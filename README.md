@@ -19,12 +19,14 @@ From a fresh clone:
 
 ```powershell
 git submodule update --init --recursive
-cmake -S . -B build/cmake -T ClangCL
-cmake --build build/cmake --config Release -- /m:8
+cmake --preset x64-Release
+cmake --build --preset x64-Release -- /m:8
 ```
 
 The build has a single renderer path: the live Blink path. On Windows this
-requires the Visual Studio Clang toolset (`-T ClangCL`).
+requires the Visual Studio Clang toolset. Visual Studio should pick up the
+checked-in `CMakePresets.json` presets; use `x64-Debug` or `x64-Release`.
+If configuring manually without presets, use a ClangCL environment/toolset.
 
 All build products and fetched SDL sources live under `build/`, which is
 generated-only and ignored by Git.
