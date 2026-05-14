@@ -1,0 +1,13 @@
+#ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_LOADER_RESOURCE_LOAD_INFO_MOJOM_H_
+#define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_LOADER_RESOURCE_LOAD_INFO_MOJOM_H_
+
+#include <memory>
+
+namespace blink::mojom {
+
+struct ResourceLoadInfo {};
+using ResourceLoadInfoPtr = std::unique_ptr<ResourceLoadInfo>;
+
+}  // namespace blink::mojom
+
+#endif  // STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_LOADER_RESOURCE_LOAD_INFO_MOJOM_H_

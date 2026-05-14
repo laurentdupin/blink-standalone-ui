@@ -1,0 +1,14 @@
+[
+  {
+    "mojom_sources": [
+      "mojo/public/rust/mojom_value_parser/test_util/parser_unittests.test-mojom"
+    ],
+    "target_name": "//mojo/public/rust/mojom_value_parser:parser_unittests_rust"
+  },
+  {
+    "mojom_sources": [
+      "mojo/public/rust/tests/interop_tests/interop_test.test-mojom"
+    ],
+    "target_name": "//mojo/public/rust/tests/interop_tests:interop_test_mojom_rust"
+  }
+]

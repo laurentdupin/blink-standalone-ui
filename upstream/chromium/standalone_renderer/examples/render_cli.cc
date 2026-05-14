@@ -1,0 +1,307 @@
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <memory>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "html_css_renderer/draw_command_serializer.h"
+#include "html_css_renderer/renderer.h"
+#include "html_css_renderer/source_text_backend.h"
+
+namespace {
+
+class CliAssets final : public html_css_renderer::AssetProvider {
+ public:
+  std::optional<html_css_renderer::Asset> Load(
+      const std::string& resource_id) override {
+    const auto found = assets.find(resource_id);
+    if (found != assets.end()) {
+      html_css_renderer::Asset asset;
+      asset.id = resource_id;
+      asset.mime_type = found->second.mime_type;
+      asset.bytes = found->second.bytes;
+      return asset;
+    }
+    if (!font_bytes.empty() && resource_id == "cli-font.ttf") {
+      html_css_renderer::Asset asset;
+      asset.id = resource_id;
+      asset.mime_type = "font/ttf";
+      asset.bytes = font_bytes;
+      return asset;
+    }
+    return std::nullopt;
+  }
+
+  struct StoredAsset {
+    std::string mime_type;
+    std::vector<uint8_t> bytes;
+  };
+
+  std::unordered_map<std::string, StoredAsset> assets;
+  std::vector<uint8_t> font_bytes;
+};
+
+std::vector<uint8_t> ReadBinaryFile(const std::string& path) {
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return {};
+  }
+  return std::vector<uint8_t>(std::istreambuf_iterator<char>(file),
+                              std::istreambuf_iterator<char>());
+}
+
+bool ParseFloat(const std::string& value, float* output) {
+  char* end = nullptr;
+  const float parsed = std::strtof(value.c_str(), &end);
+  if (end == value.c_str() || *end != '\0') {
+    return false;
+  }
+  *output = parsed;
+  return true;
+}
+
+bool ParseDouble(const std::string& value, double* output) {
+  char* end = nullptr;
+  const double parsed = std::strtod(value.c_str(), &end);
+  if (end == value.c_str() || *end != '\0') {
+    return false;
+  }
+  *output = parsed;
+  return true;
+}
+
+bool ParseViewport(const std::string& value, html_css_renderer::Size* output) {
+  const size_t separator = value.find('x');
+  if (separator == std::string::npos) {
+    return false;
+  }
+  float width = 0.0f;
+  float height = 0.0f;
+  if (!ParseFloat(value.substr(0, separator), &width) ||
+      !ParseFloat(value.substr(separator + 1), &height)) {
+    return false;
+  }
+  output->width = width;
+  output->height = height;
+  return true;
+}
+
+bool ParseAssetSpec(const std::string& value,
+                    std::string* resource_id,
+                    std::string* path,
+                    std::string* mime_type) {
+  const size_t equals = value.find('=');
+  if (equals == std::string::npos || equals == 0 ||
+      equals + 1 >= value.size()) {
+    return false;
+  }
+  *resource_id = value.substr(0, equals);
+  std::string path_and_mime = value.substr(equals + 1);
+  *mime_type = "application/octet-stream";
+
+  const size_t comma = path_and_mime.rfind(',');
+  if (comma != std::string::npos && comma + 1 < path_and_mime.size()) {
+    *path = path_and_mime.substr(0, comma);
+    *mime_type = path_and_mime.substr(comma + 1);
+  } else {
+    *path = path_and_mime;
+  }
+  return !path->empty() && !mime_type->empty();
+}
+
+void PrintUsage() {
+  std::fprintf(stderr,
+               "Usage: html_css_renderer_cli --html <html> [--css <css>] "
+               "[--viewport WxH] [--delta seconds] [--time seconds] "
+               "[--hover id] [--focus id] [--active id] "
+               "[--previous-hover id] [--previous-focus id] "
+               "[--previous-active id] [--previous-time seconds] "
+               "[--asset id=path[,mime]] [--font-file path] "
+               "[--incremental]\n");
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  CliAssets assets;
+  html_css_renderer::RendererCreateInfo create_info;
+  create_info.asset_provider = &assets;
+  html_css_renderer::FrameInput input;
+  html_css_renderer::FrameInput previous_input;
+  std::string font_file;
+  std::vector<std::string> asset_specs;
+  bool incremental = false;
+
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    auto next_value = [&]() -> const char* {
+      if (i + 1 >= argc) {
+        return nullptr;
+      }
+      ++i;
+      return argv[i];
+    };
+
+    if (arg == "--html") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      create_info.html = value;
+    } else if (arg == "--css") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      create_info.stylesheets.push_back({"cli", value});
+    } else if (arg == "--viewport") {
+      const char* value = next_value();
+      if (!value || !ParseViewport(value, &create_info.viewport)) {
+        PrintUsage();
+        return 2;
+      }
+    } else if (arg == "--delta") {
+      const char* value = next_value();
+      if (!value || !ParseDouble(value, &input.delta_time_seconds)) {
+        PrintUsage();
+        return 2;
+      }
+    } else if (arg == "--time") {
+      const char* value = next_value();
+      if (!value || !ParseDouble(value, &input.timeline_time_seconds)) {
+        PrintUsage();
+        return 2;
+      }
+    } else if (arg == "--hover") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      input.hovered_element_id = value;
+    } else if (arg == "--focus") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      input.focused_element_id = value;
+    } else if (arg == "--active") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      input.active_element_id = value;
+    } else if (arg == "--previous-hover") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.hovered_element_id = value;
+    } else if (arg == "--previous-focus") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.focused_element_id = value;
+    } else if (arg == "--previous-active") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.active_element_id = value;
+    } else if (arg == "--previous-time") {
+      const char* value = next_value();
+      if (!value ||
+          !ParseDouble(value, &previous_input.timeline_time_seconds)) {
+        PrintUsage();
+        return 2;
+      }
+    } else if (arg == "--font-file") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      font_file = value;
+    } else if (arg == "--asset") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      asset_specs.push_back(value);
+    } else if (arg == "--incremental") {
+      incremental = true;
+    } else if (arg == "--help" || arg == "-h") {
+      PrintUsage();
+      return 0;
+    } else {
+      PrintUsage();
+      return 2;
+    }
+  }
+
+  if (create_info.html.empty()) {
+    PrintUsage();
+    return 2;
+  }
+
+  for (const std::string& spec : asset_specs) {
+    std::string resource_id;
+    std::string path;
+    std::string mime_type;
+    if (!ParseAssetSpec(spec, &resource_id, &path, &mime_type)) {
+      PrintUsage();
+      return 2;
+    }
+    CliAssets::StoredAsset asset;
+    asset.mime_type = mime_type;
+    asset.bytes = ReadBinaryFile(path);
+    if (asset.bytes.empty()) {
+      std::fprintf(stderr, "failed to read asset file for %s: %s\n",
+                   resource_id.c_str(), path.c_str());
+      return 2;
+    }
+    assets.assets[resource_id] = std::move(asset);
+  }
+
+  if (!font_file.empty()) {
+    assets.font_bytes = ReadBinaryFile(font_file);
+    if (assets.font_bytes.empty()) {
+      std::fprintf(stderr, "failed to read font file: %s\n",
+                   font_file.c_str());
+      return 2;
+    }
+  }
+
+  std::unique_ptr<html_css_renderer::SourceTextBackend> text_backend =
+      html_css_renderer::CreateSourceTextBackend();
+  if (text_backend) {
+    create_info.font_provider = text_backend.get();
+    create_info.text_shaper = text_backend.get();
+    create_info.glyph_rasterizer = text_backend.get();
+  }
+
+  auto state = html_css_renderer::RendererState::Create(std::move(create_info));
+  if (incremental) {
+    (void)state->AdvanceAndRender(previous_input);
+  }
+  const html_css_renderer::RenderResult result =
+      incremental ? state->AdvanceAndRenderIncremental(input)
+                  : state->AdvanceAndRender(input);
+  const std::string output = html_css_renderer::SerializeRenderResultJson(result);
+  std::printf("%s\n", output.c_str());
+  return result.missing_resources.empty() ? 0 : 1;
+}

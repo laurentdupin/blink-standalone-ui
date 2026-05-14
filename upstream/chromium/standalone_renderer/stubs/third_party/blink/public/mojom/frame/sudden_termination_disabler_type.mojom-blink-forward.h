@@ -1,0 +1,11 @@
+#ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_FRAME_SUDDEN_TERMINATION_DISABLER_TYPE_MOJOM_BLINK_FORWARD_H_
+#define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_FRAME_SUDDEN_TERMINATION_DISABLER_TYPE_MOJOM_BLINK_FORWARD_H_
+namespace blink::mojom::blink {
+enum class SuddenTerminationDisablerType {
+  kBeforeUnloadHandler,
+  kUnloadHandler,
+  kPageHideHandler,
+  kVisibilityChangeHandler,
+};
+}
+#endif

@@ -1,0 +1,8 @@
+[
+  {
+    "mojom_sources": [
+      "mojo/public/rust/bindings/test/test_util/bindings_unittests.test-mojom"
+    ],
+    "target_name": "//mojo/public/rust/bindings/test:bindings_unittests_mojom_rust"
+  }
+]

@@ -1,0 +1,88 @@
+{
+  "c++": {
+    "bluetooth.mojom.UUID": {
+      "typename": "::device::BluetoothUUID",
+      "forward_declaration": null,
+      "public_headers": [
+        "device/bluetooth/public/mojom/uuid_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_characteristic_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_service_mojom_traits.h"
+      ],
+      "traits_headers": [],
+      "copyable_pass_by_value": false,
+      "default_constructible": true,
+      "force_serialize": false,
+      "hashable": false,
+      "move_only": false,
+      "non_const_ref": false,
+      "nullable_is_same_type": false,
+      "non_copyable_non_movable": false
+    },
+    "bluetooth.mojom.GattCharacteristicProperties": {
+      "typename": "::device::BluetoothGattCharacteristic::Properties",
+      "forward_declaration": null,
+      "public_headers": [
+        "device/bluetooth/public/mojom/uuid_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_characteristic_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_service_mojom_traits.h"
+      ],
+      "traits_headers": [],
+      "copyable_pass_by_value": false,
+      "default_constructible": true,
+      "force_serialize": false,
+      "hashable": false,
+      "move_only": false,
+      "non_const_ref": false,
+      "nullable_is_same_type": false,
+      "non_copyable_non_movable": false
+    },
+    "bluetooth.mojom.GattCharacteristicPermissions": {
+      "typename": "::device::BluetoothGattCharacteristic::Permissions",
+      "forward_declaration": null,
+      "public_headers": [
+        "device/bluetooth/public/mojom/uuid_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_characteristic_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_service_mojom_traits.h"
+      ],
+      "traits_headers": [],
+      "copyable_pass_by_value": false,
+      "default_constructible": true,
+      "force_serialize": false,
+      "hashable": false,
+      "move_only": false,
+      "non_const_ref": false,
+      "nullable_is_same_type": false,
+      "non_copyable_non_movable": false
+    },
+    "bluetooth.mojom.GattServiceErrorCode": {
+      "typename": "::device::BluetoothGattService::GattErrorCode",
+      "forward_declaration": null,
+      "public_headers": [
+        "device/bluetooth/public/mojom/uuid_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_characteristic_mojom_traits.h",
+        "device/bluetooth/public/mojom/gatt_service_mojom_traits.h"
+      ],
+      "traits_headers": [],
+      "copyable_pass_by_value": false,
+      "default_constructible": true,
+      "force_serialize": false,
+      "hashable": false,
+      "move_only": false,
+      "non_const_ref": false,
+      "nullable_is_same_type": false,
+      "non_copyable_non_movable": false
+    }
+  },
+  "typescript": {},
+  "_metadata": {
+    "module_typemaps": {
+      "c++": [
+        "bluetooth.mojom.UUID",
+        "bluetooth.mojom.GattCharacteristicProperties",
+        "bluetooth.mojom.GattCharacteristicPermissions",
+        "bluetooth.mojom.GattServiceErrorCode"
+      ],
+      "typescript": []
+    }
+  }
+}

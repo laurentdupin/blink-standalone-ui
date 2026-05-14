@@ -1,0 +1,14 @@
+#ifndef STANDALONE_RENDERER_STUBS_SERVICES_METRICS_PUBLIC_CPP_METRICS_UTILS_H_
+#define STANDALONE_RENDERER_STUBS_SERVICES_METRICS_PUBLIC_CPP_METRICS_UTILS_H_
+
+#include <cstdint>
+
+namespace ukm {
+
+inline int64_t GetExponentialBucketMinForCounts1000(int64_t value) {
+  return value;
+}
+
+}  // namespace ukm
+
+#endif  // STANDALONE_RENDERER_STUBS_SERVICES_METRICS_PUBLIC_CPP_METRICS_UTILS_H_

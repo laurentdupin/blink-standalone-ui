@@ -1,32 +1,51 @@
-# Prerequisites
-*.d
+# Local build products
+/build/
+/out/
+/cmake-build-*/
+/.vs/
+/.vscode/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
+# The exported tree keeps only the generated files and command metadata from
+# Chromium's out directory. Local object files and executables must stay out.
+/upstream/chromium/out/**
+!/upstream/chromium/generated/blink_live/
+!/upstream/chromium/generated/blink_live/gen/
+!/upstream/chromium/generated/blink_live/gen/**
+!/upstream/chromium/generated/blink_live/*.rsp
+!/upstream/chromium/generated/blink_live/*.commands.txt
+
+# Compiler/linker products
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
+*.o
 *.lib
-
-# Executables
+*.a
+*.dll
+*.dylib
+*.so
 *.exe
-*.out
-*.app
+*.pdb
+*.ilk
+*.exp
+*.idb
+*.ipdb
+*.iobj
+
+# Generated local scratch files
+*.log
+*.tmp
+*.rsp
+!upstream/chromium/generated/blink_live/*.rsp
+*.commands.txt
+!upstream/chromium/generated/blink_live/*.commands.txt
+
+# Python/tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Editor/OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~

@@ -1,0 +1,6 @@
+[submodule "upstream/chromium/third_party/freetype/src"]
+	path = upstream/chromium/third_party/freetype/src
+	url = https://chromium.googlesource.com/chromium/src/third_party/freetype2
+[submodule "upstream/chromium/third_party/harfbuzz/src"]
+	path = upstream/chromium/third_party/harfbuzz/src
+	url = https://chromium.googlesource.com/external/github.com/harfbuzz/harfbuzz

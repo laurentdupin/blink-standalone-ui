@@ -1,0 +1,6 @@
+#ifndef STANDALONE_RENDERER_STUBS_UI_BASE_MOJOM_WINDOW_SHOW_STATE_MOJOM_BLINK_H_
+#define STANDALONE_RENDERER_STUBS_UI_BASE_MOJOM_WINDOW_SHOW_STATE_MOJOM_BLINK_H_
+
+#include "ui/base/mojom/window_show_state.mojom-blink-forward.h"
+
+#endif

@@ -1,0 +1,19 @@
+[
+  {
+    "mojom_sources": [
+      "mojo/public/rust/tests/import_tests/imports_a_b.test-mojom",
+      "mojo/public/rust/tests/import_tests/leaf_a.test-mojom",
+      "mojo/public/rust/tests/import_tests/leaf_b.test-mojom",
+      "mojo/public/rust/tests/import_tests/nested_enums.test-mojom",
+      "mojo/public/rust/tests/import_tests/nested_enums_import.test-mojom"
+    ],
+    "target_name": "//mojo/public/rust/tests/import_tests:crate1_rust"
+  },
+  {
+    "mojom_sources": [
+      "mojo/public/rust/tests/import_tests/imports_a_c.test-mojom",
+      "mojo/public/rust/tests/import_tests/leaf_c.test-mojom"
+    ],
+    "target_name": "//mojo/public/rust/tests/import_tests:crate2_rust"
+  }
+]

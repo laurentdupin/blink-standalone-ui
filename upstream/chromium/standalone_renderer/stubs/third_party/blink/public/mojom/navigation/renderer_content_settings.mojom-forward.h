@@ -1,0 +1,11 @@
+#ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_NAVIGATION_RENDERER_CONTENT_SETTINGS_MOJOM_FORWARD_H_
+#define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_NAVIGATION_RENDERER_CONTENT_SETTINGS_MOJOM_FORWARD_H_
+
+#include <memory>
+
+namespace blink::mojom {
+struct RendererContentSettings;
+using RendererContentSettingsPtr = std::unique_ptr<RendererContentSettings>;
+}
+
+#endif

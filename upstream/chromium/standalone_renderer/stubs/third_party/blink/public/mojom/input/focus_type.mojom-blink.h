@@ -1,0 +1,6 @@
+#ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_INPUT_FOCUS_TYPE_MOJOM_BLINK_H_
+#define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_INPUT_FOCUS_TYPE_MOJOM_BLINK_H_
+
+#include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
+
+#endif

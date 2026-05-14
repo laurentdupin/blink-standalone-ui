@@ -1,0 +1,8 @@
+[
+  {
+    "mojom_sources": [
+      "mojo/public/rust/mojom_value_parser/test_util/parser_unittests.test-mojom"
+    ],
+    "target_name": "//mojo/public/rust/mojom_value_parser:parser_unittests_rust"
+  }
+]

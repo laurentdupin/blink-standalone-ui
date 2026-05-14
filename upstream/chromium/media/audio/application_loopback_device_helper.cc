@@ -1,0 +1,110 @@
+// Copyright 2025 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "media/audio/application_loopback_device_helper.h"
+
+#include "base/notreached.h"
+#include "base/process/process_handle.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
+#include "media/audio/audio_device_description.h"
+
+namespace media {
+
+#if BUILDFLAG(IS_WIN)
+
+namespace {
+
+std::string BuildDeviceId(std::string_view base_id,
+                          const uint32_t application_id) {
+  return base::StrCat({base_id, ":", base::NumberToString(application_id)});
+}
+
+}  // namespace
+
+std::string MEDIA_EXPORT
+CreateApplicationLoopbackDeviceId(const uint32_t application_id) {
+  return BuildDeviceId(AudioDeviceDescription::kApplicationLoopbackDeviceId,
+                       application_id);
+}
+
+std::string MEDIA_EXPORT CreateRestrictOwnAudioBrowserLoopbackDeviceId() {
+  return BuildDeviceId(
+      AudioDeviceDescription::kRestrictOwnAudioBrowserLoopbackDeviceId,
+      base::GetCurrentProcId());
+}
+
+uint32_t MEDIA_EXPORT
+GetApplicationIdFromApplicationLoopbackDeviceId(std::string_view device_id) {
+  CHECK(AudioDeviceDescription::IsApplicationLoopbackDevice(device_id));
+
+  size_t colon_pos = device_id.find(':');
+  CHECK(colon_pos != std::string::npos);
+
+  uint32_t application_id;
+  bool valid =
+      base::StringToUint(device_id.substr(colon_pos + 1), &application_id);
+  CHECK(valid);
+
+  return application_id;
+}
+
+#elif BUILDFLAG(IS_MAC)
+
+namespace {
+
+std::string BuildDeviceId(std::string_view base_id,
+                          std::string_view bundle_id) {
+  return base::StrCat({base_id, ":", bundle_id});
+}
+
+}  // namespace
+
+// TODO(crbug.com/502159773): When CreateApplicationLoopbackDeviceId() and
+// CreateRestrictOwnAudioBrowserLoopbackDeviceId() are only exposed on Windows,
+// these mock functions can be deleted.
+std::string MEDIA_EXPORT
+CreateApplicationLoopbackDeviceId(const uint32_t application_id) {
+  NOTREACHED();
+}
+
+std::string MEDIA_EXPORT CreateRestrictOwnAudioBrowserLoopbackDeviceId() {
+  NOTREACHED();
+}
+
+std::string MEDIA_EXPORT
+CreateApplicationLoopbackDeviceId(std::string_view bundle_id) {
+  return BuildDeviceId(AudioDeviceDescription::kApplicationLoopbackDeviceId,
+                       bundle_id);
+}
+
+std::string MEDIA_EXPORT
+CreateRestrictOwnAudioBrowserLoopbackDeviceId(std::string_view bundle_id) {
+  return BuildDeviceId(
+      AudioDeviceDescription::kRestrictOwnAudioBrowserLoopbackDeviceId,
+      bundle_id);
+}
+
+std::string MEDIA_EXPORT
+GetBundleIdFromApplicationLoopbackDeviceId(std::string_view device_id) {
+  CHECK(AudioDeviceDescription::IsApplicationLoopbackDevice(device_id));
+  size_t colon_pos = device_id.find(':');
+  CHECK(colon_pos != std::string::npos);
+
+  std::string bundle_id = std::string(device_id.substr(colon_pos + 1));
+  CHECK(!bundle_id.empty());
+  return bundle_id;
+}
+
+#endif  // BUILDFLAG(IS_WIN)
+
+bool MEDIA_EXPORT
+IsRestrictOwnAudioBrowserLoopbackDeviceId(std::string_view device_id) {
+  return base::StartsWith(
+      device_id,
+      AudioDeviceDescription::kRestrictOwnAudioBrowserLoopbackDeviceId);
+}
+
+}  // namespace media

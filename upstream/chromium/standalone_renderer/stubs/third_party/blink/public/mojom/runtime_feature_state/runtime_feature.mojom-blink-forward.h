@@ -1,0 +1,12 @@
+#ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_RUNTIME_FEATURE_STATE_RUNTIME_FEATURE_MOJOM_BLINK_FORWARD_H_
+#define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_RUNTIME_FEATURE_STATE_RUNTIME_FEATURE_MOJOM_BLINK_FORWARD_H_
+
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature.mojom-shared.h"
+
+namespace blink::mojom::blink {
+
+using RuntimeFeature = ::blink::mojom::RuntimeFeature;
+
+}  // namespace blink::mojom::blink
+
+#endif  // STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_RUNTIME_FEATURE_STATE_RUNTIME_FEATURE_MOJOM_BLINK_FORWARD_H_

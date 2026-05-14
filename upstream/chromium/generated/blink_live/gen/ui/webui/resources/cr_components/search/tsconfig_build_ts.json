@@ -1,0 +1,52 @@
+{
+  "extends": "../../../../../../../../tools/typescript/tsconfig_base_lit.json",
+  "compilerOptions": {
+    "rootDir": "preprocessed",
+    "outDir": "..\\..\\tsc\\cr_components\\search",
+    "composite": true,
+    "declaration": true,
+    "tsBuildInfoFile": "tsconfig_build_ts.tsbuildinfo",
+    "skipLibCheck": true,
+    "paths": {
+      "/strings.m.js": [
+        "../../../../../../../..//tools/typescript/definitions/strings.d.ts"
+      ],
+      "//resources/lit/v3_0/lit.rollup.js": [
+        "./../../../../../third_party/lit/v3_0/lit.d.ts"
+      ],
+      "//resources/js/*": [
+        "./../../../../../ui/webui/resources/tsc/js/*"
+      ],
+      "/tools/typescript/definitions/*": [
+        "./../../../../../../../../tools/typescript/definitions/*"
+      ]
+    }
+  },
+  "files": [
+    "preprocessed\\audio_processor.service.ts",
+    "preprocessed\\animated_glow.html.ts",
+    "preprocessed\\animated_glow.ts",
+    "preprocessed\\audio_wave.html.ts",
+    "preprocessed\\audio_wave.ts",
+    "preprocessed\\constants.ts",
+    "preprocessed\\drag_drop_handler.ts",
+    "preprocessed\\drag_drop_host.ts",
+    "preprocessed\\recording_wave.html.ts",
+    "preprocessed\\recording_wave.ts",
+    "preprocessed\\animated_glow.css.ts",
+    "preprocessed\\audio_wave.css.ts",
+    "preprocessed\\recording_wave.css.ts",
+    "../../../../../../../../tools/typescript/definitions/strings.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../../../../../tools/typescript/definitions/tsconfig_build_ts.json"
+    },
+    {
+      "path": "../../../../../third_party/lit/v3_0/tsconfig_build_ts.json"
+    },
+    {
+      "path": "../../js/tsconfig_build_ts.json"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+# Local standalone-renderer bootstrap shim.
+#
+# This file is normally generated from .gclient solutions by Chromium sync.
+# The current checkout has no .gclient, so provide the minimal values needed
+# for local GN generation of Blink build artifacts.
+
+build_with_chromium = true
+checkout_android = false
+checkout_android_native_support = false
+checkout_chromeos = false
+checkout_fuchsia = false
+checkout_ios = false
+checkout_linux = false
+checkout_mac = false
+checkout_win = true
+checkout_src_internal = false
+checkout_google_benchmark = false
+checkout_instrumented_libraries = false
+checkout_clang_coverage_tools = false
+checkout_clusterfuzz_data = false
+checkout_nacl = false
+checkout_openxr = false
+checkout_rust_toolchain_deps = false
+checkout_glic_e2e_tests = false
+llvm_force_head_revision = false
+generate_location_tags = false

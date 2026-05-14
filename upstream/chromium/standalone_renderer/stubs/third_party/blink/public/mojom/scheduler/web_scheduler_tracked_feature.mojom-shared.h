@@ -1,0 +1,63 @@
+#ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_SCHEDULER_WEB_SCHEDULER_TRACKED_FEATURE_MOJOM_SHARED_H_
+#define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_SCHEDULER_WEB_SCHEDULER_TRACKED_FEATURE_MOJOM_SHARED_H_
+
+namespace blink::mojom {
+
+enum class WebSchedulerTrackedFeature {
+  kWebSocket,
+  kMinValue = kWebSocket,
+  kWebRTC,
+  kMainResourceHasCacheControlNoCache,
+  kMainResourceHasCacheControlNoStore,
+  kSubresourceHasCacheControlNoCache,
+  kSubresourceHasCacheControlNoStore,
+  kContainsPlugins,
+  kDocumentLoaded,
+  kOutstandingNetworkRequestOthers,
+  kRequestedMIDIPermission,
+  kRequestedAudioCapturePermission,
+  kRequestedVideoCapturePermission,
+  kRequestedBackForwardCacheBlockedSensors,
+  kWebTransportSticky,
+  kRequestedBackgroundWorkPermission,
+  kBroadcastChannel,
+  kWebXR,
+  kSharedWorker,
+  kWebLocks,
+  kWebHID,
+  kWebShare,
+  kRequestedStorageAccessGrant,
+  kWebNfc,
+  kOutstandingNetworkRequestFetch,
+  kOutstandingNetworkRequestXHR,
+  kPrinting,
+  kPictureInPicture,
+  kSpeechRecognizer,
+  kIdleManager,
+  kPaymentManager,
+  kKeyboardLock,
+  kWebOTPService,
+  kOutstandingNetworkRequestDirectSocket,
+  kInjectedJavascript,
+  kInjectedStyleSheet,
+  kWebTransport,
+  kDummy,
+  kKeepaliveRequest,
+  kJsNetworkRequestReceivedCacheControlNoStoreResource,
+  kIndexedDBEvent,
+  kWebSerial,
+  kWebSocketSticky,
+  kWebRTCSticky,
+  kSmartCard,
+  kLiveMediaStreamTrack,
+  kUnloadHandler,
+  kParserAborted,
+  kWebBluetooth,
+  kWebAuthentication,
+  kSharedWorkerMessage,
+  kMaxValue = kSharedWorkerMessage,
+};
+
+}  // namespace blink::mojom
+
+#endif  // STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_SCHEDULER_WEB_SCHEDULER_TRACKED_FEATURE_MOJOM_SHARED_H_
