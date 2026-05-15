@@ -376,6 +376,9 @@ void PrintUsage() {
                "[--viewport WxH] --out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
+               "[--audit-only] [--disable-retained-extraction] "
+               "[--disable-skia-raster] "
+               "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
                "[--font-file path]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
                " [--blink] [--manual]"
@@ -397,9 +400,15 @@ int main(int argc, char** argv) {
   std::string out_path;
   std::string json_path;
   std::string paint_artifact_dump_path;
+  std::string paint_oracle;
+  std::string oracle_out_path;
   std::string font_file;
   size_t min_non_white = 1;
   bool use_skia_cpu = false;
+  bool audit_only = false;
+  bool disable_retained_extraction = false;
+  bool disable_skia_raster = false;
+  bool trace_stages = false;
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   bool use_blink = true;
 #else
@@ -483,6 +492,34 @@ int main(int argc, char** argv) {
       paint_artifact_dump_path = value;
     } else if (arg.rfind("--dump-paint-artifact=", 0) == 0) {
       paint_artifact_dump_path = arg.substr(22);
+    } else if (arg == "--audit-only") {
+      audit_only = true;
+      disable_retained_extraction = true;
+      disable_skia_raster = true;
+      min_non_white = 0;
+    } else if (arg == "--disable-retained-extraction") {
+      disable_retained_extraction = true;
+    } else if (arg == "--disable-skia-raster") {
+      disable_skia_raster = true;
+      min_non_white = 0;
+    } else if (arg == "--trace-stages") {
+      trace_stages = true;
+    } else if (arg == "--paint-oracle") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      paint_oracle = value;
+    } else if (arg.rfind("--paint-oracle=", 0) == 0) {
+      paint_oracle = arg.substr(15);
+    } else if (arg == "--oracle-out") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      oracle_out_path = value;
     } else if (arg == "--min-non-white") {
       const char* value = next_value();
       if (!value) {
@@ -511,7 +548,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (create_info.html.empty() || out_path.empty()) {
+  if (create_info.html.empty() || (out_path.empty() && !disable_skia_raster)) {
     PrintUsage();
     return 2;
   }
@@ -535,6 +572,8 @@ int main(int argc, char** argv) {
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
     blink_create_info.renderer = std::move(create_info);
+    blink_create_info.disable_retained_extraction = disable_retained_extraction;
+    blink_create_info.trace_stages = trace_stages;
     blink_embedder =
         html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
     if (!blink_embedder) {
@@ -546,7 +585,8 @@ int main(int argc, char** argv) {
     result = blink_embedder->AdvanceAndRender(input);
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
-    if (!HasRealBlinkPaintArtifact(result)) {
+    if (!HasRealBlinkPaintArtifact(result) &&
+        !disable_retained_extraction && !audit_only) {
       if (!paint_artifact_dump_path.empty()) {
         std::ofstream audit_file(paint_artifact_dump_path);
         if (audit_file) {
@@ -578,6 +618,39 @@ int main(int argc, char** argv) {
     }
     audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
                << "\n";
+  }
+
+  if (!paint_oracle.empty()) {
+    if (paint_oracle == "skia-paint-record") {
+      std::fprintf(stderr, "skia_paint_record_oracle not implemented\n");
+      result.diagnostics.push_back("skia_paint_record_oracle not implemented");
+      if (!oracle_out_path.empty()) {
+        std::ofstream oracle_file(oracle_out_path);
+        if (oracle_file) {
+          oracle_file << "skia_paint_record_oracle not implemented\n";
+        }
+      }
+    } else {
+      std::fprintf(stderr, "unknown paint oracle: %s\n", paint_oracle.c_str());
+      return 2;
+    }
+  }
+
+  if (disable_skia_raster) {
+    if (!json_path.empty()) {
+      Metrics empty_metrics;
+      empty_metrics.width = static_cast<int>(result.successor_snapshot.viewport.width);
+      empty_metrics.height = static_cast<int>(result.successor_snapshot.viewport.height);
+      if (!WriteJson(json_path, empty_metrics, result, loaded_font_path)) {
+        std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
+        return 1;
+      }
+    }
+    std::printf("render_metrics width=%d height=%d non_white=%zu unique=%zu\n",
+                static_cast<int>(result.successor_snapshot.viewport.width),
+                static_cast<int>(result.successor_snapshot.viewport.height),
+                static_cast<size_t>(0), static_cast<size_t>(0));
+    return 0;
   }
 
   html_css_renderer::CpuImage image =

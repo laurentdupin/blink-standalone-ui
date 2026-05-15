@@ -90,6 +90,8 @@ struct BlinkPageEmbedderCreateInfo {
   RendererCreateInfo renderer;
   std::string chromium_root;
   bool allow_transitional_v8_link = true;
+  bool disable_retained_extraction = false;
+  bool trace_stages = false;
 };
 
 struct BlinkLifecycleReport {

@@ -23,6 +23,10 @@
 namespace blink::standalone_renderer_probe {
 void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
                                                                     int height);
+void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
+    int disabled);
+void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
+    int enabled);
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -55,6 +59,16 @@ int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRend
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonForStandaloneRenderer(
     const char* body_html,
+    char* buffer,
+    int buffer_size);
+int StandaloneBlinkLiveFrameBridgeChunkStableKeyAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    char* buffer,
+    int buffer_size);
+int StandaloneBlinkLiveFrameBridgeChunkIdStringAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
     char* buffer,
     int buffer_size);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
@@ -1790,6 +1804,16 @@ BlinkTreeFrameBuildResult BuildBlinkTreeFrameOutput(
 class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
  public:
   explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
+    disable_retained_extraction_ = create_info.disable_retained_extraction;
+    trace_stages_ = create_info.trace_stages;
+#if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
+            disable_retained_extraction_ ? 1 : 0);
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
+            trace_stages_ ? 1 : 0);
+#endif
     snapshot_.html = create_info.renderer.html;
     snapshot_.stylesheets = create_info.renderer.stylesheets;
     snapshot_.viewport = create_info.renderer.viewport;
@@ -1931,6 +1955,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(result.successor_snapshot.viewport.width),
         static_cast<int>(result.successor_snapshot.viewport.height));
+    live_probe::
+        StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
+            disable_retained_extraction_ ? 1 : 0);
     if (!live_probe::
             StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer() ||
         !live_probe::
@@ -1967,6 +1994,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       result.diagnostics.push_back("real Blink PaintArtifact bridge produced no chunks");
       return;
     }
+    if (disable_retained_extraction_) {
+      result.diagnostics.push_back(
+          "real Blink PaintArtifact retained extraction disabled by caller");
+      return;
+    }
     const int exported_draw_op_count =
         live_probe::StandaloneBlinkLiveFrameBridgeExportedDrawOpCountForStandaloneRenderer(
             probe_html.c_str());
@@ -1981,6 +2013,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     DrawCommandList chunk_commands;
     DrawCommandList* active_commands = &commands;
     std::string active_chunk_key;
+    std::string active_chunk_id_string;
     Rect active_chunk_bounds;
     PaintPropertyStateSnapshot active_chunk_property_state;
     int active_chunk_debug_index = -1;
@@ -2036,7 +2069,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               std::move(chunk_commands)));
           current_scene.chunks.back().debug_index = active_chunk_debug_index;
           current_scene.chunks.back().stable_key = active_chunk_key;
-          current_scene.chunks.back().chunk_id_string = active_chunk_key;
+          current_scene.chunks.back().chunk_id_string =
+              active_chunk_id_string.empty() ? active_chunk_key
+                                             : active_chunk_id_string;
           chunk_commands.clear();
         }
         inside_chunk = true;
@@ -2044,6 +2079,20 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_chunk_debug_index = chunk_index;
         active_chunk_bounds = Rect{x, y, width, height};
         active_chunk_property_state = PaintPropertyStateSnapshot{};
+        std::array<char, 1024> chunk_key_buffer{};
+        std::array<char, 512> chunk_id_buffer{};
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeChunkStableKeyAtForStandaloneRenderer(
+                    probe_html.c_str(), chunk_index, chunk_key_buffer.data(),
+                    static_cast<int>(chunk_key_buffer.size())) <= 0) {
+          chunk_key_buffer[0] = '\0';
+        }
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeChunkIdStringAtForStandaloneRenderer(
+                    probe_html.c_str(), chunk_index, chunk_id_buffer.data(),
+                    static_cast<int>(chunk_id_buffer.size())) <= 0) {
+          chunk_id_buffer[0] = '\0';
+        }
         uint64_t property_state_hash = 0;
         std::array<float, 16> transform_to_root{};
         int has_clip_rect = 0;
@@ -2079,14 +2128,18 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               property_state_hash ^ 0xc2b2ae3d27d4eb4full;
           active_chunk_property_state.effect_chain_depth = 1;
         }
-        active_chunk_key = "blink-chunk:fingerprint=chunk-" +
-                           std::to_string(chunk_index) + "-state-" +
-                           std::to_string(
-                               active_chunk_property_state.state_hash) +
-                           ":state=" +
-                           std::to_string(
-                               active_chunk_property_state.state_hash) +
-                           ":debug-index=" + std::to_string(chunk_index);
+        active_chunk_key =
+            chunk_key_buffer[0] != '\0'
+                ? std::string(chunk_key_buffer.data())
+                : "blink-chunk:fingerprint=chunk-" +
+                      std::to_string(chunk_index) + "-state-" +
+                      std::to_string(active_chunk_property_state.state_hash) +
+                      ":state=" +
+                      std::to_string(active_chunk_property_state.state_hash) +
+                      ":debug-index=" + std::to_string(chunk_index);
+        active_chunk_id_string =
+            chunk_id_buffer[0] != '\0' ? std::string(chunk_id_buffer.data())
+                                       : active_chunk_key;
         active_commands = &chunk_commands;
       } else if (type == 13) {
         if (inside_chunk) {
@@ -2096,11 +2149,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               std::move(chunk_commands)));
           current_scene.chunks.back().debug_index = active_chunk_debug_index;
           current_scene.chunks.back().stable_key = active_chunk_key;
-          current_scene.chunks.back().chunk_id_string = active_chunk_key;
+          current_scene.chunks.back().chunk_id_string =
+              active_chunk_id_string.empty() ? active_chunk_key
+                                             : active_chunk_id_string;
           chunk_commands.clear();
         }
         inside_chunk = false;
         active_chunk_key.clear();
+        active_chunk_id_string.clear();
         active_chunk_bounds = Rect{};
         active_chunk_property_state = PaintPropertyStateSnapshot{};
         active_chunk_debug_index = -1;
@@ -2342,7 +2398,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           active_chunk_property_state, std::move(chunk_commands)));
       current_scene.chunks.back().debug_index = active_chunk_debug_index;
       current_scene.chunks.back().stable_key = active_chunk_key;
-      current_scene.chunks.back().chunk_id_string = active_chunk_key;
+      current_scene.chunks.back().chunk_id_string =
+          active_chunk_id_string.empty() ? active_chunk_key
+                                         : active_chunk_id_string;
       chunk_commands.clear();
       inside_chunk = false;
       active_commands = &commands;
@@ -2376,6 +2434,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   }
 
   RendererSnapshot snapshot_;
+  bool disable_retained_extraction_ = false;
+  bool trace_stages_ = false;
   std::optional<RetainedScene> previous_retained_scene_;
 };
 #endif
