@@ -547,6 +547,13 @@ int main(int argc, char** argv) {
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
     if (!HasRealBlinkPaintArtifact(result)) {
+      if (!paint_artifact_dump_path.empty()) {
+        std::ofstream audit_file(paint_artifact_dump_path);
+        if (audit_file) {
+          audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+                     << "\n";
+        }
+      }
       std::fprintf(stderr,
                    "strict Blink benchmark requires real Blink PaintArtifact "
                    "draw extraction; current output was "
@@ -560,6 +567,17 @@ int main(int argc, char** argv) {
     std::unique_ptr<html_css_renderer::RendererState> state =
         html_css_renderer::RendererState::Create(std::move(create_info));
     result = state->AdvanceAndRender(input);
+  }
+
+  if (!paint_artifact_dump_path.empty()) {
+    std::ofstream audit_file(paint_artifact_dump_path);
+    if (!audit_file) {
+      std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
+                   paint_artifact_dump_path.c_str());
+      return 1;
+    }
+    audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+               << "\n";
   }
 
   html_css_renderer::CpuImage image =
@@ -578,16 +596,6 @@ int main(int argc, char** argv) {
                                        loaded_font_path)) {
     std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
     return 1;
-  }
-  if (!paint_artifact_dump_path.empty()) {
-    std::ofstream audit_file(paint_artifact_dump_path);
-    if (!audit_file) {
-      std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
-                   paint_artifact_dump_path.c_str());
-      return 1;
-    }
-    audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
-               << "\n";
   }
 
   std::printf("render_metrics width=%d height=%d non_white=%zu unique=%zu\n",

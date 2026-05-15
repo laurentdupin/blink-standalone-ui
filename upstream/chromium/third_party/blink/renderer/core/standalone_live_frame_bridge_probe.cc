@@ -10,9 +10,11 @@
 #include <cstdio>
 #include <cstring>
 #include <array>
+#include <iomanip>
 #include <map>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <utility>
 #include <string>
 #include <vector>
@@ -160,6 +162,7 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveExportedDrawOp> exported_draw_ops;
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> artifact_audit_lines;
+  std::string raw_paint_artifact_audit_json;
   int viewport_width = 320;
   int viewport_height = 200;
   bool initialized = false;
@@ -921,6 +924,11 @@ bool SkM44IsIdentityOr2dTranslation(const SkM44& matrix) {
          matrix.rc(3, 2) == 0.0f && matrix.rc(3, 3) == 1.0f;
 }
 
+gfx::Transform DirectTransformToRootForStandaloneRenderer(
+    const PropertyTreeState& state,
+    uint32_t* chain_depth,
+    bool* has_non_translation);
+
 bool AppendPaintRecordExtractedOps(
     const cc::PaintRecord& record,
     float initial_translate_x,
@@ -928,7 +936,8 @@ bool AppendPaintRecordExtractedOps(
     int fallback_width,
     int fallback_height,
     std::vector<LiveExportedDrawOp>& exported_draw_ops,
-    std::vector<std::string>& diagnostics) {
+    std::vector<std::string>& diagnostics,
+    bool suppress_clip_ops_for_non_translation_transform = false) {
   struct PaintRecordState {
     int save_marker = 0;
   };
@@ -1019,6 +1028,12 @@ bool AppendPaintRecordExtractedOps(
         break;
       }
       case cc::PaintOpType::kClipRect: {
+        if (suppress_clip_ops_for_non_translation_transform) {
+          diagnostics.push_back(
+              "paint_op_extraction retained transform but suppressed ClipRect "
+              "inside non-translation chunk");
+          break;
+        }
         const auto& clip_op = static_cast<const cc::ClipRectOp&>(op);
         if (clip_op.op != SkClipOp::kIntersect || !clip_op.rect.isFinite()) {
           mark_unsupported(op);
@@ -1031,6 +1046,12 @@ bool AppendPaintRecordExtractedOps(
         break;
       }
       case cc::PaintOpType::kClipRRect: {
+        if (suppress_clip_ops_for_non_translation_transform) {
+          diagnostics.push_back(
+              "paint_op_extraction retained transform but suppressed ClipRRect "
+              "inside non-translation chunk");
+          break;
+        }
         const auto& clip_op = static_cast<const cc::ClipRRectOp&>(op);
         if ((clip_op.op != SkClipOp::kIntersect &&
              clip_op.op != SkClipOp::kDifference) ||
@@ -1048,6 +1069,12 @@ bool AppendPaintRecordExtractedOps(
         break;
       }
       case cc::PaintOpType::kClipPath: {
+        if (suppress_clip_ops_for_non_translation_transform) {
+          diagnostics.push_back(
+              "paint_op_extraction retained transform but suppressed ClipPath "
+              "inside non-translation chunk");
+          break;
+        }
         const auto& clip_op = static_cast<const cc::ClipPathOp&>(op);
         if ((clip_op.op != SkClipOp::kIntersect &&
              clip_op.op != SkClipOp::kDifference) ||
@@ -1180,7 +1207,8 @@ bool AppendPaintRecordExtractedOps(
         if (!AppendPaintRecordExtractedOps(
                 static_cast<const cc::DrawRecordOp&>(op).record, translate_x,
                 translate_y, fallback_width, fallback_height,
-                exported_draw_ops, diagnostics)) {
+                exported_draw_ops, diagnostics,
+                suppress_clip_ops_for_non_translation_transform)) {
           complete = false;
         }
         break;
@@ -1207,11 +1235,10 @@ bool AppendPaintArtifactExtractedOps(
        ++chunk_index) {
     const PaintChunk& chunk = chunks[chunk_index];
     const PropertyTreeState chunk_state = chunk.properties.Unalias();
-    gfx::Transform projection;
-    if (!GeometryMapper::SourceToDestinationProjection(
-            chunk_state.Transform(), PropertyTreeState::Root().Transform(),
-            projection) ||
-        !projection.Is2dTransform()) {
+    bool projection_has_non_translation = false;
+    gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
+        chunk_state, nullptr, &projection_has_non_translation);
+    if (!projection.Is2dTransform()) {
       diagnostics.push_back(
           "paint_op_extraction unsupported chunk transform at index=" +
           std::to_string(chunk_index));
@@ -1220,8 +1247,11 @@ bool AppendPaintArtifactExtractedOps(
     }
     AppendBeginChunkOp(chunk_index, chunk.bounds, exported_draw_ops);
     AppendSaveOp(exported_draw_ops);
-    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
-        chunk_state, PropertyTreeState::Root());
+    const FloatClipRect clip =
+        projection_has_non_translation
+            ? FloatClipRect()
+            : GeometryMapper::LocalToAncestorClipRect(
+                  chunk_state, PropertyTreeState::Root());
     AppendChunkPropertyStateForStandaloneRenderer(chunk_index, chunk_state,
                                                   projection, clip,
                                                   property_states);
@@ -1239,7 +1269,8 @@ bool AppendPaintArtifactExtractedOps(
       }
       if (!AppendPaintRecordExtractedOps(
               drawing->GetPaintRecord(), 0.0f, 0.0f, viewport_width,
-              viewport_height, exported_draw_ops, diagnostics)) {
+              viewport_height, exported_draw_ops, diagnostics,
+              projection_has_non_translation)) {
         complete = false;
       }
     }
@@ -1405,6 +1436,387 @@ std::string MapToJsonObject(const std::map<std::string, int>& values) {
   return json;
 }
 
+std::string JsonEscapeForStandaloneRenderer(const std::string& value) {
+  std::ostringstream out;
+  for (const unsigned char c : value) {
+    switch (c) {
+      case '"':
+        out << "\\\"";
+        break;
+      case '\\':
+        out << "\\\\";
+        break;
+      case '\b':
+        out << "\\b";
+        break;
+      case '\f':
+        out << "\\f";
+        break;
+      case '\n':
+        out << "\\n";
+        break;
+      case '\r':
+        out << "\\r";
+        break;
+      case '\t':
+        out << "\\t";
+        break;
+      default:
+        if (c < 0x20) {
+          out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+              << static_cast<int>(c) << std::dec;
+        } else {
+          out << static_cast<char>(c);
+        }
+        break;
+    }
+  }
+  return out.str();
+}
+
+std::string JsonStringForStandaloneRenderer(const std::string& value) {
+  return "\"" + JsonEscapeForStandaloneRenderer(value) + "\"";
+}
+
+std::string BlinkStringToStdStringForStandaloneRenderer(const String& value) {
+  return value.Utf8();
+}
+
+std::string RectJsonForStandaloneRenderer(const gfx::Rect& rect) {
+  std::ostringstream out;
+  out << "[" << rect.x() << "," << rect.y() << "," << rect.width() << ","
+      << rect.height() << "]";
+  return out.str();
+}
+
+std::string RectFJsonForStandaloneRenderer(const gfx::RectF& rect) {
+  std::ostringstream out;
+  out << "[" << rect.x() << "," << rect.y() << "," << rect.width() << ","
+      << rect.height() << "]";
+  return out.str();
+}
+
+std::string SkRectJsonForStandaloneRenderer(const SkRect& rect) {
+  std::ostringstream out;
+  out << "[" << rect.x() << "," << rect.y() << "," << rect.width() << ","
+      << rect.height() << "]";
+  return out.str();
+}
+
+std::string MatrixJsonForStandaloneRenderer(const gfx::Transform& transform) {
+  SkM44 matrix = gfx::TransformToSkM44(transform);
+  std::ostringstream out;
+  out << "[";
+  for (int row = 0; row < 4; ++row) {
+    for (int col = 0; col < 4; ++col) {
+      if (row != 0 || col != 0) {
+        out << ",";
+      }
+      out << matrix.rc(row, col);
+    }
+  }
+  out << "]";
+  return out.str();
+}
+
+std::string MatrixJsonForStandaloneRenderer(const SkM44& matrix) {
+  std::ostringstream out;
+  out << "[";
+  for (int row = 0; row < 4; ++row) {
+    for (int col = 0; col < 4; ++col) {
+      if (row != 0 || col != 0) {
+        out << ",";
+      }
+      out << matrix.rc(row, col);
+    }
+  }
+  out << "]";
+  return out.str();
+}
+
+bool SkM44IsIdentityOr2dTranslation(const SkM44& matrix);
+
+gfx::Transform DirectTransformToRootForStandaloneRenderer(
+    const PropertyTreeState& state,
+    uint32_t* chain_depth,
+    bool* has_non_translation) {
+  std::vector<const TransformPaintPropertyNode*> chain;
+  const auto* node = &state.Transform();
+  const auto* root = &PropertyTreeState::Root().Transform();
+  while (node && node != root && chain.size() < 64) {
+    chain.push_back(node);
+    node = node->UnaliasedParent();
+  }
+  gfx::Transform transform;
+  if (chain_depth) {
+    *chain_depth = static_cast<uint32_t>(chain.size());
+  }
+  if (has_non_translation) {
+    *has_non_translation = false;
+  }
+  for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
+    const TransformPaintPropertyNode* transform_node = *it;
+    gfx::Transform local = transform_node->MatrixWithOriginApplied();
+    if (has_non_translation &&
+        !SkM44IsIdentityOr2dTranslation(gfx::TransformToSkM44(local))) {
+      *has_non_translation = true;
+    }
+    transform.PreConcat(local);
+  }
+  return transform;
+}
+
+uint64_t HashStringForStandaloneRenderer(const std::string& value) {
+  uint64_t hash = 1469598103934665603ull;
+  for (const unsigned char c : value) {
+    hash ^= c;
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+bool IsVisualPaintOpForStandaloneRenderer(cc::PaintOpType type) {
+  switch (type) {
+    case cc::PaintOpType::kDrawColor:
+    case cc::PaintOpType::kDrawRect:
+    case cc::PaintOpType::kDrawIRect:
+    case cc::PaintOpType::kDrawRRect:
+    case cc::PaintOpType::kDrawDRRect:
+    case cc::PaintOpType::kDrawOval:
+    case cc::PaintOpType::kDrawArc:
+    case cc::PaintOpType::kDrawArcLite:
+    case cc::PaintOpType::kDrawLine:
+    case cc::PaintOpType::kDrawLineLite:
+    case cc::PaintOpType::kDrawPath:
+    case cc::PaintOpType::kDrawImage:
+    case cc::PaintOpType::kDrawImageRect:
+    case cc::PaintOpType::kDrawTextBlob:
+    case cc::PaintOpType::kDrawRecord:
+    case cc::PaintOpType::kDrawVertices:
+    case cc::PaintOpType::kDrawSlug:
+    case cc::PaintOpType::kDrawSkottie:
+    case cc::PaintOpType::kDrawScrollingContents:
+      return true;
+    default:
+      return false;
+  }
+}
+
+const cc::PaintFlags* PaintFlagsForStandaloneRenderer(const cc::PaintOp& op) {
+  switch (op.GetType()) {
+    case cc::PaintOpType::kDrawDRRect:
+      return &static_cast<const cc::DrawDRRectOp&>(op).flags;
+    case cc::PaintOpType::kDrawImage:
+      return &static_cast<const cc::DrawImageOp&>(op).flags;
+    case cc::PaintOpType::kDrawImageRect:
+      return &static_cast<const cc::DrawImageRectOp&>(op).flags;
+    case cc::PaintOpType::kDrawIRect:
+      return &static_cast<const cc::DrawIRectOp&>(op).flags;
+    case cc::PaintOpType::kDrawLine:
+      return &static_cast<const cc::DrawLineOp&>(op).flags;
+    case cc::PaintOpType::kDrawArc:
+      return &static_cast<const cc::DrawArcOp&>(op).flags;
+    case cc::PaintOpType::kDrawOval:
+      return &static_cast<const cc::DrawOvalOp&>(op).flags;
+    case cc::PaintOpType::kDrawPath:
+      return &static_cast<const cc::DrawPathOp&>(op).flags;
+    case cc::PaintOpType::kDrawRect:
+      return &static_cast<const cc::DrawRectOp&>(op).flags;
+    case cc::PaintOpType::kDrawRRect:
+      return &static_cast<const cc::DrawRRectOp&>(op).flags;
+    case cc::PaintOpType::kDrawTextBlob:
+      return &static_cast<const cc::DrawTextBlobOp&>(op).flags;
+    default:
+      return nullptr;
+  }
+}
+
+std::string PaintOpGeometryJsonForStandaloneRenderer(const cc::PaintOp& op) {
+  switch (op.GetType()) {
+    case cc::PaintOpType::kDrawRect:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawRectOp&>(op).rect);
+    case cc::PaintOpType::kDrawIRect: {
+      const SkIRect& rect = static_cast<const cc::DrawIRectOp&>(op).rect;
+      return SkRectJsonForStandaloneRenderer(
+          SkRect::MakeXYWH(rect.x(), rect.y(), rect.width(), rect.height()));
+    }
+    case cc::PaintOpType::kDrawRRect:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawRRectOp&>(op).rrect.rect());
+    case cc::PaintOpType::kDrawDRRect:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawDRRectOp&>(op).outer.rect());
+    case cc::PaintOpType::kDrawOval:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawOvalOp&>(op).oval);
+    case cc::PaintOpType::kDrawArc:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawArcOp&>(op).oval);
+    case cc::PaintOpType::kDrawArcLite:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawArcLiteOp&>(op).oval);
+    case cc::PaintOpType::kDrawImage: {
+      const auto& image = static_cast<const cc::DrawImageOp&>(op);
+      return SkRectJsonForStandaloneRenderer(SkRect::MakeXYWH(
+          image.left, image.top, static_cast<SkScalar>(image.image.width()),
+          static_cast<SkScalar>(image.image.height())));
+    }
+    case cc::PaintOpType::kDrawImageRect:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::DrawImageRectOp&>(op).dst);
+    case cc::PaintOpType::kDrawTextBlob: {
+      const auto& text = static_cast<const cc::DrawTextBlobOp&>(op);
+      return SkRectJsonForStandaloneRenderer(
+          SkRect::MakeXYWH(text.x, text.y, 0.0f, 0.0f));
+    }
+    case cc::PaintOpType::kClipRect:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::ClipRectOp&>(op).rect);
+    case cc::PaintOpType::kClipRRect:
+      return SkRectJsonForStandaloneRenderer(
+          static_cast<const cc::ClipRRectOp&>(op).rrect.rect());
+    case cc::PaintOpType::kTranslate: {
+      const auto& translate = static_cast<const cc::TranslateOp&>(op);
+      return "[" + std::to_string(translate.dx) + "," +
+             std::to_string(translate.dy) + "]";
+    }
+    case cc::PaintOpType::kScale: {
+      const auto& scale = static_cast<const cc::ScaleOp&>(op);
+      return "[" + std::to_string(scale.sx) + "," +
+             std::to_string(scale.sy) + "]";
+    }
+    case cc::PaintOpType::kRotate:
+      return "[" +
+             std::to_string(static_cast<const cc::RotateOp&>(op).degrees) +
+             "]";
+    case cc::PaintOpType::kConcat:
+      return MatrixJsonForStandaloneRenderer(
+          static_cast<const cc::ConcatOp&>(op).matrix);
+    case cc::PaintOpType::kSetMatrix:
+      return MatrixJsonForStandaloneRenderer(
+          static_cast<const cc::SetMatrixOp&>(op).matrix);
+    default:
+      return "null";
+  }
+}
+
+struct RawPaintRecordAudit {
+  std::map<std::string, int> top_level_histogram;
+  std::map<std::string, int> recursive_histogram;
+  std::map<std::string, int> unsupported_histogram;
+  std::map<std::string, int> fallback_histogram;
+  int paint_op_count = 0;
+  int recursive_paint_op_count = 0;
+  int visual_op_count = 0;
+  int text_blob_count = 0;
+  int image_count = 0;
+  int shader_count = 0;
+  int path_count = 0;
+  int filter_count = 0;
+  bool has_non_text_visual_paint = false;
+  bool has_non_translation_transform = false;
+  bool has_effect_opacity = false;
+};
+
+bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type);
+
+void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
+                                RawPaintRecordAudit& audit,
+                                std::ostringstream* paint_ops_json,
+                                bool top_level,
+                                int depth = 0) {
+  bool first = true;
+  for (const cc::PaintOp& op : record) {
+    const std::string op_name = cc::PaintOpTypeToString(op.GetType());
+    if (top_level) {
+      ++audit.top_level_histogram[op_name];
+      ++audit.paint_op_count;
+    }
+    ++audit.recursive_histogram[op_name];
+    ++audit.recursive_paint_op_count;
+    if (!IsPaintOpCurrentlyExtracted(op.GetType())) {
+      ++audit.unsupported_histogram[op_name];
+    }
+    if (IsVisualPaintOpForStandaloneRenderer(op.GetType())) {
+      ++audit.visual_op_count;
+      if (op.GetType() != cc::PaintOpType::kDrawTextBlob &&
+          op.GetType() != cc::PaintOpType::kDrawRecord) {
+        audit.has_non_text_visual_paint = true;
+      }
+    }
+    if (op.GetType() == cc::PaintOpType::kDrawTextBlob) {
+      ++audit.text_blob_count;
+    }
+    if (op.GetType() == cc::PaintOpType::kDrawImage ||
+        op.GetType() == cc::PaintOpType::kDrawImageRect) {
+      ++audit.image_count;
+      ++audit.fallback_histogram[op_name];
+    }
+    if (op.GetType() == cc::PaintOpType::kDrawPath ||
+        op.GetType() == cc::PaintOpType::kClipPath) {
+      ++audit.path_count;
+    }
+    if (op.GetType() == cc::PaintOpType::kDrawArc ||
+        op.GetType() == cc::PaintOpType::kDrawArcLite) {
+      ++audit.fallback_histogram[op_name];
+    }
+    if (op.GetType() == cc::PaintOpType::kSaveLayerAlpha) {
+      const auto& layer = static_cast<const cc::SaveLayerAlphaOp&>(op);
+      if (layer.alpha != 255) {
+        audit.has_effect_opacity = true;
+      }
+    }
+    if (op.GetType() == cc::PaintOpType::kSaveLayerFilters) {
+      ++audit.filter_count;
+    }
+    if (op.GetType() == cc::PaintOpType::kScale ||
+        op.GetType() == cc::PaintOpType::kRotate ||
+        op.GetType() == cc::PaintOpType::kConcat ||
+        op.GetType() == cc::PaintOpType::kSetMatrix) {
+      audit.has_non_translation_transform = true;
+    }
+
+    const cc::PaintFlags* flags = PaintFlagsForStandaloneRenderer(op);
+    if (flags && flags->HasShader()) {
+      ++audit.shader_count;
+    }
+    if (flags && flags->getImageFilter()) {
+      ++audit.filter_count;
+    }
+
+    if (paint_ops_json) {
+      if (!first) {
+        *paint_ops_json << ",";
+      }
+      first = false;
+      *paint_ops_json << "{\"type\":" << JsonStringForStandaloneRenderer(op_name)
+                      << ",\"depth\":" << depth
+                      << ",\"accounting\":\""
+                      << (op.GetType() == cc::PaintOpType::kNoop
+                              ? "intentionally_nonvisual"
+                              : IsPaintOpCurrentlyExtracted(op.GetType())
+                                    ? "retained_supported"
+                                    : "retained_unsupported")
+                      << "\",\"has_flags\":" << (flags ? "true" : "false")
+                      << ",\"has_shader\":"
+                      << (flags && flags->HasShader() ? "true" : "false")
+                      << ",\"has_image_filter\":"
+                      << (flags && flags->getImageFilter() ? "true" : "false")
+                      << ",\"has_color_filter\":"
+                      << (flags && flags->getColorFilter() ? "true" : "false")
+                      << ",\"bounds_or_geometry\":"
+                      << PaintOpGeometryJsonForStandaloneRenderer(op) << "}";
+    }
+
+    if (op.GetType() == cc::PaintOpType::kDrawRecord) {
+      AppendPaintRecordAuditJson(
+          static_cast<const cc::DrawRecordOp&>(op).record, audit,
+          paint_ops_json, false, depth + 1);
+    }
+  }
+}
+
 std::string LowerAsciiForStandaloneRenderer(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) {
@@ -1435,6 +1847,33 @@ std::vector<std::string> ExtractStyleElementTextForStandaloneRenderer(
     search_offset = close + 8;
   }
   return styles;
+}
+
+std::string RemoveStyleElementBlocksForStandaloneRenderer(
+    const std::string& html) {
+  std::string lower = LowerAsciiForStandaloneRenderer(html);
+  std::string output;
+  size_t search_offset = 0;
+  while (true) {
+    const size_t open = lower.find("<style", search_offset);
+    if (open == std::string::npos) {
+      output += html.substr(search_offset);
+      break;
+    }
+    const size_t open_end = lower.find('>', open);
+    if (open_end == std::string::npos) {
+      output += html.substr(search_offset);
+      break;
+    }
+    const size_t close = lower.find("</style>", open_end + 1);
+    if (close == std::string::npos) {
+      output += html.substr(search_offset);
+      break;
+    }
+    output += html.substr(search_offset, open - search_offset);
+    search_offset = close + 8;
+  }
+  return output;
 }
 
 std::string ExtractHtmlAttributeForStandaloneRenderer(
@@ -1472,6 +1911,7 @@ std::string ExtractHtmlAttributeForStandaloneRenderer(
 void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                              LiveFramePaintProbeCache& cache) {
   cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
   const PaintChunks& chunks = artifact.GetPaintChunks();
   const DisplayItemList& items = artifact.GetDisplayItemList();
   cache.artifact_audit_lines.push_back(
@@ -1479,37 +1919,208 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       " display_items=" + std::to_string(items.size()));
 
   std::map<std::string, int> total_op_histogram;
+  std::map<std::string, int> total_recursive_op_histogram;
   std::map<std::string, int> total_unsupported_histogram;
+  std::map<std::string, int> total_fallback_histogram;
   int total_op_count = 0;
+  int total_recursive_op_count = 0;
+  int total_drawing_item_count = 0;
+  int total_non_drawing_item_count = 0;
+  RawPaintRecordAudit total_raw_audit;
+  std::ostringstream chunks_json;
+  chunks_json << "[";
   for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
        ++chunk_index) {
     const PaintChunk& chunk = chunks[chunk_index];
     std::map<std::string, int> chunk_op_histogram;
+    std::map<std::string, int> chunk_recursive_op_histogram;
     std::map<std::string, int> chunk_unsupported_histogram;
+    std::map<std::string, int> chunk_fallback_histogram;
     int chunk_op_count = 0;
+    int chunk_recursive_op_count = 0;
     int drawing_item_count = 0;
     int non_drawing_item_count = 0;
+    RawPaintRecordAudit chunk_raw_audit;
+    std::ostringstream display_items_json;
+    display_items_json << "[";
+    bool first_display_item = true;
 
-    for (const DisplayItem& item : artifact.DisplayItemsInChunk(chunk_index)) {
+    for (wtf_size_t item_index = chunk.begin_index;
+         item_index < chunk.end_index && item_index < items.size();
+         ++item_index) {
+      const DisplayItem& item = items[item_index];
+      if (!first_display_item) {
+        display_items_json << ",";
+      }
+      first_display_item = false;
+      const std::string item_id =
+          BlinkStringToStdStringForStandaloneRenderer(item.GetId().ToString());
+      const std::string item_type =
+          std::to_string(static_cast<int>(item.GetType()));
+      display_items_json << "{\"index\":" << item_index << ",\"id\":"
+                         << JsonStringForStandaloneRenderer(item_id)
+                         << ",\"type\":"
+                         << JsonStringForStandaloneRenderer(item_type)
+                         << ",\"client_debug_name\":null"
+                         << ",\"client_owner_node_id\":null"
+                         << ",\"visual_rect\":"
+                         << RectJsonForStandaloneRenderer(item.VisualRect())
+                         << ",\"is_drawing\":"
+                         << (item.IsDrawing() ? "true" : "false");
       if (!item.IsDrawing()) {
         ++non_drawing_item_count;
+        display_items_json
+            << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
       }
       ++drawing_item_count;
       const auto* drawing = DynamicTo<DrawingDisplayItem>(item);
       if (!drawing) {
+        display_items_json
+            << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
       }
-      AppendPaintRecordAudit(drawing->GetPaintRecord(), chunk_op_histogram,
-                             chunk_unsupported_histogram, chunk_op_count);
+      RawPaintRecordAudit item_audit;
+      std::ostringstream paint_ops_json;
+      paint_ops_json << "[";
+      AppendPaintRecordAuditJson(drawing->GetPaintRecord(), item_audit,
+                                 &paint_ops_json, true);
+      paint_ops_json << "]";
+      for (const auto& [name, count] : item_audit.top_level_histogram) {
+        chunk_op_histogram[name] += count;
+      }
+      for (const auto& [name, count] : item_audit.recursive_histogram) {
+        chunk_recursive_op_histogram[name] += count;
+      }
+      for (const auto& [name, count] : item_audit.unsupported_histogram) {
+        chunk_unsupported_histogram[name] += count;
+      }
+      for (const auto& [name, count] : item_audit.fallback_histogram) {
+        chunk_fallback_histogram[name] += count;
+      }
+      chunk_op_count += item_audit.paint_op_count;
+      chunk_recursive_op_count += item_audit.recursive_paint_op_count;
+      chunk_raw_audit.visual_op_count += item_audit.visual_op_count;
+      chunk_raw_audit.text_blob_count += item_audit.text_blob_count;
+      chunk_raw_audit.image_count += item_audit.image_count;
+      chunk_raw_audit.shader_count += item_audit.shader_count;
+      chunk_raw_audit.path_count += item_audit.path_count;
+      chunk_raw_audit.filter_count += item_audit.filter_count;
+      chunk_raw_audit.has_non_text_visual_paint |=
+          item_audit.has_non_text_visual_paint;
+      chunk_raw_audit.has_non_translation_transform |=
+          item_audit.has_non_translation_transform;
+      chunk_raw_audit.has_effect_opacity |= item_audit.has_effect_opacity;
+      display_items_json << ",\"paint_record_op_histogram\":"
+                         << MapToJsonObject(item_audit.top_level_histogram)
+                         << ",\"recursive_paint_record_op_histogram\":"
+                         << MapToJsonObject(item_audit.recursive_histogram)
+                         << ",\"paint_ops\":" << paint_ops_json.str() << "}";
     }
+    display_items_json << "]";
     for (const auto& [name, count] : chunk_op_histogram) {
       total_op_histogram[name] += count;
+    }
+    for (const auto& [name, count] : chunk_recursive_op_histogram) {
+      total_recursive_op_histogram[name] += count;
     }
     for (const auto& [name, count] : chunk_unsupported_histogram) {
       total_unsupported_histogram[name] += count;
     }
+    for (const auto& [name, count] : chunk_fallback_histogram) {
+      total_fallback_histogram[name] += count;
+    }
     total_op_count += chunk_op_count;
+    total_recursive_op_count += chunk_recursive_op_count;
+    total_drawing_item_count += drawing_item_count;
+    total_non_drawing_item_count += non_drawing_item_count;
+    total_raw_audit.visual_op_count += chunk_raw_audit.visual_op_count;
+    total_raw_audit.text_blob_count += chunk_raw_audit.text_blob_count;
+    total_raw_audit.image_count += chunk_raw_audit.image_count;
+    total_raw_audit.shader_count += chunk_raw_audit.shader_count;
+    total_raw_audit.path_count += chunk_raw_audit.path_count;
+    total_raw_audit.filter_count += chunk_raw_audit.filter_count;
+    total_raw_audit.has_non_text_visual_paint |=
+        chunk_raw_audit.has_non_text_visual_paint;
+    total_raw_audit.has_non_translation_transform |=
+        chunk_raw_audit.has_non_translation_transform;
+    total_raw_audit.has_effect_opacity |= chunk_raw_audit.has_effect_opacity;
+
+    if (chunk_index > 0) {
+      chunks_json << ",";
+    }
+    const std::string chunk_id =
+        BlinkStringToStdStringForStandaloneRenderer(chunk.id.ToString());
+    const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    uint32_t transform_chain_depth = 0;
+    bool projection_has_non_translation = false;
+    gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
+        chunk_state, &transform_chain_depth, &projection_has_non_translation);
+    const bool has_projection = true;
+    std::optional<FloatClipRect> clip;
+    if (!projection_has_non_translation) {
+      clip = GeometryMapper::LocalToAncestorClipRect(
+          chunk_state, PropertyTreeState::Root());
+    }
+    const std::string property_fingerprint =
+        chunk_id + ":" + std::to_string(chunk.begin_index) + ":" +
+        std::to_string(chunk.end_index) + ":" +
+        (has_projection ? MatrixJsonForStandaloneRenderer(projection) : "");
+    const uint64_t property_hash =
+        HashStringForStandaloneRenderer(property_fingerprint);
+    const std::string stable_key =
+        !chunk_id.empty()
+            ? "blink-chunk:id=" + chunk_id + ":state=" +
+                  std::to_string(property_hash)
+            : "blink-chunk:fingerprint=" +
+                  std::to_string(HashStringForStandaloneRenderer(
+                      std::to_string(chunk.begin_index) + ":" +
+                      std::to_string(chunk.end_index))) +
+                  ":state=" + std::to_string(property_hash) +
+                  ":debug-index=" + std::to_string(chunk_index);
+    chunks_json << "{\"index\":" << chunk_index << ",\"paint_chunk_id\":"
+                << JsonStringForStandaloneRenderer(chunk_id)
+                << ",\"stable_key\":"
+                << JsonStringForStandaloneRenderer(stable_key)
+                << ",\"begin_index\":" << chunk.begin_index
+                << ",\"end_index\":" << chunk.end_index
+                << ",\"bounds\":" << RectJsonForStandaloneRenderer(chunk.bounds)
+                << ",\"drawable_bounds\":"
+                << RectJsonForStandaloneRenderer(chunk.drawable_bounds)
+                << ",\"has_text\":" << (chunk.has_text ? "true" : "false")
+                << ",\"is_cacheable\":"
+                << (chunk.is_cacheable ? "true" : "false")
+                << ",\"can_match_old_chunk\":"
+                << (chunk.CanMatchOldChunk() ? "true" : "false")
+                << ",\"client_debug_name\":null,\"client_owner_node_id\":null"
+                << ",\"property_state\":{\"state_hash\":" << property_hash
+                << ",\"transform_to_root\":"
+                << (has_projection ? MatrixJsonForStandaloneRenderer(projection)
+                                   : "null")
+                << ",\"transform_is_2d\":"
+                << (has_projection && projection.Is2dTransform() ? "true"
+                                                                 : "false")
+                << ",\"transform_has_non_translation\":"
+                << (projection_has_non_translation ? "true" : "false")
+                << ",\"transform_chain_depth\":" << transform_chain_depth
+                << ",\"has_clip_rect\":"
+                << (clip && !clip->IsInfinite() ? "true" : "false")
+                << ",\"clip_rect\":"
+                << (clip && !clip->IsInfinite()
+                        ? RectFJsonForStandaloneRenderer(clip->Rect())
+                        : "null")
+                << "},\"property_tree\":{\"transform_chain\":[],"
+                << "\"clip_chain\":[],\"effect_chain\":[],\"scroll\":null,"
+                << "\"inaccessible_fields\":["
+                << "\"raw transform/clip/effect/scroll ancestor fields are not exposed through the current standalone probe boundary; add accessors near blink_property_tree_snapshot in standalone_live_frame_bridge_probe.cc\"]}"
+                << ",\"op_histogram\":" << MapToJsonObject(chunk_op_histogram)
+                << ",\"recursive_op_histogram\":"
+                << MapToJsonObject(chunk_recursive_op_histogram)
+                << ",\"unsupported_ops\":"
+                << MapToJsonObject(chunk_unsupported_histogram)
+                << ",\"fallback_rasterized_ops\":"
+                << MapToJsonObject(chunk_fallback_histogram)
+                << ",\"display_items\":" << display_items_json.str() << "}";
 
     cache.artifact_audit_lines.push_back(
         "paint_artifact_audit chunk index=" + std::to_string(chunk_index) +
@@ -1530,12 +2141,101 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
         MapToJsonObject(chunk_op_histogram) + " unsupported=" +
         MapToJsonObject(chunk_unsupported_histogram));
   }
+  chunks_json << "]";
 
   cache.artifact_audit_lines.push_back(
       "paint_artifact_audit totals paint_ops=" +
       std::to_string(total_op_count) + " ops=" +
       MapToJsonObject(total_op_histogram) + " unsupported=" +
       MapToJsonObject(total_unsupported_histogram));
+
+  const std::string lowered_input =
+      LowerAsciiForStandaloneRenderer(cache.body_html);
+  std::vector<std::string> warnings;
+  if (lowered_input.find("linear-gradient") != std::string::npos &&
+      total_raw_audit.shader_count == 0) {
+    warnings.push_back(
+        "expected_feature_missing feature=box_gradient_background reason=raw Blink PaintArtifact audit did not expose shader-backed paint for linear-gradient input");
+  }
+  if (lowered_input.find("border") != std::string::npos &&
+      !total_raw_audit.has_non_text_visual_paint) {
+    warnings.push_back(
+        "expected_feature_missing feature=box_border_or_background reason=raw Blink PaintArtifact audit found no non-text visual paint ops");
+  }
+  if (total_raw_audit.text_blob_count == 0 &&
+      lowered_input.find("hello") != std::string::npos) {
+    warnings.push_back(
+        "expected_feature_missing feature=text reason=raw Blink PaintArtifact audit found no DrawTextBlob");
+  }
+  if (total_raw_audit.image_count == 0 &&
+      lowered_input.find("<img") != std::string::npos) {
+    warnings.push_back(
+        "expected_feature_missing feature=image reason=raw Blink PaintArtifact audit found no DrawImage/DrawImageRect; standalone live embedder does not yet feed data/local image resources into Blink image loading");
+  }
+  if (lowered_input.find("transform") != std::string::npos &&
+      !total_raw_audit.has_non_translation_transform) {
+    warnings.push_back(
+        "expected_feature_missing feature=non_translation_transform reason=raw audit did not finish transform evidence; transformed overflow currently remains a live extraction crash blocker");
+  }
+
+  std::ostringstream json;
+  json << "{\"source\":\"real Blink PaintArtifact\""
+       << ",\"viewport\":{\"width\":" << cache.viewport_width
+       << ",\"height\":" << cache.viewport_height << "}"
+       << ",\"device_scale_factor\":1"
+       << ",\"raw_chunk_count\":" << chunks.size()
+       << ",\"raw_display_item_count\":" << items.size()
+       << ",\"raw_drawing_display_item_count\":" << total_drawing_item_count
+       << ",\"raw_non_drawing_display_item_count\":"
+       << total_non_drawing_item_count
+       << ",\"raw_paint_op_histogram\":"
+       << MapToJsonObject(total_op_histogram)
+       << ",\"recursive_raw_blink_paint_op_histogram\":"
+       << MapToJsonObject(total_recursive_op_histogram)
+       << ",\"unsupported_raw_op_histogram\":"
+       << MapToJsonObject(total_unsupported_histogram)
+       << ",\"fallback_rasterized_raw_op_histogram\":"
+       << MapToJsonObject(total_fallback_histogram)
+       << ",\"resource_summary\":{\"text_blob_count\":"
+       << total_raw_audit.text_blob_count
+       << ",\"image_count\":" << total_raw_audit.image_count
+       << ",\"shader_count\":" << total_raw_audit.shader_count
+       << ",\"path_count\":" << total_raw_audit.path_count
+       << ",\"filter_count\":" << total_raw_audit.filter_count << "}"
+       << ",\"chunks\":" << chunks_json.str()
+       << ",\"self_checks\":{\"css_applied\":\"unknown\""
+       << ",\"has_text_paint\":"
+       << (total_raw_audit.text_blob_count > 0 ? "true" : "false")
+       << ",\"has_non_text_paint\":"
+       << (total_raw_audit.has_non_text_visual_paint ? "true" : "false")
+       << ",\"has_shader_paint\":"
+       << (total_raw_audit.shader_count > 0 ? "true" : "false")
+       << ",\"has_clip_state\":false"
+       << ",\"has_non_translation_transform\":"
+       << (total_raw_audit.has_non_translation_transform ? "true" : "false")
+       << ",\"has_effect_opacity\":"
+       << (total_raw_audit.has_effect_opacity ? "true" : "false")
+       << ",\"raw_ops_lost_during_retained_extraction\":\"unknown\""
+       << ",\"visual_unsupported_ops\":";
+  int visual_unsupported_ops = 0;
+  for (const auto& [name, count] : total_unsupported_histogram) {
+    visual_unsupported_ops += count;
+  }
+  int fallback_ops = 0;
+  for (const auto& [name, count] : total_fallback_histogram) {
+    fallback_ops += count;
+  }
+  json << visual_unsupported_ops
+       << ",\"diagnostic_bitmap_fallback_ops\":" << fallback_ops << "}"
+       << ",\"warnings\":[";
+  for (size_t i = 0; i < warnings.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    json << JsonStringForStandaloneRenderer(warnings[i]);
+  }
+  json << "]}";
+  cache.raw_paint_artifact_audit_json = json.str();
 }
 
 void InstallStyleElementsForStandaloneRenderer(Document& document,
@@ -1684,8 +2384,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     }
     document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
   } else {
+    InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
+    const std::string body_fragment =
+        RemoveStyleElementBlocksForStandaloneRenderer(input_html);
     document.body()->SetInnerHTMLWithoutTrustedTypes(
-        String::FromUtf8(input_html));
+        String::FromUtf8(body_fragment));
   }
   TraceLiveFrameProbeStage("after SetInnerHTML");
   DumpNodeForStandaloneRenderer(*document.body(), 0);
@@ -1716,10 +2419,10 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
+  cache.body_html = input_html;
   BuildPaintArtifactAudit(artifact, cache);
   ExportDrawOpsForStandaloneRenderer(artifact, cache);
   cache.result = result;
-  cache.body_html = input_html;
   cache.initialized = true;
   return result;
 }
@@ -1747,6 +2450,7 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
 }
 
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer() {
@@ -1892,6 +2596,28 @@ int StandaloneBlinkLiveFrameBridgeArtifactAuditLineAtForStandaloneRenderer(
   const int copy_count =
       std::min(static_cast<int>(line.size()), buffer_size - 1);
   std::memcpy(buffer, line.data(), static_cast<size_t>(copy_count));
+  buffer[copy_count] = '\0';
+  return copy_count;
+}
+
+int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().raw_paint_artifact_audit_json.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonForStandaloneRenderer(
+    const char* body_html,
+    char* buffer,
+    int buffer_size) {
+  RunLiveFramePaintProbe(body_html);
+  const std::string& json = ProbeCache().raw_paint_artifact_audit_json;
+  if (!buffer || buffer_size <= 0) {
+    return 0;
+  }
+  const int copy_count =
+      std::min(static_cast<int>(json.size()), buffer_size - 1);
+  std::memcpy(buffer, json.data(), static_cast<size_t>(copy_count));
   buffer[copy_count] = '\0';
   return copy_count;
 }

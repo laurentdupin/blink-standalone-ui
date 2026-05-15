@@ -102,6 +102,7 @@ struct RenderResult {
   Rect damage_bounds;
   std::vector<Rect> damage_rects;
   bool requires_full_redraw = true;
+  std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<std::string> diagnostics;
   std::vector<std::string> missing_resources;

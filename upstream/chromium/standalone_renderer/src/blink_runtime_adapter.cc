@@ -51,6 +51,12 @@ int StandaloneBlinkLiveFrameBridgeArtifactAuditLineAtForStandaloneRenderer(
     int line_index,
     char* buffer,
     int buffer_size);
+int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonForStandaloneRenderer(
+    const char* body_html,
+    char* buffer,
+    int buffer_size);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -1307,6 +1313,63 @@ bool RasterizeGlyphRunForBlinkBridge(const GlyphRun& glyph_run,
 
 std::string BuildLiveBlinkProbeHtml(const std::string& html,
                                     const std::vector<Stylesheet>& stylesheets) {
+  const auto lower_ascii = [](std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) {
+                     return static_cast<char>(std::tolower(c));
+                   });
+    return value;
+  };
+  const auto extract_style_blocks = [&](const std::string& input) {
+    std::string styles;
+    const std::string lower = lower_ascii(input);
+    size_t search_offset = 0;
+    while (true) {
+      const size_t open = lower.find("<style", search_offset);
+      if (open == std::string::npos) {
+        break;
+      }
+      const size_t open_end = lower.find('>', open);
+      if (open_end == std::string::npos) {
+        break;
+      }
+      const size_t close = lower.find("</style>", open_end + 1);
+      if (close == std::string::npos) {
+        break;
+      }
+      styles += "<style>";
+      styles += input.substr(open_end + 1, close - open_end - 1);
+      styles += "</style>";
+      search_offset = close + 8;
+    }
+    return styles;
+  };
+  const auto remove_style_blocks = [&](const std::string& input) {
+    std::string output;
+    const std::string lower = lower_ascii(input);
+    size_t search_offset = 0;
+    while (true) {
+      const size_t open = lower.find("<style", search_offset);
+      if (open == std::string::npos) {
+        output += input.substr(search_offset);
+        break;
+      }
+      const size_t open_end = lower.find('>', open);
+      if (open_end == std::string::npos) {
+        output += input.substr(search_offset);
+        break;
+      }
+      const size_t close = lower.find("</style>", open_end + 1);
+      if (close == std::string::npos) {
+        output += input.substr(search_offset);
+        break;
+      }
+      output += input.substr(search_offset, open - search_offset);
+      search_offset = close + 8;
+    }
+    return output;
+  };
+
   std::string stylesheet_html;
   for (const Stylesheet& stylesheet : stylesheets) {
     stylesheet_html += "<style>";
@@ -1335,7 +1398,8 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
   if (has_body || has_html) {
     return "<head>" + stylesheet_html + "</head>" + html;
   }
-  return "<head>" + stylesheet_html + "</head><body>" + html + "</body>";
+  return "<head>" + stylesheet_html + extract_style_blocks(html) +
+         "</head><body>" + remove_style_blocks(html) + "</body>";
 }
 
 std::string NormalizeBlinkTextNodeValue(const std::string& value) {
@@ -1883,6 +1947,22 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     const int chunk_count =
         live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
             probe_html.c_str());
+    const int raw_audit_json_size =
+        live_probe::
+            StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRenderer(
+                probe_html.c_str());
+    if (raw_audit_json_size > 0) {
+      std::string raw_json(static_cast<size_t>(raw_audit_json_size) + 1, '\0');
+      const int copied =
+          live_probe::
+              StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonForStandaloneRenderer(
+                  probe_html.c_str(), raw_json.data(),
+                  static_cast<int>(raw_json.size()));
+      if (copied > 0) {
+        raw_json.resize(static_cast<size_t>(copied));
+        result.raw_paint_artifact_audit_json = std::move(raw_json);
+      }
+    }
     if (chunk_count <= 0) {
       result.diagnostics.push_back("real Blink PaintArtifact bridge produced no chunks");
       return;
@@ -1920,7 +2000,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         result.diagnostics.push_back(line.data());
       }
     }
-
     int translated_command_count = 0;
     for (int i = 0; i < exported_draw_op_count; ++i) {
       int type = 0;
@@ -2000,10 +2079,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               property_state_hash ^ 0xc2b2ae3d27d4eb4full;
           active_chunk_property_state.effect_chain_depth = 1;
         }
-        active_chunk_key = "blink-chunk:state=" +
+        active_chunk_key = "blink-chunk:fingerprint=chunk-" +
+                           std::to_string(chunk_index) + "-state-" +
                            std::to_string(
                                active_chunk_property_state.state_hash) +
-                           ":range-index=" + std::to_string(chunk_index);
+                           ":state=" +
+                           std::to_string(
+                               active_chunk_property_state.state_hash) +
+                           ":debug-index=" + std::to_string(chunk_index);
         active_commands = &chunk_commands;
       } else if (type == 13) {
         if (inside_chunk) {

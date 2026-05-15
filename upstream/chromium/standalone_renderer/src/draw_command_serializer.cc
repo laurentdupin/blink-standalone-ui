@@ -484,6 +484,10 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
   WriteHitTestEntries(out, result.hit_test_entries);
   out << ",\"diagnostics\":";
   WriteStringArray(out, result.diagnostics);
+  if (!result.raw_paint_artifact_audit_json.empty()) {
+    out << ",\"raw_paint_artifact_audit_json\":"
+        << result.raw_paint_artifact_audit_json;
+  }
   out << ",\"missing_resources\":";
   WriteStringArray(out, result.missing_resources);
   out << ",\"successor_snapshot\":{\"timeline_time_seconds\":"
@@ -541,6 +545,40 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     if (diagnostic.find("SaveLayerFilters") != std::string::npos ||
         diagnostic.find("filter") != std::string::npos) {
       ++filter_count;
+    }
+  }
+
+  if (!result.raw_paint_artifact_audit_json.empty()) {
+    std::ostringstream retained;
+    retained << ",\"retained_draw_command_histogram\":";
+    WriteStringIntMap(retained, command_histogram);
+    retained << ",\"extracted_retained_scene\":{\"chunk_count\":"
+             << result.frame.scene_chunks.size()
+             << ",\"scene_command_count\":" << result.frame.scene_commands.size()
+             << ",\"resource_command_count\":"
+             << result.frame.resource_commands.size()
+             << ",\"chunks\":";
+    WriteSceneChunks(retained, result.frame.scene_chunks);
+    retained << "}";
+    retained << ",\"missing_from_retained\":[]";
+    retained << ",\"damage\":{\"requires_full_redraw\":"
+             << (result.frame.requires_full_redraw ? "true" : "false")
+             << ",\"mapping_source\":\"property_state.transform_to_root\","
+             << "\"fallback_full_viewport_reason\":"
+             << (result.frame.requires_full_redraw
+                     ? "\"conservative retained damage until raw property-tree mapping is complete\""
+                     : "null")
+             << ",\"damage_bounds\":";
+    WriteRect(retained, result.frame.damage_bounds);
+    retained << "}";
+    retained << ",\"retained_warnings\":";
+    WriteStringArray(retained, result.diagnostics);
+
+    std::string raw = result.raw_paint_artifact_audit_json;
+    const size_t object_end = raw.find_last_of('}');
+    if (object_end != std::string::npos) {
+      raw.insert(object_end, retained.str());
+      return raw;
     }
   }
 
