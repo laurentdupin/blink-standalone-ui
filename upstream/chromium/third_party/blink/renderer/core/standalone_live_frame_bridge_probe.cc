@@ -31,7 +31,10 @@
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkString.h"
+#include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkTextBlob.h"
+#include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -57,7 +60,6 @@
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-#include "third_party/skia/include/core/SkTextBlob.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -835,6 +837,15 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
     return;
   }
   SkSerialProcs procs;
+  procs.fTypefaceProc = [](SkTypeface* typeface,
+                           void*) -> sk_sp<const SkData> {
+    if (!typeface) {
+      return nullptr;
+    }
+    const uintptr_t typeface_address =
+        reinterpret_cast<uintptr_t>(typeface);
+    return SkData::MakeWithCopy(&typeface_address, sizeof(typeface_address));
+  };
   sk_sp<SkData> serialized_blob = text_op.blob->serialize(procs);
   if (serialized_blob && serialized_blob->size() > 0) {
     LiveExportedDrawOp exported;

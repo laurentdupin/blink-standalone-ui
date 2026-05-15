@@ -23,8 +23,10 @@
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
+#include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
+#include "third_party/skia/include/core/SkTypeface.h"
 
 namespace html_css_renderer {
 namespace {
@@ -302,6 +304,19 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       break;
     case DrawCommandType::kDrawTextBlob: {
       SkDeserialProcs procs;
+      procs.fTypefaceStreamProc = [](SkStream& stream,
+                                     void*) -> sk_sp<SkTypeface> {
+        uintptr_t typeface_address = 0;
+        if (stream.read(&typeface_address, sizeof(typeface_address)) !=
+            sizeof(typeface_address)) {
+          return nullptr;
+        }
+        auto* typeface = reinterpret_cast<SkTypeface*>(typeface_address);
+        if (!typeface) {
+          return nullptr;
+        }
+        return sk_ref_sp(typeface);
+      };
       sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(
           command.text_blob_bytes.data(), command.text_blob_bytes.size(),
           procs);
