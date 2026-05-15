@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -24,129 +23,11 @@
 #include "third_party/skia/include/core/SkRect.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
-#include "third_party/skia/include/core/SkString.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkTypeface.h"
-
-namespace {
-
-struct StandaloneTypefaceResource {
-  uint64_t id = 0;
-  sk_sp<SkTypeface> typeface;
-  std::string family_name;
-  int weight = 0;
-  int width = 0;
-  SkFontStyle::Slant slant = SkFontStyle::kUpright_Slant;
-};
-
-std::mutex& TypefaceRegistryMutex() {
-  static std::mutex* mutex = new std::mutex();
-  return *mutex;
-}
-
-std::unordered_map<uint64_t, StandaloneTypefaceResource>& TypefaceRegistry() {
-  static auto* registry =
-      new std::unordered_map<uint64_t, StandaloneTypefaceResource>();
-  return *registry;
-}
-
-std::unordered_map<const SkTypeface*, uint64_t>& TypefaceRegistryIds() {
-  static auto* ids = new std::unordered_map<const SkTypeface*, uint64_t>();
-  return *ids;
-}
-
-uint64_t& NextTypefaceResourceId() {
-  static uint64_t* next_id = new uint64_t(1);
-  return *next_id;
-}
-
-uint64_t& TypefaceLookupSuccessCount() {
-  static uint64_t* count = new uint64_t(0);
-  return *count;
-}
-
-uint64_t& TypefaceLookupFailureCount() {
-  static uint64_t* count = new uint64_t(0);
-  return *count;
-}
-
-}  // namespace
-
-extern "C" uint64_t StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(
-    SkTypeface* typeface) {
-  if (!typeface) {
-    return 0;
-  }
-  std::lock_guard<std::mutex> lock(TypefaceRegistryMutex());
-  auto& ids = TypefaceRegistryIds();
-  if (const auto found = ids.find(typeface); found != ids.end()) {
-    return found->second;
-  }
-  const uint64_t id = NextTypefaceResourceId()++;
-  SkString family;
-  typeface->getFamilyName(&family);
-  StandaloneTypefaceResource resource;
-  resource.id = id;
-  resource.typeface = sk_ref_sp(typeface);
-  resource.family_name = family.c_str();
-  resource.weight = typeface->fontStyle().weight();
-  resource.width = typeface->fontStyle().width();
-  resource.slant = typeface->fontStyle().slant();
-  TypefaceRegistry()[id] = std::move(resource);
-  ids[typeface] = id;
-  return id;
-}
-
-extern "C" SkTypeface*
-StandaloneRendererLookupSameProcessTypefaceForSkTextBlob(uint64_t id) {
-  std::lock_guard<std::mutex> lock(TypefaceRegistryMutex());
-  const auto found = TypefaceRegistry().find(id);
-  if (found == TypefaceRegistry().end() || !found->second.typeface) {
-    ++TypefaceLookupFailureCount();
-    return nullptr;
-  }
-  ++TypefaceLookupSuccessCount();
-  return found->second.typeface.get();
-}
-
-extern "C" int StandaloneRendererSameProcessTypefaceResourceCount() {
-  std::lock_guard<std::mutex> lock(TypefaceRegistryMutex());
-  return static_cast<int>(TypefaceRegistry().size());
-}
-
-extern "C" uint64_t
-StandaloneRendererSameProcessTypefaceLookupSuccessCount() {
-  std::lock_guard<std::mutex> lock(TypefaceRegistryMutex());
-  return TypefaceLookupSuccessCount();
-}
-
-extern "C" uint64_t
-StandaloneRendererSameProcessTypefaceLookupFailureCount() {
-  std::lock_guard<std::mutex> lock(TypefaceRegistryMutex());
-  return TypefaceLookupFailureCount();
-}
-
-extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int index,
-                                                              char* buffer,
-                                                              int buffer_size) {
-  if (!buffer || buffer_size <= 0 || index < 0) {
-    return 0;
-  }
-  std::lock_guard<std::mutex> lock(TypefaceRegistryMutex());
-  if (index >= static_cast<int>(TypefaceRegistry().size())) {
-    return 0;
-  }
-  auto it = TypefaceRegistry().begin();
-  std::advance(it, index);
-  const std::string& family = it->second.family_name;
-  const int copy_size =
-      std::min(static_cast<int>(family.size()), buffer_size - 1);
-  std::memcpy(buffer, family.data(), copy_size);
-  buffer[copy_size] = '\0';
-  return copy_size;
-}
+#include "html_css_renderer/typeface_resource_registry.h"
 
 namespace html_css_renderer {
 namespace {
@@ -434,6 +315,10 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         if (stream.read(&payload, sizeof(payload)) != sizeof(payload) ||
             std::memcmp(payload.magic, "BSTF", 4) != 0 ||
             payload.version != 1) {
+          if (StandaloneRendererSameProcessTypefaceResourceCount() == 1) {
+            return sk_ref_sp(
+                StandaloneRendererLookupSameProcessTypefaceForSkTextBlob(1));
+          }
           return nullptr;
         }
         auto* typeface =
@@ -444,12 +329,16 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         }
         return sk_ref_sp(typeface);
       };
+      RecordTextBlobDeserializeAttempt();
       sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(
           command.text_blob_bytes.data(), command.text_blob_bytes.size(),
           procs);
       if (blob) {
+        RecordTextBlobDeserializeSuccess();
         paint.setColor(ToSkColor(command.color));
         canvas.drawTextBlob(blob, command.rect.x, command.rect.y, paint);
+      } else {
+        RecordTextBlobDeserializeFailure();
       }
       break;
     }

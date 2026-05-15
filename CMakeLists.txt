@@ -123,6 +123,7 @@ endif()
 add_executable(blink_standalone_render_benchmark_skia
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/render_benchmark.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
   ${BLINK_STANDALONE_LIVE_SOURCES}
   ${BLINK_STANDALONE_LIVE_OBJECTS}
 )
@@ -212,6 +213,7 @@ add_executable(blink_standalone_render_benchmark_skia
     add_executable(blink_standalone_sdl_viewer_skia
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/sdl_viewer.cc
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
       ${BLINK_STANDALONE_LIVE_SOURCES}
       ${BLINK_STANDALONE_LIVE_OBJECTS}
     )

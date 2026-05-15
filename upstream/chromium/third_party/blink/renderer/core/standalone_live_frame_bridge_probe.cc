@@ -72,10 +72,16 @@ extern "C" int g_standalone_blink_viewport_height;
 extern "C" uint64_t
 StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(SkTypeface*);
 extern "C" int StandaloneRendererSameProcessTypefaceResourceCount();
+extern "C" int StandaloneRendererTextBlobReplayDiagnosticsEnabled();
+extern "C" uint64_t
+StandaloneRendererSameProcessTypefaceLookupAttemptCount();
 extern "C" uint64_t
 StandaloneRendererSameProcessTypefaceLookupSuccessCount();
 extern "C" uint64_t
 StandaloneRendererSameProcessTypefaceLookupFailureCount();
+extern "C" uint64_t StandaloneRendererTextBlobDeserializeAttemptCount();
+extern "C" uint64_t StandaloneRendererTextBlobDeserializeSuccessCount();
+extern "C" uint64_t StandaloneRendererTextBlobDeserializeFailureCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
                                                               char*,
                                                               int);
@@ -851,6 +857,16 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
                       std::vector<LiveExportedDrawOp>& exported_draw_ops) {
   if (!text_op.blob) {
     return;
+  }
+  {
+    SkTextBlob::Iter iter(*text_op.blob);
+    SkTextBlob::Iter::Run run;
+    while (iter.next(&run)) {
+      if (run.fTypeface) {
+        StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(
+            run.fTypeface);
+      }
+    }
   }
   SkSerialProcs procs;
   procs.fTypefaceProc = [](SkTypeface* typeface,
@@ -2267,6 +2283,53 @@ std::map<std::string, int> ImageSchemeHistogramForStandaloneRenderer(
   return histogram;
 }
 
+std::vector<std::string> ImageSrcListForStandaloneRenderer(
+    const std::string& html) {
+  std::vector<std::string> sources;
+  std::string lower = LowerAsciiForStandaloneRenderer(html);
+  size_t offset = 0;
+  while (true) {
+    const size_t img = lower.find("<img", offset);
+    if (img == std::string::npos) {
+      break;
+    }
+    const size_t tag_end = lower.find('>', img);
+    const std::string tag =
+        html.substr(img, tag_end == std::string::npos ? std::string::npos
+                                                      : tag_end - img + 1);
+    sources.push_back(ExtractHtmlAttributeForStandaloneRenderer(tag, "src"));
+    offset = tag_end == std::string::npos ? html.size() : tag_end + 1;
+  }
+  return sources;
+}
+
+std::string SchemeForStandaloneRenderer(const std::string& url) {
+  const size_t colon = url.find(':');
+  if (colon == std::string::npos) {
+    return "relative_or_empty";
+  }
+  return LowerAsciiForStandaloneRenderer(url.substr(0, colon));
+}
+
+int EncodedDataBytesForStandaloneRenderer(const std::string& url) {
+  if (SchemeForStandaloneRenderer(url) != "data") {
+    return 0;
+  }
+  const size_t comma = url.find(',');
+  if (comma == std::string::npos || comma + 1 >= url.size()) {
+    return 0;
+  }
+  return static_cast<int>(url.size() - comma - 1);
+}
+
+std::string TruncatedUrlForStandaloneRenderer(const std::string& url) {
+  constexpr size_t kMaxUrlForAudit = 96;
+  if (url.size() <= kMaxUrlForAudit) {
+    return url;
+  }
+  return url.substr(0, kMaxUrlForAudit) + "...";
+}
+
 std::vector<std::string> ExtractStyleElementTextForStandaloneRenderer(
     const std::string& html) {
   std::vector<std::string> styles;
@@ -2727,6 +2790,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << StandaloneRendererSameProcessTypefaceResourceCount()
        << ",\"same_process_only\":true"
        << ",\"raw_pointer_payloads\":0"
+       << ",\"lookup_attempt_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupAttemptCount()
        << ",\"lookup_success_count\":"
        << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
        << ",\"lookup_failure_count\":"
@@ -2745,11 +2810,22 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     json << JsonStringForStandaloneRenderer(family);
   }
   json << "]}"
-       << ",\"text_blob_replay\":{\"raw_blob_count\":"
+       << ",\"text_blob_replay\":{\"enabled\":"
+       << (StandaloneRendererTextBlobReplayDiagnosticsEnabled() ? "true"
+                                                                 : "false")
+       << ",\"raw_blob_count\":"
        << total_raw_audit.text_blob_count
        << ",\"retained_blob_count\":" << total_raw_audit.text_blob_count
+       << ",\"deserialize_attempt_count\":"
+       << StandaloneRendererTextBlobDeserializeAttemptCount()
        << ",\"deserialize_success_count\":"
-       << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+       << StandaloneRendererTextBlobDeserializeSuccessCount()
+       << ",\"deserialize_failure_count\":"
+       << StandaloneRendererTextBlobDeserializeFailureCount()
+       << ",\"typeface_resource_count\":"
+       << StandaloneRendererSameProcessTypefaceResourceCount()
+       << ",\"typeface_lookup_attempt_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupAttemptCount()
        << ",\"typeface_lookup_success_count\":"
        << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
        << ",\"typeface_lookup_failure_count\":"
@@ -2767,6 +2843,59 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                ? "no Blink image paint emitted; standalone loader/decode path for data/local images is not wired"
                : "not_applicable_or_painted")
        << "\",\"decode_status\":\"unknown\",\"layout_status\":\"unknown\"}"
+       << ",\"image_pipeline\":{\"image_element_count\":"
+       << image_element_count << ",\"images\":[";
+  const std::vector<std::string> image_sources =
+      ImageSrcListForStandaloneRenderer(cache.body_html);
+  for (size_t i = 0; i < image_sources.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    const std::string& src = image_sources[i];
+    const bool has_image_paint = total_raw_audit.image_count > 0;
+    json << "{\"src_scheme\":"
+         << JsonStringForStandaloneRenderer(SchemeForStandaloneRenderer(src))
+         << ",\"current_src\":"
+         << JsonStringForStandaloneRenderer(
+                TruncatedUrlForStandaloneRenderer(src))
+         << ",\"complete\":\"unknown\""
+         << ",\"natural_width\":0"
+         << ",\"natural_height\":0"
+         << ",\"layout_object_type\":\"unknown_after_live_link_stub\""
+         << ",\"is_layout_image\":\"unknown\""
+         << ",\"cached_image_present\":\"unknown\""
+         << ",\"image_resource_content_present\":false"
+         << ",\"encoded_data_bytes\":"
+         << EncodedDataBytesForStandaloneRenderer(src)
+         << ",\"decode_status\":"
+         << JsonStringForStandaloneRenderer(
+                has_image_paint
+                    ? "painted"
+                    : "not_reached_because_ImageResourceContent_fetch_stub_returns_null")
+         << ",\"paint_status\":"
+         << JsonStringForStandaloneRenderer(
+                has_image_paint ? "image paint emitted"
+                                : "no image paint emitted")
+         << ",\"blocker_file\":"
+         << JsonStringForStandaloneRenderer(
+                has_image_paint
+                    ? ""
+                    : "upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc")
+         << ",\"blocker_functions\":["
+         << JsonStringForStandaloneRenderer(
+                "ImageResourceContent::Fetch(FetchParameters&, ResourceFetcher*)")
+         << ","
+         << JsonStringForStandaloneRenderer(
+                "ImageResourceContent::GetImage() const")
+         << ","
+         << JsonStringForStandaloneRenderer(
+                "LayoutImageResource::GetImage(const gfx::SizeF&) const")
+         << ","
+         << JsonStringForStandaloneRenderer(
+                "LayoutImageResource::GetNaturalDimensions(float) const")
+         << "]}";
+  }
+  json << "]}"
        << ",\"page_evidence\":" << page_evidence_json
        << ",\"chunks\":" << chunks_json.str()
        << ",\"self_checks\":{\"css_applied\":\"unknown\""
@@ -3103,6 +3232,18 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   g_standalone_blink_viewport_height = clamped_height;
   delete cache.holder;
   cache.holder = nullptr;
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

@@ -8,10 +8,16 @@ namespace html_css_renderer {
 namespace {
 
 extern "C" int StandaloneRendererSameProcessTypefaceResourceCount();
+extern "C" int StandaloneRendererTextBlobReplayDiagnosticsEnabled();
+extern "C" uint64_t
+StandaloneRendererSameProcessTypefaceLookupAttemptCount();
 extern "C" uint64_t
 StandaloneRendererSameProcessTypefaceLookupSuccessCount();
 extern "C" uint64_t
 StandaloneRendererSameProcessTypefaceLookupFailureCount();
+extern "C" uint64_t StandaloneRendererTextBlobDeserializeAttemptCount();
+extern "C" uint64_t StandaloneRendererTextBlobDeserializeSuccessCount();
+extern "C" uint64_t StandaloneRendererTextBlobDeserializeFailureCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
                                                               char*,
                                                               int);
@@ -189,7 +195,37 @@ void WriteResourceCommands(std::ostringstream& out,
     out << "{\"type\":\"" << ToString(commands[i].type)
         << "\",\"resource_id\":\"" << EscapeJson(commands[i].resource_id)
         << "\"";
-    if (commands[i].type != ResourceCommandType::kDestroyResource) {
+    if (commands[i].type == ResourceCommandType::kLoadTypeface) {
+      out << ",\"typeface_resource_id\":" << commands[i].typeface_resource_id
+          << ",\"family\":\"" << EscapeJson(commands[i].family_name)
+          << "\",\"weight\":" << commands[i].font_weight
+          << ",\"width\":" << commands[i].font_width
+          << ",\"slant\":\"" << EscapeJson(commands[i].font_slant)
+          << "\",\"same_process_only\":"
+          << (commands[i].same_process_only ? "true" : "false")
+          << ",\"portable_font_data_available\":"
+          << (commands[i].portable_font_data_available ? "true" : "false")
+          << ",\"portability_status\":\""
+          << EscapeJson(commands[i].portability_status) << "\"";
+    } else if (commands[i].type == ResourceCommandType::kLoadTextBlob) {
+      out << ",\"text_blob_resource_id\":"
+          << commands[i].text_blob_resource_id
+          << ",\"blob_byte_count\":"
+          << commands[i].serialized_text_blob_bytes.size()
+          << ",\"dependent_typeface_resource_ids\":[";
+      for (size_t id_index = 0;
+           id_index < commands[i].dependent_typeface_resource_ids.size();
+           ++id_index) {
+        if (id_index > 0) {
+          out << ",";
+        }
+        out << commands[i].dependent_typeface_resource_ids[id_index];
+      }
+      out << "],\"bounds\":";
+      WriteRect(out, commands[i].resource_bounds);
+      out << ",\"portability_status\":\""
+          << EscapeJson(commands[i].portability_status) << "\"";
+    } else if (commands[i].type != ResourceCommandType::kDestroyResource) {
       out << ",\"load_command\":"
           << SerializeLoadCommandJson(commands[i].load_command);
     }
@@ -586,6 +622,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
              << StandaloneRendererSameProcessTypefaceResourceCount()
              << ",\"same_process_only\":true"
              << ",\"raw_pointer_payloads\":0"
+             << ",\"lookup_attempt_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupAttemptCount()
              << ",\"lookup_success_count\":"
              << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
              << ",\"lookup_failure_count\":"
@@ -604,8 +642,19 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
       retained << "\"" << EscapeJson(family) << "\"";
     }
     retained << "]}"
-             << ",\"post_replay_text_blob_replay\":{\"retained_blob_count\":"
+             << ",\"post_replay_text_blob_replay\":{\"enabled\":"
+             << (StandaloneRendererTextBlobReplayDiagnosticsEnabled() ? "true"
+                                                                       : "false")
+             << ",\"retained_blob_count\":"
              << text_blob_count
+             << ",\"deserialize_attempt_count\":"
+             << StandaloneRendererTextBlobDeserializeAttemptCount()
+             << ",\"deserialize_success_count\":"
+             << StandaloneRendererTextBlobDeserializeSuccessCount()
+             << ",\"deserialize_failure_count\":"
+             << StandaloneRendererTextBlobDeserializeFailureCount()
+             << ",\"typeface_lookup_attempt_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupAttemptCount()
              << ",\"typeface_lookup_success_count\":"
              << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
              << ",\"typeface_lookup_failure_count\":"

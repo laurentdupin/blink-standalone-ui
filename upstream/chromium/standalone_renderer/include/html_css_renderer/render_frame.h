@@ -14,6 +14,8 @@ enum class ResourceCommandType {
   kCreateOrUpdateImage,
   kCreateOrUpdateFont,
   kCreateOrUpdateGlyphAtlas,
+  kLoadTypeface,
+  kLoadTextBlob,
   kDestroyResource,
 };
 
@@ -32,8 +34,32 @@ struct ResourceCommand {
   ResourceCommandType type = ResourceCommandType::kCreateOrUpdateImage;
   std::string resource_id;
   LoadCommand load_command;
+  uint64_t typeface_resource_id = 0;
+  uint64_t text_blob_resource_id = 0;
+  std::vector<uint64_t> dependent_typeface_resource_ids;
+  std::vector<uint8_t> serialized_text_blob_bytes;
+  Rect resource_bounds;
+  std::string family_name;
+  int font_weight = 0;
+  int font_width = 0;
+  std::string font_slant;
+  std::string portability_status;
+  bool same_process_only = false;
+  bool portable_font_data_available = false;
 
   static ResourceCommand FromLoadCommand(const LoadCommand& command);
+  static ResourceCommand LoadTypeface(uint64_t typeface_id,
+                                      std::string family_name,
+                                      int weight,
+                                      int width,
+                                      std::string slant,
+                                      bool same_process_only,
+                                      bool portable_font_data_available);
+  static ResourceCommand LoadTextBlob(uint64_t text_blob_id,
+                                      std::vector<uint8_t> blob_bytes,
+                                      std::vector<uint64_t> typeface_ids,
+                                      Rect bounds,
+                                      std::string portability_status);
   static ResourceCommand Destroy(std::string resource_id);
 };
 

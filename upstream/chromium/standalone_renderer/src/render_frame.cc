@@ -35,6 +35,47 @@ ResourceCommand ResourceCommand::Destroy(std::string resource_id) {
   return resource;
 }
 
+ResourceCommand ResourceCommand::LoadTypeface(
+    uint64_t typeface_id,
+    std::string family_name,
+    int weight,
+    int width,
+    std::string slant,
+    bool same_process_only,
+    bool portable_font_data_available) {
+  ResourceCommand resource;
+  resource.type = ResourceCommandType::kLoadTypeface;
+  resource.typeface_resource_id = typeface_id;
+  resource.resource_id = "typeface-" + std::to_string(typeface_id);
+  resource.family_name = std::move(family_name);
+  resource.font_weight = weight;
+  resource.font_width = width;
+  resource.font_slant = std::move(slant);
+  resource.same_process_only = same_process_only;
+  resource.portable_font_data_available = portable_font_data_available;
+  resource.portability_status =
+      portable_font_data_available ? "portable_font_data" : "same_process_only";
+  return resource;
+}
+
+ResourceCommand ResourceCommand::LoadTextBlob(
+    uint64_t text_blob_id,
+    std::vector<uint8_t> blob_bytes,
+    std::vector<uint64_t> typeface_ids,
+    Rect bounds,
+    std::string portability_status) {
+  ResourceCommand resource;
+  resource.type = ResourceCommandType::kLoadTextBlob;
+  resource.text_blob_resource_id = text_blob_id;
+  resource.resource_id = "text-blob-" + std::to_string(text_blob_id);
+  resource.serialized_text_blob_bytes = std::move(blob_bytes);
+  resource.dependent_typeface_resource_ids = std::move(typeface_ids);
+  resource.resource_bounds = bounds;
+  resource.portability_status = std::move(portability_status);
+  resource.same_process_only = resource.portability_status == "same_process_only";
+  return resource;
+}
+
 SceneCommand SceneCommand::BeginChunk(std::string chunk_id, Rect bounds) {
   SceneCommand command;
   command.type = SceneCommandType::kBeginChunk;
@@ -65,6 +106,10 @@ const char* ToString(ResourceCommandType type) {
       return "CreateOrUpdateFont";
     case ResourceCommandType::kCreateOrUpdateGlyphAtlas:
       return "CreateOrUpdateGlyphAtlas";
+    case ResourceCommandType::kLoadTypeface:
+      return "LoadTypeface";
+    case ResourceCommandType::kLoadTextBlob:
+      return "LoadTextBlob";
     case ResourceCommandType::kDestroyResource:
       return "DestroyResource";
   }
@@ -138,7 +183,9 @@ LoadCommandList FlattenResourceCommands(
     const std::vector<ResourceCommand>& resource_commands) {
   LoadCommandList load_commands;
   for (const ResourceCommand& command : resource_commands) {
-    if (command.type != ResourceCommandType::kDestroyResource) {
+    if (command.type == ResourceCommandType::kCreateOrUpdateImage ||
+        command.type == ResourceCommandType::kCreateOrUpdateFont ||
+        command.type == ResourceCommandType::kCreateOrUpdateGlyphAtlas) {
       load_commands.push_back(command.load_command);
     }
   }

@@ -14,6 +14,7 @@
 #include "html_css_renderer/blink_runtime_environment.h"
 #include "html_css_renderer/render_policy.h"
 #include "html_css_renderer/retained_scene.h"
+#include "html_css_renderer/typeface_resource_registry.h"
 #if defined(HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE)
 #include "html_css_renderer/blink_tree_bridge_probe.h"
 #endif
@@ -32,6 +33,7 @@ void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
@@ -1808,7 +1810,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
     disable_retained_extraction_ = create_info.disable_retained_extraction;
     trace_stages_ = create_info.trace_stages;
+    debug_text_blob_replay_ = create_info.debug_text_blob_replay;
     lifecycle_stop_ = create_info.lifecycle_stop;
+    SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
 #if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
@@ -1958,6 +1962,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const std::vector<Stylesheet>& stylesheets) {
     namespace live_probe = ::blink::standalone_renderer_probe;
     const std::string probe_html = BuildLiveBlinkProbeHtml(html, stylesheets);
+    ResetTypefaceResourceRegistryForFrame();
+    SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
+    live_probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
     live_probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(result.successor_snapshot.viewport.width),
         static_cast<int>(result.successor_snapshot.viewport.height));
@@ -2028,6 +2035,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     int active_chunk_debug_index = -1;
     bool inside_chunk = false;
     LoadCommandList load_commands;
+    std::vector<ResourceCommand> explicit_resource_commands;
 
     const int audit_line_count =
         live_probe::
@@ -2318,6 +2326,16 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                   StandaloneBlinkLiveFrameBridgeExportedTextBlobBytesAtForStandaloneRenderer(
                       probe_html.c_str(), i, blob_bytes.data(), byte_count) ==
               byte_count) {
+            const uint64_t text_blob_resource_id =
+                static_cast<uint64_t>(i) + 1u;
+            std::vector<uint64_t> typeface_ids;
+            for (const TypefaceResource& resource :
+                 SnapshotTypefaceResources()) {
+              typeface_ids.push_back(resource.id);
+            }
+            explicit_resource_commands.push_back(ResourceCommand::LoadTextBlob(
+                text_blob_resource_id, blob_bytes, typeface_ids,
+                Rect{x, y, width, height}, "same_process_only"));
             active_commands->push_back(DrawCommand::DrawTextBlob(
                 std::move(blob_bytes), Point{x, y}, color));
             ++translated_command_count;
@@ -2440,11 +2458,24 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         "extractor=real_blink_paint_artifact_extractor");
     result.diagnostics.push_back(
         "real Blink PaintArtifact exported through retained PaintOp commands");
+    for (const TypefaceResource& resource : SnapshotTypefaceResources()) {
+      explicit_resource_commands.push_back(ResourceCommand::LoadTypeface(
+          resource.id, resource.family_name, resource.weight, resource.width,
+          resource.slant == SkFontStyle::kItalic_Slant
+              ? "italic"
+              : resource.slant == SkFontStyle::kOblique_Slant ? "oblique"
+                                                              : "upright",
+          resource.same_process_only, resource.portable_font_data_available));
+    }
+    result.frame.resource_commands.insert(result.frame.resource_commands.end(),
+                                          explicit_resource_commands.begin(),
+                                          explicit_resource_commands.end());
   }
 
   RendererSnapshot snapshot_;
   bool disable_retained_extraction_ = false;
   bool trace_stages_ = false;
+  bool debug_text_blob_replay_ = false;
   std::string lifecycle_stop_;
   std::optional<RetainedScene> previous_retained_scene_;
 };

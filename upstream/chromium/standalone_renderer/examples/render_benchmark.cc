@@ -655,7 +655,7 @@ int main(int argc, char** argv) {
     blink_create_info.renderer = std::move(create_info);
     blink_create_info.disable_retained_extraction = disable_retained_extraction;
     blink_create_info.trace_stages = trace_stages;
-    (void)debug_text_blob_replay;
+    blink_create_info.debug_text_blob_replay = debug_text_blob_replay;
     blink_create_info.lifecycle_stop = lifecycle_stop;
     blink_embedder =
         html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
@@ -752,6 +752,16 @@ int main(int argc, char** argv) {
                                        loaded_font_path)) {
     std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
     return 1;
+  }
+  if (!paint_artifact_dump_path.empty()) {
+    std::ofstream audit_file(paint_artifact_dump_path);
+    if (!audit_file) {
+      std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
+                   paint_artifact_dump_path.c_str());
+      return 1;
+    }
+    audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+               << "\n";
   }
 
   std::printf("render_metrics width=%d height=%d non_white=%zu unique=%zu\n",
