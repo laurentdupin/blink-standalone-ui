@@ -388,6 +388,7 @@ void PrintUsage() {
                "[--lifecycle-stop <html|style|layout|prepaint|paint|artifact>] "
                "[--crash-dump <path>] "
                "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
+               "[--debug-text-blob-replay] "
                "[--font-file path]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
                " [--blink] [--manual]"
@@ -461,6 +462,7 @@ int main(int argc, char** argv) {
   bool disable_retained_extraction = false;
   bool disable_skia_raster = false;
   bool trace_stages = false;
+  bool debug_text_blob_replay = false;
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   bool use_blink = true;
 #else
@@ -574,6 +576,8 @@ int main(int argc, char** argv) {
       crash_dump_path = arg.substr(13);
     } else if (arg == "--trace-stages") {
       trace_stages = true;
+    } else if (arg == "--debug-text-blob-replay") {
+      debug_text_blob_replay = true;
     } else if (arg == "--paint-oracle") {
       const char* value = next_value();
       if (!value) {
@@ -651,6 +655,7 @@ int main(int argc, char** argv) {
     blink_create_info.renderer = std::move(create_info);
     blink_create_info.disable_retained_extraction = disable_retained_extraction;
     blink_create_info.trace_stages = trace_stages;
+    (void)debug_text_blob_replay;
     blink_create_info.lifecycle_stop = lifecycle_stop;
     blink_embedder =
         html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));

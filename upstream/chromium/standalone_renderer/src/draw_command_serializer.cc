@@ -7,6 +7,15 @@
 namespace html_css_renderer {
 namespace {
 
+extern "C" int StandaloneRendererSameProcessTypefaceResourceCount();
+extern "C" uint64_t
+StandaloneRendererSameProcessTypefaceLookupSuccessCount();
+extern "C" uint64_t
+StandaloneRendererSameProcessTypefaceLookupFailureCount();
+extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
+                                                              char*,
+                                                              int);
+
 std::string EscapeJson(const std::string& value) {
   std::ostringstream out;
   for (const unsigned char c : value) {
@@ -573,6 +582,35 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     retained << "}";
     retained << ",\"retained_warnings\":";
     WriteStringArray(retained, result.diagnostics);
+    retained << ",\"post_replay_typeface_resources\":{\"count\":"
+             << StandaloneRendererSameProcessTypefaceResourceCount()
+             << ",\"same_process_only\":true"
+             << ",\"raw_pointer_payloads\":0"
+             << ",\"lookup_success_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+             << ",\"lookup_failure_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+             << ",\"families\":[";
+    for (int i = 0; i < StandaloneRendererSameProcessTypefaceResourceCount();
+         ++i) {
+      char family[256] = {};
+      if (StandaloneRendererSameProcessTypefaceFamilyAt(i, family,
+                                                        sizeof(family)) <= 0) {
+        continue;
+      }
+      if (i > 0) {
+        retained << ",";
+      }
+      retained << "\"" << EscapeJson(family) << "\"";
+    }
+    retained << "]}"
+             << ",\"post_replay_text_blob_replay\":{\"retained_blob_count\":"
+             << text_blob_count
+             << ",\"typeface_lookup_success_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+             << ",\"typeface_lookup_failure_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+             << "}";
 
     std::string raw = result.raw_paint_artifact_audit_json;
     const size_t object_end = raw.find_last_of('}');

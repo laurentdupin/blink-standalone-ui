@@ -123,7 +123,7 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
     reference = Image.open(reference_path)
     if standalone.size != reference.size:
         reference = reference.resize(standalone.size)
-    background = auto_corner_background(reference) if background_mode == "auto-corners" else parse_rgb(background_mode)
+    background = auto_corner_background(reference) if background_mode in {"auto-corners", "sampled-reference-background"} else parse_rgb(background_mode)
     width, height = standalone.size
     total = width * height
     standalone_mask = content_mask(standalone, background, threshold)
@@ -167,7 +167,7 @@ def main() -> None:
     parser.add_argument("--playwright", required=True, type=Path)
     parser.add_argument("--out-json", required=True, type=Path)
     parser.add_argument("--out-dir", type=Path)
-    parser.add_argument("--compare-background", default="white", choices=["white", "black", "auto-corners"])
+    parser.add_argument("--compare-background", default="white", help="white, black, auto-corners, sampled-reference-background, or #RRGGBB")
     parser.add_argument("--compare-threshold", default=8, type=int)
     args = parser.parse_args()
     out_dir = args.out_dir or args.out_json.parent

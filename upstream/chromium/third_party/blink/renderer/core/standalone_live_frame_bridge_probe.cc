@@ -69,8 +69,24 @@ namespace blink::standalone_renderer_probe {
 extern "C" bool g_standalone_blink_saw_font_draw_text;
 extern "C" int g_standalone_blink_viewport_width;
 extern "C" int g_standalone_blink_viewport_height;
+extern "C" uint64_t
+StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(SkTypeface*);
+extern "C" int StandaloneRendererSameProcessTypefaceResourceCount();
+extern "C" uint64_t
+StandaloneRendererSameProcessTypefaceLookupSuccessCount();
+extern "C" uint64_t
+StandaloneRendererSameProcessTypefaceLookupFailureCount();
+extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
+                                                              char*,
+                                                              int);
 
 namespace {
+
+struct StandaloneTypefacePayload {
+  char magic[4] = {'B', 'S', 'T', 'F'};
+  uint32_t version = 1;
+  uint64_t typeface_resource_id = 0;
+};
 
 struct LiveFramePaintProbeResult {
   int lifecycle_reached_paint_clean = 0;
@@ -842,9 +858,13 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
     if (!typeface) {
       return nullptr;
     }
-    const uintptr_t typeface_address =
-        reinterpret_cast<uintptr_t>(typeface);
-    return SkData::MakeWithCopy(&typeface_address, sizeof(typeface_address));
+    StandaloneTypefacePayload payload;
+    payload.typeface_resource_id =
+        StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(typeface);
+    if (payload.typeface_resource_id == 0) {
+      return nullptr;
+    }
+    return SkData::MakeWithCopy(&payload, sizeof(payload));
   };
   sk_sp<SkData> serialized_blob = text_op.blob->serialize(procs);
   if (serialized_blob && serialized_blob->size() > 0) {
@@ -2703,6 +2723,38 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"shader_count\":" << total_raw_audit.shader_count
        << ",\"path_count\":" << total_raw_audit.path_count
        << ",\"filter_count\":" << total_raw_audit.filter_count << "}"
+       << ",\"typeface_resources\":{\"count\":"
+       << StandaloneRendererSameProcessTypefaceResourceCount()
+       << ",\"same_process_only\":true"
+       << ",\"raw_pointer_payloads\":0"
+       << ",\"lookup_success_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+       << ",\"lookup_failure_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+       << ",\"families\":[";
+  for (int i = 0; i < StandaloneRendererSameProcessTypefaceResourceCount();
+       ++i) {
+    char family[256] = {};
+    if (StandaloneRendererSameProcessTypefaceFamilyAt(i, family,
+                                                       sizeof(family)) <= 0) {
+      continue;
+    }
+    if (i > 0) {
+      json << ",";
+    }
+    json << JsonStringForStandaloneRenderer(family);
+  }
+  json << "]}"
+       << ",\"text_blob_replay\":{\"raw_blob_count\":"
+       << total_raw_audit.text_blob_count
+       << ",\"retained_blob_count\":" << total_raw_audit.text_blob_count
+       << ",\"deserialize_success_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+       << ",\"typeface_lookup_success_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+       << ",\"typeface_lookup_failure_count\":"
+       << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+       << ",\"failures\":[]}"
        << ",\"image_diagnostics\":{\"image_element_count\":";
   int image_element_count = 0;
   for (const auto& [scheme, count] : image_scheme_histogram) {
