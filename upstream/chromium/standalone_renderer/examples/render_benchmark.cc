@@ -12,6 +12,13 @@
 #include <unordered_set>
 #include <vector>
 
+#if defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "Dbghelp.lib")
+#endif
+
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
 #include "html_css_renderer/blink_adapter.h"
 #endif
@@ -378,6 +385,8 @@ void PrintUsage() {
                "[--dump-paint-artifact <artifact.json>] "
                "[--audit-only] [--disable-retained-extraction] "
                "[--disable-skia-raster] "
+               "[--lifecycle-stop <html|style|layout|prepaint|paint|artifact>] "
+               "[--crash-dump <path>] "
                "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
                "[--font-file path]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
@@ -388,6 +397,47 @@ void PrintUsage() {
 #endif
                "\n");
 }
+
+#if defined(_WIN32)
+std::string g_crash_dump_path;
+
+LONG WINAPI WriteBenchmarkCrashDump(EXCEPTION_POINTERS* exception_pointers) {
+  if (g_crash_dump_path.empty()) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  HANDLE file = CreateFileA(g_crash_dump_path.c_str(), GENERIC_WRITE, 0, nullptr,
+                            CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) {
+    std::fprintf(stderr, "crash_dump.failed path=%s gle=%lu\n",
+                 g_crash_dump_path.c_str(), GetLastError());
+    std::fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  MINIDUMP_EXCEPTION_INFORMATION exception_info;
+  exception_info.ThreadId = GetCurrentThreadId();
+  exception_info.ExceptionPointers = exception_pointers;
+  exception_info.ClientPointers = FALSE;
+  const BOOL ok = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(),
+                                    file, MiniDumpWithDataSegs,
+                                    &exception_info, nullptr, nullptr);
+  CloseHandle(file);
+  const DWORD code =
+      exception_pointers && exception_pointers->ExceptionRecord
+          ? exception_pointers->ExceptionRecord->ExceptionCode
+          : 0;
+  const void* address =
+      exception_pointers && exception_pointers->ExceptionRecord
+          ? exception_pointers->ExceptionRecord->ExceptionAddress
+          : nullptr;
+  std::fprintf(stderr,
+               "crash_dump.%s path=%s exception_code=0x%08lx address=%p "
+               "thread_id=%lu gle=%lu\n",
+               ok ? "written" : "failed", g_crash_dump_path.c_str(), code,
+               address, GetCurrentThreadId(), ok ? 0 : GetLastError());
+  std::fflush(stderr);
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
 
 }  // namespace
 
@@ -402,6 +452,8 @@ int main(int argc, char** argv) {
   std::string paint_artifact_dump_path;
   std::string paint_oracle;
   std::string oracle_out_path;
+  std::string crash_dump_path;
+  std::string lifecycle_stop;
   std::string font_file;
   size_t min_non_white = 1;
   bool use_skia_cpu = false;
@@ -502,6 +554,24 @@ int main(int argc, char** argv) {
     } else if (arg == "--disable-skia-raster") {
       disable_skia_raster = true;
       min_non_white = 0;
+    } else if (arg == "--lifecycle-stop") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      lifecycle_stop = value;
+    } else if (arg.rfind("--lifecycle-stop=", 0) == 0) {
+      lifecycle_stop = arg.substr(17);
+    } else if (arg == "--crash-dump") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      crash_dump_path = value;
+    } else if (arg.rfind("--crash-dump=", 0) == 0) {
+      crash_dump_path = arg.substr(13);
     } else if (arg == "--trace-stages") {
       trace_stages = true;
     } else if (arg == "--paint-oracle") {
@@ -553,6 +623,13 @@ int main(int argc, char** argv) {
     return 2;
   }
 
+#if defined(_WIN32)
+  if (!crash_dump_path.empty()) {
+    g_crash_dump_path = crash_dump_path;
+    SetUnhandledExceptionFilter(&WriteBenchmarkCrashDump);
+  }
+#endif
+
   std::string loaded_font_path;
   if (!font_file.empty()) {
     assets.font_bytes = ReadBinaryFile(font_file);
@@ -574,6 +651,7 @@ int main(int argc, char** argv) {
     blink_create_info.renderer = std::move(create_info);
     blink_create_info.disable_retained_extraction = disable_retained_extraction;
     blink_create_info.trace_stages = trace_stages;
+    blink_create_info.lifecycle_stop = lifecycle_stop;
     blink_embedder =
         html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
     if (!blink_embedder) {

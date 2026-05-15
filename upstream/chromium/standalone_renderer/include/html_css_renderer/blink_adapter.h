@@ -92,6 +92,7 @@ struct BlinkPageEmbedderCreateInfo {
   bool allow_transitional_v8_link = true;
   bool disable_retained_extraction = false;
   bool trace_stages = false;
+  std::string lifecycle_stop;
 };
 
 struct BlinkLifecycleReport {

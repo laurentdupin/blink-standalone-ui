@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/paint/object_paint_properties.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
@@ -169,6 +170,7 @@ struct LiveFramePaintProbeCache {
   int viewport_height = 200;
   bool disable_retained_extraction = false;
   bool trace_stages = false;
+  std::string lifecycle_stop;
   bool initialized = false;
 };
 
@@ -184,6 +186,11 @@ void TraceLiveFrameProbeStage(const char* stage) {
   }
   std::fprintf(stderr, "live_probe.stage=%s\n", stage ? stage : "(null)");
   std::fflush(stderr);
+}
+
+bool LifecycleStopEqualsForStandaloneRenderer(const char* value) {
+  const std::string& lifecycle_stop = ProbeCache().lifecycle_stop;
+  return !lifecycle_stop.empty() && lifecycle_stop == value;
 }
 
 void DumpNodeForStandaloneRenderer(const Node& node, int depth) {
@@ -1495,6 +1502,112 @@ std::string MapToJsonObject(const std::map<std::string, int>& values) {
   return json;
 }
 
+Element* FindElementByClassForStandaloneRenderer(Node& node,
+                                                 const AtomicString& class_name) {
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (element->HasClassName(class_name)) {
+      return element;
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    if (Element* found =
+            FindElementByClassForStandaloneRenderer(*child, class_name)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
+  if (!element) {
+    return "{\"present\":false}";
+  }
+  std::ostringstream json;
+  json << "{\"present\":true";
+  if (const ComputedStyle* style = element->GetComputedStyle()) {
+    json << ",\"computed_style\":{\"opacity\":" << style->Opacity()
+         << ",\"has_opacity\":" << (style->HasOpacity() ? "true" : "false")
+         << ",\"has_transform\":" << (style->HasTransform() ? "true" : "false")
+         << ",\"has_transform_operations\":"
+         << (style->HasTransformOperations() ? "true" : "false")
+         << ",\"has_non_translation_transform\":"
+         << (style->HasTransform() && style->HasTransformOperations() &&
+                     !style->Transform().IsIdentityOrTranslation()
+                 ? "true"
+                 : "false")
+         << ",\"overflow_x\":" << static_cast<int>(style->OverflowX())
+         << ",\"overflow_y\":" << static_cast<int>(style->OverflowY())
+         << ",\"has_border_radius\":"
+         << (style->HasBorderRadius() ? "true" : "false")
+         << ",\"has_background_image\":"
+         << (style->BackgroundLayers().GetImage() ? "true" : "false")
+         << "}";
+  } else {
+    json << ",\"computed_style\":{\"status\":\"unavailable\"}";
+  }
+  if (LayoutObject* layout_object = element->GetLayoutObject()) {
+    json << ",\"layout\":{\"object_type\":\"layout_object\""
+         << ",\"is_box\":"
+         << (layout_object->IsBox() ? "true" : "false")
+         << ",\"is_scroll_container\":"
+         << (layout_object->IsScrollContainer() ? "true" : "false");
+    const ObjectPaintProperties* properties =
+        layout_object->FirstFragment().PaintProperties();
+    if (properties) {
+      const auto* transform = properties->Transform();
+      const auto* rotate = properties->Rotate();
+      const auto* effect = properties->Effect();
+      const auto* overflow_clip = properties->OverflowClip();
+      const auto* inner_radius_clip = properties->InnerBorderRadiusClip();
+      json << ",\"object_paint_properties\":{\"present\":true"
+           << ",\"transform_present\":"
+           << (transform ? "true" : "false")
+           << ",\"rotate_present\":" << (rotate ? "true" : "false")
+           << ",\"effect_present\":" << (effect ? "true" : "false")
+           << ",\"effect_opacity\":"
+           << (effect ? std::to_string(effect->Opacity()) : "1")
+           << ",\"effect_has_non_default_opacity\":"
+           << (effect && effect->Opacity() != 1.0f ? "true" : "false")
+           << ",\"overflow_clip_present\":"
+           << (overflow_clip ? "true" : "false")
+           << ",\"inner_border_radius_clip_present\":"
+           << (inner_radius_clip ? "true" : "false")
+           << ",\"scroll_translation_present\":"
+           << (properties->ScrollTranslation() ? "true" : "false")
+           << ",\"scroll_present\":"
+           << (properties->Scroll() ? "true" : "false")
+           << "}";
+    } else {
+      json << ",\"object_paint_properties\":{\"present\":false}";
+    }
+    json << "}";
+  } else {
+    json << ",\"layout\":{\"object_type\":null,"
+            "\"object_paint_properties\":{\"present\":false}}";
+  }
+  json << "}";
+  return json.str();
+}
+
+std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
+  Element* body = document.body();
+  Element* card = body ? FindElementByClassForStandaloneRenderer(
+                             *body, AtomicString("card"))
+                       : nullptr;
+  Element* child = body ? FindElementByClassForStandaloneRenderer(
+                              *body, AtomicString("child"))
+                        : nullptr;
+  Element* box = body ? FindElementByClassForStandaloneRenderer(
+                            *body, AtomicString("box"))
+                      : nullptr;
+  std::ostringstream json;
+  json << "{\"card\":" << ElementEvidenceJsonForStandaloneRenderer(card)
+       << ",\"child\":" << ElementEvidenceJsonForStandaloneRenderer(child)
+       << ",\"box\":" << ElementEvidenceJsonForStandaloneRenderer(box)
+       << "}";
+  return json.str();
+}
+
 std::string JsonEscapeForStandaloneRenderer(const std::string& value) {
   std::ostringstream out;
   for (const unsigned char c : value) {
@@ -2379,6 +2492,10 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       chunk_raw_audit.has_effect_opacity = true;
       total_raw_audit.has_effect_opacity = true;
     }
+    if (projection_has_non_translation) {
+      chunk_raw_audit.has_non_translation_transform = true;
+      total_raw_audit.has_non_translation_transform = true;
+    }
     if (!projection_has_non_translation &&
         (clip_chain_depth > 0 || chunk_state.Clip().ClipPath().has_value() ||
          chunk_state.Clip().PaintClipRect().IsRounded() ||
@@ -2506,6 +2623,24 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       LowerAsciiForStandaloneRenderer(cache.body_html);
   const std::map<std::string, int> image_scheme_histogram =
       ImageSchemeHistogramForStandaloneRenderer(cache.body_html);
+  const std::string page_evidence_json =
+      cache.holder ? PageEvidenceJsonForStandaloneRenderer(
+                         cache.holder->GetDocument())
+                   : "{}";
+  const bool evidence_has_non_translation_transform =
+      page_evidence_json.find("\"has_non_translation_transform\":true") !=
+      std::string::npos;
+  const bool evidence_has_effect_opacity =
+      page_evidence_json.find("\"effect_has_non_default_opacity\":true") !=
+          std::string::npos ||
+      page_evidence_json.find("\"has_opacity\":true") != std::string::npos;
+  const bool evidence_has_clip =
+      page_evidence_json.find("\"overflow_clip_present\":true") !=
+          std::string::npos ||
+      page_evidence_json.find("\"inner_border_radius_clip_present\":true") !=
+          std::string::npos ||
+      page_evidence_json.find("\"is_scroll_container\":true") !=
+          std::string::npos;
   std::vector<std::string> warnings;
   if (lowered_input.find("linear-gradient") != std::string::npos &&
       total_raw_audit.shader_count == 0) {
@@ -2569,6 +2704,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                ? "no Blink image paint emitted; standalone loader/decode path for data/local images is not wired"
                : "not_applicable_or_painted")
        << "\",\"decode_status\":\"unknown\",\"layout_status\":\"unknown\"}"
+       << ",\"page_evidence\":" << page_evidence_json
        << ",\"chunks\":" << chunks_json.str()
        << ",\"self_checks\":{\"css_applied\":\"unknown\""
        << ",\"has_text_paint\":"
@@ -2578,11 +2714,16 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"has_shader_paint\":"
        << (total_raw_audit.shader_count > 0 ? "true" : "false")
        << ",\"has_clip_state\":"
-       << (total_has_clip_state ? "true" : "false")
+       << (total_has_clip_state || evidence_has_clip ? "true" : "false")
        << ",\"has_non_translation_transform\":"
-       << (total_raw_audit.has_non_translation_transform ? "true" : "false")
+       << (total_raw_audit.has_non_translation_transform ||
+                   evidence_has_non_translation_transform
+               ? "true"
+               : "false")
        << ",\"has_effect_opacity\":"
-       << (total_raw_audit.has_effect_opacity ? "true" : "false")
+       << (total_raw_audit.has_effect_opacity || evidence_has_effect_opacity
+               ? "true"
+               : "false")
        << ",\"raw_visual_op_count\":" << total_raw_audit.visual_op_count
        << ",\"retained_supported_visual_op_count\":"
        << total_raw_audit.retained_supported_visual_op_count
@@ -2778,6 +2919,16 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         String::FromUtf8(body_fragment));
   }
   TraceLiveFrameProbeStage("after SetInnerHTML");
+  if (LifecycleStopEqualsForStandaloneRenderer("html")) {
+    result.lifecycle_reached_paint_clean = 0;
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"html\","
+        "\"status\":\"stopped_after_html\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
   DumpNodeForStandaloneRenderer(*document.body(), 0);
 
   LocalFrameView& frame_view = cache.holder->GetFrameView();
@@ -2788,10 +2939,61 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before active style update");
   document.GetStyleEngine().UpdateActiveStyle();
   TraceLiveFrameProbeStage("after active style update");
+  if (LifecycleStopEqualsForStandaloneRenderer("style")) {
+    result.lifecycle_reached_paint_clean = 0;
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"style\","
+        "\"status\":\"stopped_after_style\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
+  if (LifecycleStopEqualsForStandaloneRenderer("layout")) {
+    TraceLiveFrameProbeStage("before layout lifecycle update");
+    result.lifecycle_reached_paint_clean =
+        frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest)
+            ? 1
+            : 0;
+    TraceLiveFrameProbeStage("after layout lifecycle update");
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"layout\","
+        "\"status\":\"stopped_after_layout\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
+  if (LifecycleStopEqualsForStandaloneRenderer("prepaint")) {
+    TraceLiveFrameProbeStage("before prepaint lifecycle update");
+    result.lifecycle_reached_paint_clean =
+        frame_view.UpdateAllLifecyclePhasesExceptPaint(
+            DocumentUpdateReason::kTest)
+            ? 1
+            : 0;
+    TraceLiveFrameProbeStage("after prepaint lifecycle update");
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        "{\"source\":\"real Blink PaintArtifact\","
+        "\"lifecycle_stop\":\"prepaint\","
+        "\"status\":\"stopped_after_prepaint\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
   TraceLiveFrameProbeStage("before lifecycle update");
   result.lifecycle_reached_paint_clean =
       frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
   TraceLiveFrameProbeStage("after lifecycle update");
+  if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"paint\","
+        "\"status\":\"stopped_after_paint\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
   if (document.GetLayoutView()) {
     const gfx::Size view_size = document.GetLayoutView()->GetLayoutSize();
   }
@@ -2808,6 +3010,12 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("after display item count");
   cache.body_html = input_html;
   BuildPaintArtifactAudit(artifact, cache);
+  if (LifecycleStopEqualsForStandaloneRenderer("artifact")) {
+    cache.body_html = input_html;
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
   ExportDrawOpsForStandaloneRenderer(artifact, cache);
   cache.result = result;
   cache.initialized = true;
@@ -2863,6 +3071,21 @@ void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRend
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled) {
   ProbeCache().trace_stages = enabled != 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer() {
+  return ProbeCache().trace_stages ? 1 : 0;
+}
+
+void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
+    const char* lifecycle_stop) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const std::string value = lifecycle_stop ? lifecycle_stop : "";
+  if (cache.lifecycle_stop == value) {
+    return;
+  }
+  cache.lifecycle_stop = value;
+  cache.initialized = false;
 }
 
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer() {

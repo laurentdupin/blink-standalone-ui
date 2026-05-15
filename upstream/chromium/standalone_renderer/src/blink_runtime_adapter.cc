@@ -27,6 +27,8 @@ void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRend
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled);
+void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
+    const char* lifecycle_stop);
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -1806,6 +1808,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
     disable_retained_extraction_ = create_info.disable_retained_extraction;
     trace_stages_ = create_info.trace_stages;
+    lifecycle_stop_ = create_info.lifecycle_stop;
 #if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
@@ -1813,6 +1816,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
             trace_stages_ ? 1 : 0);
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
+            lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
 #endif
     snapshot_.html = create_info.renderer.html;
     snapshot_.stylesheets = create_info.renderer.stylesheets;
@@ -1958,6 +1964,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
+            lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
     if (!live_probe::
             StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer() ||
         !live_probe::
@@ -2436,6 +2445,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   RendererSnapshot snapshot_;
   bool disable_retained_extraction_ = false;
   bool trace_stages_ = false;
+  std::string lifecycle_stop_;
   std::optional<RetainedScene> previous_retained_scene_;
 };
 #endif

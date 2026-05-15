@@ -227,12 +227,22 @@ namespace blink {
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 Document* GetStandaloneDocumentForStandaloneRenderer();
+namespace standalone_renderer_probe {
+int StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer();
+}
 #endif
 
 namespace {
 
 void TraceStandaloneLocalFrameViewStage(const char* stage) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!standalone_renderer_probe::
+          StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer()) {
+    return;
+  }
+  std::fprintf(stderr, "local_frame_view.stage=%s\n",
+               stage ? stage : "(null)");
+  std::fflush(stderr);
 #endif
 }
 

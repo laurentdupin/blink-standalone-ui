@@ -545,6 +545,12 @@ static bool NeedsReplacedContentTransform(const LayoutObject& object) {
 
 static bool NeedsPaintOffsetTranslationForOverflowControls(
     const LayoutBoxModelObject& object) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The standalone renderer does not expose browser scrollbar/resizer controls
+  // as visual output. Avoid touching scrollbar-manager state during pre-paint;
+  // overflow clips and scroll property nodes are still built separately.
+  return false;
+#else
   if (auto* area = object.GetScrollableArea()) {
     if (area->HorizontalScrollbar() || area->VerticalScrollbar() ||
         area->Resizer()) {
@@ -552,6 +558,7 @@ static bool NeedsPaintOffsetTranslationForOverflowControls(
     }
   }
   return false;
+#endif
 }
 
 static bool IsInLocalSubframe(const LayoutObject& object) {
@@ -2810,6 +2817,9 @@ void FragmentPaintPropertyTreeBuilder::UpdateLocalBorderBoxContext() {
 }
 
 bool FragmentPaintPropertyTreeBuilder::NeedsOverflowControlsClip() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   if (!object_.IsScrollContainer())
     return false;
 
@@ -2824,6 +2834,7 @@ bool FragmentPaintPropertyTreeBuilder::NeedsOverflowControlsClip() const {
   gfx::Rect pixel_snapped_border_box_rect(
       gfx::Point(), scrollable_area->PixelSnappedBorderBoxSize());
   return !pixel_snapped_border_box_rect.Contains(scroll_controls_bounds);
+#endif
 }
 
 static bool NeedsInnerBorderRadiusClip(const LayoutObject& object) {
@@ -3440,6 +3451,13 @@ void FragmentPaintPropertyTreeBuilder::UpdateOverflowControlEffects() {
   DCHECK(NeedsPaintPropertyUpdate());
   DCHECK(NeedsScrollAndScrollTranslation(
       object_, full_context_.direct_compositing_reasons));
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  OnClearEffect(properties_->ClearHorizontalScrollbarEffect());
+  OnClearEffect(properties_->ClearVerticalScrollbarEffect());
+  OnClearEffect(properties_->ClearScrollCornerEffect());
+  return;
+#endif
 
   // While in a view transition, page content is painted into a "snapshot"
   // surface by creating a new effect node to force a separate surface.
