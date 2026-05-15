@@ -92,6 +92,40 @@ struct LiveExportedChunkPropertyState {
   float clip_y = 0.0f;
   float clip_width = 0.0f;
   float clip_height = 0.0f;
+  bool transform_is_2d = true;
+  bool transform_has_perspective = false;
+  bool transform_has_non_translation = false;
+  uint64_t transform_node_id = 0;
+  uint64_t transform_parent_id = 0;
+  uint32_t transform_chain_depth = 0;
+  uint64_t clip_node_id = 0;
+  uint64_t clip_parent_id = 0;
+  uint64_t clip_local_transform_id = 0;
+  uint32_t clip_chain_depth = 0;
+  bool clip_has_rounded_clip = false;
+  bool clip_has_path_clip = false;
+  uint64_t effect_node_id = 0;
+  uint64_t effect_parent_id = 0;
+  uint32_t effect_chain_depth = 0;
+  float effect_opacity = 1.0f;
+  bool effect_has_non_default_opacity = false;
+  bool effect_has_filter = false;
+  bool effect_has_backdrop_filter = false;
+  bool effect_has_blend_mode = false;
+  uint64_t effect_output_clip_id = 0;
+  uint64_t scroll_node_id = 0;
+  uint64_t scroll_parent_id = 0;
+  bool has_scroll_offset = false;
+  float scroll_offset_x = 0.0f;
+  float scroll_offset_y = 0.0f;
+  float scroll_container_x = 0.0f;
+  float scroll_container_y = 0.0f;
+  float scroll_container_width = 0.0f;
+  float scroll_container_height = 0.0f;
+  float scroll_contents_x = 0.0f;
+  float scroll_contents_y = 0.0f;
+  float scroll_contents_width = 0.0f;
+  float scroll_contents_height = 0.0f;
 };
 
 struct LiveExportedDrawOp {
@@ -389,6 +423,14 @@ uint64_t HashChunkPropertyStateForStandaloneRenderer(
     hash = HashCombineForStandaloneRenderer(hash,
                                             HashFloatForStandaloneRenderer(value));
   }
+  hash = HashCombineForStandaloneRenderer(hash, state.transform_is_2d ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(
+      hash, state.transform_has_perspective ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(
+      hash, state.transform_has_non_translation ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(hash, state.transform_node_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.transform_parent_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.transform_chain_depth);
   hash = HashCombineForStandaloneRenderer(hash, state.has_clip_rect ? 1u : 0u);
   if (state.has_clip_rect) {
     hash = HashCombineForStandaloneRenderer(
@@ -400,11 +442,37 @@ uint64_t HashChunkPropertyStateForStandaloneRenderer(
     hash = HashCombineForStandaloneRenderer(
         hash, HashFloatForStandaloneRenderer(state.clip_height));
   }
+  hash = HashCombineForStandaloneRenderer(hash, state.clip_node_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.clip_parent_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.clip_local_transform_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.clip_chain_depth);
+  hash = HashCombineForStandaloneRenderer(hash, state.clip_has_rounded_clip ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(hash, state.clip_has_path_clip ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(hash, state.effect_node_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.effect_parent_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.effect_chain_depth);
+  hash = HashCombineForStandaloneRenderer(
+      hash, HashFloatForStandaloneRenderer(state.effect_opacity));
+  hash = HashCombineForStandaloneRenderer(
+      hash, state.effect_has_non_default_opacity ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(hash, state.effect_has_filter ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(
+      hash, state.effect_has_backdrop_filter ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(hash, state.effect_has_blend_mode ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(hash, state.effect_output_clip_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.scroll_node_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.scroll_parent_id);
+  hash = HashCombineForStandaloneRenderer(hash, state.has_scroll_offset ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(
+      hash, HashFloatForStandaloneRenderer(state.scroll_offset_x));
+  hash = HashCombineForStandaloneRenderer(
+      hash, HashFloatForStandaloneRenderer(state.scroll_offset_y));
   return hash;
 }
 
 void AppendChunkPropertyStateForStandaloneRenderer(
     wtf_size_t chunk_index,
+    const PropertyTreeState& chunk_state,
     const gfx::Transform& projection,
     const FloatClipRect& clip,
     std::vector<LiveExportedChunkPropertyState>& property_states) {
@@ -418,6 +486,18 @@ void AppendChunkPropertyStateForStandaloneRenderer(
   state.transform_to_root[1] = static_cast<float>(projection.rc(1, 0));
   state.transform_to_root[5] = static_cast<float>(projection.rc(1, 1));
   state.transform_to_root[13] = static_cast<float>(projection.rc(1, 3));
+  state.transform_is_2d = projection.Is2dTransform();
+  state.transform_has_perspective = !projection.Is2dTransform();
+  state.transform_has_non_translation =
+      projection.rc(0, 0) != 1.0 || projection.rc(0, 1) != 0.0 ||
+      projection.rc(1, 0) != 0.0 || projection.rc(1, 1) != 1.0;
+  state.transform_node_id =
+      reinterpret_cast<uintptr_t>(&chunk_state.Transform());
+  state.clip_node_id = reinterpret_cast<uintptr_t>(&chunk_state.Clip());
+  state.effect_node_id = reinterpret_cast<uintptr_t>(&chunk_state.Effect());
+  state.transform_chain_depth = state.transform_node_id ? 1u : 0u;
+  state.clip_chain_depth = state.clip_node_id ? 1u : 0u;
+  state.effect_chain_depth = state.effect_node_id ? 1u : 0u;
   if (!clip.IsInfinite()) {
     const gfx::RectF& rect = clip.Rect();
     state.has_clip_rect = true;
@@ -456,6 +536,23 @@ void AppendMatrix2dOp(const gfx::Transform& transform,
   exported.height = static_cast<float>(transform.rc(1, 0));
   exported.r = static_cast<float>(transform.rc(1, 1));
   exported.g = static_cast<float>(transform.rc(1, 3));
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendSkM44Op(const SkM44& matrix,
+                   std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  if (matrix == SkM44()) {
+    return;
+  }
+  LiveExportedDrawOp exported;
+  exported.type = 14;
+  exported.x = matrix.rc(0, 0);
+  exported.y = matrix.rc(0, 1);
+  exported.width = matrix.rc(0, 3);
+  exported.height = matrix.rc(1, 0);
+  exported.r = matrix.rc(1, 1);
+  exported.g = matrix.rc(1, 3);
+  exported.debug_label = "retained_matrix_2d_from_paint_record";
   exported_draw_ops.push_back(exported);
 }
 
@@ -833,13 +930,16 @@ bool AppendPaintRecordExtractedOps(
     std::vector<LiveExportedDrawOp>& exported_draw_ops,
     std::vector<std::string>& diagnostics) {
   struct PaintRecordState {
-    float translate_x = 0.0f;
-    float translate_y = 0.0f;
+    int save_marker = 0;
   };
   std::vector<PaintRecordState> state_stack;
-  float translate_x = initial_translate_x;
-  float translate_y = initial_translate_y;
+  float translate_x = 0.0f;
+  float translate_y = 0.0f;
   bool complete = true;
+  if (initial_translate_x != 0.0f || initial_translate_y != 0.0f) {
+    AppendTranslateOp(initial_translate_x, initial_translate_y,
+                      exported_draw_ops);
+  }
 
   const auto mark_unsupported = [&](const cc::PaintOp& op) {
     complete = false;
@@ -853,12 +953,17 @@ bool AppendPaintRecordExtractedOps(
       case cc::PaintOpType::kNoop:
         break;
       case cc::PaintOpType::kSave:
-        state_stack.push_back({translate_x, translate_y});
+        state_stack.push_back({});
         AppendSaveOp(exported_draw_ops);
         break;
-      case cc::PaintOpType::kSaveLayer:
-        mark_unsupported(op);
+      case cc::PaintOpType::kSaveLayer: {
+        const auto& save_layer_op = static_cast<const cc::SaveLayerOp&>(op);
+        state_stack.push_back({});
+        AppendSaveLayerAlphaOp(save_layer_op.bounds, 0.0f, 0.0f, 255,
+                               fallback_width, fallback_height,
+                               exported_draw_ops);
         break;
+      }
       case cc::PaintOpType::kSaveLayerAlpha: {
         const auto& save_layer_op =
             static_cast<const cc::SaveLayerAlphaOp&>(op);
@@ -866,44 +971,51 @@ bool AppendPaintRecordExtractedOps(
           mark_unsupported(op);
           break;
         }
-        state_stack.push_back({translate_x, translate_y});
-        AppendSaveLayerAlphaOp(save_layer_op.bounds, translate_x, translate_y,
+        state_stack.push_back({});
+        AppendSaveLayerAlphaOp(save_layer_op.bounds, 0.0f, 0.0f,
                                save_layer_op.alpha, fallback_width,
                                fallback_height, exported_draw_ops);
         break;
       }
       case cc::PaintOpType::kRestore:
         if (!state_stack.empty()) {
-          translate_x = state_stack.back().translate_x;
-          translate_y = state_stack.back().translate_y;
           state_stack.pop_back();
         }
         AppendRestoreOp(exported_draw_ops);
         break;
       case cc::PaintOpType::kTranslate: {
         const auto& translate_op = static_cast<const cc::TranslateOp&>(op);
-        translate_x += translate_op.dx;
-        translate_y += translate_op.dy;
+        AppendTranslateOp(translate_op.dx, translate_op.dy, exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kScale: {
+        const auto& scale_op = static_cast<const cc::ScaleOp&>(op);
+        AppendSkM44Op(SkM44::Scale(scale_op.sx, scale_op.sy),
+                      exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kRotate: {
+        const auto& rotate_op = static_cast<const cc::RotateOp&>(op);
+        AppendSkM44Op(SkM44::Rotate({0.0f, 0.0f, 1.0f}, rotate_op.degrees),
+                      exported_draw_ops);
         break;
       }
       case cc::PaintOpType::kConcat: {
         const auto& concat_op = static_cast<const cc::ConcatOp&>(op);
-        if (!SkM44IsIdentityOr2dTranslation(concat_op.matrix)) {
+        if (!concat_op.matrix.isFinite()) {
           mark_unsupported(op);
           break;
         }
-        translate_x += concat_op.matrix.rc(0, 3);
-        translate_y += concat_op.matrix.rc(1, 3);
+        AppendSkM44Op(concat_op.matrix, exported_draw_ops);
         break;
       }
       case cc::PaintOpType::kSetMatrix: {
         const auto& matrix_op = static_cast<const cc::SetMatrixOp&>(op);
-        if (!SkM44IsIdentityOr2dTranslation(matrix_op.matrix)) {
+        if (!matrix_op.matrix.isFinite()) {
           mark_unsupported(op);
           break;
         }
-        translate_x = initial_translate_x + matrix_op.matrix.rc(0, 3);
-        translate_y = initial_translate_y + matrix_op.matrix.rc(1, 3);
+        AppendSkM44Op(matrix_op.matrix, exported_draw_ops);
         break;
       }
       case cc::PaintOpType::kClipRect: {
@@ -913,8 +1025,7 @@ bool AppendPaintRecordExtractedOps(
           break;
         }
         AppendClipRectOp(
-            gfx::RectF(translate_x + clip_op.rect.x(),
-                       translate_y + clip_op.rect.y(), clip_op.rect.width(),
+            gfx::RectF(clip_op.rect.x(), clip_op.rect.y(), clip_op.rect.width(),
                        clip_op.rect.height()),
             exported_draw_ops);
         break;
@@ -1111,6 +1222,9 @@ bool AppendPaintArtifactExtractedOps(
     AppendSaveOp(exported_draw_ops);
     const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
         chunk_state, PropertyTreeState::Root());
+    AppendChunkPropertyStateForStandaloneRenderer(chunk_index, chunk_state,
+                                                  projection, clip,
+                                                  property_states);
     if (!clip.IsInfinite()) {
       AppendClipRectOp(clip.Rect(), exported_draw_ops);
     }

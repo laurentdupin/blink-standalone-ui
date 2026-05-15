@@ -375,6 +375,7 @@ void PrintUsage() {
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
                "[--viewport WxH] --out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
+               "[--dump-paint-artifact <artifact.json>] "
                "[--font-file path]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
                " [--blink] [--manual]"
@@ -395,6 +396,7 @@ int main(int argc, char** argv) {
   html_css_renderer::FrameInput input;
   std::string out_path;
   std::string json_path;
+  std::string paint_artifact_dump_path;
   std::string font_file;
   size_t min_non_white = 1;
   bool use_skia_cpu = false;
@@ -472,6 +474,15 @@ int main(int argc, char** argv) {
         return 2;
       }
       json_path = value;
+    } else if (arg == "--dump-paint-artifact") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      paint_artifact_dump_path = value;
+    } else if (arg.rfind("--dump-paint-artifact=", 0) == 0) {
+      paint_artifact_dump_path = arg.substr(22);
     } else if (arg == "--min-non-white") {
       const char* value = next_value();
       if (!value) {
@@ -567,6 +578,16 @@ int main(int argc, char** argv) {
                                        loaded_font_path)) {
     std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
     return 1;
+  }
+  if (!paint_artifact_dump_path.empty()) {
+    std::ofstream audit_file(paint_artifact_dump_path);
+    if (!audit_file) {
+      std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
+                   paint_artifact_dump_path.c_str());
+      return 1;
+    }
+    audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+               << "\n";
   }
 
   std::printf("render_metrics width=%d height=%d non_white=%zu unique=%zu\n",

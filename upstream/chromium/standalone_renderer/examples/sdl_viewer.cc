@@ -21,6 +21,7 @@
 #include "html_css_renderer/blink_adapter.h"
 #endif
 #include "html_css_renderer/cpu_renderer.h"
+#include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
 #include "html_css_renderer/skia_cpu_renderer.h"
@@ -193,6 +194,7 @@ void PrintUsage() {
                "[--viewport WxH] [--delta seconds] "
                "[--font-file path] [--window-scale factor] "
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
+               " [--dump-paint-artifact path]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
                " [--blink] [--manual]"
 #endif
@@ -209,6 +211,7 @@ bool ParseArgs(int argc,
                bool* incremental,
                bool* use_cpu,
                bool* use_skia_cpu,
+               std::string* paint_artifact_dump_path,
                bool* use_blink) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -293,6 +296,14 @@ bool ParseArgs(int argc,
     } else if (arg == "--skia-cpu") {
       *use_skia_cpu = true;
       *use_cpu = true;
+    } else if (arg == "--dump-paint-artifact") {
+      const char* value = next_value();
+      if (!value) {
+        return false;
+      }
+      *paint_artifact_dump_path = value;
+    } else if (arg.rfind("--dump-paint-artifact=", 0) == 0) {
+      *paint_artifact_dump_path = arg.substr(22);
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
     } else if (arg == "--blink") {
       *use_blink = true;
@@ -838,12 +849,17 @@ int main(int argc, char** argv) {
   EmptyAssets assets;
   html_css_renderer::RendererCreateInfo create_info;
   create_info.asset_provider = &assets;
-  create_info.html = "<main><img src=\"missing.png\"><h1>SDL renderer</h1></main>";
-  create_info.stylesheets.push_back({"viewer", "body { background: #f5f7fb; }"});
+  if (argc <= 1) {
+    create_info.html =
+        "<main><img src=\"missing.png\"><h1>SDL renderer</h1></main>";
+    create_info.stylesheets.push_back(
+        {"viewer", "body { background: #f5f7fb; }"});
+  }
   html_css_renderer::FrameInput input;
   uint64_t quit_after_ms = 0;
   float window_scale = 2.0f;
   std::string font_file;
+  std::string paint_artifact_dump_path;
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
@@ -856,6 +872,7 @@ int main(int argc, char** argv) {
   if (argc > 1 && !ParseArgs(argc, argv, &create_info, &input,
                              &quit_after_ms, &window_scale, &font_file,
                              &incremental, &use_cpu, &use_skia_cpu,
+                             &paint_artifact_dump_path,
                              &use_blink)) {
     PrintUsage();
     return 2;
@@ -902,6 +919,16 @@ int main(int argc, char** argv) {
     result = blink_embedder->AdvanceAndRender(input);
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
+    if (!paint_artifact_dump_path.empty()) {
+      std::ofstream audit_file(paint_artifact_dump_path);
+      if (!audit_file) {
+        std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
+                     paint_artifact_dump_path.c_str());
+        return 1;
+      }
+      audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+                 << "\n";
+    }
     for (const std::string& diagnostic : result.diagnostics) {
       std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
     }

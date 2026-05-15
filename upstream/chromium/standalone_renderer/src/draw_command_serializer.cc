@@ -1,6 +1,7 @@
 #include "html_css_renderer/draw_command_serializer.h"
 
 #include <iomanip>
+#include <map>
 #include <sstream>
 
 namespace html_css_renderer {
@@ -75,9 +76,49 @@ void WritePropertyState(std::ostringstream& out,
   out << "{\"state_hash\":" << state.state_hash
       << ",\"transform_to_root\":";
   WriteMatrix(out, state.transform_to_root);
-  out << ",\"has_clip_rect\":" << (state.has_clip_rect ? "true" : "false")
+  out << ",\"transform_is_2d\":"
+      << (state.transform_is_2d ? "true" : "false")
+      << ",\"transform_has_perspective\":"
+      << (state.transform_has_perspective ? "true" : "false")
+      << ",\"transform_has_non_translation\":"
+      << (state.transform_has_non_translation ? "true" : "false")
+      << ",\"transform_node_id\":" << state.transform_node_id
+      << ",\"transform_parent_id\":" << state.transform_parent_id
+      << ",\"transform_chain_depth\":" << state.transform_chain_depth
+      << ",\"has_clip_rect\":" << (state.has_clip_rect ? "true" : "false")
       << ",\"clip_rect\":";
   WriteRect(out, state.clip_rect);
+  out << ",\"clip_node_id\":" << state.clip_node_id
+      << ",\"clip_parent_id\":" << state.clip_parent_id
+      << ",\"clip_local_transform_id\":" << state.clip_local_transform_id
+      << ",\"clip_chain_depth\":" << state.clip_chain_depth
+      << ",\"clip_has_rounded_clip\":"
+      << (state.clip_has_rounded_clip ? "true" : "false")
+      << ",\"clip_has_path_clip\":"
+      << (state.clip_has_path_clip ? "true" : "false")
+      << ",\"effect_node_id\":" << state.effect_node_id
+      << ",\"effect_parent_id\":" << state.effect_parent_id
+      << ",\"effect_chain_depth\":" << state.effect_chain_depth
+      << ",\"effect_opacity\":" << state.effect_opacity
+      << ",\"effect_has_non_default_opacity\":"
+      << (state.effect_has_non_default_opacity ? "true" : "false")
+      << ",\"effect_has_filter\":"
+      << (state.effect_has_filter ? "true" : "false")
+      << ",\"effect_has_backdrop_filter\":"
+      << (state.effect_has_backdrop_filter ? "true" : "false")
+      << ",\"effect_has_blend_mode\":"
+      << (state.effect_has_blend_mode ? "true" : "false")
+      << ",\"effect_output_clip_id\":" << state.effect_output_clip_id
+      << ",\"scroll_node_id\":" << state.scroll_node_id
+      << ",\"scroll_parent_id\":" << state.scroll_parent_id
+      << ",\"has_scroll_offset\":"
+      << (state.has_scroll_offset ? "true" : "false")
+      << ",\"scroll_offset_x\":" << state.scroll_offset_x
+      << ",\"scroll_offset_y\":" << state.scroll_offset_y
+      << ",\"scroll_container_rect\":";
+  WriteRect(out, state.scroll_container_rect);
+  out << ",\"scroll_contents_rect\":";
+  WriteRect(out, state.scroll_contents_rect);
   out << "}";
 }
 
@@ -91,6 +132,20 @@ void WriteStringArray(std::ostringstream& out,
     out << "\"" << EscapeJson(values[i]) << "\"";
   }
   out << "]";
+}
+
+void WriteStringIntMap(std::ostringstream& out,
+                       const std::map<std::string, int>& values) {
+  out << "{";
+  bool first = true;
+  for (const auto& [key, value] : values) {
+    if (!first) {
+      out << ",";
+    }
+    first = false;
+    out << "\"" << EscapeJson(key) << "\":" << value;
+  }
+  out << "}";
 }
 
 void WriteBytesSummary(std::ostringstream& out,
@@ -141,7 +196,9 @@ void WriteSceneChunks(std::ostringstream& out,
     if (i > 0) {
       out << ",";
     }
-    out << "{\"chunk_id\":\"" << EscapeJson(chunks[i].chunk_id)
+    out << "{\"debug_index\":" << chunks[i].debug_index
+        << ",\"stable_key\":\"" << EscapeJson(chunks[i].stable_key)
+        << "\",\"chunk_id\":\"" << EscapeJson(chunks[i].chunk_id)
         << "\",\"bounds\":";
     WriteRect(out, chunks[i].bounds);
     out << ",\"damage_bounds\":";
@@ -439,6 +496,104 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
       << EscapeJson(result.successor_snapshot.hovered_element_id)
       << "\",\"active_element_id\":\""
       << EscapeJson(result.successor_snapshot.active_element_id) << "\"}}";
+  return out.str();
+}
+
+std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
+  std::map<std::string, int> command_histogram;
+  std::map<std::string, int> unsupported_histogram;
+  std::map<std::string, int> fallback_histogram;
+  int text_blob_count = 0;
+  int image_count = 0;
+  int shader_count = 0;
+  int path_count = 0;
+  int filter_count = 0;
+
+  for (const SceneCommand& scene_command : result.frame.scene_commands) {
+    if (scene_command.type != SceneCommandType::kDrawCommand) {
+      continue;
+    }
+    const DrawCommand& command = scene_command.draw_command;
+    ++command_histogram[ToString(command.type)];
+    if (command.type == DrawCommandType::kDrawTextBlob) {
+      ++text_blob_count;
+    }
+    if (command.type == DrawCommandType::kDrawImage) {
+      ++image_count;
+    }
+    if (!command.shader_bytes.empty()) {
+      ++shader_count;
+    }
+    if (!command.path_bytes.empty()) {
+      ++path_count;
+    }
+  }
+  for (const std::string& diagnostic : result.diagnostics) {
+    const size_t unsupported = diagnostic.find("unsupported op=");
+    if (unsupported != std::string::npos) {
+      ++unsupported_histogram[diagnostic.substr(unsupported + 15)];
+    }
+    if (diagnostic.find("bitmap-backed PaintOp resource") !=
+            std::string::npos ||
+        diagnostic.find("diagnostic_bitmap_fallback") != std::string::npos) {
+      ++fallback_histogram["diagnostic_bitmap_fallback"];
+    }
+    if (diagnostic.find("SaveLayerFilters") != std::string::npos ||
+        diagnostic.find("filter") != std::string::npos) {
+      ++filter_count;
+    }
+  }
+
+  std::ostringstream out;
+  out << "{\"source\":\"real Blink PaintArtifact\"";
+  out << ",\"viewport\":{\"width\":"
+      << result.successor_snapshot.viewport.width << ",\"height\":"
+      << result.successor_snapshot.viewport.height << "}";
+  out << ",\"device_scale_factor\":1";
+  out << ",\"chunk_count\":" << result.frame.scene_chunks.size();
+  out << ",\"display_item_count\":null";
+  out << ",\"drawing_display_item_count\":null";
+  out << ",\"non_drawing_display_item_count\":null";
+  out << ",\"op_histogram\":";
+  WriteStringIntMap(out, command_histogram);
+  out << ",\"unsupported_op_histogram\":";
+  WriteStringIntMap(out, unsupported_histogram);
+  out << ",\"fallback_rasterized_op_histogram\":";
+  WriteStringIntMap(out, fallback_histogram);
+  out << ",\"resource_summary\":{\"text_blob_count\":" << text_blob_count
+      << ",\"image_count\":" << image_count
+      << ",\"shader_count\":" << shader_count
+      << ",\"path_count\":" << path_count
+      << ",\"filter_count\":" << filter_count << "}";
+  out << ",\"chunks\":[";
+  for (size_t i = 0; i < result.frame.scene_chunks.size(); ++i) {
+    const SceneChunk& chunk = result.frame.scene_chunks[i];
+    if (i > 0) {
+      out << ",";
+    }
+    std::map<std::string, int> chunk_histogram;
+    for (const DrawCommand& command : chunk.commands) {
+      ++chunk_histogram[ToString(command.type)];
+    }
+    out << "{\"index\":" << i << ",\"id\":\"" << EscapeJson(chunk.chunk_id)
+        << "\",\"stable_key\":\"" << EscapeJson(chunk.stable_key)
+        << "\",\"bounds\":";
+    WriteRect(out, chunk.bounds);
+    out << ",\"drawable_bounds\":";
+    WriteRect(out, chunk.damage_bounds);
+    out << ",\"display_item_begin\":null,\"display_item_end\":null";
+    out << ",\"has_text\":"
+        << (chunk_histogram["DrawTextBlob"] > 0 ? "true" : "false");
+    out << ",\"property_state\":";
+    WritePropertyState(out, chunk.property_state);
+    out << ",\"op_histogram\":";
+    WriteStringIntMap(out, chunk_histogram);
+    out << ",\"unsupported_ops\":[],\"fallback_rasterized_ops\":[]";
+    out << ",\"display_items\":[]}";
+  }
+  out << "],\"warnings\":";
+  WriteStringArray(out, result.diagnostics);
+  out << "}";
   return out.str();
 }
 

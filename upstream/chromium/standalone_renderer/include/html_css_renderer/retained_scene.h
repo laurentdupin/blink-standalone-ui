@@ -32,6 +32,9 @@ enum class RetainedChunkChangeKind {
 
 struct RetainedPaintChunk {
   std::string key;
+  int debug_index = -1;
+  std::string chunk_id_string;
+  std::string stable_key;
   RetainedChunkKind kind = RetainedChunkKind::kAnonymous;
   Rect bounds;
   Rect placement_bounds;

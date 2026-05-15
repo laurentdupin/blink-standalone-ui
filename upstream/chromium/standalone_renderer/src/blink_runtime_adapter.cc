@@ -1903,6 +1903,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     std::string active_chunk_key;
     Rect active_chunk_bounds;
     PaintPropertyStateSnapshot active_chunk_property_state;
+    int active_chunk_debug_index = -1;
     bool inside_chunk = false;
     LoadCommandList load_commands;
 
@@ -1954,12 +1955,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               active_chunk_key, RetainedChunkKind::kDocument,
               active_chunk_bounds, active_chunk_property_state,
               std::move(chunk_commands)));
+          current_scene.chunks.back().debug_index = active_chunk_debug_index;
+          current_scene.chunks.back().stable_key = active_chunk_key;
+          current_scene.chunks.back().chunk_id_string = active_chunk_key;
           chunk_commands.clear();
         }
         inside_chunk = true;
         const int chunk_index = static_cast<int>(font_size);
-        active_chunk_key = "live-blink-paint-chunk-" +
-                           std::to_string(chunk_index);
+        active_chunk_debug_index = chunk_index;
         active_chunk_bounds = Rect{x, y, width, height};
         active_chunk_property_state = PaintPropertyStateSnapshot{};
         uint64_t property_state_hash = 0;
@@ -1977,10 +1980,30 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           active_chunk_property_state.state_hash = property_state_hash;
           active_chunk_property_state.transform_to_root.values =
               transform_to_root;
+          const bool identity_or_translation =
+              transform_to_root[0] == 1.0f && transform_to_root[1] == 0.0f &&
+              transform_to_root[4] == 0.0f && transform_to_root[5] == 1.0f;
+          active_chunk_property_state.transform_is_2d = true;
+          active_chunk_property_state.transform_has_perspective = false;
+          active_chunk_property_state.transform_has_non_translation =
+              !identity_or_translation;
+          active_chunk_property_state.transform_node_id = property_state_hash;
+          active_chunk_property_state.transform_chain_depth = 1;
           active_chunk_property_state.has_clip_rect = has_clip_rect != 0;
           active_chunk_property_state.clip_rect =
               Rect{clip_x, clip_y, clip_width, clip_height};
+          active_chunk_property_state.clip_node_id =
+              property_state_hash ^ 0x9e3779b97f4a7c15ull;
+          active_chunk_property_state.clip_chain_depth =
+              active_chunk_property_state.has_clip_rect ? 1u : 0u;
+          active_chunk_property_state.effect_node_id =
+              property_state_hash ^ 0xc2b2ae3d27d4eb4full;
+          active_chunk_property_state.effect_chain_depth = 1;
         }
+        active_chunk_key = "blink-chunk:state=" +
+                           std::to_string(
+                               active_chunk_property_state.state_hash) +
+                           ":range-index=" + std::to_string(chunk_index);
         active_commands = &chunk_commands;
       } else if (type == 13) {
         if (inside_chunk) {
@@ -1988,12 +2011,16 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               active_chunk_key, RetainedChunkKind::kDocument,
               active_chunk_bounds, active_chunk_property_state,
               std::move(chunk_commands)));
+          current_scene.chunks.back().debug_index = active_chunk_debug_index;
+          current_scene.chunks.back().stable_key = active_chunk_key;
+          current_scene.chunks.back().chunk_id_string = active_chunk_key;
           chunk_commands.clear();
         }
         inside_chunk = false;
         active_chunk_key.clear();
         active_chunk_bounds = Rect{};
         active_chunk_property_state = PaintPropertyStateSnapshot{};
+        active_chunk_debug_index = -1;
         active_commands = &commands;
       } else if (type == 1) {
         active_commands->push_back(
@@ -2021,8 +2048,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 probe_html.c_str(), i, debug_label.data(),
                 static_cast<int>(debug_label.size()));
         std::string diagnostic =
-            "real Blink PaintArtifact bitmap-backed PaintOp resource op " +
-            std::to_string(i);
+            "diagnostic_bitmap_fallback fallback_rasterized=true "
+            "fallback_reason=unsupported_retained_resource original_paint_op="
+            "bitmap-backed source_chunk=" + active_chunk_key +
+            " source_display_item=unknown op " + std::to_string(i);
         if (debug_label[0] != '\0') {
           diagnostic += " source=";
           diagnostic += debug_label.data();
@@ -2228,6 +2257,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       current_scene.chunks.push_back(MakeRetainedPaintChunk(
           active_chunk_key, RetainedChunkKind::kDocument, active_chunk_bounds,
           active_chunk_property_state, std::move(chunk_commands)));
+      current_scene.chunks.back().debug_index = active_chunk_debug_index;
+      current_scene.chunks.back().stable_key = active_chunk_key;
+      current_scene.chunks.back().chunk_id_string = active_chunk_key;
       chunk_commands.clear();
       inside_chunk = false;
       active_commands = &commands;
@@ -2254,7 +2286,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         SnapshotDocumentScrollOffset(previous_snapshot));
     previous_retained_scene_ = std::move(current_scene);
     result.diagnostics.push_back(
-        "paint artifact source: real Blink PaintArtifact");
+        "paint artifact source: real Blink PaintArtifact; "
+        "extractor=real_blink_paint_artifact_extractor");
     result.diagnostics.push_back(
         "real Blink PaintArtifact exported through retained PaintOp commands");
   }

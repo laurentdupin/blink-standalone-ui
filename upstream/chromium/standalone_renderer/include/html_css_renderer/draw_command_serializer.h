@@ -16,6 +16,7 @@ std::string SerializeLoadCommandListJsonLines(
 std::string SerializeDrawCommandListJsonLines(
     const DrawCommandList& commands);
 std::string SerializeRenderResultJson(const RenderResult& result);
+std::string SerializePaintArtifactAuditJson(const RenderResult& result);
 
 }  // namespace html_css_renderer
 

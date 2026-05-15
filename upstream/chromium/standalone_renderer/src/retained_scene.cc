@@ -51,10 +51,38 @@ uint64_t HashMatrix(Matrix4 matrix) {
 uint64_t HashPropertyState(PaintPropertyStateSnapshot state) {
   uint64_t hash = state.state_hash;
   hash = HashCombine(hash, HashMatrix(state.transform_to_root));
+  hash = HashCombine(hash, state.transform_is_2d ? 1u : 0u);
+  hash = HashCombine(hash, state.transform_has_perspective ? 1u : 0u);
+  hash = HashCombine(hash, state.transform_has_non_translation ? 1u : 0u);
+  hash = HashCombine(hash, state.transform_node_id);
+  hash = HashCombine(hash, state.transform_parent_id);
+  hash = HashCombine(hash, state.transform_chain_depth);
   hash = HashCombine(hash, state.has_clip_rect ? 1u : 0u);
   if (state.has_clip_rect) {
     hash = HashCombine(hash, HashRect(state.clip_rect));
   }
+  hash = HashCombine(hash, state.clip_node_id);
+  hash = HashCombine(hash, state.clip_parent_id);
+  hash = HashCombine(hash, state.clip_local_transform_id);
+  hash = HashCombine(hash, state.clip_chain_depth);
+  hash = HashCombine(hash, state.clip_has_rounded_clip ? 1u : 0u);
+  hash = HashCombine(hash, state.clip_has_path_clip ? 1u : 0u);
+  hash = HashCombine(hash, state.effect_node_id);
+  hash = HashCombine(hash, state.effect_parent_id);
+  hash = HashCombine(hash, state.effect_chain_depth);
+  hash = HashCombine(hash, HashFloat(state.effect_opacity));
+  hash = HashCombine(hash, state.effect_has_non_default_opacity ? 1u : 0u);
+  hash = HashCombine(hash, state.effect_has_filter ? 1u : 0u);
+  hash = HashCombine(hash, state.effect_has_backdrop_filter ? 1u : 0u);
+  hash = HashCombine(hash, state.effect_has_blend_mode ? 1u : 0u);
+  hash = HashCombine(hash, state.effect_output_clip_id);
+  hash = HashCombine(hash, state.scroll_node_id);
+  hash = HashCombine(hash, state.scroll_parent_id);
+  hash = HashCombine(hash, state.has_scroll_offset ? 1u : 0u);
+  hash = HashCombine(hash, HashFloat(state.scroll_offset_x));
+  hash = HashCombine(hash, HashFloat(state.scroll_offset_y));
+  hash = HashCombine(hash, HashRect(state.scroll_container_rect));
+  hash = HashCombine(hash, HashRect(state.scroll_contents_rect));
   return hash;
 }
 
@@ -111,6 +139,60 @@ bool Intersects(Rect a, Rect b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
+Point MapPoint(const Matrix4& matrix, Point point) {
+  return Point{
+      matrix.values[0] * point.x + matrix.values[4] * point.y +
+          matrix.values[12],
+      matrix.values[1] * point.x + matrix.values[5] * point.y +
+          matrix.values[13],
+  };
+}
+
+Rect UnionRects(Rect a, Rect b) {
+  const float left = std::min(a.x, b.x);
+  const float top = std::min(a.y, b.y);
+  const float right = std::max(a.x + a.width, b.x + b.width);
+  const float bottom = std::max(a.y + a.height, b.y + b.height);
+  return Rect{left, top, std::max(0.0f, right - left),
+              std::max(0.0f, bottom - top)};
+}
+
+Rect IntersectRects(Rect a, Rect b) {
+  const float left = std::max(a.x, b.x);
+  const float top = std::max(a.y, b.y);
+  const float right = std::min(a.x + a.width, b.x + b.width);
+  const float bottom = std::min(a.y + a.height, b.y + b.height);
+  return Rect{left, top, std::max(0.0f, right - left),
+              std::max(0.0f, bottom - top)};
+}
+
+Rect MapRectConservatively(Rect rect,
+                           const PaintPropertyStateSnapshot& property_state,
+                           Rect viewport) {
+  if (!property_state.transform_is_2d ||
+      property_state.transform_has_perspective) {
+    return viewport;
+  }
+  const Point p0 = MapPoint(property_state.transform_to_root,
+                            Point{rect.x, rect.y});
+  const Point p1 = MapPoint(property_state.transform_to_root,
+                            Point{rect.x + rect.width, rect.y});
+  const Point p2 = MapPoint(property_state.transform_to_root,
+                            Point{rect.x + rect.width, rect.y + rect.height});
+  const Point p3 = MapPoint(property_state.transform_to_root,
+                            Point{rect.x, rect.y + rect.height});
+  const float left = std::min(std::min(p0.x, p1.x), std::min(p2.x, p3.x));
+  const float top = std::min(std::min(p0.y, p1.y), std::min(p2.y, p3.y));
+  const float right = std::max(std::max(p0.x, p1.x), std::max(p2.x, p3.x));
+  const float bottom = std::max(std::max(p0.y, p1.y), std::max(p2.y, p3.y));
+  Rect mapped{left, top, std::max(0.0f, right - left),
+              std::max(0.0f, bottom - top)};
+  if (property_state.has_clip_rect) {
+    mapped = IntersectRects(mapped, property_state.clip_rect);
+  }
+  return IntersectRects(mapped, viewport);
+}
+
 Rect Translate(Rect rect, Point delta) {
   rect.x += delta.x;
   rect.y += delta.y;
@@ -160,6 +242,8 @@ RetainedPaintChunk MakeRetainedPaintChunk(
     DrawCommandList commands) {
   RetainedPaintChunk chunk;
   chunk.key = std::move(key);
+  chunk.stable_key = chunk.key;
+  chunk.chunk_id_string = chunk.key;
   chunk.kind = kind;
   chunk.bounds = bounds;
   chunk.placement_bounds = bounds;
@@ -312,11 +396,35 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
     }
 
     if (update.requires_redraw) {
+      const RetainedPaintChunk* previous_chunk = nullptr;
+      const RetainedPaintChunk* current_chunk = nullptr;
+      if (previous) {
+        for (const RetainedPaintChunk& candidate : previous->chunks) {
+          if (candidate.key == chunk_diff.key) {
+            previous_chunk = &candidate;
+            break;
+          }
+        }
+      }
+      for (const RetainedPaintChunk& candidate : current.chunks) {
+        if (candidate.key == chunk_diff.key) {
+          current_chunk = &candidate;
+          break;
+        }
+      }
       if (chunk_diff.previous_bounds) {
-        plan.dirty_rects.push_back(*chunk_diff.previous_bounds);
+        plan.dirty_rects.push_back(MapRectConservatively(
+            *chunk_diff.previous_bounds,
+            previous_chunk ? previous_chunk->property_state
+                           : PaintPropertyStateSnapshot{},
+            plan.viewport_bounds));
       }
       if (chunk_diff.current_bounds) {
-        plan.dirty_rects.push_back(*chunk_diff.current_bounds);
+        plan.dirty_rects.push_back(MapRectConservatively(
+            *chunk_diff.current_bounds,
+            current_chunk ? current_chunk->property_state
+                          : PaintPropertyStateSnapshot{},
+            plan.viewport_bounds));
       }
     }
     plan.chunk_updates.push_back(std::move(update));
@@ -360,6 +468,10 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
 
   for (const RetainedPaintChunk& retained_chunk : scene.chunks) {
     SceneChunk chunk;
+    chunk.debug_index = retained_chunk.debug_index;
+    chunk.stable_key = retained_chunk.stable_key.empty()
+                           ? retained_chunk.key
+                           : retained_chunk.stable_key;
     chunk.chunk_id = retained_chunk.key;
     chunk.bounds = retained_chunk.placement_bounds;
     chunk.property_state = retained_chunk.property_state;
