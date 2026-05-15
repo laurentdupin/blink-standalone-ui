@@ -40,6 +40,24 @@ uint64_t HashRect(Rect rect) {
   return hash;
 }
 
+uint64_t HashMatrix(Matrix4 matrix) {
+  uint64_t hash = 0;
+  for (const float value : matrix.values) {
+    hash = HashCombine(hash, HashFloat(value));
+  }
+  return hash;
+}
+
+uint64_t HashPropertyState(PaintPropertyStateSnapshot state) {
+  uint64_t hash = state.state_hash;
+  hash = HashCombine(hash, HashMatrix(state.transform_to_root));
+  hash = HashCombine(hash, state.has_clip_rect ? 1u : 0u);
+  if (state.has_clip_rect) {
+    hash = HashCombine(hash, HashRect(state.clip_rect));
+  }
+  return hash;
+}
+
 uint64_t HashColor(Color color) {
   uint64_t hash = 0;
   hash = HashCombine(hash, HashFloat(color.r));
@@ -129,11 +147,26 @@ RetainedPaintChunk MakeRetainedPaintChunk(std::string key,
                                           RetainedChunkKind kind,
                                           Rect bounds,
                                           DrawCommandList commands) {
+  return MakeRetainedPaintChunk(std::move(key), kind, bounds,
+                                PaintPropertyStateSnapshot{},
+                                std::move(commands));
+}
+
+RetainedPaintChunk MakeRetainedPaintChunk(
+    std::string key,
+    RetainedChunkKind kind,
+    Rect bounds,
+    PaintPropertyStateSnapshot property_state,
+    DrawCommandList commands) {
   RetainedPaintChunk chunk;
   chunk.key = std::move(key);
   chunk.kind = kind;
   chunk.bounds = bounds;
   chunk.placement_bounds = bounds;
+  chunk.property_state = property_state;
+  if (chunk.property_state.state_hash == 0) {
+    chunk.property_state.state_hash = HashPropertyState(chunk.property_state);
+  }
   chunk.commands = std::move(commands);
   for (const DrawCommand& command : chunk.commands) {
     chunk.content_hash = HashCombine(chunk.content_hash,
@@ -141,7 +174,7 @@ RetainedPaintChunk MakeRetainedPaintChunk(std::string key,
     chunk.resource_hash = HashCombine(chunk.resource_hash,
                                       HashCommandResources(command));
   }
-  chunk.content_hash = HashCombine(chunk.content_hash, HashRect(chunk.bounds));
+  chunk.content_hash = HashCombine(chunk.content_hash, HashRect(chunk.bounds));
   chunk.content_hash = HashCombine(chunk.content_hash,
                                    HashString(chunk.element_id));
   chunk.resource_hash = HashCombine(chunk.resource_hash,
@@ -200,6 +233,9 @@ RetainedSceneDiff DiffRetainedScenes(const RetainedScene& current,
     if (current_chunk.content_hash != previous_chunk.content_hash ||
         current_chunk.resource_hash != previous_chunk.resource_hash) {
       kind = RetainedChunkChangeKind::kContentChanged;
+    } else if (current_chunk.property_state.state_hash !=
+               previous_chunk.property_state.state_hash) {
+      kind = RetainedChunkChangeKind::kPresentationChanged;
     } else if (!SameRect(current_chunk.placement_bounds,
                          previous_chunk.placement_bounds)) {
       kind = RetainedChunkChangeKind::kMoved;
@@ -326,6 +362,7 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
     SceneChunk chunk;
     chunk.chunk_id = retained_chunk.key;
     chunk.bounds = retained_chunk.placement_bounds;
+    chunk.property_state = retained_chunk.property_state;
     chunk.content_hash = retained_chunk.content_hash;
     chunk.resource_hash = retained_chunk.resource_hash;
     chunk.commands = retained_chunk.commands;

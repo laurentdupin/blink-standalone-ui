@@ -34,6 +34,44 @@ DrawCommand DrawCommand::ClipRect(Rect clip) {
   return command;
 }
 
+DrawCommand DrawCommand::ClipRRect(Rect clip, float radius_x, float radius_y) {
+  DrawCommand command;
+  command.type = DrawCommandType::kClipRRect;
+  command.rect = clip;
+  command.radius_x = radius_x;
+  command.radius_y = radius_y;
+  command.corner_radii = {
+      Point{radius_x, radius_y},
+      Point{radius_x, radius_y},
+      Point{radius_x, radius_y},
+      Point{radius_x, radius_y},
+  };
+  command.clip_difference = false;
+  return command;
+}
+
+DrawCommand DrawCommand::ClipRRect(Rect clip,
+                                   std::array<Point, 4> corner_radii,
+                                   bool difference) {
+  DrawCommand command;
+  command.type = DrawCommandType::kClipRRect;
+  command.rect = clip;
+  command.corner_radii = corner_radii;
+  command.radius_x = corner_radii[0].x;
+  command.radius_y = corner_radii[0].y;
+  command.clip_difference = difference;
+  return command;
+}
+
+DrawCommand DrawCommand::ClipPath(std::vector<uint8_t> path_bytes,
+                                  bool difference) {
+  DrawCommand command;
+  command.type = DrawCommandType::kClipPath;
+  command.path_bytes = std::move(path_bytes);
+  command.clip_difference = difference;
+  return command;
+}
+
 DrawCommand DrawCommand::SaveLayer(Rect bounds, float opacity) {
   DrawCommand command;
   command.type = DrawCommandType::kSaveLayer;
@@ -59,6 +97,17 @@ DrawCommand DrawCommand::StrokeRect(Rect bounds, Color stroke, float width) {
   return command;
 }
 
+DrawCommand DrawCommand::FillRectShader(Rect bounds,
+                                        std::vector<uint8_t> shader_bytes,
+                                        Color modulation) {
+  DrawCommand command;
+  command.type = DrawCommandType::kFillRectShader;
+  command.rect = bounds;
+  command.shader_bytes = std::move(shader_bytes);
+  command.color = modulation;
+  return command;
+}
+
 DrawCommand DrawCommand::FillRRect(Rect bounds,
                                    float radius_x,
                                    float radius_y,
@@ -69,6 +118,21 @@ DrawCommand DrawCommand::FillRRect(Rect bounds,
   command.radius_x = radius_x;
   command.radius_y = radius_y;
   command.color = fill;
+  return command;
+}
+
+DrawCommand DrawCommand::FillRRectShader(Rect bounds,
+                                         float radius_x,
+                                         float radius_y,
+                                         std::vector<uint8_t> shader_bytes,
+                                         Color modulation) {
+  DrawCommand command;
+  command.type = DrawCommandType::kFillRRectShader;
+  command.rect = bounds;
+  command.radius_x = radius_x;
+  command.radius_y = radius_y;
+  command.shader_bytes = std::move(shader_bytes);
+  command.color = modulation;
   return command;
 }
 
@@ -87,11 +151,16 @@ DrawCommand DrawCommand::StrokeRRect(Rect bounds,
   return command;
 }
 
-DrawCommand DrawCommand::FillPath(std::string path_data, Color fill) {
+DrawCommand DrawCommand::FillPath(std::vector<uint8_t> path_bytes,
+                                  Color fill,
+                                  float stroke_width,
+                                  std::vector<uint8_t> shader_bytes) {
   DrawCommand command;
   command.type = DrawCommandType::kFillPath;
-  command.path_data = std::move(path_data);
+  command.path_bytes = std::move(path_bytes);
   command.color = fill;
+  command.stroke_width = stroke_width;
+  command.shader_bytes = std::move(shader_bytes);
   return command;
 }
 
@@ -107,6 +176,17 @@ DrawCommand DrawCommand::DrawGlyphRun(GlyphRun run) {
   DrawCommand command;
   command.type = DrawCommandType::kDrawGlyphRun;
   command.glyph_run = std::move(run);
+  return command;
+}
+
+DrawCommand DrawCommand::DrawTextBlob(std::vector<uint8_t> blob_bytes,
+                                      Point origin,
+                                      Color fill) {
+  DrawCommand command;
+  command.type = DrawCommandType::kDrawTextBlob;
+  command.text_blob_bytes = std::move(blob_bytes);
+  command.rect = Rect{origin.x, origin.y, 0.0f, 0.0f};
+  command.color = fill;
   return command;
 }
 
@@ -140,22 +220,32 @@ const char* ToString(DrawCommandType type) {
       return "Transform";
     case DrawCommandType::kClipRect:
       return "ClipRect";
+    case DrawCommandType::kClipRRect:
+      return "ClipRRect";
+    case DrawCommandType::kClipPath:
+      return "ClipPath";
     case DrawCommandType::kSaveLayer:
       return "SaveLayer";
     case DrawCommandType::kFillRect:
       return "FillRect";
     case DrawCommandType::kStrokeRect:
       return "StrokeRect";
+    case DrawCommandType::kFillRectShader:
+      return "FillRectShader";
     case DrawCommandType::kFillRRect:
       return "FillRRect";
     case DrawCommandType::kStrokeRRect:
       return "StrokeRRect";
+    case DrawCommandType::kFillRRectShader:
+      return "FillRRectShader";
     case DrawCommandType::kFillPath:
       return "FillPath";
     case DrawCommandType::kDrawImage:
       return "DrawImage";
     case DrawCommandType::kDrawGlyphRun:
       return "DrawGlyphRun";
+    case DrawCommandType::kDrawTextBlob:
+      return "DrawTextBlob";
     case DrawCommandType::kDrawText:
       return "DrawText";
     case DrawCommandType::kDiagnostic:

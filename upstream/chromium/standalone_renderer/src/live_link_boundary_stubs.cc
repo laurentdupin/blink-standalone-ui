@@ -4,6 +4,10 @@
 
 #include "third_party/blink/renderer/core/loader/resource/css_style_sheet_resource.h"
 #include "third_party/blink/renderer/core/css/style_sheet.h"
+#include "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_fraction_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_padded_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_space_layout_algorithm.h"
 
 #include "base/trace_event/trace_arguments.h"
 #include "base/cpu.h"
@@ -1303,6 +1307,41 @@ uint32_t Message::Finalize() {
 void ScatteredStreamWriter::WriteBytesSlowPath(const uint8_t*, size_t) {}
 }  // namespace protozero
 
+namespace v8 {
+TryCatch::TryCatch(Isolate*) {}
+TryCatch::~TryCatch() {}
+bool TryCatch::HasCaught() const {
+  return false;
+}
+Local<Value> TryCatch::ReThrow() {
+  return Local<Value>();
+}
+}  // namespace v8
+
+namespace SkCodecs {
+bool HasDecoder(std::string_view) {
+  return true;
+}
+}  // namespace SkCodecs
+
+namespace blink {
+CEReactionsScope* CEReactionsScope::top_of_stack_ = nullptr;
+CEReactionsScope* CEReactionsScope::Current() {
+  return top_of_stack_;
+}
+CEReactionsScope::CEReactionsScope(v8::Isolate* isolate)
+    : prev_(top_of_stack_), try_catch_(isolate) {
+  top_of_stack_ = this;
+}
+CEReactionsScope::~CEReactionsScope() {
+  top_of_stack_ = prev_;
+}
+void CEReactionsScope::EnqueueToCurrentQueue(CustomElementReactionStack&,
+                                             Element&,
+                                             CustomElementReaction&) {}
+void MutationObserver::CancelInspectorAsyncTasks() {}
+}  // namespace blink
+
 namespace cppgc::internal {
 PrefinalizerRegistration::PrefinalizerRegistration(void*, Callback) {}
 PersistentRegion& StandalonePersistentRegion() {
@@ -2025,6 +2064,9 @@ BASE_FEATURE(kHTMLParserYieldByUserTiming,
 BASE_FEATURE(kOptimizeHTMLElementUrls,
              "OptimizeHTMLElementUrls",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDevToolsAllowPopoverForcing,
+             "DevToolsAllowPopoverForcing",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE_PARAM(size_t,
                    kDocumentURLCacheSize,
                    &kOptimizeHTMLElementUrls,
@@ -7035,10 +7077,6 @@ bool VisualViewport::IsActiveViewport() const {
   return false;
 }
 void VisualViewport::InitializeScrollbars() {}
-void PaginationState::UpdateContentAreaPropertiesForCurrentPage(
-    const LayoutView&) {}
-PaginationState::PaginationState() = default;
-void PaginationState::DestroyAnonymousPageLayoutObjects() {}
 PhysicalSize CalculateInitialContainingBlockSizeForPagination(Document&) {
   return PhysicalSize();
 }
@@ -8491,7 +8529,6 @@ bool FrameViewAutoSizeInfo::AutoSizeIfNeeded() {
   return false;
 }
 void FrameViewAutoSizeInfo::Clear() {}
-void PaginationState::Trace(Visitor*) const {}
 void WebPluginContainerImpl::Trace(Visitor*) const {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void TransformPaintPropertyNode::State::Trace(Visitor*) const {}
@@ -12639,8 +12676,16 @@ ArrayIndexError MakeMessageWithArrayIndex(const char* message,
                                           size_t size) {
   return {message, size, index};
 }
+ArrayExpectedSizeError MakeMessageWithExpectedArraySize(
+    const char* message,
+    size_t size,
+    size_t expected_size) {
+  return {message, size, expected_size};
+}
 void HandleSerializationWarning(ValidationError, const char*) {}
 void HandleSerializationWarning(ValidationError, const ArrayIndexError&) {}
+void HandleSerializationWarning(ValidationError,
+                                const ArrayExpectedSizeError&) {}
 ValidationContext::ValidationContext(const void*,
                                      size_t,
                                      size_t,
@@ -12812,6 +12857,7 @@ ScopedRule::ScopedRule() : ruleset_(nullptr), rule_(nullptr) {}
 ScopedRule::ScopedRule(ScopedRule&& other)
     : ruleset_(std::move(other.ruleset_)),
       rule_(other.rule_) {}
+ScopedRule& ScopedRule::operator=(ScopedRule&& other) = default;
 ScopedRule::~ScopedRule() = default;
 }  // namespace subresource_filter
 
@@ -13089,6 +13135,7 @@ void TracedValue::WriteBoolean(bool) && {}
 namespace subresource_filter {
 MemoryMappedRuleset::~MemoryMappedRuleset() = default;
 ScopedRule::ScopedRule(const ScopedRule&) = default;
+ScopedRule& ScopedRule::operator=(const ScopedRule&) = default;
 }  // namespace subresource_filter
 
 namespace partition_alloc {
@@ -13102,9 +13149,6 @@ namespace internal {
 }  // namespace partition_alloc
 
 namespace ukm {
-int64_t GetExponentialBucketMinForCounts1000(int64_t sample) {
-  return sample;
-}
 SourceId UkmRecorder::GetNewSourceID() {
   return 1;
 }
@@ -15610,19 +15654,52 @@ const LayoutResult* MathRowLayoutAlgorithm::Layout() {
 const LayoutResult* MathOperatorLayoutAlgorithm::Layout() {
   return nullptr;
 }
-bool IsValidMathMLScript(const BlockNode&) {
-  return false;
+MathSpaceLayoutAlgorithm::MathSpaceLayoutAlgorithm(
+    const LayoutAlgorithmParams& params)
+    : LayoutAlgorithm(params) {}
+const LayoutResult* MathSpaceLayoutAlgorithm::Layout() {
+  return nullptr;
 }
-bool IsUnderOverLaidOutAsSubSup(const BlockNode&) {
-  return false;
+MinMaxSizesResult MathSpaceLayoutAlgorithm::ComputeMinMaxSizes(
+    const MinMaxSizesFloatInput&) {
+  return MinMaxSizesResult();
 }
-bool IsTextOnlyToken(const BlockNode&) {
+MathFractionLayoutAlgorithm::MathFractionLayoutAlgorithm(
+    const LayoutAlgorithmParams& params)
+    : LayoutAlgorithm(params) {}
+const LayoutResult* MathFractionLayoutAlgorithm::Layout() {
+  return nullptr;
+}
+MinMaxSizesResult MathFractionLayoutAlgorithm::ComputeMinMaxSizes(
+    const MinMaxSizesFloatInput&) {
+  return MinMaxSizesResult();
+}
+MathPaddedLayoutAlgorithm::MathPaddedLayoutAlgorithm(
+    const LayoutAlgorithmParams& params)
+    : LayoutAlgorithm(params) {}
+const LayoutResult* MathPaddedLayoutAlgorithm::Layout() {
+  return nullptr;
+}
+MinMaxSizesResult MathPaddedLayoutAlgorithm::ComputeMinMaxSizes(
+    const MinMaxSizesFloatInput&) {
+  return MinMaxSizesResult();
+}
+bool IsValidMathMLFraction(const BlockNode&) {
   return false;
 }
 bool IsValidMathMLRadical(const BlockNode&) {
   return false;
 }
 bool IsOperatorWithSpecialShaping(const BlockNode&) {
+  return false;
+}
+bool IsTextOnlyToken(const BlockNode&) {
+  return false;
+}
+bool IsValidMathMLScript(const BlockNode&) {
+  return false;
+}
+bool IsUnderOverLaidOutAsSubSup(const BlockNode&) {
   return false;
 }
 OutOfFlowLayoutPart::OutOfFlowLayoutPart(BoxFragmentBuilder*) {}
@@ -17591,14 +17668,9 @@ SoftNavigationPaintAttributionTracker::UpdateOnPrePaint(const LayoutObject&,
 PhysicalRect StitchedPageContentRect(const PhysicalBoxFragment&) {
   return PhysicalRect();
 }
-ObjectPaintProperties& PaginationState::EnsureContentAreaProperties(
-    const TransformPaintPropertyNodeOrAlias&,
-    const ClipPaintPropertyNodeOrAlias&) {
-  static Persistent<ObjectPaintProperties> properties =
-      MakeGarbageCollected<ObjectPaintProperties>();
-  return *properties;
+const PhysicalBoxFragment* GetPageContainer(const LayoutView&, wtf_size_t) {
+  return nullptr;
 }
-
 namespace features {
 BASE_FEATURE(kExpandCompositedCullRect, base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<int> kCullRectPixelDistanceToExpand{

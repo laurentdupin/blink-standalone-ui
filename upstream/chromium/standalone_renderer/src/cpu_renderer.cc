@@ -210,12 +210,18 @@ void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
         StrokeRect(image, command.rect, command.color, command.stroke_width,
                    current_clip);
         break;
+      case DrawCommandType::kFillRectShader:
+        FillRect(image, command.rect, command.color, current_clip);
+        break;
       case DrawCommandType::kFillRRect:
         FillRect(image, command.rect, command.color, current_clip);
         break;
       case DrawCommandType::kStrokeRRect:
         StrokeRect(image, command.rect, command.color, command.stroke_width,
                    current_clip);
+        break;
+      case DrawCommandType::kFillRRectShader:
+        FillRect(image, command.rect, command.color, current_clip);
         break;
       case DrawCommandType::kDrawImage:
         FillRect(image, command.rect,
@@ -229,6 +235,8 @@ void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
       case DrawCommandType::kDrawGlyphRun:
         DrawGlyphRunWithAtlas(image, command, atlas, current_clip);
         break;
+      case DrawCommandType::kDrawTextBlob:
+        break;
       case DrawCommandType::kSave:
         clip_stack.push_back(current_clip);
         break;
@@ -240,6 +248,12 @@ void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
       case DrawCommandType::kClipRect:
         clip_stack.back() =
             Intersect(current_clip, ClipRectToImage(command.rect, image));
+        break;
+      case DrawCommandType::kClipRRect:
+        clip_stack.back() =
+            Intersect(current_clip, ClipRectToImage(command.rect, image));
+        break;
+      case DrawCommandType::kClipPath:
         break;
       case DrawCommandType::kTransform:
       case DrawCommandType::kSaveLayer:

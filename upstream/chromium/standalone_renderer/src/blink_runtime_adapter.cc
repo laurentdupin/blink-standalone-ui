@@ -1,6 +1,7 @@
-﻿#include "html_css_renderer/blink_adapter.h"
+#include "html_css_renderer/blink_adapter.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <filesystem>
 #include <iterator>
@@ -43,6 +44,13 @@ int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(
     int* has_text);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpCountForStandaloneRenderer(
     const char* body_html);
+int StandaloneBlinkLiveFrameBridgeArtifactAuditLineCountForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeArtifactAuditLineAtForStandaloneRenderer(
+    const char* body_html,
+    int line_index,
+    char* buffer,
+    int buffer_size);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -66,6 +74,17 @@ int StandaloneBlinkLiveFrameBridgeExportedGlyphAtForStandaloneRenderer(
     uint32_t* glyph_id,
     float* x,
     float* y);
+int StandaloneBlinkLiveFrameBridgeExportedRRectRadiiAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    float* top_left_x,
+    float* top_left_y,
+    float* top_right_x,
+    float* top_right_y,
+    float* bottom_right_x,
+    float* bottom_right_y,
+    float* bottom_left_x,
+    float* bottom_left_y);
 int StandaloneBlinkLiveFrameBridgeExportedTextMaskInfoAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -77,6 +96,48 @@ int StandaloneBlinkLiveFrameBridgeExportedTextMaskBytesAtForStandaloneRenderer(
     int op_index,
     uint8_t* destination,
     int destination_size);
+int StandaloneBlinkLiveFrameBridgeExportedPathInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count);
+int StandaloneBlinkLiveFrameBridgeExportedPathBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size);
+int StandaloneBlinkLiveFrameBridgeExportedTextBlobInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count);
+int StandaloneBlinkLiveFrameBridgeExportedTextBlobBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size);
+int StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    char* buffer,
+    int buffer_size);
+int StandaloneBlinkLiveFrameBridgeExportedShaderInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count);
+int StandaloneBlinkLiveFrameBridgeExportedShaderBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size);
+int StandaloneBlinkLiveFrameBridgePaintChunkPropertyStateAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    uint64_t* state_hash,
+    float* transform16,
+    int* has_clip_rect,
+    float* clip_x,
+    float* clip_y,
+    float* clip_width,
+    float* clip_height);
 int StandaloneBlinkLiveFrameBridgeExportedBitmapInfoAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -197,11 +258,14 @@ constexpr const char* kRequiredGeneratedFiles[] = {
 bool IsDrawableDrawCommand(DrawCommandType type) {
   return type == DrawCommandType::kFillRect ||
          type == DrawCommandType::kStrokeRect ||
+         type == DrawCommandType::kFillRectShader ||
          type == DrawCommandType::kFillRRect ||
          type == DrawCommandType::kStrokeRRect ||
+         type == DrawCommandType::kFillRRectShader ||
          type == DrawCommandType::kFillPath ||
          type == DrawCommandType::kDrawImage ||
          type == DrawCommandType::kDrawGlyphRun ||
+         type == DrawCommandType::kDrawTextBlob ||
          type == DrawCommandType::kDrawText;
 }
 
@@ -227,6 +291,9 @@ Rect DrawCommandBounds(const DrawCommand& command) {
                                   0.5f * static_cast<float>(command.text.size());
     return Rect{command.rect.x, command.rect.y, width,
                 command.glyph_run.font_size};
+  }
+  if (command.type == DrawCommandType::kDrawTextBlob) {
+    return Rect{command.rect.x, command.rect.y, 1.0f, 1.0f};
   }
   return command.rect;
 }
@@ -1240,22 +1307,35 @@ bool RasterizeGlyphRunForBlinkBridge(const GlyphRun& glyph_run,
 
 std::string BuildLiveBlinkProbeHtml(const std::string& html,
                                     const std::vector<Stylesheet>& stylesheets) {
-  std::string output = "<head>";
+  std::string stylesheet_html;
   for (const Stylesheet& stylesheet : stylesheets) {
-    output += "<style>";
-    output += stylesheet.css;
-    output += "</style>";
+    stylesheet_html += "<style>";
+    stylesheet_html += stylesheet.css;
+    stylesheet_html += "</style>";
   }
-  output += "</head>";
-  if (html.find("<body") != std::string::npos ||
-      html.find("<BODY") != std::string::npos) {
-    output += html;
-  } else {
-    output += "<body>";
-    output += html;
-    output += "</body>";
+
+  const bool has_head = html.find("<head") != std::string::npos ||
+                        html.find("<HEAD") != std::string::npos;
+  const bool has_body = html.find("<body") != std::string::npos ||
+                        html.find("<BODY") != std::string::npos;
+  const bool has_html = html.find("<html") != std::string::npos ||
+                        html.find("<HTML") != std::string::npos;
+  if (has_head) {
+    std::string output = html;
+    const size_t head_close = output.find("</head>");
+    const size_t head_close_upper = output.find("</HEAD>");
+    const size_t insert_at =
+        head_close != std::string::npos ? head_close : head_close_upper;
+    if (insert_at != std::string::npos) {
+      output.insert(insert_at, stylesheet_html);
+      return output;
+    }
+    return stylesheet_html + output;
   }
-  return output;
+  if (has_body || has_html) {
+    return "<head>" + stylesheet_html + "</head>" + html;
+  }
+  return "<head>" + stylesheet_html + "</head><body>" + html + "</body>";
 }
 
 std::string NormalizeBlinkTextNodeValue(const std::string& value) {
@@ -1645,10 +1725,7 @@ BlinkTreeFrameBuildResult BuildBlinkTreeFrameOutput(
 #if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
 class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
  public:
-  explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info)
-      : asset_provider_(create_info.renderer.asset_provider),
-        font_provider_(create_info.renderer.font_provider),
-        glyph_rasterizer_(create_info.renderer.glyph_rasterizer) {
+  explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
     snapshot_.html = create_info.renderer.html;
     snapshot_.stylesheets = create_info.renderer.stylesheets;
     snapshot_.viewport = create_info.renderer.viewport;
@@ -1819,45 +1896,28 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       return;
     }
 
+    RetainedScene current_scene;
     DrawCommandList commands;
+    DrawCommandList chunk_commands;
+    DrawCommandList* active_commands = &commands;
+    std::string active_chunk_key;
+    Rect active_chunk_bounds;
+    PaintPropertyStateSnapshot active_chunk_property_state;
+    bool inside_chunk = false;
     LoadCommandList load_commands;
 
-    std::string active_font_id;
-    if (asset_provider_ && font_provider_) {
-      std::vector<ResourceReference> font_references =
-          ExtractResourceReferences(std::string(),
-                                    result.successor_snapshot.stylesheets);
-      font_references.push_back({"viewer-font.ttf", "font"});
-      for (const ResourceResolution& resolution :
-           ResolveResourceReferences(font_references, asset_provider_)) {
-        if (resolution.reference.element_kind != "font" || !resolution.asset) {
-          continue;
-        }
-        FontLoadInfo font;
-        font.font_id = resolution.reference.id;
-        font.resource_id = resolution.reference.id;
-        font.mime_type = resolution.asset->mime_type;
-        font.byte_count = resolution.asset->bytes.size();
-        font.bytes_hash = HashBytes(resolution.asset->bytes);
-        load_commands.push_back(LoadCommand::LoadFont(std::move(font)));
-
-        FontAsset font_asset;
-        font_asset.font_id = resolution.reference.id;
-        font_asset.resource_id = resolution.reference.id;
-        font_asset.mime_type = resolution.asset->mime_type;
-        font_asset.bytes = resolution.asset->bytes;
-        if (font_provider_->RegisterFont(font_asset)) {
-          active_font_id = resolution.reference.id;
-          result.diagnostics.push_back(
-              "real Blink PaintArtifact text font registered: " +
-              active_font_id);
-          break;
-        }
+    const int audit_line_count =
+        live_probe::
+            StandaloneBlinkLiveFrameBridgeArtifactAuditLineCountForStandaloneRenderer(
+                probe_html.c_str());
+    for (int i = 0; i < audit_line_count && i < 128; ++i) {
+      std::array<char, 4096> line{};
+      if (live_probe::
+              StandaloneBlinkLiveFrameBridgeArtifactAuditLineAtForStandaloneRenderer(
+                  probe_html.c_str(), i, line.data(),
+                  static_cast<int>(line.size())) > 0) {
+        result.diagnostics.push_back(line.data());
       }
-    }
-    if (active_font_id.empty()) {
-      result.diagnostics.push_back(
-          "real Blink PaintArtifact text export has no registered font");
     }
 
     int translated_command_count = 0;
@@ -1888,83 +1948,86 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const Color color =
           Color::Rgba(normalize_component(r), normalize_component(g),
                       normalize_component(b), normalize_component(a));
-      if (type == 1) {
-        commands.push_back(DrawCommand::FillRect(Rect{x, y, width, height}, color));
+      if (type == 12) {
+        if (inside_chunk) {
+          current_scene.chunks.push_back(MakeRetainedPaintChunk(
+              active_chunk_key, RetainedChunkKind::kDocument,
+              active_chunk_bounds, active_chunk_property_state,
+              std::move(chunk_commands)));
+          chunk_commands.clear();
+        }
+        inside_chunk = true;
+        const int chunk_index = static_cast<int>(font_size);
+        active_chunk_key = "live-blink-paint-chunk-" +
+                           std::to_string(chunk_index);
+        active_chunk_bounds = Rect{x, y, width, height};
+        active_chunk_property_state = PaintPropertyStateSnapshot{};
+        uint64_t property_state_hash = 0;
+        std::array<float, 16> transform_to_root{};
+        int has_clip_rect = 0;
+        float clip_x = 0.0f;
+        float clip_y = 0.0f;
+        float clip_width = 0.0f;
+        float clip_height = 0.0f;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgePaintChunkPropertyStateAtForStandaloneRenderer(
+                    probe_html.c_str(), chunk_index, &property_state_hash,
+                    transform_to_root.data(), &has_clip_rect, &clip_x, &clip_y,
+                    &clip_width, &clip_height)) {
+          active_chunk_property_state.state_hash = property_state_hash;
+          active_chunk_property_state.transform_to_root.values =
+              transform_to_root;
+          active_chunk_property_state.has_clip_rect = has_clip_rect != 0;
+          active_chunk_property_state.clip_rect =
+              Rect{clip_x, clip_y, clip_width, clip_height};
+        }
+        active_commands = &chunk_commands;
+      } else if (type == 13) {
+        if (inside_chunk) {
+          current_scene.chunks.push_back(MakeRetainedPaintChunk(
+              active_chunk_key, RetainedChunkKind::kDocument,
+              active_chunk_bounds, active_chunk_property_state,
+              std::move(chunk_commands)));
+          chunk_commands.clear();
+        }
+        inside_chunk = false;
+        active_chunk_key.clear();
+        active_chunk_bounds = Rect{};
+        active_chunk_property_state = PaintPropertyStateSnapshot{};
+        active_commands = &commands;
+      } else if (type == 1) {
+        active_commands->push_back(
+            DrawCommand::FillRect(Rect{x, y, width, height}, color));
         ++translated_command_count;
       } else if (type == 4) {
-        commands.push_back(DrawCommand::StrokeRect(
+        active_commands->push_back(DrawCommand::StrokeRect(
             Rect{x, y, width, height}, color,
             font_size > 0.0f ? font_size : 1.0f));
         ++translated_command_count;
       } else if (type == 5) {
-        commands.push_back(
+        active_commands->push_back(
             DrawCommand::FillRRect(Rect{x, y, width, height}, radius_x,
                                    radius_y, color));
         ++translated_command_count;
       } else if (type == 6) {
-        commands.push_back(DrawCommand::StrokeRRect(
+        active_commands->push_back(DrawCommand::StrokeRRect(
             Rect{x, y, width, height}, radius_x, radius_y, color,
             font_size > 0.0f ? font_size : 1.0f));
         ++translated_command_count;
-      } else if (type == 3) {
-        int mask_width = 0;
-        int mask_height = 0;
-        int byte_count = 0;
-        if (!live_probe::
-                StandaloneBlinkLiveFrameBridgeExportedTextMaskInfoAtForStandaloneRenderer(
-                    probe_html.c_str(), i, &mask_width, &mask_height,
-                    &byte_count) ||
-            mask_width <= 0 || mask_height <= 0 || byte_count <= 0) {
-          result.diagnostics.push_back(
-              "real Blink PaintArtifact text mask missing for op " +
-              std::to_string(i));
-          continue;
-        }
-        std::vector<uint8_t> alpha_mask(static_cast<size_t>(byte_count));
-        const int copied =
-            live_probe::
-                StandaloneBlinkLiveFrameBridgeExportedTextMaskBytesAtForStandaloneRenderer(
-                    probe_html.c_str(), i, alpha_mask.data(), byte_count);
-        if (copied != byte_count) {
-          result.diagnostics.push_back(
-              "real Blink PaintArtifact text mask copy failed for op " +
-              std::to_string(i));
-          continue;
-        }
-        const size_t nonzero_alpha_count = static_cast<size_t>(std::count_if(
-            alpha_mask.begin(), alpha_mask.end(),
-            [](uint8_t coverage) { return coverage != 0; }));
-        result.diagnostics.push_back(
-            "real Blink PaintArtifact Skia text mask op " + std::to_string(i) +
-            ": pos=(" + std::to_string(x) + "," + std::to_string(y) +
-            "), size=" + std::to_string(mask_width) + "x" +
-            std::to_string(mask_height) + ", nonzero_alpha=" +
-            std::to_string(nonzero_alpha_count) + ", color=(" +
-            std::to_string(r) + "," + std::to_string(g) + "," +
-            std::to_string(b) + "," + std::to_string(a) + ")");
-        if (nonzero_alpha_count == 0) {
-          continue;
-        }
-
-        GlyphAtlasUpdate update;
-        update.atlas_id = "blink-text-mask";
-        update.font_id = "blink-text-mask";
-        update.glyph_id = static_cast<uint32_t>(i + 1);
-        update.bounds = Rect{0.0f, 0.0f, static_cast<float>(mask_width),
-                             static_cast<float>(mask_height)};
-        update.format = PixelFormat::kAlpha8;
-        update.pixels = std::move(alpha_mask);
-        load_commands.push_back(LoadCommand::UpdateGlyphAtlas(update));
-
-        GlyphRun run;
-        run.font_id = "blink-text-mask";
-        run.font_size = font_size > 0.0f ? font_size : 16.0f;
-        run.color = color;
-        run.glyph_ids.push_back(static_cast<uint32_t>(i + 1));
-        run.positions.push_back(Point{x, y});
-        commands.push_back(DrawCommand::DrawGlyphRun(std::move(run)));
-        ++translated_command_count;
       } else if (type == 7) {
+        std::array<char, 128> debug_label{};
+        live_probe::
+            StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
+                probe_html.c_str(), i, debug_label.data(),
+                static_cast<int>(debug_label.size()));
+        std::string diagnostic =
+            "real Blink PaintArtifact bitmap-backed PaintOp resource op " +
+            std::to_string(i);
+        if (debug_label[0] != '\0') {
+          diagnostic += " source=";
+          diagnostic += debug_label.data();
+        }
+        result.diagnostics.push_back(std::move(diagnostic));
         int bitmap_width = 0;
         int bitmap_height = 0;
         int byte_count = 0;
@@ -1989,8 +2052,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               std::to_string(i));
           continue;
         }
+        const uint64_t pixel_hash = HashBytes(rgba_pixels);
         ImageLoadInfo image;
-        image.image_id = "blink-paint-bitmap-" + std::to_string(i);
+        image.image_id =
+            "blink-paint-bitmap-" + std::to_string(pixel_hash);
         image.resource_id = image.image_id;
         image.mime_type = "image/x-raw-rgba";
         image.decoded_format = PixelFormat::kRgba8888;
@@ -1998,28 +2063,189 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                   static_cast<float>(bitmap_height)};
         image.decoded_pixels = std::move(rgba_pixels);
         image.byte_count = image.decoded_pixels.size();
-        image.bytes_hash = HashBytes(image.decoded_pixels);
-        commands.push_back(
+        image.bytes_hash = pixel_hash;
+        active_commands->push_back(
             DrawCommand::DrawImage(image.image_id, Rect{x, y, width, height}));
         load_commands.push_back(LoadCommand::LoadImage(std::move(image)));
         ++translated_command_count;
-      } else if (type == 2) {
+      } else if (type == 8) {
+        active_commands->push_back(DrawCommand::Save());
+        ++translated_command_count;
+      } else if (type == 9) {
+        active_commands->push_back(DrawCommand::Restore());
+        ++translated_command_count;
+      } else if (type == 10) {
+        active_commands->push_back(
+            DrawCommand::ClipRect(Rect{x, y, width, height}));
+        ++translated_command_count;
+      } else if (type == 15) {
+        std::array<Point, 4> corner_radii = {
+            Point{radius_x, radius_y},
+            Point{radius_x, radius_y},
+            Point{radius_x, radius_y},
+            Point{radius_x, radius_y},
+        };
+        float top_left_x = 0.0f;
+        float top_left_y = 0.0f;
+        float top_right_x = 0.0f;
+        float top_right_y = 0.0f;
+        float bottom_right_x = 0.0f;
+        float bottom_right_y = 0.0f;
+        float bottom_left_x = 0.0f;
+        float bottom_left_y = 0.0f;
+        if (blink::standalone_renderer_probe::
+                StandaloneBlinkLiveFrameBridgeExportedRRectRadiiAtForStandaloneRenderer(
+                    probe_html.c_str(), static_cast<int>(i), &top_left_x,
+                    &top_left_y, &top_right_x, &top_right_y, &bottom_right_x,
+                    &bottom_right_y, &bottom_left_x, &bottom_left_y)) {
+          corner_radii = {
+              Point{top_left_x, top_left_y},
+              Point{top_right_x, top_right_y},
+              Point{bottom_right_x, bottom_right_y},
+              Point{bottom_left_x, bottom_left_y},
+          };
+        }
+        active_commands->push_back(
+            DrawCommand::ClipRRect(Rect{x, y, width, height}, corner_radii,
+                                   font_size > 0.5f));
+        ++translated_command_count;
+      } else if (type == 16) {
+        active_commands->push_back(
+            DrawCommand::SaveLayer(Rect{x, y, width, height}, font_size));
+        ++translated_command_count;
+      } else if (type == 17) {
+        int byte_count = 0;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedPathInfoAtForStandaloneRenderer(
+                    probe_html.c_str(), i, &byte_count) &&
+            byte_count > 0) {
+          std::vector<uint8_t> path_bytes(static_cast<size_t>(byte_count));
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedPathBytesAtForStandaloneRenderer(
+                      probe_html.c_str(), i, path_bytes.data(), byte_count) ==
+              byte_count) {
+            active_commands->push_back(
+                DrawCommand::ClipPath(std::move(path_bytes),
+                                      font_size > 0.5f));
+            ++translated_command_count;
+          }
+        }
+      } else if (type == 18) {
+        int byte_count = 0;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedTextBlobInfoAtForStandaloneRenderer(
+                    probe_html.c_str(), i, &byte_count) &&
+            byte_count > 0) {
+          std::vector<uint8_t> blob_bytes(static_cast<size_t>(byte_count));
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedTextBlobBytesAtForStandaloneRenderer(
+                      probe_html.c_str(), i, blob_bytes.data(), byte_count) ==
+              byte_count) {
+            active_commands->push_back(DrawCommand::DrawTextBlob(
+                std::move(blob_bytes), Point{x, y}, color));
+            ++translated_command_count;
+          }
+        }
+      } else if (type == 19 || type == 20) {
+        int byte_count = 0;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedShaderInfoAtForStandaloneRenderer(
+                    probe_html.c_str(), i, &byte_count) &&
+            byte_count > 0) {
+          std::vector<uint8_t> shader_bytes(static_cast<size_t>(byte_count));
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedShaderBytesAtForStandaloneRenderer(
+                      probe_html.c_str(), i, shader_bytes.data(),
+                      byte_count) == byte_count) {
+            if (type == 19) {
+              active_commands->push_back(DrawCommand::FillRectShader(
+                  Rect{x, y, width, height}, std::move(shader_bytes), color));
+            } else {
+              active_commands->push_back(DrawCommand::FillRRectShader(
+                  Rect{x, y, width, height}, radius_x, radius_y,
+                  std::move(shader_bytes), color));
+            }
+            ++translated_command_count;
+          }
+        }
+      } else if (type == 21) {
+        int path_byte_count = 0;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedPathInfoAtForStandaloneRenderer(
+                    probe_html.c_str(), i, &path_byte_count) &&
+            path_byte_count > 0) {
+          std::vector<uint8_t> path_bytes(
+              static_cast<size_t>(path_byte_count));
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedPathBytesAtForStandaloneRenderer(
+                      probe_html.c_str(), i, path_bytes.data(),
+                      path_byte_count) == path_byte_count) {
+            std::vector<uint8_t> shader_bytes;
+            int shader_byte_count = 0;
+            if (live_probe::
+                    StandaloneBlinkLiveFrameBridgeExportedShaderInfoAtForStandaloneRenderer(
+                        probe_html.c_str(), i, &shader_byte_count) &&
+                shader_byte_count > 0) {
+              shader_bytes.resize(static_cast<size_t>(shader_byte_count));
+              if (live_probe::
+                      StandaloneBlinkLiveFrameBridgeExportedShaderBytesAtForStandaloneRenderer(
+                          probe_html.c_str(), i, shader_bytes.data(),
+                          shader_byte_count) != shader_byte_count) {
+                shader_bytes.clear();
+              }
+            }
+            active_commands->push_back(DrawCommand::FillPath(
+                std::move(path_bytes), color,
+                font_size > 0.0f ? font_size : 0.0f,
+                std::move(shader_bytes)));
+            active_commands->back().rect = Rect{x, y, width, height};
+            ++translated_command_count;
+          }
+        }
+      } else if (type == 11) {
+        Matrix4 matrix;
+        matrix.values[12] = x;
+        matrix.values[13] = y;
+        active_commands->push_back(DrawCommand::Transform(matrix));
+        ++translated_command_count;
+      } else if (type == 14) {
+        Matrix4 matrix;
+        matrix.values[0] = x;
+        matrix.values[4] = y;
+        matrix.values[12] = width;
+        matrix.values[1] = height;
+        matrix.values[5] = r;
+        matrix.values[13] = g;
+        active_commands->push_back(DrawCommand::Transform(matrix));
+        ++translated_command_count;
+      } else {
         result.diagnostics.push_back(
-            "real Blink PaintArtifact raw glyph-id text op skipped; Skia text "
-            "mask export is used instead");
-        continue;
+            "real Blink PaintArtifact unexpected non-oracle exported op type " +
+            std::to_string(type));
       }
+    }
+    if (inside_chunk) {
+      current_scene.chunks.push_back(MakeRetainedPaintChunk(
+          active_chunk_key, RetainedChunkKind::kDocument, active_chunk_bounds,
+          active_chunk_property_state, std::move(chunk_commands)));
+      chunk_commands.clear();
+      inside_chunk = false;
+      active_commands = &commands;
     }
     if (translated_command_count == 0) {
       result.diagnostics.push_back(
           "real Blink PaintArtifact bridge produced no translated draw commands");
       return;
     }
-
-    RetainedScene current_scene = MakeSingleChunkScene(
-        "live-blink-paint-artifact",
-        DrawCommandListBounds(commands, result.successor_snapshot),
-        std::move(commands));
+    if (!commands.empty() || current_scene.chunks.empty()) {
+      current_scene.chunks.push_back(MakeRetainedPaintChunk(
+          "live-blink-paint-artifact", RetainedChunkKind::kDocument,
+          DrawCommandListBounds(commands, result.successor_snapshot),
+          std::move(commands)));
+    }
+    result.diagnostics.push_back(
+        "retained Blink PaintChunk scene chunks=" +
+        std::to_string(current_scene.chunks.size()));
     ApplyRetainedScenePlan(
         result, current_scene, load_commands,
         incremental && previous_retained_scene_ ? &*previous_retained_scene_
@@ -2030,13 +2256,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     result.diagnostics.push_back(
         "paint artifact source: real Blink PaintArtifact");
     result.diagnostics.push_back(
-        "real Blink PaintArtifact translated into draw commands");
+        "real Blink PaintArtifact exported through retained PaintOp commands");
   }
 
   RendererSnapshot snapshot_;
-  AssetProvider* asset_provider_ = nullptr;
-  FontProvider* font_provider_ = nullptr;
-  GlyphRasterizer* glyph_rasterizer_ = nullptr;
   std::optional<RetainedScene> previous_retained_scene_;
 };
 #endif

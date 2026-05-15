@@ -94,7 +94,7 @@ PaintTranslationResult PaintTranslator::Translate(
         command = DrawCommand::StrokeRect(op.rect, op.color, op.stroke_width);
         break;
       case PaintOpType::kFillPath:
-        command = DrawCommand::FillPath(op.path_data, op.color);
+        command = DrawCommand::FillPath({}, op.color);
         break;
       case PaintOpType::kDrawImage:
         command = DrawCommand::DrawImage(op.resource_id, op.rect);

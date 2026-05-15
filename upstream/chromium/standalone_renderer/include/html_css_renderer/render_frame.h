@@ -37,10 +37,17 @@ struct ResourceCommand {
   static ResourceCommand Destroy(std::string resource_id);
 };
 
+struct PaintPropertyStateSnapshot {
+  uint64_t state_hash = 0;
+  Matrix4 transform_to_root;
+  bool has_clip_rect = false;
+  Rect clip_rect;
+};
 struct SceneChunk {
   std::string chunk_id;
   Rect bounds;
   Rect damage_bounds;
+  PaintPropertyStateSnapshot property_state;
   uint64_t content_hash = 0;
   uint64_t resource_hash = 0;
   bool retained_from_previous_frame = false;

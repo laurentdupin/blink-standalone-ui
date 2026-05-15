@@ -59,6 +59,28 @@ void WriteRect(std::ostringstream& out, const Rect& rect) {
       << "}";
 }
 
+void WriteMatrix(std::ostringstream& out, const Matrix4& matrix) {
+  out << "[";
+  for (size_t i = 0; i < matrix.values.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    out << matrix.values[i];
+  }
+  out << "]";
+}
+
+void WritePropertyState(std::ostringstream& out,
+                        const PaintPropertyStateSnapshot& state) {
+  out << "{\"state_hash\":" << state.state_hash
+      << ",\"transform_to_root\":";
+  WriteMatrix(out, state.transform_to_root);
+  out << ",\"has_clip_rect\":" << (state.has_clip_rect ? "true" : "false")
+      << ",\"clip_rect\":";
+  WriteRect(out, state.clip_rect);
+  out << "}";
+}
+
 void WriteStringArray(std::ostringstream& out,
                       const std::vector<std::string>& values) {
   out << "[";
@@ -124,6 +146,8 @@ void WriteSceneChunks(std::ostringstream& out,
     WriteRect(out, chunks[i].bounds);
     out << ",\"damage_bounds\":";
     WriteRect(out, chunks[i].damage_bounds);
+    out << ",\"property_state\":";
+    WritePropertyState(out, chunks[i].property_state);
     out << ",\"content_hash\":" << chunks[i].content_hash
         << ",\"resource_hash\":" << chunks[i].resource_hash
         << ",\"retained_from_previous_frame\":"
@@ -253,18 +277,33 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
     case DrawCommandType::kRestore:
       break;
     case DrawCommandType::kTransform:
-      out << ",\"matrix\":[";
-      for (size_t i = 0; i < command.transform.values.size(); ++i) {
-        if (i > 0) {
-          out << ",";
-        }
-        out << command.transform.values[i];
-      }
-      out << "]";
+      out << ",\"matrix\":";
+      WriteMatrix(out, command.transform);
       break;
     case DrawCommandType::kClipRect:
       out << ",\"rect\":";
       WriteRect(out, command.rect);
+      break;
+    case DrawCommandType::kClipRRect:
+      out << ",\"rect\":";
+      WriteRect(out, command.rect);
+      out << ",\"radius_x\":" << command.radius_x
+          << ",\"radius_y\":" << command.radius_y
+          << ",\"clip_op\":\""
+          << (command.clip_difference ? "Difference" : "Intersect") << "\""
+          << ",\"corner_radii\":[";
+      for (size_t i = 0; i < command.corner_radii.size(); ++i) {
+        if (i > 0) {
+          out << ",";
+        }
+        WritePoint(out, command.corner_radii[i]);
+      }
+      out << "]";
+      break;
+    case DrawCommandType::kClipPath:
+      out << ",\"clip_op\":\""
+          << (command.clip_difference ? "Difference" : "Intersect")
+          << "\",\"path_byte_count\":" << command.path_bytes.size();
       break;
     case DrawCommandType::kSaveLayer:
       out << ",\"bounds\":";
@@ -273,14 +312,17 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
       break;
     case DrawCommandType::kFillRect:
     case DrawCommandType::kStrokeRect:
+    case DrawCommandType::kFillRectShader:
     case DrawCommandType::kFillRRect:
     case DrawCommandType::kStrokeRRect:
+    case DrawCommandType::kFillRRectShader:
       out << ",\"rect\":";
       WriteRect(out, command.rect);
       out << ",\"color\":";
       WriteColor(out, command.color);
       if (command.type == DrawCommandType::kFillRRect ||
-          command.type == DrawCommandType::kStrokeRRect) {
+          command.type == DrawCommandType::kStrokeRRect ||
+          command.type == DrawCommandType::kFillRRectShader) {
         out << ",\"radius_x\":" << command.radius_x
             << ",\"radius_y\":" << command.radius_y;
       }
@@ -288,10 +330,16 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
           command.type == DrawCommandType::kStrokeRRect) {
         out << ",\"stroke_width\":" << command.stroke_width;
       }
+      if (command.type == DrawCommandType::kFillRectShader ||
+          command.type == DrawCommandType::kFillRRectShader) {
+        out << ",\"shader_byte_count\":" << command.shader_bytes.size();
+      }
       break;
     case DrawCommandType::kFillPath:
-      out << ",\"path\":\"" << EscapeJson(command.path_data)
-          << "\",\"color\":";
+      out << ",\"path_byte_count\":" << command.path_bytes.size()
+          << ",\"shader_byte_count\":" << command.shader_bytes.size()
+          << ",\"stroke_width\":" << command.stroke_width
+          << ",\"color\":";
       WriteColor(out, command.color);
       break;
     case DrawCommandType::kDrawImage:
@@ -319,6 +367,13 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
         WritePoint(out, command.glyph_run.positions[i]);
       }
       out << "]";
+      break;
+    case DrawCommandType::kDrawTextBlob:
+      out << ",\"origin\":";
+      WritePoint(out, Point{command.rect.x, command.rect.y});
+      out << ",\"color\":";
+      WriteColor(out, command.color);
+      out << ",\"blob_byte_count\":" << command.text_blob_bytes.size();
       break;
     case DrawCommandType::kDrawText:
       out << ",\"text\":\"" << EscapeJson(command.text) << "\",\"origin\":";

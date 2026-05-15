@@ -3,9 +3,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
+#include <cctype>
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -26,6 +28,8 @@
 #include "html_css_renderer/source_text_backend.h"
 
 namespace {
+
+namespace fs = std::filesystem;
 
 class EmptyAssets final : public html_css_renderer::AssetProvider {
  public:
@@ -51,6 +55,99 @@ std::vector<uint8_t> ReadBinaryFile(const std::string& path) {
   }
   return std::vector<uint8_t>(std::istreambuf_iterator<char>(file),
                               std::istreambuf_iterator<char>());
+}
+
+std::optional<std::string> ReadTextFile(const std::string& path) {
+  std::ifstream file(path, std::ios::binary);
+  if (!file) {
+    return std::nullopt;
+  }
+  return std::string(std::istreambuf_iterator<char>(file),
+                     std::istreambuf_iterator<char>());
+}
+
+std::string ToLowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return value;
+}
+
+std::optional<std::string> ExtractAttribute(const std::string& tag,
+                                            const std::string& name) {
+  const std::string lower = ToLowerAscii(tag);
+  const std::string needle = ToLowerAscii(name) + "=";
+  const size_t attr = lower.find(needle);
+  if (attr == std::string::npos) {
+    return std::nullopt;
+  }
+  size_t value_start = attr + needle.size();
+  if (value_start >= tag.size()) {
+    return std::nullopt;
+  }
+  const char quote = tag[value_start];
+  if (quote == '"' || quote == '\'') {
+    ++value_start;
+    const size_t value_end = tag.find(quote, value_start);
+    if (value_end == std::string::npos) {
+      return std::nullopt;
+    }
+    return tag.substr(value_start, value_end - value_start);
+  }
+  size_t value_end = value_start;
+  while (value_end < tag.size() &&
+         !std::isspace(static_cast<unsigned char>(tag[value_end])) &&
+         tag[value_end] != '>') {
+    ++value_end;
+  }
+  return tag.substr(value_start, value_end - value_start);
+}
+
+std::vector<std::string> ExtractLinkedStylesheetHrefs(const std::string& html) {
+  std::vector<std::string> hrefs;
+  const std::string lower = ToLowerAscii(html);
+  size_t search_offset = 0;
+  while (true) {
+    const size_t link_start = lower.find("<link", search_offset);
+    if (link_start == std::string::npos) {
+      break;
+    }
+    const size_t link_end = lower.find('>', link_start);
+    if (link_end == std::string::npos) {
+      break;
+    }
+    const std::string tag = html.substr(link_start, link_end - link_start + 1);
+    const std::optional<std::string> rel = ExtractAttribute(tag, "rel");
+    const std::optional<std::string> href = ExtractAttribute(tag, "href");
+    if (href && rel &&
+        ToLowerAscii(*rel).find("stylesheet") != std::string::npos) {
+      hrefs.push_back(*href);
+    }
+    search_offset = link_end + 1;
+  }
+  return hrefs;
+}
+
+void AddLocalLinkedStylesheets(const std::string& html_path,
+                               const std::string& html,
+                               html_css_renderer::RendererCreateInfo*
+                                   create_info) {
+  const fs::path base_dir = fs::absolute(fs::path(html_path)).parent_path();
+  for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
+    if (href.find("://") != std::string::npos || href.rfind("//", 0) == 0 ||
+        href.rfind("data:", 0) == 0 || href.empty()) {
+      continue;
+    }
+    fs::path css_path = fs::path(href);
+    if (css_path.is_relative()) {
+      css_path = base_dir / css_path;
+    }
+    std::optional<std::string> css = ReadTextFile(css_path.string());
+    if (css) {
+      create_info->stylesheets.push_back({css_path.string(), std::move(*css)});
+    }
+  }
 }
 
 bool ParseFloat(const std::string& value, float* output) {
@@ -92,7 +189,8 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* output) {
 void PrintUsage() {
   std::fprintf(stderr,
                "Usage: html_css_renderer_sdl_viewer --html <html> "
-               "[--css <css>] [--viewport WxH] [--delta seconds] "
+               "[--html-file <path>] [--css <css>] [--css-file <path>] "
+               "[--viewport WxH] [--delta seconds] "
                "[--font-file path] [--window-scale factor] "
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
@@ -128,12 +226,35 @@ bool ParseArgs(int argc,
         return false;
       }
       create_info->html = value;
+    } else if (arg == "--html-file") {
+      const char* value = next_value();
+      if (!value) {
+        return false;
+      }
+      std::optional<std::string> html = ReadTextFile(value);
+      if (!html) {
+        std::fprintf(stderr, "failed to read html file: %s\n", value);
+        return false;
+      }
+      create_info->html = std::move(*html);
+      AddLocalLinkedStylesheets(value, create_info->html, create_info);
     } else if (arg == "--css") {
       const char* value = next_value();
       if (!value) {
         return false;
       }
       create_info->stylesheets.push_back({"viewer", value});
+    } else if (arg == "--css-file") {
+      const char* value = next_value();
+      if (!value) {
+        return false;
+      }
+      std::optional<std::string> css = ReadTextFile(value);
+      if (!css) {
+        std::fprintf(stderr, "failed to read css file: %s\n", value);
+        return false;
+      }
+      create_info->stylesheets.push_back({value, std::move(*css)});
     } else if (arg == "--viewport") {
       const char* value = next_value();
       if (!value || !ParseViewport(value, &create_info->viewport)) {
@@ -589,6 +710,12 @@ class SdlFrameRenderer {
       case html_css_renderer::DrawCommandType::kStrokeRRect:
         DrawRRectApprox(command, true, state);
         break;
+      case html_css_renderer::DrawCommandType::kFillRectShader:
+        FillRect(command, state);
+        break;
+      case html_css_renderer::DrawCommandType::kFillRRectShader:
+        DrawRRectApprox(command, false, state);
+        break;
       case html_css_renderer::DrawCommandType::kDrawImage: {
         const auto found = images_.find(command.resource_id);
         if (found == images_.end()) {
@@ -619,6 +746,8 @@ class SdlFrameRenderer {
         }
         break;
       }
+      case html_css_renderer::DrawCommandType::kDrawTextBlob:
+        break;
       case html_css_renderer::DrawCommandType::kSave:
         state_stack.push_back(state);
         break;
@@ -645,6 +774,14 @@ class SdlFrameRenderer {
         ApplyClip(state.clip);
         break;
       }
+      case html_css_renderer::DrawCommandType::kClipRRect: {
+        SDL_Rect clip = BoundsForTransformedRect(state.transform, command.rect);
+        state.clip = state.clip ? IntersectClip(*state.clip, clip) : clip;
+        ApplyClip(state.clip);
+        break;
+      }
+      case html_css_renderer::DrawCommandType::kClipPath:
+        break;
       case html_css_renderer::DrawCommandType::kFillPath:
       case html_css_renderer::DrawCommandType::kDrawText:
       case html_css_renderer::DrawCommandType::kDiagnostic:

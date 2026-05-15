@@ -1,13 +1,16 @@
-﻿// Copyright 2026 The Chromium Authors
+// Copyright 2026 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <array>
+#include <map>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -18,9 +21,13 @@
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "third_party/skia/include/core/SkPathBuilder.h"
+#include "third_party/skia/include/core/SkSerialProcs.h"
+#include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkString.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -50,6 +57,7 @@
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/rect_conversions.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 
 namespace blink::standalone_renderer_probe {
 
@@ -71,6 +79,21 @@ struct LiveExportedGlyph {
   float y = 0.0f;
 };
 
+struct LiveExportedChunkPropertyState {
+  uint64_t state_hash = 0;
+  std::array<float, 16> transform_to_root = {
+      1.0f, 0.0f, 0.0f, 0.0f,
+      0.0f, 1.0f, 0.0f, 0.0f,
+      0.0f, 0.0f, 1.0f, 0.0f,
+      0.0f, 0.0f, 0.0f, 1.0f,
+  };
+  bool has_clip_rect = false;
+  float clip_x = 0.0f;
+  float clip_y = 0.0f;
+  float clip_width = 0.0f;
+  float clip_height = 0.0f;
+};
+
 struct LiveExportedDrawOp {
   int type = 0;
   float x = 0.0f;
@@ -84,11 +107,16 @@ struct LiveExportedDrawOp {
   float font_size = 0.0f;
   float radius_x = 0.0f;
   float radius_y = 0.0f;
+  std::array<SkVector, 4> corner_radii = {};
   std::vector<LiveExportedGlyph> glyphs;
   int mask_width = 0;
   int mask_height = 0;
+  std::vector<uint8_t> path_bytes;
+  std::vector<uint8_t> text_blob_bytes;
+  std::vector<uint8_t> shader_bytes;
   std::vector<uint8_t> alpha_mask;
   std::vector<uint8_t> rgba_pixels;
+  std::string debug_label;
 };
 
 struct LiveFramePaintProbeCache {
@@ -96,6 +124,8 @@ struct LiveFramePaintProbeCache {
   LiveFramePaintProbeResult result;
   std::string body_html;
   std::vector<LiveExportedDrawOp> exported_draw_ops;
+  std::vector<LiveExportedChunkPropertyState> chunk_property_states;
+  std::vector<std::string> artifact_audit_lines;
   int viewport_width = 320;
   int viewport_height = 200;
   bool initialized = false;
@@ -233,6 +263,221 @@ void AppendRRectOp(float x,
   exported_draw_ops.push_back(exported);
 }
 
+void AppendSaveOp(std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  LiveExportedDrawOp exported;
+  exported.type = 8;
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendRestoreOp(std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  LiveExportedDrawOp exported;
+  exported.type = 9;
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendClipRectOp(const gfx::RectF& rect,
+                      std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  if (rect.width() <= 0.0f || rect.height() <= 0.0f) {
+    return;
+  }
+  LiveExportedDrawOp exported;
+  exported.type = 10;
+  exported.x = rect.x();
+  exported.y = rect.y();
+  exported.width = rect.width();
+  exported.height = rect.height();
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendClipRRectOp(const SkRRect& rrect,
+                       float translate_x,
+                       float translate_y,
+                       SkClipOp clip_op,
+                       std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  const SkRect& rect = rrect.getBounds();
+  if (!rect.isFinite() || rect.width() <= 0.0f || rect.height() <= 0.0f) {
+    return;
+  }
+  LiveExportedDrawOp exported;
+  exported.type = 15;
+  exported.x = translate_x + rect.x();
+  exported.y = translate_y + rect.y();
+  exported.width = rect.width();
+  exported.height = rect.height();
+  for (size_t i = 0; i < exported.corner_radii.size(); ++i) {
+    exported.corner_radii[i] =
+        rrect.radii(static_cast<SkRRect::Corner>(i));
+  }
+  exported.radius_x = exported.corner_radii[0].x();
+  exported.radius_y = exported.corner_radii[0].y();
+  exported.font_size = clip_op == SkClipOp::kDifference ? 1.0f : 0.0f;
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendSaveLayerAlphaOp(const SkRect& bounds,
+                            float translate_x,
+                            float translate_y,
+                            float alpha,
+                            int fallback_width,
+                            int fallback_height,
+                            std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  LiveExportedDrawOp exported;
+  exported.type = 16;
+  if (bounds.fLeft == SK_ScalarInfinity) {
+    exported.x = 0.0f;
+    exported.y = 0.0f;
+    exported.width = static_cast<float>(fallback_width);
+    exported.height = static_cast<float>(fallback_height);
+  } else {
+    exported.x = translate_x + bounds.x();
+    exported.y = translate_y + bounds.y();
+    exported.width = bounds.width();
+    exported.height = bounds.height();
+  }
+  exported.font_size = std::max(0.0f, std::min(1.0f, alpha));
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendClipPathOp(const SkPath& path,
+                      float translate_x,
+                      float translate_y,
+                      SkClipOp clip_op,
+                      std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  SkPath translated_path = path.makeOffset(translate_x, translate_y);
+  const size_t byte_count = translated_path.writeToMemory(nullptr);
+  if (byte_count == 0) {
+    return;
+  }
+  LiveExportedDrawOp exported;
+  exported.type = 17;
+  exported.font_size = clip_op == SkClipOp::kDifference ? 1.0f : 0.0f;
+  exported.path_bytes.resize(byte_count);
+  translated_path.writeToMemory(exported.path_bytes.data());
+  exported_draw_ops.push_back(std::move(exported));
+}
+
+std::vector<uint8_t> SerializeShaderBytes(const cc::PaintFlags& flags) {
+  SkPaint paint = flags.ToSkPaint();
+  sk_sp<SkShader> shader = paint.refShader();
+  if (!shader) {
+    return {};
+  }
+  SkSerialProcs procs;
+  sk_sp<SkData> data = shader->serialize(&procs);
+  if (!data || data->size() == 0) {
+    return {};
+  }
+  const uint8_t* bytes = static_cast<const uint8_t*>(data->data());
+  return std::vector<uint8_t>(bytes, bytes + data->size());
+}
+
+uint64_t HashCombineForStandaloneRenderer(uint64_t seed, uint64_t value) {
+  return seed ^ (value + 0x9e3779b97f4a7c15ull + (seed << 6) + (seed >> 2));
+}
+
+uint64_t HashFloatForStandaloneRenderer(float value) {
+  static_assert(sizeof(float) == sizeof(uint32_t));
+  uint32_t bits = 0;
+  std::memcpy(&bits, &value, sizeof(bits));
+  return bits;
+}
+
+uint64_t HashChunkPropertyStateForStandaloneRenderer(
+    const LiveExportedChunkPropertyState& state) {
+  uint64_t hash = 0;
+  for (const float value : state.transform_to_root) {
+    hash = HashCombineForStandaloneRenderer(hash,
+                                            HashFloatForStandaloneRenderer(value));
+  }
+  hash = HashCombineForStandaloneRenderer(hash, state.has_clip_rect ? 1u : 0u);
+  if (state.has_clip_rect) {
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_y));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_width));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_height));
+  }
+  return hash;
+}
+
+void AppendChunkPropertyStateForStandaloneRenderer(
+    wtf_size_t chunk_index,
+    const gfx::Transform& projection,
+    const FloatClipRect& clip,
+    std::vector<LiveExportedChunkPropertyState>& property_states) {
+  if (property_states.size() <= chunk_index) {
+    property_states.resize(chunk_index + 1);
+  }
+  LiveExportedChunkPropertyState state;
+  state.transform_to_root[0] = static_cast<float>(projection.rc(0, 0));
+  state.transform_to_root[4] = static_cast<float>(projection.rc(0, 1));
+  state.transform_to_root[12] = static_cast<float>(projection.rc(0, 3));
+  state.transform_to_root[1] = static_cast<float>(projection.rc(1, 0));
+  state.transform_to_root[5] = static_cast<float>(projection.rc(1, 1));
+  state.transform_to_root[13] = static_cast<float>(projection.rc(1, 3));
+  if (!clip.IsInfinite()) {
+    const gfx::RectF& rect = clip.Rect();
+    state.has_clip_rect = true;
+    state.clip_x = rect.x();
+    state.clip_y = rect.y();
+    state.clip_width = rect.width();
+    state.clip_height = rect.height();
+  }
+  state.state_hash = HashChunkPropertyStateForStandaloneRenderer(state);
+  property_states[chunk_index] = state;
+}
+
+void AppendTranslateOp(float x,
+                       float y,
+                       std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  if (x == 0.0f && y == 0.0f) {
+    return;
+  }
+  LiveExportedDrawOp exported;
+  exported.type = 11;
+  exported.x = x;
+  exported.y = y;
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendMatrix2dOp(const gfx::Transform& transform,
+                      std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  if (transform.IsIdentity()) {
+    return;
+  }
+  LiveExportedDrawOp exported;
+  exported.type = 14;
+  exported.x = static_cast<float>(transform.rc(0, 0));
+  exported.y = static_cast<float>(transform.rc(0, 1));
+  exported.width = static_cast<float>(transform.rc(0, 3));
+  exported.height = static_cast<float>(transform.rc(1, 0));
+  exported.r = static_cast<float>(transform.rc(1, 1));
+  exported.g = static_cast<float>(transform.rc(1, 3));
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendBeginChunkOp(wtf_size_t chunk_index,
+                        const gfx::Rect& bounds,
+                        std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  LiveExportedDrawOp exported;
+  exported.type = 12;
+  exported.x = static_cast<float>(bounds.x());
+  exported.y = static_cast<float>(bounds.y());
+  exported.width = static_cast<float>(bounds.width());
+  exported.height = static_cast<float>(bounds.height());
+  exported.font_size = static_cast<float>(chunk_index);
+  exported_draw_ops.push_back(exported);
+}
+
+void AppendEndChunkOp(std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  LiveExportedDrawOp exported;
+  exported.type = 13;
+  exported_draw_ops.push_back(exported);
+}
+
 void AppendSkRectOpWithFlags(
     const SkRect& rect,
     float translate_x,
@@ -243,6 +488,19 @@ void AppendSkRectOpWithFlags(
     return;
   }
   if (flags.HasShader() && flags.getStyle() != cc::PaintFlags::kStroke_Style) {
+    std::vector<uint8_t> shader_bytes = SerializeShaderBytes(flags);
+    if (!shader_bytes.empty()) {
+      LiveExportedDrawOp exported;
+      exported.type = 19;
+      exported.x = translate_x + rect.x();
+      exported.y = translate_y + rect.y();
+      exported.width = rect.width();
+      exported.height = rect.height();
+      AppendSkColor(exported, flags.getColor4f());
+      exported.shader_bytes = std::move(shader_bytes);
+      exported_draw_ops.push_back(std::move(exported));
+      return;
+    }
     const int bitmap_width = SkScalarCeilToInt(rect.width());
     const int bitmap_height = SkScalarCeilToInt(rect.height());
     if (bitmap_width > 0 && bitmap_height > 0) {
@@ -267,6 +525,7 @@ void AppendSkRectOpWithFlags(
         exported.mask_width = bitmap_width;
         exported.mask_height = bitmap_height;
         exported.rgba_pixels = std::move(rgba_pixels);
+        exported.debug_label = "DrawRectOp shader";
         exported_draw_ops.push_back(std::move(exported));
         return;
       }
@@ -313,6 +572,21 @@ void AppendSkRRectOpWithFlags(
   }
   const SkVector radii = rrect.getSimpleRadii();
   if (flags.HasShader() && flags.getStyle() != cc::PaintFlags::kStroke_Style) {
+    std::vector<uint8_t> shader_bytes = SerializeShaderBytes(flags);
+    if (!shader_bytes.empty()) {
+      LiveExportedDrawOp exported;
+      exported.type = 20;
+      exported.x = translate_x + rect.x();
+      exported.y = translate_y + rect.y();
+      exported.width = rect.width();
+      exported.height = rect.height();
+      exported.radius_x = radii.x();
+      exported.radius_y = radii.y();
+      AppendSkColor(exported, flags.getColor4f());
+      exported.shader_bytes = std::move(shader_bytes);
+      exported_draw_ops.push_back(std::move(exported));
+      return;
+    }
     const int bitmap_width = SkScalarCeilToInt(rect.width());
     const int bitmap_height = SkScalarCeilToInt(rect.height());
     if (bitmap_width > 0 && bitmap_height > 0) {
@@ -337,6 +611,7 @@ void AppendSkRRectOpWithFlags(
         exported.mask_width = bitmap_width;
         exported.mask_height = bitmap_height;
         exported.rgba_pixels = std::move(rgba_pixels);
+        exported.debug_label = "DrawRRectOp shader";
         exported_draw_ops.push_back(std::move(exported));
         return;
       }
@@ -359,92 +634,31 @@ void AppendSkPathOpWithFlags(
   if (!bounds.isFinite()) {
     return;
   }
-  if (!flags.HasShader()) {
-    SkRect decoration_bounds = bounds;
-    if (flags.getStyle() == cc::PaintFlags::kStroke_Style) {
-      const SkScalar outset = std::max<SkScalar>(1.0f, flags.getStrokeWidth()) *
-                              0.5f + 1.0f;
-      decoration_bounds.outset(outset, outset);
-    }
-    if (decoration_bounds.width() <= 4.0f ||
-        decoration_bounds.height() <= 4.0f) {
-      AppendFillRectOp(translate_x + decoration_bounds.x(),
-                       translate_y + decoration_bounds.y(),
-                       decoration_bounds.width(), decoration_bounds.height(),
-                       flags.getColor4f(), exported_draw_ops);
-    }
-    if (flags.getStyle() != cc::PaintFlags::kStroke_Style) {
-      const int bitmap_width = SkScalarCeilToInt(bounds.width());
-      const int bitmap_height = SkScalarCeilToInt(bounds.height());
-      constexpr int kMaxPathBitmapPixels = 1024 * 1024;
-      if (bitmap_width > 0 && bitmap_height > 0 &&
-          static_cast<int64_t>(bitmap_width) *
-                  static_cast<int64_t>(bitmap_height) <=
-              kMaxPathBitmapPixels) {
-        std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
-                                         static_cast<size_t>(bitmap_height) *
-                                         4u);
-        SkImageInfo info = SkImageInfo::Make(bitmap_width, bitmap_height,
-                                             kRGBA_8888_SkColorType,
-                                             kPremul_SkAlphaType);
-        sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-            info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
-        if (surface) {
-          SkCanvas* canvas = surface->getCanvas();
-          canvas->clear(SK_ColorTRANSPARENT);
-          canvas->translate(-bounds.x(), -bounds.y());
-          canvas->drawPath(path, flags.ToSkPaint());
-          LiveExportedDrawOp exported;
-          exported.type = 7;
-          exported.x = translate_x + bounds.x();
-          exported.y = translate_y + bounds.y();
-          exported.width = static_cast<float>(bitmap_width);
-          exported.height = static_cast<float>(bitmap_height);
-          exported.mask_width = bitmap_width;
-          exported.mask_height = bitmap_height;
-          exported.rgba_pixels = std::move(rgba_pixels);
-          exported_draw_ops.push_back(std::move(exported));
-        }
-      }
-    }
-    return;
-  }
-  SkRect draw_bounds = bounds;
-  if (flags.getStyle() == cc::PaintFlags::kStroke_Style) {
-    const SkScalar outset = std::max<SkScalar>(1.0f, flags.getStrokeWidth()) *
-                            0.5f + 1.0f;
-    draw_bounds.outset(outset, outset);
-  }
-  const int bitmap_width = SkScalarCeilToInt(draw_bounds.width());
-  const int bitmap_height = SkScalarCeilToInt(draw_bounds.height());
-  if (bitmap_width <= 0 || bitmap_height <= 0) {
-    return;
-  }
-  std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
-                                   static_cast<size_t>(bitmap_height) * 4u);
-  SkImageInfo info =
-      SkImageInfo::Make(bitmap_width, bitmap_height, kRGBA_8888_SkColorType,
-                        kPremul_SkAlphaType);
-  sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
-  if (surface) {
-    SkCanvas* canvas = surface->getCanvas();
-    canvas->clear(SK_ColorTRANSPARENT);
-    canvas->translate(-draw_bounds.x(), -draw_bounds.y());
-    canvas->drawRect(draw_bounds, flags.ToSkPaint());
-    LiveExportedDrawOp exported;
-    exported.type = 7;
-    exported.x = translate_x + draw_bounds.x();
-    exported.y = translate_y + draw_bounds.y();
-    exported.width = static_cast<float>(bitmap_width);
-    exported.height = static_cast<float>(bitmap_height);
-    exported.mask_width = bitmap_width;
-    exported.mask_height = bitmap_height;
-    exported.rgba_pixels = std::move(rgba_pixels);
-    exported_draw_ops.push_back(std::move(exported));
-  }
-}
 
+  const size_t path_byte_count = path.writeToMemory(nullptr);
+  if (path_byte_count == 0) {
+    return;
+  }
+
+  LiveExportedDrawOp exported;
+  exported.type = 21;
+  exported.x = translate_x;
+  exported.y = translate_y;
+  exported.width = bounds.width();
+  exported.height = bounds.height();
+  exported.font_size = flags.getStyle() == cc::PaintFlags::kStroke_Style
+                           ? std::max<SkScalar>(1.0f, flags.getStrokeWidth())
+                           : 0.0f;
+  AppendSkColor(exported, flags.getColor4f());
+  exported.path_bytes.resize(path_byte_count);
+  path.writeToMemory(exported.path_bytes.data());
+
+  if (flags.HasShader()) {
+    exported.shader_bytes = SerializeShaderBytes(flags);
+  }
+
+  exported_draw_ops.push_back(std::move(exported));
+}
 void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
                       int fallback_x,
                       int fallback_y,
@@ -452,6 +666,20 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
                       int fallback_height,
                       std::vector<LiveExportedDrawOp>& exported_draw_ops) {
   if (!text_op.blob) {
+    return;
+  }
+  SkSerialProcs procs;
+  sk_sp<SkData> serialized_blob = text_op.blob->serialize(procs);
+  if (serialized_blob && serialized_blob->size() > 0) {
+    LiveExportedDrawOp exported;
+    exported.type = 18;
+    exported.x = text_op.x;
+    exported.y = text_op.y;
+    AppendSkColor(exported, text_op.flags.getColor4f());
+    const uint8_t* bytes =
+        static_cast<const uint8_t*>(serialized_blob->data());
+    exported.text_blob_bytes.assign(bytes, bytes + serialized_blob->size());
+    exported_draw_ops.push_back(std::move(exported));
     return;
   }
   const float absolute_x = text_op.x;
@@ -522,7 +750,7 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
   }
 
   LiveExportedDrawOp bitmap_export;
-  bitmap_export.type = 3;
+  bitmap_export.type = 7;
   AppendSkColor(bitmap_export, text_op.flags.getColor4f());
   bitmap_export.x = export_offset_x + static_cast<float>(ibounds.left());
   bitmap_export.y = export_offset_y + static_cast<float>(ibounds.top());
@@ -530,63 +758,397 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
   bitmap_export.height = static_cast<float>(mask_height);
   bitmap_export.mask_width = mask_width;
   bitmap_export.mask_height = mask_height;
-  bitmap_export.alpha_mask = std::move(mask_pixels);
+  bitmap_export.rgba_pixels = std::move(rgba_pixels);
+  bitmap_export.debug_label = "DrawTextBlobOp fallback";
   exported_draw_ops.push_back(std::move(bitmap_export));
-
-  SkTextBlob::Iter iterator(*text_op.blob);
-  SkTextBlob::Iter::ExperimentalRun run;
-  while (iterator.experimentalNext(&run)) {
-    if (run.count <= 0 || !run.glyphs) {
-      continue;
-    }
-    for (int i = 0; i < std::min(run.count, 12); ++i) {
-    }
-    SkString typeface_family;
-    if (run.font.getTypeface()) {
-      run.font.getTypeface()->getFamilyName(&typeface_family);
-    }
-    LiveExportedDrawOp exported;
-    exported.type = 2;
-    AppendSkColor(exported, text_op.flags.getColor4f());
-    exported.font_size = run.font.getSize();
-    const SkRect bounds = text_op.blob->bounds().makeOffset(text_op.x, text_op.y);
-    exported.x = export_offset_x + bounds.x();
-    exported.y = export_offset_y + bounds.y();
-    exported.width = bounds.width();
-    exported.height = bounds.height();
-    exported.glyphs.reserve(static_cast<size_t>(run.count));
-    for (int i = 0; i < run.count; ++i) {
-      LiveExportedGlyph glyph;
-      glyph.glyph_id = run.glyphs[i];
-      if (run.positions) {
-        glyph.x = export_offset_x + text_op.x + run.positions[i].x();
-        glyph.y = export_offset_y + text_op.y + run.positions[i].y();
-      } else {
-        glyph.x = export_offset_x + text_op.x;
-        glyph.y = export_offset_y + text_op.y;
-      }
-      exported.glyphs.push_back(glyph);
-    }
-    exported_draw_ops.push_back(std::move(exported));
-  }
 }
 
-bool AppendPaintRecordBitmapOp(
+bool AppendPaintOpBitmapResource(
+    const cc::PaintOp& op,
+    SkRect bounds,
+    float translate_x,
+    float translate_y,
+    std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  if (!bounds.isFinite() || bounds.width() <= 0.0f ||
+      bounds.height() <= 0.0f) {
+    return false;
+  }
+  constexpr int kMaxOpBitmapPixels = 4 * 1024 * 1024;
+  bounds.roundOut(&bounds);
+  const int bitmap_width = SkScalarCeilToInt(bounds.width());
+  const int bitmap_height = SkScalarCeilToInt(bounds.height());
+  if (bitmap_width <= 0 || bitmap_height <= 0 ||
+      static_cast<int64_t>(bitmap_width) *
+              static_cast<int64_t>(bitmap_height) >
+          kMaxOpBitmapPixels) {
+    return false;
+  }
+
+  std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
+                                   static_cast<size_t>(bitmap_height) * 4u);
+  SkImageInfo info =
+      SkImageInfo::Make(bitmap_width, bitmap_height, kRGBA_8888_SkColorType,
+                        kPremul_SkAlphaType);
+  sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
+      info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
+  if (!surface) {
+    return false;
+  }
+
+  SkCanvas* canvas = surface->getCanvas();
+  canvas->clear(SK_ColorTRANSPARENT);
+  canvas->translate(-bounds.x(), -bounds.y());
+  op.Raster(canvas, cc::PlaybackParams());
+
+  LiveExportedDrawOp exported;
+  exported.type = 7;
+  exported.x = translate_x + bounds.x();
+  exported.y = translate_y + bounds.y();
+  exported.width = static_cast<float>(bitmap_width);
+  exported.height = static_cast<float>(bitmap_height);
+  exported.mask_width = bitmap_width;
+  exported.mask_height = bitmap_height;
+  exported.rgba_pixels = std::move(rgba_pixels);
+  exported.debug_label = cc::PaintOpTypeToString(op.GetType());
+  exported_draw_ops.push_back(std::move(exported));
+  return true;
+}
+
+bool SkM44IsIdentityOr2dTranslation(const SkM44& matrix) {
+  return matrix.rc(0, 0) == 1.0f && matrix.rc(0, 1) == 0.0f &&
+         matrix.rc(0, 2) == 0.0f && matrix.rc(1, 0) == 0.0f &&
+         matrix.rc(1, 1) == 1.0f && matrix.rc(1, 2) == 0.0f &&
+         matrix.rc(2, 0) == 0.0f && matrix.rc(2, 1) == 0.0f &&
+         matrix.rc(2, 2) == 1.0f && matrix.rc(2, 3) == 0.0f &&
+         matrix.rc(3, 0) == 0.0f && matrix.rc(3, 1) == 0.0f &&
+         matrix.rc(3, 2) == 0.0f && matrix.rc(3, 3) == 1.0f;
+}
+
+bool AppendPaintRecordExtractedOps(
     const cc::PaintRecord& record,
-    int fallback_x,
-    int fallback_y,
+    float initial_translate_x,
+    float initial_translate_y,
     int fallback_width,
     int fallback_height,
+    std::vector<LiveExportedDrawOp>& exported_draw_ops,
+    std::vector<std::string>& diagnostics) {
+  struct PaintRecordState {
+    float translate_x = 0.0f;
+    float translate_y = 0.0f;
+  };
+  std::vector<PaintRecordState> state_stack;
+  float translate_x = initial_translate_x;
+  float translate_y = initial_translate_y;
+  bool complete = true;
+
+  const auto mark_unsupported = [&](const cc::PaintOp& op) {
+    complete = false;
+    diagnostics.push_back(
+        "paint_op_extraction unsupported op=" +
+        std::string(cc::PaintOpTypeToString(op.GetType())));
+  };
+
+  for (const cc::PaintOp& op : record) {
+    switch (op.GetType()) {
+      case cc::PaintOpType::kNoop:
+        break;
+      case cc::PaintOpType::kSave:
+        state_stack.push_back({translate_x, translate_y});
+        AppendSaveOp(exported_draw_ops);
+        break;
+      case cc::PaintOpType::kSaveLayer:
+        mark_unsupported(op);
+        break;
+      case cc::PaintOpType::kSaveLayerAlpha: {
+        const auto& save_layer_op =
+            static_cast<const cc::SaveLayerAlphaOp&>(op);
+        if (!save_layer_op.IsValid()) {
+          mark_unsupported(op);
+          break;
+        }
+        state_stack.push_back({translate_x, translate_y});
+        AppendSaveLayerAlphaOp(save_layer_op.bounds, translate_x, translate_y,
+                               save_layer_op.alpha, fallback_width,
+                               fallback_height, exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kRestore:
+        if (!state_stack.empty()) {
+          translate_x = state_stack.back().translate_x;
+          translate_y = state_stack.back().translate_y;
+          state_stack.pop_back();
+        }
+        AppendRestoreOp(exported_draw_ops);
+        break;
+      case cc::PaintOpType::kTranslate: {
+        const auto& translate_op = static_cast<const cc::TranslateOp&>(op);
+        translate_x += translate_op.dx;
+        translate_y += translate_op.dy;
+        break;
+      }
+      case cc::PaintOpType::kConcat: {
+        const auto& concat_op = static_cast<const cc::ConcatOp&>(op);
+        if (!SkM44IsIdentityOr2dTranslation(concat_op.matrix)) {
+          mark_unsupported(op);
+          break;
+        }
+        translate_x += concat_op.matrix.rc(0, 3);
+        translate_y += concat_op.matrix.rc(1, 3);
+        break;
+      }
+      case cc::PaintOpType::kSetMatrix: {
+        const auto& matrix_op = static_cast<const cc::SetMatrixOp&>(op);
+        if (!SkM44IsIdentityOr2dTranslation(matrix_op.matrix)) {
+          mark_unsupported(op);
+          break;
+        }
+        translate_x = initial_translate_x + matrix_op.matrix.rc(0, 3);
+        translate_y = initial_translate_y + matrix_op.matrix.rc(1, 3);
+        break;
+      }
+      case cc::PaintOpType::kClipRect: {
+        const auto& clip_op = static_cast<const cc::ClipRectOp&>(op);
+        if (clip_op.op != SkClipOp::kIntersect || !clip_op.rect.isFinite()) {
+          mark_unsupported(op);
+          break;
+        }
+        AppendClipRectOp(
+            gfx::RectF(translate_x + clip_op.rect.x(),
+                       translate_y + clip_op.rect.y(), clip_op.rect.width(),
+                       clip_op.rect.height()),
+            exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kClipRRect: {
+        const auto& clip_op = static_cast<const cc::ClipRRectOp&>(op);
+        if ((clip_op.op != SkClipOp::kIntersect &&
+             clip_op.op != SkClipOp::kDifference) ||
+            !clip_op.rrect.isValid()) {
+          diagnostics.push_back(
+              "paint_op_extraction unsupported ClipRRect detail op=" +
+              std::to_string(static_cast<int>(clip_op.op)) +
+              " valid=" + std::to_string(clip_op.rrect.isValid() ? 1 : 0) +
+              " type=" + std::to_string(clip_op.rrect.getType()));
+          mark_unsupported(op);
+          break;
+        }
+        AppendClipRRectOp(clip_op.rrect, translate_x, translate_y, clip_op.op,
+                          exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kClipPath: {
+        const auto& clip_op = static_cast<const cc::ClipPathOp&>(op);
+        if ((clip_op.op != SkClipOp::kIntersect &&
+             clip_op.op != SkClipOp::kDifference) ||
+            !clip_op.IsValid()) {
+          mark_unsupported(op);
+          break;
+        }
+        AppendClipPathOp(clip_op.path, translate_x, translate_y, clip_op.op,
+                         exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kSaveLayerFilters:
+        mark_unsupported(op);
+        break;
+      case cc::PaintOpType::kDrawColor: {
+        const auto& color_op = static_cast<const cc::DrawColorOp&>(op);
+        AppendFillRectOp(0.0f, 0.0f, static_cast<float>(fallback_width),
+                         static_cast<float>(fallback_height), color_op.color,
+                         exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kDrawImage: {
+        const auto& image_op = static_cast<const cc::DrawImageOp&>(op);
+        if (!AppendPaintOpBitmapResource(
+                op,
+                SkRect::MakeXYWH(image_op.left, image_op.top,
+                                 static_cast<SkScalar>(image_op.image.width()),
+                                 static_cast<SkScalar>(
+                                     image_op.image.height())),
+                translate_x, translate_y, exported_draw_ops)) {
+          mark_unsupported(op);
+        }
+        break;
+      }
+      case cc::PaintOpType::kDrawImageRect: {
+        const auto& image_op = static_cast<const cc::DrawImageRectOp&>(op);
+        if (!AppendPaintOpBitmapResource(op, image_op.dst, translate_x,
+                                         translate_y, exported_draw_ops)) {
+          mark_unsupported(op);
+        }
+        break;
+      }
+      case cc::PaintOpType::kDrawIRect:
+        AppendSkIRectOpWithFlags(static_cast<const cc::DrawIRectOp&>(op).rect,
+                                 translate_x, translate_y,
+                                 static_cast<const cc::DrawIRectOp&>(op).flags,
+                                 exported_draw_ops);
+        break;
+      case cc::PaintOpType::kDrawDRRect: {
+        const auto& drrect_op = static_cast<const cc::DrawDRRectOp&>(op);
+        SkPath path = SkPathBuilder(SkPathFillType::kEvenOdd)
+                          .addRRect(drrect_op.outer)
+                          .addRRect(drrect_op.inner)
+                          .detach();
+        AppendSkPathOpWithFlags(path, translate_x, translate_y,
+                                drrect_op.flags, exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kDrawRect:
+        AppendSkRectOpWithFlags(static_cast<const cc::DrawRectOp&>(op).rect,
+                                translate_x, translate_y,
+                                static_cast<const cc::DrawRectOp&>(op).flags,
+                                exported_draw_ops);
+        break;
+      case cc::PaintOpType::kDrawArc: {
+        const auto& arc_op = static_cast<const cc::DrawArcOp&>(op);
+        if (!AppendPaintOpBitmapResource(op, arc_op.oval, translate_x,
+                                         translate_y, exported_draw_ops)) {
+          mark_unsupported(op);
+        }
+        break;
+      }
+      case cc::PaintOpType::kDrawArcLite: {
+        const auto& arc_op = static_cast<const cc::DrawArcLiteOp&>(op);
+        if (!AppendPaintOpBitmapResource(op, arc_op.oval, translate_x,
+                                         translate_y, exported_draw_ops)) {
+          mark_unsupported(op);
+        }
+        break;
+      }
+      case cc::PaintOpType::kDrawLine: {
+        const auto& line_op = static_cast<const cc::DrawLineOp&>(op);
+        SkPath path = SkPathBuilder()
+                          .moveTo(line_op.x0, line_op.y0)
+                          .lineTo(line_op.x1, line_op.y1)
+                          .detach();
+        cc::PaintFlags flags = line_op.flags;
+        flags.setStyle(cc::PaintFlags::kStroke_Style);
+        AppendSkPathOpWithFlags(path, translate_x, translate_y, flags,
+                                exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kDrawLineLite: {
+        const auto& line_op = static_cast<const cc::DrawLineLiteOp&>(op);
+        SkPath path = SkPathBuilder()
+                          .moveTo(line_op.x0, line_op.y0)
+                          .lineTo(line_op.x1, line_op.y1)
+                          .detach();
+        cc::PaintFlags flags(line_op.core_paint_flags);
+        flags.setStyle(cc::PaintFlags::kStroke_Style);
+        AppendSkPathOpWithFlags(path, translate_x, translate_y, flags,
+                                exported_draw_ops);
+        break;
+      }
+      case cc::PaintOpType::kDrawRRect:
+        AppendSkRRectOpWithFlags(
+            static_cast<const cc::DrawRRectOp&>(op).rrect, translate_x,
+            translate_y, static_cast<const cc::DrawRRectOp&>(op).flags,
+            exported_draw_ops);
+        break;
+      case cc::PaintOpType::kDrawOval:
+        AppendSkRectOpWithFlags(static_cast<const cc::DrawOvalOp&>(op).oval,
+                                translate_x, translate_y,
+                                static_cast<const cc::DrawOvalOp&>(op).flags,
+                                exported_draw_ops);
+        break;
+      case cc::PaintOpType::kDrawPath:
+        AppendSkPathOpWithFlags(static_cast<const cc::DrawPathOp&>(op).path,
+                                translate_x, translate_y,
+                                static_cast<const cc::DrawPathOp&>(op).flags,
+                                exported_draw_ops);
+        break;
+      case cc::PaintOpType::kDrawTextBlob:
+        AppendTextBlobOp(static_cast<const cc::DrawTextBlobOp&>(op),
+                         static_cast<int>(translate_x),
+                         static_cast<int>(translate_y), fallback_width,
+                         fallback_height, exported_draw_ops);
+        break;
+      case cc::PaintOpType::kDrawRecord:
+        if (!AppendPaintRecordExtractedOps(
+                static_cast<const cc::DrawRecordOp&>(op).record, translate_x,
+                translate_y, fallback_width, fallback_height,
+                exported_draw_ops, diagnostics)) {
+          complete = false;
+        }
+        break;
+      default:
+        mark_unsupported(op);
+        break;
+    }
+  }
+
+  return complete;
+}
+
+bool AppendPaintArtifactExtractedOps(
+    const PaintArtifact& artifact,
+    int viewport_width,
+    int viewport_height,
+    std::vector<LiveExportedDrawOp>& exported_draw_ops,
+    std::vector<LiveExportedChunkPropertyState>& property_states,
+    std::vector<std::string>& diagnostics) {
+  const DisplayItemList& display_items = artifact.GetDisplayItemList();
+  const PaintChunks& chunks = artifact.GetPaintChunks();
+  bool complete = true;
+  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
+       ++chunk_index) {
+    const PaintChunk& chunk = chunks[chunk_index];
+    const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    gfx::Transform projection;
+    if (!GeometryMapper::SourceToDestinationProjection(
+            chunk_state.Transform(), PropertyTreeState::Root().Transform(),
+            projection) ||
+        !projection.Is2dTransform()) {
+      diagnostics.push_back(
+          "paint_op_extraction unsupported chunk transform at index=" +
+          std::to_string(chunk_index));
+      complete = false;
+      continue;
+    }
+    AppendBeginChunkOp(chunk_index, chunk.bounds, exported_draw_ops);
+    AppendSaveOp(exported_draw_ops);
+    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
+        chunk_state, PropertyTreeState::Root());
+    if (!clip.IsInfinite()) {
+      AppendClipRectOp(clip.Rect(), exported_draw_ops);
+    }
+    AppendMatrix2dOp(projection, exported_draw_ops);
+    for (wtf_size_t item_index = chunk.begin_index;
+         item_index < chunk.end_index && item_index < display_items.size();
+         ++item_index) {
+      const auto* drawing =
+          DynamicTo<DrawingDisplayItem>(display_items[item_index]);
+      if (!drawing) {
+        continue;
+      }
+      if (!AppendPaintRecordExtractedOps(
+              drawing->GetPaintRecord(), 0.0f, 0.0f, viewport_width,
+              viewport_height, exported_draw_ops, diagnostics)) {
+        complete = false;
+      }
+    }
+    AppendRestoreOp(exported_draw_ops);
+    AppendEndChunkOp(exported_draw_ops);
+  }
+  return complete && !exported_draw_ops.empty();
+}
+
+bool AppendPaintArtifactOracleBitmapOp(
+    const PaintArtifact& artifact,
+    int viewport_width,
+    int viewport_height,
     std::vector<LiveExportedDrawOp>& exported_draw_ops) {
-  if (fallback_width <= 0 || fallback_height <= 0) {
+  if (viewport_width <= 0 || viewport_height <= 0) {
     return false;
   }
   constexpr int kMaxBitmapExportDimension = 4096;
-  constexpr int kMaxBitmapExportPixels = 8 * 1024 * 1024;
+  constexpr int kMaxBitmapExportPixels = 16 * 1024 * 1024;
   const int bitmap_width =
-      std::min(fallback_width, kMaxBitmapExportDimension);
+      std::min(viewport_width, kMaxBitmapExportDimension);
   const int bitmap_height =
-      std::min(fallback_height, kMaxBitmapExportDimension);
+      std::min(viewport_height, kMaxBitmapExportDimension);
   if (bitmap_width <= 0 || bitmap_height <= 0 ||
       static_cast<int64_t>(bitmap_width) *
               static_cast<int64_t>(bitmap_height) >
@@ -607,14 +1169,47 @@ bool AppendPaintRecordBitmapOp(
 
   SkCanvas* canvas = surface->getCanvas();
   canvas->clear(SK_ColorTRANSPARENT);
-  canvas->translate(-static_cast<SkScalar>(fallback_x),
-                    -static_cast<SkScalar>(fallback_y));
-  record.Playback(canvas);
+
+  const DisplayItemList& display_items = artifact.GetDisplayItemList();
+  const PaintChunks& chunks = artifact.GetPaintChunks();
+  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
+       ++chunk_index) {
+    const PaintChunk& chunk = chunks[chunk_index];
+    const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    gfx::Transform projection;
+    if (!GeometryMapper::SourceToDestinationProjection(
+            chunk_state.Transform(), PropertyTreeState::Root().Transform(),
+            projection)) {
+      continue;
+    }
+
+    canvas->save();
+    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
+        chunk_state, PropertyTreeState::Root());
+    if (!clip.IsInfinite()) {
+      const gfx::RectF& clip_rect = clip.Rect();
+      canvas->clipRect(
+          SkRect::MakeXYWH(clip_rect.x(), clip_rect.y(),
+                           clip_rect.width(), clip_rect.height()),
+          SkClipOp::kIntersect, true);
+    }
+    canvas->concat(gfx::TransformToSkM44(projection));
+    for (wtf_size_t item_index = chunk.begin_index;
+         item_index < chunk.end_index && item_index < display_items.size();
+         ++item_index) {
+      const auto* drawing = DynamicTo<DrawingDisplayItem>(display_items[item_index]);
+      if (!drawing) {
+        continue;
+      }
+      drawing->GetPaintRecord().Playback(canvas);
+    }
+    canvas->restore();
+  }
 
   LiveExportedDrawOp exported;
   exported.type = 7;
-  exported.x = static_cast<float>(fallback_x);
-  exported.y = static_cast<float>(fallback_y);
+  exported.x = 0.0f;
+  exported.y = 0.0f;
   exported.width = static_cast<float>(bitmap_width);
   exported.height = static_cast<float>(bitmap_height);
   exported.mask_width = bitmap_width;
@@ -624,317 +1219,125 @@ bool AppendPaintRecordBitmapOp(
   return true;
 }
 
-bool PaintRecordNeedsBitmapExport(const cc::PaintRecord& record) {
-  for (const cc::PaintOp& op : record) {
-    switch (op.GetType()) {
-      case cc::PaintOpType::kDrawArc:
-      case cc::PaintOpType::kDrawArcLite:
-      case cc::PaintOpType::kDrawDRRect:
-      case cc::PaintOpType::kDrawImage:
-      case cc::PaintOpType::kDrawImageRect:
-      case cc::PaintOpType::kDrawScrollingContents:
-      case cc::PaintOpType::kDrawSkottie:
-      case cc::PaintOpType::kDrawSlug:
-      case cc::PaintOpType::kDrawVertices:
-      case cc::PaintOpType::kRotate:
-      case cc::PaintOpType::kSaveLayerFilters:
-      case cc::PaintOpType::kScale:
-      case cc::PaintOpType::kSetMatrix:
-        return true;
-      case cc::PaintOpType::kDrawIRect:
-        if (static_cast<const cc::DrawIRectOp&>(op).flags.HasShader()) {
-          return true;
-        }
-        break;
-      case cc::PaintOpType::kDrawOval:
-        if (static_cast<const cc::DrawOvalOp&>(op).flags.HasShader()) {
-          return true;
-        }
-        break;
-      case cc::PaintOpType::kDrawPath:
-        break;
-      case cc::PaintOpType::kDrawRect:
-        if (static_cast<const cc::DrawRectOp&>(op).flags.HasShader()) {
-          return true;
-        }
-        break;
-      case cc::PaintOpType::kDrawRRect:
-        if (static_cast<const cc::DrawRRectOp&>(op).flags.HasShader()) {
-          return true;
-        }
-        break;
-      case cc::PaintOpType::kDrawRecord:
-        if (PaintRecordNeedsBitmapExport(
-                static_cast<const cc::DrawRecordOp&>(op).record)) {
-          return true;
-        }
-        break;
-      default:
-        break;
-    }
+bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type) {
+  switch (type) {
+    case cc::PaintOpType::kSave:
+    case cc::PaintOpType::kRestore:
+    case cc::PaintOpType::kSaveLayer:
+    case cc::PaintOpType::kSaveLayerAlpha:
+    case cc::PaintOpType::kSaveLayerFilters:
+    case cc::PaintOpType::kTranslate:
+    case cc::PaintOpType::kScale:
+    case cc::PaintOpType::kRotate:
+    case cc::PaintOpType::kConcat:
+    case cc::PaintOpType::kSetMatrix:
+    case cc::PaintOpType::kClipRect:
+    case cc::PaintOpType::kClipRRect:
+    case cc::PaintOpType::kClipPath:
+    case cc::PaintOpType::kDrawColor:
+    case cc::PaintOpType::kDrawRect:
+    case cc::PaintOpType::kDrawIRect:
+    case cc::PaintOpType::kDrawRRect:
+    case cc::PaintOpType::kDrawDRRect:
+    case cc::PaintOpType::kDrawOval:
+    case cc::PaintOpType::kDrawArc:
+    case cc::PaintOpType::kDrawArcLite:
+    case cc::PaintOpType::kDrawLine:
+    case cc::PaintOpType::kDrawLineLite:
+    case cc::PaintOpType::kDrawPath:
+    case cc::PaintOpType::kDrawImage:
+    case cc::PaintOpType::kDrawImageRect:
+    case cc::PaintOpType::kDrawTextBlob:
+    case cc::PaintOpType::kDrawRecord:
+    case cc::PaintOpType::kNoop:
+      return true;
+    default:
+      return false;
   }
-  return false;
 }
 
-bool PaintRecordHasTextExport(const cc::PaintRecord& record) {
+void AppendPaintRecordAudit(const cc::PaintRecord& record,
+                            std::map<std::string, int>& op_histogram,
+                            std::map<std::string, int>& unsupported_histogram,
+                            int& op_count) {
   for (const cc::PaintOp& op : record) {
-    switch (op.GetType()) {
-      case cc::PaintOpType::kDrawTextBlob:
-      case cc::PaintOpType::kDrawSlug:
-        return true;
-      case cc::PaintOpType::kDrawRecord:
-        if (PaintRecordHasTextExport(
-                static_cast<const cc::DrawRecordOp&>(op).record)) {
-          return true;
-        }
-        break;
-      default:
-        break;
+    const std::string op_name = cc::PaintOpTypeToString(op.GetType());
+    ++op_histogram[op_name];
+    ++op_count;
+    if (!IsPaintOpCurrentlyExtracted(op.GetType())) {
+      ++unsupported_histogram[op_name];
+    }
+    if (op.GetType() == cc::PaintOpType::kDrawRecord) {
+      AppendPaintRecordAudit(static_cast<const cc::DrawRecordOp&>(op).record,
+                             op_histogram, unsupported_histogram, op_count);
     }
   }
-  return false;
 }
 
-std::pair<float, float> TranslateForPaintOpBounds(
-    const SkRect& local_bounds,
-    float current_translate_x,
-    float current_translate_y,
-    float fallback_x,
-    float fallback_y,
-    int fallback_width,
-    int fallback_height) {
-  if (!local_bounds.isFinite() || fallback_width <= 0 || fallback_height <= 0) {
-    return {current_translate_x, current_translate_y};
-  }
-  const SkRect translated_bounds =
-      local_bounds.makeOffset(current_translate_x, current_translate_y);
-  const SkRect fallback_bounds =
-      SkRect::MakeXYWH(fallback_x, fallback_y,
-                       static_cast<float>(fallback_width),
-                       static_cast<float>(fallback_height));
-  SkRect intersection;
-  if (intersection.intersect(translated_bounds, fallback_bounds)) {
-    return {current_translate_x, current_translate_y};
-  }
-  return {current_translate_x + fallback_x, current_translate_y + fallback_y};
-}
-
-void AppendPaintRecordOps(const cc::PaintRecord& record,
-                          float fallback_x,
-                          float fallback_y,
-                          int fallback_width,
-                          int fallback_height,
-                          std::vector<LiveExportedDrawOp>& exported_draw_ops) {
-  struct PaintRecordState {
-    float translate_x = 0.0f;
-    float translate_y = 0.0f;
-    std::optional<SkRect> clip;
-  };
-  std::vector<PaintRecordState> state_stack;
-  float current_translate_x = 0.0f;
-  float current_translate_y = 0.0f;
-  std::optional<SkRect> current_clip;
-  for (const cc::PaintOp& op : record) {
-    switch (op.GetType()) {
-      case cc::PaintOpType::kSave:
-      case cc::PaintOpType::kSaveLayer:
-      case cc::PaintOpType::kSaveLayerAlpha:
-      case cc::PaintOpType::kSaveLayerFilters:
-        state_stack.push_back(
-            {current_translate_x, current_translate_y, current_clip});
-        break;
-      case cc::PaintOpType::kRestore:
-        if (!state_stack.empty()) {
-          current_translate_x = state_stack.back().translate_x;
-          current_translate_y = state_stack.back().translate_y;
-          current_clip = state_stack.back().clip;
-          state_stack.pop_back();
-        }
-        break;
-      case cc::PaintOpType::kTranslate: {
-        const auto& translate_op = static_cast<const cc::TranslateOp&>(op);
-        current_translate_x += translate_op.dx;
-        current_translate_y += translate_op.dy;
-        break;
-      }
-      case cc::PaintOpType::kConcat: {
-        const auto& concat_op = static_cast<const cc::ConcatOp&>(op);
-        current_translate_x += concat_op.matrix.rc(0, 3);
-        current_translate_y += concat_op.matrix.rc(1, 3);
-        break;
-      }
-      case cc::PaintOpType::kSetMatrix: {
-        const auto& matrix_op = static_cast<const cc::SetMatrixOp&>(op);
-        current_translate_x = matrix_op.matrix.rc(0, 3);
-        current_translate_y = matrix_op.matrix.rc(1, 3);
-        break;
-      }
-      case cc::PaintOpType::kClipRect: {
-        const auto& clip_op = static_cast<const cc::ClipRectOp&>(op);
-        if (clip_op.op == SkClipOp::kIntersect && clip_op.rect.isFinite()) {
-          SkRect clip = clip_op.rect.makeOffset(current_translate_x,
-                                                current_translate_y);
-          if (current_clip) {
-            SkRect intersection;
-            if (intersection.intersect(*current_clip, clip)) {
-              current_clip = intersection;
-            } else {
-              current_clip = SkRect::MakeEmpty();
-            }
-          } else {
-            current_clip = clip;
-          }
-        }
-        break;
-      }
-      case cc::PaintOpType::kDrawColor: {
-        const auto& color_op = static_cast<const cc::DrawColorOp&>(op);
-        if (current_clip) {
-          SkRect export_clip = *current_clip;
-          if (fallback_width > 0 && fallback_height > 0) {
-            const SkRect fallback_bounds = SkRect::MakeXYWH(
-                fallback_x, fallback_y, static_cast<float>(fallback_width),
-                static_cast<float>(fallback_height));
-            SkRect intersection;
-            if (!intersection.intersect(export_clip, fallback_bounds)) {
-              export_clip = export_clip.makeOffset(fallback_x, fallback_y);
-            }
-          }
-          AppendFillRectOp(export_clip.x(), export_clip.y(),
-                           export_clip.width(), export_clip.height(),
-                           color_op.color, exported_draw_ops);
-        } else {
-          AppendFillRectOp(fallback_x + current_translate_x,
-                           fallback_y + current_translate_y,
-                           static_cast<float>(fallback_width),
-                           static_cast<float>(fallback_height), color_op.color,
-                           exported_draw_ops);
-        }
-        break;
-      }
-      case cc::PaintOpType::kDrawIRect: {
-        const auto& rect_op = static_cast<const cc::DrawIRectOp&>(op);
-        const auto [translate_x, translate_y] = TranslateForPaintOpBounds(
-            SkRect::Make(rect_op.rect), current_translate_x,
-            current_translate_y, fallback_x, fallback_y, fallback_width,
-            fallback_height);
-        AppendSkIRectOpWithFlags(rect_op.rect, translate_x, translate_y,
-                                 rect_op.flags, exported_draw_ops);
-        break;
-      }
-      case cc::PaintOpType::kDrawRect: {
-        const auto& rect_op = static_cast<const cc::DrawRectOp&>(op);
-        const auto [translate_x, translate_y] = TranslateForPaintOpBounds(
-            rect_op.rect, current_translate_x, current_translate_y, fallback_x,
-            fallback_y, fallback_width, fallback_height);
-        AppendSkRectOpWithFlags(rect_op.rect, translate_x, translate_y,
-                                rect_op.flags, exported_draw_ops);
-        break;
-      }
-      case cc::PaintOpType::kDrawRRect: {
-        const auto& rect_op = static_cast<const cc::DrawRRectOp&>(op);
-        const auto [translate_x, translate_y] = TranslateForPaintOpBounds(
-            rect_op.rrect.rect(), current_translate_x, current_translate_y,
-            fallback_x, fallback_y, fallback_width, fallback_height);
-        AppendSkRRectOpWithFlags(rect_op.rrect, translate_x, translate_y,
-                                 rect_op.flags,
-                                 exported_draw_ops);
-        break;
-      }
-      case cc::PaintOpType::kDrawOval: {
-        const auto& oval_op = static_cast<const cc::DrawOvalOp&>(op);
-        const auto [translate_x, translate_y] = TranslateForPaintOpBounds(
-            oval_op.oval, current_translate_x, current_translate_y, fallback_x,
-            fallback_y, fallback_width, fallback_height);
-        AppendSkRectOpWithFlags(oval_op.oval, translate_x, translate_y,
-                                oval_op.flags, exported_draw_ops);
-        break;
-      }
-      case cc::PaintOpType::kDrawLine: {
-        const auto& line_op = static_cast<const cc::DrawLineOp&>(op);
-        const SkScalar stroke_width =
-            line_op.flags.getStrokeWidth() > 0.0f
-                ? line_op.flags.getStrokeWidth()
-                : 1.0f;
-        const SkScalar left = std::min(line_op.x0, line_op.x1);
-        const SkScalar top = std::min(line_op.y0, line_op.y1);
-        const SkScalar width = std::max<SkScalar>(
-            stroke_width, std::abs(line_op.x1 - line_op.x0));
-        const SkScalar height = std::max<SkScalar>(
-            stroke_width, std::abs(line_op.y1 - line_op.y0));
-        const auto [translate_x, translate_y] = TranslateForPaintOpBounds(
-            SkRect::MakeXYWH(left, top, width, height), current_translate_x,
-            current_translate_y, fallback_x, fallback_y, fallback_width,
-            fallback_height);
-        AppendFillRectOp(translate_x + left,
-                         translate_y + top, width, height,
-                         line_op.flags.getColor4f(), exported_draw_ops);
-        break;
-      }
-      case cc::PaintOpType::kDrawPath: {
-        const auto& path_op = static_cast<const cc::DrawPathOp&>(op);
-        const auto [translate_x, translate_y] = TranslateForPaintOpBounds(
-            path_op.path.getBounds(), current_translate_x, current_translate_y,
-            fallback_x, fallback_y, fallback_width, fallback_height);
-        AppendSkPathOpWithFlags(path_op.path, translate_x, translate_y,
-                                path_op.flags,
-                                exported_draw_ops);
-        break;
-      }
-      case cc::PaintOpType::kDrawTextBlob:
-        AppendTextBlobOp(static_cast<const cc::DrawTextBlobOp&>(op),
-                         static_cast<int>(fallback_x + current_translate_x),
-                         static_cast<int>(fallback_y + current_translate_y),
-                         fallback_width, fallback_height,
-                         exported_draw_ops);
-        break;
-      case cc::PaintOpType::kDrawRecord:
-        AppendPaintRecordOps(static_cast<const cc::DrawRecordOp&>(op).record,
-                             fallback_x + current_translate_x,
-                             fallback_y + current_translate_y,
-                             fallback_width, fallback_height,
-                             exported_draw_ops);
-        break;
-      default:
-        break;
+std::string MapToJsonObject(const std::map<std::string, int>& values) {
+  std::string json = "{";
+  bool first = true;
+  for (const auto& [key, value] : values) {
+    if (!first) {
+      json += ",";
     }
+    first = false;
+    json += "\"";
+    json += key;
+    json += "\":";
+    json += std::to_string(value);
   }
+  json += "}";
+  return json;
+}
+
+std::string LowerAsciiForStandaloneRenderer(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return value;
 }
 
 std::vector<std::string> ExtractStyleElementTextForStandaloneRenderer(
-    const std::string& head_html) {
+    const std::string& html) {
   std::vector<std::string> styles;
-  size_t search_from = 0;
-  while (search_from < head_html.size()) {
-    const size_t style_open = head_html.find("<style>", search_from);
-    if (style_open == std::string::npos) {
+  std::string lower = LowerAsciiForStandaloneRenderer(html);
+  size_t search_offset = 0;
+  while (true) {
+    const size_t open = lower.find("<style", search_offset);
+    if (open == std::string::npos) {
       break;
     }
-    const size_t style_text_start = style_open + std::string("<style>").size();
-    const size_t style_close = head_html.find("</style>", style_text_start);
-    if (style_close == std::string::npos) {
+    const size_t open_end = lower.find('>', open);
+    if (open_end == std::string::npos) {
       break;
     }
-    styles.push_back(head_html.substr(style_text_start,
-                                      style_close - style_text_start));
-    search_from = style_close + std::string("</style>").size();
+    const size_t close = lower.find("</style>", open_end + 1);
+    if (close == std::string::npos) {
+      break;
+    }
+    styles.push_back(html.substr(open_end + 1, close - open_end - 1));
+    search_offset = close + 8;
   }
   return styles;
 }
 
 std::string ExtractHtmlAttributeForStandaloneRenderer(
     const std::string& tag,
-    const std::string& name) {
-  const std::string needle = name + "=";
-  size_t attr = tag.find(needle);
-  if (attr == std::string::npos) {
+    const std::string& attribute_name) {
+  const std::string lower = LowerAsciiForStandaloneRenderer(tag);
+  const std::string needle =
+      LowerAsciiForStandaloneRenderer(attribute_name) + "=";
+  const size_t name = lower.find(needle);
+  if (name == std::string::npos) {
     return std::string();
   }
-  size_t value_start = attr + needle.size();
+  size_t value_start = name + needle.size();
   if (value_start >= tag.size()) {
     return std::string();
   }
-  char quote = tag[value_start];
+  const char quote = tag[value_start];
   if (quote == '"' || quote == '\'') {
     ++value_start;
     const size_t value_end = tag.find(quote, value_start);
@@ -944,24 +1347,81 @@ std::string ExtractHtmlAttributeForStandaloneRenderer(
     return tag.substr(value_start, value_end - value_start);
   }
   size_t value_end = value_start;
-  while (value_end < tag.size() && tag[value_end] != ' ' &&
-         tag[value_end] != '\t' && tag[value_end] != '\n' &&
-         tag[value_end] != '\r' && tag[value_end] != '>') {
+  while (value_end < tag.size() &&
+         !std::isspace(static_cast<unsigned char>(tag[value_end])) &&
+         tag[value_end] != '>') {
     ++value_end;
   }
   return tag.substr(value_start, value_end - value_start);
 }
 
-gfx::Rect MapDisplayItemRectToRootForStandaloneRenderer(
-    const PaintChunk& chunk,
-    const DisplayItem& item) {
-  const PropertyTreeState chunk_state = chunk.properties.Unalias();
-  FloatClipRect mapped_rect(gfx::RectF(item.VisualRect()));
-  if (!GeometryMapper::LocalToAncestorVisualRect(
-          chunk_state, PropertyTreeState::Root(), mapped_rect)) {
-    return item.VisualRect();
+void BuildPaintArtifactAudit(const PaintArtifact& artifact,
+                             LiveFramePaintProbeCache& cache) {
+  cache.artifact_audit_lines.clear();
+  const PaintChunks& chunks = artifact.GetPaintChunks();
+  const DisplayItemList& items = artifact.GetDisplayItemList();
+  cache.artifact_audit_lines.push_back(
+      "paint_artifact_audit summary chunks=" + std::to_string(chunks.size()) +
+      " display_items=" + std::to_string(items.size()));
+
+  std::map<std::string, int> total_op_histogram;
+  std::map<std::string, int> total_unsupported_histogram;
+  int total_op_count = 0;
+  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
+       ++chunk_index) {
+    const PaintChunk& chunk = chunks[chunk_index];
+    std::map<std::string, int> chunk_op_histogram;
+    std::map<std::string, int> chunk_unsupported_histogram;
+    int chunk_op_count = 0;
+    int drawing_item_count = 0;
+    int non_drawing_item_count = 0;
+
+    for (const DisplayItem& item : artifact.DisplayItemsInChunk(chunk_index)) {
+      if (!item.IsDrawing()) {
+        ++non_drawing_item_count;
+        continue;
+      }
+      ++drawing_item_count;
+      const auto* drawing = DynamicTo<DrawingDisplayItem>(item);
+      if (!drawing) {
+        continue;
+      }
+      AppendPaintRecordAudit(drawing->GetPaintRecord(), chunk_op_histogram,
+                             chunk_unsupported_histogram, chunk_op_count);
+    }
+    for (const auto& [name, count] : chunk_op_histogram) {
+      total_op_histogram[name] += count;
+    }
+    for (const auto& [name, count] : chunk_unsupported_histogram) {
+      total_unsupported_histogram[name] += count;
+    }
+    total_op_count += chunk_op_count;
+
+    cache.artifact_audit_lines.push_back(
+        "paint_artifact_audit chunk index=" + std::to_string(chunk_index) +
+        " bounds=(" + std::to_string(chunk.bounds.x()) + "," +
+        std::to_string(chunk.bounds.y()) + " " +
+        std::to_string(chunk.bounds.width()) + "x" +
+        std::to_string(chunk.bounds.height()) + ") drawable_bounds=(" +
+        std::to_string(chunk.drawable_bounds.x()) + "," +
+        std::to_string(chunk.drawable_bounds.y()) + " " +
+        std::to_string(chunk.drawable_bounds.width()) + "x" +
+        std::to_string(chunk.drawable_bounds.height()) + ") display_range=[" +
+        std::to_string(chunk.begin_index) + "," +
+        std::to_string(chunk.end_index) + ") drawing_items=" +
+        std::to_string(drawing_item_count) + " non_drawing_items=" +
+        std::to_string(non_drawing_item_count) + " paint_ops=" +
+        std::to_string(chunk_op_count) + " has_text=" +
+        std::to_string(chunk.has_text ? 1 : 0) + " ops=" +
+        MapToJsonObject(chunk_op_histogram) + " unsupported=" +
+        MapToJsonObject(chunk_unsupported_histogram));
   }
-  return gfx::ToEnclosingRect(mapped_rect.Rect());
+
+  cache.artifact_audit_lines.push_back(
+      "paint_artifact_audit totals paint_ops=" +
+      std::to_string(total_op_count) + " ops=" +
+      MapToJsonObject(total_op_histogram) + " unsupported=" +
+      MapToJsonObject(total_unsupported_histogram));
 }
 
 void InstallStyleElementsForStandaloneRenderer(Document& document,
@@ -987,55 +1447,35 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
                                         LiveFramePaintProbeCache& cache) {
   TraceLiveFrameProbeStage("export begin");
   cache.exported_draw_ops.clear();
-  const DisplayItemList& display_items = artifact.GetDisplayItemList();
-  const PaintChunks& chunks = artifact.GetPaintChunks();
-  TraceLiveFrameProbeStage("export after lists");
-  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
-       ++chunk_index) {
-    TraceLiveFrameProbeStage("export before chunk");
-    const PaintChunk& chunk = chunks[chunk_index];
-    TraceLiveFrameProbeStage("export before chunk transform");
-    const TransformPaintPropertyNode& chunk_transform =
-        chunk.properties.Transform().Unalias();
-    TraceLiveFrameProbeStage("export after chunk transform");
-    if (chunk_transform.IsIdentityOr2dTranslation()) {
-      const gfx::Vector2dF chunk_translation =
-          chunk_transform.Get2dTranslation();
-    } else {
-    }
-    std::fflush(stdout);
-    for (wtf_size_t item_index = chunk.begin_index;
-         item_index < chunk.end_index && item_index < display_items.size();
-         ++item_index) {
-      TraceLiveFrameProbeStage("export before item");
-      const DisplayItem& item = display_items[item_index];
-      const auto* drawing = DynamicTo<DrawingDisplayItem>(item);
-      if (!drawing) {
-        continue;
-      }
-      TraceLiveFrameProbeStage("export before paint record size");
-      const gfx::Rect mapped_visual_rect =
-          MapDisplayItemRectToRootForStandaloneRenderer(chunk, item);
-      const int fallback_x = mapped_visual_rect.x();
-      const int fallback_y = mapped_visual_rect.y();
-      const int fallback_width = mapped_visual_rect.width();
-      const int fallback_height = mapped_visual_rect.height();
-      TraceLiveFrameProbeStage("export before append paint record ops");
-      const bool use_bitmap_record =
-          PaintRecordNeedsBitmapExport(drawing->GetPaintRecord());
-      if (!use_bitmap_record ||
-          !AppendPaintRecordBitmapOp(drawing->GetPaintRecord(), fallback_x,
-                                     fallback_y, fallback_width,
-                                     fallback_height,
-                                     cache.exported_draw_ops)) {
-        AppendPaintRecordOps(drawing->GetPaintRecord(), fallback_x, fallback_y,
-                             fallback_width, fallback_height,
-                             cache.exported_draw_ops);
-      }
-      TraceLiveFrameProbeStage("export after append paint record ops");
-    }
+  cache.chunk_property_states.clear();
+  std::vector<std::string> extraction_diagnostics;
+  if (AppendPaintArtifactExtractedOps(artifact, cache.viewport_width,
+                                      cache.viewport_height,
+                                      cache.exported_draw_ops,
+                                      cache.chunk_property_states,
+                                      extraction_diagnostics)) {
+    cache.artifact_audit_lines.push_back(
+        "paint_op_extraction mode=retained_ops exported_draw_ops=" +
+        std::to_string(cache.exported_draw_ops.size()));
+    TraceLiveFrameProbeStage("export extracted ops done");
+    return;
   }
-  TraceLiveFrameProbeStage("export done");
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.artifact_audit_lines.insert(cache.artifact_audit_lines.end(),
+                                    extraction_diagnostics.begin(),
+                                    extraction_diagnostics.end());
+  cache.artifact_audit_lines.push_back(
+      "paint_op_extraction mode=oracle_bitmap reason=incomplete");
+  if (AppendPaintArtifactOracleBitmapOp(artifact, cache.viewport_width,
+                                        cache.viewport_height,
+                                        cache.exported_draw_ops)) {
+    TraceLiveFrameProbeStage("export oracle bitmap done");
+    return;
+  }
+  TraceLiveFrameProbeStage("export oracle bitmap failed");
+  cache.exported_draw_ops.clear();
+cache.chunk_property_states.clear();
 }
 
 void EnsureWtfInitializedForStandaloneRenderer() {
@@ -1162,6 +1602,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
+  BuildPaintArtifactAudit(artifact, cache);
   ExportDrawOpsForStandaloneRenderer(artifact, cache);
   cache.result = result;
   cache.body_html = input_html;
@@ -1190,6 +1631,8 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.artifact_audit_lines.clear();
 }
 
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer() {
@@ -1267,10 +1710,76 @@ int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(
   return 1;
 }
 
+int StandaloneBlinkLiveFrameBridgePaintChunkPropertyStateAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    uint64_t* state_hash,
+    float* transform16,
+    int* has_clip_rect,
+    float* clip_x,
+    float* clip_y,
+    float* clip_width,
+    float* clip_height) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& states = ProbeCache().chunk_property_states;
+  if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
+    return 0;
+  }
+  const LiveExportedChunkPropertyState& state =
+      states[static_cast<size_t>(chunk_index)];
+  if (state_hash) {
+    *state_hash = state.state_hash;
+  }
+  if (transform16) {
+    std::memcpy(transform16, state.transform_to_root.data(),
+                state.transform_to_root.size() * sizeof(float));
+  }
+  if (has_clip_rect) {
+    *has_clip_rect = state.has_clip_rect ? 1 : 0;
+  }
+  if (clip_x) {
+    *clip_x = state.clip_x;
+  }
+  if (clip_y) {
+    *clip_y = state.clip_y;
+  }
+  if (clip_width) {
+    *clip_width = state.clip_width;
+  }
+  if (clip_height) {
+    *clip_height = state.clip_height;
+  }
+  return 1;
+}
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpCountForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);
   return static_cast<int>(ProbeCache().exported_draw_ops.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeArtifactAuditLineCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().artifact_audit_lines.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeArtifactAuditLineAtForStandaloneRenderer(
+    const char* body_html,
+    int line_index,
+    char* buffer,
+    int buffer_size) {
+  RunLiveFramePaintProbe(body_html);
+  const std::vector<std::string>& lines = ProbeCache().artifact_audit_lines;
+  if (line_index < 0 || static_cast<size_t>(line_index) >= lines.size() ||
+      !buffer || buffer_size <= 0) {
+    return 0;
+  }
+  const std::string& line = lines[static_cast<size_t>(line_index)];
+  const int copy_count =
+      std::min(static_cast<int>(line.size()), buffer_size - 1);
+  std::memcpy(buffer, line.data(), static_cast<size_t>(copy_count));
+  buffer[copy_count] = '\0';
+  return copy_count;
 }
 
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
@@ -1366,6 +1875,53 @@ int StandaloneBlinkLiveFrameBridgeExportedGlyphAtForStandaloneRenderer(
   return 1;
 }
 
+int StandaloneBlinkLiveFrameBridgeExportedRRectRadiiAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    float* top_left_x,
+    float* top_left_y,
+    float* top_right_x,
+    float* top_right_y,
+    float* bottom_right_x,
+    float* bottom_right_y,
+    float* bottom_left_x,
+    float* bottom_left_y) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.type != 15) {
+    return 0;
+  }
+  if (top_left_x) {
+    *top_left_x = op.corner_radii[0].x();
+  }
+  if (top_left_y) {
+    *top_left_y = op.corner_radii[0].y();
+  }
+  if (top_right_x) {
+    *top_right_x = op.corner_radii[1].x();
+  }
+  if (top_right_y) {
+    *top_right_y = op.corner_radii[1].y();
+  }
+  if (bottom_right_x) {
+    *bottom_right_x = op.corner_radii[2].x();
+  }
+  if (bottom_right_y) {
+    *bottom_right_y = op.corner_radii[2].y();
+  }
+  if (bottom_left_x) {
+    *bottom_left_x = op.corner_radii[3].x();
+  }
+  if (bottom_left_y) {
+    *bottom_left_y = op.corner_radii[3].y();
+  }
+  return 1;
+}
+
 int StandaloneBlinkLiveFrameBridgeExportedTextMaskInfoAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -1412,6 +1968,146 @@ int StandaloneBlinkLiveFrameBridgeExportedTextMaskBytesAtForStandaloneRenderer(
   }
   std::memcpy(destination, op.alpha_mask.data(), op.alpha_mask.size());
   return static_cast<int>(op.alpha_mask.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedPathInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if ((op.type != 17 && op.type != 21) || op.path_bytes.empty()) {
+    return 0;
+  }
+  if (byte_count) {
+    *byte_count = static_cast<int>(op.path_bytes.size());
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedPathBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() ||
+      !destination || destination_size <= 0) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if ((op.type != 17 && op.type != 21) || op.path_bytes.empty() ||
+      destination_size < static_cast<int>(op.path_bytes.size())) {
+    return 0;
+  }
+  std::memcpy(destination, op.path_bytes.data(), op.path_bytes.size());
+  return static_cast<int>(op.path_bytes.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedTextBlobInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.type != 18 || op.text_blob_bytes.empty()) {
+    return 0;
+  }
+  if (byte_count) {
+    *byte_count = static_cast<int>(op.text_blob_bytes.size());
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedTextBlobBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() ||
+      !destination || destination_size <= 0) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.type != 18 || op.text_blob_bytes.empty() ||
+      destination_size < static_cast<int>(op.text_blob_bytes.size())) {
+    return 0;
+  }
+  std::memcpy(destination, op.text_blob_bytes.data(), op.text_blob_bytes.size());
+  return static_cast<int>(op.text_blob_bytes.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    char* buffer,
+    int buffer_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() ||
+      !buffer || buffer_size <= 0) {
+    return 0;
+  }
+  const std::string& label = ops[static_cast<size_t>(op_index)].debug_label;
+  if (label.empty()) {
+    buffer[0] = '\0';
+    return 0;
+  }
+  std::snprintf(buffer, static_cast<size_t>(buffer_size), "%s",
+                label.c_str());
+  return static_cast<int>(std::strlen(buffer));
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedShaderInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if ((op.type != 19 && op.type != 20 && op.type != 21) ||
+      op.shader_bytes.empty()) {
+    return 0;
+  }
+  if (byte_count) {
+    *byte_count = static_cast<int>(op.shader_bytes.size());
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedShaderBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() ||
+      !destination || destination_size <= 0) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if ((op.type != 19 && op.type != 20 && op.type != 21) ||
+      op.shader_bytes.empty() ||
+      destination_size < static_cast<int>(op.shader_bytes.size())) {
+    return 0;
+  }
+  std::memcpy(destination, op.shader_bytes.data(), op.shader_bytes.size());
+  return static_cast<int>(op.shader_bytes.size());
 }
 
 int StandaloneBlinkLiveFrameBridgeExportedBitmapInfoAtForStandaloneRenderer(

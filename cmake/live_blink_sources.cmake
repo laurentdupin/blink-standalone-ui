@@ -63,7 +63,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_core_initializer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_link_boundary_stubs.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_trace_origin_compat.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/load_command.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_feature_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/paint_translator.cc
@@ -930,6 +929,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/style_mask_source_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/style_pending_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_tree_scope_resources.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/frame/pagination_state.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/generated_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/gradient.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/gradient_generated_image.cc
@@ -939,9 +939,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkMatrix.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkRegion_path.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkRRect.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/base/SkThreadID.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/win/SkHRESULT.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkParsePath.cpp
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/harfbuzz/src/src/harfbuzz.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/rrect_f.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkPathMeasure.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkTextBlob.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/pathops/SkPathOpsOp.cpp

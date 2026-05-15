@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -12,13 +13,18 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkFlattenable.h"
 #include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkSerialProcs.h"
+#include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkTextBlob.h"
 
 namespace html_css_renderer {
 namespace {
@@ -41,6 +47,20 @@ SkMatrix ToSkMatrix(const Matrix4& matrix) {
   const auto& m = matrix.values;
   return SkMatrix::MakeAll(m[0], m[4], m[12], m[1], m[5], m[13], m[3], m[7],
                            m[15]);
+}
+
+sk_sp<SkShader> DeserializeShader(const std::vector<uint8_t>& bytes) {
+  if (bytes.empty()) {
+    return nullptr;
+  }
+  SkDeserialProcs procs;
+  sk_sp<SkFlattenable> flattenable = SkFlattenable::Deserialize(
+      SkFlattenable::kSkShader_Type, bytes.data(), bytes.size(), &procs);
+  if (!flattenable ||
+      flattenable->getFlattenableType() != SkFlattenable::kSkShader_Type) {
+    return nullptr;
+  }
+  return sk_sp<SkShader>(static_cast<SkShader*>(flattenable.release()));
 }
 
 uint32_t PackRgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -181,6 +201,13 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       paint.setStrokeWidth(command.stroke_width);
       canvas.drawRect(ToSkRect(command.rect), paint);
       break;
+    case DrawCommandType::kFillRectShader:
+      if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
+        paint.setStyle(SkPaint::kFill_Style);
+        paint.setShader(std::move(shader));
+        canvas.drawRect(ToSkRect(command.rect), paint);
+      }
+      break;
     case DrawCommandType::kFillRRect:
       paint.setStyle(SkPaint::kFill_Style);
       canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
@@ -192,9 +219,42 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
                            command.radius_y, paint);
       break;
-    case DrawCommandType::kClipRect:
-      canvas.clipRect(ToSkRect(command.rect));
+    case DrawCommandType::kFillRRectShader:
+      if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
+        paint.setStyle(SkPaint::kFill_Style);
+        paint.setShader(std::move(shader));
+        canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
+                             command.radius_y, paint);
+      }
       break;
+   case DrawCommandType::kClipRect:
+     canvas.clipRect(ToSkRect(command.rect));
+     break;
+   case DrawCommandType::kClipRRect: {
+     SkVector radii[4] = {
+         SkVector::Make(command.corner_radii[0].x, command.corner_radii[0].y),
+         SkVector::Make(command.corner_radii[1].x, command.corner_radii[1].y),
+         SkVector::Make(command.corner_radii[2].x, command.corner_radii[2].y),
+         SkVector::Make(command.corner_radii[3].x, command.corner_radii[3].y),
+     };
+     canvas.clipRRect(SkRRect::MakeRectRadii(ToSkRect(command.rect), radii),
+                      command.clip_difference ? SkClipOp::kDifference
+                                              : SkClipOp::kIntersect,
+                      true);
+     break;
+   }
+   case DrawCommandType::kClipPath: {
+     std::optional<SkPath> path =
+         SkPath::ReadFromMemory(command.path_bytes.data(),
+                                command.path_bytes.size());
+     if (path) {
+       canvas.clipPath(*path,
+                       command.clip_difference ? SkClipOp::kDifference
+                                               : SkClipOp::kIntersect,
+                       true);
+     }
+     break;
+   }
     case DrawCommandType::kSave:
       canvas.save();
       ++*save_depth;
@@ -240,7 +300,38 @@ void DrawCommandWithSkia(SkCanvas& canvas,
     case DrawCommandType::kDrawGlyphRun:
       DrawGlyphRunWithSkia(canvas, glyphs, command.glyph_run);
       break;
-    case DrawCommandType::kFillPath:
+    case DrawCommandType::kDrawTextBlob: {
+      SkDeserialProcs procs;
+      sk_sp<SkTextBlob> blob = SkTextBlob::Deserialize(
+          command.text_blob_bytes.data(), command.text_blob_bytes.size(),
+          procs);
+      if (blob) {
+        paint.setColor(ToSkColor(command.color));
+        canvas.drawTextBlob(blob, command.rect.x, command.rect.y, paint);
+      }
+      break;
+    }
+    case DrawCommandType::kFillPath: {
+      std::optional<SkPath> path =
+          SkPath::ReadFromMemory(command.path_bytes.data(),
+                                 command.path_bytes.size());
+      if (path) {
+        paint.setStyle(command.stroke_width > 0.0f ? SkPaint::kStroke_Style
+                                                   : SkPaint::kFill_Style);
+        paint.setStrokeWidth(command.stroke_width > 0.0f ? command.stroke_width
+                                                         : 1.0f);
+        if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
+          paint.setShader(std::move(shader));
+        } else {
+          paint.setColor(ToSkColor(command.color));
+        }
+        canvas.save();
+        canvas.translate(command.rect.x, command.rect.y);
+        canvas.drawPath(*path, paint);
+        canvas.restore();
+      }
+      break;
+    }
     case DrawCommandType::kDiagnostic:
       break;
   }

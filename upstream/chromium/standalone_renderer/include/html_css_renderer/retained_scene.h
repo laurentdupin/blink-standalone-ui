@@ -35,6 +35,7 @@ struct RetainedPaintChunk {
   RetainedChunkKind kind = RetainedChunkKind::kAnonymous;
   Rect bounds;
   Rect placement_bounds;
+  PaintPropertyStateSnapshot property_state;
   std::string element_id;
   bool ignores_scroll_offset = false;
   DrawCommandList commands;
@@ -85,6 +86,12 @@ RetainedPaintChunk MakeRetainedPaintChunk(std::string key,
                                           RetainedChunkKind kind,
                                           Rect bounds,
                                           DrawCommandList commands);
+RetainedPaintChunk MakeRetainedPaintChunk(
+    std::string key,
+    RetainedChunkKind kind,
+    Rect bounds,
+    PaintPropertyStateSnapshot property_state,
+    DrawCommandList commands);
 RetainedScene MakeSingleChunkScene(std::string key,
                                    Rect bounds,
                                    DrawCommandList commands);
