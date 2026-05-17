@@ -18,6 +18,7 @@ struct CpuImage {
 struct CpuRenderOptions {
   Color clear_color = Color::Rgba(1.0f, 1.0f, 1.0f, 1.0f);
   bool strict_text_blob_typefaces = true;
+  bool debug_command_coverage = false;
 };
 
 CpuImage RasterizeDrawCommands(const DrawCommandList& commands,

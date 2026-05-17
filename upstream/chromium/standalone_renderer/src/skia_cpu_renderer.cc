@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -32,6 +33,16 @@
 namespace html_css_renderer {
 namespace {
 
+std::mutex& CommandCoverageMutex() {
+  static auto* mutex = new std::mutex();
+  return *mutex;
+}
+
+std::vector<CommandCoverageRecord>& CommandCoverageRecords() {
+  static auto* records = new std::vector<CommandCoverageRecord>();
+  return *records;
+}
+
 uint8_t ClampByte(float value) {
   const float clamped = std::max(0.0f, std::min(1.0f, value));
   return static_cast<uint8_t>(clamped * 255.0f + 0.5f);
@@ -44,6 +55,20 @@ SkColor ToSkColor(Color color) {
 
 SkRect ToSkRect(Rect rect) {
   return SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height);
+}
+
+Rect FromSkIRect(const SkIRect& rect) {
+  return Rect{static_cast<float>(rect.x()), static_cast<float>(rect.y()),
+              static_cast<float>(rect.width()),
+              static_cast<float>(rect.height())};
+}
+
+std::array<float, 9> SnapshotMatrix(const SkMatrix& matrix) {
+  std::array<float, 9> values = {};
+  for (int i = 0; i < 9; ++i) {
+    values[static_cast<size_t>(i)] = matrix[i];
+  }
+  return values;
 }
 
 SkMatrix ToSkMatrix(const Matrix4& matrix) {
@@ -64,6 +89,24 @@ sk_sp<SkShader> DeserializeShader(const std::vector<uint8_t>& bytes) {
     return nullptr;
   }
   return sk_sp<SkShader>(static_cast<SkShader*>(flattenable.release()));
+}
+
+uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
+                            const std::vector<uint8_t>& after) {
+  const size_t byte_count = std::min(before.size(), after.size());
+  uint64_t changed = 0;
+  for (size_t i = 0; i + 3 < byte_count; i += 4) {
+    if (before[i] != after[i] || before[i + 1] != after[i + 1] ||
+        before[i + 2] != after[i + 2] || before[i + 3] != after[i + 3]) {
+      ++changed;
+    }
+  }
+  return changed;
+}
+
+void StoreCommandCoverage(CommandCoverageRecord record) {
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  CommandCoverageRecords().push_back(std::move(record));
 }
 
 uint32_t PackRgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -190,7 +233,8 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                          const ImageAtlas& images,
                          const GlyphAtlas& glyphs,
                          bool strict_text_blob_typefaces,
-                         int* save_depth) {
+                         int* save_depth,
+                         CommandCoverageRecord* coverage) {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setColor(ToSkColor(command.color));
@@ -206,10 +250,22 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       canvas.drawRect(ToSkRect(command.rect), paint);
       break;
     case DrawCommandType::kFillRectShader:
+      if (coverage) {
+        coverage->shader_resource_present = !command.shader_bytes.empty();
+        coverage->shader_byte_count = command.shader_bytes.size();
+      }
       if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
+        if (coverage) {
+          coverage->shader_deserialize_success = true;
+        }
         paint.setStyle(SkPaint::kFill_Style);
         paint.setShader(std::move(shader));
+        paint.setColor(SkColorSetARGB(ClampByte(command.color.a), 255, 255,
+                                      255));
         canvas.drawRect(ToSkRect(command.rect), paint);
+      } else if (coverage) {
+        coverage->skipped = true;
+        coverage->skip_reason = "shader_deserialize_failed";
       }
       break;
     case DrawCommandType::kFillRRect:
@@ -224,11 +280,23 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                            command.radius_y, paint);
       break;
     case DrawCommandType::kFillRRectShader:
+      if (coverage) {
+        coverage->shader_resource_present = !command.shader_bytes.empty();
+        coverage->shader_byte_count = command.shader_bytes.size();
+      }
       if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
+        if (coverage) {
+          coverage->shader_deserialize_success = true;
+        }
         paint.setStyle(SkPaint::kFill_Style);
         paint.setShader(std::move(shader));
+        paint.setColor(SkColorSetARGB(ClampByte(command.color.a), 255, 255,
+                                      255));
         canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
                              command.radius_y, paint);
+      } else if (coverage) {
+        coverage->skipped = true;
+        coverage->skip_reason = "shader_deserialize_failed";
       }
       break;
    case DrawCommandType::kClipRect:
@@ -305,6 +373,10 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       DrawGlyphRunWithSkia(canvas, glyphs, command.glyph_run);
       break;
     case DrawCommandType::kDrawTextBlob: {
+      if (coverage) {
+        coverage->text_blob_resource_present = !command.text_blob_bytes.empty();
+        coverage->text_blob_byte_count = command.text_blob_bytes.size();
+      }
       SkDeserialProcs procs;
       procs.fTypefaceCtx = const_cast<bool*>(&strict_text_blob_typefaces);
       procs.fTypefaceStreamProc = [](SkStream& stream,
@@ -341,10 +413,17 @@ void DrawCommandWithSkia(SkCanvas& canvas,
           procs);
       if (blob) {
         RecordTextBlobDeserializeSuccess();
+        if (coverage) {
+          coverage->text_blob_deserialize_success = true;
+        }
         paint.setColor(ToSkColor(command.color));
         canvas.drawTextBlob(blob, command.rect.x, command.rect.y, paint);
       } else {
         RecordTextBlobDeserializeFailure();
+        if (coverage) {
+          coverage->skipped = true;
+          coverage->skip_reason = "text_blob_deserialize_failed";
+        }
       }
       break;
     }
@@ -359,8 +438,21 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                                                          : 1.0f);
         if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
           paint.setShader(std::move(shader));
+          paint.setColor(SkColorSetARGB(ClampByte(command.color.a), 255, 255,
+                                        255));
+          if (coverage) {
+            coverage->shader_resource_present = true;
+            coverage->shader_byte_count = command.shader_bytes.size();
+            coverage->shader_deserialize_success = true;
+          }
         } else {
           paint.setColor(ToSkColor(command.color));
+          if (coverage && !command.shader_bytes.empty()) {
+            coverage->shader_resource_present = true;
+            coverage->shader_byte_count = command.shader_bytes.size();
+            coverage->skipped = true;
+            coverage->skip_reason = "path_shader_deserialize_failed";
+          }
         }
         canvas.save();
         canvas.translate(command.rect.x, command.rect.y);
@@ -398,9 +490,37 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   SkCanvas* canvas = surface->getCanvas();
   canvas->clear(ToSkColor(options.clear_color));
   int save_depth = 0;
-  for (const DrawCommand& command : commands) {
+  if (options.debug_command_coverage) {
+    ResetCommandCoverageDiagnostics();
+  }
+  for (size_t command_index = 0; command_index < commands.size();
+       ++command_index) {
+    const DrawCommand& command = commands[command_index];
+    std::vector<uint8_t> before_pixels;
+    CommandCoverageRecord coverage;
+    CommandCoverageRecord* coverage_ptr = nullptr;
+    if (options.debug_command_coverage) {
+      before_pixels = pixels;
+      coverage_ptr = &coverage;
+      coverage.command_index = static_cast<int>(command_index);
+      coverage.command_type = ToString(command.type);
+      coverage.bounds = command.rect;
+      coverage.active_matrix = SnapshotMatrix(canvas->getTotalMatrix());
+      SkIRect clip_bounds;
+      if (canvas->getDeviceClipBounds(&clip_bounds)) {
+        coverage.has_active_clip = true;
+        coverage.active_clip_bounds = FromSkIRect(clip_bounds);
+      }
+      coverage.save_depth_before = save_depth;
+    }
     DrawCommandWithSkia(*canvas, command, images, glyphs,
-                        options.strict_text_blob_typefaces, &save_depth);
+                        options.strict_text_blob_typefaces, &save_depth,
+                        coverage_ptr);
+    if (options.debug_command_coverage) {
+      coverage.save_depth_after = save_depth;
+      coverage.pixels_changed = CountChangedPixels(before_pixels, pixels);
+      StoreCommandCoverage(std::move(coverage));
+    }
   }
   while (save_depth > 0) {
     canvas->restore();
@@ -420,6 +540,16 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
 }
 
 }  // namespace
+
+void ResetCommandCoverageDiagnostics() {
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  CommandCoverageRecords().clear();
+}
+
+std::vector<CommandCoverageRecord> SnapshotCommandCoverageDiagnostics() {
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  return CommandCoverageRecords();
+}
 
 CpuImage RasterizeDrawCommandsWithSkiaCpu(const DrawCommandList& commands,
                                           Size viewport,

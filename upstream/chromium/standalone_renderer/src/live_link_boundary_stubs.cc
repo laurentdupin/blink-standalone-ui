@@ -98,6 +98,10 @@
 
 #include "unicode/ubidi.h"
 #include "unicode/uchar.h"
+#include "third_party/skia/include/core/SkFlattenable.h"
+#include "third_party/skia/src/shaders/SkLocalMatrixShader.h"
+#include "third_party/skia/src/shaders/SkShaderBase.h"
+#include "third_party/skia/src/shaders/gradients/SkGradientBaseShader.h"
 #include "unicode/uscript.h"
 #include "hb-ot.h"
 
@@ -18262,7 +18266,23 @@ Program::~Program() {
 }
 }  // namespace SkSL
 
-void SkFlattenable::PrivateInitializer::InitEffects() {}
+void SkFlattenable::PrivateInitializer::InitEffects() {
+  // The standalone build owns a narrow Skia initialization boundary instead of
+  // linking Skia's full ports/SkGlobalInitialization_default.cc. Register the
+  // shader flattenables required to deserialize Blink PaintFlags shader
+  // resources (CSS gradients, local-matrix wrapped gradients, and simple
+  // shader composition) without pulling browser/network services into the cut.
+  SkRegisterBlendShaderFlattenable();
+  SkRegisterColorShaderFlattenable();
+  SkRegisterEmptyShaderFlattenable();
+  SK_REGISTER_FLATTENABLE(SkLocalMatrixShader);
+  SkRegisterConicalGradientShaderFlattenable();
+  SkRegisterLinearGradientShaderFlattenable();
+  SkRegisterRadialGradientShaderFlattenable();
+  SkRegisterSweepGradientShaderFlattenable();
+  SkRegisterWorkingColorSpaceShaderFlattenable();
+  SkShaderBase::RegisterFlattenables();
+}
 void SkFlattenable::PrivateInitializer::InitImageFilters() {}
 
 SkMeshSpecification::~SkMeshSpecification() {}

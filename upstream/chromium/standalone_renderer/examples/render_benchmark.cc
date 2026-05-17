@@ -389,6 +389,7 @@ void PrintUsage() {
                "[--crash-dump <path>] "
                "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
                "[--debug-text-blob-replay] "
+               "[--debug-command-coverage] "
                "[--strict-text-blob-typefaces] "
                "[--compat-text-blob-typefaces] "
                "[--font-file path]"
@@ -465,6 +466,7 @@ int main(int argc, char** argv) {
   bool disable_skia_raster = false;
   bool trace_stages = false;
   bool debug_text_blob_replay = false;
+  bool debug_command_coverage = false;
   bool strict_text_blob_typefaces = true;
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   bool use_blink = true;
@@ -581,6 +583,8 @@ int main(int argc, char** argv) {
       trace_stages = true;
     } else if (arg == "--debug-text-blob-replay") {
       debug_text_blob_replay = true;
+    } else if (arg == "--debug-command-coverage") {
+      debug_command_coverage = true;
     } else if (arg == "--strict-text-blob-typefaces") {
       strict_text_blob_typefaces = true;
     } else if (arg == "--compat-text-blob-typefaces") {
@@ -731,6 +735,7 @@ int main(int argc, char** argv) {
 
   html_css_renderer::CpuRenderOptions cpu_options;
   cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
+  cpu_options.debug_command_coverage = debug_command_coverage;
   html_css_renderer::CpuImage image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
       use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
@@ -792,6 +797,7 @@ int main(int argc, char** argv) {
       }
       html_css_renderer::CpuRenderOptions oracle_options;
       oracle_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
+      oracle_options.debug_command_coverage = false;
       const html_css_renderer::CpuImage oracle_image =
           html_css_renderer::RasterizeRenderResultWithSkiaCpu(oracle_result,
                                                               oracle_options);

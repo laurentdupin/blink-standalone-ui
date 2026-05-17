@@ -4,6 +4,8 @@
 #include <map>
 #include <sstream>
 
+#include "html_css_renderer/skia_cpu_renderer.h"
+
 namespace html_css_renderer {
 namespace {
 
@@ -83,6 +85,57 @@ void WriteMatrix(std::ostringstream& out, const Matrix4& matrix) {
       out << ",";
     }
     out << matrix.values[i];
+  }
+  out << "]";
+}
+
+void WriteMatrix3(std::ostringstream& out,
+                  const std::array<float, 9>& matrix) {
+  out << "[";
+  for (size_t i = 0; i < matrix.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    out << matrix[i];
+  }
+  out << "]";
+}
+
+void WriteCommandCoverageRecords(std::ostringstream& out) {
+  const std::vector<CommandCoverageRecord> records =
+      SnapshotCommandCoverageDiagnostics();
+  out << "[";
+  for (size_t i = 0; i < records.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const CommandCoverageRecord& record = records[i];
+    out << "{\"command_index\":" << record.command_index
+        << ",\"command_type\":\"" << EscapeJson(record.command_type) << "\""
+        << ",\"bounds\":";
+    WriteRect(out, record.bounds);
+    out << ",\"active_matrix\":";
+    WriteMatrix3(out, record.active_matrix);
+    out << ",\"has_active_clip\":"
+        << (record.has_active_clip ? "true" : "false")
+        << ",\"active_clip_bounds\":";
+    WriteRect(out, record.active_clip_bounds);
+    out << ",\"save_depth_before\":" << record.save_depth_before
+        << ",\"save_depth_after\":" << record.save_depth_after
+        << ",\"pixels_changed\":" << record.pixels_changed
+        << ",\"skipped\":" << (record.skipped ? "true" : "false")
+        << ",\"skip_reason\":\"" << EscapeJson(record.skip_reason) << "\""
+        << ",\"shader_resource_present\":"
+        << (record.shader_resource_present ? "true" : "false")
+        << ",\"shader_byte_count\":" << record.shader_byte_count
+        << ",\"shader_deserialize_success\":"
+        << (record.shader_deserialize_success ? "true" : "false")
+        << ",\"text_blob_resource_present\":"
+        << (record.text_blob_resource_present ? "true" : "false")
+        << ",\"text_blob_byte_count\":" << record.text_blob_byte_count
+        << ",\"text_blob_deserialize_success\":"
+        << (record.text_blob_deserialize_success ? "true" : "false")
+        << "}";
   }
   out << "]";
 }
@@ -686,6 +739,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
              << ",\"diagnostic_typeface_fallback_count\":"
              << StandaloneRendererDiagnosticTypefaceFallbackCount()
              << "}";
+    retained << ",\"debug_command_coverage\":";
+    WriteCommandCoverageRecords(retained);
 
     std::string raw = result.raw_paint_artifact_audit_json;
     const size_t object_end = raw.find_last_of('}');
