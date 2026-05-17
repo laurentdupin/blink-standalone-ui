@@ -189,6 +189,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                          const DrawCommand& command,
                          const ImageAtlas& images,
                          const GlyphAtlas& glyphs,
+                         bool strict_text_blob_typefaces,
                          int* save_depth) {
   SkPaint paint;
   paint.setAntiAlias(true);
@@ -305,8 +306,11 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       break;
     case DrawCommandType::kDrawTextBlob: {
       SkDeserialProcs procs;
+      procs.fTypefaceCtx = const_cast<bool*>(&strict_text_blob_typefaces);
       procs.fTypefaceStreamProc = [](SkStream& stream,
-                                     void*) -> sk_sp<SkTypeface> {
+                                     void* ctx) -> sk_sp<SkTypeface> {
+        const bool strict_text_blob_typefaces =
+            ctx && *static_cast<const bool*>(ctx);
         struct Payload {
           char magic[4];
           uint32_t version;
@@ -315,7 +319,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         if (stream.read(&payload, sizeof(payload)) != sizeof(payload) ||
             std::memcmp(payload.magic, "BSTF", 4) != 0 ||
             payload.version != 1) {
-          if (StandaloneRendererSameProcessTypefaceResourceCount() == 1) {
+          if (!strict_text_blob_typefaces &&
+              StandaloneRendererSameProcessTypefaceResourceCount() == 1) {
+            RecordDiagnosticTypefaceFallback();
             return sk_ref_sp(
                 StandaloneRendererLookupSameProcessTypefaceForSkTextBlob(1));
           }
@@ -393,7 +399,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   canvas->clear(ToSkColor(options.clear_color));
   int save_depth = 0;
   for (const DrawCommand& command : commands) {
-    DrawCommandWithSkia(*canvas, command, images, glyphs, &save_depth);
+    DrawCommandWithSkia(*canvas, command, images, glyphs,
+                        options.strict_text_blob_typefaces, &save_depth);
   }
   while (save_depth > 0) {
     canvas->restore();

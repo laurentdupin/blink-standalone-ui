@@ -18,6 +18,7 @@ StandaloneRendererSameProcessTypefaceLookupFailureCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeAttemptCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeSuccessCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeFailureCount();
+extern "C" uint64_t StandaloneRendererDiagnosticTypefaceFallbackCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
                                                               char*,
                                                               int);
@@ -642,6 +643,29 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
       retained << "\"" << EscapeJson(family) << "\"";
     }
     retained << "]}"
+             << ",\"replay_text_blob_diagnostics\":{\"enabled\":"
+             << (StandaloneRendererTextBlobReplayDiagnosticsEnabled() ? "true"
+                                                                       : "false")
+             << ",\"strict_typeface_payloads\":true"
+             << ",\"retained_blob_count\":" << text_blob_count
+             << ",\"deserialize_attempt_count\":"
+             << StandaloneRendererTextBlobDeserializeAttemptCount()
+             << ",\"deserialize_success_count\":"
+             << StandaloneRendererTextBlobDeserializeSuccessCount()
+             << ",\"deserialize_failure_count\":"
+             << StandaloneRendererTextBlobDeserializeFailureCount()
+             << ",\"typeface_resource_count\":"
+             << StandaloneRendererSameProcessTypefaceResourceCount()
+             << ",\"typeface_lookup_attempt_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupAttemptCount()
+             << ",\"typeface_lookup_success_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
+             << ",\"typeface_lookup_failure_count\":"
+             << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+             << ",\"diagnostic_typeface_fallback_count\":"
+             << StandaloneRendererDiagnosticTypefaceFallbackCount()
+             << ",\"same_process_only\":true"
+             << ",\"raw_pointer_payloads\":0}"
              << ",\"post_replay_text_blob_replay\":{\"enabled\":"
              << (StandaloneRendererTextBlobReplayDiagnosticsEnabled() ? "true"
                                                                        : "false")
@@ -659,6 +683,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
              << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
              << ",\"typeface_lookup_failure_count\":"
              << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+             << ",\"diagnostic_typeface_fallback_count\":"
+             << StandaloneRendererDiagnosticTypefaceFallbackCount()
              << "}";
 
     std::string raw = result.raw_paint_artifact_audit_json;

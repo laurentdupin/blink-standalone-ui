@@ -30,6 +30,7 @@ struct TextBlobReplayDiagnostics {
   uint64_t typeface_lookup_attempt_count = 0;
   uint64_t typeface_lookup_success_count = 0;
   uint64_t typeface_lookup_failure_count = 0;
+  uint64_t diagnostic_typeface_fallback_count = 0;
 };
 
 void ResetTypefaceResourceRegistryForFrame();
@@ -41,6 +42,7 @@ TextBlobReplayDiagnostics SnapshotTextBlobReplayDiagnostics();
 void RecordTextBlobDeserializeAttempt();
 void RecordTextBlobDeserializeSuccess();
 void RecordTextBlobDeserializeFailure();
+void RecordDiagnosticTypefaceFallback();
 
 }  // namespace html_css_renderer
 
@@ -62,6 +64,7 @@ StandaloneRendererSameProcessTypefaceLookupFailureCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeAttemptCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeSuccessCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeFailureCount();
+extern "C" uint64_t StandaloneRendererDiagnosticTypefaceFallbackCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int index,
                                                               char* buffer,
                                                               int buffer_size);

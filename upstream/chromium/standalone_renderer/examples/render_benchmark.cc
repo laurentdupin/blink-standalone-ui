@@ -389,6 +389,8 @@ void PrintUsage() {
                "[--crash-dump <path>] "
                "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
                "[--debug-text-blob-replay] "
+               "[--strict-text-blob-typefaces] "
+               "[--compat-text-blob-typefaces] "
                "[--font-file path]"
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
                " [--blink] [--manual]"
@@ -463,6 +465,7 @@ int main(int argc, char** argv) {
   bool disable_skia_raster = false;
   bool trace_stages = false;
   bool debug_text_blob_replay = false;
+  bool strict_text_blob_typefaces = true;
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   bool use_blink = true;
 #else
@@ -578,6 +581,10 @@ int main(int argc, char** argv) {
       trace_stages = true;
     } else if (arg == "--debug-text-blob-replay") {
       debug_text_blob_replay = true;
+    } else if (arg == "--strict-text-blob-typefaces") {
+      strict_text_blob_typefaces = true;
+    } else if (arg == "--compat-text-blob-typefaces") {
+      strict_text_blob_typefaces = false;
     } else if (arg == "--paint-oracle") {
       const char* value = next_value();
       if (!value) {
@@ -646,6 +653,8 @@ int main(int argc, char** argv) {
     create_info.text_shaper = text_backend.get();
     create_info.glyph_rasterizer = text_backend.get();
   }
+  const html_css_renderer::RendererCreateInfo renderer_info_for_oracle =
+      create_info;
 
   html_css_renderer::RenderResult result;
 #if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
@@ -703,22 +712,6 @@ int main(int argc, char** argv) {
                << "\n";
   }
 
-  if (!paint_oracle.empty()) {
-    if (paint_oracle == "skia-paint-record") {
-      std::fprintf(stderr, "skia_paint_record_oracle not implemented\n");
-      result.diagnostics.push_back("skia_paint_record_oracle not implemented");
-      if (!oracle_out_path.empty()) {
-        std::ofstream oracle_file(oracle_out_path);
-        if (oracle_file) {
-          oracle_file << "skia_paint_record_oracle not implemented\n";
-        }
-      }
-    } else {
-      std::fprintf(stderr, "unknown paint oracle: %s\n", paint_oracle.c_str());
-      return 2;
-    }
-  }
-
   if (disable_skia_raster) {
     if (!json_path.empty()) {
       Metrics empty_metrics;
@@ -736,12 +729,16 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  html_css_renderer::CpuRenderOptions cpu_options;
+  cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
   html_css_renderer::CpuImage image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-      use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(result)
+      use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                         result, cpu_options)
                    :
 #endif
-                   html_css_renderer::RasterizeRenderResult(result);
+                   html_css_renderer::RasterizeRenderResult(result,
+                                                            cpu_options);
 
   const Metrics metrics = ComputeMetrics(image);
   if (!WriteBmp(out_path, image)) {
@@ -762,6 +759,56 @@ int main(int argc, char** argv) {
     }
     audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
                << "\n";
+  }
+
+  if (!paint_oracle.empty()) {
+    if (paint_oracle == "skia-paint-record") {
+      if (oracle_out_path.empty()) {
+        std::fprintf(stderr, "--paint-oracle requires --oracle-out\n");
+        return 2;
+      }
+#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER) && \
+    defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+      html_css_renderer::BlinkPageEmbedderCreateInfo oracle_create_info;
+      oracle_create_info.renderer = renderer_info_for_oracle;
+      oracle_create_info.trace_stages = trace_stages;
+      oracle_create_info.debug_text_blob_replay = debug_text_blob_replay;
+      oracle_create_info.force_paint_oracle_bitmap = true;
+      std::unique_ptr<html_css_renderer::BlinkPageEmbedder> oracle_embedder =
+          html_css_renderer::CreateLiveBlinkPageEmbedder(
+              std::move(oracle_create_info));
+      if (!oracle_embedder) {
+        std::fprintf(stderr, "failed to create Blink oracle adapter\n");
+        return 1;
+      }
+      (void)oracle_embedder->Initialize();
+      html_css_renderer::RenderResult oracle_result =
+          oracle_embedder->AdvanceAndRender(input);
+      if (!HasRealBlinkPaintArtifact(oracle_result)) {
+        std::fprintf(stderr,
+                     "skia_paint_record_oracle failed before PaintArtifact\n");
+        PrintDiagnostics(oracle_result);
+        return 1;
+      }
+      html_css_renderer::CpuRenderOptions oracle_options;
+      oracle_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
+      const html_css_renderer::CpuImage oracle_image =
+          html_css_renderer::RasterizeRenderResultWithSkiaCpu(oracle_result,
+                                                              oracle_options);
+      if (!WriteBmp(oracle_out_path, oracle_image)) {
+        std::fprintf(stderr, "failed to write oracle image: %s\n",
+                     oracle_out_path.c_str());
+        return 1;
+      }
+#else
+      std::fprintf(stderr,
+                   "skia_paint_record_oracle requires live Blink and Skia CPU\n");
+      return 1;
+#endif
+    } else {
+      std::fprintf(stderr, "unknown paint oracle: %s\n", paint_oracle.c_str());
+      return 2;
+    }
   }
 
   std::printf("render_metrics width=%d height=%d non_white=%zu unique=%zu\n",

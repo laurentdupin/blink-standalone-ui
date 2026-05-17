@@ -26,6 +26,8 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
                                                                     int height);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
+void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
+    int enabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
@@ -1811,12 +1813,16 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     disable_retained_extraction_ = create_info.disable_retained_extraction;
     trace_stages_ = create_info.trace_stages;
     debug_text_blob_replay_ = create_info.debug_text_blob_replay;
+    force_paint_oracle_bitmap_ = create_info.force_paint_oracle_bitmap;
     lifecycle_stop_ = create_info.lifecycle_stop;
     SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
 #if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
+            force_paint_oracle_bitmap_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
             trace_stages_ ? 1 : 0);
@@ -1971,6 +1977,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
+        force_paint_oracle_bitmap_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
             lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
@@ -2476,6 +2484,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   bool disable_retained_extraction_ = false;
   bool trace_stages_ = false;
   bool debug_text_blob_replay_ = false;
+  bool force_paint_oracle_bitmap_ = false;
   std::string lifecycle_stop_;
   std::optional<RetainedScene> previous_retained_scene_;
 };

@@ -117,6 +117,11 @@ void RecordTextBlobDeserializeFailure() {
   ++Registry().diagnostics.deserialize_failure_count;
 }
 
+void RecordDiagnosticTypefaceFallback() {
+  std::lock_guard<std::mutex> lock(RegistryMutex());
+  ++Registry().diagnostics.diagnostic_typeface_fallback_count;
+}
+
 }  // namespace html_css_renderer
 
 extern "C" uint64_t StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(
@@ -180,6 +185,11 @@ extern "C" uint64_t StandaloneRendererTextBlobDeserializeSuccessCount() {
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeFailureCount() {
   return html_css_renderer::SnapshotTextBlobReplayDiagnostics()
       .deserialize_failure_count;
+}
+
+extern "C" uint64_t StandaloneRendererDiagnosticTypefaceFallbackCount() {
+  return html_css_renderer::SnapshotTextBlobReplayDiagnostics()
+      .diagnostic_typeface_fallback_count;
 }
 
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int index,

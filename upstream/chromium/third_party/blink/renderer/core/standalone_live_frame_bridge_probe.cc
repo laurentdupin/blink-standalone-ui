@@ -82,6 +82,7 @@ StandaloneRendererSameProcessTypefaceLookupFailureCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeAttemptCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeSuccessCount();
 extern "C" uint64_t StandaloneRendererTextBlobDeserializeFailureCount();
+extern "C" uint64_t StandaloneRendererDiagnosticTypefaceFallbackCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
                                                               char*,
                                                               int);
@@ -193,6 +194,7 @@ struct LiveFramePaintProbeCache {
   int viewport_width = 320;
   int viewport_height = 200;
   bool disable_retained_extraction = false;
+  bool force_oracle_bitmap = false;
   bool trace_stages = false;
   std::string lifecycle_stop;
   bool initialized = false;
@@ -2810,9 +2812,10 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     json << JsonStringForStandaloneRenderer(family);
   }
   json << "]}"
-       << ",\"text_blob_replay\":{\"enabled\":"
+       << ",\"extraction_text_blob_resources\":{\"enabled\":"
        << (StandaloneRendererTextBlobReplayDiagnosticsEnabled() ? "true"
                                                                  : "false")
+       << ",\"strict_typeface_payloads\":true"
        << ",\"raw_blob_count\":"
        << total_raw_audit.text_blob_count
        << ",\"retained_blob_count\":" << total_raw_audit.text_blob_count
@@ -2830,6 +2833,10 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << StandaloneRendererSameProcessTypefaceLookupSuccessCount()
        << ",\"typeface_lookup_failure_count\":"
        << StandaloneRendererSameProcessTypefaceLookupFailureCount()
+       << ",\"diagnostic_typeface_fallback_count\":"
+       << StandaloneRendererDiagnosticTypefaceFallbackCount()
+       << ",\"same_process_only\":true"
+       << ",\"raw_pointer_payloads\":0"
        << ",\"failures\":[]}"
        << ",\"image_diagnostics\":{\"image_element_count\":";
   int image_element_count = 0;
@@ -2981,6 +2988,20 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
     cache.artifact_audit_lines.push_back(
         "paint_op_extraction disabled reason=audit_only_or_disable_retained_extraction");
     TraceLiveFrameProbeStage("export skipped retained extraction");
+    return;
+  }
+  if (cache.force_oracle_bitmap) {
+    cache.artifact_audit_lines.push_back(
+        "paint_op_extraction mode=skia_paint_record_oracle requested=true");
+    if (AppendPaintArtifactOracleBitmapOp(artifact, cache.viewport_width,
+                                          cache.viewport_height,
+                                          cache.exported_draw_ops)) {
+      TraceLiveFrameProbeStage("export requested oracle bitmap done");
+      return;
+    }
+    cache.artifact_audit_lines.push_back(
+        "paint_op_extraction mode=skia_paint_record_oracle failed");
+    TraceLiveFrameProbeStage("export requested oracle bitmap failed");
     return;
   }
   if (AppendPaintArtifactExtractedOps(artifact, cache.viewport_width,
@@ -3270,6 +3291,17 @@ void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRend
   cache.chunk_id_strings.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
+    int enabled) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool value = enabled != 0;
+  if (cache.force_oracle_bitmap == value) {
+    return;
+  }
+  cache.force_oracle_bitmap = value;
+  cache.initialized = false;
 }
 
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
