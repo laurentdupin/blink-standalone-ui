@@ -1538,6 +1538,89 @@ extern "C" bool g_standalone_blink_saw_font_draw_text = false;
 extern "C" int g_standalone_blink_viewport_width = 800;
 extern "C" int g_standalone_blink_viewport_height = 600;
 
+namespace {
+int g_image_resource_content_fetch_called = 0;
+int g_layout_image_set_resource_called = 0;
+int g_layout_image_resource_initialize_called = 0;
+int g_layout_image_resource_set_resource_called = 0;
+int g_layout_image_resource_natural_dimensions_called = 0;
+int g_layout_image_resource_get_image_called = 0;
+std::string g_image_resource_content_fetch_last_url;
+}  // namespace
+
+extern "C" void StandaloneRendererResetImageReachabilityDiagnostics() {
+  g_image_resource_content_fetch_called = 0;
+  g_layout_image_set_resource_called = 0;
+  g_layout_image_resource_initialize_called = 0;
+  g_layout_image_resource_set_resource_called = 0;
+  g_layout_image_resource_natural_dimensions_called = 0;
+  g_layout_image_resource_get_image_called = 0;
+  g_image_resource_content_fetch_last_url.clear();
+}
+
+extern "C" void StandaloneRendererNoteImageResourceContentFetch(
+    const char* url) {
+  ++g_image_resource_content_fetch_called;
+  g_image_resource_content_fetch_last_url = url ? url : "";
+}
+
+extern "C" void StandaloneRendererNoteLayoutImageSetResource() {
+  ++g_layout_image_set_resource_called;
+}
+
+extern "C" void StandaloneRendererNoteLayoutImageResourceInitialize() {
+  ++g_layout_image_resource_initialize_called;
+}
+
+extern "C" void StandaloneRendererNoteLayoutImageResourceSetResource() {
+  ++g_layout_image_resource_set_resource_called;
+}
+
+extern "C" void StandaloneRendererNoteLayoutImageResourceNaturalDimensions() {
+  ++g_layout_image_resource_natural_dimensions_called;
+}
+
+extern "C" void StandaloneRendererNoteLayoutImageResourceGetImage() {
+  ++g_layout_image_resource_get_image_called;
+}
+
+extern "C" int StandaloneRendererImageResourceContentFetchCalled() {
+  return g_image_resource_content_fetch_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageSetResourceCalled() {
+  return g_layout_image_set_resource_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageResourceInitializeCalled() {
+  return g_layout_image_resource_initialize_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageResourceSetResourceCalled() {
+  return g_layout_image_resource_set_resource_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageResourceNaturalDimensionsCalled() {
+  return g_layout_image_resource_natural_dimensions_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled() {
+  return g_layout_image_resource_get_image_called;
+}
+
+extern "C" int StandaloneRendererImageResourceContentFetchLastUrl(char* out,
+                                                                  int size) {
+  if (!out || size <= 0) {
+    return 0;
+  }
+  const int copied = std::min<int>(
+      static_cast<int>(g_image_resource_content_fetch_last_url.size()),
+      size - 1);
+  std::memcpy(out, g_image_resource_content_fetch_last_url.data(), copied);
+  out[copied] = '\0';
+  return copied;
+}
+
 bool RuntimeEnabledFeaturesBase::is_selectedcontentelement_attribute_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_selectedcontent_multiple_enabled_ = false;
@@ -3430,6 +3513,8 @@ ImageResourceContent* ImageResourceContent::CreateLoaded(
 ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
                                                   ResourceFetcher*) {
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  StandaloneRendererNoteImageResourceContentFetch(
+      params.Url().GetString().Utf8().c_str());
   if (scoped_refptr<Image> image =
           DecodeStandaloneDataUrlPngImage(params.Url())) {
     return ImageResourceContent::CreateLoaded(std::move(image));
@@ -13942,6 +14027,7 @@ LayoutImage* LayoutImage::CreateAnonymous(Document&) {
   return nullptr;
 }
 void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
+  StandaloneRendererNoteLayoutImageSetResource();
   image_resource_ = image_resource;
   if (image_resource_) {
     image_resource_->Initialize(this);
@@ -14570,6 +14656,7 @@ void LayoutImageResource::Trace(Visitor* visitor) const {
   visitor->Trace(layout_object_);
 }
 void LayoutImageResource::Initialize(LayoutObject* layout_object) {
+  StandaloneRendererNoteLayoutImageResourceInitialize();
   layout_object_ = layout_object;
 }
 void LayoutImageResource::Shutdown() {
@@ -14577,9 +14664,11 @@ void LayoutImageResource::Shutdown() {
   cached_image_ = nullptr;
 }
 scoped_refptr<Image> LayoutImageResource::GetImage(const gfx::SizeF&) const {
+  StandaloneRendererNoteLayoutImageResourceGetImage();
   return nullptr;
 }
 NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(float) const {
+  StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
   return NaturalSizingInfo::None();
 }
 RespectImageOrientationEnum LayoutImageResource::ImageOrientation() const {

@@ -89,6 +89,14 @@ extern "C" uint64_t StandaloneRendererDiagnosticTypefaceFallbackCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
                                                               char*,
                                                               int);
+extern "C" void StandaloneRendererResetImageReachabilityDiagnostics();
+extern "C" int StandaloneRendererImageResourceContentFetchCalled();
+extern "C" int StandaloneRendererLayoutImageSetResourceCalled();
+extern "C" int StandaloneRendererLayoutImageResourceInitializeCalled();
+extern "C" int StandaloneRendererLayoutImageResourceSetResourceCalled();
+extern "C" int StandaloneRendererLayoutImageResourceNaturalDimensionsCalled();
+extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled();
+extern "C" int StandaloneRendererImageResourceContentFetchLastUrl(char*, int);
 
 namespace {
 
@@ -102,6 +110,19 @@ struct LiveFramePaintProbeResult {
   int lifecycle_reached_paint_clean = 0;
   int paint_chunk_count = 0;
   int display_item_count = 0;
+};
+
+struct ImageReachabilityDiagnostics {
+  int html_image_element_count = 0;
+  bool img_src_detected_from_dom = false;
+  bool img_src_detected_from_source_scan = false;
+  bool real_html_image_element_class_linked = false;
+  bool image_loader_present = false;
+  bool image_loader_update_called = false;
+  std::string image_loader_request_url;
+  bool layout_object_created = false;
+  std::string layout_object_type = "not_reached";
+  bool layout_image_resource_created = false;
 };
 
 struct LiveExportedGlyph {
@@ -200,6 +221,7 @@ struct LiveFramePaintProbeCache {
   bool force_oracle_bitmap = false;
   bool trace_stages = false;
   std::string lifecycle_stop;
+  ImageReachabilityDiagnostics image_reachability;
   bool initialized = false;
 };
 
@@ -2308,6 +2330,101 @@ std::vector<std::string> ImageSrcListForStandaloneRenderer(
   return sources;
 }
 
+void CollectImageReachabilityFromNodeForStandaloneRenderer(
+    const Node& node,
+    ImageReachabilityDiagnostics& diagnostics) {
+  if (const auto* element = DynamicTo<Element>(node)) {
+    if (element->HasTagName(html_names::kImgTag)) {
+      ++diagnostics.html_image_element_count;
+      const AtomicString src =
+          element->FastGetAttribute(html_names::kSrcAttr);
+      if (!src.empty()) {
+        diagnostics.img_src_detected_from_dom = true;
+        diagnostics.image_loader_request_url = src.Utf8();
+      }
+      if (const LayoutObject* layout_object = element->GetLayoutObject()) {
+        diagnostics.layout_object_created = true;
+        diagnostics.layout_object_type = layout_object->DebugName().Utf8();
+      }
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    CollectImageReachabilityFromNodeForStandaloneRenderer(*child,
+                                                          diagnostics);
+  }
+}
+
+ImageReachabilityDiagnostics CollectImageReachabilityForStandaloneRenderer(
+    Document& document,
+    const std::string& html) {
+  ImageReachabilityDiagnostics diagnostics;
+  diagnostics.img_src_detected_from_source_scan =
+      !ImageSrcListForStandaloneRenderer(html).empty();
+  if (Node* root = document.documentElement()) {
+    CollectImageReachabilityFromNodeForStandaloneRenderer(*root, diagnostics);
+  }
+  diagnostics.image_loader_update_called =
+      StandaloneRendererImageResourceContentFetchCalled() > 0;
+  diagnostics.layout_image_resource_created =
+      StandaloneRendererLayoutImageResourceInitializeCalled() > 0 ||
+      StandaloneRendererLayoutImageSetResourceCalled() > 0;
+  diagnostics.real_html_image_element_class_linked =
+      diagnostics.layout_image_resource_created ||
+      diagnostics.layout_object_type.find("LayoutImage") != std::string::npos ||
+      StandaloneRendererImageResourceContentFetchCalled() > 0;
+  diagnostics.image_loader_present =
+      diagnostics.real_html_image_element_class_linked ||
+      StandaloneRendererImageResourceContentFetchCalled() > 0;
+  char last_url[2048] = {};
+  if (StandaloneRendererImageResourceContentFetchLastUrl(
+          last_url, static_cast<int>(sizeof(last_url))) > 0) {
+    diagnostics.image_loader_request_url = last_url;
+  }
+  return diagnostics;
+}
+
+std::string FirstMissingImageStageForStandaloneRenderer(
+    const ImageReachabilityDiagnostics& diagnostics) {
+  if (!diagnostics.img_src_detected_from_source_scan) {
+    return "no_img_src_in_input";
+  }
+  if (diagnostics.html_image_element_count == 0) {
+    return "html_img_not_present_in_dom";
+  }
+  if (!diagnostics.img_src_detected_from_dom) {
+    return "img_src_not_present_on_dom_element";
+  }
+  if (!diagnostics.real_html_image_element_class_linked) {
+    return "real_HTMLImageElement_class_not_linked";
+  }
+  if (!diagnostics.image_loader_present) {
+    return "ImageLoader_not_present";
+  }
+  if (!diagnostics.image_loader_update_called) {
+    return "ImageLoader_UpdateFromElement_or_ImageResourceContent_Fetch_not_called";
+  }
+  if (StandaloneRendererImageResourceContentFetchCalled() == 0) {
+    return "ImageResourceContent_Fetch_not_called";
+  }
+  if (StandaloneRendererImageResourceContentFetchCalled() > 0 &&
+      StandaloneRendererLayoutImageResourceSetResourceCalled() == 0) {
+    return "LayoutImageResource_SetImageResource_not_called";
+  }
+  if (!diagnostics.layout_object_created) {
+    return "LayoutObject_not_created";
+  }
+  if (!diagnostics.layout_image_resource_created) {
+    return "LayoutImageResource_not_created";
+  }
+  if (StandaloneRendererLayoutImageResourceNaturalDimensionsCalled() == 0) {
+    return "LayoutImageResource_GetNaturalDimensions_not_called";
+  }
+  if (StandaloneRendererLayoutImageResourceGetImageCalled() == 0) {
+    return "LayoutImageResource_GetImage_not_called";
+  }
+  return "none";
+}
+
 std::string SchemeForStandaloneRenderer(const std::string& url);
 std::vector<std::string> ExtractStyleElementTextForStandaloneRenderer(
     const std::string& html);
@@ -2933,6 +3050,58 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           "\"failure_count\":0,\"requests\":[]}";
 #endif
   json
+       << ",\"image_reachability\":{\"html_image_element_count\":"
+       << cache.image_reachability.html_image_element_count
+       << ",\"img_src_detected_from_dom\":"
+       << (cache.image_reachability.img_src_detected_from_dom ? "true"
+                                                              : "false")
+       << ",\"img_src_detected_from_source_scan\":"
+       << (cache.image_reachability.img_src_detected_from_source_scan ? "true"
+                                                                      : "false")
+       << ",\"real_html_image_element_class_linked\":"
+       << (cache.image_reachability.real_html_image_element_class_linked
+               ? "true"
+               : "false")
+       << ",\"image_loader_present\":"
+       << (cache.image_reachability.image_loader_present ? "true" : "false")
+       << ",\"image_loader_update_called\":"
+       << (cache.image_reachability.image_loader_update_called ? "true"
+                                                               : "false")
+       << ",\"image_loader_request_url\":"
+       << JsonStringForStandaloneRenderer(
+              TruncatedUrlForStandaloneRenderer(
+                  cache.image_reachability.image_loader_request_url))
+       << ",\"image_resource_content_fetch_called\":"
+       << StandaloneRendererImageResourceContentFetchCalled()
+       << ",\"provider_request_count\":";
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  json << provider_diagnostics.request_count;
+#else
+  json << 0;
+#endif
+  json << ",\"layout_object_created\":"
+       << (cache.image_reachability.layout_object_created ? "true" : "false")
+       << ",\"layout_object_type\":"
+       << JsonStringForStandaloneRenderer(
+              cache.image_reachability.layout_object_type)
+       << ",\"layout_image_resource_created\":"
+       << (cache.image_reachability.layout_image_resource_created ? "true"
+                                                                  : "false")
+       << ",\"layout_image_resource_initialize_called\":"
+       << StandaloneRendererLayoutImageResourceInitializeCalled()
+       << ",\"layout_image_resource_set_resource_called\":"
+       << StandaloneRendererLayoutImageResourceSetResourceCalled()
+       << ",\"layout_image_set_resource_called\":"
+       << StandaloneRendererLayoutImageSetResourceCalled()
+       << ",\"natural_dimensions_called\":"
+       << StandaloneRendererLayoutImageResourceNaturalDimensionsCalled()
+       << ",\"get_image_called\":"
+       << StandaloneRendererLayoutImageResourceGetImageCalled()
+       << ",\"first_missing_stage\":"
+       << JsonStringForStandaloneRenderer(
+              FirstMissingImageStageForStandaloneRenderer(
+                  cache.image_reachability))
+       << "}"
        << ",\"image_diagnostics\":{\"image_element_count\":";
   int image_element_count = 0;
   for (const auto& [scheme, count] : image_scheme_histogram) {
@@ -2963,10 +3132,18 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << ",\"complete\":\"unknown\""
          << ",\"natural_width\":0"
          << ",\"natural_height\":0"
-         << ",\"layout_object_type\":\"unknown_after_live_link_stub\""
-         << ",\"is_layout_image\":\"unknown\""
+         << ",\"layout_object_type\":"
+         << JsonStringForStandaloneRenderer(
+                cache.image_reachability.layout_object_type)
+         << ",\"is_layout_image\":"
+         << (cache.image_reachability.layout_object_type.find("LayoutImage") !=
+                     std::string::npos
+                 ? "true"
+                 : "false")
          << ",\"cached_image_present\":\"unknown\""
-         << ",\"image_resource_content_present\":false"
+         << ",\"image_resource_content_present\":"
+         << (StandaloneRendererImageResourceContentFetchCalled() > 0 ? "true"
+                                                                     : "false")
          << ",\"encoded_data_bytes\":"
          << EncodedDataBytesForStandaloneRenderer(src)
          << ",\"decode_status\":"
@@ -3179,6 +3356,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
 #endif
+  StandaloneRendererResetImageReachabilityDiagnostics();
+  cache.image_reachability = ImageReachabilityDiagnostics();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
@@ -3261,6 +3440,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         String::FromUtf8(body_fragment));
   }
   TraceLiveFrameProbeStage("after SetInnerHTML");
+  cache.image_reachability =
+      CollectImageReachabilityForStandaloneRenderer(document, input_html);
   if (LifecycleStopEqualsForStandaloneRenderer("html")) {
     result.lifecycle_reached_paint_clean = 0;
     cache.body_html = input_html;
@@ -3298,6 +3479,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
             ? 1
             : 0;
     TraceLiveFrameProbeStage("after layout lifecycle update");
+    cache.image_reachability =
+        CollectImageReachabilityForStandaloneRenderer(document, input_html);
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
         "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"layout\","
@@ -3314,6 +3497,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
             ? 1
             : 0;
     TraceLiveFrameProbeStage("after prepaint lifecycle update");
+    cache.image_reachability =
+        CollectImageReachabilityForStandaloneRenderer(document, input_html);
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
         "{\"source\":\"real Blink PaintArtifact\","
@@ -3327,6 +3512,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.lifecycle_reached_paint_clean =
       frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
   TraceLiveFrameProbeStage("after lifecycle update");
+  cache.image_reachability =
+      CollectImageReachabilityForStandaloneRenderer(document, input_html);
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
