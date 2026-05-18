@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import warnings
 from pathlib import Path
 from typing import Iterable, Tuple
 
@@ -16,6 +17,8 @@ try:
     from PIL import Image, ImageChops
 except ImportError as exc:  # pragma: no cover - diagnostic script.
     raise SystemExit("Pillow is required: python -m pip install pillow") from exc
+
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="PIL")
 
 
 Rgb = Tuple[int, int, int]
@@ -90,6 +93,15 @@ def count_changed(a: Image.Image, b: Image.Image, threshold: int, bbox: BBox | N
     return changed
 
 
+def count_exact_changed(a: Image.Image, b: Image.Image, bbox: BBox | None = None) -> int:
+    a_rgb = a.convert("RGB")
+    b_rgb = b.convert("RGB")
+    if bbox:
+        a_rgb = a_rgb.crop(bbox)
+        b_rgb = b_rgb.crop(bbox)
+    return sum(1 for left, right in zip(a_rgb.getdata(), b_rgb.getdata()) if left != right)
+
+
 def area(bbox: BBox | None) -> int:
     if not bbox:
         return 0
@@ -136,8 +148,14 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
     changed_full = count_changed(standalone, reference, threshold)
     changed_union = count_changed(standalone, reference, threshold, content_bbox)
     changed_reference = count_changed(standalone, reference, threshold, reference_bbox)
+    exact_changed_full = count_exact_changed(standalone, reference)
+    exact_changed_union = count_exact_changed(standalone, reference, content_bbox)
     missing = sum(1 for s, r in zip(standalone_mask, reference_mask) if r and not s)
     extra = sum(1 for s, r in zip(standalone_mask, reference_mask) if s and not r)
+    mask_difference = missing + extra
+    mask_artifact_suspected = changed_full == 0 and mask_difference > 0
+    reported_missing = 0 if mask_artifact_suspected else missing
+    reported_extra = 0 if mask_artifact_suspected else extra
     result = {
         "standalone": str(standalone_path),
         "reference": str(reference_path),
@@ -151,11 +169,20 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
         "content_bbox_standalone": standalone_bbox,
         "content_bbox_playwright": reference_bbox,
         "union_content_bbox": content_bbox,
+        "exact_pixel_difference_count": exact_changed_full,
+        "exact_pixel_difference_percent": percent(exact_changed_full, total),
+        "exact_pixel_difference_count_union_content_bbox": exact_changed_union,
+        "exact_pixel_difference_percent_union_content_bbox": percent(exact_changed_union, area(content_bbox)),
+        "mask_difference_count": mask_difference,
+        "mask_difference_percent": percent(mask_difference, total),
+        "mask_artifact_suspected": mask_artifact_suspected,
         "changed_percent_full_viewport": percent(changed_full, total),
         "changed_percent_union_content_bbox": percent(changed_union, area(content_bbox)),
         "changed_percent_playwright_content_bbox": percent(changed_reference, area(reference_bbox)),
-        "missing_content_percent": percent(missing, max(1, reference_content)),
-        "extra_content_percent": percent(extra, max(1, reference_content)),
+        "missing_content_percent": percent(reported_missing, max(1, reference_content)),
+        "extra_content_percent": percent(reported_extra, max(1, reference_content)),
+        "mask_missing_content_percent": percent(missing, max(1, reference_content)),
+        "mask_extra_content_percent": percent(extra, max(1, reference_content)),
     }
     result.update(write_crops(standalone, reference, content_bbox, out_dir))
     return result

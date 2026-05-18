@@ -299,6 +299,33 @@ bool WriteBmp(const std::string& path, const html_css_renderer::CpuImage& image)
   return true;
 }
 
+void WriteJsonString(std::ofstream& file, const std::string& value) {
+  file << "\"";
+  for (char c : value) {
+    switch (c) {
+      case '\\':
+        file << "\\\\";
+        break;
+      case '"':
+        file << "\\\"";
+        break;
+      case '\n':
+        file << "\\n";
+        break;
+      case '\r':
+        file << "\\r";
+        break;
+      case '\t':
+        file << "\\t";
+        break;
+      default:
+        file << c;
+        break;
+    }
+  }
+  file << "\"";
+}
+
 bool WriteJson(const std::string& path,
                const Metrics& metrics,
                const html_css_renderer::RenderResult& result,
@@ -354,6 +381,47 @@ bool WriteJson(const std::string& path,
   file << "],\n";
   file << "  \"render_result\": "
        << html_css_renderer::SerializeRenderResultJson(result) << "\n";
+  file << "}\n";
+  return true;
+}
+
+bool WriteOracleProvenanceJson(
+    const std::string& path,
+    const Metrics& metrics,
+    const html_css_renderer::RenderResult& oracle_result) {
+  std::ofstream file(path);
+  if (!file) {
+    return false;
+  }
+  file << "{\n";
+  file << "  \"oracle\": {\n";
+  file << "    \"implemented\": true,\n";
+  file << "    \"source\": \"blink_paint_artifact_direct_record_playback\",\n";
+  file << "    \"uses_retained_draw_commands\": false,\n";
+  file << "    \"uses_live_exported_draw_ops_for_paint_generation\": false,\n";
+  file << "    \"uses_bitmap_transport_for_output\": true,\n";
+  file << "    \"uses_diagnostic_bitmap_fallback_as_rendering\": false,\n";
+  file << "    \"retained_command_count_for_oracle_generation\": 0,\n";
+  file << "    \"non_white_pixels\": " << metrics.non_white_pixels << ",\n";
+  file << "    \"content_bounds\": {\"left\": " << metrics.content_left
+       << ", \"top\": " << metrics.content_top
+       << ", \"right\": " << metrics.content_right
+       << ", \"bottom\": " << metrics.content_bottom << "},\n";
+  file << "    \"raw_paint_artifact_audit\": ";
+  if (!oracle_result.raw_paint_artifact_audit_json.empty()) {
+    file << oracle_result.raw_paint_artifact_audit_json << "\n";
+  } else {
+    file << "null\n";
+  }
+  file << "  },\n";
+  file << "  \"diagnostics\": [";
+  for (size_t i = 0; i < oracle_result.diagnostics.size(); ++i) {
+    if (i != 0) {
+      file << ", ";
+    }
+    WriteJsonString(file, oracle_result.diagnostics[i]);
+  }
+  file << "]\n";
   file << "}\n";
   return true;
 }
@@ -804,6 +872,14 @@ int main(int argc, char** argv) {
       if (!WriteBmp(oracle_out_path, oracle_image)) {
         std::fprintf(stderr, "failed to write oracle image: %s\n",
                      oracle_out_path.c_str());
+        return 1;
+      }
+      const Metrics oracle_metrics = ComputeMetrics(oracle_image);
+      const std::string oracle_json_path = oracle_out_path + ".json";
+      if (!WriteOracleProvenanceJson(oracle_json_path, oracle_metrics,
+                                     oracle_result)) {
+        std::fprintf(stderr, "failed to write oracle provenance: %s\n",
+                     oracle_json_path.c_str());
         return 1;
       }
 #else
