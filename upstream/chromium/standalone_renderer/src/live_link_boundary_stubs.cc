@@ -32,6 +32,18 @@
 #include "base/win/scoped_handle.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#include <algorithm>
+#include <cctype>
+#include <limits>
+#include <string>
+#include <objbase.h>
+#include <wincodec.h>
+#include <wrl/client.h>
+#ifdef DrawText
+#undef DrawText
+#endif
+#endif
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/delegated_capability_request_token.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
@@ -133,6 +145,10 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImage.h"
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#include "third_party/blink/renderer/platform/wtf/text/base64.h"
+#include "ui/gfx/geometry/skia_conversions.h"
+#endif
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "third_party/skia/include/core/SkMesh.h"
@@ -3346,9 +3362,179 @@ KURL MemoryCache::RemoveFragmentIdentifierIfNeeded(const KURL& url) {
   return url;
 }
 
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-ImageResourceContent* ImageResourceContent::Fetch(FetchParameters&,
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+namespace {
+class StandaloneDataUrlPngImage final : public Image {
+ public:
+  static scoped_refptr<StandaloneDataUrlPngImage> Create(sk_sp<SkImage> image) {
+    if (!image) {
+      return nullptr;
+    }
+    return base::AdoptRef(new StandaloneDataUrlPngImage(std::move(image)));
+  }
+
+  bool IsOpaque() override { return paint_image_.IsOpaque(); }
+  gfx::Size SizeWithConfig(SizeConfig) const override { return size_; }
+  void DestroyDecodedData() override {}
+  PaintImage PaintImageForCurrentFrame() override { return paint_image_; }
+  void Draw(cc::PaintCanvas* canvas,
+            const cc::PaintFlags& flags,
+            const gfx::RectF& dst_rect,
+            const gfx::RectF& src_rect,
+            const ImageDrawOptions& draw_options) override {
+    if (!canvas || !paint_image_ || dst_rect.IsEmpty() || src_rect.IsEmpty()) {
+      return;
+    }
+    canvas->drawImageRect(paint_image_, gfx::RectFToSkRect(src_rect),
+                          gfx::RectFToSkRect(dst_rect),
+                          draw_options.sampling_options, &flags,
+                          ToSkiaRectConstraint(draw_options.clamping_mode));
+  }
+
+ private:
+  explicit StandaloneDataUrlPngImage(sk_sp<SkImage> image)
+      : Image(nullptr, false),
+        size_(image->width(), image->height()),
+        paint_image_(CreatePaintImageBuilder()
+                         .set_image(std::move(image),
+                                    cc::PaintImage::GetNextContentId())
+                         .TakePaintImage()) {}
+
+  gfx::Size size_;
+  PaintImage paint_image_;
+};
+
+std::string StandaloneLowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](char c) {
+    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  });
+  return value;
+}
+
+scoped_refptr<Image> DecodeStandaloneDataUrlPngImage(const KURL& url) {
+  std::string spec = url.GetString().Utf8();
+  std::string lower_spec = StandaloneLowerAscii(spec);
+  constexpr char kPrefix[] = "data:";
+  if (lower_spec.rfind(kPrefix, 0) != 0) {
+    return nullptr;
+  }
+  size_t comma = spec.find(',');
+  if (comma == std::string::npos || comma == 0) {
+    return nullptr;
+  }
+  std::string metadata =
+      lower_spec.substr(sizeof(kPrefix) - 1, comma - (sizeof(kPrefix) - 1));
+  if (metadata.find("image/png") == std::string::npos ||
+      metadata.find(";base64") == std::string::npos) {
+    return nullptr;
+  }
+
+  Vector<uint8_t> encoded_bytes;
+  std::string payload = spec.substr(comma + 1);
+  if (!Base64Decode(String(payload.c_str()), encoded_bytes,
+                    Base64DecodePolicy::kForgiving) ||
+      encoded_bytes.empty() ||
+      encoded_bytes.size() > std::numeric_limits<DWORD>::max()) {
+    return nullptr;
+  }
+
+  HRESULT initialize_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (FAILED(initialize_result) && initialize_result != RPC_E_CHANGED_MODE) {
+    return nullptr;
+  }
+
+  Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
+  HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+
+  Microsoft::WRL::ComPtr<IWICStream> stream;
+  hr = factory->CreateStream(&stream);
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+  hr = stream->InitializeFromMemory(encoded_bytes.data(),
+                                    static_cast<DWORD>(encoded_bytes.size()));
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+
+  Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
+  hr = factory->CreateDecoderFromStream(stream.Get(), nullptr,
+                                        WICDecodeMetadataCacheOnLoad, &decoder);
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+  Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
+  hr = decoder->GetFrame(0, &frame);
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+
+  UINT width = 0;
+  UINT height = 0;
+  hr = frame->GetSize(&width, &height);
+  if (FAILED(hr) || width == 0 || height == 0) {
+    return nullptr;
+  }
+
+  Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
+  hr = factory->CreateFormatConverter(&converter);
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+  hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
+                             WICBitmapDitherTypeNone, nullptr, 0.0,
+                             WICBitmapPaletteTypeCustom);
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+
+  constexpr UINT kBytesPerPixel = 4;
+  uint64_t stride64 = static_cast<uint64_t>(width) * kBytesPerPixel;
+  uint64_t byte_count64 = stride64 * height;
+  if (stride64 > std::numeric_limits<UINT>::max() ||
+      byte_count64 > std::numeric_limits<wtf_size_t>::max()) {
+    return nullptr;
+  }
+
+  Vector<uint8_t> pixels(static_cast<wtf_size_t>(byte_count64));
+  hr = converter->CopyPixels(nullptr, static_cast<UINT>(stride64),
+                             static_cast<UINT>(byte_count64), pixels.data());
+  if (FAILED(hr)) {
+    return nullptr;
+  }
+
+  SkImageInfo image_info =
+      SkImageInfo::Make(static_cast<int>(width), static_cast<int>(height),
+                        kBGRA_8888_SkColorType, kPremul_SkAlphaType);
+  SkPixmap pixmap(image_info, pixels.data(), static_cast<size_t>(stride64));
+  return StandaloneDataUrlPngImage::Create(SkImages::RasterFromPixmapCopy(pixmap));
+}
+}  // namespace
+#endif
+
+ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
+    : image_(std::move(image)) {
+  content_status_ = image_ ? ResourceStatus::kCached : ResourceStatus::kNotStarted;
+  size_available_ = image_ ? Image::kSizeAvailable : Image::kSizeUnavailable;
+}
+
+ImageResourceContent* ImageResourceContent::CreateLoaded(
+    scoped_refptr<blink::Image> image) {
+  return MakeGarbageCollected<ImageResourceContent>(std::move(image));
+}
+
+ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
                                                   ResourceFetcher*) {
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  if (scoped_refptr<Image> image =
+          DecodeStandaloneDataUrlPngImage(params.Url())) {
+    return ImageResourceContent::CreateLoaded(std::move(image));
+  }
+#endif
   return nullptr;
 }
 
@@ -3359,7 +3545,60 @@ bool ImageResourceContent::IsAnimatedImage() const {
 void ImageResourceContent::Trace(Visitor* visitor) const {
   ImageObserver::Trace(visitor);
 }
-#endif
+void ImageResourceContent::AddObserver(ImageResourceObserver*) {}
+void ImageResourceContent::RemoveObserver(ImageResourceObserver*) {}
+RespectImageOrientationEnum ImageResourceContent::ForceOrientationIfNecessary(
+    RespectImageOrientationEnum default_orientation) const {
+  return default_orientation;
+}
+const KURL& ImageResourceContent::Url() const {
+  static KURL* url = new KURL();
+  return *url;
+}
+void ImageResourceContent::SetIsSufficientContentLoadedForPaint() {}
+bool ImageResourceContent::IsSufficientContentLoadedForPaint() const {
+  return true;
+}
+uint64_t ImageResourceContent::ContentSizeForEntropy() const {
+  return 0;
+}
+bool ImageResourceContent::IsPaintedFirstFrame() const {
+  return image_.get();
+}
+std::optional<WebURLRequest::Priority> ImageResourceContent::RequestPriority()
+    const {
+  return std::nullopt;
+}
+bool ImageResourceContent::IsDataUrl() const {
+  return true;
+}
+AtomicString ImageResourceContent::MediaType() const {
+  return AtomicString("image");
+}
+bool ImageResourceContent::IsBroken() const {
+  return !image_;
+}
+void ImageResourceContent::SetIsBroken() {
+  is_broken_ = true;
+}
+bool ImageResourceContent::IsCorsSameOrigin() const {
+  return true;
+}
+base::TimeTicks ImageResourceContent::DiscoveryTime() const {
+  return base::TimeTicks();
+}
+base::TimeTicks ImageResourceContent::LoadStart() const {
+  return base::TimeTicks();
+}
+base::TimeTicks ImageResourceContent::LoadEnd() const {
+  return base::TimeTicks();
+}
+void ImageResourceContent::DecodedSizeChangedTo(const blink::Image*, size_t) {}
+bool ImageResourceContent::ShouldPauseAnimation(const blink::Image*) {
+  return false;
+}
+void ImageResourceContent::Changed(const blink::Image*) {}
+void ImageResourceContent::AsyncLoadCompleted(const blink::Image*) {}
 
 void Resource::Trace(Visitor* visitor) const {
   visitor->Trace(clients_);
@@ -11326,7 +11565,6 @@ void ImageElementTiming::NotifyImageFinished(const LayoutObject&,
                                              const ImageResourceContent*) {}
 void ImageElementTiming::NotifyImageRemoved(const LayoutObject*,
                                             const ImageResourceContent*) {}
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 bool ImageResourceContent::ErrorOccurred() const {
   return false;
 }
@@ -11339,7 +11577,6 @@ const std::optional<AdProvenance>& ImageResourceContent::GetAdProvenance()
       new std::optional<AdProvenance>();
   return *provenance;
 }
-#endif
 bool Sanitizer::ShouldReplaceNodeWithChildren(Node*) const {
   return false;
 }
@@ -11497,6 +11734,7 @@ std::unique_ptr<FrameScheduler> CreateDummyFrameScheduler(v8::Isolate*) {
 
 namespace cc {
 ViewTransitionRequest::~ViewTransitionRequest() = default;
+ScopedRequestHighFramerate::~ScopedRequestHighFramerate() = default;
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PaintOpBuffer::PaintOpBuffer() = default;
 PaintOpBuffer::~PaintOpBuffer() = default;
@@ -13800,18 +14038,15 @@ wtf_size_t GridLineResolver::SubgridSpanSize(GridTrackSizingDirection) const {
 }
 #endif
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
 LayoutImage* LayoutImage::CreateAnonymous(Document&) {
   return nullptr;
 }
-void LayoutImage::SetImageResource(LayoutImageResource*) {}
-#endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-LayoutImage* LayoutImage::CreateAnonymous(Document&) {
-  return nullptr;
+void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
+  image_resource_ = image_resource;
+  if (image_resource_) {
+    image_resource_->Initialize(this);
+  }
 }
-void LayoutImage::SetImageResource(LayoutImageResource*) {}
-#endif
 LayoutListMarkerImage* LayoutListMarkerImage::CreateAnonymous(Document*) {
   return nullptr;
 }
@@ -14326,11 +14561,9 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
     mojom::blink::RequestContextType,
     network::mojom::RequestDestination,
     const AtomicString&) {}
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 void ImageResourceContent::EmulateLoadStartedForInspector(ResourceFetcher*,
                                                           const AtomicString&) {
 }
-#endif
 CSSPaintImageGenerator* CSSPaintImageGenerator::Create(const String&,
                                                        const Document&,
                                                        Observer*) {
@@ -14909,9 +15142,8 @@ ListBasedHitTestBehavior HitTestResult::AddNodeToListBasedTestResult(
 void HitTestResult::SetInnerNode(Node* node) {
   inner_node_ = node;
 }
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 Image* ImageResourceContent::GetImage() const {
-  return nullptr;
+  return image_ ? image_.get() : nullptr;
 }
 Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
@@ -14927,8 +15159,6 @@ Image::SizeAvailability Image::SetData(scoped_refptr<SharedBuffer> data,
   encoded_image_data_ = std::move(data);
   return encoded_image_data_ ? kSizeAvailable : kSizeUnavailable;
 }
-#endif
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 String Image::FilenameExtension() const {
   return String();
 }
@@ -14956,7 +15186,14 @@ void Image::DrawPattern(GraphicsContext&,
                         const gfx::RectF&,
                         const ImageTilingInfo&,
                         const ImageDrawOptions&) {}
-#endif
+PaintImageBuilder Image::CreatePaintImageBuilder(
+    std::optional<PaintImage::Id> paint_id) {
+  auto builder = PaintImageBuilder::WithDefault();
+  builder.set_id(paint_id.value_or(stable_image_id_));
+  builder.set_animation_type(PaintImage::AnimationType::kStatic)
+      .set_is_multipart(is_multipart_);
+  return builder;
+}
 void BoxPaintInvalidator::InvalidatePaint() {}
 void CustomScrollbar::ClearPaintFlags() {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -16145,12 +16382,10 @@ RespectImageOrientationEnum StyleImage::ForceOrientationIfNecessary(
     RespectImageOrientationEnum orientation) const {
   return orientation;
 }
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 scoped_refptr<Image> Image::LoadPlatformResource(int,
                                                  ui::ResourceScaleFactor) {
   return nullptr;
 }
-#endif
 const TransformPaintPropertyNode*
 VisualViewport::TransformNodeForViewportScrollbars() const {
   return nullptr;

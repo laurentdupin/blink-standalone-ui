@@ -96,6 +96,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_input_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_timeline.cc
@@ -1759,13 +1760,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
 if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   list(APPEND BLINK_STANDALONE_LIVE_SOURCES
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/resource/image_resource.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/resource/image_resource_content.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/bitmap_image.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/image_decoder.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/png/png_image_decoder.cc
   )
 endif()
 

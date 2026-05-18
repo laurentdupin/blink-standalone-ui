@@ -2901,7 +2901,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << MapToJsonObject(image_scheme_histogram)
        << ",\"resource_load_status\":\""
        << (image_element_count > 0 && total_raw_audit.image_count == 0
-               ? "no Blink image paint emitted; standalone loader/decode path for data/local images is not wired"
+               ? "no Blink image paint emitted; standalone image element/loader ownership path is not fully linked"
                : "not_applicable_or_painted")
        << "\",\"decode_status\":\"unknown\",\"layout_status\":\"unknown\"}"
        << ",\"image_pipeline\":{\"image_element_count\":"
@@ -2932,7 +2932,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << JsonStringForStandaloneRenderer(
                 has_image_paint
                     ? "painted"
-                    : "not_reached_because_ImageResourceContent_fetch_stub_returns_null")
+                    : "not_reached_because_real_HTMLImageElement_ImageLoader_path_is_not_linked")
          << ",\"paint_status\":"
          << JsonStringForStandaloneRenderer(
                 has_image_paint ? "image paint emitted"
@@ -2941,19 +2941,19 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << JsonStringForStandaloneRenderer(
                 has_image_paint
                     ? ""
-                    : "upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc")
+                    : "upstream/chromium/third_party/blink/renderer/core/html/html_image_element.cc")
          << ",\"blocker_functions\":["
+         << JsonStringForStandaloneRenderer(
+                "HTMLImageElement::CreateLayoutObject(const ComputedStyle&)")
+         << ","
+         << JsonStringForStandaloneRenderer(
+                "ImageLoader::UpdateFromElement(UpdateFromElementBehavior, UpdateType)")
+         << ","
          << JsonStringForStandaloneRenderer(
                 "ImageResourceContent::Fetch(FetchParameters&, ResourceFetcher*)")
          << ","
          << JsonStringForStandaloneRenderer(
-                "ImageResourceContent::GetImage() const")
-         << ","
-         << JsonStringForStandaloneRenderer(
-                "LayoutImageResource::GetImage(const gfx::SizeF&) const")
-         << ","
-         << JsonStringForStandaloneRenderer(
-                "LayoutImageResource::GetNaturalDimensions(float) const")
+                "LayoutImageResource::SetImageResource(ImageResourceContent*)")
          << "]}";
   }
   json << "]}";

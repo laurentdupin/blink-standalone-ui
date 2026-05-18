@@ -134,6 +134,10 @@ NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(
   }
   NaturalSizingInfo sizing_info;
   Image& image = *cached_image_->GetImage();
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  sizing_info =
+      NaturalSizingInfo::MakeFixed(gfx::SizeF(image.Size(ImageOrientation())));
+#else
   if (auto* svg_image = DynamicTo<SVGImage>(image)) {
     const SVGImageViewInfo* view_info = SVGImageForContainer::CreateViewInfo(
         *svg_image, layout_object_->GetNode());
@@ -144,6 +148,7 @@ NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(
     sizing_info = NaturalSizingInfo::MakeFixed(
         gfx::SizeF(image.Size(ImageOrientation())));
   }
+#endif
   if (multiplier != 1 && image.HasIntrinsicSize()) {
     sizing_info.size = ApplyClampedZoom(sizing_info.size, multiplier);
   }
@@ -203,6 +208,9 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
 
   Image* image = cached_image_->GetImage();
 
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  return image;
+#else
   auto* svg_image = DynamicTo<SVGImage>(image);
   if (!svg_image)
     return image;
@@ -216,6 +224,7 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
   return SVGImageForContainer::Create(*svg_image, container_size,
                                       style.EffectiveZoom(), view_info,
                                       preferred_color_scheme);
+#endif
 }
 
 bool LayoutImageResource::MaybeAnimated() const {

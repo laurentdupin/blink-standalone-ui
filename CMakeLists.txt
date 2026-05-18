@@ -186,6 +186,10 @@ add_executable(blink_standalone_render_benchmark_skia
     target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
       HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG=1
     )
+    target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
+      ole32
+      windowscodecs
+    )
   endif()
 
   if(MSVC)
@@ -278,6 +282,10 @@ add_executable(blink_standalone_render_benchmark_skia
     if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
       target_compile_definitions(blink_standalone_sdl_viewer_skia PRIVATE
         HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG=1
+      )
+      target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
+        ole32
+        windowscodecs
       )
     endif()
 
