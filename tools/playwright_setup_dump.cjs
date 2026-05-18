@@ -26,9 +26,16 @@ async function main() {
       return {
         margin: style.margin,
         padding: style.padding,
+        border: style.border,
+        borderTopWidth: style.borderTopWidth,
+        borderRightWidth: style.borderRightWidth,
+        borderBottomWidth: style.borderBottomWidth,
+        borderLeftWidth: style.borderLeftWidth,
         width: style.width,
         height: style.height,
         display: style.display,
+        position: style.position,
+        boxSizing: style.boxSizing,
         font: style.font,
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
@@ -39,6 +46,9 @@ async function main() {
         transform: style.transform,
         transformOrigin: style.transformOrigin,
         opacity: style.opacity,
+        visibility: style.visibility,
+        objectFit: style.objectFit,
+        objectPosition: style.objectPosition,
       };
     };
     const rect = (element) => {
@@ -46,10 +56,49 @@ async function main() {
       const r = element.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height, left: r.left, top: r.top, right: r.right, bottom: r.bottom };
     };
-    const selectors = [".box", ".card", ".child", "img", "table"];
+    const selectors = [
+      "html",
+      "body",
+      ".box",
+      ".card",
+      ".child",
+      "img",
+      "table",
+      ".fixture-target",
+      "[data-debug-id]",
+    ];
+    const elementInfo = (selector) => {
+      const element = selector === "html"
+        ? document.documentElement
+        : selector === "body"
+          ? document.body
+          : document.querySelector(selector);
+      if (!element) return { present: false };
+      const clientRects = Array.from(element.getClientRects()).map((r) => ({
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        height: r.height,
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+      }));
+      return {
+        present: true,
+        selector,
+        tagName: element.tagName,
+        id: element.id || "",
+        className: typeof element.className === "string" ? element.className : "",
+        interface: element.constructor && element.constructor.name ? element.constructor.name : "unknown",
+        computedStyle: pickStyle(element),
+        boundingRect: rect(element),
+        clientRects,
+      };
+    };
     const selected = {};
     for (const selector of selectors) {
-      selected[selector] = rect(document.querySelector(selector));
+      selected[selector] = elementInfo(selector);
     }
     return {
       viewport: { width: innerWidth, height: innerHeight },
@@ -61,7 +110,13 @@ async function main() {
       bodyComputedStyle: pickStyle(document.body),
       htmlRect: rect(document.documentElement),
       bodyRect: rect(document.body),
-      selectedElementRects: selected,
+      selectedElements: selected,
+      selectedElementRects: Object.fromEntries(
+        Object.entries(selected).map(([selector, info]) => [
+          selector,
+          info && info.present ? info.boundingRect : null,
+        ])
+      ),
       mediaQueryEnvironment: {
         maxWidth600: matchMedia("(max-width: 600px)").matches,
         minWidth768: matchMedia("(min-width: 768px)").matches,

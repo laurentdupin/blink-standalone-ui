@@ -1663,14 +1663,111 @@ Element* FindElementByClassForStandaloneRenderer(Node& node,
   return nullptr;
 }
 
+Element* FindElementByTagForStandaloneRenderer(Node& node,
+                                               const QualifiedName& tag_name) {
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (element->HasTagName(tag_name)) {
+      return element;
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    if (Element* found =
+            FindElementByTagForStandaloneRenderer(*child, tag_name)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+Element* FindElementByAttributeForStandaloneRenderer(
+    Node& node,
+    const AtomicString& attribute_name) {
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (element->hasAttribute(attribute_name)) {
+      return element;
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    if (Element* found =
+            FindElementByAttributeForStandaloneRenderer(*child,
+                                                        attribute_name)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+std::string JsonStringForStandaloneRenderer(const std::string& value);
+std::string BlinkStringToStdStringForStandaloneRenderer(const String& value);
+std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect);
+
 std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
   if (!element) {
     return "{\"present\":false}";
   }
   std::ostringstream json;
   json << "{\"present\":true";
+  json << ",\"tag_name\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(element->tagName()))
+       << ",\"id\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  element->GetIdAttribute()))
+       << ",\"class\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  element->getAttribute(html_names::kClassAttr)));
   if (const ComputedStyle* style = element->GetComputedStyle()) {
     json << ",\"computed_style\":{\"opacity\":" << style->Opacity()
+         << ",\"display\":" << static_cast<int>(style->Display())
+         << ",\"position\":" << static_cast<int>(style->GetPosition())
+         << ",\"box_sizing\":" << static_cast<int>(style->BoxSizing())
+         << ",\"font_size\":" << style->FontSize()
+         << ",\"width\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->LogicalWidth().ToString()))
+         << ",\"height\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->LogicalHeight().ToString()))
+         << ",\"margin\":{\"top\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->MarginTop().ToString()))
+         << ",\"right\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->MarginRight().ToString()))
+         << ",\"bottom\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->MarginBottom().ToString()))
+         << ",\"left\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->MarginLeft().ToString()))
+         << "},\"padding\":{\"top\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->PaddingTop().ToString()))
+         << ",\"right\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->PaddingRight().ToString()))
+         << ",\"bottom\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->PaddingBottom().ToString()))
+         << ",\"left\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    style->PaddingLeft().ToString()))
+         << "},\"border_width\":{\"top\":" << style->BorderTopWidth()
+         << ",\"right\":" << style->BorderRightWidth()
+         << ",\"bottom\":" << style->BorderBottomWidth()
+         << ",\"left\":" << style->BorderLeftWidth() << "}"
          << ",\"has_opacity\":" << (style->HasOpacity() ? "true" : "false")
          << ",\"has_transform\":" << (style->HasTransform() ? "true" : "false")
          << ",\"has_transform_operations\":"
@@ -1691,11 +1788,30 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
     json << ",\"computed_style\":{\"status\":\"unavailable\"}";
   }
   if (LayoutObject* layout_object = element->GetLayoutObject()) {
-    json << ",\"layout\":{\"object_type\":\"layout_object\""
+    json << ",\"layout\":{\"object_type\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    layout_object->DebugName()))
          << ",\"is_box\":"
          << (layout_object->IsBox() ? "true" : "false")
          << ",\"is_scroll_container\":"
          << (layout_object->IsScrollContainer() ? "true" : "false");
+    if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
+      json << ",\"layout_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(
+                  PhysicalRect(box->PhysicalLocation(), box->StitchedSize()))
+           << ",\"border_box_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(box->PhysicalBorderBoxRect())
+           << ",\"visual_overflow_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(box->VisualOverflowRect())
+           << ",\"scrollable_overflow_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(
+                  box->ScrollableOverflowRect());
+    } else {
+      json << ",\"layout_rect\":null,\"border_box_rect\":null"
+              ",\"visual_overflow_rect\":null,"
+              "\"scrollable_overflow_rect\":null";
+    }
     const ObjectPaintProperties* properties =
         layout_object->FirstFragment().PaintProperties();
     if (properties) {
@@ -1736,6 +1852,7 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
 
 std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
   Element* body = document.body();
+  Element* html = document.documentElement();
   Element* card = body ? FindElementByClassForStandaloneRenderer(
                              *body, AtomicString("card"))
                        : nullptr;
@@ -1745,10 +1862,31 @@ std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
   Element* box = body ? FindElementByClassForStandaloneRenderer(
                             *body, AtomicString("box"))
                       : nullptr;
+  Element* fixture_target = body ? FindElementByClassForStandaloneRenderer(
+                                       *body, AtomicString("fixture-target"))
+                                 : nullptr;
+  Element* debug_id =
+      body ? FindElementByAttributeForStandaloneRenderer(
+                 *body, AtomicString("data-debug-id"))
+           : nullptr;
+  Element* img =
+      body ? FindElementByTagForStandaloneRenderer(*body, html_names::kImgTag)
+           : nullptr;
+  Element* table =
+      body ? FindElementByTagForStandaloneRenderer(*body, html_names::kTableTag)
+           : nullptr;
   std::ostringstream json;
-  json << "{\"card\":" << ElementEvidenceJsonForStandaloneRenderer(card)
+  json << "{\"html\":" << ElementEvidenceJsonForStandaloneRenderer(html)
+       << ",\"body\":" << ElementEvidenceJsonForStandaloneRenderer(body)
+       << ",\"card\":" << ElementEvidenceJsonForStandaloneRenderer(card)
        << ",\"child\":" << ElementEvidenceJsonForStandaloneRenderer(child)
        << ",\"box\":" << ElementEvidenceJsonForStandaloneRenderer(box)
+       << ",\"fixture-target\":"
+       << ElementEvidenceJsonForStandaloneRenderer(fixture_target)
+       << ",\"data-debug-id\":"
+       << ElementEvidenceJsonForStandaloneRenderer(debug_id)
+       << ",\"img\":" << ElementEvidenceJsonForStandaloneRenderer(img)
+       << ",\"table\":" << ElementEvidenceJsonForStandaloneRenderer(table)
        << "}";
   return json.str();
 }
@@ -1810,6 +1948,13 @@ std::string RectFJsonForStandaloneRenderer(const gfx::RectF& rect) {
   std::ostringstream out;
   out << "[" << rect.x() << "," << rect.y() << "," << rect.width() << ","
       << rect.height() << "]";
+  return out.str();
+}
+
+std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect) {
+  std::ostringstream out;
+  out << "[" << rect.X().ToFloat() << "," << rect.Y().ToFloat() << ","
+      << rect.Width().ToFloat() << "," << rect.Height().ToFloat() << "]";
   return out.str();
 }
 
