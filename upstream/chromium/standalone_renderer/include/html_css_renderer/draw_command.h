@@ -60,6 +60,7 @@ enum class DrawCommandType {
   kFillRRectShader,
   kFillPath,
   kDrawImage,
+  kDrawImageRect,
   kDrawGlyphRun,
   kDrawTextBlob,
   kDrawText,
@@ -91,6 +92,7 @@ struct DrawCommand {
   std::vector<uint8_t> text_blob_bytes;
   std::vector<uint8_t> shader_bytes;
   std::string resource_id;
+  Rect source_rect;
   GlyphRun glyph_run;
 
   static DrawCommand Save();
@@ -123,6 +125,9 @@ struct DrawCommand {
                               float stroke_width = 0.0f,
                               std::vector<uint8_t> shader_bytes = {});
   static DrawCommand DrawImage(std::string id, Rect destination);
+  static DrawCommand DrawImageRect(std::string id,
+                                   Rect source,
+                                   Rect destination);
   static DrawCommand DrawGlyphRun(GlyphRun run);
   static DrawCommand DrawTextBlob(std::vector<uint8_t> blob_bytes,
                                   Point origin,

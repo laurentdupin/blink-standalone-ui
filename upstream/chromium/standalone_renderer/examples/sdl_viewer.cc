@@ -731,6 +731,15 @@ class SdlFrameRenderer {
                   html_css_renderer::Color::Rgba(1, 1, 1, 1), state);
         break;
       }
+      case html_css_renderer::DrawCommandType::kDrawImageRect: {
+        const auto found = images_.find(command.resource_id);
+        if (found == images_.end()) {
+          break;
+        }
+        DrawImage(found->second.texture, command.rect,
+                  html_css_renderer::Color::Rgba(1, 1, 1, 1), state);
+        break;
+      }
       case html_css_renderer::DrawCommandType::kDrawGlyphRun: {
         const size_t count = std::min(command.glyph_run.glyph_ids.size(),
                                       command.glyph_run.positions.size());

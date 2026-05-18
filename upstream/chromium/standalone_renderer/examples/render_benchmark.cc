@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -440,6 +441,76 @@ int CountJsonSubstring(const std::string& json, const std::string& needle) {
   return count;
 }
 
+std::string ExtractJsonStringBefore(const std::string& json,
+                                    const std::string& key,
+                                    size_t before) {
+  const size_t key_pos = json.rfind(key, before);
+  if (key_pos == std::string::npos) {
+    return {};
+  }
+  const size_t value_start = json.find('"', key_pos + key.size());
+  if (value_start == std::string::npos) {
+    return {};
+  }
+  const size_t value_end = json.find('"', value_start + 1);
+  if (value_end == std::string::npos) {
+    return {};
+  }
+  return json.substr(value_start + 1, value_end - value_start - 1);
+}
+
+std::string ExtractJsonArrayAfter(const std::string& json,
+                                  const std::string& key,
+                                  size_t after) {
+  const size_t key_pos = json.find(key, after);
+  if (key_pos == std::string::npos) {
+    return "null";
+  }
+  const size_t array_start = json.find('[', key_pos + key.size());
+  const size_t array_end = json.find(']', array_start);
+  if (array_start == std::string::npos || array_end == std::string::npos) {
+    return "null";
+  }
+  return json.substr(array_start, array_end - array_start + 1);
+}
+
+void WriteOracleImageOpExamples(std::ofstream& file,
+                                const std::string& raw_json) {
+  file << "    \"raw_image_op_examples\": [";
+  bool first = true;
+  size_t offset = 0;
+  while (true) {
+    size_t op_pos = raw_json.find("\"type\":\"DrawImage", offset);
+    if (op_pos == std::string::npos) {
+      break;
+    }
+    const bool is_rect =
+        raw_json.compare(op_pos, std::strlen("\"type\":\"DrawImageRectOp\""),
+                         "\"type\":\"DrawImageRectOp\"") == 0;
+    const char* op_type = is_rect ? "DrawImageRectOp" : "DrawImageOp";
+    if (!first) {
+      file << ", ";
+    }
+    first = false;
+    file << "{\"chunk_id\": ";
+    WriteJsonString(file, ExtractJsonStringBefore(raw_json,
+                                                  "\"paint_chunk_id\":",
+                                                  op_pos));
+    file << ", \"display_item_id\": ";
+    WriteJsonString(file, ExtractJsonStringBefore(raw_json, "\"id\":",
+                                                  op_pos));
+    file << ", \"recursive_path\": ";
+    WriteJsonString(file, std::string("paint_ops/") + op_type);
+    file << ", \"op_type\": ";
+    WriteJsonString(file, op_type);
+    file << ", \"src_rect\": null, \"dst_rect\": "
+         << ExtractJsonArrayAfter(raw_json, "\"bounds_or_geometry\":", op_pos)
+         << ", \"decoded_size\": null, \"retained_command_id\": null}";
+    offset = op_pos + 1;
+  }
+  file << "],\n";
+}
+
 bool WriteOracleProvenanceJson(
     const std::string& path,
     const Metrics& metrics,
@@ -468,7 +539,7 @@ bool WriteOracleProvenanceJson(
        << draw_image_count << ", \"DrawImageRectOp\": "
        << draw_image_rect_count << ", \"image_backed_shader\": "
        << image_backed_shader_count << "},\n";
-  file << "    \"raw_image_op_examples\": [],\n";
+  WriteOracleImageOpExamples(file, raw_json);
   file << "    \"image_resource_count\": "
        << (draw_image_count + draw_image_rect_count +
            image_backed_shader_count)

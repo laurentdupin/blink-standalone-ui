@@ -172,6 +172,17 @@ DrawCommand DrawCommand::DrawImage(std::string id, Rect destination) {
   return command;
 }
 
+DrawCommand DrawCommand::DrawImageRect(std::string id,
+                                       Rect source,
+                                       Rect destination) {
+  DrawCommand command;
+  command.type = DrawCommandType::kDrawImageRect;
+  command.resource_id = std::move(id);
+  command.source_rect = source;
+  command.rect = destination;
+  return command;
+}
+
 DrawCommand DrawCommand::DrawGlyphRun(GlyphRun run) {
   DrawCommand command;
   command.type = DrawCommandType::kDrawGlyphRun;
@@ -242,6 +253,8 @@ const char* ToString(DrawCommandType type) {
       return "FillPath";
     case DrawCommandType::kDrawImage:
       return "DrawImage";
+    case DrawCommandType::kDrawImageRect:
+      return "DrawImageRect";
     case DrawCommandType::kDrawGlyphRun:
       return "DrawGlyphRun";
     case DrawCommandType::kDrawTextBlob:

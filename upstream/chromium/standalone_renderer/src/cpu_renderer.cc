@@ -224,6 +224,7 @@ void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
         FillRect(image, command.rect, command.color, current_clip);
         break;
       case DrawCommandType::kDrawImage:
+      case DrawCommandType::kDrawImageRect:
         FillRect(image, command.rect,
                  ImagePlaceholderColor(command.resource_id), current_clip);
         StrokeRect(image, command.rect, Color::Rgba(0.0f, 0.0f, 0.0f, 0.35f),

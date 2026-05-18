@@ -369,6 +369,23 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         }
       }
       break;
+    case DrawCommandType::kDrawImageRect:
+      if (const auto found = images.find(command.resource_id);
+          found != images.end()) {
+        const ImageResource& resource = found->second;
+        SkBitmap bitmap;
+        SkImageInfo info = SkImageInfo::Make(
+            resource.width, resource.height, kRGBA_8888_SkColorType,
+            kPremul_SkAlphaType);
+        if (bitmap.installPixels(info,
+                                 const_cast<uint8_t*>(resource.pixels.data()),
+                                 static_cast<size_t>(resource.width) * 4u)) {
+          canvas.drawImageRect(bitmap.asImage(), ToSkRect(command.source_rect),
+                               ToSkRect(command.rect), SkSamplingOptions(),
+                               nullptr, SkCanvas::kStrict_SrcRectConstraint);
+        }
+      }
+      break;
     case DrawCommandType::kDrawGlyphRun:
       DrawGlyphRunWithSkia(canvas, glyphs, command.glyph_run);
       break;

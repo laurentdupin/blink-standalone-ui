@@ -13,6 +13,7 @@ bool IsDrawable(DrawCommandType type) {
          type == DrawCommandType::kStrokeRRect ||
          type == DrawCommandType::kFillPath ||
          type == DrawCommandType::kDrawImage ||
+         type == DrawCommandType::kDrawImageRect ||
          type == DrawCommandType::kDrawGlyphRun ||
          type == DrawCommandType::kDrawText;
 }

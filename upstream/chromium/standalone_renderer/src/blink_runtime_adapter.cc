@@ -172,6 +172,13 @@ int StandaloneBlinkLiveFrameBridgeExportedBitmapBytesAtForStandaloneRenderer(
     int op_index,
     uint8_t* destination,
     int destination_size);
+int StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    float* src_x,
+    float* src_y,
+    float* src_width,
+    float* src_height);
 }  // namespace blink::standalone_renderer_probe
 
 namespace blink::standalone_renderer_probe {
@@ -2186,22 +2193,24 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             Rect{x, y, width, height}, radius_x, radius_y, color,
             font_size > 0.0f ? font_size : 1.0f));
         ++translated_command_count;
-      } else if (type == 7) {
+      } else if (type == 7 || type == 22) {
         std::array<char, 128> debug_label{};
         live_probe::
             StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
                 probe_html.c_str(), i, debug_label.data(),
                 static_cast<int>(debug_label.size()));
-        std::string diagnostic =
-            "diagnostic_bitmap_fallback fallback_rasterized=true "
-            "fallback_reason=unsupported_retained_resource original_paint_op="
-            "bitmap-backed source_chunk=" + active_chunk_key +
-            " source_display_item=unknown op " + std::to_string(i);
-        if (debug_label[0] != '\0') {
-          diagnostic += " source=";
-          diagnostic += debug_label.data();
+        if (type == 7) {
+          std::string diagnostic =
+              "diagnostic_bitmap_fallback fallback_rasterized=true "
+              "fallback_reason=unsupported_retained_resource original_paint_op="
+              "bitmap-backed source_chunk=" + active_chunk_key +
+              " source_display_item=unknown op " + std::to_string(i);
+          if (debug_label[0] != '\0') {
+            diagnostic += " source=";
+            diagnostic += debug_label.data();
+          }
+          result.diagnostics.push_back(std::move(diagnostic));
         }
-        result.diagnostics.push_back(std::move(diagnostic));
         int bitmap_width = 0;
         int bitmap_height = 0;
         int byte_count = 0;
@@ -2229,17 +2238,45 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         const uint64_t pixel_hash = HashBytes(rgba_pixels);
         ImageLoadInfo image;
         image.image_id =
-            "blink-paint-bitmap-" + std::to_string(pixel_hash);
+            std::string(type == 22 ? "blink-paint-image-"
+                                   : "blink-paint-bitmap-") +
+            std::to_string(pixel_hash);
         image.resource_id = image.image_id;
-        image.mime_type = "image/x-raw-rgba";
+        image.mime_type = type == 22 ? "image/x-blink-paint-image-rgba"
+                                     : "image/x-raw-rgba";
         image.decoded_format = PixelFormat::kRgba8888;
         image.decoded_size = Size{static_cast<float>(bitmap_width),
                                   static_cast<float>(bitmap_height)};
         image.decoded_pixels = std::move(rgba_pixels);
         image.byte_count = image.decoded_pixels.size();
         image.bytes_hash = pixel_hash;
+        Rect src_rect{0.0f, 0.0f, static_cast<float>(bitmap_width),
+                      static_cast<float>(bitmap_height)};
+        if (type == 22) {
+          float src_x = 0.0f;
+          float src_y = 0.0f;
+          float src_width = 0.0f;
+          float src_height = 0.0f;
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer(
+                      probe_html.c_str(), i, &src_x, &src_y, &src_width,
+                      &src_height) &&
+              src_width > 0.0f && src_height > 0.0f) {
+            src_rect = Rect{src_x, src_y, src_width, src_height};
+          }
+          result.diagnostics.push_back(
+              std::string("retained_image_resource source_raw_op=") +
+              (debug_label[0] != '\0' ? debug_label.data()
+                                      : "DrawImageRectOp") +
+              " source_chunk=" + active_chunk_key + " op=" +
+              std::to_string(i) + " resource_id=" + image.image_id);
+        }
+        const std::string image_id = image.image_id;
         active_commands->push_back(
-            DrawCommand::DrawImage(image.image_id, Rect{x, y, width, height}));
+            type == 22 ? DrawCommand::DrawImageRect(
+                             image_id, src_rect, Rect{x, y, width, height})
+                       : DrawCommand::DrawImage(image_id,
+                                                Rect{x, y, width, height}));
         load_commands.push_back(LoadCommand::LoadImage(std::move(image)));
         ++translated_command_count;
       } else if (type == 8) {

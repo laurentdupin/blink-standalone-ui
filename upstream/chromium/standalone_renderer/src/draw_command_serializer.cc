@@ -503,6 +503,13 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
           << "\",\"destination\":";
       WriteRect(out, command.rect);
       break;
+    case DrawCommandType::kDrawImageRect:
+      out << ",\"resource_id\":\"" << EscapeJson(command.resource_id)
+          << "\",\"source\":";
+      WriteRect(out, command.source_rect);
+      out << ",\"destination\":";
+      WriteRect(out, command.rect);
+      break;
     case DrawCommandType::kDrawGlyphRun:
       out << ",\"font_id\":\"" << EscapeJson(command.glyph_run.font_id)
           << "\",\"font_size\":" << command.glyph_run.font_size
@@ -621,7 +628,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     if (command.type == DrawCommandType::kDrawTextBlob) {
       ++text_blob_count;
     }
-    if (command.type == DrawCommandType::kDrawImage) {
+    if (command.type == DrawCommandType::kDrawImage ||
+        command.type == DrawCommandType::kDrawImageRect) {
       ++image_count;
     }
     if (!command.shader_bytes.empty()) {

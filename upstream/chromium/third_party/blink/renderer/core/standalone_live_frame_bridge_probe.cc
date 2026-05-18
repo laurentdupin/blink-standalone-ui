@@ -202,6 +202,10 @@ struct LiveExportedDrawOp {
   std::vector<uint8_t> shader_bytes;
   std::vector<uint8_t> alpha_mask;
   std::vector<uint8_t> rgba_pixels;
+  float src_x = 0.0f;
+  float src_y = 0.0f;
+  float src_width = 0.0f;
+  float src_height = 0.0f;
   std::string debug_label;
 };
 
@@ -1054,6 +1058,58 @@ bool AppendPaintOpBitmapResource(
   return true;
 }
 
+bool AppendPaintImageResourceOp(
+    const cc::PaintImage& paint_image,
+    const SkRect& src,
+    const SkRect& dst,
+    float translate_x,
+    float translate_y,
+    const char* debug_label,
+    std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+  if (!src.isFinite() || !dst.isFinite() || src.width() <= 0.0f ||
+      src.height() <= 0.0f || dst.width() <= 0.0f || dst.height() <= 0.0f) {
+    return false;
+  }
+
+  sk_sp<SkImage> image = paint_image.GetSwSkImage();
+  if (!image || image->width() <= 0 || image->height() <= 0) {
+    return false;
+  }
+
+  constexpr int kMaxImagePixels = 16 * 1024 * 1024;
+  if (static_cast<int64_t>(image->width()) * image->height() >
+      kMaxImagePixels) {
+    return false;
+  }
+
+  std::vector<uint8_t> rgba_pixels(static_cast<size_t>(image->width()) *
+                                   static_cast<size_t>(image->height()) * 4u);
+  SkImageInfo info =
+      SkImageInfo::Make(image->width(), image->height(), kRGBA_8888_SkColorType,
+                        kPremul_SkAlphaType);
+  if (!image->readPixels(nullptr, info, rgba_pixels.data(),
+                         static_cast<size_t>(image->width()) * 4u, 0, 0)) {
+    return false;
+  }
+
+  LiveExportedDrawOp exported;
+  exported.type = 22;
+  exported.x = translate_x + dst.x();
+  exported.y = translate_y + dst.y();
+  exported.width = dst.width();
+  exported.height = dst.height();
+  exported.mask_width = image->width();
+  exported.mask_height = image->height();
+  exported.src_x = src.x();
+  exported.src_y = src.y();
+  exported.src_width = src.width();
+  exported.src_height = src.height();
+  exported.rgba_pixels = std::move(rgba_pixels);
+  exported.debug_label = debug_label ? debug_label : "DrawImageRectOp";
+  exported_draw_ops.push_back(std::move(exported));
+  return true;
+}
+
 bool SkM44IsIdentityOr2dTranslation(const SkM44& matrix) {
   return matrix.rc(0, 0) == 1.0f && matrix.rc(0, 1) == 0.0f &&
          matrix.rc(0, 2) == 0.0f && matrix.rc(1, 0) == 0.0f &&
@@ -1238,21 +1294,25 @@ bool AppendPaintRecordExtractedOps(
       }
       case cc::PaintOpType::kDrawImage: {
         const auto& image_op = static_cast<const cc::DrawImageOp&>(op);
-        if (!AppendPaintOpBitmapResource(
-                op,
-                SkRect::MakeXYWH(image_op.left, image_op.top,
-                                 static_cast<SkScalar>(image_op.image.width()),
-                                 static_cast<SkScalar>(
-                                     image_op.image.height())),
-                translate_x, translate_y, exported_draw_ops)) {
+        const SkRect src = SkRect::MakeWH(
+            static_cast<SkScalar>(image_op.image.width()),
+            static_cast<SkScalar>(image_op.image.height()));
+        const SkRect dst =
+            SkRect::MakeXYWH(image_op.left, image_op.top, src.width(),
+                             src.height());
+        if (!AppendPaintImageResourceOp(image_op.image, src, dst, translate_x,
+                                        translate_y, "DrawImageOp",
+                                        exported_draw_ops)) {
           mark_unsupported(op);
         }
         break;
       }
       case cc::PaintOpType::kDrawImageRect: {
         const auto& image_op = static_cast<const cc::DrawImageRectOp&>(op);
-        if (!AppendPaintOpBitmapResource(op, image_op.dst, translate_x,
-                                         translate_y, exported_draw_ops)) {
+        if (!AppendPaintImageResourceOp(image_op.image, image_op.src,
+                                        image_op.dst, translate_x, translate_y,
+                                        "DrawImageRectOp",
+                                        exported_draw_ops)) {
           mark_unsupported(op);
         }
         break;
@@ -2188,9 +2248,7 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
       ++audit.visual_op_count;
       if (!IsPaintOpCurrentlyExtracted(op.GetType())) {
         ++audit.retained_unsupported_visual_op_count;
-      } else if (op.GetType() == cc::PaintOpType::kDrawImage ||
-                 op.GetType() == cc::PaintOpType::kDrawImageRect ||
-                 op.GetType() == cc::PaintOpType::kDrawArc ||
+      } else if (op.GetType() == cc::PaintOpType::kDrawArc ||
                  op.GetType() == cc::PaintOpType::kDrawArcLite) {
         ++audit.diagnostic_bitmap_fallback_visual_op_count;
       } else {
@@ -2207,7 +2265,6 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
     if (op.GetType() == cc::PaintOpType::kDrawImage ||
         op.GetType() == cc::PaintOpType::kDrawImageRect) {
       ++audit.image_count;
-      ++audit.fallback_histogram[op_name];
     }
     if (op.GetType() == cc::PaintOpType::kDrawPath ||
         op.GetType() == cc::PaintOpType::kClipPath) {
@@ -3107,6 +3164,23 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   for (const auto& [scheme, count] : image_scheme_histogram) {
     image_element_count += count;
   }
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  int provider_decoded_width = 0;
+  int provider_decoded_height = 0;
+  std::string provider_image_status;
+  for (const auto& request : provider_diagnostics.requests) {
+    if (request.initiator == "img") {
+      provider_decoded_width = request.decoded_width;
+      provider_decoded_height = request.decoded_height;
+      provider_image_status = request.status;
+      break;
+    }
+  }
+#else
+  int provider_decoded_width = 0;
+  int provider_decoded_height = 0;
+  std::string provider_image_status;
+#endif
   json << image_element_count << ",\"src_scheme_histogram\":"
        << MapToJsonObject(image_scheme_histogram)
        << ",\"resource_load_status\":\""
@@ -3114,6 +3188,21 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                ? "no Blink image paint emitted; standalone image element/loader ownership path is not fully linked"
                : "not_applicable_or_painted")
        << "\",\"decode_status\":\"unknown\",\"layout_status\":\"unknown\"}"
+       << ",\"image_size_diagnostics\":{\"element_natural_width\":0"
+       << ",\"element_natural_height\":0"
+       << ",\"provider_decoded_width\":" << provider_decoded_width
+       << ",\"provider_decoded_height\":" << provider_decoded_height
+       << ",\"layout_intrinsic_width\":0"
+       << ",\"layout_intrinsic_height\":0"
+       << ",\"get_natural_dimensions_called\":"
+       << StandaloneRendererLayoutImageResourceNaturalDimensionsCalled()
+       << ",\"size_source_used_for_layout\":"
+       << JsonStringForStandaloneRenderer(
+              provider_decoded_width > 0 && provider_decoded_height > 0
+                  ? "provider_decoded_size_available_element_natural_size_not_observed"
+                  : "unknown")
+       << ",\"provider_status\":"
+       << JsonStringForStandaloneRenderer(provider_image_status) << "}"
        << ",\"image_pipeline\":{\"image_element_count\":"
        << image_element_count << ",\"images\":[";
   const std::vector<std::string> image_sources =
@@ -3132,6 +3221,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << ",\"complete\":\"unknown\""
          << ",\"natural_width\":0"
          << ",\"natural_height\":0"
+         << ",\"provider_decoded_width\":" << provider_decoded_width
+         << ",\"provider_decoded_height\":" << provider_decoded_height
          << ",\"layout_object_type\":"
          << JsonStringForStandaloneRenderer(
                 cache.image_reachability.layout_object_type)
@@ -4187,7 +4278,8 @@ int StandaloneBlinkLiveFrameBridgeExportedBitmapInfoAtForStandaloneRenderer(
     return 0;
   }
   const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
-  if (op.type != 7 || op.mask_width <= 0 || op.mask_height <= 0 ||
+  if ((op.type != 7 && op.type != 22) || op.mask_width <= 0 ||
+      op.mask_height <= 0 ||
       op.rgba_pixels.empty()) {
     return 0;
   }
@@ -4215,12 +4307,36 @@ int StandaloneBlinkLiveFrameBridgeExportedBitmapBytesAtForStandaloneRenderer(
     return 0;
   }
   const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
-  if (op.type != 7 || op.rgba_pixels.empty() ||
+  if ((op.type != 7 && op.type != 22) || op.rgba_pixels.empty() ||
       destination_size < static_cast<int>(op.rgba_pixels.size())) {
     return 0;
   }
   std::memcpy(destination, op.rgba_pixels.data(), op.rgba_pixels.size());
   return static_cast<int>(op.rgba_pixels.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    float* src_x,
+    float* src_y,
+    float* src_width,
+    float* src_height) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() || !src_x ||
+      !src_y || !src_width || !src_height) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.type != 22) {
+    return 0;
+  }
+  *src_x = op.src_x;
+  *src_y = op.src_y;
+  *src_width = op.src_width;
+  *src_height = op.src_height;
+  return 1;
 }
 
 }  // namespace blink::standalone_renderer_probe
