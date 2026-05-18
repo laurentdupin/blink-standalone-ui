@@ -402,6 +402,17 @@ bool WriteOracleProvenanceJson(
   file << "    \"uses_bitmap_transport_for_output\": true,\n";
   file << "    \"uses_diagnostic_bitmap_fallback_as_rendering\": false,\n";
   file << "    \"retained_command_count_for_oracle_generation\": 0,\n";
+  const std::string& raw_json = oracle_result.raw_paint_artifact_audit_json;
+  const bool has_draw_image =
+      raw_json.find("DrawImageOp") != std::string::npos;
+  const bool has_draw_image_rect =
+      raw_json.find("DrawImageRectOp") != std::string::npos;
+  file << "    \"raw_image_op_histogram\": {\"DrawImageOp\": "
+       << (has_draw_image ? 1 : 0)
+       << ", \"DrawImageRectOp\": " << (has_draw_image_rect ? 1 : 0)
+       << "},\n";
+  file << "    \"image_resource_count\": "
+       << ((has_draw_image || has_draw_image_rect) ? 1 : 0) << ",\n";
   file << "    \"non_white_pixels\": " << metrics.non_white_pixels << ",\n";
   file << "    \"content_bounds\": {\"left\": " << metrics.content_left
        << ", \"top\": " << metrics.content_top
@@ -422,6 +433,63 @@ bool WriteOracleProvenanceJson(
     WriteJsonString(file, oracle_result.diagnostics[i]);
   }
   file << "]\n";
+  file << "}\n";
+  return true;
+}
+
+bool WritePageSetupJson(const std::string& path,
+                        const html_css_renderer::RendererCreateInfo& info,
+                        const html_css_renderer::RenderResult& result,
+                        const std::string& html_file,
+                        const std::string& lifecycle_stop,
+                        bool use_blink) {
+  std::ofstream file(path);
+  if (!file) {
+    return false;
+  }
+  file << "{\n";
+  file << "  \"page_setup\": {\n";
+  file << "    \"viewport\": {\"width\": " << info.viewport.width
+       << ", \"height\": " << info.viewport.height << "},\n";
+  file << "    \"device_scale_factor\": 1,\n";
+  file << "    \"css_pixel_ratio\": 1,\n";
+  file << "    \"page_scale\": 1,\n";
+  file << "    \"compat_mode\": \"standards_expected_from_doctype_or_unknown\",\n";
+  file << "    \"base_url\": ";
+  WriteJsonString(file, html_file.empty() ? std::string() : fs::absolute(html_file).parent_path().string());
+  file << ",\n";
+  file << "    \"document_url\": ";
+  WriteJsonString(file, html_file.empty() ? std::string("about:blank") : fs::absolute(html_file).string());
+  file << ",\n";
+  file << "    \"security_origin_summary\": \"standalone local document\",\n";
+  file << "    \"ua_stylesheet_status\": \"embedded standalone UA stylesheet\",\n";
+  file << "    \"default_font\": \"benchmark default font provider / system fallback\",\n";
+  file << "    \"author_stylesheet_count\": " << info.stylesheets.size()
+       << ",\n";
+  file << "    \"css_injection_path\": \"inline head style plus local linked CSS loader\",\n";
+  file << "    \"injected_default_demo_css\": false,\n";
+  file << "    \"scrollbar_policy\": \"standalone browser scrollbar/resizer paint properties skipped under guard\",\n";
+  file << "    \"media_query_environment\": {\"width\": " << info.viewport.width
+       << ", \"height\": " << info.viewport.height
+       << ", \"hover\": \"unknown\", \"pointer\": \"unknown\","
+       << " \"prefers_color_scheme\": \"unknown\", \"reduced_motion\": \"unknown\"},\n";
+  file << "    \"lifecycle_stop\": ";
+  WriteJsonString(file, lifecycle_stop);
+  file << ",\n";
+  file << "    \"used_blink\": " << (use_blink ? "true" : "false") << ",\n";
+  file << "    \"html_computed_style\": {\"status\": \"see raw_audit.page_evidence when available\"},\n";
+  file << "    \"body_computed_style\": {\"status\": \"see raw_audit.page_evidence when available\"},\n";
+  file << "    \"document_element_layout_rect\": {\"status\": \"not yet exported as dedicated field\"},\n";
+  file << "    \"body_layout_rect\": {\"status\": \"not yet exported as dedicated field\"},\n";
+  file << "    \"layout_view_size\": {\"width\": " << result.successor_snapshot.viewport.width
+       << ", \"height\": " << result.successor_snapshot.viewport.height << "}\n";
+  file << "  },\n";
+  file << "  \"raw_audit\": ";
+  if (!result.raw_paint_artifact_audit_json.empty()) {
+    file << result.raw_paint_artifact_audit_json << "\n";
+  } else {
+    file << "null\n";
+  }
   file << "}\n";
   return true;
 }
@@ -451,6 +519,7 @@ void PrintUsage() {
                "[--viewport WxH] --out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
+               "[--dump-page-setup <setup.json>] "
                "[--audit-only] [--disable-retained-extraction] "
                "[--disable-skia-raster] "
                "[--lifecycle-stop <html|style|layout|prepaint|paint|artifact>] "
@@ -522,11 +591,13 @@ int main(int argc, char** argv) {
   std::string out_path;
   std::string json_path;
   std::string paint_artifact_dump_path;
+  std::string page_setup_dump_path;
   std::string paint_oracle;
   std::string oracle_out_path;
   std::string crash_dump_path;
   std::string lifecycle_stop;
   std::string font_file;
+  std::string html_file;
   size_t min_non_white = 1;
   bool use_skia_cpu = false;
   bool audit_only = false;
@@ -569,6 +640,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "failed to read html file: %s\n", value);
         return 2;
       }
+      html_file = value;
       create_info.html = std::move(*html);
       AddLocalLinkedStylesheets(value, create_info.html, &create_info);
     } else if (arg == "--css") {
@@ -619,6 +691,15 @@ int main(int argc, char** argv) {
       paint_artifact_dump_path = value;
     } else if (arg.rfind("--dump-paint-artifact=", 0) == 0) {
       paint_artifact_dump_path = arg.substr(22);
+    } else if (arg == "--dump-page-setup") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      page_setup_dump_path = value;
+    } else if (arg.rfind("--dump-page-setup=", 0) == 0) {
+      page_setup_dump_path = arg.substr(18);
     } else if (arg == "--audit-only") {
       audit_only = true;
       disable_retained_extraction = true;
@@ -783,6 +864,13 @@ int main(int argc, char** argv) {
     audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
                << "\n";
   }
+  if (!page_setup_dump_path.empty() &&
+      !WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle, result,
+                          html_file, lifecycle_stop, use_blink)) {
+    std::fprintf(stderr, "failed to write page setup dump: %s\n",
+                 page_setup_dump_path.c_str());
+    return 1;
+  }
 
   if (disable_skia_raster) {
     if (!json_path.empty()) {
@@ -832,6 +920,13 @@ int main(int argc, char** argv) {
     }
     audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
                << "\n";
+  }
+  if (!page_setup_dump_path.empty() &&
+      !WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle, result,
+                          html_file, lifecycle_stop, use_blink)) {
+    std::fprintf(stderr, "failed to write page setup dump: %s\n",
+                 page_setup_dump_path.c_str());
+    return 1;
   }
 
   if (!paint_oracle.empty()) {

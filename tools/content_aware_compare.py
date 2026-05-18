@@ -18,7 +18,7 @@ try:
 except ImportError as exc:  # pragma: no cover - diagnostic script.
     raise SystemExit("Pillow is required: python -m pip install pillow") from exc
 
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="PIL")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 Rgb = Tuple[int, int, int]
@@ -176,11 +176,18 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
         "mask_difference_count": mask_difference,
         "mask_difference_percent": percent(mask_difference, total),
         "mask_artifact_suspected": mask_artifact_suspected,
+        "visual_match_under_threshold": changed_full == 0,
+        "exact_pixel_identical": exact_changed_full == 0,
         "changed_percent_full_viewport": percent(changed_full, total),
         "changed_percent_union_content_bbox": percent(changed_union, area(content_bbox)),
         "changed_percent_playwright_content_bbox": percent(changed_reference, area(reference_bbox)),
+        "thresholded_changed_percent_full_viewport": percent(changed_full, total),
+        "thresholded_changed_percent_union_content_bbox": percent(changed_union, area(content_bbox)),
+        "thresholded_changed_percent_playwright_content_bbox": percent(changed_reference, area(reference_bbox)),
         "missing_content_percent": percent(reported_missing, max(1, reference_content)),
         "extra_content_percent": percent(reported_extra, max(1, reference_content)),
+        "reported_missing_content_percent": percent(reported_missing, max(1, reference_content)),
+        "reported_extra_content_percent": percent(reported_extra, max(1, reference_content)),
         "mask_missing_content_percent": percent(missing, max(1, reference_content)),
         "mask_extra_content_percent": percent(extra, max(1, reference_content)),
     }
