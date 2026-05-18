@@ -1356,6 +1356,14 @@ Element* Document::CreateRawElement(const QualifiedName& qname,
                                     CreateElementFlags flags) {
   Element* element = nullptr;
   if (qname.NamespaceURI() == html_names::xhtmlNamespaceURI) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    if (qname == html_names::kImgTag) {
+      std::fprintf(stderr,
+                   "image_reachability.stage=document_create_raw_img\n");
+      std::fflush(stderr);
+    }
+#endif
     // https://html.spec.whatwg.org/C/#elements-in-the-dom:element-interface
     element = HTMLElementFactory::Create(qname.LocalName(), *this, flags);
     if (!element) {

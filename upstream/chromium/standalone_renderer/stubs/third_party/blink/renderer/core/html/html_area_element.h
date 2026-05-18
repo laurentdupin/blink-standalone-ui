@@ -21,6 +21,9 @@ class HTMLAreaElement final : public HTMLAnchorElementBase {
                const gfx::SizeF& default_length = gfx::SizeF()) const {
     return Path();
   }
+  Path GetPath(const LayoutObject*, const gfx::Vector2dF&) const {
+    return Path();
+  }
   HTMLImageElement* ImageElement() const { return nullptr; }
 };
 

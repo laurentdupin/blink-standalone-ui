@@ -57,6 +57,33 @@
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
+#include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
+#include "third_party/blink/renderer/core/html/html_image_element.h"
+#include "third_party/blink/renderer/core/html/html_picture_element.h"
+#include "third_party/blink/renderer/core/html/html_source_element.h"
+#include "third_party/blink/renderer/core/html/loading_attribute.h"
+#include "third_party/blink/renderer/core/css/media_values_dynamic.h"
+#include "third_party/blink/renderer/core/css/media_query_list_listener.h"
+#include "third_party/blink/renderer/core/css/parser/sizes_attribute_parser.h"
+#include "third_party/blink/renderer/core/html/parser/html_srcset_parser.h"
+#include "third_party/blink/renderer/core/html/html_image_fallback_helper.h"
+#include "third_party/blink/renderer/core/html/html_object_element.h"
+#include "third_party/blink/renderer/core/highlight/highlight_style_utils.h"
+#include "third_party/blink/renderer/core/image_replacement/document_image_replacements.h"
+#include "third_party/blink/renderer/core/image_replacement/image_replacement.h"
+#include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
+#include "third_party/blink/renderer/core/layout/layout_image_replacement.h"
+#include "third_party/blink/renderer/core/loader/resource/image_resource.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
+#include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
+#include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
+#include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
+#include "third_party/blink/renderer/platform/network/mime/content_type.h"
+#include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
+#endif
 #include "third_party/blink/renderer/core/html/html_li_element.h"
 #include "third_party/blink/renderer/core/html/html_olist_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
@@ -1629,6 +1656,15 @@ bool RuntimeEnabledFeaturesBase::
     is_customizable_select_multiple_popup_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_select_remove_overflow_hidden_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::is_image_srcset_reselection_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_shared_storage_api_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_lazy_image_conformant_load_event_timing_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_html_image_element_actual_natural_size_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_topics_api_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_all_images_painted_sent_to_element_timing_enabled_ = false;
 
 void SetStandaloneDocumentBodyForStandaloneRenderer(Document*, HTMLElement*);
 
@@ -2026,6 +2062,7 @@ class AttributionSrcLoader {
   ~AttributionSrcLoader();
   void Trace(Visitor*) const;
   void Register(const AtomicString&, HTMLElement*, network::mojom::ReferrerPolicy);
+  bool CanRegister(const KURL&, HTMLElement*, bool = true);
   std::optional<Impression> RegisterNavigation(
       const KURL&,
       const std::vector<WebString>&,
@@ -2552,6 +2589,16 @@ BASE_FEATURE(kVisualRectMappingApplyLocalVisualViewportTransform,
 BASE_FEATURE(kCaptureJSExecutionLocation,
              "CaptureJSExecutionLocation",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kSpeculativeImageDecodes,
+             "SpeculativeImageDecodes",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kLCPCriticalPathPredictor,
+             "LCPCriticalPathPredictor",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<bool>
+    kLCPCriticalPathPredictorImageLoadPriorityEnabledForHTMLImageElement{
+        &kLCPCriticalPathPredictor, "image-load-priority-for-html-image",
+        false};
 BASE_FEATURE(kBackForwardCacheDWCOnJavaScriptExecution,
              "BackForwardCacheDWCOnJavaScriptExecution",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2636,6 +2683,8 @@ const WrapperTypeInfo& HTMLDivElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLDivElement");
 const WrapperTypeInfo& HTMLFormElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLFormElement");
+const WrapperTypeInfo& HTMLImageElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLImageElement");
 const WrapperTypeInfo& HTMLHeadingElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLHeadingElement");
 const WrapperTypeInfo& HTMLHtmlElement::wrapper_type_info_ =
@@ -2823,6 +2872,13 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
     return MakeGarbageCollected<HTMLHeadElement>(document);
   if (local_name == html_names::kBodyTag.LocalName())
     return MakeGarbageCollected<HTMLBodyElement>(document);
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  if (local_name == html_names::kImgTag.LocalName()) {
+    std::fprintf(stderr, "image_reachability.stage=create_html_image_element\n");
+    std::fflush(stderr);
+    return MakeGarbageCollected<HTMLImageElement>(document);
+  }
+#endif
   if (local_name == html_names::kFormTag.LocalName()) {
     return MakeGarbageCollected<HTMLFormElement>(document);
   }
@@ -2859,6 +2915,277 @@ SVGElement* SVGElementFactory::Create(const AtomicString&,
                                       const CreateElementFlags) {
   return nullptr;
 }
+
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+bool LcppScriptObserverEnabled() {
+  return false;
+}
+
+HashSet<String> LCPScriptObserver::GetExecutingScriptUrls() {
+  return HashSet<String>();
+}
+
+ImageCandidate BestFitSourceForImageAttributes(float,
+                                               float,
+                                               const String& src_attribute,
+                                               const String&,
+                                               Document*) {
+  if (src_attribute.empty()) {
+    return ImageCandidate();
+  }
+  DescriptorParsingResult result;
+  result.SetDensity(1.0f);
+  return ImageCandidate(src_attribute, 0, src_attribute.length(), result,
+                        ImageCandidate::kSrcOrigin);
+}
+
+ImageCandidate BestFitSourceForSrcsetAttribute(float,
+                                               float,
+                                               const String&,
+                                               Document*) {
+  return ImageCandidate();
+}
+
+String BestFitSourceForImageAttributes(float,
+                                       float,
+                                       const String& src_attribute,
+                                       ImageCandidate& srcset_image_candidate) {
+  srcset_image_candidate = ImageCandidate();
+  return src_attribute;
+}
+
+void HTMLFormElement::Associate(HTMLImageElement&) {}
+void HTMLFormElement::Disassociate(HTMLImageElement&) {}
+void MediaQueryMatcher::AddViewportListener(MediaQueryListListener*) {}
+void MediaQueryMatcher::RemoveViewportListener(MediaQueryListListener*) {}
+LoadingAttributeValue GetLoadingAttributeValue(const String&) {
+  return LoadingAttributeValue::kAuto;
+}
+Image::ImageDecodingMode ImageElementBase::ParseImageDecodingMode(
+    const AtomicString&) {
+  return Image::kSyncDecode;
+}
+Image::ImageDecodingMode ImageElementBase::GetDecodingModeForPainting(
+    PaintImage::Id) {
+  return decoding_mode_;
+}
+CrossOriginAttributeValue GetCrossOriginAttributeValue(const String&) {
+  return kCrossOriginAttributeNotSet;
+}
+ContentType::ContentType(const String& type) : type_(type) {}
+String ContentType::GetType() const {
+  return type_;
+}
+bool MIMETypeRegistry::IsSupportedImagePrefixedMIMEType(const String& type) {
+  return type.StartsWithIgnoringAsciiCase("image/");
+}
+bool HTMLSourceElement::MediaQueryMatches() const {
+  return false;
+}
+void HTMLPictureElement::AddListenerToSourceChildren() {}
+void HTMLPictureElement::RemoveListenerFromSourceChildren() {}
+
+bool LCPCriticalPathPredictor::IsElementMatchingLocator(
+    const Element& element) {
+  return false;
+}
+
+void HTMLFormElement::DidAssociateByParser() {}
+
+MediaValues* MediaValuesDynamic::Create(Document&) {
+  return nullptr;
+}
+
+SizesAttributeParser::SizesAttributeParser(MediaValues*,
+                                           const String&,
+                                           ExecutionContext*,
+                                           const HTMLImageElement*) {}
+
+bool SizesAttributeParser::IsAuto() {
+  return false;
+}
+
+float SizesAttributeParser::Size() {
+  return 100.0f;
+}
+
+const SVGImageViewInfo* SVGImageForContainer::CreateViewInfo(
+    SVGImage&,
+    const Element&) {
+  return nullptr;
+}
+
+gfx::SizeF SVGImageForContainer::ConcreteObjectSize(
+    SVGImage&,
+    const SVGImageViewInfo*,
+    const gfx::SizeF& default_object_size) {
+  return default_object_size;
+}
+
+std::optional<NaturalSizingInfo> SVGImageForContainer::GetNaturalDimensions(
+    SVGImage&,
+    const SVGImageViewInfo*) {
+  return std::nullopt;
+}
+
+void SVGImage::CheckLoaded() const {}
+void SVGImage::UpdateUseCountersAfterLoad(const Document&) const {}
+void SVGImage::MaybeRecordSvgImageProcessingTime(Document const&) {}
+
+mojom::blink::FetchPriorityHint GetFetchPriorityAttributeValue(
+    const String&) {
+  return mojom::blink::FetchPriorityHint::kAuto;
+}
+
+DocumentImageReplacements* DocumentImageReplacements::FromIfExists(
+    Document&) {
+  return nullptr;
+}
+
+ImageReplacement* DocumentImageReplacements::GetImageReplacement(
+    HTMLImageElement*) const {
+  return nullptr;
+}
+
+void ImageReplacement::ResetImageReplacement(base::PassKey<HTMLImageElement>,
+                                             HTMLImageElement&,
+                                             Document&) {}
+
+void ImageReplacement::CreateImageReplacementShadowTree(
+    base::PassKey<HTMLImageElement>,
+    HTMLImageElement&) {}
+
+bool ImageReplacement::ResumeReplacementAfterImageLoad() {
+  return false;
+}
+
+void HTMLImageFallbackHelper::CreateAltTextShadowTree(Element&) {}
+
+void HTMLImageFallbackHelper::AdjustHostStyle(HTMLElement&,
+                                              ComputedStyleBuilder&) {}
+
+MediaQueryListListener::MediaQueryListListener() = default;
+
+void HTMLSourceElement::Trace(Visitor* visitor) const {
+  HTMLElement::Trace(visitor);
+}
+
+LayoutImageReplacement::LayoutImageReplacement(HTMLImageElement* element)
+    : LayoutImage(element) {}
+LayoutImageReplacement::~LayoutImageReplacement() = default;
+void LayoutImageReplacement::Trace(Visitor* visitor) const {
+  LayoutImage::Trace(visitor);
+}
+bool LayoutImageReplacement::IsChildAllowed(LayoutObject*,
+                                            const ComputedStyle&) const {
+  return false;
+}
+void LayoutImageReplacement::PaintReplaced(
+    const PaintInfo&,
+    const PhysicalOffset&) const {}
+
+scoped_refptr<Image> ImageElementBase::GetSourceImageForCanvas(
+    SourceImageStatus* status,
+    const gfx::SizeF&) {
+  if (status) {
+    *status = kIncompleteSourceImageStatus;
+  }
+  return nullptr;
+}
+
+bool ImageElementBase::WouldTaintOrigin() const {
+  return false;
+}
+
+bool ImageElementBase::IsImageElement() const {
+  return true;
+}
+
+gfx::SizeF ImageElementBase::ElementSize(
+    const gfx::SizeF& default_object_size,
+    const RespectImageOrientationEnum) const {
+  return default_object_size;
+}
+
+gfx::SizeF ImageElementBase::DefaultDestinationSize(
+    const gfx::SizeF& default_object_size,
+    const RespectImageOrientationEnum) const {
+  return default_object_size;
+}
+
+const KURL& ImageElementBase::SourceURL() const {
+  static KURL* url = new KURL();
+  return *url;
+}
+
+bool ImageElementBase::IsOpaque() const {
+  return false;
+}
+
+bool ImageElementBase::IsAccelerated() const {
+  return false;
+}
+
+ImageBitmapSourceStatus ImageElementBase::CheckUsability() const {
+  return base::ok();
+}
+
+ScriptPromise<ImageBitmap> ImageElementBase::CreateImageBitmap(
+    ScriptState*,
+    std::optional<gfx::Rect>,
+    const ImageBitmapOptions*,
+    ExceptionState&) {
+  return ScriptPromise<ImageBitmap>();
+}
+
+ScriptPromise<ImageBitmap> ImageBitmapSource::CreateImageBitmap(
+    ScriptState*,
+    std::optional<gfx::Rect>,
+    const ImageBitmapOptions*,
+    ExceptionState&) {
+  return ScriptPromise<ImageBitmap>();
+}
+
+void HTMLObjectElement::RenderFallbackContent(
+    HTMLObjectElement::ErrorEventPolicy) {}
+
+void ScriptPromiseResolverBase::Reject(DOMException*) {}
+
+int IdentifiersFactory::IntIdForNode(Node*) {
+  return 0;
+}
+
+const String& IdentifiersFactory::FrameId(Frame*) {
+  static String* id = new String("standalone-frame");
+  return *id;
+}
+
+void ImageElementTiming::NotifyImagePainted(
+    const LayoutObject&,
+    const ImageResourceContent&,
+    const PropertyTreeStateOrAlias&,
+    const gfx::Rect&) {}
+
+bool PaintTimingDetector::NotifyImagePaint(
+    const LayoutObject&,
+    const gfx::Size&,
+    const MediaTiming&,
+    const PropertyTreeStateOrAlias&,
+    const gfx::Rect&) {
+  return false;
+}
+
+Color HighlightStyleUtils::HighlightBackgroundColor(
+    const Document&,
+    const ComputedStyle&,
+    Node*,
+    std::optional<Color>,
+    PseudoId,
+    bool,
+    SearchTextIsActiveMatch) {
+  return Color::kTransparent;
+}
+#endif
 
 MathMLElement* MathMLElementFactory::Create(const AtomicString&,
                                             Document&,
@@ -2933,6 +3260,7 @@ const WrapperTypeInfo& TrustedTypePolicyFactory::wrapper_type_info_ =
     StandaloneDummyWrapperTypeInfo();
 
 ResourceRequestHead::ResourceRequestHead() = default;
+ResourceRequestHead::ResourceRequestHead(const KURL& url) : url_(url) {}
 ResourceRequestHead::ResourceRequestHead(ResourceRequestHead&&) = default;
 ResourceRequestHead::~ResourceRequestHead() = default;
 
@@ -2955,7 +3283,9 @@ ResourceRequestBody::~ResourceRequestBody() = default;
 
 ResourceRequest::ResourceRequest() = default;
 ResourceRequest::ResourceRequest(const String&) : ResourceRequest() {}
-ResourceRequest::ResourceRequest(const KURL&) : ResourceRequest() {}
+ResourceRequest::ResourceRequest(const KURL& url) : ResourceRequest() {
+  SetUrl(url);
+}
 ResourceRequest::ResourceRequest(const ResourceRequestHead&) : ResourceRequest() {}
 ResourceRequest::ResourceRequest(ResourceRequest&&) = default;
 ResourceRequest::~ResourceRequest() = default;
@@ -3437,6 +3767,12 @@ int ItalicMathVariant(int character) {
 KURL MemoryCache::RemoveFragmentIdentifierIfNeeded(const KURL& url) {
   return url;
 }
+MemoryCache* MemoryCache::Get() {
+  return reinterpret_cast<MemoryCache*>(1);
+}
+Resource* MemoryCache::ResourceForURL(const KURL&, const String&) const {
+  return nullptr;
+}
 
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 namespace {
@@ -3513,12 +3849,21 @@ ImageResourceContent* ImageResourceContent::CreateLoaded(
 ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
                                                   ResourceFetcher*) {
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=image_resource_content_fetch url=%s\n",
+               params.Url().GetString().Utf8().c_str());
+  std::fflush(stderr);
   StandaloneRendererNoteImageResourceContentFetch(
       params.Url().GetString().Utf8().c_str());
   if (scoped_refptr<Image> image =
           DecodeStandaloneDataUrlPngImage(params.Url())) {
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_resource_content_fetch_decoded\n");
+    std::fflush(stderr);
     return ImageResourceContent::CreateLoaded(std::move(image));
   }
+  std::fprintf(stderr,
+               "image_reachability.stage=image_resource_content_fetch_decode_failed\n");
+  std::fflush(stderr);
 #endif
   return nullptr;
 }
@@ -3566,6 +3911,28 @@ bool ImageResourceContent::IsBroken() const {
 void ImageResourceContent::SetIsBroken() {
   is_broken_ = true;
 }
+float ImageResourceContent::DevicePixelRatioHeaderValue() const {
+  return 1.0f;
+}
+bool ImageResourceContent::HasDevicePixelRatioHeaderValue() const {
+  return false;
+}
+std::optional<ResourceError> ImageResourceContent::GetResourceError() const {
+  return std::nullopt;
+}
+const ResourceResponse& ImageResourceContent::GetResponse() const {
+  static ResourceResponse* response = new ResourceResponse();
+  return *response;
+}
+bool ImageResourceContent::IsLoading() const {
+  return false;
+}
+bool ImageResourceContent::IsLoaded() const {
+  return image_.get();
+}
+ResourceStatus ImageResourceContent::GetContentStatus() const {
+  return image_ ? ResourceStatus::kCached : ResourceStatus::kNotStarted;
+}
 bool ImageResourceContent::IsCorsSameOrigin() const {
   return true;
 }
@@ -3584,6 +3951,14 @@ bool ImageResourceContent::ShouldPauseAnimation(const blink::Image*) {
 }
 void ImageResourceContent::Changed(const blink::Image*) {}
 void ImageResourceContent::AsyncLoadCompleted(const blink::Image*) {}
+void ImageResourceContent::RecordDecodedImageType(UseCounter*) {}
+void ImageResourceContent::RecordDecodedImageC2PA(UseCounter*) {}
+
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+bool ImageResource::IsAboveSpeculativeDecodeSizeThreshold(const gfx::Size&) {
+  return false;
+}
+#endif
 
 void Resource::Trace(Visitor* visitor) const {
   visitor->Trace(clients_);
@@ -7434,7 +7809,8 @@ PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
 }
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
 }
@@ -7454,10 +7830,28 @@ WebPluginContainerImpl* PluginDocument::GetPluginView() {
   return nullptr;
 }
 void ResourceFetcher::UpdateImagePrioritiesAndSpeculativeDecodes() {}
+void ResourceFetcher::StartSpeculativeImageDecodes() {}
 void ResourceFetcher::SetDefersLoading(LoaderFreezeMode) {}
+String ResourceFetcher::GetCacheIdentifier(const KURL&, bool) const {
+  return String();
+}
 const KURL& ResourceRequestHead::Url() const {
-  static KURL* url = new KURL();
-  return *url;
+  return url_;
+}
+void ResourceRequestHead::SetUrl(const KURL& url) {
+  url_ = url;
+}
+void ResourceRequestHead::SetCacheMode(mojom::blink::FetchCacheMode) {}
+void ResourceRequestHead::SetHttpHeaderField(const AtomicString&,
+                                             const AtomicString&) {}
+void FetchParameters::SetLazyImageDeferred() {
+  image_request_behavior_ = ImageRequestBehavior::kDeferImageLoad;
+}
+void FetchParameters::SetLazyImageNonBlocking() {
+  image_request_behavior_ = ImageRequestBehavior::kNonBlockingImage;
+}
+void FetchParameters::SetResourceWidth(const std::optional<float> width) {
+  resource_width_ = width;
 }
 HTMLFormElement* FrameLoadRequest::Form() const {
   return nullptr;
@@ -7756,6 +8150,9 @@ void PerformanceMonitor::DidProcessTask(base::TimeTicks, base::TimeTicks) {}
 AttributionSrcLoader::AttributionSrcLoader(LocalFrame*) {}
 AttributionSrcLoader::~AttributionSrcLoader() = default;
 void AttributionSrcLoader::Trace(Visitor*) const {}
+bool AttributionSrcLoader::CanRegister(const KURL&, HTMLElement*, bool) {
+  return false;
+}
 std::optional<Impression> AttributionSrcLoader::RegisterNavigation(
     const KURL&,
     const std::vector<WebString>&,
@@ -8567,7 +8964,15 @@ KURL::KURL(const StringView& string)
     : is_valid_(!string.IsNull()),
       protocol_is_in_http_family_(false),
       parsed_(),
-      string_(AtomicString(string.ToString())) {}
+      string_(AtomicString(string.ToString())) {
+  std::string value = string_.GetString().Utf8();
+  const size_t colon = value.find(':');
+  if (colon != std::string::npos) {
+    protocol_ = AtomicString(value.substr(0, colon).c_str());
+    protocol_is_in_http_family_ =
+        protocol_ == "http" || protocol_ == "https";
+  }
+}
 KURL::KURL(const KURL& other)
     : is_valid_(other.is_valid_),
       protocol_is_in_http_family_(other.protocol_is_in_http_family_),
@@ -8595,7 +9000,15 @@ KURL& KURL::operator=(const KURL& other) {
   return *this;
 }
 KURL::KURL(const KURL&, const StringView& relative, const TextEncoding&)
-    : KURL(relative) {}
+    : KURL(relative) {
+  std::string value = GetString().Utf8();
+  const size_t colon = value.find(':');
+  if (colon != std::string::npos) {
+    protocol_ = AtomicString(value.substr(0, colon).c_str());
+    protocol_is_in_http_family_ =
+        protocol_ == "http" || protocol_ == "https";
+  }
+}
 void KURL::WriteIntoTrace(perfetto::TracedValue) const {}
 const AtomicString& HTMLLinkElement::GetType() const {
   return g_empty_atom;
@@ -8810,7 +9223,9 @@ void V8UnionStringOrTrustedHTML::Trace(Visitor* visitor) const {
   visitor->Trace(member_trusted_html_);
 }
 void ViewTransitionSupplement::Trace(Visitor*) const {}
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 void HTMLImageElement::OnResize() {}
+#endif
 void NodeIterator::Trace(Visitor*) const {}
 void Range::Trace(Visitor*) const {}
 SVGDocumentExtensions::~SVGDocumentExtensions() = default;
@@ -9103,6 +9518,11 @@ AXObjectCache* AXObjectCache::Create(Document&, const ui::AXMode&) {
 }
 CanvasFontCache::CanvasFontCache(Document&) {}
 bool LazyImageHelper::LoadAllImagesAndBlockLoadEvent(Document&) {
+  return false;
+}
+void LazyImageHelper::StartMonitoring(Element*) {}
+void LazyImageHelper::StopMonitoring(Element*) {}
+bool LazyImageHelper::ShouldDeferImageLoad(LocalFrame&, HTMLImageElement*) {
   return false;
 }
 void DisplayLockDocumentState::NotifyPrintingOrPreviewChanged() {}
@@ -10076,7 +10496,15 @@ const AtomicString& QualifiedName::LocalNameUpperSlow() const {
   return LocalName();
 }
 #endif
-KURL::KURL(const KURL& base, const StringView&) : KURL(base) {}
+KURL::KURL(const KURL&, const StringView& relative) : KURL(relative) {
+  std::string value = GetString().Utf8();
+  const size_t colon = value.find(':');
+  if (colon != std::string::npos) {
+    protocol_ = AtomicString(value.substr(0, colon).c_str());
+    protocol_is_in_http_family_ =
+        protocol_ == "http" || protocol_ == "https";
+  }
+}
 bool KURL::IsAboutBlankUrl() const {
   return false;
 }
@@ -11543,13 +11971,20 @@ void PaintTimingDetector::NotifyImageFinished(const LayoutObject&,
                                               const MediaTiming*) {}
 void PaintTimingDetector::NotifyImageRemoved(const LayoutObject&,
                                              const ImageResourceContent*) {}
-ImageElementTiming& ImageElementTiming::From(LocalDOMWindow&) {
-  return *static_cast<ImageElementTiming*>(nullptr);
+ImageElementTiming::ImageElementTiming(LocalDOMWindow& window)
+    : Supplement<LocalDOMWindow>(window) {}
+ImageElementTiming& ImageElementTiming::From(LocalDOMWindow& window) {
+  static Persistent<ImageElementTiming> timing;
+  if (!timing) {
+    timing = MakeGarbageCollected<ImageElementTiming>(window);
+  }
+  return *timing;
 }
 void ImageElementTiming::NotifyImageFinished(const LayoutObject&,
                                              const ImageResourceContent*) {}
 void ImageElementTiming::NotifyImageRemoved(const LayoutObject*,
                                             const ImageResourceContent*) {}
+void ImageElementTiming::Trace(Visitor*) const {}
 bool ImageResourceContent::ErrorOccurred() const {
   return false;
 }
@@ -12491,6 +12926,9 @@ WeakReference& WeakReference::operator=(WeakReference&& other) noexcept {
   flag_ = std::move(other.flag_);
   return *this;
 }
+void WeakReference::Reset() {
+  flag_ = nullptr;
+}
 bool WeakReference::IsValid() const {
   return MaybeValid();
 }
@@ -13250,7 +13688,17 @@ size_t BaseObjectSizeTrait::GetObjectSizeForGarbageCollected(const void*) {
 }
 CrossThreadPersistentRegion&
 WeakCrossThreadPersistentPolicy::GetPersistentRegion(const void*) {
-  return *static_cast<CrossThreadPersistentRegion*>(nullptr);
+  static FatalOutOfMemoryHandler* oom =
+      reinterpret_cast<FatalOutOfMemoryHandler*>(1);
+  alignas(CrossThreadPersistentRegion) static unsigned char storage
+      [sizeof(CrossThreadPersistentRegion)];
+  static CrossThreadPersistentRegion* region =
+      ::new (storage) CrossThreadPersistentRegion(*oom);
+  return *region;
+}
+CrossThreadPersistentRegion&
+StrongCrossThreadPersistentPolicy::GetPersistentRegion(const void*) {
+  return WeakCrossThreadPersistentPolicy::GetPersistentRegion(nullptr);
 }
 CrossThreadPersistentRegion::CrossThreadPersistentRegion(
     const FatalOutOfMemoryHandler& oom_handler)
@@ -13597,6 +14045,7 @@ void Data(perfetto::TracedValue,
 }  // namespace inspector_layout_invalidation_tracking_event
 
 namespace http_names {
+const AtomicString& kCacheControl = *new AtomicString("Cache-Control");
 const AtomicString& kSourceMap = *new AtomicString("SourceMap");
 const AtomicString& kXSourceMap = *new AtomicString("X-SourceMap");
 }  // namespace http_names
@@ -14023,6 +14472,7 @@ wtf_size_t GridLineResolver::SubgridSpanSize(GridTrackSizingDirection) const {
 }
 #endif
 
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 LayoutImage* LayoutImage::CreateAnonymous(Document&) {
   return nullptr;
 }
@@ -14033,6 +14483,7 @@ void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
     image_resource_->Initialize(this);
   }
 }
+#endif
 LayoutListMarkerImage* LayoutListMarkerImage::CreateAnonymous(Document*) {
   return nullptr;
 }
@@ -15191,7 +15642,8 @@ PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
   return rect;
 }
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
     const PhysicalRect& rect) {
   return rect;
@@ -17873,9 +18325,11 @@ bool SVGLayoutSupport::IsIsolationRequired(const LayoutObject*) {
 bool SVGLayoutSupport::IsOverflowHidden(const LayoutObject&) {
   return false;
 }
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 bool LayoutReplaced::ClipsToContentBox() const {
   return false;
 }
+#endif
 bool LayoutShiftTracker::NeedsToTrack(const LayoutObject&) const {
   return false;
 }

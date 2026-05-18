@@ -22,9 +22,11 @@
 
 #include "third_party/blink/renderer/core/loader/image_loader.h"
 
+#include <cstdio>
 #include <memory>
 #include <utility>
 
+#include "cc/paint/draw_image.h"
 #include "services/network/public/mojom/attribution.mojom-blink.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
@@ -61,6 +63,7 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_image.h"
 #include "third_party/blink/renderer/core/loader/fetch_priority_attribute.h"
 #include "third_party/blink/renderer/core/loader/lazy_image_helper.h"
+#include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/probe/async_task_context.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
@@ -430,6 +433,11 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
                                       const KURL* source_url,
                                       UpdateType update_type,
                                       bool force_blocking) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=image_loader_do_update\n");
+  std::fflush(stderr);
+#endif
   // FIXME: According to
   // http://www.whatwg.org/specs/web-apps/current-work/multipage/embedded-content.html#the-img-element:the-img-element-55
   // When "update image" is called due to environment changes and the load
@@ -462,6 +470,13 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
   } else {
     url = ImageSourceToKURL(image_source_url);
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::string url_utf8 = url.GetString().Utf8();
+  std::fprintf(stderr, "image_reachability.stage=image_loader_url url=%s\n",
+               url_utf8.c_str());
+  std::fflush(stderr);
+#endif
   ImageResourceContent* new_image_content = nullptr;
   if (!url.IsNull() && !url.IsEmpty()) {
     // Unlike raw <img>, we block mixed content inside of <picture> or
@@ -645,7 +660,18 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
 
 void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
                                     bool force_blocking) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=image_loader_update_from_element\n");
+  std::fflush(stderr);
+#endif
   if (!element_->GetDocument().IsActive()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_loader_update_document_inactive\n");
+    std::fflush(stderr);
+#endif
     return;
   }
 
@@ -687,8 +713,25 @@ void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
   if (update_behavior == kUpdateIgnorePreviousError) {
     SoftNavigationHeuristics::ModifiedNode(element_.Get());
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=image_loader_after_soft_navigation\n");
+  std::fflush(stderr);
+#endif
 
   const KURL image_source_kurl = ImageSourceToKURL(image_source_url);
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::string image_source_utf8 = image_source_kurl.GetString().Utf8();
+  const bool standalone_should_load_immediately =
+      ShouldLoadImmediately(image_source_kurl);
+  std::fprintf(stderr,
+               "image_reachability.stage=image_loader_should_load immediate=%d url=%s\n",
+               standalone_should_load_immediately ? 1 : 0,
+               image_source_utf8.c_str());
+  std::fflush(stderr);
+#endif
   if (ShouldLoadImmediately(image_source_kurl) &&
       update_behavior != kUpdateFromMicrotask) {
     DoUpdateFromElement(element_->GetExecutionContext()->GetCurrentWorld(),
@@ -743,6 +786,12 @@ KURL ImageLoader::ImageSourceToKURL(AtomicString image_source_url) const {
 }
 
 bool ImageLoader::ShouldLoadImmediately(const KURL& url) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  if (url.ProtocolIs("data")) {
+    return true;
+  }
+#endif
   // We force any image loads which might require alt content through the
   // asynchronous path so that we can add the shadow DOM for the alt-text
   // content when style recalc is over and DOM mutation is allowed again.
@@ -879,8 +928,19 @@ LayoutImageResource* ImageLoader::GetLayoutImageResource() const {
 }
 
 void ImageLoader::OnAttachLayoutTree() {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=image_loader_on_attach\n");
+  std::fflush(stderr);
+#endif
   LayoutImageResource* image_resource = GetLayoutImageResource();
   if (!image_resource) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_loader_on_attach_no_resource\n");
+    std::fflush(stderr);
+#endif
     return;
   }
   // If the LayoutImageResource already has an image, it either means that it
@@ -888,9 +948,27 @@ void ImageLoader::OnAttachLayoutTree() {
   // url(...)") - in which case we don't need to do anything or shouldn't do
   // anything respectively.
   if (image_resource->HasImage()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_loader_on_attach_resource_has_image\n");
+    std::fflush(stderr);
+#endif
     return;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=image_loader_on_attach_set_resource\n");
+  std::fflush(stderr);
+#endif
   image_resource->SetImageResource(image_content_);
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=image_loader_on_attach_done\n");
+  std::fflush(stderr);
+#endif
 }
 
 void ImageLoader::UpdateLayoutObject() {

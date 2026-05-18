@@ -51,10 +51,16 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+
+#include <cstdio>
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+extern "C" void StandaloneRendererNoteLayoutImageSetResource();
+#endif
 
 LayoutImage::LayoutImage(Element* element) : LayoutReplaced(element) {}
 
@@ -80,6 +86,11 @@ void LayoutImage::WillBeDestroyed() {
 }
 
 void LayoutImage::InsertedIntoTree() {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=layout_image_inserted_into_tree\n");
+  std::fflush(stderr);
+#endif
   NOT_DESTROYED();
   ImageResourceContent* image_content = image_resource_->CachedImage();
   LocalDOMWindow* window = GetDocument().domWindow();
@@ -89,9 +100,26 @@ void LayoutImage::InsertedIntoTree() {
   // would be required for timing. Notify at this point now it is attached to
   // its parent.
   if (!GetNode() && window && image_content && image_content->IsLoaded()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    std::fprintf(stderr,
+                 "image_reachability.stage=layout_image_before_timing_notify\n");
+    std::fflush(stderr);
+#endif
     ImageElementTiming::From(*window).NotifyImageFinished(*this, image_content);
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_before_replaced_inserted_into_tree\n");
+  std::fflush(stderr);
+#endif
   LayoutReplaced::InsertedIntoTree();
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=layout_image_inserted_into_tree_done\n");
+  std::fflush(stderr);
+#endif
 }
 
 void GetImageSizeChangeTracingData(perfetto::TracedValue context,
@@ -131,10 +159,25 @@ void LayoutImage::StyleDidChange(
 }
 
 void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr, "image_reachability.stage=layout_image_set_resource resource=%p\n",
+               image_resource);
+  std::fflush(stderr);
+  StandaloneRendererNoteLayoutImageSetResource();
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_set_resource_after_note\n");
+  std::fflush(stderr);
+#endif
   NOT_DESTROYED();
   DCHECK(!image_resource_);
   image_resource_ = image_resource;
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_before_resource_initialize\n");
+  std::fflush(stderr);
   image_resource_->Initialize(this);
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_after_resource_initialize\n");
+  std::fflush(stderr);
 }
 
 void LayoutImage::ImageChanged(WrappedImagePtr new_image,
@@ -221,13 +264,31 @@ bool CanQueryNaturalSize(const LayoutImageResource& image_resource) {
 }  // namespace
 
 bool LayoutImage::UpdateNaturalSizeIfNeeded() {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_update_natural_size\n");
+  std::fflush(stderr);
+#endif
   NOT_DESTROYED();
   PhysicalNaturalSizingInfo new_natural_dimensions;
   // If the image resource is not associated with an image then we set natural
   // dimensions of 0x0 ("represents nothing" per HTML spec).
   if (CanQueryNaturalSize(*image_resource_)) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    std::fprintf(stderr,
+                 "image_reachability.stage=layout_image_before_get_natural_dimensions\n");
+    std::fflush(stderr);
+#endif
     new_natural_dimensions = PhysicalNaturalSizingInfo::FromSizingInfo(
         image_resource_->GetNaturalDimensions(StyleRef().EffectiveZoom()));
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    std::fprintf(stderr,
+                 "image_reachability.stage=layout_image_after_get_natural_dimensions\n");
+    std::fflush(stderr);
+#endif
   }
   const bool dimensions_changed = natural_dimensions_ != new_natural_dimensions;
   if (!image_resource_->ErrorOccurred()) {

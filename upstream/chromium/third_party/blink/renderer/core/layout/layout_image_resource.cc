@@ -28,6 +28,8 @@
 
 #include "third_party/blink/renderer/core/layout/layout_image_resource.h"
 
+#include <cstdio>
+
 #include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
@@ -73,11 +75,22 @@ void LayoutImageResource::Trace(Visitor* visitor) const {
 
 void LayoutImageResource::Initialize(LayoutObject* layout_object) {
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_resource_initialize\n");
+  std::fflush(stderr);
   StandaloneRendererNoteLayoutImageResourceInitialize();
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_resource_initialize_after_note\n");
+  std::fflush(stderr);
 #endif
   DCHECK(!layout_object_);
   DCHECK(layout_object);
   layout_object_ = layout_object;
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_resource_initialize_done\n");
+  std::fflush(stderr);
+#endif
 }
 
 void LayoutImageResource::Shutdown() {
@@ -142,6 +155,9 @@ RespectImageOrientationEnum LayoutImageResource::ImageOrientation() const {
 NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(
     float multiplier) const {
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  std::fprintf(stderr,
+               "image_reachability.stage=layout_image_resource_get_natural_dimensions\n");
+  std::fflush(stderr);
   StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
 #endif
   if (!cached_image_ || !cached_image_->IsSizeAvailable() ||

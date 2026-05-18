@@ -23,6 +23,8 @@
 
 #include "third_party/blink/renderer/core/dom/container_node.h"
 
+#include <cstdio>
+
 #include "third_party/blink/renderer/bindings/core/v8/v8_get_html_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_sethtmlunsafeoptions_trustedparseroptions.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
@@ -69,6 +71,7 @@
 #include "third_party/blink/renderer/core/html/html_stream.h"
 #include "third_party/blink/renderer/core/html/html_tag_collection.h"
 #include "third_party/blink/renderer/core/html/html_template_element.h"
+#include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/parser/fragment_parser.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_block_flow.h"
@@ -1499,8 +1502,29 @@ void ContainerNode::RemovedFrom(ContainerNode& insertion_point) {
 
 DISABLE_CFI_PERF
 void ContainerNode::AttachLayoutTree(AttachContext& context) {
-  for (Node* child = firstChild(); child; child = child->nextSibling())
+  for (Node* child = firstChild(); child; child = child->nextSibling()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    if (auto* element = DynamicTo<Element>(child)) {
+      if (element->localName() == html_names::kImgTag.LocalName()) {
+        std::fprintf(stderr,
+                     "image_reachability.stage=container_before_attach_img\n");
+        std::fflush(stderr);
+      }
+    }
+#endif
     child->AttachLayoutTree(context);
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    if (auto* element = DynamicTo<Element>(child)) {
+      if (element->localName() == html_names::kImgTag.LocalName()) {
+        std::fprintf(stderr,
+                     "image_reachability.stage=container_after_attach_img\n");
+        std::fflush(stderr);
+      }
+    }
+#endif
+  }
   Node::AttachLayoutTree(context);
   ClearChildNeedsReattachLayoutTree();
 }

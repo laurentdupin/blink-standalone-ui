@@ -27,6 +27,7 @@
 #include "third_party/blink/renderer/core/html/parser/html_construction_site.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <limits>
 #include <utility>
 
@@ -1356,6 +1357,14 @@ Element* HTMLConstructionSite::CreateElement(
            ? static_cast<const QualifiedName&>(
                  html_names::TagToQualifiedName(token->GetHTMLTag()))
            : QualifiedName(g_null_atom, token->GetName(), namespace_uri));
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  if (tag_name == html_names::kImgTag) {
+    std::fprintf(stderr,
+                 "image_reachability.stage=construction_site_create_img\n");
+    std::fflush(stderr);
+  }
+#endif
   // "5. Let is be the value of the "is" attribute in the given token ..." etc.
   const Attribute* is_attribute = token->GetAttributeItem(html_names::kIsAttr);
   const AtomicString& is = is_attribute ? is_attribute->Value() : g_null_atom;
