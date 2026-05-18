@@ -194,17 +194,35 @@ NOINLINE void DetermineAlgorithmAndRun(const LayoutAlgorithmParams& params,
 inline const LayoutResult* LayoutWithAlgorithm(
     const LayoutAlgorithmParams& params) {
   const LayoutResult* result = nullptr;
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  if (const LayoutBox* box = params.node.GetLayoutBox()) {
+    if (box->IsLayoutImage() || box->IsLayoutReplaced()) {
+      std::fprintf(stderr,
+                   "image_reachability.stage=layout_with_algorithm_before "
+                   "box=%p is_image=%d is_replaced=%d\n",
+                   static_cast<const void*>(box), box->IsLayoutImage(),
+                   box->IsLayoutReplaced());
+      std::fflush(stderr);
+    }
+  }
 #endif
   DetermineAlgorithmAndRun(params,
                            [&result]<typename Algorithm>(Algorithm* algorithm) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
                              result = algorithm->Layout();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
                            });
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  if (const LayoutBox* box = params.node.GetLayoutBox()) {
+    if (box->IsLayoutImage() || box->IsLayoutReplaced()) {
+      std::fprintf(stderr,
+                   "image_reachability.stage=layout_with_algorithm_after "
+                   "box=%p is_image=%d is_replaced=%d result=%p\n",
+                   static_cast<const void*>(box), box->IsLayoutImage(),
+                   box->IsLayoutReplaced(), static_cast<const void*>(result));
+      std::fflush(stderr);
+    }
+  }
 #endif
   return result;
 }

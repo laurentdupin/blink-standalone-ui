@@ -1767,6 +1767,7 @@ if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_replaced.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/natural_sizing_info.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/replaced_layout_algorithm.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/image_painter.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/replaced_painter.cc
   )

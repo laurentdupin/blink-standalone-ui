@@ -75,6 +75,7 @@
 #include "third_party/blink/renderer/core/image_replacement/image_replacement.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_image_replacement.h"
+#include "third_party/blink/renderer/core/layout/layout_media.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
@@ -16177,10 +16178,12 @@ MinMaxSizesResult GridLanesLayoutAlgorithm::ComputeMinMaxSizes(
   return MinMaxSizesResult();
 }
 #endif
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 MinMaxSizesResult ReplacedLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
   return MinMaxSizesResult();
 }
+#endif
 MinMaxSizesResult FieldsetLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
   return MinMaxSizesResult();
@@ -16283,17 +16286,24 @@ const LayoutResult* GridLanesLayoutAlgorithm::Layout() {
   return nullptr;
 }
 #endif
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 ReplacedLayoutAlgorithm::ReplacedLayoutAlgorithm(
     const LayoutAlgorithmParams& params)
     : LayoutAlgorithm(params) {}
 const LayoutResult* ReplacedLayoutAlgorithm::Layout() {
   return nullptr;
 }
+#endif
 FieldsetLayoutAlgorithm::FieldsetLayoutAlgorithm(
     const LayoutAlgorithmParams& params)
     : LayoutAlgorithm(params),
       writing_direction_(GetConstraintSpace().GetWritingDirection()),
       consumed_block_size_(LayoutUnit()) {}
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+LayoutUnit LayoutMedia::ComputePanelWidth(const PhysicalRect& rect) const {
+  return rect.Width();
+}
+#endif
 const LayoutResult* FieldsetLayoutAlgorithm::Layout() {
   return nullptr;
 }
