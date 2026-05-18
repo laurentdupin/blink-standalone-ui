@@ -94,6 +94,11 @@ struct DrawCommand {
   std::string resource_id;
   Rect source_rect;
   GlyphRun glyph_run;
+  std::string sampling_options = "filter=nearest,mipmap=none";
+  std::string blend_mode = "src_over";
+  std::string src_rect_constraint = "strict";
+  float image_alpha = 1.0f;
+  std::string paint_flags_summary;
 
   static DrawCommand Save();
   static DrawCommand Restore();
@@ -127,7 +132,12 @@ struct DrawCommand {
   static DrawCommand DrawImage(std::string id, Rect destination);
   static DrawCommand DrawImageRect(std::string id,
                                    Rect source,
-                                   Rect destination);
+                                   Rect destination,
+                                   std::string sampling_options = "filter=nearest,mipmap=none",
+                                   std::string blend_mode = "src_over",
+                                   std::string src_rect_constraint = "strict",
+                                   float image_alpha = 1.0f,
+                                   std::string paint_flags_summary = {});
   static DrawCommand DrawGlyphRun(GlyphRun run);
   static DrawCommand DrawTextBlob(std::vector<uint8_t> blob_bytes,
                                   Point origin,

@@ -49,7 +49,9 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
+#include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -123,6 +125,15 @@ struct ImageReachabilityDiagnostics {
   bool layout_object_created = false;
   std::string layout_object_type = "not_reached";
   bool layout_image_resource_created = false;
+  int element_natural_width = 0;
+  int element_natural_height = 0;
+  int loader_natural_width = 0;
+  int loader_natural_height = 0;
+  int loader_resource_width = 0;
+  int loader_resource_height = 0;
+  bool loader_content_present = false;
+  bool loader_content_has_image = false;
+  bool loader_content_error = false;
 };
 
 struct LiveExportedGlyph {
@@ -2399,6 +2410,27 @@ void CollectImageReachabilityFromNodeForStandaloneRenderer(
         diagnostics.img_src_detected_from_dom = true;
         diagnostics.image_loader_request_url = src.Utf8();
       }
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+      if (const auto* image_element = DynamicTo<HTMLImageElement>(element)) {
+        diagnostics.element_natural_width =
+            static_cast<int>(image_element->naturalWidth());
+        diagnostics.element_natural_height =
+            static_cast<int>(image_element->naturalHeight());
+        diagnostics.loader_natural_width = diagnostics.element_natural_width;
+        diagnostics.loader_natural_height = diagnostics.element_natural_height;
+        if (ImageResourceContent* content = image_element->CachedImage()) {
+          diagnostics.image_loader_present = true;
+          diagnostics.loader_content_present = true;
+          diagnostics.loader_content_has_image = content->HasImage();
+          diagnostics.loader_content_error = content->ErrorOccurred();
+          if (Image* image = content->GetImage()) {
+            const gfx::Size resource_size = image->Size(kRespectImageOrientation);
+            diagnostics.loader_resource_width = resource_size.width();
+            diagnostics.loader_resource_height = resource_size.height();
+          }
+        }
+      }
+#endif
       if (const LayoutObject* layout_object = element->GetLayoutObject()) {
         diagnostics.layout_object_created = true;
         diagnostics.layout_object_type = layout_object->DebugName().Utf8();
@@ -3188,19 +3220,42 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                ? "no Blink image paint emitted; standalone image element/loader ownership path is not fully linked"
                : "not_applicable_or_painted")
        << "\",\"decode_status\":\"unknown\",\"layout_status\":\"unknown\"}"
-       << ",\"image_size_diagnostics\":{\"element_natural_width\":0"
-       << ",\"element_natural_height\":0"
+       << ",\"image_size_diagnostics\":{\"element_natural_width\":"
+       << cache.image_reachability.element_natural_width
+       << ",\"element_natural_height\":"
+       << cache.image_reachability.element_natural_height
+       << ",\"loader_natural_width\":"
+       << cache.image_reachability.loader_natural_width
+       << ",\"loader_natural_height\":"
+       << cache.image_reachability.loader_natural_height
+       << ",\"loader_resource_width\":"
+       << cache.image_reachability.loader_resource_width
+       << ",\"loader_resource_height\":"
+       << cache.image_reachability.loader_resource_height
+       << ",\"loader_content_present\":"
+       << (cache.image_reachability.loader_content_present ? "true" : "false")
+       << ",\"loader_content_has_image\":"
+       << (cache.image_reachability.loader_content_has_image ? "true" : "false")
+       << ",\"loader_content_error\":"
+       << (cache.image_reachability.loader_content_error ? "true" : "false")
        << ",\"provider_decoded_width\":" << provider_decoded_width
        << ",\"provider_decoded_height\":" << provider_decoded_height
-       << ",\"layout_intrinsic_width\":0"
-       << ",\"layout_intrinsic_height\":0"
+       << ",\"layout_intrinsic_width\":"
+       << cache.image_reachability.loader_resource_width
+       << ",\"layout_intrinsic_height\":"
+       << cache.image_reachability.loader_resource_height
+       << ",\"paint_image_width\":" << provider_decoded_width
+       << ",\"paint_image_height\":" << provider_decoded_height
        << ",\"get_natural_dimensions_called\":"
        << StandaloneRendererLayoutImageResourceNaturalDimensionsCalled()
        << ",\"size_source_used_for_layout\":"
        << JsonStringForStandaloneRenderer(
-              provider_decoded_width > 0 && provider_decoded_height > 0
-                  ? "provider_decoded_size_available_element_natural_size_not_observed"
-                  : "unknown")
+              cache.image_reachability.loader_natural_width > 0 &&
+                      cache.image_reachability.loader_natural_height > 0
+                  ? "loader_natural_size"
+                  : provider_decoded_width > 0 && provider_decoded_height > 0
+                        ? "provider_decoded_size_available_element_natural_size_not_observed"
+                        : "unknown")
        << ",\"provider_status\":"
        << JsonStringForStandaloneRenderer(provider_image_status) << "}"
        << ",\"image_pipeline\":{\"image_element_count\":"
@@ -3219,8 +3274,18 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << JsonStringForStandaloneRenderer(
                 TruncatedUrlForStandaloneRenderer(src))
          << ",\"complete\":\"unknown\""
-         << ",\"natural_width\":0"
-         << ",\"natural_height\":0"
+         << ",\"natural_width\":"
+         << cache.image_reachability.element_natural_width
+         << ",\"natural_height\":"
+         << cache.image_reachability.element_natural_height
+         << ",\"loader_natural_width\":"
+         << cache.image_reachability.loader_natural_width
+         << ",\"loader_natural_height\":"
+         << cache.image_reachability.loader_natural_height
+         << ",\"loader_resource_width\":"
+         << cache.image_reachability.loader_resource_width
+         << ",\"loader_resource_height\":"
+         << cache.image_reachability.loader_resource_height
          << ",\"provider_decoded_width\":" << provider_decoded_width
          << ",\"provider_decoded_height\":" << provider_decoded_height
          << ",\"layout_object_type\":"
@@ -3231,26 +3296,42 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                      std::string::npos
                  ? "true"
                  : "false")
-         << ",\"cached_image_present\":\"unknown\""
+         << ",\"cached_image_present\":"
+         << (cache.image_reachability.loader_content_present ? "true" : "false")
          << ",\"image_resource_content_present\":"
-         << (StandaloneRendererImageResourceContentFetchCalled() > 0 ? "true"
-                                                                     : "false")
+         << (cache.image_reachability.loader_content_present ||
+                     StandaloneRendererImageResourceContentFetchCalled() > 0
+                 ? "true"
+                 : "false")
          << ",\"encoded_data_bytes\":"
          << EncodedDataBytesForStandaloneRenderer(src)
          << ",\"decode_status\":"
          << JsonStringForStandaloneRenderer(
                 has_image_paint
                     ? "painted"
-                    : "not_reached_because_real_HTMLImageElement_ImageLoader_path_is_not_linked")
+                    : (provider_image_status == "success" &&
+                       cache.image_reachability.layout_object_type.find("LayoutImage") !=
+                           std::string::npos
+                           ? "provider_success_layout_image_but_no_image_paint"
+                           : "provider_or_layout_not_ready_for_image_paint"))
          << ",\"paint_status\":"
          << JsonStringForStandaloneRenderer(
-                has_image_paint ? "image paint emitted"
-                                : "no image paint emitted")
+                has_image_paint
+                    ? "image paint emitted"
+                    : (provider_image_status == "success" &&
+                       cache.image_reachability.layout_object_type.find("LayoutImage") !=
+                           std::string::npos
+                           ? "no image paint emitted; ImagePainter/GetImage not entered for this layout path"
+                           : "no image paint emitted"))
          << ",\"blocker_file\":"
          << JsonStringForStandaloneRenderer(
                 has_image_paint
                     ? ""
-                    : "upstream/chromium/third_party/blink/renderer/core/html/html_image_element.cc")
+                    : (provider_image_status == "success" &&
+                       cache.image_reachability.layout_object_type.find("LayoutImage") !=
+                           std::string::npos
+                           ? "upstream/chromium/third_party/blink/renderer/core/paint/image_painter.cc"
+                           : "upstream/chromium/third_party/blink/renderer/core/html/html_image_element.cc"))
          << ",\"blocker_functions\":["
          << JsonStringForStandaloneRenderer(
                 "HTMLImageElement::CreateLayoutObject(const ComputedStyle&)")

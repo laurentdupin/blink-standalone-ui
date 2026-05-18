@@ -174,12 +174,22 @@ DrawCommand DrawCommand::DrawImage(std::string id, Rect destination) {
 
 DrawCommand DrawCommand::DrawImageRect(std::string id,
                                        Rect source,
-                                       Rect destination) {
+                                       Rect destination,
+                                       std::string sampling_options,
+                                       std::string blend_mode,
+                                       std::string src_rect_constraint,
+                                       float image_alpha,
+                                       std::string paint_flags_summary) {
   DrawCommand command;
   command.type = DrawCommandType::kDrawImageRect;
   command.resource_id = std::move(id);
   command.source_rect = source;
   command.rect = destination;
+  command.sampling_options = std::move(sampling_options);
+  command.blend_mode = std::move(blend_mode);
+  command.src_rect_constraint = std::move(src_rect_constraint);
+  command.image_alpha = image_alpha;
+  command.paint_flags_summary = std::move(paint_flags_summary);
   return command;
 }
 

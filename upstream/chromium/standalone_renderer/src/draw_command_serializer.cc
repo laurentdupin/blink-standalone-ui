@@ -135,6 +135,15 @@ void WriteCommandCoverageRecords(std::ostringstream& out) {
         << ",\"text_blob_byte_count\":" << record.text_blob_byte_count
         << ",\"text_blob_deserialize_success\":"
         << (record.text_blob_deserialize_success ? "true" : "false")
+        << ",\"image_resource_present\":"
+        << (record.image_resource_present ? "true" : "false")
+        << ",\"image_byte_count\":" << record.image_byte_count
+        << ",\"image_resource_cache_hit\":"
+        << (record.image_resource_cache_hit ? "true" : "false")
+        << ",\"image_resource_cache_miss\":"
+        << (record.image_resource_cache_miss ? "true" : "false")
+        << ",\"image_width\":" << record.image_width
+        << ",\"image_height\":" << record.image_height
         << "}";
   }
   out << "]";
@@ -509,6 +518,14 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
       WriteRect(out, command.source_rect);
       out << ",\"destination\":";
       WriteRect(out, command.rect);
+      out << ",\"sampling_options\":\""
+          << EscapeJson(command.sampling_options) << "\""
+          << ",\"blend_mode\":\"" << EscapeJson(command.blend_mode) << "\""
+          << ",\"src_rect_constraint\":\""
+          << EscapeJson(command.src_rect_constraint) << "\""
+          << ",\"image_alpha\":" << command.image_alpha
+          << ",\"paint_flags_summary\":\""
+          << EscapeJson(command.paint_flags_summary) << "\"";
       break;
     case DrawCommandType::kDrawGlyphRun:
       out << ",\"font_id\":\"" << EscapeJson(command.glyph_run.font_id)

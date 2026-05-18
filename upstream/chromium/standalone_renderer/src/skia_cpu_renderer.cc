@@ -16,6 +16,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkFlattenable.h"
 #include "third_party/skia/include/core/SkFont.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -132,6 +133,8 @@ struct ImageResource {
   int width = 0;
   int height = 0;
   std::vector<uint8_t> pixels;
+  sk_sp<SkImage> image;
+  size_t byte_count = 0;
 };
 
 using ImageAtlas = std::unordered_map<std::string, ImageResource>;
@@ -188,6 +191,17 @@ ImageAtlas BuildImageAtlas(const std::vector<ResourceCommand>& commands) {
       continue;
     }
     image.pixels = update.decoded_pixels;
+    image.byte_count = std::min(
+        image.pixels.size(), static_cast<size_t>(image.width) *
+                                 static_cast<size_t>(image.height) * 4u);
+    SkBitmap bitmap;
+    SkImageInfo info = SkImageInfo::Make(image.width, image.height,
+                                         kRGBA_8888_SkColorType,
+                                         kPremul_SkAlphaType);
+    if (bitmap.installPixels(info, image.pixels.data(),
+                             static_cast<size_t>(image.width) * 4u)) {
+      image.image = bitmap.asImage();
+    }
     atlas[update.image_id] = std::move(image);
   }
   return atlas;
@@ -357,14 +371,16 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       if (const auto found = images.find(command.resource_id);
           found != images.end()) {
         const ImageResource& resource = found->second;
-        SkBitmap bitmap;
-        SkImageInfo info = SkImageInfo::Make(
-            resource.width, resource.height, kRGBA_8888_SkColorType,
-            kPremul_SkAlphaType);
-        if (bitmap.installPixels(info,
-                                 const_cast<uint8_t*>(resource.pixels.data()),
-                                 static_cast<size_t>(resource.width) * 4u)) {
-          canvas.drawImageRect(bitmap.asImage(), ToSkRect(command.rect),
+        if (coverage) {
+          coverage->image_resource_present = true;
+          coverage->image_byte_count = resource.byte_count;
+          coverage->image_resource_cache_hit = static_cast<bool>(resource.image);
+          coverage->image_resource_cache_miss = !resource.image;
+          coverage->image_width = resource.width;
+          coverage->image_height = resource.height;
+        }
+        if (resource.image) {
+          canvas.drawImageRect(resource.image, ToSkRect(command.rect),
                                SkSamplingOptions(), nullptr);
         }
       }
@@ -373,16 +389,26 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       if (const auto found = images.find(command.resource_id);
           found != images.end()) {
         const ImageResource& resource = found->second;
-        SkBitmap bitmap;
-        SkImageInfo info = SkImageInfo::Make(
-            resource.width, resource.height, kRGBA_8888_SkColorType,
-            kPremul_SkAlphaType);
-        if (bitmap.installPixels(info,
-                                 const_cast<uint8_t*>(resource.pixels.data()),
-                                 static_cast<size_t>(resource.width) * 4u)) {
-          canvas.drawImageRect(bitmap.asImage(), ToSkRect(command.source_rect),
+        if (coverage) {
+          coverage->image_resource_present = true;
+          coverage->image_byte_count = resource.byte_count;
+          coverage->image_resource_cache_hit = static_cast<bool>(resource.image);
+          coverage->image_resource_cache_miss = !resource.image;
+          coverage->image_width = resource.width;
+          coverage->image_height = resource.height;
+        }
+        if (resource.image) {
+          SkPaint image_paint;
+          image_paint.setAlphaf(
+              std::max(0.0f, std::min(1.0f, command.image_alpha)));
+          image_paint.setBlendMode(SkBlendMode::kSrcOver);
+          const SkCanvas::SrcRectConstraint constraint =
+              command.src_rect_constraint == "fast"
+                  ? SkCanvas::kFast_SrcRectConstraint
+                  : SkCanvas::kStrict_SrcRectConstraint;
+          canvas.drawImageRect(resource.image, ToSkRect(command.source_rect),
                                ToSkRect(command.rect), SkSamplingOptions(),
-                               nullptr, SkCanvas::kStrict_SrcRectConstraint);
+                               &image_paint, constraint);
         }
       }
       break;

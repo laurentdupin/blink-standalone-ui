@@ -33,6 +33,12 @@ struct CommandCoverageRecord {
   bool text_blob_resource_present = false;
   uint64_t text_blob_byte_count = 0;
   bool text_blob_deserialize_success = false;
+  bool image_resource_present = false;
+  uint64_t image_byte_count = 0;
+  bool image_resource_cache_hit = false;
+  bool image_resource_cache_miss = false;
+  int image_width = 0;
+  int image_height = 0;
 };
 
 void ResetCommandCoverageDiagnostics();
