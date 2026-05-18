@@ -1759,6 +1759,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
 
 if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
   )
 endif()

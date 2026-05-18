@@ -22,6 +22,9 @@
 #include "cc/paint/paint_op.h"
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#include "html_css_renderer/standalone_resource_provider.h"
+#endif
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -2892,6 +2895,44 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"same_process_only\":true"
        << ",\"raw_pointer_payloads\":0"
        << ",\"failures\":[]}"
+       << ",\"resource_provider\":";
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  html_css_renderer::StandaloneResourceProviderDiagnostics provider_diagnostics =
+      html_css_renderer::GetStandaloneResourceProviderDiagnostics();
+  json << "{\"request_count\":" << provider_diagnostics.request_count
+       << ",\"image_request_count\":"
+       << provider_diagnostics.image_request_count
+       << ",\"data_png_request_count\":"
+       << provider_diagnostics.data_png_request_count
+       << ",\"success_count\":" << provider_diagnostics.success_count
+       << ",\"failure_count\":" << provider_diagnostics.failure_count
+       << ",\"requests\":[";
+  for (size_t i = 0; i < provider_diagnostics.requests.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    const auto& request = provider_diagnostics.requests[i];
+    json << "{\"url_prefix\":"
+         << JsonStringForStandaloneRenderer(request.url_prefix)
+         << ",\"initiator\":"
+         << JsonStringForStandaloneRenderer(request.initiator)
+         << ",\"mime_type\":"
+         << JsonStringForStandaloneRenderer(request.mime_type)
+         << ",\"encoded_bytes\":" << request.encoded_bytes
+         << ",\"decoded_width\":" << request.decoded_width
+         << ",\"decoded_height\":" << request.decoded_height
+         << ",\"status\":"
+         << JsonStringForStandaloneRenderer(request.status)
+         << ",\"error\":"
+         << JsonStringForStandaloneRenderer(request.error) << "}";
+  }
+  json << "]}";
+#else
+  json << "{\"request_count\":0,\"image_request_count\":0,"
+          "\"data_png_request_count\":0,\"success_count\":0,"
+          "\"failure_count\":0,\"requests\":[]}";
+#endif
+  json
        << ",\"image_diagnostics\":{\"image_element_count\":";
   int image_element_count = 0;
   for (const auto& [scheme, count] : image_scheme_histogram) {
@@ -3135,6 +3176,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   if (cache.initialized && cache.body_html == input_html) {
     return cache.result;
   }
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
+#endif
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
