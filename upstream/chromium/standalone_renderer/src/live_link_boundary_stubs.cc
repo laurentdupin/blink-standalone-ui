@@ -11326,6 +11326,7 @@ void ImageElementTiming::NotifyImageFinished(const LayoutObject&,
                                              const ImageResourceContent*) {}
 void ImageElementTiming::NotifyImageRemoved(const LayoutObject*,
                                             const ImageResourceContent*) {}
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 bool ImageResourceContent::ErrorOccurred() const {
   return false;
 }
@@ -11338,6 +11339,7 @@ const std::optional<AdProvenance>& ImageResourceContent::GetAdProvenance()
       new std::optional<AdProvenance>();
   return *provenance;
 }
+#endif
 bool Sanitizer::ShouldReplaceNodeWithChildren(Node*) const {
   return false;
 }
@@ -14324,9 +14326,11 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
     mojom::blink::RequestContextType,
     network::mojom::RequestDestination,
     const AtomicString&) {}
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 void ImageResourceContent::EmulateLoadStartedForInspector(ResourceFetcher*,
                                                           const AtomicString&) {
 }
+#endif
 CSSPaintImageGenerator* CSSPaintImageGenerator::Create(const String&,
                                                        const Document&,
                                                        Observer*) {
@@ -16141,10 +16145,12 @@ RespectImageOrientationEnum StyleImage::ForceOrientationIfNecessary(
     RespectImageOrientationEnum orientation) const {
   return orientation;
 }
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 scoped_refptr<Image> Image::LoadPlatformResource(int,
                                                  ui::ResourceScaleFactor) {
   return nullptr;
 }
+#endif
 const TransformPaintPropertyNode*
 VisualViewport::TransformNodeForViewportScrollbars() const {
   return nullptr;
@@ -17437,12 +17443,14 @@ DarkModeResult DarkModeImageClassifier::Classify(const SkPixmap&,
                                                  const SkIRect&) const {
   return DarkModeResult::kDoNotApplyFilter;
 }
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 DarkModeImageCache* Image::GetDarkModeImageCache() {
   return nullptr;
 }
 SkBitmap Image::AsSkBitmapForCurrentFrame(RespectImageOrientationEnum) {
   return SkBitmap();
 }
+#endif
 bool RuntimeEnabledFeaturesBase::is_scrollbar_gutter_bug_fix_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_remove_scroll_node_workaround_enabled_ =
     false;

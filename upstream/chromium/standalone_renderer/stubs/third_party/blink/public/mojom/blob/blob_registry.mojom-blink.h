@@ -19,6 +19,7 @@ class ProgressClient {
  public:
   class Proxy_ {};
   virtual ~ProgressClient() = default;
+  virtual void OnProgress(uint64_t delta) = 0;
 };
 
 }  // namespace blink::mojom::blink
