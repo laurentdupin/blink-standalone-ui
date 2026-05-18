@@ -2305,6 +2305,58 @@ std::vector<std::string> ImageSrcListForStandaloneRenderer(
   return sources;
 }
 
+std::string SchemeForStandaloneRenderer(const std::string& url);
+std::vector<std::string> ExtractStyleElementTextForStandaloneRenderer(
+    const std::string& html);
+
+std::vector<std::string> CssUrlListForStandaloneRenderer(
+    const std::string& html) {
+  std::vector<std::string> urls;
+  for (const std::string& style :
+       ExtractStyleElementTextForStandaloneRenderer(html)) {
+    const std::string lower = LowerAsciiForStandaloneRenderer(style);
+    size_t offset = 0;
+    while (true) {
+      const size_t url_pos = lower.find("url(", offset);
+      if (url_pos == std::string::npos) {
+        break;
+      }
+      size_t value_start = url_pos + 4;
+      while (value_start < style.size() &&
+             std::isspace(static_cast<unsigned char>(style[value_start]))) {
+        ++value_start;
+      }
+      char quote = 0;
+      if (value_start < style.size() &&
+          (style[value_start] == '"' || style[value_start] == '\'')) {
+        quote = style[value_start++];
+      }
+      size_t value_end = value_start;
+      while (value_end < style.size()) {
+        if (quote != 0 && style[value_end] == quote) {
+          break;
+        }
+        if (quote == 0 && style[value_end] == ')') {
+          break;
+        }
+        ++value_end;
+      }
+      urls.push_back(style.substr(value_start, value_end - value_start));
+      offset = value_end == std::string::npos ? style.size() : value_end + 1;
+    }
+  }
+  return urls;
+}
+
+std::map<std::string, int> CssImageSchemeHistogramForStandaloneRenderer(
+    const std::string& html) {
+  std::map<std::string, int> histogram;
+  for (const std::string& url : CssUrlListForStandaloneRenderer(html)) {
+    ++histogram[SchemeForStandaloneRenderer(url)];
+  }
+  return histogram;
+}
+
 std::string SchemeForStandaloneRenderer(const std::string& url) {
   const size_t colon = url.find(':');
   if (colon == std::string::npos) {
@@ -2719,6 +2771,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       LowerAsciiForStandaloneRenderer(cache.body_html);
   const std::map<std::string, int> image_scheme_histogram =
       ImageSchemeHistogramForStandaloneRenderer(cache.body_html);
+  const std::map<std::string, int> css_image_scheme_histogram =
+      CssImageSchemeHistogramForStandaloneRenderer(cache.body_html);
   const std::string page_evidence_json =
       cache.holder ? PageEvidenceJsonForStandaloneRenderer(
                          cache.holder->GetDocument())
@@ -2902,7 +2956,38 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                 "LayoutImageResource::GetNaturalDimensions(float) const")
          << "]}";
   }
-  json << "]}"
+  json << "]}";
+  int css_image_count = 0;
+  for (const auto& [scheme, count] : css_image_scheme_histogram) {
+    css_image_count += count;
+  }
+  json << ",\"css_image_diagnostics\":{\"background_image_present\":"
+       << (lowered_input.find("background-image") != std::string::npos ||
+                   lowered_input.find("url(") != std::string::npos
+               ? "true"
+               : "false")
+       << ",\"url_scheme_histogram\":"
+       << MapToJsonObject(css_image_scheme_histogram)
+       << ",\"css_image_url_count\":" << css_image_count
+       << ",\"style_image_presence\":\"unknown_at_current_access_boundary\""
+       << ",\"resource_status\":\""
+       << (css_image_count > 0 && total_raw_audit.image_count == 0
+               ? "no image-backed Blink paint observed"
+               : "not_applicable_or_image_painted")
+       << "\",\"paint_status\":\""
+       << (css_image_count > 0 && total_raw_audit.image_count == 0
+               ? "fallback/background rect paint only or image resource blocked"
+               : "not_applicable_or_image_painted")
+       << "\",\"raw_paint_ops\":{\"DrawImageOp\":"
+       << total_recursive_op_histogram["DrawImageOp"]
+       << ",\"DrawImageRectOp\":"
+       << total_recursive_op_histogram["DrawImageRectOp"]
+       << ",\"DrawRectOp\":" << total_recursive_op_histogram["DrawRectOp"]
+       << "},\"blocker_file\":\""
+       << (css_image_count > 0 && total_raw_audit.image_count == 0
+               ? "upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc"
+               : "")
+       << "\"}"
        << ",\"page_evidence\":" << page_evidence_json
        << ",\"chunks\":" << chunks_json.str()
        << ",\"self_checks\":{\"css_applied\":\"unknown\""

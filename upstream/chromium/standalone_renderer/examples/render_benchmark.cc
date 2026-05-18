@@ -385,6 +385,64 @@ bool WriteJson(const std::string& path,
   return true;
 }
 
+int ExtractJsonHistogramCount(const std::string& json,
+                              const std::string& histogram_name,
+                              const std::string& key) {
+  const std::string histogram = "\"" + histogram_name + "\":";
+  const size_t histogram_pos = json.find(histogram);
+  if (histogram_pos == std::string::npos) {
+    return 0;
+  }
+  const size_t object_begin = json.find('{', histogram_pos + histogram.size());
+  if (object_begin == std::string::npos) {
+    return 0;
+  }
+  int depth = 0;
+  size_t object_end = object_begin;
+  for (; object_end < json.size(); ++object_end) {
+    if (json[object_end] == '{') {
+      ++depth;
+    } else if (json[object_end] == '}') {
+      --depth;
+      if (depth == 0) {
+        break;
+      }
+    }
+  }
+  if (object_end <= object_begin) {
+    return 0;
+  }
+  const std::string object =
+      json.substr(object_begin, object_end - object_begin);
+  const std::string needle = "\"" + key + "\":";
+  const size_t key_pos = object.find(needle);
+  if (key_pos == std::string::npos) {
+    return 0;
+  }
+  size_t value_pos = key_pos + needle.size();
+  while (value_pos < object.size() &&
+         std::isspace(static_cast<unsigned char>(object[value_pos]))) {
+    ++value_pos;
+  }
+  char* end = nullptr;
+  const long value = std::strtol(object.c_str() + value_pos, &end, 10);
+  return value > 0 ? static_cast<int>(value) : 0;
+}
+
+int CountJsonSubstring(const std::string& json, const std::string& needle) {
+  int count = 0;
+  size_t offset = 0;
+  while (true) {
+    offset = json.find(needle, offset);
+    if (offset == std::string::npos) {
+      break;
+    }
+    ++count;
+    offset += needle.size();
+  }
+  return count;
+}
+
 bool WriteOracleProvenanceJson(
     const std::string& path,
     const Metrics& metrics,
@@ -403,16 +461,21 @@ bool WriteOracleProvenanceJson(
   file << "    \"uses_diagnostic_bitmap_fallback_as_rendering\": false,\n";
   file << "    \"retained_command_count_for_oracle_generation\": 0,\n";
   const std::string& raw_json = oracle_result.raw_paint_artifact_audit_json;
-  const bool has_draw_image =
-      raw_json.find("DrawImageOp") != std::string::npos;
-  const bool has_draw_image_rect =
-      raw_json.find("DrawImageRectOp") != std::string::npos;
+  const int draw_image_count = ExtractJsonHistogramCount(
+      raw_json, "recursive_raw_blink_paint_op_histogram", "DrawImageOp");
+  const int draw_image_rect_count = ExtractJsonHistogramCount(
+      raw_json, "recursive_raw_blink_paint_op_histogram", "DrawImageRectOp");
+  const int image_backed_shader_count =
+      CountJsonSubstring(raw_json, "\"image_backed_shader\":true");
   file << "    \"raw_image_op_histogram\": {\"DrawImageOp\": "
-       << (has_draw_image ? 1 : 0)
-       << ", \"DrawImageRectOp\": " << (has_draw_image_rect ? 1 : 0)
-       << "},\n";
+       << draw_image_count << ", \"DrawImageRectOp\": "
+       << draw_image_rect_count << ", \"image_backed_shader\": "
+       << image_backed_shader_count << "},\n";
+  file << "    \"raw_image_op_examples\": [],\n";
   file << "    \"image_resource_count\": "
-       << ((has_draw_image || has_draw_image_rect) ? 1 : 0) << ",\n";
+       << (draw_image_count + draw_image_rect_count +
+           image_backed_shader_count)
+       << ",\n";
   file << "    \"non_white_pixels\": " << metrics.non_white_pixels << ",\n";
   file << "    \"content_bounds\": {\"left\": " << metrics.content_left
        << ", \"top\": " << metrics.content_top
