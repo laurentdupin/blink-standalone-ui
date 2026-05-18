@@ -70,7 +70,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/render_policy.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/renderer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/retained_scene.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/source_text_backend.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_frame.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/url_network_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_history_item_standalone.cc
@@ -1756,6 +1755,19 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/shaders/SkLocalMatrixShader.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkMatrix22.cpp
 )
+
+if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/resource/image_resource.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/resource/image_resource_content.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/bitmap_image.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/image_decoder.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/png/png_image_decoder.cc
+  )
+endif()
 
 
 

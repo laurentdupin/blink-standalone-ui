@@ -17,16 +17,13 @@
 #include <utility>
 #include <vector>
 
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
 #include "html_css_renderer/blink_adapter.h"
-#endif
 #include "html_css_renderer/cpu_renderer.h"
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
 #include "html_css_renderer/skia_cpu_renderer.h"
 #endif
-#include "html_css_renderer/source_text_backend.h"
 
 namespace {
 
@@ -195,9 +192,7 @@ void PrintUsage() {
                "[--font-file path] [--window-scale factor] "
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
                " [--dump-paint-artifact path]"
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
-               " [--blink] [--manual]"
-#endif
+               " [--blink]"
                "\n");
 }
 
@@ -304,12 +299,12 @@ bool ParseArgs(int argc,
       *paint_artifact_dump_path = value;
     } else if (arg.rfind("--dump-paint-artifact=", 0) == 0) {
       *paint_artifact_dump_path = arg.substr(22);
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
     } else if (arg == "--blink") {
       *use_blink = true;
     } else if (arg == "--manual") {
-      *use_blink = false;
-#endif
+      std::fprintf(stderr,
+                   "--manual is no longer supported; live Blink is required\n");
+      return false;
     } else if (arg == "--help" || arg == "-h") {
       return false;
     } else {
@@ -863,11 +858,7 @@ int main(int argc, char** argv) {
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   bool use_blink = true;
-#else
-  bool use_blink = false;
-#endif
 
   if (argc > 1 && !ParseArgs(argc, argv, &create_info, &input,
                              &quit_after_ms, &window_scale, &font_file,
@@ -890,21 +881,10 @@ int main(int argc, char** argv) {
   }
   const html_css_renderer::Size initial_viewport = create_info.viewport;
 
-  std::unique_ptr<html_css_renderer::SourceTextBackend> text_backend =
-      html_css_renderer::CreateSourceTextBackend();
-  if (text_backend) {
-    create_info.font_provider = text_backend.get();
-    create_info.text_shaper = text_backend.get();
-    create_info.glyph_rasterizer = text_backend.get();
-  }
-
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
-#endif
   std::unique_ptr<html_css_renderer::RendererState> state;
   html_css_renderer::RenderResult result;
 
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
     blink_create_info.renderer = std::move(create_info);
@@ -932,11 +912,6 @@ int main(int argc, char** argv) {
     for (const std::string& diagnostic : result.diagnostics) {
       std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
     }
-  } else
-#endif
-  {
-    state = html_css_renderer::RendererState::Create(std::move(create_info));
-    result = state->AdvanceAndRender(input);
   }
 
   int frame_width =
@@ -1041,12 +1016,7 @@ int main(int argc, char** argv) {
           next_input.hovered_element_id = hovered;
           next_input.delta_time_seconds = input.delta_time_seconds;
           const html_css_renderer::RenderResult next_result =
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
-              use_blink
-                  ? blink_embedder->AdvanceAndRenderIncremental(next_input)
-                  :
-#endif
-                  state->AdvanceAndRenderIncremental(next_input);
+              blink_embedder->AdvanceAndRenderIncremental(next_input);
           if (use_cpu) {
             image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)

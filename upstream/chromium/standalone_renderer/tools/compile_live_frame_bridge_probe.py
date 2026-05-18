@@ -955,12 +955,6 @@ def compile_runtime_adapter(
         for arg in relink.split_command_line(matches[0])
         if not arg.lower().startswith("/showincludes")
     ]
-    live_define = "/DHTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME=1"
-    if live_define not in args:
-        args.append(live_define)
-    tree_define = "/DHTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE=1"
-    if tree_define not in args:
-        args.append(tree_define)
     obj = (
         "obj/standalone_renderer/blink_live_frame_bridge_probe/"
         "blink_runtime_adapter.live.obj"

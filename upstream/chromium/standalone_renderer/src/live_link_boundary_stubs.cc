@@ -3346,6 +3346,7 @@ KURL MemoryCache::RemoveFragmentIdentifierIfNeeded(const KURL& url) {
   return url;
 }
 
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 ImageResourceContent* ImageResourceContent::Fetch(FetchParameters&,
                                                   ResourceFetcher*) {
   return nullptr;
@@ -3358,6 +3359,7 @@ bool ImageResourceContent::IsAnimatedImage() const {
 void ImageResourceContent::Trace(Visitor* visitor) const {
   ImageObserver::Trace(visitor);
 }
+#endif
 
 void Resource::Trace(Visitor* visitor) const {
   visitor->Trace(clients_);
@@ -13824,7 +13826,9 @@ String LayoutCounter::GenerateCounterText(Vector<int>,
 }
 LayoutCounter::LayoutCounter(Document& document, const CounterContentData& data)
     : LayoutText(&document, String()), counter_(&data) {}
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 LayoutImageResource::LayoutImageResource() = default;
+#endif
 LayoutImageResourceStyleImage::LayoutImageResourceStyleImage(StyleImage*) {}
 StyleImageSet::StyleImageSet(StyleImage* image, CSSImageSetValue* value)
     : best_fit_image_(image), image_set_value_(value) {}
@@ -14422,6 +14426,7 @@ void LayoutCounter::WillBeDestroyed() {
   LayoutText::WillBeDestroyed();
 }
 
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 LayoutImageResource::~LayoutImageResource() = default;
 void LayoutImageResource::Trace(Visitor* visitor) const {
   visitor->Trace(cached_image_);
@@ -14443,6 +14448,7 @@ NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(float) const {
 RespectImageOrientationEnum LayoutImageResource::ImageOrientation() const {
   return kDoNotRespectImageOrientation;
 }
+#endif
 
 LayoutImageResourceStyleImage::~LayoutImageResourceStyleImage() = default;
 void LayoutImageResourceStyleImage::Trace(Visitor* visitor) const {
@@ -14899,6 +14905,7 @@ ListBasedHitTestBehavior HitTestResult::AddNodeToListBasedTestResult(
 void HitTestResult::SetInnerNode(Node* node) {
   inner_node_ = node;
 }
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 Image* ImageResourceContent::GetImage() const {
   return nullptr;
 }
@@ -14916,6 +14923,8 @@ Image::SizeAvailability Image::SetData(scoped_refptr<SharedBuffer> data,
   encoded_image_data_ = std::move(data);
   return encoded_image_data_ ? kSizeAvailable : kSizeUnavailable;
 }
+#endif
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 String Image::FilenameExtension() const {
   return String();
 }
@@ -14943,6 +14952,7 @@ void Image::DrawPattern(GraphicsContext&,
                         const gfx::RectF&,
                         const ImageTilingInfo&,
                         const ImageDrawOptions&) {}
+#endif
 void BoxPaintInvalidator::InvalidatePaint() {}
 void CustomScrollbar::ClearPaintFlags() {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)

@@ -8,6 +8,8 @@ option(BLINK_STANDALONE_BUILD_SDL_VIEWER
   "Build the optional SDL3 viewer executables." ON)
 option(BLINK_STANDALONE_FETCH_SDL3
   "Fetch SDL3 with CMake when an installed SDL3 package is unavailable." ON)
+option(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG
+  "Experimental: link the real Blink PNG image resource/decode path instead of standalone null image stubs." OFF)
 
 set(BLINK_STANDALONE_CHROMIUM_ROOT
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium
@@ -160,11 +162,7 @@ add_executable(blink_standalone_render_benchmark_skia
     STANDALONE_RENDERER_GN_PROBE=1
     HTML_CSS_RENDERER_STANDALONE=1
     HTML_CSS_RENDERER_HAS_REDUCED_BLINK_PLATFORM=1
-    HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE=1
-    HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME=1
-    HTML_CSS_RENDERER_USE_BLINK_ADAPTER=1
     HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER=1
-    HTML_CSS_RENDERER_HAS_SOURCE_TEXT_BACKEND=1
     DCHECK_ALWAYS_ON=1
     WTF_IMPLEMENTATION=1
     USE_AURA=1
@@ -183,6 +181,12 @@ add_executable(blink_standalone_render_benchmark_skia
     SKCMS_DISABLE_SKX=1
     SK_ENABLE_OPTIMIZE_SIZE=1
   )
+
+  if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+    target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
+      HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG=1
+    )
+  endif()
 
   if(MSVC)
     target_compile_options(blink_standalone_render_benchmark_skia PRIVATE
@@ -250,11 +254,7 @@ add_executable(blink_standalone_render_benchmark_skia
       STANDALONE_RENDERER_GN_PROBE=1
       HTML_CSS_RENDERER_STANDALONE=1
       HTML_CSS_RENDERER_HAS_REDUCED_BLINK_PLATFORM=1
-      HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE=1
-      HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME=1
-      HTML_CSS_RENDERER_USE_BLINK_ADAPTER=1
       HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER=1
-      HTML_CSS_RENDERER_HAS_SOURCE_TEXT_BACKEND=1
       DCHECK_ALWAYS_ON=1
       WTF_IMPLEMENTATION=1
       USE_AURA=1
@@ -274,6 +274,12 @@ add_executable(blink_standalone_render_benchmark_skia
       SK_ENABLE_OPTIMIZE_SIZE=1
       SDL_STATIC_LIB=1
     )
+
+    if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+      target_compile_definitions(blink_standalone_sdl_viewer_skia PRIVATE
+        HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG=1
+      )
+    endif()
 
     if(MSVC)
       target_compile_options(blink_standalone_sdl_viewer_skia PRIVATE

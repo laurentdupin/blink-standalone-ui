@@ -19,16 +19,13 @@
 #pragma comment(lib, "Dbghelp.lib")
 #endif
 
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
 #include "html_css_renderer/blink_adapter.h"
-#endif
 #include "html_css_renderer/cpu_renderer.h"
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
 #include "html_css_renderer/skia_cpu_renderer.h"
 #endif
-#include "html_css_renderer/source_text_backend.h"
 
 namespace {
 
@@ -593,9 +590,7 @@ void PrintUsage() {
                "[--strict-text-blob-typefaces] "
                "[--compat-text-blob-typefaces] "
                "[--font-file path]"
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
-               " [--blink] [--manual]"
-#endif
+               " [--blink]"
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
                " [--skia-cpu]"
 #endif
@@ -670,11 +665,7 @@ int main(int argc, char** argv) {
   bool debug_text_blob_replay = false;
   bool debug_command_coverage = false;
   bool strict_text_blob_typefaces = true;
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   bool use_blink = true;
-#else
-  bool use_blink = false;
-#endif
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -833,12 +824,12 @@ int main(int argc, char** argv) {
       font_file = value;
     } else if (arg == "--skia-cpu") {
       use_skia_cpu = true;
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
     } else if (arg == "--blink") {
       use_blink = true;
     } else if (arg == "--manual") {
-      use_blink = false;
-#endif
+      std::fprintf(stderr,
+                   "--manual is no longer supported; live Blink is required\n");
+      return 2;
     } else {
       PrintUsage();
       return 2;
@@ -862,18 +853,10 @@ int main(int argc, char** argv) {
     assets.font_bytes = ReadBinaryFile(font_file);
     loaded_font_path = font_file;
   }
-  std::unique_ptr<html_css_renderer::SourceTextBackend> text_backend =
-      html_css_renderer::CreateSourceTextBackend();
-  if (text_backend) {
-    create_info.font_provider = text_backend.get();
-    create_info.text_shaper = text_backend.get();
-    create_info.glyph_rasterizer = text_backend.get();
-  }
   const html_css_renderer::RendererCreateInfo renderer_info_for_oracle =
       create_info;
 
   html_css_renderer::RenderResult result;
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER)
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
@@ -909,12 +892,6 @@ int main(int argc, char** argv) {
       PrintDiagnostics(result);
       return 4;
     }
-  } else
-#endif
-  {
-    std::unique_ptr<html_css_renderer::RendererState> state =
-        html_css_renderer::RendererState::Create(std::move(create_info));
-    result = state->AdvanceAndRender(input);
   }
 
   if (!paint_artifact_dump_path.empty()) {
@@ -998,8 +975,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "--paint-oracle requires --oracle-out\n");
         return 2;
       }
-#if defined(HTML_CSS_RENDERER_USE_BLINK_ADAPTER) && \
-    defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
       html_css_renderer::BlinkPageEmbedderCreateInfo oracle_create_info;
       oracle_create_info.renderer = renderer_info_for_oracle;
       oracle_create_info.trace_stages = trace_stages;
@@ -1042,7 +1018,7 @@ int main(int argc, char** argv) {
       }
 #else
       std::fprintf(stderr,
-                   "skia_paint_record_oracle requires live Blink and Skia CPU\n");
+                   "skia_paint_record_oracle requires Skia CPU\n");
       return 1;
 #endif
     } else {

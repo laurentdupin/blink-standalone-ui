@@ -47,9 +47,7 @@ TREE_BUILDER_OBJECT_PREFIX = (
 )
 
 EXTRA_DEFINES_BY_SOURCE = {
-    "standalone_renderer/src/blink_runtime_adapter.cc": (
-        "/DHTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE=1",
-    ),
+    "standalone_renderer/src/blink_runtime_adapter.cc": (),
     "core/html/parser/html_element_stack.cc": (
         "/DSTANDALONE_RENDERER_GN_PROBE=1",
     ),

@@ -11,7 +11,6 @@
 
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
-#include "html_css_renderer/source_text_backend.h"
 
 namespace {
 
@@ -284,14 +283,6 @@ int main(int argc, char** argv) {
                    font_file.c_str());
       return 2;
     }
-  }
-
-  std::unique_ptr<html_css_renderer::SourceTextBackend> text_backend =
-      html_css_renderer::CreateSourceTextBackend();
-  if (text_backend) {
-    create_info.font_provider = text_backend.get();
-    create_info.text_shaper = text_backend.get();
-    create_info.glyph_rasterizer = text_backend.get();
   }
 
   auto state = html_css_renderer::RendererState::Create(std::move(create_info));

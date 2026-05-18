@@ -15,12 +15,9 @@
 #include "html_css_renderer/render_policy.h"
 #include "html_css_renderer/retained_scene.h"
 #include "html_css_renderer/typeface_resource_registry.h"
-#if defined(HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE)
 #include "html_css_renderer/blink_tree_bridge_probe.h"
-#endif
 #include "incremental_damage.h"
 
-#if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
 namespace blink::standalone_renderer_probe {
 void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
                                                                     int height);
@@ -176,7 +173,6 @@ int StandaloneBlinkLiveFrameBridgeExportedBitmapBytesAtForStandaloneRenderer(
     uint8_t* destination,
     int destination_size);
 }  // namespace blink::standalone_renderer_probe
-#endif
 
 namespace blink::standalone_renderer_probe {
 bool HasDocumentLifecycleTypesForStandaloneRenderer();
@@ -259,9 +255,7 @@ namespace fs = std::filesystem;
 #if defined(HTML_CSS_RENDERER_HAS_REDUCED_BLINK_CORE)
 namespace blink_core_probe = ::blink::standalone_renderer_probe;
 #endif
-#if defined(HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE)
 namespace blink_tree_probe = ::blink::standalone_renderer_probe;
-#endif
 
 constexpr const char* kRuntimeSeedFiles[] = {
     "third_party/blink/renderer/core/testing/dummy_page_holder.h",
@@ -419,7 +413,6 @@ std::string ReducedBlinkCoreCSSDiagnostic() {
 }
 
 std::string RealBlinkPaintBridgeDiagnostic() {
-#if defined(HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE)
   if (!blink_tree_probe::
           StandaloneBlinkRealPaintBridgeSurfaceReachableForStandaloneRenderer()) {
     return "real Blink paint bridge surface is not linked";
@@ -429,9 +422,6 @@ std::string RealBlinkPaintBridgeDiagnostic() {
              ? "real Blink paint bridge contract selected: "
                "LocalFrameView::GetPaintArtifact after PaintClean lifecycle"
              : "real Blink paint bridge contract selected";
-#else
-  return "real Blink paint bridge surface is not linked";
-#endif
 }
 
 std::string ReducedBlinkHTMLTokenizerDiagnostic(const std::string& html) {
@@ -778,7 +768,6 @@ void ImportBlinkTokenizerResourceMetadata(const std::string& html,
 
 bool ParseDocumentWithBlinkTreeBuilder(const std::string& html,
                                        ParsedDocument& document) {
-#if defined(HTML_CSS_RENDERER_HAS_BLINK_TREE_BUILDER_BRIDGE)
   blink_tree_probe::ResetStandaloneHTMLTreeBuilderRecordingForStandaloneRenderer();
   blink_tree_probe::StandaloneHTMLTreeBuilderParseHTMLForStandaloneRenderer(
       html.c_str());
@@ -966,11 +955,6 @@ bool ParseDocumentWithBlinkTreeBuilder(const std::string& html,
   ImportBlinkTokenizerResourceMetadata(html, document);
   AttachParsedDocumentTreeRelationships(document);
   return true;
-#else
-  (void)html;
-  (void)document;
-  return false;
-#endif
 }
 
 ParsedDocument ParseDocumentWithReducedBlink(const std::string& html) {
@@ -1806,7 +1790,6 @@ BlinkTreeFrameBuildResult BuildBlinkTreeFrameOutput(
   return output;
 }
 
-#if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
 class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
  public:
   explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
@@ -1816,7 +1799,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     force_paint_oracle_bitmap_ = create_info.force_paint_oracle_bitmap;
     lifecycle_stop_ = create_info.lifecycle_stop;
     SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
-#if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
@@ -1829,7 +1811,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
             lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
-#endif
     snapshot_.html = create_info.renderer.html;
     snapshot_.stylesheets = create_info.renderer.stylesheets;
     snapshot_.viewport = create_info.renderer.viewport;
@@ -2488,7 +2469,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   std::string lifecycle_stop_;
   std::optional<RetainedScene> previous_retained_scene_;
 };
-#endif
 
 }  // namespace
 
@@ -2584,11 +2564,7 @@ BlinkRuntimeAdapterStatus InspectBlinkRuntimeAdapterStatus(
 
 std::unique_ptr<BlinkPageEmbedder> CreateLiveBlinkPageEmbedder(
     BlinkPageEmbedderCreateInfo create_info) {
-#if defined(HTML_CSS_RENDERER_HAS_LIVE_BLINK_RUNTIME)
   return std::make_unique<LiveBlinkPageEmbedder>(std::move(create_info));
-#else
-  return CreateNoOpBlinkPageEmbedder(std::move(create_info));
-#endif
 }
 
 }  // namespace html_css_renderer
