@@ -1,4 +1,4 @@
-﻿// Copyright 2026 The Chromium Authors
+// Copyright 2026 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7077,6 +7077,7 @@ bool RuntimeEnabledFeaturesBase::is_css_ruby_overhang_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_scroll_initial_target_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_scroll_target_group_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_scrollbar_width_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_background_clip_text_decoration_enabled_ = true;
 bool RuntimeEnabledFeaturesBase::is_css_text_decoration_skip_spaces_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_css_text_fit_enabled_ = false;
@@ -15854,38 +15855,6 @@ extern "C" int g_standalone_text_decoration_begin_called = 0;
 extern "C" int g_standalone_text_decoration_except_line_through_called = 0;
 extern "C" int g_standalone_text_decoration_only_line_through_called = 0;
 extern "C" int g_standalone_decoration_line_painter_paint_called = 0;
-
-TextDecorationPainter::TextDecorationPainter(
-    TextPainter& text_painter,
-    const InlinePaintContext* inline_context,
-    const PaintInfo& paint_info,
-    const ComputedStyle& style,
-    const TextPaintStyle& text_style,
-    const LineRelativeRect& decoration_rect,
-    HighlightPainter::SelectionPaintState* selection)
-    : text_painter_(text_painter),
-      inline_context_(inline_context),
-      paint_info_(paint_info),
-      style_(style),
-      text_style_(text_style),
-      decoration_rect_(decoration_rect),
-      selection_(selection),
-      step_(kBegin),
-      phase_(kOriginating) {
-  ++g_standalone_text_decoration_painter_constructed;
-}
-TextDecorationPainter::~TextDecorationPainter() = default;
-void TextDecorationPainter::Begin(const FragmentItem&, Phase phase) {
-  ++g_standalone_text_decoration_begin_called;
-  phase_ = phase;
-}
-void TextDecorationPainter::PaintExceptLineThrough(
-    const TextFragmentPaintInfo&) {
-  ++g_standalone_text_decoration_except_line_through_called;
-}
-void TextDecorationPainter::PaintOnlyLineThrough() {
-  ++g_standalone_text_decoration_only_line_through_called;
-}
 SelectionBoundsRecorder::SelectionBoundsRecorder(SelectionState state,
                                                  PhysicalRect selection_rect,
                                                  PaintController& controller,
@@ -15900,6 +15869,11 @@ SelectionBoundsRecorder::~SelectionBoundsRecorder() = default;
 bool SelectionBoundsRecorder::ShouldRecordSelection(const FrameSelection&,
                                                     SelectionState) {
   return false;
+}
+const LineRelativeRect&
+HighlightPainter::SelectionPaintState::LineRelativeSelectionRect() {
+  static LineRelativeRect* rect = new LineRelativeRect{LineRelativeOffset(LayoutUnit(), LayoutUnit()), LogicalSize()};
+  return *rect;
 }
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 TextDirection FragmentItem::ResolvedDirection() const {
@@ -15947,30 +15921,8 @@ AffineTransform LineRelativeRect::ComputeRelativeToPhysicalTransform(
     WritingMode) const {
   return AffineTransform();
 }
-gfx::RectF DecorationLinePainter::Bounds(const DecorationGeometry& geometry) {
-  return geometry.line;
-}
-DecorationGeometry DecorationGeometry::Make(StrokeStyle style,
-                                            const gfx::RectF& line,
-                                            float double_offset,
-                                            float wavy_offset,
-                                            const WaveDefinition* wave) {
-  DecorationGeometry geometry;
-  geometry.style = style;
-  geometry.line = line;
-  geometry.double_offset = double_offset;
-  geometry.wavy_offset = wavy_offset;
-  if (wave) {
-    geometry.wavy_wave = *wave;
-  }
-  return geometry;
-}
-void DecorationLinePainter::Paint(const DecorationGeometry&,
-                                  const Color&,
-                                  const AutoDarkMode&,
-                                  const cc::PaintFlags*) {
-  ++g_standalone_decoration_line_painter_paint_called;
-}
+void ScopedTextShadowPainter::ApplyShadowList(GraphicsContext&,
+                                              const TextPaintStyle&) {}
 int Font::EmphasisMarkDescent(const AtomicString&) const {
   return 0;
 }

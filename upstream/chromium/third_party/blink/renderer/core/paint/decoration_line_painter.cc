@@ -15,6 +15,8 @@
 
 namespace blink {
 
+extern "C" int g_standalone_decoration_line_painter_paint_called;
+
 namespace {
 
 float RoundDownThickness(float stroke_thickness) {
@@ -327,6 +329,7 @@ void DecorationLinePainter::Paint(const DecorationGeometry& geometry,
                                   const Color& color,
                                   const AutoDarkMode& auto_dark_mode,
                                   const cc::PaintFlags* flags) {
+  ++g_standalone_decoration_line_painter_paint_called;
   if (geometry.line.width() <= 0) {
     return;
   }

@@ -36,6 +36,7 @@ def main() -> None:
     standalone_elements = (
         standalone.get("selected_elements")
         or standalone.get("selectedElements")
+        or standalone_doc.get("page_evidence")
         or raw_audit.get("page_evidence")
         or {}
     )
@@ -50,6 +51,13 @@ def main() -> None:
             standalone_selector = "data-debug-id"
         s = standalone_elements.get(standalone_selector) or {}
         p = playwright_elements.get(selector) or {}
+        standalone_layout = s.get("layout") or {}
+        standalone_spaces = standalone_layout.get("rect_coordinate_spaces") or {}
+        standalone_viewport_rect = standalone_layout.get("viewport_rect")
+        playwright_viewport_rect = p.get("boundingRect")
+        rect_warning = None
+        if standalone_viewport_rect is None and standalone_layout.get("layout_rect") is not None:
+            rect_warning = "standalone layout_rect is local; not comparable to Playwright viewport DOMRect"
         selected[selector] = {
             "present": {
                 "standalone": s.get("present"),
@@ -79,9 +87,22 @@ def main() -> None:
                 "standalone": nested_get(s, ["computed_style", "height"]),
                 "playwright": nested_get(p, ["computedStyle", "height"]),
             },
-            "layout_rect": {
-                "standalone": nested_get(s, ["layout", "layout_rect"]),
-                "playwright": p.get("boundingRect"),
+            "rect_coordinate_spaces": standalone_spaces,
+            "local_layout_rect": {
+                "standalone": standalone_layout.get("local_layout_rect") or standalone_layout.get("layout_rect"),
+                "coordinate_space": standalone_spaces.get("local_layout_rect", "local_layout_object_coordinates"),
+            },
+            "viewport_rect": {
+                "standalone": standalone_viewport_rect,
+                "standalone_coordinate_space": standalone_spaces.get("viewport_rect"),
+                "playwright": playwright_viewport_rect,
+                "playwright_coordinate_space": "viewport_dom_rect",
+                "warning": rect_warning,
+            },
+            "layout_rect_legacy_do_not_compare_to_playwright": {
+                "standalone": standalone_layout.get("layout_rect"),
+                "playwright": playwright_viewport_rect,
+                "warning": "legacy field may be local on standalone and viewport-relative on Playwright",
             },
         }
 
@@ -119,7 +140,7 @@ def main() -> None:
         },
         "selected_elements": selected,
         "selected_element_rects_playwright": playwright.get("selectedElementRects"),
-        "summary": "Standalone and Playwright setup dumps include comparable selected-element computed-style and rect fields where available; unknown/inaccessible fields are preserved as null/status values.",
+        "summary": "Standalone setup diff labels rect coordinate spaces. Comparisons should use selected_elements.*.viewport_rect; legacy layout_rect is local and is not comparable to Playwright DOMRect without mapping.",
     }
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(diff, indent=2), encoding="utf-8")

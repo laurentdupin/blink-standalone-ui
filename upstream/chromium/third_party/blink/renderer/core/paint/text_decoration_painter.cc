@@ -15,6 +15,11 @@
 
 namespace blink {
 
+extern "C" int g_standalone_text_decoration_painter_constructed;
+extern "C" int g_standalone_text_decoration_begin_called;
+extern "C" int g_standalone_text_decoration_except_line_through_called;
+extern "C" int g_standalone_text_decoration_only_line_through_called;
+
 TextDecorationPainter::TextDecorationPainter(
     TextPainter& text_painter,
     const InlinePaintContext* inline_context,
@@ -31,7 +36,8 @@ TextDecorationPainter::TextDecorationPainter(
       decoration_rect_(decoration_rect),
       selection_(selection),
       step_(kBegin),
-      phase_(kOriginating) {}
+      phase_(kOriginating) {
+  ++g_standalone_text_decoration_painter_constructed;}
 
 TextDecorationPainter::~TextDecorationPainter() {
   DCHECK(step_ == kBegin);
@@ -106,6 +112,7 @@ gfx::RectF TextDecorationPainter::ExpandRectForSVGDecorations(
 }
 
 void TextDecorationPainter::Begin(const FragmentItem& text_item, Phase phase) {
+  ++g_standalone_text_decoration_begin_called;
   DCHECK(step_ == kBegin);
 
   phase_ = phase;
@@ -250,10 +257,11 @@ void TextDecorationPainter::PaintLineThroughDecorations(
 
 void TextDecorationPainter::PaintExceptLineThrough(
     const TextFragmentPaintInfo& fragment_paint_info) {
+  ++g_standalone_text_decoration_except_line_through_called;
   DCHECK(step_ == kExcept);
 
   // Clipping the canvas unnecessarily is expensive, so avoid doing it if the
-  // only decoration was a ‘line-through’.
+  // only decoration was a ‘line-through E
   if (decoration_info_ &&
       decoration_info_->HasAnyLine(~TextDecorationLine::kLineThrough)) {
     GraphicsContextStateSaver state_saver(paint_info_.context);
@@ -266,10 +274,11 @@ void TextDecorationPainter::PaintExceptLineThrough(
 }
 
 void TextDecorationPainter::PaintOnlyLineThrough() {
+  ++g_standalone_text_decoration_only_line_through_called;
   DCHECK(step_ == kOnly);
 
   // Clipping the canvas unnecessarily is expensive, so avoid doing it if there
-  // are no ‘line-through’ decorations.
+  // are no ‘line-through Edecorations.
   if (decoration_info_ &&
       decoration_info_->HasAnyLine(TextDecorationLine::kLineThrough)) {
     GraphicsContextStateSaver state_saver(paint_info_.context);
@@ -285,6 +294,7 @@ void TextDecorationPainter::PaintExceptLineThrough(
     const TextPaintStyle& text_style,
     const TextFragmentPaintInfo& fragment_paint_info,
     TextDecorationLine lines_to_paint) {
+  ++g_standalone_text_decoration_except_line_through_called;
   if (!decoration_info.HasAnyLine(lines_to_paint &
                                   ~TextDecorationLine::kLineThrough)) {
     return;

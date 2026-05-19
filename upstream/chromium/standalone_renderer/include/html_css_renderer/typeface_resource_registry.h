@@ -35,6 +35,8 @@ struct TextBlobReplayDiagnostics {
 
 void ResetTypefaceResourceRegistryForFrame();
 uint64_t RegisterSameProcessTypefaceResource(SkTypeface* typeface);
+bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface);
+void FreezeTypefaceResourcesForReplay();
 sk_sp<SkTypeface> LookupSameProcessTypefaceResource(uint64_t id);
 std::vector<TypefaceResource> SnapshotTypefaceResources();
 void SetTextBlobReplayDiagnosticsEnabled(bool enabled);

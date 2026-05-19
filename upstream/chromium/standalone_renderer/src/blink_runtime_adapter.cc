@@ -2484,8 +2484,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         "extractor=real_blink_paint_artifact_extractor");
     result.diagnostics.push_back(
         "real Blink PaintArtifact exported through retained PaintOp commands");
+    std::vector<ResourceCommand> typeface_resource_commands;
     for (const TypefaceResource& resource : SnapshotTypefaceResources()) {
-      explicit_resource_commands.push_back(ResourceCommand::LoadTypeface(
+      typeface_resource_commands.push_back(ResourceCommand::LoadTypeface(
           resource.id, resource.family_name, resource.weight, resource.width,
           resource.slant == SkFontStyle::kItalic_Slant
               ? "italic"
@@ -2493,9 +2494,15 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                                               : "upright",
           resource.same_process_only, resource.portable_font_data_available));
     }
+    // Typeface resources must precede dependent text blob resources in strict
+    // replay; otherwise SkTextBlob deserialization cannot resolve BSTF ids.
+    result.frame.resource_commands.insert(result.frame.resource_commands.end(),
+                                          typeface_resource_commands.begin(),
+                                          typeface_resource_commands.end());
     result.frame.resource_commands.insert(result.frame.resource_commands.end(),
                                           explicit_resource_commands.begin(),
                                           explicit_resource_commands.end());
+    FreezeTypefaceResourcesForReplay();
   }
 
   RendererSnapshot snapshot_;

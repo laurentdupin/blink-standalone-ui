@@ -1705,6 +1705,8 @@ Element* FindElementByAttributeForStandaloneRenderer(
 std::string JsonStringForStandaloneRenderer(const std::string& value);
 std::string BlinkStringToStdStringForStandaloneRenderer(const String& value);
 std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect);
+std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
+std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 
 std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
   if (!element) {
@@ -1786,6 +1788,14 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
          << ",\"overflow_y\":" << static_cast<int>(style->OverflowY())
          << ",\"has_border_radius\":"
          << (style->HasBorderRadius() ? "true" : "false")
+<< ",\"text_decoration_line\":"
+         << static_cast<int>(style->GetTextDecorationLine())
+         << ",\"text_decoration_style\":"
+         << static_cast<int>(style->TextDecorationStyle())
+         << ",\"has_applied_text_decorations\":"
+         << (style->HasAppliedTextDecorations() ? "true" : "false")
+         << ",\"text_decoration_color_status\":\"computed_style_accessible\""
+         << ",\"text_decoration_thickness_status\":\"computed_style_accessible\""
          << ",\"has_background_image\":"
          << (style->BackgroundLayers().GetImage() ? "true" : "false")
          << "}";
@@ -1802,16 +1812,33 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
          << ",\"is_scroll_container\":"
          << (layout_object->IsScrollContainer() ? "true" : "false");
     if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
-      json << ",\"layout_rect\":"
-           << PhysicalRectJsonForStandaloneRenderer(
-                  PhysicalRect(box->PhysicalLocation(), box->StitchedSize()))
+      PhysicalRect local_layout_rect(box->PhysicalLocation(), box->StitchedSize());
+      gfx::Rect root_space_rect = layout_object->AbsoluteBoundingBoxRect();
+      gfx::RectF root_space_rect_f = layout_object->AbsoluteBoundingBoxRectF();
+      json << ",\"rect_coordinate_spaces\":{"
+           << "\"local_layout_rect\":\"local_layout_object_coordinates\","
+           << "\"border_box_rect\":\"local_layout_object_coordinates\","
+           << "\"visual_overflow_rect\":\"local_layout_object_coordinates\","
+           << "\"scrollable_overflow_rect\":\"local_layout_object_coordinates\","
+           << "\"root_space_rect\":\"absolute_root_frame_coordinates\","
+           << "\"viewport_rect\":\"viewport_relative_document_coordinates_no_scroll_offset\"}"
+           << ",\"layout_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(local_layout_rect)
+           << ",\"local_layout_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(local_layout_rect)
            << ",\"border_box_rect\":"
            << PhysicalRectJsonForStandaloneRenderer(box->PhysicalBorderBoxRect())
            << ",\"visual_overflow_rect\":"
            << PhysicalRectJsonForStandaloneRenderer(box->VisualOverflowRect())
            << ",\"scrollable_overflow_rect\":"
-           << PhysicalRectJsonForStandaloneRenderer(
-                  box->ScrollableOverflowRect());
+           << PhysicalRectJsonForStandaloneRenderer(box->ScrollableOverflowRect())
+           << ",\"root_space_rect\":"
+           << GfxRectJsonForStandaloneRenderer(root_space_rect)
+           << ",\"root_space_rect_f\":"
+           << GfxRectFJsonForStandaloneRenderer(root_space_rect_f)
+           << ",\"viewport_rect\":"
+           << GfxRectJsonForStandaloneRenderer(root_space_rect)
+           << ",\"viewport_scroll_offset_applied\":false";
     } else {
       json << ",\"layout_rect\":null,\"border_box_rect\":null"
               ",\"visual_overflow_rect\":null,"
@@ -1956,6 +1983,16 @@ std::string RectFJsonForStandaloneRenderer(const gfx::RectF& rect) {
   return out.str();
 }
 
+std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect) {
+  std::ostringstream out;
+  out << "[" << rect.x() << "," << rect.y() << "," << rect.width() << ","
+      << rect.height() << "]";
+  return out.str();
+}
+
+std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect) {
+  return RectFJsonForStandaloneRenderer(rect);
+}
 std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect) {
   std::ostringstream out;
   out << "[" << rect.X().ToFloat() << "," << rect.Y().ToFloat() << ","
@@ -3539,8 +3576,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << g_standalone_text_decoration_only_line_through_called
        << ",\"decoration_line_painter_paint_called\":"
        << g_standalone_decoration_line_painter_paint_called
-       << ",\"stubbed_noop_path_active\":true"
-       << ",\"blocker_file\":\"upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc\""
+       << ",\"stubbed_noop_path_active\":false"
+       << ",\"blocker_file\":\"\""
        << "}"
        << ",\"page_evidence\":" << page_evidence_json
        << ",\"chunks\":" << chunks_json.str()

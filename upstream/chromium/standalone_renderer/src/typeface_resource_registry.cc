@@ -13,6 +13,7 @@ namespace {
 
 struct RegistryState {
   std::unordered_map<uint64_t, TypefaceResource> resources;
+  std::unordered_map<uint64_t, TypefaceResource> replay_resources;
   std::unordered_map<const SkTypeface*, uint64_t> ids;
   uint64_t next_id = 1;
   TextBlobReplayDiagnostics diagnostics;
@@ -65,17 +66,51 @@ uint64_t RegisterSameProcessTypefaceResource(SkTypeface* typeface) {
   return id;
 }
 
+bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface) {
+  if (!id || !typeface) {
+    return false;
+  }
+  std::lock_guard<std::mutex> lock(RegistryMutex());
+  auto& registry = Registry();
+  SkString family;
+  typeface->getFamilyName(&family);
+  TypefaceResource resource;
+  resource.id = id;
+  resource.typeface = sk_ref_sp(typeface);
+  resource.family_name = family.c_str();
+  resource.weight = typeface->fontStyle().weight();
+  resource.width = typeface->fontStyle().width();
+  resource.slant = typeface->fontStyle().slant();
+  resource.same_process_only = true;
+  resource.portable_font_data_available = false;
+  registry.resources[id] = std::move(resource);
+  registry.ids[typeface] = id;
+  registry.next_id = std::max(registry.next_id, id + 1);
+  return true;
+}
+
+void FreezeTypefaceResourcesForReplay() {
+  std::lock_guard<std::mutex> lock(RegistryMutex());
+  Registry().replay_resources = Registry().resources;
+}
+
 sk_sp<SkTypeface> LookupSameProcessTypefaceResource(uint64_t id) {
   std::lock_guard<std::mutex> lock(RegistryMutex());
   auto& registry = Registry();
   ++registry.diagnostics.typeface_lookup_attempt_count;
   const auto found = registry.resources.find(id);
-  if (found == registry.resources.end() || !found->second.typeface) {
-    ++registry.diagnostics.typeface_lookup_failure_count;
-    return nullptr;
+  if (found != registry.resources.end() && found->second.typeface) {
+    ++registry.diagnostics.typeface_lookup_success_count;
+    return found->second.typeface;
   }
-  ++registry.diagnostics.typeface_lookup_success_count;
-  return found->second.typeface;
+  const auto replay_found = registry.replay_resources.find(id);
+  if (replay_found != registry.replay_resources.end() &&
+      replay_found->second.typeface) {
+    ++registry.diagnostics.typeface_lookup_success_count;
+    return replay_found->second.typeface;
+  }
+  ++registry.diagnostics.typeface_lookup_failure_count;
+  return nullptr;
 }
 
 std::vector<TypefaceResource> SnapshotTypefaceResources() {
