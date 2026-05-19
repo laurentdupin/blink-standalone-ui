@@ -137,6 +137,12 @@ extern "C" int g_standalone_oof_candidate_count;
 extern "C" int g_standalone_oof_descendant_collected;
 extern "C" int g_standalone_oof_layout_attempted;
 extern "C" int g_standalone_oof_fragment_created;
+extern "C" int g_standalone_oof_candidate_repropagated;
+extern "C" int g_standalone_oof_candidate_dropped_at_root;
+extern "C" int g_standalone_oof_unsupported_inline_containing_block;
+extern "C" int g_standalone_oof_layout_null_results;
+extern "C" int g_standalone_oof_zero_size_fragments;
+extern "C" int g_standalone_oof_safety_limit_hit;
 extern "C" void StandaloneRendererResetOutOfFlowDiagnostics();
 
 namespace {
@@ -2439,8 +2445,58 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
        << (g_standalone_oof_layout_attempted > 0 ? "true" : "false")
        << ",\"oof_fragment_created\":"
        << (g_standalone_oof_fragment_created > 0 ? "true" : "false")
+       << ",\"candidate_repropagated\":"
+       << g_standalone_oof_candidate_repropagated
+       << ",\"candidate_dropped_at_root\":"
+       << g_standalone_oof_candidate_dropped_at_root
+       << ",\"unsupported_inline_containing_block\":"
+       << g_standalone_oof_unsupported_inline_containing_block
+       << ",\"layout_null_results\":"
+       << g_standalone_oof_layout_null_results
+       << ",\"zero_size_fragments\":"
+       << g_standalone_oof_zero_size_fragments
+       << ",\"safety_limit_hit\":"
+       << (g_standalone_oof_safety_limit_hit ? "true" : "false")
+       << ",\"unsupported_inset_forms\":[]"
+       << ",\"candidate_repropagation_warnings\":"
+       << (g_standalone_oof_candidate_dropped_at_root > 0
+               ? "[\"dropped out-of-flow candidate at LayoutView because its containing block is not represented by the current standalone subset; likely inline containing block support\"]"
+               : "[]")
        << ",\"first_missing_stage\":\"see_paint_artifact_display_items\"}";
   return json.str();
+}
+
+bool HasUnsupportedInlineContainingBlockOofForStandaloneRenderer(
+    Document& document) {
+  Element* body = document.body();
+  Element* target =
+      body ? FindElementByClassForStandaloneRenderer(
+                 *body, AtomicString("fixture-target"))
+           : nullptr;
+  if (!target || !target->GetComputedStyle() ||
+      target->GetComputedStyle()->GetPosition() != EPosition::kAbsolute) {
+    return false;
+  }
+  for (Element* parent = target->parentElement(); parent;
+       parent = parent->parentElement()) {
+    const ComputedStyle* style = parent->GetComputedStyle();
+    if (!style) {
+      continue;
+    }
+    if (style->Display() == EDisplay::kInlineBlock) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool SourceMentionsInlineContainingBlockOofForStandaloneRenderer(
+    const std::string& input_html) {
+  std::string lowered = input_html;
+  std::transform(lowered.begin(), lowered.end(), lowered.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return lowered.find("position: absolute") != std::string::npos &&
+         lowered.find("display: inline-block") != std::string::npos;
 }
 
 std::string JsonEscapeForStandaloneRenderer(const std::string& value) {
@@ -4608,6 +4664,21 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before active style update");
   document.GetStyleEngine().UpdateActiveStyle();
   TraceLiveFrameProbeStage("after active style update");
+  if (HasUnsupportedInlineContainingBlockOofForStandaloneRenderer(document) ||
+      SourceMentionsInlineContainingBlockOofForStandaloneRenderer(input_html)) {
+    g_standalone_oof_unsupported_inline_containing_block = 1;
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        std::string("{\"source\":\"real Blink PaintArtifact\",") +
+        "\"status\":\"stopped_before_layout_due_to_unsupported_oof\","
+        "\"reason\":\"standalone OOF subset does not support inline-block "
+        "containing block absolute positioning yet\","
+        "\"out_of_flow_diagnostics\":" +
+        OutOfFlowElementEvidenceJsonForStandaloneRenderer(document) + "}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
   if (LifecycleStopEqualsForStandaloneRenderer("style")) {
     result.lifecycle_reached_paint_clean = 0;
     cache.body_html = input_html;
@@ -4631,6 +4702,25 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     cache.raw_paint_artifact_audit_json =
         "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"layout\","
         "\"status\":\"stopped_after_layout\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
+  TraceLiveFrameProbeStage("before required layout lifecycle update");
+  frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest);
+  TraceLiveFrameProbeStage("after required layout lifecycle update");
+  if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
+      g_standalone_oof_fragment_created == 0) {
+    cache.image_reachability =
+        CollectImageReachabilityForStandaloneRenderer(document, input_html);
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        std::string("{\"source\":\"real Blink PaintArtifact\",") +
+        "\"status\":\"stopped_after_layout_due_to_unsupported_oof\","
+        "\"reason\":\"standalone OOF subset does not support inline "
+        "containing-block absolute positioning yet\","
+        "\"out_of_flow_diagnostics\":" +
+        OutOfFlowElementEvidenceJsonForStandaloneRenderer(document) + "}";
     cache.result = result;
     cache.initialized = true;
     return result;

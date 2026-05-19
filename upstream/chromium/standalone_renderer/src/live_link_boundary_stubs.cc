@@ -1570,6 +1570,12 @@ extern "C" int g_standalone_oof_candidate_count = 0;
 extern "C" int g_standalone_oof_descendant_collected = 0;
 extern "C" int g_standalone_oof_layout_attempted = 0;
 extern "C" int g_standalone_oof_fragment_created = 0;
+extern "C" int g_standalone_oof_candidate_repropagated = 0;
+extern "C" int g_standalone_oof_candidate_dropped_at_root = 0;
+extern "C" int g_standalone_oof_unsupported_inline_containing_block = 0;
+extern "C" int g_standalone_oof_layout_null_results = 0;
+extern "C" int g_standalone_oof_zero_size_fragments = 0;
+extern "C" int g_standalone_oof_safety_limit_hit = 0;
 
 extern "C" void StandaloneRendererResetOutOfFlowDiagnostics() {
   g_standalone_oof_layout_part_run_called = 0;
@@ -1577,6 +1583,12 @@ extern "C" void StandaloneRendererResetOutOfFlowDiagnostics() {
   g_standalone_oof_descendant_collected = 0;
   g_standalone_oof_layout_attempted = 0;
   g_standalone_oof_fragment_created = 0;
+  g_standalone_oof_candidate_repropagated = 0;
+  g_standalone_oof_candidate_dropped_at_root = 0;
+  g_standalone_oof_unsupported_inline_containing_block = 0;
+  g_standalone_oof_layout_null_results = 0;
+  g_standalone_oof_zero_size_fragments = 0;
+  g_standalone_oof_safety_limit_hit = 0;
 }
 
 namespace {
@@ -16436,6 +16448,11 @@ void OutOfFlowLayoutPart::Run() {
   HeapVector<LogicalOofPositionedNode> candidates;
   container_builder_->SwapOutOfFlowPositionedCandidates(&candidates);
   g_standalone_oof_candidate_count += static_cast<int>(candidates.size());
+  constexpr wtf_size_t kStandaloneMaxOofCandidatesPerContainer = 256;
+  if (candidates.size() > kStandaloneMaxOofCandidatesPerContainer) {
+    g_standalone_oof_safety_limit_hit = 1;
+    candidates.Shrink(kStandaloneMaxOofCandidatesPerContainer);
+  }
 
   for (const auto& candidate : candidates) {
     BlockNode child = candidate.Node();
@@ -16448,8 +16465,23 @@ void OutOfFlowLayoutPart::Run() {
     LayoutBox* container_box = container_builder_->Node().GetLayoutBox();
     if (child_box && container_box &&
         child_box->ContainingBlock() != container_box) {
-      container_builder_->AddOutOfFlowDescendant(candidate);
-      continue;
+      if (auto* containing_block_box = child_box->ContainingBlock();
+          containing_block_box && !containing_block_box->IsLayoutView() &&
+          child.Style().GetPosition() != EPosition::kFixed) {
+        ++g_standalone_oof_candidate_dropped_at_root;
+        ++g_standalone_oof_unsupported_inline_containing_block;
+        continue;
+      } else {
+        if (container_box->IsLayoutView()) {
+          ++g_standalone_oof_candidate_dropped_at_root;
+          ++g_standalone_oof_unsupported_inline_containing_block;
+          continue;
+        } else {
+          ++g_standalone_oof_candidate_repropagated;
+          container_builder_->AddOutOfFlowDescendant(candidate);
+          continue;
+        }
+      }
     }
 
     LogicalOffset offset = candidate.StaticPosition().offset;
@@ -16484,7 +16516,17 @@ void OutOfFlowLayoutPart::Run() {
     const LayoutResult* result = child.Layout(
         child_space_builder.ToConstraintSpace(), candidate.GetBreakToken());
     if (!result) {
+      ++g_standalone_oof_layout_null_results;
       continue;
+    }
+    const auto& physical_fragment =
+        To<PhysicalBoxFragment>(result->GetPhysicalFragment());
+    if ((physical_fragment.Size().width == LayoutUnit() ||
+         physical_fragment.Size().height == LayoutUnit()) &&
+        ((style.LogicalWidth().IsFixed() && style.LogicalWidth().Pixels() > 0) ||
+         (style.LogicalHeight().IsFixed() &&
+          style.LogicalHeight().Pixels() > 0))) {
+      ++g_standalone_oof_zero_size_fragments;
     }
     container_builder_->AddResult(*result, offset);
     container_builder_->SetHasOutOfFlowFragmentChild(true);
