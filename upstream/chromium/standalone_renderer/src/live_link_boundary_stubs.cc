@@ -16424,7 +16424,56 @@ const PhysicalBoxFragment& GetPageArea(const PhysicalBoxFragment& box) {
   return box;
 }
 void FragmentRepeater::DeepCloneRepeatableRoot(LayoutBox&) {}
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+namespace {
+void SetStandaloneChildLayoutBoxLocation(
+    const PhysicalBoxFragment& child_fragment,
+    PhysicalOffset child_fragment_offset) {
+  if (child_fragment.IsLayoutObjectDestroyedOrMoved() ||
+      !child_fragment.IsFirstForNode()) {
+    return;
+  }
+
+  auto* child_layout_box =
+      DynamicTo<LayoutBox>(child_fragment.GetMutableLayoutObject());
+  if (!child_layout_box) {
+    return;
+  }
+
+  child_layout_box->SetLocation(child_fragment_offset);
+}
+}  // namespace
+
+void UpdateChildLayoutBoxLocations(const PhysicalBoxFragment& fragment) {
+  if (fragment.GetLayoutObject()->ChildLayoutBlockedByDisplayLock()) {
+    return;
+  }
+
+  if (const FragmentItems* items = fragment.Items()) {
+    for (InlineCursor cursor(fragment, *items); cursor;
+         cursor.MoveToNext()) {
+      const PhysicalBoxFragment* child_box_fragment =
+          cursor.Current().BoxFragment();
+      if (!child_box_fragment) {
+        continue;
+      }
+      SetStandaloneChildLayoutBoxLocation(
+          *child_box_fragment, cursor.Current().OffsetInContainerFragment());
+    }
+  }
+
+  for (const auto& child : fragment.Children()) {
+    const auto* child_box_fragment =
+        DynamicTo<PhysicalBoxFragment>(child.get());
+    if (!child_box_fragment || child_box_fragment->IsColumnBox()) {
+      continue;
+    }
+    SetStandaloneChildLayoutBoxLocation(*child_box_fragment, child.offset);
+  }
+}
+#else
 void UpdateChildLayoutBoxLocations(const PhysicalBoxFragment&) {}
+#endif
 NamingScope* ToTriggerScopedName(const ScopedCSSName&, const Element&) {
   return nullptr;
 }

@@ -48,6 +48,30 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" int g_standalone_layout_html_body_placement_count = 0;
+extern "C" float g_standalone_layout_html_body_margin_inline_start = 0.0f;
+extern "C" float g_standalone_layout_html_body_margin_block_start = 0.0f;
+extern "C" float g_standalone_layout_html_body_child_bfc_line = 0.0f;
+extern "C" float g_standalone_layout_html_body_child_bfc_block = 0.0f;
+extern "C" float g_standalone_layout_html_body_parent_bfc_line = 0.0f;
+extern "C" float g_standalone_layout_html_body_parent_bfc_block = 0.0f;
+extern "C" float g_standalone_layout_html_body_logical_inline_offset = 0.0f;
+extern "C" float g_standalone_layout_html_body_logical_block_offset = 0.0f;
+extern "C" int g_standalone_layout_body_first_child_placement_count = 0;
+extern "C" float g_standalone_layout_body_child_margin_inline_start = 0.0f;
+extern "C" float g_standalone_layout_body_child_margin_block_start = 0.0f;
+extern "C" float g_standalone_layout_body_child_bfc_line = 0.0f;
+extern "C" float g_standalone_layout_body_child_bfc_block = 0.0f;
+extern "C" float g_standalone_layout_body_parent_bfc_line = 0.0f;
+extern "C" float g_standalone_layout_body_parent_bfc_block = 0.0f;
+extern "C" float g_standalone_layout_body_child_logical_inline_offset = 0.0f;
+extern "C" float g_standalone_layout_body_child_logical_block_offset = 0.0f;
+extern "C" float g_standalone_layout_body_previous_margin_strut_sum = 0.0f;
+extern "C" float g_standalone_layout_body_previous_logical_block_offset = 0.0f;
+#endif
+
 namespace {
 
 bool HasLineEvenIfEmpty(LayoutBox* box) {
@@ -2795,6 +2819,23 @@ LayoutResult::EStatus BlockLayoutAlgorithm::FinishInflow(
     logical_offset = AdjustSliderThumbInlineOffset(fragment, logical_offset);
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (Node().GetLayoutBox() && child.GetLayoutBox()) {
+    if (Node().GetLayoutBox()->IsDocumentElement() &&
+        child.GetLayoutBox()->IsBody()) {
+      g_standalone_layout_html_body_logical_inline_offset =
+          logical_offset.inline_offset.ToFloat();
+      g_standalone_layout_html_body_logical_block_offset =
+          logical_offset.block_offset.ToFloat();
+    } else if (Node().GetLayoutBox()->IsBody()) {
+      g_standalone_layout_body_child_logical_inline_offset =
+          logical_offset.inline_offset.ToFloat();
+      g_standalone_layout_body_child_logical_block_offset =
+          logical_offset.block_offset.ToFloat();
+    }
+  }
+#endif
+
   if (!PositionOrPropagateListMarker(*layout_result, &logical_offset,
                                      previous_inflow_position))
     return LayoutResult::kBfcBlockOffsetResolved;
@@ -2951,6 +2992,46 @@ InflowChildData BlockLayoutAlgorithm::ComputeChildData(
           BorderScrollbarPadding().LineLeft(direction) +
           additional_line_offset + margins.LineLeft(direction),
       BfcBlockOffset() + logical_block_offset};
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (Node().GetLayoutBox() && child.GetLayoutBox()) {
+    const BfcOffset parent_bfc_offset = GetConstraintSpace().GetBfcOffset();
+    if (Node().GetLayoutBox()->IsDocumentElement() &&
+        child.GetLayoutBox()->IsBody()) {
+      ++g_standalone_layout_html_body_placement_count;
+      g_standalone_layout_html_body_margin_inline_start =
+          margins.inline_start.ToFloat();
+      g_standalone_layout_html_body_margin_block_start =
+          margins.block_start.ToFloat();
+      g_standalone_layout_html_body_child_bfc_line =
+          child_bfc_offset.line_offset.ToFloat();
+      g_standalone_layout_html_body_child_bfc_block =
+          child_bfc_offset.block_offset.ToFloat();
+      g_standalone_layout_html_body_parent_bfc_line =
+          parent_bfc_offset.line_offset.ToFloat();
+      g_standalone_layout_html_body_parent_bfc_block =
+          parent_bfc_offset.block_offset.ToFloat();
+    } else if (Node().GetLayoutBox()->IsBody()) {
+      ++g_standalone_layout_body_first_child_placement_count;
+      g_standalone_layout_body_child_margin_inline_start =
+          margins.inline_start.ToFloat();
+      g_standalone_layout_body_child_margin_block_start =
+          margins.block_start.ToFloat();
+      g_standalone_layout_body_child_bfc_line =
+          child_bfc_offset.line_offset.ToFloat();
+      g_standalone_layout_body_child_bfc_block =
+          child_bfc_offset.block_offset.ToFloat();
+      g_standalone_layout_body_parent_bfc_line =
+          parent_bfc_offset.line_offset.ToFloat();
+      g_standalone_layout_body_parent_bfc_block =
+          parent_bfc_offset.block_offset.ToFloat();
+      g_standalone_layout_body_previous_margin_strut_sum =
+          previous_inflow_position.margin_strut.Sum().ToFloat();
+      g_standalone_layout_body_previous_logical_block_offset =
+          previous_inflow_position.logical_block_offset.ToFloat();
+    }
+  }
+#endif
 
   return InflowChildData(child_bfc_offset, margin_strut, margins);
 }

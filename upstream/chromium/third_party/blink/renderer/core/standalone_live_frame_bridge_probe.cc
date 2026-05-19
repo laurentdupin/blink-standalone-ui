@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdint>
 #include <array>
 #include <iomanip>
 #include <map>
@@ -57,6 +58,9 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/physical_fragment.h"
+#include "third_party/blink/renderer/core/layout/physical_fragment_link.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
@@ -108,6 +112,26 @@ extern "C" int g_standalone_text_decoration_only_line_through_called;
 extern "C" int g_standalone_decoration_line_painter_paint_called;
 extern "C" int g_standalone_html_factory_create_html_count;
 extern "C" int g_standalone_html_factory_create_body_count;
+extern "C" int g_standalone_layout_html_body_placement_count;
+extern "C" float g_standalone_layout_html_body_margin_inline_start;
+extern "C" float g_standalone_layout_html_body_margin_block_start;
+extern "C" float g_standalone_layout_html_body_child_bfc_line;
+extern "C" float g_standalone_layout_html_body_child_bfc_block;
+extern "C" float g_standalone_layout_html_body_parent_bfc_line;
+extern "C" float g_standalone_layout_html_body_parent_bfc_block;
+extern "C" float g_standalone_layout_html_body_logical_inline_offset;
+extern "C" float g_standalone_layout_html_body_logical_block_offset;
+extern "C" int g_standalone_layout_body_first_child_placement_count;
+extern "C" float g_standalone_layout_body_child_margin_inline_start;
+extern "C" float g_standalone_layout_body_child_margin_block_start;
+extern "C" float g_standalone_layout_body_child_bfc_line;
+extern "C" float g_standalone_layout_body_child_bfc_block;
+extern "C" float g_standalone_layout_body_parent_bfc_line;
+extern "C" float g_standalone_layout_body_parent_bfc_block;
+extern "C" float g_standalone_layout_body_child_logical_inline_offset;
+extern "C" float g_standalone_layout_body_child_logical_block_offset;
+extern "C" float g_standalone_layout_body_previous_margin_strut_sum;
+extern "C" float g_standalone_layout_body_previous_logical_block_offset;
 
 namespace {
 
@@ -1713,6 +1737,23 @@ std::string PhysicalOffsetJsonForStandaloneRenderer(const PhysicalOffset& offset
 std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 
+std::string PhysicalSizeJsonForStandaloneRenderer(const PhysicalSize& size) {
+  std::ostringstream json;
+  json << "{\"width\":" << size.width.ToFloat()
+       << ",\"height\":" << size.height.ToFloat() << "}";
+  return json.str();
+}
+
+std::string PhysicalBoxStrutJsonForStandaloneRenderer(
+    const PhysicalBoxStrut& strut) {
+  std::ostringstream json;
+  json << "{\"top\":" << strut.top.ToFloat()
+       << ",\"right\":" << strut.right.ToFloat()
+       << ",\"bottom\":" << strut.bottom.ToFloat()
+       << ",\"left\":" << strut.left.ToFloat() << "}";
+  return json.str();
+}
+
 std::string LayoutParentChainJsonForStandaloneRenderer(
     const LayoutObject* layout_object) {
   std::ostringstream json;
@@ -1725,6 +1766,115 @@ std::string LayoutParentChainJsonForStandaloneRenderer(
     }
     json << JsonStringForStandaloneRenderer(
         BlinkStringToStdStringForStandaloneRenderer(current->DebugName()));
+  }
+  json << "]";
+  return json.str();
+}
+
+std::string FragmentEvidenceJsonForStandaloneRenderer(const LayoutBox& box) {
+  std::ostringstream json;
+  json << "{\"physical_fragment_count\":" << box.PhysicalFragmentCount();
+  const PhysicalBoxFragment* fragment = box.GetPhysicalFragment(0);
+  if (!fragment) {
+    json << ",\"first_fragment_present\":false}";
+    return json.str();
+  }
+  json << ",\"first_fragment_present\":true"
+       << ",\"first_fragment_size\":"
+       << PhysicalSizeJsonForStandaloneRenderer(fragment->Size())
+       << ",\"first_fragment_margins\":"
+       << PhysicalBoxStrutJsonForStandaloneRenderer(fragment->Margins())
+       << ",\"first_fragment_content_rect\":"
+       << PhysicalRectJsonForStandaloneRenderer(fragment->ContentRect())
+       << ",\"offset_from_root_fragmentation_context\":"
+       << PhysicalOffsetJsonForStandaloneRenderer(
+              fragment->OffsetFromRootFragmentationContext())
+       << ",\"children\":[";
+  int child_index = 0;
+  for (const PhysicalFragmentLink& child_link : fragment->Children()) {
+    if (child_index > 0) {
+      json << ",";
+    }
+    const PhysicalFragment* child_fragment = child_link.get();
+    json << "{\"index\":" << child_index
+         << ",\"offset\":"
+         << PhysicalOffsetJsonForStandaloneRenderer(child_link.Offset());
+    if (child_fragment) {
+      const LayoutObject* child_object = child_fragment->GetLayoutObject();
+      json << ",\"layout_object\":"
+           << JsonStringForStandaloneRenderer(
+                  child_object ? BlinkStringToStdStringForStandaloneRenderer(
+                                     child_object->DebugName())
+                               : std::string())
+           << ",\"size\":"
+           << PhysicalSizeJsonForStandaloneRenderer(child_fragment->Size());
+    } else {
+      json << ",\"layout_object\":null,\"size\":null";
+    }
+    json << "}";
+    ++child_index;
+    if (child_index >= 16) {
+      break;
+    }
+  }
+  json << "]}";
+  return json.str();
+}
+
+std::string LayoutChainEvidenceJsonForStandaloneRenderer(
+    const LayoutObject* layout_object) {
+  std::ostringstream json;
+  json << "[";
+  std::vector<const LayoutObject*> chain;
+  for (const LayoutObject* current = layout_object; current;
+       current = current->Parent()) {
+    chain.push_back(current);
+  }
+  for (wtf_size_t i = chain.size(); i > 0; --i) {
+    const LayoutObject* current = chain[i - 1];
+    if (i != chain.size()) {
+      json << ",";
+    }
+    json << "{\"name\":"
+         << JsonStringForStandaloneRenderer(
+                BlinkStringToStdStringForStandaloneRenderer(
+                    current->DebugName()))
+         << ",\"pointer\":\"0x" << std::hex
+         << reinterpret_cast<uintptr_t>(current) << std::dec << "\"";
+    if (const Node* node = current->GetNode()) {
+      json << ",\"node_name\":"
+           << JsonStringForStandaloneRenderer(
+                  BlinkStringToStdStringForStandaloneRenderer(
+                      node->nodeName()));
+    } else {
+      json << ",\"node_name\":null";
+    }
+    if (const auto* box = DynamicTo<LayoutBox>(current)) {
+      const PhysicalRect local_rect(PhysicalOffset(), box->StitchedSize());
+      const PhysicalOffset root_offset =
+          current->OffsetFromAncestor(current->View());
+      json << ",\"is_box\":true"
+           << ",\"local_layout_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(local_rect)
+           << ",\"root_offset\":"
+           << PhysicalOffsetJsonForStandaloneRenderer(root_offset)
+           << ",\"root_space_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(
+                  PhysicalRect(root_offset, box->StitchedSize()))
+           << ",\"fragment\":"
+           << FragmentEvidenceJsonForStandaloneRenderer(*box);
+    } else {
+      json << ",\"is_box\":false";
+    }
+    if (LayoutBlock* containing_block = current->ContainingBlock()) {
+      json << ",\"containing_block\":"
+           << JsonStringForStandaloneRenderer(
+                  BlinkStringToStdStringForStandaloneRenderer(
+                      containing_block->DebugName()));
+    } else {
+      json << ",\"containing_block\":null";
+    }
+    json << "}";
   }
   json << "]";
   return json.str();
@@ -1763,7 +1913,48 @@ std::string DocumentEvidenceJsonForStandaloneRenderer(Document& document) {
        << ",\"html_element_factory_create_html_count\":"
        << g_standalone_html_factory_create_html_count
        << ",\"html_element_factory_create_body_count\":"
-       << g_standalone_html_factory_create_body_count << "}";
+       << g_standalone_html_factory_create_body_count
+       << ",\"layout_child_placement_breadcrumbs\":{"
+       << "\"html_to_body\":{\"count\":"
+       << g_standalone_layout_html_body_placement_count
+       << ",\"margin_inline_start\":"
+       << g_standalone_layout_html_body_margin_inline_start
+       << ",\"margin_block_start\":"
+       << g_standalone_layout_html_body_margin_block_start
+       << ",\"child_bfc_line\":"
+       << g_standalone_layout_html_body_child_bfc_line
+       << ",\"child_bfc_block\":"
+       << g_standalone_layout_html_body_child_bfc_block
+       << ",\"parent_bfc_line\":"
+       << g_standalone_layout_html_body_parent_bfc_line
+       << ",\"parent_bfc_block\":"
+       << g_standalone_layout_html_body_parent_bfc_block
+       << ",\"logical_inline_offset\":"
+       << g_standalone_layout_html_body_logical_inline_offset
+       << ",\"logical_block_offset\":"
+       << g_standalone_layout_html_body_logical_block_offset << "}"
+       << ",\"body_to_first_child\":{\"count\":"
+       << g_standalone_layout_body_first_child_placement_count
+       << ",\"margin_inline_start\":"
+       << g_standalone_layout_body_child_margin_inline_start
+       << ",\"margin_block_start\":"
+       << g_standalone_layout_body_child_margin_block_start
+       << ",\"child_bfc_line\":"
+       << g_standalone_layout_body_child_bfc_line
+       << ",\"child_bfc_block\":"
+       << g_standalone_layout_body_child_bfc_block
+       << ",\"parent_bfc_line\":"
+       << g_standalone_layout_body_parent_bfc_line
+       << ",\"parent_bfc_block\":"
+       << g_standalone_layout_body_parent_bfc_block
+       << ",\"logical_inline_offset\":"
+       << g_standalone_layout_body_child_logical_inline_offset
+       << ",\"logical_block_offset\":"
+       << g_standalone_layout_body_child_logical_block_offset
+       << ",\"previous_margin_strut_sum\":"
+       << g_standalone_layout_body_previous_margin_strut_sum
+       << ",\"previous_logical_block_offset\":"
+       << g_standalone_layout_body_previous_logical_block_offset << "}}}";
   return json.str();
 }
 
@@ -1893,7 +2084,9 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
          << (element == element->GetDocument().documentElement() ? "true"
                                                                  : "false")
          << ",\"parent_layout_chain\":"
-         << LayoutParentChainJsonForStandaloneRenderer(layout_object);
+         << LayoutParentChainJsonForStandaloneRenderer(layout_object)
+         << ",\"layout_chain\":"
+         << LayoutChainEvidenceJsonForStandaloneRenderer(layout_object);
     if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
       PhysicalRect local_layout_rect(PhysicalOffset(), box->StitchedSize());
       const PhysicalOffset local_to_root_offset =
