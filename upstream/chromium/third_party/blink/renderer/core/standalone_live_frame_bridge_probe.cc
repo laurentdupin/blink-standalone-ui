@@ -2898,6 +2898,15 @@ std::string LowerAsciiForStandaloneRenderer(std::string value) {
   return value;
 }
 
+bool ContainsOutOfFlowPositioningForStandaloneRenderer(
+    const std::string& html) {
+  const std::string lower = LowerAsciiForStandaloneRenderer(html);
+  return lower.find("position:absolute") != std::string::npos ||
+         lower.find("position: absolute") != std::string::npos ||
+         lower.find("position:fixed") != std::string::npos ||
+         lower.find("position: fixed") != std::string::npos;
+}
+
 std::string ExtractHtmlAttributeForStandaloneRenderer(
     const std::string& tag,
     const std::string& attribute_name);
@@ -3252,10 +3261,80 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   int total_non_drawing_item_count = 0;
   RawPaintRecordAudit total_raw_audit;
   bool total_has_clip_state = false;
+  TraceLiveFrameProbeStage("paint audit before safe mode check");
+  const bool artifact_audit_safe_mode =
+      ContainsOutOfFlowPositioningForStandaloneRenderer(cache.body_html);
+  TraceLiveFrameProbeStage("paint audit after safe mode check");
   std::ostringstream chunks_json;
   chunks_json << "[";
-  for (wtf_size_t chunk_index = 0; chunk_index < chunk_count;
-       ++chunk_index) {
+  if (artifact_audit_safe_mode) {
+    TraceLiveFrameProbeStage("paint audit safe mode begin");
+    RawPaintRecordAudit aggregate_audit;
+    std::ostringstream aggregate_ops_json;
+    aggregate_ops_json << "[";
+    bool first_safe_item = true;
+    for (wtf_size_t item_index = 0; item_index < display_item_count;
+         ++item_index) {
+      TraceLiveFrameProbeStagef("paint audit safe before item %lu",
+                                item_index);
+      const auto* drawing = DynamicTo<DrawingDisplayItem>(items[item_index]);
+      TraceLiveFrameProbeStagef("paint audit safe after dynamic item %lu",
+                                item_index);
+      if (!drawing) {
+        ++total_non_drawing_item_count;
+        continue;
+      }
+      ++total_drawing_item_count;
+      if (!first_safe_item) {
+        aggregate_ops_json << ",";
+      }
+      first_safe_item = false;
+      aggregate_ops_json << "{\"display_item_index\":" << item_index
+                         << ",\"paint_ops\":[";
+      TraceLiveFrameProbeStagef("paint audit safe before record %lu",
+                                item_index);
+      AppendPaintRecordAuditJson(drawing->GetPaintRecord(), aggregate_audit,
+                                 &aggregate_ops_json, true);
+      TraceLiveFrameProbeStagef("paint audit safe after record %lu",
+                                item_index);
+      aggregate_ops_json << "]}";
+    }
+    TraceLiveFrameProbeStage("paint audit safe mode after item loop");
+    aggregate_ops_json << "]";
+    TraceLiveFrameProbeStage("paint audit safe before totals assign");
+    total_op_histogram = aggregate_audit.top_level_histogram;
+    total_recursive_op_histogram = aggregate_audit.recursive_histogram;
+    total_unsupported_histogram = aggregate_audit.unsupported_histogram;
+    total_fallback_histogram = aggregate_audit.fallback_histogram;
+    total_op_count = aggregate_audit.paint_op_count;
+    total_recursive_op_count = aggregate_audit.recursive_paint_op_count;
+    total_raw_audit = aggregate_audit;
+    TraceLiveFrameProbeStage("paint audit safe after totals assign");
+    chunks_json
+        << "{\"index\":0,\"status\":\"metadata_skipped\","
+        << "\"reason\":\"paint-artifact-audit-safe: out-of-flow/fixed "
+           "PaintChunk metadata is currently unsafe in the standalone export; "
+           "essential raw PaintOp counts are collected from display items when "
+           "available\","
+        << "\"begin_index\":null,\"end_index\":null,"
+        << "\"op_histogram\":" << MapToJsonObject(total_op_histogram)
+        << ",\"recursive_op_histogram\":"
+        << MapToJsonObject(total_recursive_op_histogram)
+        << ",\"unsupported_ops\":"
+        << MapToJsonObject(total_unsupported_histogram)
+        << ",\"fallback_rasterized_ops\":"
+        << MapToJsonObject(total_fallback_histogram)
+        << ",\"paint_ops\":" << aggregate_ops_json.str()
+        << ",\"display_items\":[]}";
+    TraceLiveFrameProbeStage("paint audit safe after chunks json");
+    cache.artifact_audit_lines.push_back(
+        "paint_artifact_audit safe_mode=1 reason=out_of_flow_or_fixed "
+        "chunk_metadata_skipped essential_ops=" +
+        std::to_string(total_recursive_op_count));
+    TraceLiveFrameProbeStage("paint audit safe after line");
+  }
+  for (wtf_size_t chunk_index = 0;
+       !artifact_audit_safe_mode && chunk_index < chunk_count; ++chunk_index) {
     TraceLiveFrameProbeStagef("paint audit before chunk %lu", chunk_index);
     const PaintChunk& chunk = chunks[chunk_index];
     TraceLiveFrameProbeStagef("paint audit after chunk %lu", chunk_index);
@@ -3721,24 +3800,33 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
         MapToJsonObject(chunk_op_histogram) + " unsupported=" +
         MapToJsonObject(chunk_unsupported_histogram));
   }
+  TraceLiveFrameProbeStage("paint audit after chunk loop");
   chunks_json << "]";
+  TraceLiveFrameProbeStage("paint audit after chunks json close");
 
   cache.artifact_audit_lines.push_back(
       "paint_artifact_audit totals paint_ops=" +
       std::to_string(total_op_count) + " ops=" +
       MapToJsonObject(total_op_histogram) + " unsupported=" +
       MapToJsonObject(total_unsupported_histogram));
+  TraceLiveFrameProbeStage("paint audit after totals line");
 
   const std::string lowered_input =
       LowerAsciiForStandaloneRenderer(cache.body_html);
+  TraceLiveFrameProbeStage("paint audit after lowered input");
   const std::map<std::string, int> image_scheme_histogram =
       ImageSchemeHistogramForStandaloneRenderer(cache.body_html);
+  TraceLiveFrameProbeStage("paint audit after image scheme histogram");
   const std::map<std::string, int> css_image_scheme_histogram =
       CssImageSchemeHistogramForStandaloneRenderer(cache.body_html);
+  TraceLiveFrameProbeStage("paint audit after css image scheme histogram");
   const std::string page_evidence_json =
-      cache.holder ? PageEvidenceJsonForStandaloneRenderer(
-                         cache.holder->GetDocument())
-                   : "{}";
+      artifact_audit_safe_mode
+          ? "{\"status\":\"inaccessible\",\"reason\":\"paint-artifact-audit-safe skips optional page evidence for out-of-flow/fixed crash isolation\"}"
+          : cache.holder ? PageEvidenceJsonForStandaloneRenderer(
+                               cache.holder->GetDocument())
+                         : "{}";
+  TraceLiveFrameProbeStage("paint audit after page evidence");
   const bool evidence_has_non_translation_transform =
       page_evidence_json.find("\"has_non_translation_transform\":true") !=
       std::string::npos;
@@ -3785,8 +3873,15 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"viewport\":{\"width\":" << cache.viewport_width
        << ",\"height\":" << cache.viewport_height << "}"
        << ",\"device_scale_factor\":1"
-       << ",\"raw_chunk_count\":" << chunks.size()
-       << ",\"raw_display_item_count\":" << items.size()
+       << ",\"paint_artifact_audit_safe_mode\":"
+       << (artifact_audit_safe_mode ? "true" : "false")
+       << ",\"paint_artifact_audit_safe_mode_reason\":"
+       << JsonStringForStandaloneRenderer(
+              artifact_audit_safe_mode
+                  ? "out_of_flow_or_fixed_position_chunk_metadata_skipped"
+                  : "")
+       << ",\"raw_chunk_count\":" << chunk_count
+       << ",\"raw_display_item_count\":" << display_item_count
        << ",\"raw_drawing_display_item_count\":" << total_drawing_item_count
        << ",\"raw_non_drawing_display_item_count\":"
        << total_non_drawing_item_count
