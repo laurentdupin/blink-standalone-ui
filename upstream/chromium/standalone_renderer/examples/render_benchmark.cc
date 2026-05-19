@@ -643,6 +643,32 @@ void PrintDiagnostics(const html_css_renderer::RenderResult& result) {
   }
 }
 
+void StripTransformCommandsForDiagnosticOracle(
+    html_css_renderer::RenderResult& result) {
+  for (html_css_renderer::SceneChunk& chunk : result.frame.scene_chunks) {
+    chunk.commands.erase(
+        std::remove_if(chunk.commands.begin(), chunk.commands.end(),
+                       [](const html_css_renderer::DrawCommand& command) {
+                         return command.type ==
+                                html_css_renderer::DrawCommandType::kTransform;
+                       }),
+        chunk.commands.end());
+  }
+  result.frame.scene_commands.erase(
+      std::remove_if(
+          result.frame.scene_commands.begin(), result.frame.scene_commands.end(),
+          [](const html_css_renderer::SceneCommand& command) {
+            return command.type ==
+                       html_css_renderer::SceneCommandType::kDrawCommand &&
+                   command.draw_command.type ==
+                       html_css_renderer::DrawCommandType::kTransform;
+          }),
+      result.frame.scene_commands.end());
+  result.diagnostics.push_back(
+      "diagnostic_transform_mode=record-only stripped retained Transform "
+      "commands for diagnostic playback only");
+}
+
 void PrintUsage() {
   std::fprintf(stderr,
                "Usage: blink_standalone_render_benchmark_skia --html <html> "
@@ -656,6 +682,8 @@ void PrintUsage() {
                "[--lifecycle-stop <html|style|layout|prepaint|paint|artifact>] "
                "[--crash-dump <path>] "
                "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
+               "[--paint-oracle-transform-mode=normal|record-only] "
+               "[--retained-transform-mode=normal|record-only] "
                "[--debug-text-blob-replay] "
                "[--debug-command-coverage] "
                "[--strict-text-blob-typefaces] "
@@ -728,6 +756,8 @@ int main(int argc, char** argv) {
   std::string paint_artifact_dump_path;
   std::string page_setup_dump_path;
   std::string paint_oracle;
+  std::string paint_oracle_transform_mode = "normal";
+  std::string retained_transform_mode = "normal";
   std::string oracle_out_path;
   std::string crash_dump_path;
   std::string lifecycle_stop;
@@ -885,6 +915,24 @@ int main(int argc, char** argv) {
         return 2;
       }
       oracle_out_path = value;
+    } else if (arg == "--paint-oracle-transform-mode") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      paint_oracle_transform_mode = value;
+    } else if (arg.rfind("--paint-oracle-transform-mode=", 0) == 0) {
+      paint_oracle_transform_mode = arg.substr(30);
+    } else if (arg == "--retained-transform-mode") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      retained_transform_mode = value;
+    } else if (arg.rfind("--retained-transform-mode=", 0) == 0) {
+      retained_transform_mode = arg.substr(26);
     } else if (arg == "--min-non-white") {
       const char* value = next_value();
       if (!value) {
@@ -1006,6 +1054,14 @@ int main(int argc, char** argv) {
     return 0;
   }
 
+  if (retained_transform_mode == "record-only") {
+    StripTransformCommandsForDiagnosticOracle(result);
+  } else if (retained_transform_mode != "normal") {
+    std::fprintf(stderr, "unknown retained transform mode: %s\n",
+                 retained_transform_mode.c_str());
+    return 2;
+  }
+
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
   if (use_blink && !use_skia_cpu && HasRealBlinkPaintArtifact(result)) {
     std::fprintf(stderr,
@@ -1067,7 +1123,7 @@ int main(int argc, char** argv) {
       oracle_create_info.renderer = renderer_info_for_oracle;
       oracle_create_info.trace_stages = trace_stages;
       oracle_create_info.debug_text_blob_replay = debug_text_blob_replay;
-      oracle_create_info.force_paint_oracle_bitmap = true;
+      oracle_create_info.force_paint_oracle_bitmap = false;
       std::unique_ptr<html_css_renderer::BlinkPageEmbedder> oracle_embedder =
           html_css_renderer::CreateLiveBlinkPageEmbedder(
               std::move(oracle_create_info));
@@ -1083,6 +1139,13 @@ int main(int argc, char** argv) {
                      "skia_paint_record_oracle failed before PaintArtifact\n");
         PrintDiagnostics(oracle_result);
         return 1;
+      }
+      if (paint_oracle_transform_mode == "record-only") {
+        StripTransformCommandsForDiagnosticOracle(oracle_result);
+      } else if (paint_oracle_transform_mode != "normal") {
+        std::fprintf(stderr, "unknown paint oracle transform mode: %s\n",
+                     paint_oracle_transform_mode.c_str());
+        return 2;
       }
       html_css_renderer::CpuRenderOptions oracle_options;
       oracle_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
@@ -1108,6 +1171,14 @@ int main(int argc, char** argv) {
                    "skia_paint_record_oracle requires Skia CPU\n");
       return 1;
 #endif
+    } else if (paint_oracle == "blink-flattened-paint-record") {
+      std::fprintf(
+          stderr,
+          "blink-flattened-paint-record oracle unavailable: "
+          "PaintArtifact::GetPaintRecord is not linked in the standalone "
+          "runtime and currently resolves to the live_link_boundary_stubs.cc "
+          "empty stub\n");
+      return 2;
     } else {
       std::fprintf(stderr, "unknown paint oracle: %s\n", paint_oracle.c_str());
       return 2;

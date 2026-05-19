@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -2052,6 +2053,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       }
     }
     int translated_command_count = 0;
+    auto nearly_equal = [](float left, float right) {
+      return std::abs(left - right) <= 0.01f;
+    };
     for (int i = 0; i < exported_draw_op_count; ++i) {
       int type = 0;
       float x = 0.0f;
@@ -2435,6 +2439,19 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_commands->push_back(DrawCommand::Transform(matrix));
         ++translated_command_count;
       } else if (type == 14) {
+        const bool pure_translation =
+            nearly_equal(x, 1.0f) && nearly_equal(y, 0.0f) &&
+            nearly_equal(height, 0.0f) && nearly_equal(r, 1.0f);
+        const bool duplicates_chunk_root_space_origin =
+            pure_translation && nearly_equal(width, active_chunk_bounds.x) &&
+            nearly_equal(g, active_chunk_bounds.y) &&
+            (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
+        if (duplicates_chunk_root_space_origin) {
+          result.diagnostics.push_back(
+              "real Blink PaintArtifact skipped duplicate root-space chunk "
+              "translation transform for chunk " + active_chunk_key);
+          continue;
+        }
         Matrix4 matrix;
         matrix.values[0] = x;
         matrix.values[4] = y;
