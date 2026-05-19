@@ -15849,6 +15849,12 @@ void HighlightPainter::PaintHighlightOverlays(const TextPaintStyle&,
                                               bool,
                                               std::optional<AffineTransform>) {}
 void HighlightPainter::FastPaintSpellingGrammarDecorations() {}
+extern "C" int g_standalone_text_decoration_painter_constructed = 0;
+extern "C" int g_standalone_text_decoration_begin_called = 0;
+extern "C" int g_standalone_text_decoration_except_line_through_called = 0;
+extern "C" int g_standalone_text_decoration_only_line_through_called = 0;
+extern "C" int g_standalone_decoration_line_painter_paint_called = 0;
+
 TextDecorationPainter::TextDecorationPainter(
     TextPainter& text_painter,
     const InlinePaintContext* inline_context,
@@ -15865,14 +15871,21 @@ TextDecorationPainter::TextDecorationPainter(
       decoration_rect_(decoration_rect),
       selection_(selection),
       step_(kBegin),
-      phase_(kOriginating) {}
+      phase_(kOriginating) {
+  ++g_standalone_text_decoration_painter_constructed;
+}
 TextDecorationPainter::~TextDecorationPainter() = default;
 void TextDecorationPainter::Begin(const FragmentItem&, Phase phase) {
+  ++g_standalone_text_decoration_begin_called;
   phase_ = phase;
 }
 void TextDecorationPainter::PaintExceptLineThrough(
-    const TextFragmentPaintInfo&) {}
-void TextDecorationPainter::PaintOnlyLineThrough() {}
+    const TextFragmentPaintInfo&) {
+  ++g_standalone_text_decoration_except_line_through_called;
+}
+void TextDecorationPainter::PaintOnlyLineThrough() {
+  ++g_standalone_text_decoration_only_line_through_called;
+}
 SelectionBoundsRecorder::SelectionBoundsRecorder(SelectionState state,
                                                  PhysicalRect selection_rect,
                                                  PaintController& controller,
@@ -15955,7 +15968,9 @@ DecorationGeometry DecorationGeometry::Make(StrokeStyle style,
 void DecorationLinePainter::Paint(const DecorationGeometry&,
                                   const Color&,
                                   const AutoDarkMode&,
-                                  const cc::PaintFlags*) {}
+                                  const cc::PaintFlags*) {
+  ++g_standalone_decoration_line_painter_paint_called;
+}
 int Font::EmphasisMarkDescent(const AtomicString&) const {
   return 0;
 }

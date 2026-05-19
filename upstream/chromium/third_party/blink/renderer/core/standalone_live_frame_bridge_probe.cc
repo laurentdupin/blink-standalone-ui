@@ -99,6 +99,11 @@ extern "C" int StandaloneRendererLayoutImageResourceSetResourceCalled();
 extern "C" int StandaloneRendererLayoutImageResourceNaturalDimensionsCalled();
 extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled();
 extern "C" int StandaloneRendererImageResourceContentFetchLastUrl(char*, int);
+extern "C" int g_standalone_text_decoration_painter_constructed;
+extern "C" int g_standalone_text_decoration_begin_called;
+extern "C" int g_standalone_text_decoration_except_line_through_called;
+extern "C" int g_standalone_text_decoration_only_line_through_called;
+extern "C" int g_standalone_decoration_line_painter_paint_called;
 
 namespace {
 
@@ -3523,6 +3528,20 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                ? "upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc"
                : "")
        << "\"}"
+       << ",\"text_decoration_diagnostics\":{"
+       << "\"text_decoration_painter_constructed\":"
+       << g_standalone_text_decoration_painter_constructed
+       << ",\"text_decoration_begin_called\":"
+       << g_standalone_text_decoration_begin_called
+       << ",\"paint_except_line_through_called\":"
+       << g_standalone_text_decoration_except_line_through_called
+       << ",\"paint_only_line_through_called\":"
+       << g_standalone_text_decoration_only_line_through_called
+       << ",\"decoration_line_painter_paint_called\":"
+       << g_standalone_decoration_line_painter_paint_called
+       << ",\"stubbed_noop_path_active\":true"
+       << ",\"blocker_file\":\"upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc\""
+       << "}"
        << ",\"page_evidence\":" << page_evidence_json
        << ",\"chunks\":" << chunks_json.str()
        << ",\"self_checks\":{\"css_applied\":\"unknown\""

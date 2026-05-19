@@ -43,7 +43,12 @@ def main() -> None:
     selectors = sorted(set(standalone_elements.keys()) | set(playwright_elements.keys()))
     selected = {}
     for selector in selectors:
-        s = standalone_elements.get(selector) or {}
+        standalone_selector = selector
+        if selector == ".fixture-target" and selector not in standalone_elements:
+            standalone_selector = "fixture-target"
+        elif selector == "[data-debug-id]" and selector not in standalone_elements:
+            standalone_selector = "data-debug-id"
+        s = standalone_elements.get(standalone_selector) or {}
         p = playwright_elements.get(selector) or {}
         selected[selector] = {
             "present": {

@@ -1,6 +1,25 @@
 #!/usr/bin/env node
 const fs = require("fs");
-const { chromium } = require("playwright");
+const path = require("path");
+
+function requirePlaywright() {
+  try {
+    return require("playwright");
+  } catch (firstError) {
+    const pathEntries = (process.env.PATH || "").split(path.delimiter);
+    for (const entry of pathEntries) {
+      if (!entry.toLowerCase().endsWith(`${path.sep}.bin`)) continue;
+      const candidate = path.join(path.dirname(entry), "playwright");
+      try {
+        return require(candidate);
+      } catch (_) {
+      }
+    }
+    throw firstError;
+  }
+}
+
+const { chromium } = requirePlaywright();
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
