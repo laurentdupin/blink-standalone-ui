@@ -1976,21 +1976,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer()) {
       return;
     }
-    if (!live_probe::StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
-            probe_html.c_str())) {
-      result.diagnostics.push_back(
-          "real Blink PaintArtifact bridge did not reach PaintClean");
-      return;
-    }
-
-    const int chunk_count =
-        live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
-            probe_html.c_str());
-    const int raw_audit_json_size =
-        live_probe::
-            StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRenderer(
-                probe_html.c_str());
-    if (raw_audit_json_size > 0) {
+    auto copy_raw_paint_artifact_audit_json = [&]() {
+      const int raw_audit_json_size =
+          live_probe::
+              StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRenderer(
+                  probe_html.c_str());
+      if (raw_audit_json_size <= 0) {
+        return;
+      }
       std::string raw_json(static_cast<size_t>(raw_audit_json_size) + 1, '\0');
       const int copied =
           live_probe::
@@ -2001,7 +1994,19 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         raw_json.resize(static_cast<size_t>(copied));
         result.raw_paint_artifact_audit_json = std::move(raw_json);
       }
+    };
+    copy_raw_paint_artifact_audit_json();
+    if (!live_probe::StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
+            probe_html.c_str())) {
+      result.diagnostics.push_back(
+          "real Blink PaintArtifact bridge did not reach PaintClean");
+      return;
     }
+
+    const int chunk_count =
+        live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
+            probe_html.c_str());
+    copy_raw_paint_artifact_audit_json();
     if (chunk_count <= 0) {
       result.diagnostics.push_back("real Blink PaintArtifact bridge produced no chunks");
       return;

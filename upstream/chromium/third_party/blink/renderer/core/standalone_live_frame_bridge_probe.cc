@@ -2337,7 +2337,33 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
   json << ",\"layout_object_present\":"
        << (layout_object ? "true" : "false");
   if (!layout_object) {
-    json << ",\"first_missing_stage\":\"layout_object_missing\"}";
+    json << ",\"oof_layout_part_run_called\":"
+         << (g_standalone_oof_layout_part_run_called > 0 ? "true" : "false")
+         << ",\"oof_descendant_collected\":"
+         << (g_standalone_oof_descendant_collected > 0 ? "true" : "false")
+         << ",\"oof_candidate_count\":" << g_standalone_oof_candidate_count
+         << ",\"oof_layout_attempted\":"
+         << (g_standalone_oof_layout_attempted > 0 ? "true" : "false")
+         << ",\"oof_fragment_created\":"
+         << (g_standalone_oof_fragment_created > 0 ? "true" : "false")
+         << ",\"candidate_repropagated\":"
+         << g_standalone_oof_candidate_repropagated
+         << ",\"candidate_dropped_at_root\":"
+         << g_standalone_oof_candidate_dropped_at_root
+         << ",\"unsupported_inline_containing_block\":"
+         << g_standalone_oof_unsupported_inline_containing_block
+         << ",\"layout_null_results\":"
+         << g_standalone_oof_layout_null_results
+         << ",\"zero_size_fragments\":"
+         << g_standalone_oof_zero_size_fragments
+         << ",\"safety_limit_hit\":"
+         << (g_standalone_oof_safety_limit_hit ? "true" : "false")
+         << ",\"unsupported_inset_forms\":[]"
+         << ",\"candidate_repropagation_warnings\":"
+         << (g_standalone_oof_unsupported_inline_containing_block > 0
+                 ? "[\"standalone OOF subset does not support inline containing block absolute positioning yet\"]"
+                 : "[]")
+         << ",\"first_missing_stage\":\"layout_object_missing\"}";
     return json.str();
   }
   LayoutBlock* containing_block = layout_object->ContainingBlock();

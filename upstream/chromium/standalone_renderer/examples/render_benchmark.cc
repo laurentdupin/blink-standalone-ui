@@ -666,6 +666,12 @@ void PrintUsage() {
                " [--skia-cpu]"
 #endif
                "\n");
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+  std::fprintf(stderr,
+               "Note: live Blink retained replay currently requires "
+               "--skia-cpu; the non-Skia backend is unsupported for this "
+               "path.\n");
+#endif
 }
 
 #if defined(_WIN32)
@@ -999,6 +1005,16 @@ int main(int argc, char** argv) {
                 static_cast<size_t>(0), static_cast<size_t>(0));
     return 0;
   }
+
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+  if (use_blink && !use_skia_cpu && HasRealBlinkPaintArtifact(result)) {
+    std::fprintf(stderr,
+                 "non-Skia backend unsupported for live Blink retained replay; "
+                 "pass --skia-cpu\n");
+    PrintDiagnostics(result);
+    return 5;
+  }
+#endif
 
   html_css_renderer::CpuRenderOptions cpu_options;
   cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
