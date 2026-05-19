@@ -21,6 +21,19 @@ def nested_get(value: dict, keys: list[str], default=None):
     return current if current is not None else default
 
 
+def dict_or_empty(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def element_map_or_empty(value) -> dict:
+    value = dict_or_empty(value)
+    if "status" in value and "reason" in value and not any(
+        isinstance(v, dict) and "layout" in v for v in value.values()
+    ):
+        return {}
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--standalone", required=True, type=Path)
@@ -33,14 +46,14 @@ def main() -> None:
     playwright = load(args.playwright).get("playwright_setup", {})
     body = playwright.get("bodyComputedStyle") or {}
     html = playwright.get("htmlComputedStyle") or {}
-    standalone_elements = (
+    standalone_elements = element_map_or_empty(
         standalone.get("selected_elements")
         or standalone.get("selectedElements")
         or standalone_doc.get("page_evidence")
         or raw_audit.get("page_evidence")
         or {}
     )
-    playwright_elements = playwright.get("selectedElements") or {}
+    playwright_elements = dict_or_empty(playwright.get("selectedElements") or {})
     selectors = sorted(set(standalone_elements.keys()) | set(playwright_elements.keys()))
     selected = {}
     for selector in selectors:
@@ -49,8 +62,8 @@ def main() -> None:
             standalone_selector = "fixture-target"
         elif selector == "[data-debug-id]" and selector not in standalone_elements:
             standalone_selector = "data-debug-id"
-        s = standalone_elements.get(standalone_selector) or {}
-        p = playwright_elements.get(selector) or {}
+        s = dict_or_empty(standalone_elements.get(standalone_selector) or {})
+        p = dict_or_empty(playwright_elements.get(selector) or {})
         standalone_layout = s.get("layout") or {}
         standalone_spaces = standalone_layout.get("rect_coordinate_spaces") or {}
         standalone_viewport_rect = standalone_layout.get("viewport_rect")
