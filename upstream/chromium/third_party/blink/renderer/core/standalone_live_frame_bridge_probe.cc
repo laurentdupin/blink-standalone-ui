@@ -287,6 +287,20 @@ void TraceLiveFrameProbeStage(const char* stage) {
   std::fflush(stderr);
 }
 
+void TraceLiveFrameProbeStagef(const char* format,
+                               wtf_size_t first,
+                               wtf_size_t second = 0) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.trace_stages) {
+    return;
+  }
+  char buffer[256];
+  std::snprintf(buffer, sizeof(buffer), format,
+                static_cast<unsigned long>(first),
+                static_cast<unsigned long>(second));
+  TraceLiveFrameProbeStage(buffer);
+}
+
 bool LifecycleStopEqualsForStandaloneRenderer(const char* value) {
   const std::string& lifecycle_stop = ProbeCache().lifecycle_stop;
   return !lifecycle_stop.empty() && lifecycle_stop == value;
@@ -3213,15 +3227,20 @@ std::string ExtractHtmlAttributeForStandaloneRenderer(
 
 void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                              LiveFramePaintProbeCache& cache) {
+  TraceLiveFrameProbeStage("paint audit begin");
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  TraceLiveFrameProbeStage("paint audit before chunks/items");
   const PaintChunks& chunks = artifact.GetPaintChunks();
   const DisplayItemList& items = artifact.GetDisplayItemList();
+  const wtf_size_t chunk_count = chunks.size();
+  const wtf_size_t display_item_count = items.size();
+  TraceLiveFrameProbeStage("paint audit after chunks/items");
   cache.artifact_audit_lines.push_back(
-      "paint_artifact_audit summary chunks=" + std::to_string(chunks.size()) +
-      " display_items=" + std::to_string(items.size()));
+      "paint_artifact_audit summary chunks=" + std::to_string(chunk_count) +
+      " display_items=" + std::to_string(display_item_count));
 
   std::map<std::string, int> total_op_histogram;
   std::map<std::string, int> total_recursive_op_histogram;
@@ -3235,9 +3254,46 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   bool total_has_clip_state = false;
   std::ostringstream chunks_json;
   chunks_json << "[";
-  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
+  for (wtf_size_t chunk_index = 0; chunk_index < chunk_count;
        ++chunk_index) {
+    TraceLiveFrameProbeStagef("paint audit before chunk %lu", chunk_index);
     const PaintChunk& chunk = chunks[chunk_index];
+    TraceLiveFrameProbeStagef("paint audit after chunk %lu", chunk_index);
+    const wtf_size_t chunk_begin_index = chunk.begin_index;
+    const wtf_size_t chunk_end_index = chunk.end_index;
+    if (chunk_begin_index == chunk_end_index) {
+      if (chunk_index > 0) {
+        chunks_json << ",";
+      }
+      const std::string empty_chunk_id =
+          BlinkStringToStdStringForStandaloneRenderer(chunk.id.ToString());
+      if (cache.chunk_stable_keys.size() <= chunk_index) {
+        cache.chunk_stable_keys.resize(chunk_index + 1);
+        cache.chunk_id_strings.resize(chunk_index + 1);
+      }
+      const std::string empty_stable_key =
+          !empty_chunk_id.empty()
+              ? "blink-chunk:id=" + empty_chunk_id + ":empty"
+              : "blink-chunk:empty:debug-index=" +
+                    std::to_string(chunk_index);
+      cache.chunk_stable_keys[chunk_index] = empty_stable_key;
+      cache.chunk_id_strings[chunk_index] = empty_chunk_id;
+      chunks_json << "{\"index\":" << chunk_index << ",\"paint_chunk_id\":"
+                  << JsonStringForStandaloneRenderer(empty_chunk_id)
+                  << ",\"stable_key\":"
+                  << JsonStringForStandaloneRenderer(empty_stable_key)
+                  << ",\"begin_index\":" << chunk_begin_index
+                  << ",\"end_index\":" << chunk_end_index
+                  << ",\"empty\":true"
+                  << ",\"op_histogram\":{},\"recursive_op_histogram\":{}"
+                  << ",\"unsupported_ops\":{},\"fallback_rasterized_ops\":{}"
+                  << ",\"display_items\":[]}";
+      cache.artifact_audit_lines.push_back(
+          "paint_artifact_audit chunk index=" + std::to_string(chunk_index) +
+          " empty display_range=[" + std::to_string(chunk_begin_index) + "," +
+          std::to_string(chunk_end_index) + ")");
+      continue;
+    }
     std::map<std::string, int> chunk_op_histogram;
     std::map<std::string, int> chunk_recursive_op_histogram;
     std::map<std::string, int> chunk_unsupported_histogram;
@@ -3251,18 +3307,49 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     display_items_json << "[";
     bool first_display_item = true;
 
-    for (wtf_size_t item_index = chunk.begin_index;
-         item_index < chunk.end_index && item_index < items.size();
+    TraceLiveFrameProbeStagef("paint audit before chunk begin index %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit after chunk begin index %lu %lu",
+                              chunk_index, chunk_begin_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk end index %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit after chunk end index %lu %lu",
+                              chunk_index, chunk_end_index);
+    TraceLiveFrameProbeStagef("paint audit before item loop %lu", chunk_index);
+    for (wtf_size_t item_index = chunk_begin_index;
+         item_index < chunk_end_index && item_index < display_item_count;
          ++item_index) {
+      TraceLiveFrameProbeStagef("paint audit before item %lu %lu", chunk_index,
+                                item_index);
       const DisplayItem& item = items[item_index];
+      TraceLiveFrameProbeStagef("paint audit after item %lu %lu", chunk_index,
+                                item_index);
       if (!first_display_item) {
         display_items_json << ",";
       }
       first_display_item = false;
+      TraceLiveFrameProbeStagef("paint audit before item id %lu %lu",
+                                chunk_index, item_index);
       const std::string item_id =
           BlinkStringToStdStringForStandaloneRenderer(item.GetId().ToString());
+      TraceLiveFrameProbeStagef("paint audit after item id %lu %lu",
+                                chunk_index, item_index);
+      TraceLiveFrameProbeStagef("paint audit before item type %lu %lu",
+                                chunk_index, item_index);
       const std::string item_type =
           std::to_string(static_cast<int>(item.GetType()));
+      TraceLiveFrameProbeStagef("paint audit after item type %lu %lu",
+                                chunk_index, item_index);
+      TraceLiveFrameProbeStagef("paint audit before item visual rect %lu %lu",
+                                chunk_index, item_index);
+      const gfx::Rect item_visual_rect = item.VisualRect();
+      TraceLiveFrameProbeStagef("paint audit after item visual rect %lu %lu",
+                                chunk_index, item_index);
+      TraceLiveFrameProbeStagef("paint audit before item is_drawing %lu %lu",
+                                chunk_index, item_index);
+      const bool item_is_drawing = item.IsDrawing();
+      TraceLiveFrameProbeStagef("paint audit after item is_drawing %lu %lu",
+                                chunk_index, item_index);
       display_items_json << "{\"index\":" << item_index << ",\"id\":"
                          << JsonStringForStandaloneRenderer(item_id)
                          << ",\"type\":"
@@ -3270,17 +3357,21 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                          << ",\"client_debug_name\":null"
                          << ",\"client_owner_node_id\":null"
                          << ",\"visual_rect\":"
-                         << RectJsonForStandaloneRenderer(item.VisualRect())
+                         << RectJsonForStandaloneRenderer(item_visual_rect)
                          << ",\"is_drawing\":"
-                         << (item.IsDrawing() ? "true" : "false");
-      if (!item.IsDrawing()) {
+                         << (item_is_drawing ? "true" : "false");
+      if (!item_is_drawing) {
         ++non_drawing_item_count;
         display_items_json
             << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
       }
       ++drawing_item_count;
+      TraceLiveFrameProbeStagef("paint audit before dynamic drawing %lu %lu",
+                                chunk_index, item_index);
       const auto* drawing = DynamicTo<DrawingDisplayItem>(item);
+      TraceLiveFrameProbeStagef("paint audit after dynamic drawing %lu %lu",
+                                chunk_index, item_index);
       if (!drawing) {
         display_items_json
             << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
@@ -3289,8 +3380,12 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       RawPaintRecordAudit item_audit;
       std::ostringstream paint_ops_json;
       paint_ops_json << "[";
+      TraceLiveFrameProbeStagef("paint audit before paint record %lu %lu",
+                                chunk_index, item_index);
       AppendPaintRecordAuditJson(drawing->GetPaintRecord(), item_audit,
                                  &paint_ops_json, true);
+      TraceLiveFrameProbeStagef("paint audit after paint record %lu %lu",
+                                chunk_index, item_index);
       paint_ops_json << "]";
       for (const auto& [name, count] : item_audit.top_level_histogram) {
         chunk_op_histogram[name] += count;
@@ -3329,7 +3424,12 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                          << MapToJsonObject(item_audit.recursive_histogram)
                          << ",\"paint_ops\":" << paint_ops_json.str() << "}";
     }
+    TraceLiveFrameProbeStagef("paint audit after item loop %lu", chunk_index);
     display_items_json << "]";
+    TraceLiveFrameProbeStagef("paint audit after display items json %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before total histograms %lu",
+                              chunk_index);
     for (const auto& [name, count] : chunk_op_histogram) {
       total_op_histogram[name] += count;
     }
@@ -3363,49 +3463,95 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     total_raw_audit.has_non_translation_transform |=
         chunk_raw_audit.has_non_translation_transform;
     total_raw_audit.has_effect_opacity |= chunk_raw_audit.has_effect_opacity;
+    TraceLiveFrameProbeStagef("paint audit after total histograms %lu",
+                              chunk_index);
 
     if (chunk_index > 0) {
       chunks_json << ",";
     }
+    TraceLiveFrameProbeStagef("paint audit before chunk id %lu", chunk_index);
     const std::string chunk_id =
         BlinkStringToStdStringForStandaloneRenderer(chunk.id.ToString());
+    TraceLiveFrameProbeStagef("paint audit after chunk id %lu", chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk state %lu",
+                              chunk_index);
     const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    TraceLiveFrameProbeStagef("paint audit after chunk state %lu",
+                              chunk_index);
     uint32_t transform_chain_depth = 0;
     bool projection_has_non_translation = false;
+    TraceLiveFrameProbeStagef("paint audit before transform projection %lu",
+                              chunk_index);
     gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
         chunk_state, &transform_chain_depth, &projection_has_non_translation);
+    TraceLiveFrameProbeStagef("paint audit after transform projection %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before clip depth %lu",
+                              chunk_index);
     const uint32_t clip_chain_depth =
         projection_has_non_translation
             ? 0
             : ClipChainDepthForStandaloneRenderer(chunk_state.Clip());
+    TraceLiveFrameProbeStagef("paint audit after clip depth %lu", chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before effect depth %lu",
+                              chunk_index);
     const uint32_t effect_chain_depth =
         EffectChainDepthForStandaloneRenderer(chunk_state.Effect());
-    if (chunk_state.Effect().Opacity() != 1.0f) {
+    TraceLiveFrameProbeStagef("paint audit after effect depth %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before effect opacity %lu",
+                              chunk_index);
+    const float effect_opacity = chunk_state.Effect().Opacity();
+    TraceLiveFrameProbeStagef("paint audit after effect opacity %lu",
+                              chunk_index);
+    if (effect_opacity != 1.0f) {
       chunk_raw_audit.has_effect_opacity = true;
       total_raw_audit.has_effect_opacity = true;
     }
+    TraceLiveFrameProbeStagef("paint audit before clip metadata %lu",
+                              chunk_index);
+    const bool clip_has_path = chunk_state.Clip().ClipPath().has_value();
+    const bool clip_paint_rect_rounded =
+        chunk_state.Clip().PaintClipRect().IsRounded();
+    const bool clip_layout_rect_has_radius =
+        chunk_state.Clip().LayoutClipRect().HasRadius();
+    TraceLiveFrameProbeStagef("paint audit after clip metadata %lu",
+                              chunk_index);
     if (projection_has_non_translation) {
       chunk_raw_audit.has_non_translation_transform = true;
       total_raw_audit.has_non_translation_transform = true;
     }
     if (!projection_has_non_translation &&
-        (clip_chain_depth > 0 || chunk_state.Clip().ClipPath().has_value() ||
-         chunk_state.Clip().PaintClipRect().IsRounded() ||
-         chunk_state.Clip().LayoutClipRect().HasRadius())) {
+        (clip_chain_depth > 0 || clip_has_path || clip_paint_rect_rounded ||
+         clip_layout_rect_has_radius)) {
       total_has_clip_state = true;
     }
     const bool has_projection = true;
     std::optional<FloatClipRect> clip;
     if (!projection_has_non_translation) {
+      TraceLiveFrameProbeStagef("paint audit before local clip rect %lu",
+                                chunk_index);
       clip = GeometryMapper::LocalToAncestorClipRect(
           chunk_state, PropertyTreeState::Root());
+      TraceLiveFrameProbeStagef("paint audit after local clip rect %lu",
+                                chunk_index);
     }
+    TraceLiveFrameProbeStagef("paint audit before property fingerprint %lu",
+                              chunk_index);
     const std::string property_fingerprint =
         chunk_id + ":" + std::to_string(chunk.begin_index) + ":" +
         std::to_string(chunk.end_index) + ":" +
         (has_projection ? MatrixJsonForStandaloneRenderer(projection) : "");
+    TraceLiveFrameProbeStagef("paint audit after property fingerprint %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before property hash %lu",
+                              chunk_index);
     const uint64_t property_hash =
         HashStringForStandaloneRenderer(property_fingerprint);
+    TraceLiveFrameProbeStagef("paint audit after property hash %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before stable key %lu",
+                              chunk_index);
     const std::string stable_key =
         !chunk_id.empty()
             ? "blink-chunk:id=" + chunk_id + ":state=" +
@@ -3416,31 +3562,111 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                       std::to_string(chunk.end_index))) +
                   ":state=" + std::to_string(property_hash) +
                   ":debug-index=" + std::to_string(chunk_index);
+    TraceLiveFrameProbeStagef("paint audit after stable key %lu", chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before cache resize %lu",
+                              chunk_index);
     if (cache.chunk_stable_keys.size() <= chunk_index) {
       cache.chunk_stable_keys.resize(chunk_index + 1);
       cache.chunk_id_strings.resize(chunk_index + 1);
     }
     cache.chunk_stable_keys[chunk_index] = stable_key;
     cache.chunk_id_strings[chunk_index] = chunk_id;
+    TraceLiveFrameProbeStagef("paint audit after cache resize %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk bounds %lu",
+                              chunk_index);
+    const gfx::Rect chunk_bounds = chunk.bounds;
+    TraceLiveFrameProbeStagef("paint audit after chunk bounds %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk drawable bounds %lu",
+                              chunk_index);
+    const gfx::Rect chunk_drawable_bounds = chunk.drawable_bounds;
+    TraceLiveFrameProbeStagef("paint audit after chunk drawable bounds %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk flags %lu",
+                              chunk_index);
+    const bool chunk_has_text = chunk.has_text;
+    const bool chunk_is_cacheable = chunk.is_cacheable;
+    TraceLiveFrameProbeStagef("paint audit after chunk flags %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before can match old chunk %lu",
+                              chunk_index);
+    const bool chunk_can_match_old = chunk.CanMatchOldChunk();
+    TraceLiveFrameProbeStagef("paint audit after can match old chunk %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk json strings %lu",
+                              chunk_index);
+    const std::string chunk_id_json =
+        JsonStringForStandaloneRenderer(chunk_id);
+    const std::string stable_key_json =
+        JsonStringForStandaloneRenderer(stable_key);
+    const std::string chunk_bounds_json =
+        RectJsonForStandaloneRenderer(chunk_bounds);
+    const std::string chunk_drawable_bounds_json =
+        RectJsonForStandaloneRenderer(chunk_drawable_bounds);
+    const std::string projection_json =
+        has_projection ? MatrixJsonForStandaloneRenderer(projection) : "null";
+    const std::string clip_json =
+        clip && !clip->IsInfinite()
+            ? RectFJsonForStandaloneRenderer(clip->Rect())
+            : "null";
+    TraceLiveFrameProbeStagef("paint audit before tree chain json %lu",
+                              chunk_index);
+    const std::string transform_chain_json =
+        projection_has_non_translation
+            ? "[{\"status\":\"isolated\",\"reason\":\"transform chain under transformed overflow crash reducer is summarized in property_state only\"}]"
+            : TransformChainJsonForStandaloneRenderer(chunk_state.Transform());
+    TraceLiveFrameProbeStagef("paint audit after transform chain json %lu",
+                              chunk_index);
+    const std::string clip_chain_json =
+        projection_has_non_translation
+            ? "[{\"status\":\"inaccessible\",\"reason\":\"clip chain detail under non-translation transform is isolated because current Blink standalone probe crashes while walking transformed overflow clip state\"}]"
+            : ClipChainJsonForStandaloneRenderer(chunk_state.Clip());
+    TraceLiveFrameProbeStagef("paint audit after clip chain json %lu",
+                              chunk_index);
+    const std::string effect_chain_json =
+        projection_has_non_translation
+            ? "[{\"status\":\"isolated\",\"reason\":\"effect chain under transformed overflow crash reducer is summarized in property_state only\"}]"
+            : EffectChainJsonForStandaloneRenderer(chunk_state.Effect());
+    TraceLiveFrameProbeStagef("paint audit after effect chain json %lu",
+                              chunk_index);
+    const std::string scroll_json =
+        ScrollJsonForStandaloneRenderer(chunk_state.Transform().ScrollNode());
+    TraceLiveFrameProbeStagef("paint audit after scroll json %lu",
+                              chunk_index);
+    const std::string chunk_op_histogram_json =
+        MapToJsonObject(chunk_op_histogram);
+    const std::string chunk_recursive_op_histogram_json =
+        MapToJsonObject(chunk_recursive_op_histogram);
+    const std::string chunk_unsupported_histogram_json =
+        MapToJsonObject(chunk_unsupported_histogram);
+    const std::string chunk_fallback_histogram_json =
+        MapToJsonObject(chunk_fallback_histogram);
+    const std::string display_items_json_string = display_items_json.str();
+    TraceLiveFrameProbeStagef("paint audit after remaining chunk json strings %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit after chunk json strings %lu",
+                              chunk_index);
+    TraceLiveFrameProbeStagef("paint audit before chunk json %lu",
+                              chunk_index);
     chunks_json << "{\"index\":" << chunk_index << ",\"paint_chunk_id\":"
-                << JsonStringForStandaloneRenderer(chunk_id)
+                << chunk_id_json
                 << ",\"stable_key\":"
-                << JsonStringForStandaloneRenderer(stable_key)
-                << ",\"begin_index\":" << chunk.begin_index
-                << ",\"end_index\":" << chunk.end_index
-                << ",\"bounds\":" << RectJsonForStandaloneRenderer(chunk.bounds)
+                << stable_key_json
+                << ",\"begin_index\":" << chunk_begin_index
+                << ",\"end_index\":" << chunk_end_index
+                << ",\"bounds\":" << chunk_bounds_json
                 << ",\"drawable_bounds\":"
-                << RectJsonForStandaloneRenderer(chunk.drawable_bounds)
-                << ",\"has_text\":" << (chunk.has_text ? "true" : "false")
+                << chunk_drawable_bounds_json
+                << ",\"has_text\":" << (chunk_has_text ? "true" : "false")
                 << ",\"is_cacheable\":"
-                << (chunk.is_cacheable ? "true" : "false")
+                << (chunk_is_cacheable ? "true" : "false")
                 << ",\"can_match_old_chunk\":"
-                << (chunk.CanMatchOldChunk() ? "true" : "false")
+                << (chunk_can_match_old ? "true" : "false")
                 << ",\"client_debug_name\":null,\"client_owner_node_id\":null"
                 << ",\"property_state\":{\"state_hash\":" << property_hash
                 << ",\"transform_to_root\":"
-                << (has_projection ? MatrixJsonForStandaloneRenderer(projection)
-                                   : "null")
+                << projection_json
                 << ",\"transform_is_2d\":"
                 << (has_projection && projection.Is2dTransform() ? "true"
                                                                  : "false")
@@ -3450,39 +3676,31 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                 << ",\"has_clip_rect\":"
                 << (clip && !clip->IsInfinite() ? "true" : "false")
                 << ",\"clip_rect\":"
-                << (clip && !clip->IsInfinite()
-                        ? RectFJsonForStandaloneRenderer(clip->Rect())
-                        : "null")
+                << clip_json
                 << ",\"clip_chain_depth\":" << clip_chain_depth
                 << ",\"effect_chain_depth\":" << effect_chain_depth
-                << ",\"effect_opacity\":" << chunk_state.Effect().Opacity()
+                << ",\"effect_opacity\":" << effect_opacity
                 << ",\"effect_has_non_default_opacity\":"
-                << (chunk_state.Effect().Opacity() != 1.0f ? "true" : "false")
+                << (effect_opacity != 1.0f ? "true" : "false")
                 << "},\"property_tree\":{\"transform_chain\":"
-                << (projection_has_non_translation
-                        ? "[{\"status\":\"isolated\",\"reason\":\"transform chain under transformed overflow crash reducer is summarized in property_state only\"}]"
-                        : TransformChainJsonForStandaloneRenderer(chunk_state.Transform()))
+                << transform_chain_json
                 << ",\"clip_chain\":"
-                << (projection_has_non_translation
-                        ? "[{\"status\":\"inaccessible\",\"reason\":\"clip chain detail under non-translation transform is isolated because current Blink standalone probe crashes while walking transformed overflow clip state\"}]"
-                        : ClipChainJsonForStandaloneRenderer(chunk_state.Clip()))
+                << clip_chain_json
                 << ",\"effect_chain\":"
-                << (projection_has_non_translation
-                        ? "[{\"status\":\"isolated\",\"reason\":\"effect chain under transformed overflow crash reducer is summarized in property_state only\"}]"
-                        : EffectChainJsonForStandaloneRenderer(chunk_state.Effect()))
+                << effect_chain_json
                 << ",\"scroll\":"
-                << ScrollJsonForStandaloneRenderer(chunk_state.Transform().ScrollNode())
+                << scroll_json
                 << ",\"inaccessible_fields\":["
                 << "{\"field\":\"nearest_scroll_translation_node_id\",\"status\":\"inaccessible\",\"reason\":\"not exported by current TransformPaintPropertyNode access boundary\",\"required_header_or_friend_access\":\"transform_paint_property_node.h\"},"
                 << "{\"field\":\"compositor_element_id_debug\",\"status\":\"inaccessible\",\"reason\":\"not stringified in standalone audit\",\"required_header_or_friend_access\":\"CompositorElementId formatting\"}]}"
-                << ",\"op_histogram\":" << MapToJsonObject(chunk_op_histogram)
+                << ",\"op_histogram\":" << chunk_op_histogram_json
                 << ",\"recursive_op_histogram\":"
-                << MapToJsonObject(chunk_recursive_op_histogram)
+                << chunk_recursive_op_histogram_json
                 << ",\"unsupported_ops\":"
-                << MapToJsonObject(chunk_unsupported_histogram)
+                << chunk_unsupported_histogram_json
                 << ",\"fallback_rasterized_ops\":"
-                << MapToJsonObject(chunk_fallback_histogram)
-                << ",\"display_items\":" << display_items_json.str() << "}";
+                << chunk_fallback_histogram_json
+                << ",\"display_items\":" << display_items_json_string << "}";
 
     cache.artifact_audit_lines.push_back(
         "paint_artifact_audit chunk index=" + std::to_string(chunk_index) +
