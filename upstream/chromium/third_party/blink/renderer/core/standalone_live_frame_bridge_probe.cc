@@ -1709,6 +1709,56 @@ std::string PhysicalOffsetJsonForStandaloneRenderer(const PhysicalOffset& offset
 std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 
+std::string LayoutParentChainJsonForStandaloneRenderer(
+    const LayoutObject* layout_object) {
+  std::ostringstream json;
+  json << "[";
+  int depth = 0;
+  for (const LayoutObject* current = layout_object; current && depth < 12;
+       current = current->Parent(), ++depth) {
+    if (depth > 0) {
+      json << ",";
+    }
+    json << JsonStringForStandaloneRenderer(
+        BlinkStringToStdStringForStandaloneRenderer(current->DebugName()));
+  }
+  json << "]";
+  return json.str();
+}
+
+std::string DocumentEvidenceJsonForStandaloneRenderer(Document& document) {
+  std::ostringstream json;
+  json << "{\"compat_mode\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  document.compatMode()))
+       << ",\"doctype_present\":"
+       << (document.doctype() ? "true" : "false")
+       << ",\"url\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  document.Url().GetString()))
+       << ",\"base_url\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  document.BaseURL().GetString()));
+  if (document.GetLayoutView()) {
+    const gfx::Size layout_size = document.GetLayoutView()->GetLayoutSize();
+    json << ",\"layout_view_present\":true"
+         << ",\"layout_view_size\":{\"width\":" << layout_size.width()
+         << ",\"height\":" << layout_size.height() << "}"
+         << ",\"layout_view_origin_status\":\"not exported\""
+         << ",\"initial_containing_block_status\":\"not exported\"";
+  } else {
+    json << ",\"layout_view_present\":false"
+         << ",\"layout_view_size\":null"
+         << ",\"layout_view_origin_status\":\"layout view unavailable\""
+         << ",\"initial_containing_block_status\":\"layout view unavailable\"";
+  }
+  json << ",\"scroll_offset_status\":\"not exported\"}";
+  return json.str();
+}
+
 std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
   if (!element) {
     return "{\"present\":false}";
@@ -1811,13 +1861,35 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
          << ",\"is_box\":"
          << (layout_object->IsBox() ? "true" : "false")
          << ",\"is_scroll_container\":"
-         << (layout_object->IsScrollContainer() ? "true" : "false");
+         << (layout_object->IsScrollContainer() ? "true" : "false")
+         << ",\"is_document_body\":"
+         << (element == element->GetDocument().body() ? "true" : "false")
+         << ",\"is_document_element\":"
+         << (element == element->GetDocument().documentElement() ? "true"
+                                                                 : "false")
+         << ",\"parent_layout_chain\":"
+         << LayoutParentChainJsonForStandaloneRenderer(layout_object);
     if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
       PhysicalRect local_layout_rect(PhysicalOffset(), box->StitchedSize());
       const PhysicalOffset local_to_root_offset =
           layout_object->OffsetFromAncestor(layout_object->View());
       PhysicalRect root_space_physical_rect(local_to_root_offset,
                                             box->StitchedSize());
+      PhysicalRect local_to_absolute_rect =
+          layout_object->LocalToAbsoluteRect(local_layout_rect);
+      const gfx::Rect absolute_bounding_box_rect =
+          layout_object->AbsoluteBoundingBoxRect();
+      const gfx::RectF absolute_bounding_box_rect_f =
+          layout_object->AbsoluteBoundingBoxRectF();
+      PhysicalRect visual_overflow_mapped_to_view = box->VisualOverflowRect();
+      const bool visual_overflow_mapped =
+          layout_object->MapToVisualRectInAncestorSpace(
+              layout_object->View(), visual_overflow_mapped_to_view);
+      const gfx::RectF visual_overflow_mapped_to_view_f(
+          visual_overflow_mapped_to_view.X().ToFloat(),
+          visual_overflow_mapped_to_view.Y().ToFloat(),
+          visual_overflow_mapped_to_view.Width().ToFloat(),
+          visual_overflow_mapped_to_view.Height().ToFloat());
       const gfx::RectF dom_client_rect =
           element->GetBoundingClientRectNoLifecycleUpdate();
       gfx::Rect root_space_rect = gfx::ToEnclosingRect(gfx::RectF(
@@ -1868,6 +1940,26 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
            << ",\"page_scale_applied\":false"
            << ",\"transform_applied\":false"
            << ",\"source\":\"Element::GetBoundingClientRectNoLifecycleUpdate for viewport_rect; LayoutObject::OffsetFromAncestor(LayoutView) for root_space_rect\"}"
+           << ",\"rect_candidates\":{"
+           << "\"dom_client_rect_no_lifecycle\":"
+           << GfxRectFJsonForStandaloneRenderer(dom_client_rect)
+           << ",\"absolute_bounding_box_rect\":"
+           << GfxRectJsonForStandaloneRenderer(absolute_bounding_box_rect)
+           << ",\"absolute_bounding_box_rect_f\":"
+           << GfxRectFJsonForStandaloneRenderer(absolute_bounding_box_rect_f)
+           << ",\"offset_from_layout_view_rect\":"
+           << GfxRectFJsonForStandaloneRenderer(root_space_rect_f)
+           << ",\"local_to_absolute_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(local_to_absolute_rect)
+           << ",\"visual_overflow_mapped_to_layout_view\":"
+           << GfxRectFJsonForStandaloneRenderer(
+                  visual_overflow_mapped_to_view_f)
+           << ",\"visual_overflow_mapped_to_layout_view_success\":"
+           << (visual_overflow_mapped ? "true" : "false")
+           << ",\"paint_visual_rect_root\":"
+           << PhysicalRectJsonForStandaloneRenderer(paint_visual_rect)
+           << ",\"fragment_accumulated_rect\":null"
+           << ",\"paint_chunk_bounds_root\":null}"
            << ",\"viewport_scroll_offset_applied\":false";
     } else {
       json << ",\"layout_rect\":null,\"border_box_rect\":null"
@@ -1938,7 +2030,8 @@ std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
       body ? FindElementByTagForStandaloneRenderer(*body, html_names::kTableTag)
            : nullptr;
   std::ostringstream json;
-  json << "{\"html\":" << ElementEvidenceJsonForStandaloneRenderer(html)
+  json << "{\"document\":" << DocumentEvidenceJsonForStandaloneRenderer(document)
+       << ",\"html\":" << ElementEvidenceJsonForStandaloneRenderer(html)
        << ",\"body\":" << ElementEvidenceJsonForStandaloneRenderer(body)
        << ",\"card\":" << ElementEvidenceJsonForStandaloneRenderer(card)
        << ",\"child\":" << ElementEvidenceJsonForStandaloneRenderer(child)

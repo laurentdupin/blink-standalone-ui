@@ -87,6 +87,23 @@ def main() -> None:
                 "standalone": nested_get(s, ["computed_style", "height"]),
                 "playwright": nested_get(p, ["computedStyle", "height"]),
             },
+            "margin": {
+                "standalone": nested_get(s, ["computed_style", "margin"]),
+                "playwright": nested_get(p, ["computedStyle", "margin"]),
+            },
+            "padding": {
+                "standalone": nested_get(s, ["computed_style", "padding"]),
+                "playwright": nested_get(p, ["computedStyle", "padding"]),
+            },
+            "border_width": {
+                "standalone": nested_get(s, ["computed_style", "border_width"]),
+                "playwright": {
+                    "top": nested_get(p, ["computedStyle", "borderTopWidth"]),
+                    "right": nested_get(p, ["computedStyle", "borderRightWidth"]),
+                    "bottom": nested_get(p, ["computedStyle", "borderBottomWidth"]),
+                    "left": nested_get(p, ["computedStyle", "borderLeftWidth"]),
+                },
+            },
             "rect_coordinate_spaces": standalone_spaces,
             "local_layout_rect": {
                 "standalone": standalone_layout.get("local_layout_rect") or standalone_layout.get("layout_rect"),
@@ -100,6 +117,7 @@ def main() -> None:
                 "warning": rect_warning,
             },
             "coordinate_mapping": standalone_layout.get("coordinate_mapping"),
+            "rect_candidates": standalone_layout.get("rect_candidates"),
             "dom_client_rect_equivalent": standalone_layout.get("dom_client_rect_equivalent"),
             "layout_rect_legacy_do_not_compare_to_playwright": {
                 "standalone": standalone_layout.get("layout_rect"),
