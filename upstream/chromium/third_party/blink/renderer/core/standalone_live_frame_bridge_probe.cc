@@ -48,7 +48,9 @@
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
+#include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
+#include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
@@ -104,6 +106,8 @@ extern "C" int g_standalone_text_decoration_begin_called;
 extern "C" int g_standalone_text_decoration_except_line_through_called;
 extern "C" int g_standalone_text_decoration_only_line_through_called;
 extern "C" int g_standalone_decoration_line_painter_paint_called;
+extern "C" int g_standalone_html_factory_create_html_count;
+extern "C" int g_standalone_html_factory_create_body_count;
 
 namespace {
 
@@ -1755,7 +1759,11 @@ std::string DocumentEvidenceJsonForStandaloneRenderer(Document& document) {
          << ",\"layout_view_origin_status\":\"layout view unavailable\""
          << ",\"initial_containing_block_status\":\"layout view unavailable\"";
   }
-  json << ",\"scroll_offset_status\":\"not exported\"}";
+  json << ",\"scroll_offset_status\":\"not exported\""
+       << ",\"html_element_factory_create_html_count\":"
+       << g_standalone_html_factory_create_html_count
+       << ",\"html_element_factory_create_body_count\":"
+       << g_standalone_html_factory_create_body_count << "}";
   return json.str();
 }
 
@@ -1764,10 +1772,27 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
     return "{\"present\":false}";
   }
   std::ostringstream json;
+  const bool is_html_element = IsA<HTMLElement>(element);
+  const auto* html_element =
+      is_html_element ? To<HTMLElement>(element) : nullptr;
   json << "{\"present\":true";
   json << ",\"tag_name\":"
        << JsonStringForStandaloneRenderer(
               BlinkStringToStdStringForStandaloneRenderer(element->tagName()))
+       << ",\"element_interface\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(element->nodeName()))
+       << ",\"is_html_element\":"
+       << (is_html_element ? "true" : "false")
+       << ",\"html_element_is_body_virtual\":"
+       << (html_element && html_element->IsHTMLBodyElement() ? "true"
+                                                             : "false")
+       << ",\"is_html_body_element\":"
+       << (DynamicTo<HTMLBodyElement>(element) ? "true" : "false")
+       << ",\"is_html_html_element\":"
+       << (DynamicTo<HTMLHtmlElement>(element) ? "true" : "false")
+       << ",\"is_html_image_element\":"
+       << (DynamicTo<HTMLImageElement>(element) ? "true" : "false")
        << ",\"id\":"
        << JsonStringForStandaloneRenderer(
               BlinkStringToStdStringForStandaloneRenderer(

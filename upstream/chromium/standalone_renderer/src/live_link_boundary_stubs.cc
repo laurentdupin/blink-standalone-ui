@@ -2864,15 +2864,22 @@ const char* const V8DocumentReadyState::string_table_[] = {"loading",
                                                            "complete"};
 const char* const V8VisibilityState::string_table_[] = {"visible", "hidden"};
 
+extern "C" int g_standalone_html_factory_create_html_count;
+extern "C" int g_standalone_html_factory_create_body_count;
+
 HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
                                         Document& document,
                                         const CreateElementFlags) {
-  if (local_name == html_names::kHTMLTag.LocalName())
+  if (local_name == html_names::kHTMLTag.LocalName()) {
+    ++g_standalone_html_factory_create_html_count;
     return MakeGarbageCollected<HTMLHtmlElement>(document);
+  }
   if (local_name == html_names::kHeadTag.LocalName())
     return MakeGarbageCollected<HTMLHeadElement>(document);
-  if (local_name == html_names::kBodyTag.LocalName())
+  if (local_name == html_names::kBodyTag.LocalName()) {
+    ++g_standalone_html_factory_create_body_count;
     return MakeGarbageCollected<HTMLBodyElement>(document);
+  }
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   if (local_name == html_names::kImgTag.LocalName()) {
     std::fprintf(stderr, "image_reachability.stage=create_html_image_element\n");
@@ -7903,14 +7910,8 @@ void FrameLoader::Init(const DocumentToken& document_token,
                           .WithUkmSourceId(document_ukm_source_id);
   Document* document = frame_->DomWindow()->InstallNewDocument(init);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  static const AtomicString* html_local = new AtomicString("html");
-  static const AtomicString* body_local = new AtomicString("body");
-  static const AtomicString* xhtml_namespace =
-      new AtomicString("http://www.w3.org/1999/xhtml");
-  QualifiedName html_name(g_null_atom, *html_local, *xhtml_namespace);
-  QualifiedName body_name(g_null_atom, *body_local, *xhtml_namespace);
-  Element* html = MakeGarbageCollected<HTMLElement>(html_name, *document);
-  Element* body = MakeGarbageCollected<HTMLElement>(body_name, *document);
+  Element* html = MakeGarbageCollected<HTMLHtmlElement>(*document);
+  Element* body = MakeGarbageCollected<HTMLBodyElement>(*document);
   document->ParserAppendChild(html);
   html->ParserAppendChild(body);
   SetStandaloneDocumentBodyForStandaloneRenderer(document, To<HTMLElement>(body));
@@ -14355,6 +14356,33 @@ void LayoutBlockFlow::StyleDidChange(
   UpdateFromStyle();
 }
 bool LayoutBlockFlow::CreatesNewFormattingContext() const {
+  if (IsInline() || IsFloatingOrOutOfFlowPositioned() || IsScrollContainer() ||
+      IsFlexItem() || IsCustomItem() || IsDocumentElement() || IsGridItem() ||
+      IsGridLanesItem() || IsWritingModeRoot() || IsMathItem() ||
+      StyleRef().Display() == EDisplay::kFlowRoot ||
+      StyleRef().Display() == EDisplay::kFlowRootListItem ||
+      ShouldApplyPaintContainment() || ShouldApplyLayoutContainment() ||
+      StyleRef().IsContainerForSizeContainerQueries() ||
+      StyleRef().HasLineClamp() || StyleRef().SpecifiesColumns() ||
+      StyleRef().GetColumnSpan() == EColumnSpan::kAll) {
+    return true;
+  }
+
+  if (RuntimeEnabledFeatures::CanvasDrawElementEnabled(
+          GetDocument().GetExecutionContext()) &&
+      Parent()->IsCanvas()) {
+    return true;
+  }
+
+  if (StyleRef().AlignContent().GetPosition() != ContentPosition::kNormal ||
+      StyleRef().AlignContent().Distribution() !=
+          ContentDistributionType::kDefault) {
+    return true;
+  }
+
+  if (IsRenderedLegend() || IsSemiReplaced())
+    return true;
+
   return false;
 }
 void LayoutBlockFlow::Trace(Visitor*) const {}
@@ -15855,6 +15883,8 @@ extern "C" int g_standalone_text_decoration_begin_called = 0;
 extern "C" int g_standalone_text_decoration_except_line_through_called = 0;
 extern "C" int g_standalone_text_decoration_only_line_through_called = 0;
 extern "C" int g_standalone_decoration_line_painter_paint_called = 0;
+extern "C" int g_standalone_html_factory_create_html_count = 0;
+extern "C" int g_standalone_html_factory_create_body_count = 0;
 SelectionBoundsRecorder::SelectionBoundsRecorder(SelectionState state,
                                                  PhysicalRect selection_rect,
                                                  PaintController& controller,
