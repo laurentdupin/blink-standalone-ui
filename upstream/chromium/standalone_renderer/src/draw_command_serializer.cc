@@ -212,6 +212,33 @@ void WriteStringArray(std::ostringstream& out,
   out << "]";
 }
 
+void WriteSkippedTransformDiagnostics(
+    std::ostringstream& out,
+    const std::vector<SkippedTransformDiagnostic>& diagnostics) {
+  out << "[";
+  for (size_t i = 0; i < diagnostics.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const SkippedTransformDiagnostic& diagnostic = diagnostics[i];
+    out << "{\"reason\":\"" << EscapeJson(diagnostic.reason)
+        << "\",\"source_chunk_key\":\""
+        << EscapeJson(diagnostic.source_chunk_key) << "\",\"matrix\":";
+    WriteMatrix(out, diagnostic.matrix);
+    out << ",\"chunk_bounds\":";
+    WriteRect(out, diagnostic.chunk_bounds);
+    out << ",\"transform_node_id\":" << diagnostic.transform_node_id
+        << ",\"transform_parent_id\":" << diagnostic.transform_parent_id
+        << ",\"transform_chain_depth\":"
+        << diagnostic.transform_chain_depth
+        << ",\"scroll_node_id\":" << diagnostic.scroll_node_id
+        << ",\"clip_chain_depth\":" << diagnostic.clip_chain_depth
+        << ",\"effect_chain_depth\":" << diagnostic.effect_chain_depth
+        << "}";
+  }
+  out << "]";
+}
+
 void WriteStringIntMap(std::ostringstream& out,
                        const std::map<std::string, int>& values) {
   out << "{";
@@ -635,7 +662,6 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
   int shader_count = 0;
   int path_count = 0;
   int filter_count = 0;
-  std::vector<std::string> skipped_fixed_transform_diagnostics;
 
   for (const SceneCommand& scene_command : result.frame.scene_commands) {
     if (scene_command.type != SceneCommandType::kDrawCommand) {
@@ -671,10 +697,6 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
         diagnostic.find("filter") != std::string::npos) {
       ++filter_count;
     }
-    if (diagnostic.find("skipped duplicate root-space chunk translation") !=
-        std::string::npos) {
-      skipped_fixed_transform_diagnostics.push_back(diagnostic);
-    }
   }
 
   if (!result.raw_paint_artifact_audit_json.empty()) {
@@ -705,9 +727,10 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     retained << ",\"fixed_transform_rule\":{\"enabled\":true"
              << ",\"status\":\"provisional\""
              << ",\"skipped_transform_count\":"
-             << skipped_fixed_transform_diagnostics.size()
-             << ",\"skipped_transform_diagnostics\":";
-    WriteStringArray(retained, skipped_fixed_transform_diagnostics);
+             << result.skipped_transform_diagnostics.size()
+             << ",\"skipped_transforms\":";
+    WriteSkippedTransformDiagnostics(retained,
+                                     result.skipped_transform_diagnostics);
     retained << "}";
     retained << ",\"post_replay_typeface_resources\":{\"count\":"
              << StandaloneRendererSameProcessTypefaceResourceCount()

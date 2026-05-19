@@ -2484,6 +2484,30 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             nearly_equal(g, active_chunk_bounds.y) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
         if (duplicates_chunk_root_space_origin) {
+          Matrix4 skipped_matrix;
+          skipped_matrix.values[0] = x;
+          skipped_matrix.values[4] = y;
+          skipped_matrix.values[12] = width;
+          skipped_matrix.values[1] = height;
+          skipped_matrix.values[5] = r;
+          skipped_matrix.values[13] = g;
+          SkippedTransformDiagnostic skipped;
+          skipped.reason = "duplicate_root_space_pure_translation";
+          skipped.matrix = skipped_matrix;
+          skipped.chunk_bounds = active_chunk_bounds;
+          skipped.transform_node_id =
+              active_chunk_property_state.transform_node_id;
+          skipped.transform_parent_id =
+              active_chunk_property_state.transform_parent_id;
+          skipped.transform_chain_depth =
+              active_chunk_property_state.transform_chain_depth;
+          skipped.scroll_node_id = active_chunk_property_state.scroll_node_id;
+          skipped.clip_chain_depth =
+              active_chunk_property_state.clip_chain_depth;
+          skipped.effect_chain_depth =
+              active_chunk_property_state.effect_chain_depth;
+          skipped.source_chunk_key = active_chunk_key;
+          result.skipped_transform_diagnostics.push_back(std::move(skipped));
           result.diagnostics.push_back(
               "real Blink PaintArtifact skipped duplicate root-space chunk "
               "translation transform for chunk " + active_chunk_key +

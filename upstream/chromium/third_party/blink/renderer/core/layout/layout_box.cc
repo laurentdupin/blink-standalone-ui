@@ -945,6 +945,8 @@ void LayoutBox::UpdateFromStyle() {
   bool should_clip_overflow = (!StyleRef().IsOverflowVisibleAlongBothAxes() ||
                                ShouldApplyPaintContainment()) &&
                               RespectsCSSOverflow();
+  const bool overflow_clip_presence_changed =
+      should_clip_overflow != HasNonVisibleOverflow();
   if (should_clip_overflow != HasNonVisibleOverflow()) {
     // The overflow clip paint property depends on whether overflow clip is
     // present so we need to update paint properties if this changes.
@@ -953,6 +955,15 @@ void LayoutBox::UpdateFromStyle() {
       Layer()->SetNeedsCompositingInputsUpdate();
   }
   SetHasNonVisibleOverflow(should_clip_overflow);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The standalone reduced source path can reach UpdateFromStyle() after
+  // StyleDidChange() has already synchronized overflow_clip_axes_. Keep the
+  // axes consistent with the final HasNonVisibleOverflow() bit so Blink's real
+  // prepaint property-tree code can create content overflow clips.
+  if (overflow_clip_presence_changed && should_clip_overflow &&
+      !IsFloatingOrOutOfFlowPositioned())
+    SetOverflowClipAxes(ComputeOverflowClipAxes());
+#endif
 }
 
 void LayoutBox::LayoutSubtreeRoot() {

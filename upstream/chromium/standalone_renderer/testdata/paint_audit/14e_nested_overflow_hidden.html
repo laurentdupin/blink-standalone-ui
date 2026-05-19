@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin: 8px; background: white; }
+  [data-debug-id=container] {
+    width: 122px;
+    height: 74px;
+    overflow: hidden;
+    background: #e9fff6;
+  }
+  .inner {
+    width: 96px;
+    height: 46px;
+    margin: 12px;
+    overflow: hidden;
+    background: #d6f5e6;
+  }
+  [data-debug-id=child] {
+    width: 150px;
+    height: 80px;
+    margin: 8px 0 0 18px;
+    background: #219653;
+  }
+</style>
+<div data-debug-id="container">
+  <div class="inner"><div data-debug-id="child"></div></div>
+</div>

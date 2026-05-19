@@ -62,6 +62,8 @@
 #include "third_party/blink/renderer/core/layout/physical_fragment.h"
 #include "third_party/blink/renderer/core/layout/physical_fragment_link.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
@@ -1756,12 +1758,32 @@ Element* FindElementByAttributeForStandaloneRenderer(
   return nullptr;
 }
 
+Element* FindElementByAttributeValueForStandaloneRenderer(
+    Node& node,
+    const AtomicString& attribute_name,
+    const AtomicString& attribute_value) {
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (element->getAttribute(attribute_name) == attribute_value) {
+      return element;
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    if (Element* found = FindElementByAttributeValueForStandaloneRenderer(
+            *child, attribute_name, attribute_value)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
 std::string JsonStringForStandaloneRenderer(const std::string& value);
 std::string BlinkStringToStdStringForStandaloneRenderer(const String& value);
+std::string RectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect);
 std::string PhysicalOffsetJsonForStandaloneRenderer(const PhysicalOffset& offset);
 std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
+uint64_t NodeIdForStandaloneRenderer(const void* node);
 
 std::string PhysicalSizeJsonForStandaloneRenderer(const PhysicalSize& size) {
   std::ostringstream json;
@@ -2287,6 +2309,192 @@ std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
        << ",\"img\":" << ElementEvidenceJsonForStandaloneRenderer(img)
        << ",\"table\":" << ElementEvidenceJsonForStandaloneRenderer(table)
        << "}";
+  return json.str();
+}
+
+std::string OverflowClipElementDiagnosticsJsonForStandaloneRenderer(
+    const char* selector,
+    Element* element) {
+  std::ostringstream json;
+  json << "{\"selector\":\"" << selector << "\"";
+  if (!element) {
+    json << ",\"present\":false,\"first_missing_stage\":\"element_not_found\"}";
+    return json.str();
+  }
+  json << ",\"present\":true";
+  const ComputedStyle* style = element->GetComputedStyle();
+  if (style) {
+    json << ",\"computed_overflow\":{\"x\":" << static_cast<int>(style->OverflowX())
+         << ",\"y\":" << static_cast<int>(style->OverflowY()) << "}"
+         << ",\"computed_border_radius_present\":"
+         << (style->HasBorderRadius() ? "true" : "false")
+         << ",\"border_width\":{\"top\":" << style->BorderTopWidth()
+         << ",\"right\":" << style->BorderRightWidth()
+         << ",\"bottom\":" << style->BorderBottomWidth()
+         << ",\"left\":" << style->BorderLeftWidth() << "}"
+         << ",\"display\":" << static_cast<int>(style->Display())
+         << ",\"position\":" << static_cast<int>(style->GetPosition())
+         << ",\"scrolls_overflow_x\":"
+         << (style->ScrollsOverflowX() ? "true" : "false")
+         << ",\"scrolls_overflow_y\":"
+         << (style->ScrollsOverflowY() ? "true" : "false");
+  } else {
+    json << ",\"computed_overflow\":null";
+  }
+
+  LayoutObject* layout_object = element->GetLayoutObject();
+  if (!layout_object) {
+    json << ",\"layout_object_type\":null"
+         << ",\"first_missing_stage\":\"layout_object_missing\"}";
+    return json.str();
+  }
+  json << ",\"layout_object_type\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  layout_object->DebugName()));
+  json << ",\"layout_flags\":{\"has_non_visible_overflow\":"
+       << (layout_object->HasNonVisibleOverflow() ? "true" : "false")
+       << ",\"is_scroll_container\":"
+       << (layout_object->IsScrollContainer() ? "true" : "false")
+       << ",\"should_clip_overflow_either_axis\":"
+       << (layout_object->ShouldClipOverflowAlongEitherAxis() ? "true"
+                                                              : "false")
+       << ",\"should_clip_overflow_both_axis\":"
+       << (layout_object->ShouldClipOverflowAlongBothAxis() ? "true"
+                                                            : "false")
+       << ",\"needs_paint_property_update\":"
+       << (layout_object->NeedsPaintPropertyUpdate() ? "true" : "false")
+       << "}";
+  const auto* box = DynamicTo<LayoutBox>(layout_object);
+  if (!box) {
+    json << ",\"layout_rect\":null"
+         << ",\"first_missing_stage\":\"layout_box_missing\"}";
+    return json.str();
+  }
+
+  json << ",\"layout_rect\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->PhysicalBorderBoxRect())
+       << ",\"border_box\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->PhysicalBorderBoxRect())
+       << ",\"padding_box\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->PhysicalPaddingBoxRect())
+       << ",\"content_box\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->PhysicalContentBoxRect())
+       << ",\"scrollable_overflow_rect\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->ScrollableOverflowRect())
+       << ",\"visual_overflow_rect\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->VisualOverflowRect())
+       << ",\"self_visual_overflow_rect\":"
+       << PhysicalRectJsonForStandaloneRenderer(box->SelfVisualOverflowRect());
+
+  PaintLayer* layer = layout_object->EnclosingLayer();
+  PaintLayerScrollableArea* scrollable_area =
+      box->GetScrollableArea()
+          ? box->GetScrollableArea()
+          : (layer ? layer->GetScrollableArea() : nullptr);
+  json << ",\"paint_layer_present\":" << (layer ? "true" : "false")
+       << ",\"paint_layer_self_painting\":"
+       << (layer && layer->IsSelfPaintingLayer() ? "true" : "false")
+       << ",\"scrollable_area_present\":"
+       << (scrollable_area ? "true" : "false");
+  if (scrollable_area) {
+    json << ",\"scroll_container_rect\":null"
+         << ",\"scroll_contents_size\":null"
+         << ",\"scroll_width\":null,\"scroll_height\":null"
+         << ",\"scroll_offset\":null,\"scrollable_axes\":null"
+         << ",\"scrollable_area_metadata_status\":\"inaccessible\""
+         << ",\"scrollable_area_metadata_reason\":\"standalone optional "
+            "PaintLayerScrollableArea geometry methods are unsafe on "
+            "scroll/auto overflow reducers; using raw property-tree scroll "
+            "nodes and LayoutBox overflow rects instead\"";
+  } else {
+    json << ",\"scroll_container_rect\":null"
+         << ",\"scroll_contents_size\":null"
+         << ",\"scroll_width\":null,\"scroll_height\":null"
+         << ",\"scroll_offset\":null,\"scrollable_axes\":0";
+  }
+
+  const ObjectPaintProperties* properties =
+      layout_object->FirstFragment().PaintProperties();
+  if (properties) {
+    const auto* overflow_clip = properties->OverflowClip();
+    const auto* inner_radius_clip = properties->InnerBorderRadiusClip();
+    json << ",\"object_paint_properties\":{\"present\":true"
+         << ",\"overflow_clip_present\":"
+         << (overflow_clip ? "true" : "false")
+         << ",\"inner_border_radius_clip_present\":"
+         << (inner_radius_clip ? "true" : "false")
+         << ",\"scroll_translation_present\":"
+         << (properties->ScrollTranslation() ? "true" : "false")
+         << ",\"scroll_node_present\":"
+         << (properties->Scroll() ? "true" : "false")
+         << ",\"clip_node_id\":" << NodeIdForStandaloneRenderer(overflow_clip)
+         << ",\"inner_border_radius_clip_node_id\":"
+         << NodeIdForStandaloneRenderer(inner_radius_clip) << "}";
+  } else {
+    json << ",\"object_paint_properties\":{\"present\":false}";
+  }
+
+  std::string missing_stage = "ok";
+  if (style && (style->OverflowX() != EOverflow::kVisible ||
+                style->OverflowY() != EOverflow::kVisible)) {
+    if (!scrollable_area) {
+      missing_stage = "paint_layer_scrollable_area_missing";
+    } else if (!properties) {
+      missing_stage = "object_paint_properties_missing";
+    } else if (!properties->OverflowClip()) {
+      missing_stage = "overflow_clip_property_missing";
+    }
+  }
+  json << ",\"first_missing_stage\":"
+       << JsonStringForStandaloneRenderer(missing_stage) << "}";
+  return json.str();
+}
+
+std::string OverflowClipDiagnosticsJsonForStandaloneRenderer(Document& document) {
+  Element* body = document.body();
+  Element* container =
+      body ? FindElementByAttributeValueForStandaloneRenderer(
+                 *body, AtomicString("data-debug-id"),
+                 AtomicString("container"))
+           : nullptr;
+  Element* child =
+      body ? FindElementByAttributeValueForStandaloneRenderer(
+                 *body, AtomicString("data-debug-id"), AtomicString("child"))
+           : nullptr;
+  if (!container) {
+    container = body ? FindElementByClassForStandaloneRenderer(
+                           *body, AtomicString("fixture-target"))
+                     : nullptr;
+  }
+  if (!container) {
+    container = body ? FindElementByClassForStandaloneRenderer(
+                           *body, AtomicString("card"))
+                     : nullptr;
+  }
+  if (!container) {
+    container = body ? FindElementByClassForStandaloneRenderer(
+                           *body, AtomicString("box"))
+                     : nullptr;
+  }
+  if (!container) {
+    container = body ? FindElementByClassForStandaloneRenderer(
+                           *body, AtomicString("clip"))
+                     : nullptr;
+  }
+  if (!child) {
+    child = body ? FindElementByClassForStandaloneRenderer(
+                       *body, AtomicString("child"))
+                 : nullptr;
+  }
+  std::ostringstream json;
+  json << "{\"containers\":["
+       << OverflowClipElementDiagnosticsJsonForStandaloneRenderer(
+              "[data-debug-id=container] or .fixture-target", container)
+       << "],\"children\":["
+       << OverflowClipElementDiagnosticsJsonForStandaloneRenderer(
+              "[data-debug-id=child] or .child", child)
+       << "]}";
   return json.str();
 }
 
@@ -4012,6 +4220,11 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           ? OutOfFlowElementEvidenceJsonForStandaloneRenderer(
                 cache.holder->GetDocument())
           : "{\"target_present\":false,\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string overflow_clip_diagnostics_json =
+      cache.holder
+          ? OverflowClipDiagnosticsJsonForStandaloneRenderer(
+                cache.holder->GetDocument())
+          : "{\"containers\":[],\"children\":[],\"first_missing_stage\":\"document_unavailable\"}";
   TraceLiveFrameProbeStage("paint audit after page evidence");
   const bool evidence_has_non_translation_transform =
       page_evidence_json.find("\"has_non_translation_transform\":true") !=
@@ -4072,6 +4285,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << "\"reason\":\"optional page-evidence walk disabled; chunk, "
           "display-item, PaintOp, bounds, and property-state metadata are "
           "still collected field-by-field\"}}"
+       << ",\"overflow_clip_diagnostics\":"
+       << overflow_clip_diagnostics_json
        << ",\"raw_chunk_count\":" << chunk_count
        << ",\"raw_display_item_count\":" << display_item_count
        << ",\"raw_drawing_display_item_count\":" << total_drawing_item_count

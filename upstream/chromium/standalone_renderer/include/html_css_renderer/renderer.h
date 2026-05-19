@@ -97,6 +97,19 @@ struct HitTestEntry {
   Rect bounds;
 };
 
+struct SkippedTransformDiagnostic {
+  std::string reason;
+  Matrix4 matrix;
+  Rect chunk_bounds;
+  uint64_t transform_node_id = 0;
+  uint64_t transform_parent_id = 0;
+  uint32_t transform_chain_depth = 0;
+  uint64_t scroll_node_id = 0;
+  uint32_t clip_chain_depth = 0;
+  uint32_t effect_chain_depth = 0;
+  std::string source_chunk_key;
+};
+
 struct RenderResult {
   RenderFrame frame;
   Rect damage_bounds;
@@ -104,6 +117,7 @@ struct RenderResult {
   bool requires_full_redraw = true;
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
+  std::vector<SkippedTransformDiagnostic> skipped_transform_diagnostics;
   std::vector<std::string> diagnostics;
   std::vector<std::string> missing_resources;
   RendererSnapshot successor_snapshot;

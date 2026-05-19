@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin: 8px; background: white; }
+  [data-debug-id=container] {
+    width: 108px;
+    height: 62px;
+    overflow: auto;
+    background: #f5edff;
+  }
+  [data-debug-id=child] {
+    width: 172px;
+    height: 96px;
+    margin: 15px 0 0 14px;
+    background: #9b51e0;
+  }
+  [data-debug-id=container]::-webkit-scrollbar { display: none; }
+</style>
+<div data-debug-id="container">
+  <div data-debug-id="child"></div>
+</div>
