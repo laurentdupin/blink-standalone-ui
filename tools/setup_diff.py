@@ -99,6 +99,8 @@ def main() -> None:
                 "playwright_coordinate_space": "viewport_dom_rect",
                 "warning": rect_warning,
             },
+            "coordinate_mapping": standalone_layout.get("coordinate_mapping"),
+            "dom_client_rect_equivalent": standalone_layout.get("dom_client_rect_equivalent"),
             "layout_rect_legacy_do_not_compare_to_playwright": {
                 "standalone": standalone_layout.get("layout_rect"),
                 "playwright": playwright_viewport_rect,

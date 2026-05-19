@@ -1705,6 +1705,7 @@ Element* FindElementByAttributeForStandaloneRenderer(
 std::string JsonStringForStandaloneRenderer(const std::string& value);
 std::string BlinkStringToStdStringForStandaloneRenderer(const String& value);
 std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect);
+std::string PhysicalOffsetJsonForStandaloneRenderer(const PhysicalOffset& offset);
 std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 
@@ -1812,16 +1813,33 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
          << ",\"is_scroll_container\":"
          << (layout_object->IsScrollContainer() ? "true" : "false");
     if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
-      PhysicalRect local_layout_rect(box->PhysicalLocation(), box->StitchedSize());
-      gfx::Rect root_space_rect = layout_object->AbsoluteBoundingBoxRect();
-      gfx::RectF root_space_rect_f = layout_object->AbsoluteBoundingBoxRectF();
+      PhysicalRect local_layout_rect(PhysicalOffset(), box->StitchedSize());
+      const PhysicalOffset local_to_root_offset =
+          layout_object->OffsetFromAncestor(layout_object->View());
+      PhysicalRect root_space_physical_rect(local_to_root_offset,
+                                            box->StitchedSize());
+      const gfx::RectF dom_client_rect =
+          element->GetBoundingClientRectNoLifecycleUpdate();
+      gfx::Rect root_space_rect = gfx::ToEnclosingRect(gfx::RectF(
+          root_space_physical_rect.X().ToFloat(),
+          root_space_physical_rect.Y().ToFloat(),
+          root_space_physical_rect.Width().ToFloat(),
+          root_space_physical_rect.Height().ToFloat()));
+      gfx::RectF root_space_rect_f(root_space_physical_rect.X().ToFloat(),
+                                   root_space_physical_rect.Y().ToFloat(),
+                                   root_space_physical_rect.Width().ToFloat(),
+                                   root_space_physical_rect.Height().ToFloat());
+      PhysicalRect paint_visual_rect = box->VisualOverflowRect();
+      paint_visual_rect.Move(local_to_root_offset);
       json << ",\"rect_coordinate_spaces\":{"
            << "\"local_layout_rect\":\"local_layout_object_coordinates\","
            << "\"border_box_rect\":\"local_layout_object_coordinates\","
            << "\"visual_overflow_rect\":\"local_layout_object_coordinates\","
            << "\"scrollable_overflow_rect\":\"local_layout_object_coordinates\","
            << "\"root_space_rect\":\"absolute_root_frame_coordinates\","
-           << "\"viewport_rect\":\"viewport_relative_document_coordinates_no_scroll_offset\"}"
+           << "\"viewport_rect\":\"viewport_cssom_client_rect\","
+           << "\"dom_client_rect_equivalent\":\"viewport_cssom_client_rect\","
+           << "\"paint_visual_rect\":\"absolute_root_frame_coordinates\"}"
            << ",\"layout_rect\":"
            << PhysicalRectJsonForStandaloneRenderer(local_layout_rect)
            << ",\"local_layout_rect\":"
@@ -1837,7 +1855,19 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
            << ",\"root_space_rect_f\":"
            << GfxRectFJsonForStandaloneRenderer(root_space_rect_f)
            << ",\"viewport_rect\":"
-           << GfxRectJsonForStandaloneRenderer(root_space_rect)
+           << GfxRectFJsonForStandaloneRenderer(dom_client_rect)
+           << ",\"dom_client_rect_equivalent\":"
+           << GfxRectFJsonForStandaloneRenderer(dom_client_rect)
+           << ",\"visual_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(paint_visual_rect)
+           << ",\"paint_visual_rect\":"
+           << PhysicalRectJsonForStandaloneRenderer(paint_visual_rect)
+           << ",\"coordinate_mapping\":{\"local_to_root_offset\":"
+           << PhysicalOffsetJsonForStandaloneRenderer(local_to_root_offset)
+           << ",\"scroll_offset_applied\":false"
+           << ",\"page_scale_applied\":false"
+           << ",\"transform_applied\":false"
+           << ",\"source\":\"Element::GetBoundingClientRectNoLifecycleUpdate for viewport_rect; LayoutObject::OffsetFromAncestor(LayoutView) for root_space_rect\"}"
            << ",\"viewport_scroll_offset_applied\":false";
     } else {
       json << ",\"layout_rect\":null,\"border_box_rect\":null"
@@ -1997,6 +2027,13 @@ std::string PhysicalRectJsonForStandaloneRenderer(const PhysicalRect& rect) {
   std::ostringstream out;
   out << "[" << rect.X().ToFloat() << "," << rect.Y().ToFloat() << ","
       << rect.Width().ToFloat() << "," << rect.Height().ToFloat() << "]";
+  return out.str();
+}
+
+std::string PhysicalOffsetJsonForStandaloneRenderer(
+    const PhysicalOffset& offset) {
+  std::ostringstream out;
+  out << "[" << offset.left.ToFloat() << "," << offset.top.ToFloat() << "]";
   return out.str();
 }
 
