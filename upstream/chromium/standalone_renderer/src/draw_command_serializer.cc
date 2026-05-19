@@ -635,6 +635,7 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
   int shader_count = 0;
   int path_count = 0;
   int filter_count = 0;
+  std::vector<std::string> skipped_fixed_transform_diagnostics;
 
   for (const SceneCommand& scene_command : result.frame.scene_commands) {
     if (scene_command.type != SceneCommandType::kDrawCommand) {
@@ -670,6 +671,10 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
         diagnostic.find("filter") != std::string::npos) {
       ++filter_count;
     }
+    if (diagnostic.find("skipped duplicate root-space chunk translation") !=
+        std::string::npos) {
+      skipped_fixed_transform_diagnostics.push_back(diagnostic);
+    }
   }
 
   if (!result.raw_paint_artifact_audit_json.empty()) {
@@ -697,6 +702,13 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     retained << "}";
     retained << ",\"retained_warnings\":";
     WriteStringArray(retained, result.diagnostics);
+    retained << ",\"fixed_transform_rule\":{\"enabled\":true"
+             << ",\"status\":\"provisional\""
+             << ",\"skipped_transform_count\":"
+             << skipped_fixed_transform_diagnostics.size()
+             << ",\"skipped_transform_diagnostics\":";
+    WriteStringArray(retained, skipped_fixed_transform_diagnostics);
+    retained << "}";
     retained << ",\"post_replay_typeface_resources\":{\"count\":"
              << StandaloneRendererSameProcessTypefaceResourceCount()
              << ",\"same_process_only\":true"
