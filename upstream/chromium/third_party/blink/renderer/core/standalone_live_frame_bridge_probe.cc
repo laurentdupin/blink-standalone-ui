@@ -132,6 +132,12 @@ extern "C" float g_standalone_layout_body_child_logical_inline_offset;
 extern "C" float g_standalone_layout_body_child_logical_block_offset;
 extern "C" float g_standalone_layout_body_previous_margin_strut_sum;
 extern "C" float g_standalone_layout_body_previous_logical_block_offset;
+extern "C" int g_standalone_oof_layout_part_run_called;
+extern "C" int g_standalone_oof_candidate_count;
+extern "C" int g_standalone_oof_descendant_collected;
+extern "C" int g_standalone_oof_layout_attempted;
+extern "C" int g_standalone_oof_fragment_created;
+extern "C" void StandaloneRendererResetOutOfFlowDiagnostics();
 
 namespace {
 
@@ -2328,18 +2334,82 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
     json << ",\"first_missing_stage\":\"layout_object_missing\"}";
     return json.str();
   }
+  LayoutBlock* containing_block = layout_object->ContainingBlock();
   json << ",\"layout_object_type\":"
        << JsonStringForStandaloneRenderer(
               BlinkStringToStdStringForStandaloneRenderer(
                   layout_object->DebugName()))
        << ",\"is_box\":" << (layout_object->IsBox() ? "true" : "false")
+       << ",\"has_layer\":" << (layout_object->HasLayer() ? "true" : "false")
+       << ",\"has_self_painting_layer\":";
+  if (auto* box_model_object = DynamicTo<LayoutBoxModelObject>(layout_object)) {
+    json << (box_model_object->HasSelfPaintingLayer() ? "true" : "false");
+  } else {
+    json << "false";
+  }
+  json
        << ",\"containing_block\":";
-  if (LayoutBlock* containing_block = layout_object->ContainingBlock()) {
+  if (containing_block) {
     json << JsonStringForStandaloneRenderer(
         BlinkStringToStdStringForStandaloneRenderer(
             containing_block->DebugName()));
   } else {
     json << "null";
+  }
+  json << ",\"containing_block_fragments\":";
+  if (containing_block && containing_block->PhysicalFragmentCount() > 0) {
+    json << "[";
+    for (wtf_size_t i = 0; i < containing_block->PhysicalFragmentCount(); ++i) {
+      if (i) {
+        json << ",";
+      }
+      const PhysicalBoxFragment* fragment = containing_block->GetPhysicalFragment(i);
+      json << "{\"index\":" << i
+           << ",\"has_oof_fragment_child\":"
+           << (fragment && fragment->HasOutOfFlowFragmentChild() ? "true"
+                                                                 : "false")
+           << ",\"child_count\":"
+           << (fragment ? static_cast<int>(fragment->Children().size()) : 0)
+           << ",\"size\":"
+           << (fragment ? PhysicalSizeJsonForStandaloneRenderer(fragment->Size())
+                        : "null")
+           << "}";
+    }
+    json << "]";
+  } else {
+    json << "[]";
+  }
+  LayoutObject* parent_object = layout_object->Parent();
+  json << ",\"layout_parent\":";
+  if (parent_object) {
+    json << JsonStringForStandaloneRenderer(
+        BlinkStringToStdStringForStandaloneRenderer(parent_object->DebugName()));
+  } else {
+    json << "null";
+  }
+  json << ",\"layout_parent_fragments\":";
+  auto* parent_box = DynamicTo<LayoutBox>(parent_object);
+  if (parent_box && parent_box->PhysicalFragmentCount() > 0) {
+    json << "[";
+    for (wtf_size_t i = 0; i < parent_box->PhysicalFragmentCount(); ++i) {
+      if (i) {
+        json << ",";
+      }
+      const PhysicalBoxFragment* fragment = parent_box->GetPhysicalFragment(i);
+      json << "{\"index\":" << i
+           << ",\"has_oof_fragment_child\":"
+           << (fragment && fragment->HasOutOfFlowFragmentChild() ? "true"
+                                                                 : "false")
+           << ",\"child_count\":"
+           << (fragment ? static_cast<int>(fragment->Children().size()) : 0)
+           << ",\"size\":"
+           << (fragment ? PhysicalSizeJsonForStandaloneRenderer(fragment->Size())
+                        : "null")
+           << "}";
+    }
+    json << "]";
+  } else {
+    json << "[]";
   }
   if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
     const PhysicalOffset local_to_root_offset =
@@ -2360,7 +2430,16 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
   }
   json << ",\"paint_artifact_display_items_seen_by_audit\":\"see "
           "raw_display_item_count and chunks[].display_items\","
-       << "\"first_missing_stage\":\"see_paint_artifact_display_items\"}";
+       << "\"oof_layout_part_run_called\":"
+       << (g_standalone_oof_layout_part_run_called > 0 ? "true" : "false")
+       << ",\"oof_descendant_collected\":"
+       << (g_standalone_oof_descendant_collected > 0 ? "true" : "false")
+       << ",\"oof_candidate_count\":" << g_standalone_oof_candidate_count
+       << ",\"oof_layout_attempted\":"
+       << (g_standalone_oof_layout_attempted > 0 ? "true" : "false")
+       << ",\"oof_fragment_created\":"
+       << (g_standalone_oof_fragment_created > 0 ? "true" : "false")
+       << ",\"first_missing_stage\":\"see_paint_artifact_display_items\"}";
   return json.str();
 }
 
@@ -4423,6 +4502,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
 #endif
   StandaloneRendererResetImageReachabilityDiagnostics();
+  StandaloneRendererResetOutOfFlowDiagnostics();
   cache.image_reachability = ImageReachabilityDiagnostics();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");

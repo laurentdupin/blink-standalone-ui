@@ -1565,6 +1565,19 @@ namespace blink {
 extern "C" bool g_standalone_blink_saw_font_draw_text = false;
 extern "C" int g_standalone_blink_viewport_width = 800;
 extern "C" int g_standalone_blink_viewport_height = 600;
+extern "C" int g_standalone_oof_layout_part_run_called = 0;
+extern "C" int g_standalone_oof_candidate_count = 0;
+extern "C" int g_standalone_oof_descendant_collected = 0;
+extern "C" int g_standalone_oof_layout_attempted = 0;
+extern "C" int g_standalone_oof_fragment_created = 0;
+
+extern "C" void StandaloneRendererResetOutOfFlowDiagnostics() {
+  g_standalone_oof_layout_part_run_called = 0;
+  g_standalone_oof_candidate_count = 0;
+  g_standalone_oof_descendant_collected = 0;
+  g_standalone_oof_layout_attempted = 0;
+  g_standalone_oof_fragment_created = 0;
+}
 
 namespace {
 int g_image_resource_content_fetch_called = 0;
@@ -16405,8 +16418,79 @@ bool IsValidMathMLScript(const BlockNode&) {
 bool IsUnderOverLaidOutAsSubSup(const BlockNode&) {
   return false;
 }
-OutOfFlowLayoutPart::OutOfFlowLayoutPart(BoxFragmentBuilder*) {}
-void OutOfFlowLayoutPart::Run() {}
+OutOfFlowLayoutPart::OutOfFlowLayoutPart(BoxFragmentBuilder* container_builder)
+    : container_builder_(container_builder),
+      multicol_children_(nullptr),
+      fragmentainer_consumed_block_size_() {}
+void OutOfFlowLayoutPart::Run() {
+  ++g_standalone_oof_layout_part_run_called;
+  if (!container_builder_) {
+    return;
+  }
+
+  const BlockNode& container_node = container_builder_->Node();
+  if (container_node.ChildLayoutBlockedByDisplayLock()) {
+    return;
+  }
+
+  HeapVector<LogicalOofPositionedNode> candidates;
+  container_builder_->SwapOutOfFlowPositionedCandidates(&candidates);
+  g_standalone_oof_candidate_count += static_cast<int>(candidates.size());
+
+  for (const auto& candidate : candidates) {
+    BlockNode child = candidate.Node();
+    if (!child) {
+      continue;
+    }
+    ++g_standalone_oof_descendant_collected;
+
+    LayoutBox* child_box = child.GetLayoutBox();
+    LayoutBox* container_box = container_builder_->Node().GetLayoutBox();
+    if (child_box && container_box &&
+        child_box->ContainingBlock() != container_box) {
+      container_builder_->AddOutOfFlowDescendant(candidate);
+      continue;
+    }
+
+    LogicalOffset offset = candidate.StaticPosition().offset;
+    const ComputedStyle& style = child.Style();
+    if (style.Left().IsFixed()) {
+      offset.inline_offset = LayoutUnit(style.Left().Pixels());
+    }
+    if (style.Top().IsFixed()) {
+      offset.block_offset = LayoutUnit(style.Top().Pixels());
+    }
+
+    const ConstraintSpace& parent_space = container_builder_->GetConstraintSpace();
+    ConstraintSpaceBuilder child_space_builder(
+        parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
+    LogicalSize available_size = parent_space.AvailableSize();
+    if (style.LogicalWidth().IsFixed()) {
+      available_size.inline_size = LayoutUnit(style.LogicalWidth().Pixels());
+      child_space_builder.SetIsFixedInlineSize(true);
+    }
+    if (style.LogicalHeight().IsFixed()) {
+      available_size.block_size = LayoutUnit(style.LogicalHeight().Pixels());
+      child_space_builder.SetIsFixedBlockSize(true);
+    }
+    child_space_builder.SetAvailableSize(available_size);
+    child_space_builder.SetPercentageResolutionSize(
+        parent_space.PercentageResolutionSize());
+    if (parent_space.IsHiddenForPaint()) {
+      child_space_builder.SetIsHiddenForPaint(true);
+    }
+
+    ++g_standalone_oof_layout_attempted;
+    const LayoutResult* result = child.Layout(
+        child_space_builder.ToConstraintSpace(), candidate.GetBreakToken());
+    if (!result) {
+      continue;
+    }
+    container_builder_->AddResult(*result, offset);
+    container_builder_->SetHasOutOfFlowFragmentChild(true);
+    ++g_standalone_oof_fragment_created;
+  }
+}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void UpdateTransformState(const PhysicalFragment&,
                           PhysicalOffset,
