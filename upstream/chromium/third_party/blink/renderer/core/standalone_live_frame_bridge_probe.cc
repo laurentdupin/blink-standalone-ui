@@ -5018,6 +5018,43 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyStateAtForStandaloneRenderer
   }
   return 1;
 }
+
+int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    uint64_t* transform_node_id,
+    uint64_t* transform_parent_id,
+    uint32_t* transform_chain_depth,
+    uint64_t* scroll_node_id,
+    uint32_t* clip_chain_depth,
+    uint32_t* effect_chain_depth) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& states = ProbeCache().chunk_property_states;
+  if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
+    return 0;
+  }
+  const LiveExportedChunkPropertyState& state =
+      states[static_cast<size_t>(chunk_index)];
+  if (transform_node_id) {
+    *transform_node_id = state.transform_node_id;
+  }
+  if (transform_parent_id) {
+    *transform_parent_id = state.transform_parent_id;
+  }
+  if (transform_chain_depth) {
+    *transform_chain_depth = state.transform_chain_depth;
+  }
+  if (scroll_node_id) {
+    *scroll_node_id = state.scroll_node_id;
+  }
+  if (clip_chain_depth) {
+    *clip_chain_depth = state.clip_chain_depth;
+  }
+  if (effect_chain_depth) {
+    *effect_chain_depth = state.effect_chain_depth;
+  }
+  return 1;
+}
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpCountForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);

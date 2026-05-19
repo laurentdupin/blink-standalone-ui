@@ -514,7 +514,9 @@ void WriteOracleImageOpExamples(std::ofstream& file,
 bool WriteOracleProvenanceJson(
     const std::string& path,
     const Metrics& metrics,
-    const html_css_renderer::RenderResult& oracle_result) {
+    const html_css_renderer::RenderResult& oracle_result,
+    const std::string& requested_mode,
+    const std::string& transform_mode) {
   std::ofstream file(path);
   if (!file) {
     return false;
@@ -522,10 +524,24 @@ bool WriteOracleProvenanceJson(
   file << "{\n";
   file << "  \"oracle\": {\n";
   file << "    \"implemented\": true,\n";
-  file << "    \"source\": \"blink_paint_artifact_direct_record_playback\",\n";
-  file << "    \"uses_retained_draw_commands\": false,\n";
-  file << "    \"uses_live_exported_draw_ops_for_paint_generation\": false,\n";
-  file << "    \"uses_bitmap_transport_for_output\": true,\n";
+  file << "    \"source\": \"manual_chunk_property_replay\",\n";
+  file << "    \"oracle_provenance\": {";
+  file << "\"requested_mode\": ";
+  WriteJsonString(file, requested_mode);
+  file << ", \"actual_mode\": \"manual_chunk_property_replay\"";
+  file << ", \"uses_blink_paintartifact_direct_playback\": false";
+  file << ", \"uses_retained_exported_commands\": true";
+  file << ", \"uses_transform_stripping\": "
+       << (transform_mode == "record-only" ? "true" : "false");
+  file << ", \"blink_flattened_get_paint_record_available\": false";
+  file << ", \"reason_if_not_independent\": "
+       << "\"standalone PaintArtifact::GetPaintRecord is currently an empty "
+          "stub, so this oracle replays exported PaintArtifact commands "
+          "through the retained Skia CPU path\"";
+  file << "},\n";
+  file << "    \"uses_retained_draw_commands\": true,\n";
+  file << "    \"uses_live_exported_draw_ops_for_paint_generation\": true,\n";
+  file << "    \"uses_bitmap_transport_for_output\": false,\n";
   file << "    \"uses_diagnostic_bitmap_fallback_as_rendering\": false,\n";
   file << "    \"retained_command_count_for_oracle_generation\": 0,\n";
   const std::string& raw_json = oracle_result.raw_paint_artifact_audit_json;
@@ -1161,7 +1177,8 @@ int main(int argc, char** argv) {
       const Metrics oracle_metrics = ComputeMetrics(oracle_image);
       const std::string oracle_json_path = oracle_out_path + ".json";
       if (!WriteOracleProvenanceJson(oracle_json_path, oracle_metrics,
-                                     oracle_result)) {
+                                     oracle_result, paint_oracle,
+                                     paint_oracle_transform_mode)) {
         std::fprintf(stderr, "failed to write oracle provenance: %s\n",
                      oracle_json_path.c_str());
         return 1;

@@ -75,6 +75,15 @@ int StandaloneBlinkLiveFrameBridgeChunkIdStringAtForStandaloneRenderer(
     int chunk_index,
     char* buffer,
     int buffer_size);
+int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    uint64_t* transform_node_id,
+    uint64_t* transform_parent_id,
+    uint32_t* transform_chain_depth,
+    uint64_t* scroll_node_id,
+    uint32_t* clip_chain_depth,
+    uint32_t* effect_chain_depth);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -2149,6 +2158,27 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           active_chunk_property_state.effect_node_id =
               property_state_hash ^ 0xc2b2ae3d27d4eb4full;
           active_chunk_property_state.effect_chain_depth = 1;
+          uint64_t transform_node_id = 0;
+          uint64_t transform_parent_id = 0;
+          uint32_t transform_chain_depth = 0;
+          uint64_t scroll_node_id = 0;
+          uint32_t clip_chain_depth = 0;
+          uint32_t effect_chain_depth = 0;
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRenderer(
+                      probe_html.c_str(), chunk_index, &transform_node_id,
+                      &transform_parent_id, &transform_chain_depth,
+                      &scroll_node_id, &clip_chain_depth,
+                      &effect_chain_depth)) {
+            active_chunk_property_state.transform_node_id = transform_node_id;
+            active_chunk_property_state.transform_parent_id =
+                transform_parent_id;
+            active_chunk_property_state.transform_chain_depth =
+                transform_chain_depth;
+            active_chunk_property_state.scroll_node_id = scroll_node_id;
+            active_chunk_property_state.clip_chain_depth = clip_chain_depth;
+            active_chunk_property_state.effect_chain_depth = effect_chain_depth;
+          }
         }
         active_chunk_key =
             chunk_key_buffer[0] != '\0'
@@ -2442,15 +2472,48 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         const bool pure_translation =
             nearly_equal(x, 1.0f) && nearly_equal(y, 0.0f) &&
             nearly_equal(height, 0.0f) && nearly_equal(r, 1.0f);
+        const bool conservative_property_state =
+            active_chunk_property_state.transform_chain_depth == 2 &&
+            active_chunk_property_state.scroll_node_id == 0 &&
+            !active_chunk_property_state.has_clip_rect &&
+            active_chunk_property_state.clip_chain_depth == 0 &&
+            active_chunk_property_state.effect_chain_depth <= 1;
         const bool duplicates_chunk_root_space_origin =
-            pure_translation && nearly_equal(width, active_chunk_bounds.x) &&
+            pure_translation && conservative_property_state &&
+            nearly_equal(width, active_chunk_bounds.x) &&
             nearly_equal(g, active_chunk_bounds.y) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
         if (duplicates_chunk_root_space_origin) {
           result.diagnostics.push_back(
               "real Blink PaintArtifact skipped duplicate root-space chunk "
-              "translation transform for chunk " + active_chunk_key);
+              "translation transform for chunk " + active_chunk_key +
+              " reason=record_geometry_already_root_space"
+              " transform_node_id=" +
+              std::to_string(active_chunk_property_state.transform_node_id) +
+              " transform_parent_id=" +
+              std::to_string(active_chunk_property_state.transform_parent_id) +
+              " transform_chain_depth=" +
+              std::to_string(
+                  active_chunk_property_state.transform_chain_depth) +
+              " scroll_node_id=" +
+              std::to_string(active_chunk_property_state.scroll_node_id) +
+              " matrix=[1,0,0," + std::to_string(width) +
+              ",0,1,0," + std::to_string(g) +
+              ",0,0,1,0,0,0,0,1]"
+              " chunk_bounds=[" +
+              std::to_string(active_chunk_bounds.x) + "," +
+              std::to_string(active_chunk_bounds.y) + "," +
+              std::to_string(active_chunk_bounds.width) + "," +
+              std::to_string(active_chunk_bounds.height) + "]"
+              " transform_node_classification=provisional_root_space_paint_offset_translation"
+              " is_paint_offset_translation=unknown"
+              " is_fixed_position_translation=unknown");
           continue;
+        }
+        if (!pure_translation) {
+          result.diagnostics.push_back(
+              "real Blink PaintArtifact kept non-translation transform for "
+              "chunk " + active_chunk_key);
         }
         Matrix4 matrix;
         matrix.values[0] = x;
