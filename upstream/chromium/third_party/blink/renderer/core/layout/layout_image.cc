@@ -60,6 +60,8 @@ namespace blink {
 
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 extern "C" void StandaloneRendererNoteLayoutImageSetResource();
+extern "C" void StandaloneRendererNoteLayoutImagePaint();
+extern "C" void StandaloneRendererNoteLayoutImagePaintReplaced();
 #endif
 
 LayoutImage::LayoutImage(Element* element) : LayoutReplaced(element) {}
@@ -369,6 +371,9 @@ void LayoutImage::InvalidatePaintWithoutLayoutChange(
 void LayoutImage::PaintReplaced(const PaintInfo& paint_info,
                                 const PhysicalOffset& paint_offset) const {
   NOT_DESTROYED();
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  StandaloneRendererNoteLayoutImagePaintReplaced();
+#endif
   if (ChildPaintBlockedByDisplayLock())
     return;
   ImagePainter(*this).PaintReplaced(paint_info, paint_offset);
@@ -376,6 +381,9 @@ void LayoutImage::PaintReplaced(const PaintInfo& paint_info,
 
 void LayoutImage::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  StandaloneRendererNoteLayoutImagePaint();
+#endif
   ImagePainter(*this).Paint(paint_info);
 
   if (image_resource_ && image_resource_->MaybeAnimated()) {

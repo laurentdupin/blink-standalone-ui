@@ -44,6 +44,8 @@ extern "C" void StandaloneRendererNoteLayoutImageResourceInitialize();
 extern "C" void StandaloneRendererNoteLayoutImageResourceSetResource();
 extern "C" void StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
 extern "C" void StandaloneRendererNoteLayoutImageResourceGetImage();
+extern "C" void StandaloneRendererNoteLayoutImageResourceMaybeAnimated(
+    bool null_image);
 #endif
 
 namespace {
@@ -264,6 +266,18 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
 
 bool LayoutImageResource::MaybeAnimated() const {
   Image* image = cached_image_ ? cached_image_->GetImage() : Image::NullImage();
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  StandaloneRendererNoteLayoutImageResourceMaybeAnimated(!image);
+  if (!image) {
+    std::fprintf(
+        stderr,
+        "image_reachability.stage=layout_image_resource_maybe_animated_null "
+        "resource=%p cached_image=%p\n",
+        this, cached_image_.Get());
+    std::fflush(stderr);
+    return false;
+  }
+#endif
   return image->MaybeAnimated();
 }
 

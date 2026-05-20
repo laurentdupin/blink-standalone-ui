@@ -1765,6 +1765,7 @@ if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_element.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_loader.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/image_loader.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/presentation_attribute_style.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_replaced.cc
@@ -1774,8 +1775,5 @@ if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/replaced_painter.cc
   )
 endif()
-
-
-
 
 

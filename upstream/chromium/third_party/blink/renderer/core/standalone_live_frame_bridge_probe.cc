@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
@@ -106,6 +107,11 @@ extern "C" int StandaloneRendererLayoutImageResourceInitializeCalled();
 extern "C" int StandaloneRendererLayoutImageResourceSetResourceCalled();
 extern "C" int StandaloneRendererLayoutImageResourceNaturalDimensionsCalled();
 extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled();
+extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedCalled();
+extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedNullImage();
+extern "C" int StandaloneRendererLayoutImagePaintCalled();
+extern "C" int StandaloneRendererLayoutImagePaintReplacedCalled();
+extern "C" int StandaloneRendererImagePainterPaintReplacedCalled();
 extern "C" int StandaloneRendererImageResourceContentFetchLastUrl(char*, int);
 extern "C" int g_standalone_text_decoration_painter_constructed;
 extern "C" int g_standalone_text_decoration_begin_called;
@@ -181,6 +187,25 @@ struct ImageReachabilityDiagnostics {
   bool loader_content_present = false;
   bool loader_content_has_image = false;
   bool loader_content_error = false;
+  std::string width_attr;
+  std::string height_attr;
+  int computed_display = -1;
+  int computed_visibility = -1;
+  std::string computed_width;
+  std::string computed_height;
+  bool layout_is_box = false;
+  bool layout_is_layout_image = false;
+  int layout_box_width = 0;
+  int layout_box_height = 0;
+  int layout_content_width = 0;
+  int layout_content_height = 0;
+  int layout_viewport_x = 0;
+  int layout_viewport_y = 0;
+  int layout_viewport_width = 0;
+  int layout_viewport_height = 0;
+  int physical_fragment_count = 0;
+  bool paint_layer_present = false;
+  bool object_paint_properties_present = false;
 };
 
 struct LiveExportedGlyph {
@@ -3414,6 +3439,22 @@ void CollectImageReachabilityFromNodeForStandaloneRenderer(
         diagnostics.img_src_detected_from_dom = true;
         diagnostics.image_loader_request_url = src.Utf8();
       }
+      diagnostics.width_attr =
+          BlinkStringToStdStringForStandaloneRenderer(
+              element->FastGetAttribute(html_names::kWidthAttr));
+      diagnostics.height_attr =
+          BlinkStringToStdStringForStandaloneRenderer(
+              element->FastGetAttribute(html_names::kHeightAttr));
+      if (const ComputedStyle* style = element->GetComputedStyle()) {
+        diagnostics.computed_display = static_cast<int>(style->Display());
+        diagnostics.computed_visibility =
+            static_cast<int>(style->Visibility());
+        diagnostics.computed_width = BlinkStringToStdStringForStandaloneRenderer(
+            style->LogicalWidth().ToString());
+        diagnostics.computed_height =
+            BlinkStringToStdStringForStandaloneRenderer(
+                style->LogicalHeight().ToString());
+      }
 #if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
       if (const auto* image_element = DynamicTo<HTMLImageElement>(element)) {
         diagnostics.element_natural_width =
@@ -3438,6 +3479,28 @@ void CollectImageReachabilityFromNodeForStandaloneRenderer(
       if (const LayoutObject* layout_object = element->GetLayoutObject()) {
         diagnostics.layout_object_created = true;
         diagnostics.layout_object_type = layout_object->DebugName().Utf8();
+        diagnostics.layout_is_layout_image = layout_object->IsLayoutImage();
+        diagnostics.paint_layer_present = layout_object->HasLayer();
+        diagnostics.object_paint_properties_present =
+            layout_object->FirstFragment().PaintProperties();
+        if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
+          diagnostics.layout_is_box = true;
+          diagnostics.layout_box_width = box->StitchedSize().width.ToInt();
+          diagnostics.layout_box_height = box->StitchedSize().height.ToInt();
+          const PhysicalRect content_rect = box->PhysicalContentBoxRect();
+          diagnostics.layout_content_width = content_rect.Width().ToInt();
+          diagnostics.layout_content_height = content_rect.Height().ToInt();
+          const gfx::RectF dom_rect =
+              element->GetBoundingClientRectNoLifecycleUpdate();
+          diagnostics.layout_viewport_x = static_cast<int>(std::round(dom_rect.x()));
+          diagnostics.layout_viewport_y = static_cast<int>(std::round(dom_rect.y()));
+          diagnostics.layout_viewport_width =
+              static_cast<int>(std::round(dom_rect.width()));
+          diagnostics.layout_viewport_height =
+              static_cast<int>(std::round(dom_rect.height()));
+          diagnostics.physical_fragment_count =
+              static_cast<int>(box->PhysicalFragments().Size());
+        }
       }
     }
   }
@@ -3509,11 +3572,20 @@ std::string FirstMissingImageStageForStandaloneRenderer(
   if (!diagnostics.layout_image_resource_created) {
     return "LayoutImageResource_not_created";
   }
-  if (StandaloneRendererLayoutImageResourceNaturalDimensionsCalled() == 0) {
-    return "LayoutImageResource_GetNaturalDimensions_not_called";
+  if (StandaloneRendererLayoutImagePaintCalled() == 0) {
+    return "LayoutImage_Paint_not_called";
+  }
+  if (StandaloneRendererLayoutImagePaintReplacedCalled() == 0) {
+    return "LayoutImage_PaintReplaced_not_called";
+  }
+  if (StandaloneRendererImagePainterPaintReplacedCalled() == 0) {
+    return "ImagePainter_PaintReplaced_not_called";
   }
   if (StandaloneRendererLayoutImageResourceGetImageCalled() == 0) {
     return "LayoutImageResource_GetImage_not_called";
+  }
+  if (StandaloneRendererLayoutImageResourceNaturalDimensionsCalled() == 0) {
+    return "LayoutImageResource_GetNaturalDimensions_not_called";
   }
   return "none";
 }
@@ -4285,6 +4357,11 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << "\"reason\":\"optional page-evidence walk disabled; chunk, "
           "display-item, PaintOp, bounds, and property-state metadata are "
           "still collected field-by-field\"}}"
+       << ",\"scrollbar_chrome_policy\":{"
+       << "\"standalone_paints_scrollbars\":false,"
+       << "\"standalone_paints_resizers\":false,"
+       << "\"content_overflow_clip_preserved\":true,"
+       << "\"scroll_background_failsoft_enabled\":true}"
        << ",\"overflow_clip_diagnostics\":"
        << overflow_clip_diagnostics_json
        << ",\"raw_chunk_count\":" << chunk_count
@@ -4441,6 +4518,16 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << StandaloneRendererLayoutImageResourceNaturalDimensionsCalled()
        << ",\"get_image_called\":"
        << StandaloneRendererLayoutImageResourceGetImageCalled()
+       << ",\"maybe_animated_called\":"
+       << StandaloneRendererLayoutImageResourceMaybeAnimatedCalled()
+       << ",\"maybe_animated_null_image\":"
+       << StandaloneRendererLayoutImageResourceMaybeAnimatedNullImage()
+       << ",\"layout_image_paint_called\":"
+       << StandaloneRendererLayoutImagePaintCalled()
+       << ",\"layout_image_paint_replaced_called\":"
+       << StandaloneRendererLayoutImagePaintReplacedCalled()
+       << ",\"image_painter_paint_replaced_called\":"
+       << StandaloneRendererImagePainterPaintReplacedCalled()
        << ",\"first_missing_stage\":"
        << JsonStringForStandaloneRenderer(
               FirstMissingImageStageForStandaloneRenderer(
@@ -4499,6 +4586,38 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << cache.image_reachability.loader_resource_width
        << ",\"layout_intrinsic_height\":"
        << cache.image_reachability.loader_resource_height
+       << ",\"width_attr\":"
+       << JsonStringForStandaloneRenderer(cache.image_reachability.width_attr)
+       << ",\"height_attr\":"
+       << JsonStringForStandaloneRenderer(cache.image_reachability.height_attr)
+       << ",\"computed_display\":"
+       << cache.image_reachability.computed_display
+       << ",\"computed_visibility\":"
+       << cache.image_reachability.computed_visibility
+       << ",\"computed_width\":"
+       << JsonStringForStandaloneRenderer(
+              cache.image_reachability.computed_width)
+       << ",\"computed_height\":"
+       << JsonStringForStandaloneRenderer(
+              cache.image_reachability.computed_height)
+       << ",\"layout_box_size\":["
+       << cache.image_reachability.layout_box_width << ","
+       << cache.image_reachability.layout_box_height << "]"
+       << ",\"layout_content_size\":["
+       << cache.image_reachability.layout_content_width << ","
+       << cache.image_reachability.layout_content_height << "]"
+       << ",\"layout_viewport_rect\":["
+       << cache.image_reachability.layout_viewport_x << ","
+       << cache.image_reachability.layout_viewport_y << ","
+       << cache.image_reachability.layout_viewport_width << ","
+       << cache.image_reachability.layout_viewport_height << "]"
+       << ",\"physical_fragment_count\":"
+       << cache.image_reachability.physical_fragment_count
+       << ",\"paint_layer_present\":"
+       << (cache.image_reachability.paint_layer_present ? "true" : "false")
+       << ",\"object_paint_properties_present\":"
+       << (cache.image_reachability.object_paint_properties_present ? "true"
+                                                                    : "false")
        << ",\"paint_image_width\":" << provider_decoded_width
        << ",\"paint_image_height\":" << provider_decoded_height
        << ",\"get_natural_dimensions_called\":"
@@ -4547,10 +4666,42 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << JsonStringForStandaloneRenderer(
                 cache.image_reachability.layout_object_type)
          << ",\"is_layout_image\":"
-         << (cache.image_reachability.layout_object_type.find("LayoutImage") !=
-                     std::string::npos
-                 ? "true"
-                 : "false")
+         << (cache.image_reachability.layout_is_layout_image ? "true"
+                                                             : "false")
+         << ",\"is_layout_box\":"
+         << (cache.image_reachability.layout_is_box ? "true" : "false")
+         << ",\"width_attr\":"
+         << JsonStringForStandaloneRenderer(cache.image_reachability.width_attr)
+         << ",\"height_attr\":"
+         << JsonStringForStandaloneRenderer(cache.image_reachability.height_attr)
+         << ",\"computed_width\":"
+         << JsonStringForStandaloneRenderer(
+                cache.image_reachability.computed_width)
+         << ",\"computed_height\":"
+         << JsonStringForStandaloneRenderer(
+                cache.image_reachability.computed_height)
+         << ",\"layout_box_size\":["
+         << cache.image_reachability.layout_box_width << ","
+         << cache.image_reachability.layout_box_height << "]"
+         << ",\"layout_content_size\":["
+         << cache.image_reachability.layout_content_width << ","
+         << cache.image_reachability.layout_content_height << "]"
+         << ",\"layout_viewport_rect\":["
+         << cache.image_reachability.layout_viewport_x << ","
+         << cache.image_reachability.layout_viewport_y << ","
+         << cache.image_reachability.layout_viewport_width << ","
+         << cache.image_reachability.layout_viewport_height << "]"
+         << ",\"paint_layer_present\":"
+         << (cache.image_reachability.paint_layer_present ? "true" : "false")
+         << ",\"object_paint_properties_present\":"
+         << (cache.image_reachability.object_paint_properties_present ? "true"
+                                                                      : "false")
+         << ",\"layout_image_paint_called\":"
+         << StandaloneRendererLayoutImagePaintCalled()
+         << ",\"layout_image_paint_replaced_called\":"
+         << StandaloneRendererLayoutImagePaintReplacedCalled()
+         << ",\"image_painter_paint_replaced_called\":"
+         << StandaloneRendererImagePainterPaintReplacedCalled()
          << ",\"cached_image_present\":"
          << (cache.image_reachability.loader_content_present ? "true" : "false")
          << ",\"image_resource_content_present\":"

@@ -1598,6 +1598,11 @@ int g_layout_image_resource_initialize_called = 0;
 int g_layout_image_resource_set_resource_called = 0;
 int g_layout_image_resource_natural_dimensions_called = 0;
 int g_layout_image_resource_get_image_called = 0;
+int g_layout_image_resource_maybe_animated_called = 0;
+int g_layout_image_resource_maybe_animated_null_image = 0;
+int g_layout_image_paint_called = 0;
+int g_layout_image_paint_replaced_called = 0;
+int g_image_painter_paint_replaced_called = 0;
 std::string g_image_resource_content_fetch_last_url;
 }  // namespace
 
@@ -1608,6 +1613,11 @@ extern "C" void StandaloneRendererResetImageReachabilityDiagnostics() {
   g_layout_image_resource_set_resource_called = 0;
   g_layout_image_resource_natural_dimensions_called = 0;
   g_layout_image_resource_get_image_called = 0;
+  g_layout_image_resource_maybe_animated_called = 0;
+  g_layout_image_resource_maybe_animated_null_image = 0;
+  g_layout_image_paint_called = 0;
+  g_layout_image_paint_replaced_called = 0;
+  g_image_painter_paint_replaced_called = 0;
   g_image_resource_content_fetch_last_url.clear();
 }
 
@@ -1637,6 +1647,25 @@ extern "C" void StandaloneRendererNoteLayoutImageResourceGetImage() {
   ++g_layout_image_resource_get_image_called;
 }
 
+extern "C" void StandaloneRendererNoteLayoutImageResourceMaybeAnimated(
+    bool null_image) {
+  ++g_layout_image_resource_maybe_animated_called;
+  if (null_image)
+    ++g_layout_image_resource_maybe_animated_null_image;
+}
+
+extern "C" void StandaloneRendererNoteLayoutImagePaint() {
+  ++g_layout_image_paint_called;
+}
+
+extern "C" void StandaloneRendererNoteLayoutImagePaintReplaced() {
+  ++g_layout_image_paint_replaced_called;
+}
+
+extern "C" void StandaloneRendererNoteImagePainterPaintReplaced() {
+  ++g_image_painter_paint_replaced_called;
+}
+
 extern "C" int StandaloneRendererImageResourceContentFetchCalled() {
   return g_image_resource_content_fetch_called;
 }
@@ -1659,6 +1688,26 @@ extern "C" int StandaloneRendererLayoutImageResourceNaturalDimensionsCalled() {
 
 extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled() {
   return g_layout_image_resource_get_image_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedCalled() {
+  return g_layout_image_resource_maybe_animated_called;
+}
+
+extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedNullImage() {
+  return g_layout_image_resource_maybe_animated_null_image;
+}
+
+extern "C" int StandaloneRendererLayoutImagePaintCalled() {
+  return g_layout_image_paint_called;
+}
+
+extern "C" int StandaloneRendererLayoutImagePaintReplacedCalled() {
+  return g_layout_image_paint_replaced_called;
+}
+
+extern "C" int StandaloneRendererImagePainterPaintReplacedCalled() {
+  return g_image_painter_paint_replaced_called;
 }
 
 extern "C" int StandaloneRendererImageResourceContentFetchLastUrl(char* out,
@@ -5825,9 +5874,11 @@ void Attr::Trace(Visitor* visitor) const {
 
 void PageAnimator::SetHasInlineStyleMutation() {}
 
+#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 CSSPropertyValueSet* ComputePresentationAttributeStyle(Element&) {
   return nullptr;
 }
+#endif
 
 AtomicString DefaultLanguage() {
   return g_empty_atom;
