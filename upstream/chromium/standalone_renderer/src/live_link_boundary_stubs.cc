@@ -3075,8 +3075,18 @@ bool LCPCriticalPathPredictor::IsElementMatchingLocator(
 
 void HTMLFormElement::DidAssociateByParser() {}
 
-MediaValues* MediaValuesDynamic::Create(Document&) {
-  return nullptr;
+MediaValues* MediaValuesDynamic::Create(Document& document) {
+  return MediaValuesDynamic::Create(document.GetFrame());
+}
+
+MediaValues* MediaValuesDynamic::Create(LocalFrame* frame) {
+  if (!frame || !frame->View() || !frame->GetDocument()) {
+    if (frame && frame->GetDocument()) {
+      return MakeGarbageCollected<MediaValuesCached>(*frame->GetDocument());
+    }
+    return MakeGarbageCollected<MediaValuesCached>();
+  }
+  return MakeGarbageCollected<MediaValuesDynamic>(frame);
 }
 
 SizesAttributeParser::SizesAttributeParser(MediaValues*,
@@ -4492,13 +4502,17 @@ double MediaValuesDynamic::ViewportWidth() const {
   if (viewport_dimensions_overridden_) {
     return viewport_width_override_;
   }
-  return frame_ && frame_->View() ? frame_->View()->GetLayoutSize().width() : 800;
+  return frame_ && frame_->View()
+             ? frame_->View()->ViewportSizeForMediaQueries().width()
+             : 800;
 }
 double MediaValuesDynamic::ViewportHeight() const {
   if (viewport_dimensions_overridden_) {
     return viewport_height_override_;
   }
-  return frame_ && frame_->View() ? frame_->View()->GetLayoutSize().height() : 600;
+  return frame_ && frame_->View()
+             ? frame_->View()->ViewportSizeForMediaQueries().height()
+             : 600;
 }
 double MediaValuesDynamic::SmallViewportWidth() const { return ViewportWidth(); }
 double MediaValuesDynamic::SmallViewportHeight() const { return ViewportHeight(); }
@@ -4558,7 +4572,9 @@ MediaValuesCached::MediaValuesCached(Document& document) {
 MediaValuesCached::MediaValuesCached(const MediaValuesCachedData& data)
     : data_(data) {}
 MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData() = default;
-MediaValues* MediaValuesCached::Copy() const { return nullptr; }
+MediaValues* MediaValuesCached::Copy() const {
+  return MakeGarbageCollected<MediaValuesCached>(data_);
+}
 void MediaValuesCached::OverrideViewportDimensions(double width, double height) {
   data_.viewport_width = width;
   data_.viewport_height = height;
@@ -5388,7 +5404,17 @@ bool MediaValues::SnappedInline() const {
 }
 
 MediaValues* MediaValues::CreateDynamicIfFrameExists(LocalFrame* frame) {
-  return MakeGarbageCollected<MediaValuesDynamic>(frame);
+  if (!frame) {
+    return nullptr;
+  }
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  return MediaValuesDynamic::Create(frame);
+#else
+  if (frame->GetDocument()) {
+    return MakeGarbageCollected<MediaValuesCached>(*frame->GetDocument());
+  }
+  return MakeGarbageCollected<MediaValuesCached>();
+#endif
 }
 
 const unsigned char* SelectorStatisticsFlag::GetCategoryGroupEnabled() {
