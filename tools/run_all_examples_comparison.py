@@ -214,6 +214,8 @@ def main() -> int:
             str(args.benchmark),
             "--html-file",
             str(fixture),
+            "--resource-root",
+            str(args.fixtures),
             "--viewport",
             args.viewport,
             "--out",
@@ -236,13 +238,14 @@ def main() -> int:
         status["benchmark_exit"] = run(bench_cmd, item_dir / f"{name}-benchmark.log", args.timeout)
 
         pw_cmd = [
-            "npx.cmd",
-            "playwright",
-            "screenshot",
-            "--browser=chromium",
-            f"--viewport-size={args.viewport.replace('x', ',')}",
-            f"file:///{str(fixture).replace(chr(92), '/')}",
+            "node",
+            str(ROOT / "tools" / "playwright_screenshot.cjs"),
+            "--html-file",
+            str(fixture),
+            "--out",
             str(pw),
+            "--viewport",
+            args.viewport,
         ]
         status["playwright_exit"] = run(pw_cmd, item_dir / f"{name}-playwright.log", args.timeout)
 

@@ -39,6 +39,7 @@ enum class StandaloneResourceSourceKind {
   kUnsupported,
   kDataUrl,
   kFileUrl,
+  kRelativeFile,
   kLocalFile,
   kMemory,
 };

@@ -101,17 +101,17 @@ StandaloneResourceResult ErrorResult(StandaloneResourceStatus status,
   return result;
 }
 
-StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
+StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
 #if defined(_WIN32)
   if (result.encoded_bytes.size() > std::numeric_limits<DWORD>::max()) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "encoded PNG is too large", "image/png");
+                       "encoded image is too large", result.mime_type);
   }
 
   HRESULT initialize_result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   if (FAILED(initialize_result) && initialize_result != RPC_E_CHANGED_MODE) {
     return ErrorResult(StandaloneResourceStatus::kError,
-                       "CoInitializeEx failed", "image/png");
+                       "CoInitializeEx failed", result.mime_type);
   }
 
   Microsoft::WRL::ComPtr<IWICImagingFactory> factory;
@@ -119,21 +119,21 @@ StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
                                 CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kError,
-                       "WIC factory creation failed", "image/png");
+                       "WIC factory creation failed", result.mime_type);
   }
 
   Microsoft::WRL::ComPtr<IWICStream> stream;
   hr = factory->CreateStream(&stream);
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kError,
-                       "WIC stream creation failed", "image/png");
+                       "WIC stream creation failed", result.mime_type);
   }
   hr = stream->InitializeFromMemory(
       result.encoded_bytes.data(),
       static_cast<DWORD>(result.encoded_bytes.size()));
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kError,
-                       "WIC stream initialization failed", "image/png");
+                       "WIC stream initialization failed", result.mime_type);
   }
 
   Microsoft::WRL::ComPtr<IWICBitmapDecoder> decoder;
@@ -141,14 +141,14 @@ StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
       stream.Get(), nullptr, WICDecodeMetadataCacheOnLoad, &decoder);
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "WIC PNG decoder failed", "image/png");
+                       "WIC image decoder failed", result.mime_type);
   }
 
   Microsoft::WRL::ComPtr<IWICBitmapFrameDecode> frame;
   hr = decoder->GetFrame(0, &frame);
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "WIC PNG frame extraction failed", "image/png");
+                       "WIC image frame extraction failed", result.mime_type);
   }
 
   UINT width = 0;
@@ -156,21 +156,21 @@ StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
   hr = frame->GetSize(&width, &height);
   if (FAILED(hr) || width == 0 || height == 0) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "WIC PNG size query failed", "image/png");
+                       "WIC image size query failed", result.mime_type);
   }
 
   Microsoft::WRL::ComPtr<IWICFormatConverter> converter;
   hr = factory->CreateFormatConverter(&converter);
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kError,
-                       "WIC format converter creation failed", "image/png");
+                       "WIC format converter creation failed", result.mime_type);
   }
   hr = converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA,
                              WICBitmapDitherTypeNone, nullptr, 0.0,
                              WICBitmapPaletteTypeCustom);
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "WIC PNG conversion to BGRA failed", "image/png");
+                       "WIC image conversion to BGRA failed", result.mime_type);
   }
 
   constexpr UINT kBytesPerPixel = 4;
@@ -198,7 +198,7 @@ StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
   if (!result.decoded_image) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "SkImage creation failed after WIC decode",
-                       "image/png");
+                       result.mime_type);
   }
   result.intrinsic_width = static_cast<int>(width);
   result.intrinsic_height = static_cast<int>(height);
@@ -206,12 +206,24 @@ StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
   return result;
 #else
   return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                     "PNG decode provider is implemented only on Windows",
-                     "image/png");
+                     "image decode provider is implemented only on Windows",
+                     result.mime_type);
 #endif
 }
 
-StandaloneResourceResult DecodeDataPngUrl(const std::string& url) {
+std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
+  if (metadata.find("image/png") != std::string::npos)
+    return "image/png";
+  if (metadata.find("image/jpeg") != std::string::npos ||
+      metadata.find("image/jpg") != std::string::npos)
+    return "image/jpeg";
+  if (metadata.find("image/bmp") != std::string::npos ||
+      metadata.find("image/x-ms-bmp") != std::string::npos)
+    return "image/bmp";
+  return std::string();
+}
+
+StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
   std::string lower_url = LowerAscii(url);
   constexpr char kPrefix[] = "data:";
   if (lower_url.rfind(kPrefix, 0) != 0) {
@@ -227,14 +239,14 @@ StandaloneResourceResult DecodeDataPngUrl(const std::string& url) {
 
   std::string metadata =
       lower_url.substr(sizeof(kPrefix) - 1, comma - (sizeof(kPrefix) - 1));
-  if (metadata.find("image/png") == std::string::npos) {
+  std::string mime_type = SupportedImageMimeFromMetadata(metadata);
+  if (mime_type.empty()) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
-                       "only image/png data URLs are enabled", "");
+                       "only PNG/JPEG/BMP data URLs are enabled", "");
   }
   if (metadata.find(";base64") == std::string::npos) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "image/png data URL is not base64 encoded",
-                       "image/png");
+                       "image data URL is not base64 encoded", mime_type);
   }
 
   blink::Vector<uint8_t> blink_encoded;
@@ -243,15 +255,15 @@ StandaloneResourceResult DecodeDataPngUrl(const std::string& url) {
                            blink::Base64DecodePolicy::kForgiving) ||
       blink_encoded.empty()) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "base64 decode failed", "image/png");
+                       "base64 decode failed", mime_type);
   }
 
   StandaloneResourceResult result;
   result.source_kind = StandaloneResourceSourceKind::kDataUrl;
-  result.mime_type = "image/png";
+  result.mime_type = std::move(mime_type);
   result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
   result.cache_key = url;
-  return DecodePngBytes(std::move(result));
+  return DecodeImageBytes(std::move(result));
 }
 
 std::string StripFileUrlPrefix(const std::string& url) {
@@ -290,7 +302,18 @@ bool IsWithinRoot(const std::filesystem::path& path,
   return true;
 }
 
-StandaloneResourceResult DecodeLocalPng(const std::string& url) {
+std::string SupportedImageMimeFromExtension(std::string extension) {
+  extension = LowerAscii(std::move(extension));
+  if (extension == ".png")
+    return "image/png";
+  if (extension == ".jpg" || extension == ".jpeg")
+    return "image/jpeg";
+  if (extension == ".bmp")
+    return "image/bmp";
+  return std::string();
+}
+
+StandaloneResourceResult DecodeLocalImage(const std::string& url) {
   std::string lower_url = LowerAscii(url);
   if (lower_url.rfind("http:", 0) == 0 || lower_url.rfind("https:", 0) == 0) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
@@ -324,9 +347,10 @@ StandaloneResourceResult DecodeLocalPng(const std::string& url) {
                          "document base path cannot be resolved");
     }
   }
+  const bool is_file_url = lower_url.rfind("file:", 0) == 0;
   std::filesystem::path candidate =
-      lower_url.rfind("file:", 0) == 0 ? std::filesystem::path(StripFileUrlPrefix(url))
-                                       : std::filesystem::path(url);
+      is_file_url ? std::filesystem::path(StripFileUrlPrefix(url))
+                  : std::filesystem::path(url);
   if (candidate.is_relative())
     candidate = base_path / candidate;
   std::error_code candidate_error;
@@ -336,8 +360,9 @@ StandaloneResourceResult DecodeLocalPng(const std::string& url) {
   }
 
   StandaloneResourceResult result;
-  result.source_kind = StandaloneResourceSourceKind::kLocalFile;
-  result.mime_type = "image/png";
+  result.source_kind = is_file_url ? StandaloneResourceSourceKind::kFileUrl
+                                   : StandaloneResourceSourceKind::kRelativeFile;
+  result.mime_type = SupportedImageMimeFromExtension(candidate.extension().string());
   result.resolved_path = candidate.string();
   result.cache_key = result.resolved_path;
 
@@ -346,9 +371,9 @@ StandaloneResourceResult DecodeLocalPng(const std::string& url) {
     result.error = "resolved local image path escapes resource root";
     return result;
   }
-  if (LowerAscii(candidate.extension().string()) != ".png") {
+  if (result.mime_type.empty()) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
-    result.error = "only local PNG images are enabled";
+    result.error = "only local PNG/JPEG/BMP images are enabled";
     return result;
   }
   if (!std::filesystem::exists(candidate) ||
@@ -371,7 +396,7 @@ StandaloneResourceResult DecodeLocalPng(const std::string& url) {
     result.error = "local image file is empty";
     return result;
   }
-  return DecodePngBytes(std::move(result));
+  return DecodeImageBytes(std::move(result));
 }
 
 class DefaultProvider final : public StandaloneResourceProvider {
@@ -383,9 +408,9 @@ class DefaultProvider final : public StandaloneResourceProvider {
       result = ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
                            "provider currently supports image requests only");
     } else {
-      result = DecodeDataPngUrl(request.url);
+      result = DecodeDataImageUrl(request.url);
       if (result.status == StandaloneResourceStatus::kUnsupportedScheme)
-        result = DecodeLocalPng(request.url);
+        result = DecodeLocalImage(request.url);
     }
     RecordRequest(request, result);
     return result;
@@ -473,6 +498,8 @@ const char* ToString(StandaloneResourceSourceKind source_kind) {
       return "data_url";
     case StandaloneResourceSourceKind::kFileUrl:
       return "file_url";
+    case StandaloneResourceSourceKind::kRelativeFile:
+      return "relative_file";
     case StandaloneResourceSourceKind::kLocalFile:
       return "local_file";
     case StandaloneResourceSourceKind::kMemory:

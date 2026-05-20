@@ -68,6 +68,7 @@
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/css/parser/sizes_attribute_parser.h"
 #include "third_party/blink/renderer/core/html/parser/html_srcset_parser.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/core/html/html_image_fallback_helper.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/highlight/highlight_style_utils.h"
@@ -3937,10 +3938,15 @@ ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
   std::fflush(stderr);
   StandaloneRendererNoteImageResourceContentFetch(
       params.Url().GetString().Utf8().c_str());
+  html_css_renderer::StandaloneResourceInitiator initiator =
+      html_css_renderer::StandaloneResourceInitiator::kImgElement;
+  if (params.Options().initiator_info.name == fetch_initiator_type_names::kCSS ||
+      params.Options().initiator_info.name == fetch_initiator_type_names::kUacss) {
+    initiator =
+        html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
+  }
   if (scoped_refptr<Image> image =
-          DecodeStandalonePngImage(
-              params.Url(),
-              html_css_renderer::StandaloneResourceInitiator::kImgElement)) {
+          DecodeStandalonePngImage(params.Url(), initiator)) {
     std::fprintf(stderr,
                  "image_reachability.stage=image_resource_content_fetch_decoded\n");
     std::fflush(stderr);
