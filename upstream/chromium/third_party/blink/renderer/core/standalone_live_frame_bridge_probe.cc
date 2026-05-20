@@ -57,6 +57,7 @@
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
+#include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
@@ -152,6 +153,14 @@ extern "C" int g_standalone_oof_layout_null_results;
 extern "C" int g_standalone_oof_zero_size_fragments;
 extern "C" int g_standalone_oof_safety_limit_hit;
 extern "C" void StandaloneRendererResetOutOfFlowDiagnostics();
+extern "C" void StandaloneRendererResetMediaQueryDiagnostics();
+extern "C" int StandaloneRendererMediaQueryDiagnosticsJsonSize();
+extern "C" int StandaloneRendererMediaQueryDiagnosticsJson(char*, int);
+extern "C" int StandaloneRendererMediaQueryDiagnosticCount();
+extern "C" int StandaloneRendererMediaQueryDiagnosticFieldAt(int,
+                                                             int,
+                                                             char*,
+                                                             int);
 
 namespace {
 
@@ -2800,6 +2809,248 @@ std::string JsonStringForStandaloneRenderer(const std::string& value) {
   return "\"" + JsonEscapeForStandaloneRenderer(value) + "\"";
 }
 
+std::string MediaQueryDiagnosticsJsonForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache) {
+  auto field_at = [](int index, int field) {
+    std::array<char, 512> buffer{};
+    const int copied = StandaloneRendererMediaQueryDiagnosticFieldAt(
+        index, field, buffer.data(), static_cast<int>(buffer.size()));
+    if (copied <= 0) {
+      return std::string();
+    }
+    return std::string(buffer.data(), static_cast<size_t>(copied));
+  };
+  auto source_expected_value = [&](const std::string& feature) {
+    if (feature.empty()) {
+      return std::string();
+    }
+    std::string lower = cache.body_html;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) {
+                     return static_cast<char>(std::tolower(c));
+                   });
+    const std::string needle = feature + ":";
+    size_t feature_pos = lower.find(needle);
+    if (feature_pos == std::string::npos) {
+      return std::string();
+    }
+    size_t value_start = feature_pos + needle.size();
+    while (value_start < lower.size() &&
+           std::isspace(static_cast<unsigned char>(lower[value_start]))) {
+      ++value_start;
+    }
+    size_t value_end = value_start;
+    while (value_end < lower.size() && lower[value_end] != ')' &&
+           lower[value_end] != '{' && lower[value_end] != ',' &&
+           !std::isspace(static_cast<unsigned char>(lower[value_end]))) {
+      ++value_end;
+    }
+    if (value_end <= value_start) {
+      return std::string();
+    }
+    while (value_end > value_start &&
+           (std::isspace(static_cast<unsigned char>(cache.body_html[value_end - 1])) ||
+            cache.body_html[value_end - 1] == ';')) {
+      --value_end;
+    }
+    return cache.body_html.substr(value_start, value_end - value_start);
+  };
+  std::ostringstream queries;
+  queries << "[";
+  const int trace_count = StandaloneRendererMediaQueryDiagnosticCount();
+  for (int i = 0; i < trace_count; ++i) {
+    if (i) {
+      queries << ",";
+    }
+    const std::string feature = field_at(i, 0);
+    std::string expected_value = field_at(i, 1);
+    if (expected_value.empty()) {
+      expected_value = source_expected_value(feature);
+    }
+    const std::string actual_value = field_at(i, 2);
+    const std::string result = field_at(i, 3);
+    const std::string unsupported = field_at(i, 4);
+    queries << "{\"text\":\"(" << JsonEscapeForStandaloneRenderer(feature);
+    if (!expected_value.empty()) {
+      queries << ": " << JsonEscapeForStandaloneRenderer(expected_value);
+    }
+    queries << ")\",\"parsed\":true"
+            << ",\"evaluation_result\":"
+            << (result == "true"    ? "true"
+                : result == "false" ? "false"
+                                     : "null")
+            << ",\"features\":[{\"name\":"
+            << JsonStringForStandaloneRenderer(feature)
+            << ",\"expected_value\":"
+            << JsonStringForStandaloneRenderer(expected_value)
+            << ",\"actual_value\":"
+            << JsonStringForStandaloneRenderer(actual_value)
+            << ",\"match\":"
+            << (result == "true"    ? "true"
+                : result == "false" ? "false"
+                                     : "null")
+            << "}],\"unsupported_features\":";
+    if (unsupported.empty()) {
+      queries << "[]";
+    } else {
+      queries << "[{\"name\":" << JsonStringForStandaloneRenderer(feature)
+              << ",\"reason\":" << JsonStringForStandaloneRenderer(unsupported)
+              << "}]";
+    }
+    queries << ",\"error\":\"\"}";
+  }
+  queries << "]";
+  const std::string orientation =
+      cache.viewport_width >= cache.viewport_height ? "landscape" : "portrait";
+  std::ostringstream json;
+  json << "{\"viewport\":{\"width\":" << cache.viewport_width
+       << ",\"height\":" << cache.viewport_height << "}"
+       << ",\"device_scale_factor\":1"
+       << ",\"media_values\":{\"viewport_width\":" << cache.viewport_width
+       << ",\"viewport_height\":" << cache.viewport_height
+       << ",\"device_width\":" << cache.viewport_width
+       << ",\"device_height\":" << cache.viewport_height
+       << ",\"orientation\":" << JsonStringForStandaloneRenderer(orientation)
+       << ",\"hover\":\"none\""
+       << ",\"pointer\":\"none\""
+       << ",\"any_hover\":\"none\""
+       << ",\"any_pointer\":\"none\""
+       << ",\"prefers_color_scheme\":\"light\""
+       << ",\"prefers_reduced_motion\":\"no-preference\"}"
+       << ",\"queries\":" << queries.str() << "}";
+  return json.str();
+}
+
+struct ListMarkerDiagnosticsForStandaloneRenderer {
+  int layout_list_item_count = 0;
+  int marker_layout_object_count = 0;
+  int marker_pseudo_element_count = 0;
+  int dom_li_count = 0;
+  int computed_list_item_count = 0;
+  int dom_li_with_layout_object_count = 0;
+  int dynamic_layout_list_item_count = 0;
+  std::vector<std::string> li_layout_object_debug_names;
+};
+
+void CollectListMarkerDiagnosticsForStandaloneRenderer(
+    const LayoutObject* object,
+    ListMarkerDiagnosticsForStandaloneRenderer& diagnostics) {
+  if (!object) {
+    return;
+  }
+  const std::string debug_name = BlinkStringToStdStringForStandaloneRenderer(
+      object->DebugName());
+  if (debug_name.find("LayoutListItem") != std::string::npos ||
+      debug_name.find("LayoutInlineListItem") != std::string::npos) {
+    ++diagnostics.layout_list_item_count;
+  }
+  if (debug_name.find("ListMarker") != std::string::npos) {
+    ++diagnostics.marker_layout_object_count;
+  }
+  for (const LayoutObject* child = object->SlowFirstChild(); child;
+       child = child->NextSibling()) {
+    CollectListMarkerDiagnosticsForStandaloneRenderer(child, diagnostics);
+  }
+}
+
+void CollectListMarkerDomDiagnosticsForStandaloneRenderer(
+    Node* node,
+    ListMarkerDiagnosticsForStandaloneRenderer& diagnostics) {
+  if (!node) {
+    return;
+  }
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (element->HasTagName(html_names::kLiTag)) {
+      ++diagnostics.dom_li_count;
+      if (const ComputedStyle* style = element->GetComputedStyle()) {
+        if (style->IsDisplayListItem()) {
+          ++diagnostics.computed_list_item_count;
+        }
+      }
+      if (LayoutObject* layout_object = element->GetLayoutObject()) {
+        ++diagnostics.dom_li_with_layout_object_count;
+        diagnostics.li_layout_object_debug_names.push_back(
+            BlinkStringToStdStringForStandaloneRenderer(
+                layout_object->DebugName()));
+        if (DynamicTo<LayoutListItem>(layout_object)) {
+          ++diagnostics.dynamic_layout_list_item_count;
+        }
+      }
+    }
+  }
+  for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
+    CollectListMarkerDomDiagnosticsForStandaloneRenderer(child, diagnostics);
+  }
+}
+
+std::string ListMarkerDiagnosticsJsonForStandaloneRenderer(Document& document,
+                                                           const std::string& html) {
+  ListMarkerDiagnosticsForStandaloneRenderer diagnostics;
+  if (LayoutView* view = document.GetLayoutView()) {
+    CollectListMarkerDiagnosticsForStandaloneRenderer(view, diagnostics);
+  }
+  CollectListMarkerDomDiagnosticsForStandaloneRenderer(&document, diagnostics);
+  Element* body = document.body();
+  if (body) {
+    if (Element* marker = body->GetPseudoElement(kPseudoIdMarker)) {
+      if (marker->GetLayoutObject()) {
+        ++diagnostics.marker_pseudo_element_count;
+      }
+    }
+  }
+  std::string lower_html = html;
+  std::transform(lower_html.begin(), lower_html.end(), lower_html.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  int li_source_count = 0;
+  size_t pos = 0;
+  while ((pos = lower_html.find("<li", pos)) != std::string::npos) {
+    ++li_source_count;
+    pos += 3;
+  }
+  std::ostringstream json;
+  json << "{\"source_li_count\":" << li_source_count
+       << ",\"dom_li_count\":" << diagnostics.dom_li_count
+       << ",\"computed_list_item_count\":"
+       << diagnostics.computed_list_item_count
+       << ",\"dom_li_with_layout_object_count\":"
+       << diagnostics.dom_li_with_layout_object_count
+       << ",\"dynamic_layout_list_item_count\":"
+       << diagnostics.dynamic_layout_list_item_count
+       << ",\"layout_list_item_count\":"
+       << diagnostics.layout_list_item_count
+       << ",\"marker_layout_object_count\":"
+       << diagnostics.marker_layout_object_count
+       << ",\"marker_pseudo_element_count\":"
+       << diagnostics.marker_pseudo_element_count
+       << ",\"li_layout_object_debug_names\":[";
+  for (size_t i = 0; i < diagnostics.li_layout_object_debug_names.size(); ++i) {
+    if (i) {
+      json << ",";
+    }
+    json << JsonStringForStandaloneRenderer(
+        diagnostics.li_layout_object_debug_names[i]);
+  }
+  json << "]"
+       << ",\"first_missing_stage\":";
+  if (li_source_count == 0) {
+    json << "\"no_list_items_in_source\"";
+  } else if (diagnostics.dom_li_count == 0) {
+    json << "\"list_item_dom_nodes_not_created\"";
+  } else if (diagnostics.computed_list_item_count == 0) {
+    json << "\"list_item_computed_display_not_list_item\"";
+  } else if (diagnostics.dynamic_layout_list_item_count == 0) {
+    json << "\"list_item_layout_object_not_created\"";
+  } else if (diagnostics.marker_layout_object_count == 0) {
+    json << "\"marker_pseudo_layout_object_not_created\"";
+  } else {
+    json << "\"marker_layout_present\"";
+  }
+  json << "}";
+  return json.str();
+}
+
 std::string BlinkStringToStdStringForStandaloneRenderer(const String& value) {
   return value.Utf8();
 }
@@ -4297,6 +4548,16 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           ? OverflowClipDiagnosticsJsonForStandaloneRenderer(
                 cache.holder->GetDocument())
           : "{\"containers\":[],\"children\":[],\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string media_query_diagnostics_json =
+      MediaQueryDiagnosticsJsonForStandaloneRenderer(cache);
+  const std::string list_marker_diagnostics_json =
+      cache.holder
+          ? ListMarkerDiagnosticsJsonForStandaloneRenderer(
+                cache.holder->GetDocument(), cache.body_html)
+          : "{\"source_li_count\":0,\"layout_list_item_count\":0,"
+            "\"marker_layout_object_count\":0,"
+            "\"marker_pseudo_element_count\":0,"
+            "\"first_missing_stage\":\"document_unavailable\"}";
   TraceLiveFrameProbeStage("paint audit after page evidence");
   const bool evidence_has_non_translation_transform =
       page_evidence_json.find("\"has_non_translation_transform\":true") !=
@@ -4344,6 +4605,10 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"viewport\":{\"width\":" << cache.viewport_width
        << ",\"height\":" << cache.viewport_height << "}"
        << ",\"device_scale_factor\":1"
+       << ",\"media_query_diagnostics\":"
+       << media_query_diagnostics_json
+       << ",\"list_marker_diagnostics\":"
+       << list_marker_diagnostics_json
        << ",\"paint_artifact_audit_safe_mode\":"
        << (artifact_audit_safe_mode ? "true" : "false")
        << ",\"paint_artifact_audit_safe_mode_reason\":"
@@ -4957,6 +5222,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
 #endif
   StandaloneRendererResetImageReachabilityDiagnostics();
   StandaloneRendererResetOutOfFlowDiagnostics();
+  StandaloneRendererResetMediaQueryDiagnostics();
   cache.image_reachability = ImageReachabilityDiagnostics();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");

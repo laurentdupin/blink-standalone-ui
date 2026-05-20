@@ -118,18 +118,22 @@
 #include <cstdarg>
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <future>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
 #include <malloc.h>
 #include <new>
 #include <ostream>
+#include <sstream>
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "unicode/ubidi.h"
 #include "unicode/uchar.h"
@@ -1593,6 +1597,314 @@ extern "C" void StandaloneRendererResetOutOfFlowDiagnostics() {
   g_standalone_oof_layout_null_results = 0;
   g_standalone_oof_zero_size_fragments = 0;
   g_standalone_oof_safety_limit_hit = 0;
+}
+
+namespace {
+struct StandaloneMediaQueryEvaluationTrace {
+  std::string feature;
+  std::string expected_value;
+  std::string actual_value;
+  std::string result;
+  std::string unsupported_reason;
+};
+
+std::vector<StandaloneMediaQueryEvaluationTrace>&
+StandaloneMediaQueryEvaluationTraces() {
+  static std::vector<StandaloneMediaQueryEvaluationTrace>* traces =
+      new std::vector<StandaloneMediaQueryEvaluationTrace>();
+  return *traces;
+}
+
+std::map<std::string, std::string>& StandaloneMediaQueryParsedExpectedValues() {
+  static std::map<std::string, std::string>* values =
+      new std::map<std::string, std::string>();
+  return *values;
+}
+
+std::string StandaloneJsonEscape(const std::string& value) {
+  std::ostringstream out;
+  for (const unsigned char c : value) {
+    switch (c) {
+      case '"':
+        out << "\\\"";
+        break;
+      case '\\':
+        out << "\\\\";
+        break;
+      case '\b':
+        out << "\\b";
+        break;
+      case '\f':
+        out << "\\f";
+        break;
+      case '\n':
+        out << "\\n";
+        break;
+      case '\r':
+        out << "\\r";
+        break;
+      case '\t':
+        out << "\\t";
+        break;
+      default:
+        if (c < 0x20) {
+          out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+              << static_cast<int>(c) << std::dec;
+        } else {
+          out << static_cast<char>(c);
+        }
+        break;
+    }
+  }
+  return out.str();
+}
+
+std::string StandaloneJsonString(const std::string& value) {
+  return "\"" + StandaloneJsonEscape(value) + "\"";
+}
+
+std::string StandaloneKleeneValueString(KleeneValue value) {
+  switch (value) {
+    case KleeneValue::kTrue:
+      return "true";
+    case KleeneValue::kFalse:
+      return "false";
+    case KleeneValue::kUnknown:
+      return "unknown";
+  }
+  return "unknown";
+}
+
+std::string StandaloneMediaQueryActualValue(const String& feature) {
+  if (feature == media_feature_names::kWidthMediaFeature ||
+      feature == media_feature_names::kMinWidthMediaFeature ||
+      feature == media_feature_names::kMaxWidthMediaFeature ||
+      feature == media_feature_names::kInlineSizeMediaFeature ||
+      feature == media_feature_names::kMinInlineSizeMediaFeature ||
+      feature == media_feature_names::kMaxInlineSizeMediaFeature ||
+      feature == media_feature_names::kDeviceWidthMediaFeature ||
+      feature == media_feature_names::kMinDeviceWidthMediaFeature ||
+      feature == media_feature_names::kMaxDeviceWidthMediaFeature) {
+    return std::to_string(g_standalone_blink_viewport_width) + "px";
+  }
+  if (feature == media_feature_names::kHeightMediaFeature ||
+      feature == media_feature_names::kMinHeightMediaFeature ||
+      feature == media_feature_names::kMaxHeightMediaFeature ||
+      feature == media_feature_names::kBlockSizeMediaFeature ||
+      feature == media_feature_names::kMinBlockSizeMediaFeature ||
+      feature == media_feature_names::kMaxBlockSizeMediaFeature ||
+      feature == media_feature_names::kDeviceHeightMediaFeature ||
+      feature == media_feature_names::kMinDeviceHeightMediaFeature ||
+      feature == media_feature_names::kMaxDeviceHeightMediaFeature) {
+    return std::to_string(g_standalone_blink_viewport_height) + "px";
+  }
+  if (feature == media_feature_names::kOrientationMediaFeature) {
+    return g_standalone_blink_viewport_width >= g_standalone_blink_viewport_height
+               ? "landscape"
+               : "portrait";
+  }
+  if (feature == media_feature_names::kHoverMediaFeature ||
+      feature == media_feature_names::kAnyHoverMediaFeature) {
+    return "none";
+  }
+  if (feature == media_feature_names::kPointerMediaFeature ||
+      feature == media_feature_names::kAnyPointerMediaFeature) {
+    return "none";
+  }
+  if (feature == media_feature_names::kPrefersColorSchemeMediaFeature) {
+    return "light";
+  }
+  if (feature == media_feature_names::kPrefersReducedMotionMediaFeature) {
+    return "no-preference";
+  }
+  return "unsupported_or_unknown";
+}
+
+bool StandaloneMediaQueryFeatureSupportedForDiagnostics(const String& feature) {
+  return feature == media_feature_names::kWidthMediaFeature ||
+         feature == media_feature_names::kMinWidthMediaFeature ||
+         feature == media_feature_names::kMaxWidthMediaFeature ||
+         feature == media_feature_names::kHeightMediaFeature ||
+         feature == media_feature_names::kMinHeightMediaFeature ||
+         feature == media_feature_names::kMaxHeightMediaFeature ||
+         feature == media_feature_names::kInlineSizeMediaFeature ||
+         feature == media_feature_names::kMinInlineSizeMediaFeature ||
+         feature == media_feature_names::kMaxInlineSizeMediaFeature ||
+         feature == media_feature_names::kBlockSizeMediaFeature ||
+         feature == media_feature_names::kMinBlockSizeMediaFeature ||
+         feature == media_feature_names::kMaxBlockSizeMediaFeature ||
+         feature == media_feature_names::kDeviceWidthMediaFeature ||
+         feature == media_feature_names::kMinDeviceWidthMediaFeature ||
+         feature == media_feature_names::kMaxDeviceWidthMediaFeature ||
+         feature == media_feature_names::kDeviceHeightMediaFeature ||
+         feature == media_feature_names::kMinDeviceHeightMediaFeature ||
+         feature == media_feature_names::kMaxDeviceHeightMediaFeature ||
+         feature == media_feature_names::kOrientationMediaFeature ||
+         feature == media_feature_names::kHoverMediaFeature ||
+         feature == media_feature_names::kAnyHoverMediaFeature ||
+         feature == media_feature_names::kPointerMediaFeature ||
+         feature == media_feature_names::kAnyPointerMediaFeature ||
+         feature == media_feature_names::kPrefersColorSchemeMediaFeature ||
+         feature == media_feature_names::kPrefersReducedMotionMediaFeature;
+}
+
+std::string StandaloneMediaQueryDiagnosticsJson() {
+  std::ostringstream json;
+  json << "{\"queries\":[";
+  const auto& traces = StandaloneMediaQueryEvaluationTraces();
+  for (size_t i = 0; i < traces.size(); ++i) {
+    if (i) {
+      json << ",";
+    }
+    const auto& trace = traces[i];
+    json << "{\"text\":\"(" << StandaloneJsonEscape(trace.feature);
+    if (!trace.expected_value.empty()) {
+      json << ": " << StandaloneJsonEscape(trace.expected_value);
+    }
+    json << ")\",\"parsed\":true"
+         << ",\"evaluation_result\":"
+         << (trace.result == "true"    ? "true"
+             : trace.result == "false" ? "false"
+                                        : "null")
+         << ",\"features\":[{\"name\":"
+         << StandaloneJsonString(trace.feature)
+         << ",\"expected_value\":" << StandaloneJsonString(trace.expected_value)
+         << ",\"actual_value\":" << StandaloneJsonString(trace.actual_value)
+         << ",\"match\":"
+         << (trace.result == "true"    ? "true"
+             : trace.result == "false" ? "false"
+                                        : "null")
+         << "}],\"unsupported_features\":";
+    if (trace.unsupported_reason.empty()) {
+      json << "[]";
+    } else {
+      json << "[{\"name\":" << StandaloneJsonString(trace.feature)
+           << ",\"reason\":" << StandaloneJsonString(trace.unsupported_reason)
+           << "}]";
+    }
+    json << ",\"error\":\"\"}";
+  }
+  json << "]}";
+  return json.str();
+}
+
+void StandaloneRecordMediaQueryEvaluation(const MediaQueryFeatureExpNode& node,
+                                          KleeneValue result) {
+  auto& traces = StandaloneMediaQueryEvaluationTraces();
+  if (traces.size() >= 256) {
+    return;
+  }
+  StandaloneMediaQueryEvaluationTrace trace;
+  trace.feature = node.HasMediaFeature()
+                      ? node.Name().Utf8()
+                      : (node.IsCustomMedia() ? node.Name().Utf8()
+                                              : "style-range");
+  const MediaQueryExpBounds& bounds = node.Bounds();
+  if (bounds.left.IsValid() && bounds.right.IsValid()) {
+    trace.expected_value = bounds.left.value.CssText().Utf8() + " .. " +
+                           bounds.right.value.CssText().Utf8();
+  } else if (bounds.left.IsValid()) {
+    trace.expected_value = bounds.left.value.CssText().Utf8();
+  } else if (bounds.right.IsValid()) {
+    trace.expected_value = bounds.right.value.CssText().Utf8();
+  }
+  if (trace.expected_value.empty()) {
+    const auto& parsed_values = StandaloneMediaQueryParsedExpectedValues();
+    const auto parsed = parsed_values.find(trace.feature);
+    if (parsed != parsed_values.end()) {
+      trace.expected_value = parsed->second;
+    }
+  }
+  trace.actual_value =
+      node.HasMediaFeature() ? StandaloneMediaQueryActualValue(node.Name())
+                             : "unsupported_or_unknown";
+  trace.result = StandaloneKleeneValueString(result);
+  if (!node.HasMediaFeature() ||
+      !StandaloneMediaQueryFeatureSupportedForDiagnostics(node.Name())) {
+    trace.unsupported_reason =
+        node.IsCustomMedia()
+            ? "custom media is not supported by the standalone subset"
+            : "feature is not in the current standalone static media subset";
+  }
+  traces.push_back(std::move(trace));
+}
+}  // namespace
+
+extern "C" void StandaloneRendererResetMediaQueryDiagnostics() {
+  StandaloneMediaQueryEvaluationTraces().clear();
+  StandaloneMediaQueryParsedExpectedValues().clear();
+}
+
+extern "C" int StandaloneRendererMediaQueryDiagnosticsJsonSize() {
+  static std::string* serialized = new std::string();
+  *serialized = StandaloneMediaQueryDiagnosticsJson();
+  return static_cast<int>(serialized->size());
+}
+
+extern "C" int StandaloneRendererMediaQueryDiagnosticsJson(char* buffer,
+                                                           int buffer_size) {
+  if (!buffer || buffer_size <= 0) {
+    return 0;
+  }
+  const std::string serialized = StandaloneMediaQueryDiagnosticsJson();
+  const int bytes_to_copy =
+      std::min(static_cast<int>(serialized.size()), buffer_size - 1);
+  if (bytes_to_copy <= 0) {
+    buffer[0] = '\0';
+    return 0;
+  }
+  std::memcpy(buffer, serialized.data(), static_cast<size_t>(bytes_to_copy));
+  buffer[bytes_to_copy] = '\0';
+  return bytes_to_copy;
+}
+
+extern "C" int StandaloneRendererMediaQueryDiagnosticCount() {
+  return static_cast<int>(StandaloneMediaQueryEvaluationTraces().size());
+}
+
+extern "C" int StandaloneRendererMediaQueryDiagnosticFieldAt(int index,
+                                                             int field,
+                                                             char* buffer,
+                                                             int buffer_size) {
+  if (!buffer || buffer_size <= 0) {
+    return 0;
+  }
+  const auto& traces = StandaloneMediaQueryEvaluationTraces();
+  if (index < 0 || static_cast<size_t>(index) >= traces.size()) {
+    buffer[0] = '\0';
+    return 0;
+  }
+  const auto& trace = traces[static_cast<size_t>(index)];
+  const std::string* value = &trace.feature;
+  switch (field) {
+    case 0:
+      value = &trace.feature;
+      break;
+    case 1:
+      value = &trace.expected_value;
+      break;
+    case 2:
+      value = &trace.actual_value;
+      break;
+    case 3:
+      value = &trace.result;
+      break;
+    case 4:
+      value = &trace.unsupported_reason;
+      break;
+    default:
+      buffer[0] = '\0';
+      return 0;
+  }
+  const int bytes_to_copy =
+      std::min(static_cast<int>(value->size()), buffer_size - 1);
+  if (bytes_to_copy <= 0) {
+    buffer[0] = '\0';
+    return 0;
+  }
+  std::memcpy(buffer, value->data(), static_cast<size_t>(bytes_to_copy));
+  buffer[bytes_to_copy] = '\0';
+  return bytes_to_copy;
 }
 
 namespace {
@@ -5355,6 +5667,8 @@ MediaQueryExp MediaQueryExp::Create(const AtomicString& media_feature,
   std::optional<MediaQueryExpValue> value =
       MediaQueryExpValue::Consume(media_feature, stream, context, false);
   if (value.has_value()) {
+    StandaloneMediaQueryParsedExpectedValues()[media_feature.Utf8()] =
+        value->CssText().Utf8();
     return MediaQueryExp(media_feature, value.value());
   }
   return Invalid();
@@ -5559,7 +5873,9 @@ KleeneValue MediaQueryFeatureExpNode::Evaluate(
     MediaQueryEvaluator::Init();
     media_query_evaluator_initialized = true;
   }
-  return visitor.EvaluateMediaQueryFeatureExpNode(*this);
+  const KleeneValue result = visitor.EvaluateMediaQueryFeatureExpNode(*this);
+  StandaloneRecordMediaQueryEvaluation(*this, result);
+  return result;
 }
 
 void MediaQueryFeatureExpNode::SerializeTo(StringBuilder& builder) const {

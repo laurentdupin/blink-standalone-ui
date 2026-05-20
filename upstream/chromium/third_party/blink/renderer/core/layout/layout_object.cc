@@ -511,10 +511,6 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
 LayoutBlockFlow* LayoutObject::CreateBlockFlowOrListItem(
     Element* element,
     const ComputedStyle& style) {
-#if defined(STANDALONE_RENDERER_GN_PROBE) || \
-    defined(HTML_CSS_RENDERER_STANDALONE)
-  return MakeGarbageCollected<LayoutBlockFlow>(element);
-#else
   if (style.IsDisplayListItem() && element &&
       element->GetPseudoId() != kPseudoIdBackdrop) {
     // Create a LayoutBlockFlow with a ListItemOrdinal and maybe a ::marker.
@@ -525,7 +521,6 @@ LayoutBlockFlow* LayoutObject::CreateBlockFlowOrListItem(
 
   // Create a plain LayoutBlockFlow
   return MakeGarbageCollected<LayoutBlockFlow>(element);
-#endif
 }
 
 LayoutObject::LayoutObject(Node* node)
