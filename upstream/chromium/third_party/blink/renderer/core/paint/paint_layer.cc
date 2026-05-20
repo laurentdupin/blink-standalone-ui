@@ -716,6 +716,13 @@ void PaintLayer::SetNeedsCompositingInputsUpdate() {
 }
 
 void PaintLayer::ScrollContainerStatusChanged() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Standalone may finalize LayoutBox::HasNonVisibleOverflow() after the
+  // normal StyleDidChange() scrollable-area synchronization. Keep the
+  // PaintLayerScrollableArea lifecycle aligned so scroll/auto containers can
+  // paint their Blink-owned content clips without entering browser chrome.
+  UpdateScrollableArea();
+#endif
   SetNeedsCompositingInputsUpdate();
 }
 
