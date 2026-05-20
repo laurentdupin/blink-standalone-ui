@@ -21,6 +21,7 @@
 #include "html_css_renderer/cpu_renderer.h"
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
+#include "html_css_renderer/standalone_resource_provider.h"
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
 #include "html_css_renderer/skia_cpu_renderer.h"
 #endif
@@ -148,6 +149,36 @@ void AddLocalLinkedStylesheets(const std::string& html_path,
   }
 }
 
+std::string FileUrlForDirectory(const fs::path& directory) {
+  std::string path = fs::absolute(directory).generic_string();
+  if (!path.empty() && path.back() != '/') {
+    path.push_back('/');
+  }
+  return "file:///" + path;
+}
+
+std::string InjectBaseHrefForHtmlFile(const std::string& html_path,
+                                      std::string html) {
+  const std::string lower = ToLowerAscii(html);
+  if (lower.find("<base") != std::string::npos) {
+    return html;
+  }
+  const std::string base =
+      "<base href=\"" +
+      FileUrlForDirectory(fs::absolute(fs::path(html_path)).parent_path()) +
+      "\">\n";
+  const size_t head = lower.find("<head");
+  if (head != std::string::npos) {
+    const size_t head_end = lower.find('>', head);
+    if (head_end != std::string::npos) {
+      html.insert(head_end + 1, "\n" + base);
+      return html;
+    }
+  }
+  html.insert(0, base);
+  return html;
+}
+
 bool ParseFloat(const std::string& value, float* output) {
   char* end = nullptr;
   const float parsed = std::strtof(value.c_str(), &end);
@@ -188,6 +219,7 @@ void PrintUsage() {
   std::fprintf(stderr,
                "Usage: html_css_renderer_sdl_viewer --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
+               "[--resource-root <path>] "
                "[--viewport WxH] [--delta seconds] "
                "[--font-file path] [--window-scale factor] "
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
@@ -207,6 +239,8 @@ bool ParseArgs(int argc,
                bool* use_cpu,
                bool* use_skia_cpu,
                std::string* paint_artifact_dump_path,
+               std::string* resource_root,
+               std::string* resource_base_path,
                bool* use_blink) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -234,8 +268,16 @@ bool ParseArgs(int argc,
         std::fprintf(stderr, "failed to read html file: %s\n", value);
         return false;
       }
-      create_info->html = std::move(*html);
+      create_info->html = InjectBaseHrefForHtmlFile(value, std::move(*html));
+      *resource_base_path = fs::absolute(value).parent_path().string();
+      *resource_root = *resource_base_path;
       AddLocalLinkedStylesheets(value, create_info->html, create_info);
+    } else if (arg == "--resource-root") {
+      const char* value = next_value();
+      if (!value) {
+        return false;
+      }
+      *resource_root = fs::absolute(value).string();
     } else if (arg == "--css") {
       const char* value = next_value();
       if (!value) {
@@ -864,6 +906,8 @@ int main(int argc, char** argv) {
   float window_scale = 2.0f;
   std::string font_file;
   std::string paint_artifact_dump_path;
+  std::string resource_root;
+  std::string resource_base_path;
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
@@ -872,7 +916,8 @@ int main(int argc, char** argv) {
   if (argc > 1 && !ParseArgs(argc, argv, &create_info, &input,
                              &quit_after_ms, &window_scale, &font_file,
                              &incremental, &use_cpu, &use_skia_cpu,
-                             &paint_artifact_dump_path,
+                             &paint_artifact_dump_path, &resource_root,
+                             &resource_base_path,
                              &use_blink)) {
     PrintUsage();
     return 2;
@@ -889,6 +934,11 @@ int main(int argc, char** argv) {
                  font_file.c_str());
   }
   const html_css_renderer::Size initial_viewport = create_info.viewport;
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
+  html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
+      resource_base_path);
+#endif
 
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
   std::unique_ptr<html_css_renderer::RendererState> state;

@@ -3898,12 +3898,13 @@ class StandaloneDataUrlPngImage final : public Image {
   PaintImage paint_image_;
 };
 
-scoped_refptr<Image> DecodeStandaloneDataUrlPngImage(const KURL& url) {
+scoped_refptr<Image> DecodeStandalonePngImage(
+    const KURL& url,
+    html_css_renderer::StandaloneResourceInitiator initiator) {
   html_css_renderer::StandaloneResourceRequest request;
   request.url = url.GetString().Utf8();
   request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
-  request.initiator =
-      html_css_renderer::StandaloneResourceInitiator::kImgElement;
+  request.initiator = initiator;
   request.accepted_mime_types.push_back("image/png");
   html_css_renderer::StandaloneResourceResult result =
       html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
@@ -3937,7 +3938,9 @@ ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
   StandaloneRendererNoteImageResourceContentFetch(
       params.Url().GetString().Utf8().c_str());
   if (scoped_refptr<Image> image =
-          DecodeStandaloneDataUrlPngImage(params.Url())) {
+          DecodeStandalonePngImage(
+              params.Url(),
+              html_css_renderer::StandaloneResourceInitiator::kImgElement)) {
     std::fprintf(stderr,
                  "image_reachability.stage=image_resource_content_fetch_decoded\n");
     std::fflush(stderr);
@@ -15137,43 +15140,102 @@ StyleFetchedImage::StyleFetchedImage(ImageResourceContent* image,
       url_data_(&url_data),
       document_(&document),
       url_(url),
-      override_image_resolution_(override_image_resolution) {}
+      override_image_resolution_(override_image_resolution) {
+  is_image_resource_ = true;
+  if (image_) {
+    image_->AddObserver(this);
+  }
+}
 StyleFetchedImage::~StyleFetchedImage() = default;
 WrappedImagePtr StyleFetchedImage::Data() const { return image_.Get(); }
-float StyleFetchedImage::ImageScaleFactor() const { return 1.0f; }
+float StyleFetchedImage::ImageScaleFactor() const {
+  if (override_image_resolution_ > 0.0f) {
+    return override_image_resolution_;
+  }
+  if (image_ && image_->HasDevicePixelRatioHeaderValue()) {
+    return image_->DevicePixelRatioHeaderValue();
+  }
+  return 1.0f;
+}
 CSSValue* StyleFetchedImage::CssValue() const { return nullptr; }
 CSSValue* StyleFetchedImage::ComputedCSSValue(const ComputedStyle&,
                                               bool,
                                               CSSValuePhase) const {
   return nullptr;
 }
-bool StyleFetchedImage::CanRender() const { return false; }
-bool StyleFetchedImage::IsLoaded() const { return false; }
-bool StyleFetchedImage::IsLoading() const { return false; }
-bool StyleFetchedImage::ErrorOccurred() const { return true; }
+bool StyleFetchedImage::CanRender() const {
+  return image_ && image_->HasImage() && !image_->ErrorOccurred();
+}
+bool StyleFetchedImage::IsLoaded() const {
+  return image_ && image_->IsLoaded();
+}
+bool StyleFetchedImage::IsLoading() const {
+  return image_ && image_->IsLoading();
+}
+bool StyleFetchedImage::ErrorOccurred() const {
+  return !image_ || image_->ErrorOccurred();
+}
 bool StyleFetchedImage::IsCorsSameOrigin(String&) const { return false; }
 NaturalSizingInfo StyleFetchedImage::GetNaturalSizingInfo(
-    float,
-    RespectImageOrientationEnum) const {
-  return NaturalSizingInfo::None();
+    float multiplier,
+    RespectImageOrientationEnum respect_orientation) const {
+  if (!image_ || !image_->HasImage() || image_->ErrorOccurred()) {
+    return NaturalSizingInfo::None();
+  }
+  Image* image = image_->GetImage();
+  gfx::SizeF size(image->Size(respect_orientation));
+  if (override_image_resolution_ > 0.0f) {
+    size.Scale(1.0f / override_image_resolution_);
+  } else if (image_->HasDevicePixelRatioHeaderValue()) {
+    size.Scale(1.0f / image_->DevicePixelRatioHeaderValue());
+  }
+  size.Scale(multiplier);
+  return NaturalSizingInfo::MakeFixed(size);
 }
 gfx::SizeF StyleFetchedImage::ImageSize(float,
                                         const gfx::SizeF& default_object_size,
-                                        RespectImageOrientationEnum) const {
-  return default_object_size;
+                                        RespectImageOrientationEnum respect_orientation) const {
+  if (!image_ || !image_->HasImage() || image_->ErrorOccurred()) {
+    return default_object_size;
+  }
+  Image* image = image_->GetImage();
+  gfx::SizeF size(image->Size(respect_orientation));
+  if (override_image_resolution_ > 0.0f) {
+    size.Scale(1.0f / override_image_resolution_);
+  } else if (image_->HasDevicePixelRatioHeaderValue()) {
+    size.Scale(1.0f / image_->DevicePixelRatioHeaderValue());
+  }
+  return size;
 }
-bool StyleFetchedImage::HasIntrinsicSize() const { return false; }
-void StyleFetchedImage::AddClient(ImageResourceObserver*) {}
-void StyleFetchedImage::RemoveClient(ImageResourceObserver*) {}
+bool StyleFetchedImage::HasIntrinsicSize() const {
+  if (!image_ || !image_->HasImage() || image_->ErrorOccurred()) {
+    return false;
+  }
+  return image_->GetImage()->HasIntrinsicSize();
+}
+void StyleFetchedImage::AddClient(ImageResourceObserver* observer) {
+  if (image_ && observer) {
+    image_->AddObserver(observer);
+  }
+}
+void StyleFetchedImage::RemoveClient(ImageResourceObserver* observer) {
+  if (image_ && observer) {
+    image_->RemoveObserver(observer);
+  }
+}
 scoped_refptr<Image> StyleFetchedImage::GetImage(const ImageResourceObserver&,
                                                  const Node&,
                                                  const ComputedStyle&,
                                                  const gfx::SizeF&) const {
-  return nullptr;
+  if (!image_ || image_->ErrorOccurred()) {
+    return Image::NullImage();
+  }
+  return image_->GetImage();
 }
 bool StyleFetchedImage::KnownToBeOpaque(const Document&,
                                         const ComputedStyle&) const {
-  return false;
+  return image_ && image_->HasImage() && !image_->ErrorOccurred() &&
+         image_->GetImage()->IsOpaque();
 }
 ImageResourceContent* StyleFetchedImage::CachedImage() const {
   return image_.Get();
@@ -15183,12 +15245,19 @@ void StyleFetchedImage::Trace(Visitor* visitor) const {
   visitor->Trace(url_data_);
   visitor->Trace(document_);
   StyleImage::Trace(visitor);
+  ImageResourceObserver::Trace(visitor);
 }
 bool StyleFetchedImage::IsEqual(const StyleImage& other) const {
   return this == &other;
 }
-void StyleFetchedImage::Prefinalize() {}
-void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {}
+void StyleFetchedImage::Prefinalize() {
+  if (image_) {
+    image_ = nullptr;
+  }
+}
+void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {
+  document_.Clear();
+}
 bool StyleFetchedImage::GetImageAnimationPolicy(
     mojom::blink::ImageAnimationPolicy&) {
   return false;

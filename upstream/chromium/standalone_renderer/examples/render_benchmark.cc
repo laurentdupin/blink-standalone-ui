@@ -24,6 +24,7 @@
 #include "html_css_renderer/cpu_renderer.h"
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
+#include "html_css_renderer/standalone_resource_provider.h"
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
 #include "html_css_renderer/skia_cpu_renderer.h"
 #endif
@@ -166,6 +167,36 @@ void AddLocalLinkedStylesheets(const std::string& html_path,
     }
     create_info->stylesheets.push_back({css_path.string(), std::move(*css)});
   }
+}
+
+std::string FileUrlForDirectory(const fs::path& directory) {
+  std::string path = fs::absolute(directory).generic_string();
+  if (!path.empty() && path.back() != '/') {
+    path.push_back('/');
+  }
+  return "file:///" + path;
+}
+
+std::string InjectBaseHrefForHtmlFile(const std::string& html_path,
+                                      std::string html) {
+  const std::string lower = ToLowerAscii(html);
+  if (lower.find("<base") != std::string::npos) {
+    return html;
+  }
+  const std::string base =
+      "<base href=\"" +
+      FileUrlForDirectory(fs::absolute(fs::path(html_path)).parent_path()) +
+      "\">\n";
+  const size_t head = lower.find("<head");
+  if (head != std::string::npos) {
+    const size_t head_end = lower.find('>', head);
+    if (head_end != std::string::npos) {
+      html.insert(head_end + 1, "\n" + base);
+      return html;
+    }
+  }
+  html.insert(0, base);
+  return html;
 }
 
 bool ParseFloat(const std::string& value, float* output) {
@@ -689,6 +720,7 @@ void PrintUsage() {
   std::fprintf(stderr,
                "Usage: blink_standalone_render_benchmark_skia --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
+               "[--resource-root <path>] "
                "[--viewport WxH] --out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
@@ -779,6 +811,8 @@ int main(int argc, char** argv) {
   std::string lifecycle_stop;
   std::string font_file;
   std::string html_file;
+  std::string resource_root;
+  std::string resource_base_path;
   size_t min_non_white = 1;
   bool use_skia_cpu = false;
   bool audit_only = false;
@@ -818,8 +852,17 @@ int main(int argc, char** argv) {
         return 2;
       }
       html_file = value;
-      create_info.html = std::move(*html);
+      resource_base_path = fs::absolute(value).parent_path().string();
+      resource_root = resource_base_path;
+      create_info.html = InjectBaseHrefForHtmlFile(value, std::move(*html));
       AddLocalLinkedStylesheets(value, create_info.html, &create_info);
+    } else if (arg == "--resource-root") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      resource_root = fs::absolute(value).string();
     } else if (arg == "--css") {
       const char* value = next_value();
       if (!value) {
@@ -981,6 +1024,12 @@ int main(int argc, char** argv) {
     PrintUsage();
     return 2;
   }
+
+#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+  html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
+  html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
+      resource_base_path);
+#endif
 
 #if defined(_WIN32)
   if (!crash_dump_path.empty()) {

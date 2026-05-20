@@ -791,6 +791,10 @@ bool ImageLoader::ShouldLoadImmediately(const KURL& url) const {
   if (url.ProtocolIs("data")) {
     return true;
   }
+  if (!url.IsNull() && !url.IsEmpty() && !url.ProtocolIs("http") &&
+      !url.ProtocolIs("https")) {
+    return true;
+  }
 #endif
   // We force any image loads which might require alt content through the
   // asynchronous path so that we can add the shadow DOM for the alt-text

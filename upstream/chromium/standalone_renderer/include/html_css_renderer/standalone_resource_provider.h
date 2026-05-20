@@ -39,6 +39,7 @@ enum class StandaloneResourceSourceKind {
   kUnsupported,
   kDataUrl,
   kFileUrl,
+  kLocalFile,
   kMemory,
 };
 
@@ -63,6 +64,7 @@ struct StandaloneResourceResult {
   int intrinsic_height = 0;
   std::string error;
   std::string cache_key;
+  std::string resolved_path;
   bool same_process_only = true;
 };
 
@@ -76,7 +78,10 @@ struct StandaloneResourceProviderDiagnostics {
   struct RequestDiagnostic {
     std::string url_prefix;
     std::string initiator;
+    std::string source_kind;
     std::string mime_type;
+    std::string resolved_path;
+    std::string cache_key;
     size_t encoded_bytes = 0;
     int decoded_width = 0;
     int decoded_height = 0;
@@ -95,11 +100,16 @@ class StandaloneResourceProvider {
 };
 
 StandaloneResourceProvider& DefaultStandaloneResourceProvider();
+void SetStandaloneResourceProviderResourceRoot(std::string root_path);
+std::string GetStandaloneResourceProviderResourceRoot();
+void SetStandaloneResourceProviderDocumentBasePath(std::string base_path);
+std::string GetStandaloneResourceProviderDocumentBasePath();
 void ResetStandaloneResourceProviderDiagnostics();
 StandaloneResourceProviderDiagnostics GetStandaloneResourceProviderDiagnostics();
 
 const char* ToString(StandaloneResourceStatus status);
 const char* ToString(StandaloneResourceInitiator initiator);
+const char* ToString(StandaloneResourceSourceKind source_kind);
 
 }  // namespace html_css_renderer
 

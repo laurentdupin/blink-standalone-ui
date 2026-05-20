@@ -4454,8 +4454,14 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << JsonStringForStandaloneRenderer(request.url_prefix)
          << ",\"initiator\":"
          << JsonStringForStandaloneRenderer(request.initiator)
+         << ",\"source_kind\":"
+         << JsonStringForStandaloneRenderer(request.source_kind)
          << ",\"mime_type\":"
          << JsonStringForStandaloneRenderer(request.mime_type)
+         << ",\"resolved_path\":"
+         << JsonStringForStandaloneRenderer(request.resolved_path)
+         << ",\"cache_key\":"
+         << JsonStringForStandaloneRenderer(request.cache_key)
          << ",\"encoded_bytes\":" << request.encoded_bytes
          << ",\"decoded_width\":" << request.decoded_width
          << ",\"decoded_height\":" << request.decoded_height

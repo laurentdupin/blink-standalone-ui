@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <string>
@@ -28,6 +31,16 @@ StandaloneResourceProviderDiagnostics& MutableDiagnostics() {
 std::mutex& DiagnosticsMutex() {
   static std::mutex* mutex = new std::mutex();
   return *mutex;
+}
+
+std::string& MutableResourceRoot() {
+  static std::string* root = new std::string();
+  return *root;
+}
+
+std::string& MutableDocumentBasePath() {
+  static std::string* base_path = new std::string();
+  return *base_path;
 }
 
 std::string LowerAscii(std::string value) {
@@ -66,7 +79,10 @@ void RecordRequest(const StandaloneResourceRequest& request,
   StandaloneResourceProviderDiagnostics::RequestDiagnostic item;
   item.url_prefix = UrlPrefix(request.url);
   item.initiator = ToString(request.initiator);
+  item.source_kind = ToString(result.source_kind);
   item.mime_type = result.mime_type;
+  item.resolved_path = result.resolved_path;
+  item.cache_key = result.cache_key;
   item.encoded_bytes = result.encoded_bytes.size();
   item.decoded_width = result.intrinsic_width;
   item.decoded_height = result.intrinsic_height;
@@ -85,47 +101,7 @@ StandaloneResourceResult ErrorResult(StandaloneResourceStatus status,
   return result;
 }
 
-StandaloneResourceResult DecodeDataPngUrl(const std::string& url) {
-  std::string lower_url = LowerAscii(url);
-  constexpr char kPrefix[] = "data:";
-  if (lower_url.rfind(kPrefix, 0) != 0) {
-    return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
-                       "only data: image resources are enabled initially");
-  }
-
-  size_t comma = url.find(',');
-  if (comma == std::string::npos || comma == 0) {
-    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "malformed data URL");
-  }
-
-  std::string metadata =
-      lower_url.substr(sizeof(kPrefix) - 1, comma - (sizeof(kPrefix) - 1));
-  if (metadata.find("image/png") == std::string::npos) {
-    return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
-                       "only image/png data URLs are enabled initially");
-  }
-  if (metadata.find(";base64") == std::string::npos) {
-    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "image/png data URL is not base64 encoded",
-                       "image/png");
-  }
-
-  blink::Vector<uint8_t> blink_encoded;
-  std::string payload = url.substr(comma + 1);
-  if (!blink::Base64Decode(blink::String(payload.c_str()), blink_encoded,
-                           blink::Base64DecodePolicy::kForgiving) ||
-      blink_encoded.empty()) {
-    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "base64 decode failed", "image/png");
-  }
-
-  StandaloneResourceResult result;
-  result.source_kind = StandaloneResourceSourceKind::kDataUrl;
-  result.mime_type = "image/png";
-  result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
-  result.cache_key = url;
-
+StandaloneResourceResult DecodePngBytes(StandaloneResourceResult result) {
 #if defined(_WIN32)
   if (result.encoded_bytes.size() > std::numeric_limits<DWORD>::max()) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
@@ -235,6 +211,169 @@ StandaloneResourceResult DecodeDataPngUrl(const std::string& url) {
 #endif
 }
 
+StandaloneResourceResult DecodeDataPngUrl(const std::string& url) {
+  std::string lower_url = LowerAscii(url);
+  constexpr char kPrefix[] = "data:";
+  if (lower_url.rfind(kPrefix, 0) != 0) {
+    return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
+                       "not a data URL");
+  }
+
+  size_t comma = url.find(',');
+  if (comma == std::string::npos || comma == 0) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "malformed data URL");
+  }
+
+  std::string metadata =
+      lower_url.substr(sizeof(kPrefix) - 1, comma - (sizeof(kPrefix) - 1));
+  if (metadata.find("image/png") == std::string::npos) {
+    return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
+                       "only image/png data URLs are enabled", "");
+  }
+  if (metadata.find(";base64") == std::string::npos) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "image/png data URL is not base64 encoded",
+                       "image/png");
+  }
+
+  blink::Vector<uint8_t> blink_encoded;
+  std::string payload = url.substr(comma + 1);
+  if (!blink::Base64Decode(blink::String(payload.c_str()), blink_encoded,
+                           blink::Base64DecodePolicy::kForgiving) ||
+      blink_encoded.empty()) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "base64 decode failed", "image/png");
+  }
+
+  StandaloneResourceResult result;
+  result.source_kind = StandaloneResourceSourceKind::kDataUrl;
+  result.mime_type = "image/png";
+  result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
+  result.cache_key = url;
+  return DecodePngBytes(std::move(result));
+}
+
+std::string StripFileUrlPrefix(const std::string& url) {
+  std::string path = url;
+  if (path.rfind("file:///", 0) == 0) {
+    path = path.substr(8);
+  } else if (path.rfind("file://", 0) == 0) {
+    path = path.substr(7);
+  }
+#if defined(_WIN32)
+  std::replace(path.begin(), path.end(), '/', '\\');
+#endif
+  return path;
+}
+
+bool HasScheme(const std::string& url) {
+  size_t colon = url.find(':');
+  if (colon == std::string::npos || colon == 0)
+    return false;
+  for (size_t i = 0; i < colon; ++i) {
+    unsigned char c = static_cast<unsigned char>(url[i]);
+    if (!std::isalnum(c) && url[i] != '+' && url[i] != '-' && url[i] != '.')
+      return false;
+  }
+  return true;
+}
+
+bool IsWithinRoot(const std::filesystem::path& path,
+                  const std::filesystem::path& root) {
+  auto path_it = path.begin();
+  auto root_it = root.begin();
+  for (; root_it != root.end(); ++root_it, ++path_it) {
+    if (path_it == path.end() || *path_it != *root_it)
+      return false;
+  }
+  return true;
+}
+
+StandaloneResourceResult DecodeLocalPng(const std::string& url) {
+  std::string lower_url = LowerAscii(url);
+  if (lower_url.rfind("http:", 0) == 0 || lower_url.rfind("https:", 0) == 0) {
+    return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
+                       "HTTP/HTTPS loading is disabled");
+  }
+  if (HasScheme(lower_url) && lower_url.rfind("file:", 0) != 0) {
+    return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
+                       "only data:, file:, and document-relative resources are enabled");
+  }
+
+  const std::string root_string = GetStandaloneResourceProviderResourceRoot();
+  if (root_string.empty()) {
+    return ErrorResult(StandaloneResourceStatus::kBlockedByPolicy,
+                       "local resource root is not configured");
+  }
+
+  std::error_code root_error;
+  std::filesystem::path root =
+      std::filesystem::weakly_canonical(root_string, root_error);
+  if (root_error) {
+    return ErrorResult(StandaloneResourceStatus::kBlockedByPolicy,
+                       "local resource root cannot be resolved");
+  }
+  const std::string base_string = GetStandaloneResourceProviderDocumentBasePath();
+  std::filesystem::path base_path = root;
+  if (!base_string.empty()) {
+    std::error_code base_error;
+    base_path = std::filesystem::weakly_canonical(base_string, base_error);
+    if (base_error) {
+      return ErrorResult(StandaloneResourceStatus::kBlockedByPolicy,
+                         "document base path cannot be resolved");
+    }
+  }
+  std::filesystem::path candidate =
+      lower_url.rfind("file:", 0) == 0 ? std::filesystem::path(StripFileUrlPrefix(url))
+                                       : std::filesystem::path(url);
+  if (candidate.is_relative())
+    candidate = base_path / candidate;
+  std::error_code candidate_error;
+  candidate = std::filesystem::weakly_canonical(candidate, candidate_error);
+  if (candidate_error) {
+    candidate = std::filesystem::absolute(candidate);
+  }
+
+  StandaloneResourceResult result;
+  result.source_kind = StandaloneResourceSourceKind::kLocalFile;
+  result.mime_type = "image/png";
+  result.resolved_path = candidate.string();
+  result.cache_key = result.resolved_path;
+
+  if (!IsWithinRoot(candidate, root)) {
+    result.status = StandaloneResourceStatus::kBlockedByPolicy;
+    result.error = "resolved local image path escapes resource root";
+    return result;
+  }
+  if (LowerAscii(candidate.extension().string()) != ".png") {
+    result.status = StandaloneResourceStatus::kUnsupportedMime;
+    result.error = "only local PNG images are enabled";
+    return result;
+  }
+  if (!std::filesystem::exists(candidate) ||
+      !std::filesystem::is_regular_file(candidate)) {
+    result.status = StandaloneResourceStatus::kNotFound;
+    result.error = "local image file was not found";
+    return result;
+  }
+
+  std::ifstream file(candidate, std::ios::binary);
+  if (!file) {
+    result.status = StandaloneResourceStatus::kError;
+    result.error = "failed to open local image file";
+    return result;
+  }
+  result.encoded_bytes.assign(std::istreambuf_iterator<char>(file),
+                              std::istreambuf_iterator<char>());
+  if (result.encoded_bytes.empty()) {
+    result.status = StandaloneResourceStatus::kDecodeFailed;
+    result.error = "local image file is empty";
+    return result;
+  }
+  return DecodePngBytes(std::move(result));
+}
+
 class DefaultProvider final : public StandaloneResourceProvider {
  public:
   StandaloneResourceResult LoadResource(
@@ -245,6 +384,8 @@ class DefaultProvider final : public StandaloneResourceProvider {
                            "provider currently supports image requests only");
     } else {
       result = DecodeDataPngUrl(request.url);
+      if (result.status == StandaloneResourceStatus::kUnsupportedScheme)
+        result = DecodeLocalPng(request.url);
     }
     RecordRequest(request, result);
     return result;
@@ -256,6 +397,26 @@ class DefaultProvider final : public StandaloneResourceProvider {
 StandaloneResourceProvider& DefaultStandaloneResourceProvider() {
   static DefaultProvider* provider = new DefaultProvider();
   return *provider;
+}
+
+void SetStandaloneResourceProviderResourceRoot(std::string root_path) {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  MutableResourceRoot() = std::move(root_path);
+}
+
+std::string GetStandaloneResourceProviderResourceRoot() {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  return MutableResourceRoot();
+}
+
+void SetStandaloneResourceProviderDocumentBasePath(std::string base_path) {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  MutableDocumentBasePath() = std::move(base_path);
+}
+
+std::string GetStandaloneResourceProviderDocumentBasePath() {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  return MutableDocumentBasePath();
 }
 
 void ResetStandaloneResourceProviderDiagnostics() {
@@ -302,6 +463,22 @@ const char* ToString(StandaloneResourceInitiator initiator) {
       return "font_face";
   }
   return "other";
+}
+
+const char* ToString(StandaloneResourceSourceKind source_kind) {
+  switch (source_kind) {
+    case StandaloneResourceSourceKind::kUnsupported:
+      return "unsupported";
+    case StandaloneResourceSourceKind::kDataUrl:
+      return "data_url";
+    case StandaloneResourceSourceKind::kFileUrl:
+      return "file_url";
+    case StandaloneResourceSourceKind::kLocalFile:
+      return "local_file";
+    case StandaloneResourceSourceKind::kMemory:
+      return "memory";
+  }
+  return "unsupported";
 }
 
 }  // namespace html_css_renderer
