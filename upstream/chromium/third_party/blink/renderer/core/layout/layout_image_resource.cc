@@ -39,14 +39,12 @@
 
 namespace blink {
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 extern "C" void StandaloneRendererNoteLayoutImageResourceInitialize();
 extern "C" void StandaloneRendererNoteLayoutImageResourceSetResource();
 extern "C" void StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
 extern "C" void StandaloneRendererNoteLayoutImageResourceGetImage();
 extern "C" void StandaloneRendererNoteLayoutImageResourceMaybeAnimated(
     bool null_image);
-#endif
 
 namespace {
 
@@ -76,7 +74,6 @@ void LayoutImageResource::Trace(Visitor* visitor) const {
 }
 
 void LayoutImageResource::Initialize(LayoutObject* layout_object) {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_resource_initialize\n");
   std::fflush(stderr);
@@ -84,15 +81,12 @@ void LayoutImageResource::Initialize(LayoutObject* layout_object) {
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_resource_initialize_after_note\n");
   std::fflush(stderr);
-#endif
   DCHECK(!layout_object_);
   DCHECK(layout_object);
   layout_object_ = layout_object;
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_resource_initialize_done\n");
   std::fflush(stderr);
-#endif
 }
 
 void LayoutImageResource::Shutdown() {
@@ -104,9 +98,7 @@ void LayoutImageResource::Shutdown() {
 }
 
 void LayoutImageResource::SetImageResource(ImageResourceContent* new_image) {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   StandaloneRendererNoteLayoutImageResourceSetResource();
-#endif
   DCHECK(layout_object_);
 
   if (cached_image_ == new_image)
@@ -156,33 +148,18 @@ RespectImageOrientationEnum LayoutImageResource::ImageOrientation() const {
 
 NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(
     float multiplier) const {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_resource_get_natural_dimensions\n");
   std::fflush(stderr);
   StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
-#endif
   if (!cached_image_ || !cached_image_->IsSizeAvailable() ||
       !cached_image_->HasImage()) {
     return NaturalSizingInfo::None();
   }
   NaturalSizingInfo sizing_info;
   Image& image = *cached_image_->GetImage();
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   sizing_info =
       NaturalSizingInfo::MakeFixed(gfx::SizeF(image.Size(ImageOrientation())));
-#else
-  if (auto* svg_image = DynamicTo<SVGImage>(image)) {
-    const SVGImageViewInfo* view_info = SVGImageForContainer::CreateViewInfo(
-        *svg_image, layout_object_->GetNode());
-    sizing_info =
-        SVGImageForContainer::GetNaturalDimensions(*svg_image, view_info)
-            .value_or(NaturalSizingInfo::None());
-  } else {
-    sizing_info = NaturalSizingInfo::MakeFixed(
-        gfx::SizeF(image.Size(ImageOrientation())));
-  }
-#endif
   if (multiplier != 1 && image.HasIntrinsicSize()) {
     sizing_info.size = ApplyClampedZoom(sizing_info.size, multiplier);
   }
@@ -231,9 +208,7 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
 
 scoped_refptr<Image> LayoutImageResource::GetImage(
     const gfx::SizeF& container_size) const {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   StandaloneRendererNoteLayoutImageResourceGetImage();
-#endif
   if (!cached_image_)
     return Image::NullImage();
 
@@ -245,28 +220,11 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
 
   Image* image = cached_image_->GetImage();
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   return image;
-#else
-  auto* svg_image = DynamicTo<SVGImage>(image);
-  if (!svg_image)
-    return image;
-
-  const ComputedStyle& style = layout_object_->StyleRef();
-  auto preferred_color_scheme = layout_object_->GetDocument()
-                                    .GetStyleEngine()
-                                    .ResolveColorSchemeForEmbedding(&style);
-  const SVGImageViewInfo* view_info = SVGImageForContainer::CreateViewInfo(
-      *svg_image, layout_object_->GetNode());
-  return SVGImageForContainer::Create(*svg_image, container_size,
-                                      style.EffectiveZoom(), view_info,
-                                      preferred_color_scheme);
-#endif
 }
 
 bool LayoutImageResource::MaybeAnimated() const {
   Image* image = cached_image_ ? cached_image_->GetImage() : Image::NullImage();
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   StandaloneRendererNoteLayoutImageResourceMaybeAnimated(!image);
   if (!image) {
     std::fprintf(
@@ -277,7 +235,6 @@ bool LayoutImageResource::MaybeAnimated() const {
     std::fflush(stderr);
     return false;
   }
-#endif
   return image->MaybeAnimated();
 }
 

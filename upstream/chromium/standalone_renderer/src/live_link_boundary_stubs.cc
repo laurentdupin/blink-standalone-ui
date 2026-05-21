@@ -32,12 +32,10 @@
 #include "base/win/scoped_handle.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 #ifdef DrawText
 #undef DrawText
 #endif
 #include "html_css_renderer/standalone_resource_provider.h"
-#endif
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/delegated_capability_request_token.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
@@ -57,7 +55,6 @@
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
@@ -85,7 +82,6 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
-#endif
 #include "third_party/blink/renderer/core/html/html_li_element.h"
 #include "third_party/blink/renderer/core/html/html_olist_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
@@ -172,9 +168,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImage.h"
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 #include "ui/gfx/geometry/skia_conversions.h"
-#endif
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "third_party/skia/include/core/SkMesh.h"
@@ -3271,13 +3265,11 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
     ++g_standalone_html_factory_create_body_count;
     return MakeGarbageCollected<HTMLBodyElement>(document);
   }
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   if (local_name == html_names::kImgTag.LocalName()) {
     std::fprintf(stderr, "image_reachability.stage=create_html_image_element\n");
     std::fflush(stderr);
     return MakeGarbageCollected<HTMLImageElement>(document);
   }
-#endif
   if (local_name == html_names::kFormTag.LocalName()) {
     return MakeGarbageCollected<HTMLFormElement>(document);
   }
@@ -3315,7 +3307,6 @@ SVGElement* SVGElementFactory::Create(const AtomicString&,
   return nullptr;
 }
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 bool LcppScriptObserverEnabled() {
   return false;
 }
@@ -3594,7 +3585,6 @@ Color HighlightStyleUtils::HighlightBackgroundColor(
     SearchTextIsActiveMatch) {
   return Color::kTransparent;
 }
-#endif
 
 MathMLElement* MathMLElementFactory::Create(const AtomicString&,
                                             Document&,
@@ -4183,7 +4173,6 @@ Resource* MemoryCache::ResourceForURL(const KURL&, const String&) const {
   return nullptr;
 }
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 namespace {
 class StandaloneDataUrlPngImage final : public Image {
  public:
@@ -4243,7 +4232,6 @@ scoped_refptr<Image> DecodeStandalonePngImage(
   return StandaloneDataUrlPngImage::Create(std::move(result.decoded_image));
 }
 }  // namespace
-#endif
 
 ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
     : image_(std::move(image)) {
@@ -4258,7 +4246,6 @@ ImageResourceContent* ImageResourceContent::CreateLoaded(
 
 ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
                                                   ResourceFetcher*) {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   std::fprintf(stderr, "image_reachability.stage=image_resource_content_fetch url=%s\n",
                params.Url().GetString().Utf8().c_str());
   std::fflush(stderr);
@@ -4281,7 +4268,6 @@ ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
   std::fprintf(stderr,
                "image_reachability.stage=image_resource_content_fetch_decode_failed\n");
   std::fflush(stderr);
-#endif
   return nullptr;
 }
 
@@ -4371,11 +4357,9 @@ void ImageResourceContent::AsyncLoadCompleted(const blink::Image*) {}
 void ImageResourceContent::RecordDecodedImageType(UseCounter*) {}
 void ImageResourceContent::RecordDecodedImageC2PA(UseCounter*) {}
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 bool ImageResource::IsAboveSpeculativeDecodeSizeThreshold(const gfx::Size&) {
   return false;
 }
-#endif
 
 void Resource::Trace(Visitor* visitor) const {
   visitor->Trace(clients_);
@@ -5903,14 +5887,7 @@ MediaValues* MediaValues::CreateDynamicIfFrameExists(LocalFrame* frame) {
   if (!frame) {
     return nullptr;
   }
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   return MediaValuesDynamic::Create(frame);
-#else
-  if (frame->GetDocument()) {
-    return MakeGarbageCollected<MediaValuesCached>(*frame->GetDocument());
-  }
-  return MakeGarbageCollected<MediaValuesCached>();
-#endif
 }
 
 const unsigned char* SelectorStatisticsFlag::GetCategoryGroupEnabled() {
@@ -6405,11 +6382,6 @@ void Attr::Trace(Visitor* visitor) const {
 
 void PageAnimator::SetHasInlineStyleMutation() {}
 
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-CSSPropertyValueSet* ComputePresentationAttributeStyle(Element&) {
-  return nullptr;
-}
-#endif
 
 AtomicString DefaultLanguage() {
   return g_empty_atom;
@@ -8427,15 +8399,6 @@ PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
 }
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-PhysicalRect LayoutReplaced::ReplacedContentRect() const {
-  return PhysicalRect();
-}
-PhysicalNaturalSizingInfo LayoutReplaced::ComputeNaturalSizingInfo() const {
-  return PhysicalNaturalSizingInfo();
-}
-#endif
 void LayoutEmbeddedContent::UpdateGeometry(EmbeddedContentView&) {}
 bool MouseEventManager::IsMousePositionUnknown() {
   return true;
@@ -9835,9 +9798,6 @@ void V8UnionStringOrTrustedHTML::Trace(Visitor* visitor) const {
   visitor->Trace(member_trusted_html_);
 }
 void ViewTransitionSupplement::Trace(Visitor*) const {}
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-void HTMLImageElement::OnResize() {}
-#endif
 void NodeIterator::Trace(Visitor*) const {}
 void Range::Trace(Visitor*) const {}
 SVGDocumentExtensions::~SVGDocumentExtensions() = default;
@@ -15111,18 +15071,6 @@ wtf_size_t GridLineResolver::SubgridSpanSize(GridTrackSizingDirection) const {
 }
 #endif
 
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-LayoutImage* LayoutImage::CreateAnonymous(Document&) {
-  return nullptr;
-}
-void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
-  StandaloneRendererNoteLayoutImageSetResource();
-  image_resource_ = image_resource;
-  if (image_resource_) {
-    image_resource_->Initialize(this);
-  }
-}
-#endif
 LayoutListMarkerImage* LayoutListMarkerImage::CreateAnonymous(Document*) {
   return nullptr;
 }
@@ -15139,9 +15087,6 @@ String LayoutCounter::GenerateCounterText(Vector<int>,
 }
 LayoutCounter::LayoutCounter(Document& document, const CounterContentData& data)
     : LayoutText(&document, String()), counter_(&data) {}
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-LayoutImageResource::LayoutImageResource() = default;
-#endif
 LayoutImageResourceStyleImage::LayoutImageResourceStyleImage(StyleImage*) {}
 StyleImageSet::StyleImageSet(StyleImage* image, CSSImageSetValue* value)
     : best_fit_image_(image), image_set_value_(value) {}
@@ -15805,32 +15750,6 @@ void LayoutCounter::WillBeDestroyed() {
   LayoutText::WillBeDestroyed();
 }
 
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-LayoutImageResource::~LayoutImageResource() = default;
-void LayoutImageResource::Trace(Visitor* visitor) const {
-  visitor->Trace(cached_image_);
-  visitor->Trace(layout_object_);
-}
-void LayoutImageResource::Initialize(LayoutObject* layout_object) {
-  StandaloneRendererNoteLayoutImageResourceInitialize();
-  layout_object_ = layout_object;
-}
-void LayoutImageResource::Shutdown() {
-  layout_object_ = nullptr;
-  cached_image_ = nullptr;
-}
-scoped_refptr<Image> LayoutImageResource::GetImage(const gfx::SizeF&) const {
-  StandaloneRendererNoteLayoutImageResourceGetImage();
-  return nullptr;
-}
-NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(float) const {
-  StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
-  return NaturalSizingInfo::None();
-}
-RespectImageOrientationEnum LayoutImageResource::ImageOrientation() const {
-  return kDoNotRespectImageOrientation;
-}
-#endif
 
 LayoutImageResourceStyleImage::~LayoutImageResourceStyleImage() = default;
 void LayoutImageResourceStyleImage::Trace(Visitor* visitor) const {
@@ -16347,13 +16266,6 @@ PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
   return rect;
 }
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
-    const PhysicalRect& rect) {
-  return rect;
-}
-#endif
 PhysicalOffset AnchorPositionScrollData::
     SpeculativeDefaultAnchorRememberedOffsetIncludingChained() const {
   return PhysicalOffset();
@@ -16850,12 +16762,6 @@ MinMaxSizesResult GridLanesLayoutAlgorithm::ComputeMinMaxSizes(
   return MinMaxSizesResult();
 }
 #endif
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-MinMaxSizesResult ReplacedLayoutAlgorithm::ComputeMinMaxSizes(
-    const MinMaxSizesFloatInput&) {
-  return MinMaxSizesResult();
-}
-#endif
 MinMaxSizesResult FieldsetLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
   return MinMaxSizesResult();
@@ -16958,24 +16864,14 @@ const LayoutResult* GridLanesLayoutAlgorithm::Layout() {
   return nullptr;
 }
 #endif
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-ReplacedLayoutAlgorithm::ReplacedLayoutAlgorithm(
-    const LayoutAlgorithmParams& params)
-    : LayoutAlgorithm(params) {}
-const LayoutResult* ReplacedLayoutAlgorithm::Layout() {
-  return nullptr;
-}
-#endif
 FieldsetLayoutAlgorithm::FieldsetLayoutAlgorithm(
     const LayoutAlgorithmParams& params)
     : LayoutAlgorithm(params),
       writing_direction_(GetConstraintSpace().GetWritingDirection()),
       consumed_block_size_(LayoutUnit()) {}
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 LayoutUnit LayoutMedia::ComputePanelWidth(const PhysicalRect& rect) const {
   return rect.Width();
 }
-#endif
 const LayoutResult* FieldsetLayoutAlgorithm::Layout() {
   return nullptr;
 }
@@ -18951,14 +18847,6 @@ DarkModeResult DarkModeImageClassifier::Classify(const SkPixmap&,
                                                  const SkIRect&) const {
   return DarkModeResult::kDoNotApplyFilter;
 }
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-DarkModeImageCache* Image::GetDarkModeImageCache() {
-  return nullptr;
-}
-SkBitmap Image::AsSkBitmapForCurrentFrame(RespectImageOrientationEnum) {
-  return SkBitmap();
-}
-#endif
 bool RuntimeEnabledFeaturesBase::is_scrollbar_gutter_bug_fix_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_remove_scroll_node_workaround_enabled_ =
     false;
@@ -19157,11 +19045,6 @@ bool SVGLayoutSupport::IsIsolationRequired(const LayoutObject*) {
 bool SVGLayoutSupport::IsOverflowHidden(const LayoutObject&) {
   return false;
 }
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-bool LayoutReplaced::ClipsToContentBox() const {
-  return false;
-}
-#endif
 bool LayoutShiftTracker::NeedsToTrack(const LayoutObject&) const {
   return false;
 }

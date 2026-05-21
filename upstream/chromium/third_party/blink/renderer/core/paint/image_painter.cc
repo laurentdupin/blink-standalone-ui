@@ -36,9 +36,7 @@
 
 namespace blink {
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 extern "C" void StandaloneRendererNoteImagePainterPaintReplaced();
-#endif
 
 namespace {
 
@@ -121,9 +119,7 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info) {
 
 void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
                                  const PhysicalOffset& paint_offset) {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   StandaloneRendererNoteImagePainterPaintReplaced();
-#endif
   const PhysicalSize content_size = layout_image_.PhysicalContentBoxSize();
   bool has_image = layout_image_.ImageResource()->HasImage();
   if (has_image) {

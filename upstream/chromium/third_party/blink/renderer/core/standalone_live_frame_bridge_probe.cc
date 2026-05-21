@@ -23,9 +23,7 @@
 #include "cc/paint/paint_op.h"
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 #include "html_css_renderer/standalone_resource_provider.h"
-#endif
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -3830,7 +3828,6 @@ void CollectImageReachabilityFromNodeForStandaloneRenderer(
             BlinkStringToStdStringForStandaloneRenderer(
                 style->LogicalHeight().ToString());
       }
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
       if (const auto* image_element = DynamicTo<HTMLImageElement>(element)) {
         diagnostics.element_natural_width =
             static_cast<int>(image_element->naturalWidth());
@@ -3850,7 +3847,6 @@ void CollectImageReachabilityFromNodeForStandaloneRenderer(
           }
         }
       }
-#endif
       if (const LayoutObject* layout_object = element->GetLayoutObject()) {
         diagnostics.layout_object_created = true;
         diagnostics.layout_object_type = layout_object->DebugName().Utf8();
@@ -4831,7 +4827,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"raw_pointer_payloads\":0"
        << ",\"failures\":[]}"
        << ",\"resource_provider\":";
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   html_css_renderer::StandaloneResourceProviderDiagnostics provider_diagnostics =
       html_css_renderer::GetStandaloneResourceProviderDiagnostics();
   json << "{\"request_count\":" << provider_diagnostics.request_count
@@ -4868,11 +4863,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
          << JsonStringForStandaloneRenderer(request.error) << "}";
   }
   json << "]}";
-#else
-  json << "{\"request_count\":0,\"image_request_count\":0,"
-          "\"data_png_request_count\":0,\"success_count\":0,"
-          "\"failure_count\":0,\"requests\":[]}";
-#endif
   json
        << ",\"image_reachability\":{\"html_image_element_count\":"
        << cache.image_reachability.html_image_element_count
@@ -4898,11 +4888,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"image_resource_content_fetch_called\":"
        << StandaloneRendererImageResourceContentFetchCalled()
        << ",\"provider_request_count\":";
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   json << provider_diagnostics.request_count;
-#else
-  json << 0;
-#endif
   json << ",\"layout_object_created\":"
        << (cache.image_reachability.layout_object_created ? "true" : "false")
        << ",\"layout_object_type\":"
@@ -4941,7 +4927,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   for (const auto& [scheme, count] : image_scheme_histogram) {
     image_element_count += count;
   }
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   int provider_decoded_width = 0;
   int provider_decoded_height = 0;
   std::string provider_image_status;
@@ -4953,11 +4938,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       break;
     }
   }
-#else
-  int provider_decoded_width = 0;
-  int provider_decoded_height = 0;
-  std::string provider_image_status;
-#endif
   json << image_element_count << ",\"src_scheme_histogram\":"
        << MapToJsonObject(image_scheme_histogram)
        << ",\"resource_load_status\":\""
@@ -5349,9 +5329,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   if (cache.initialized && cache.body_html == input_html) {
     return cache.result;
   }
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
-#endif
   StandaloneRendererResetImageReachabilityDiagnostics();
   StandaloneRendererResetOutOfFlowDiagnostics();
   StandaloneRendererResetMediaQueryDiagnostics();

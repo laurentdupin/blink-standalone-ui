@@ -1032,11 +1032,9 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
   html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
       resource_base_path);
-#endif
 
 #if defined(_WIN32)
   if (!crash_dump_path.empty()) {

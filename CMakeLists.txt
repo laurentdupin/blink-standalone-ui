@@ -8,8 +8,6 @@ option(BLINK_STANDALONE_BUILD_SDL_VIEWER
   "Build the optional SDL3 viewer executables." ON)
 option(BLINK_STANDALONE_FETCH_SDL3
   "Fetch SDL3 with CMake when an installed SDL3 package is unavailable." ON)
-option(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG
-  "Experimental: link the real Blink PNG image resource/decode path instead of standalone null image stubs." OFF)
 
 set(BLINK_STANDALONE_CHROMIUM_ROOT
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium
@@ -182,15 +180,10 @@ add_executable(blink_standalone_render_benchmark_skia
     SK_ENABLE_OPTIMIZE_SIZE=1
   )
 
-  if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-    target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
-      HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG=1
-    )
-    target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
-      ole32
-      windowscodecs
-    )
-  endif()
+  target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
+    ole32
+    windowscodecs
+  )
 
   if(MSVC)
     target_compile_options(blink_standalone_render_benchmark_skia PRIVATE
@@ -279,15 +272,10 @@ add_executable(blink_standalone_render_benchmark_skia
       SDL_STATIC_LIB=1
     )
 
-    if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-      target_compile_definitions(blink_standalone_sdl_viewer_skia PRIVATE
-        HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG=1
-      )
-      target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
-        ole32
-        windowscodecs
-      )
-    endif()
+    target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
+      ole32
+      windowscodecs
+    )
 
     if(MSVC)
       target_compile_options(blink_standalone_sdl_viewer_skia PRIVATE

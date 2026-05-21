@@ -1761,21 +1761,19 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkMatrix22.cpp
 )
 
-if(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_element.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_loader.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/image_loader.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/presentation_attribute_style.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_replaced.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/natural_sizing_info.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/replaced_layout_algorithm.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/image_painter.cc
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/replaced_painter.cc
-  )
-endif()
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_loader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/image_loader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/presentation_attribute_style.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_image_resource.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_replaced.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/natural_sizing_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/replaced_layout_algorithm.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/image_painter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/replaced_painter.cc
+)
 
 

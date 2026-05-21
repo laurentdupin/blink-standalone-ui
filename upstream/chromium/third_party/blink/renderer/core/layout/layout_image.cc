@@ -58,11 +58,9 @@
 
 namespace blink {
 
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
 extern "C" void StandaloneRendererNoteLayoutImageSetResource();
 extern "C" void StandaloneRendererNoteLayoutImagePaint();
 extern "C" void StandaloneRendererNoteLayoutImagePaintReplaced();
-#endif
 
 LayoutImage::LayoutImage(Element* element) : LayoutReplaced(element) {}
 
@@ -88,8 +86,7 @@ void LayoutImage::WillBeDestroyed() {
 }
 
 void LayoutImage::InsertedIntoTree() {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr, "image_reachability.stage=layout_image_inserted_into_tree\n");
   std::fflush(stderr);
 #endif
@@ -102,23 +99,20 @@ void LayoutImage::InsertedIntoTree() {
   // would be required for timing. Notify at this point now it is attached to
   // its parent.
   if (!GetNode() && window && image_content && image_content->IsLoaded()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     std::fprintf(stderr,
                  "image_reachability.stage=layout_image_before_timing_notify\n");
     std::fflush(stderr);
 #endif
     ImageElementTiming::From(*window).NotifyImageFinished(*this, image_content);
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_before_replaced_inserted_into_tree\n");
   std::fflush(stderr);
 #endif
   LayoutReplaced::InsertedIntoTree();
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr, "image_reachability.stage=layout_image_inserted_into_tree_done\n");
   std::fflush(stderr);
 #endif
@@ -161,7 +155,6 @@ void LayoutImage::StyleDidChange(
 }
 
 void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   std::fprintf(stderr, "image_reachability.stage=layout_image_set_resource resource=%p\n",
                image_resource);
   std::fflush(stderr);
@@ -169,7 +162,6 @@ void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_set_resource_after_note\n");
   std::fflush(stderr);
-#endif
   NOT_DESTROYED();
   DCHECK(!image_resource_);
   image_resource_ = image_resource;
@@ -266,8 +258,7 @@ bool CanQueryNaturalSize(const LayoutImageResource& image_resource) {
 }  // namespace
 
 bool LayoutImage::UpdateNaturalSizeIfNeeded() {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr,
                "image_reachability.stage=layout_image_update_natural_size\n");
   std::fflush(stderr);
@@ -277,16 +268,14 @@ bool LayoutImage::UpdateNaturalSizeIfNeeded() {
   // If the image resource is not associated with an image then we set natural
   // dimensions of 0x0 ("represents nothing" per HTML spec).
   if (CanQueryNaturalSize(*image_resource_)) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     std::fprintf(stderr,
                  "image_reachability.stage=layout_image_before_get_natural_dimensions\n");
     std::fflush(stderr);
 #endif
     new_natural_dimensions = PhysicalNaturalSizingInfo::FromSizingInfo(
         image_resource_->GetNaturalDimensions(StyleRef().EffectiveZoom()));
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     std::fprintf(stderr,
                  "image_reachability.stage=layout_image_after_get_natural_dimensions\n");
     std::fflush(stderr);
@@ -371,9 +360,7 @@ void LayoutImage::InvalidatePaintWithoutLayoutChange(
 void LayoutImage::PaintReplaced(const PaintInfo& paint_info,
                                 const PhysicalOffset& paint_offset) const {
   NOT_DESTROYED();
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   StandaloneRendererNoteLayoutImagePaintReplaced();
-#endif
   if (ChildPaintBlockedByDisplayLock())
     return;
   ImagePainter(*this).PaintReplaced(paint_info, paint_offset);
@@ -381,9 +368,7 @@ void LayoutImage::PaintReplaced(const PaintInfo& paint_info,
 
 void LayoutImage::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   StandaloneRendererNoteLayoutImagePaint();
-#endif
   ImagePainter(*this).Paint(paint_info);
 
   if (image_resource_ && image_resource_->MaybeAnimated()) {

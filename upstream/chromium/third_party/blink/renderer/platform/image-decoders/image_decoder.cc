@@ -39,15 +39,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/platform/image-decoders/bmp/bmp_decoder_factory.h"
 #include "third_party/blink/renderer/platform/image-decoders/fast_shared_buffer_reader.h"
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-#include "third_party/blink/renderer/platform/image-decoders/gif/gif_image_decoder.h"
-#include "third_party/blink/renderer/platform/image-decoders/ico/ico_image_decoder.h"
-#include "third_party/blink/renderer/platform/image-decoders/jpeg/jpeg_image_decoder.h"
-#endif
 #include "third_party/blink/renderer/platform/image-decoders/png/png_image_decoder.h"
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-#include "third_party/blink/renderer/platform/image-decoders/webp/webp_image_decoder.h"
-#endif
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/private/SkExif.h"
 #include "third_party/skia/include/private/chromium/SkCodecsICCProfileChromium.h"
@@ -316,37 +308,16 @@ std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
   mime_type = mime_type.ToAsciiLower();
   if (mime_type == "image/jpeg" || mime_type == "image/pjpeg" ||
       mime_type == "image/jpg") {
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-    decoder = std::make_unique<JPEGImageDecoder>(alpha_option, color_behavior,
-                                                 aux_image, max_decoded_bytes);
-#endif
   } else if (mime_type == "image/png" || mime_type == "image/x-png" ||
              mime_type == "image/apng") {
     decoder = std::make_unique<PngImageDecoder>(
         alpha_option, color_behavior, max_decoded_bytes,
         PngImageDecoder::kNoReadingOffset, high_bit_depth_decoding_option);
   } else if (mime_type == "image/gif") {
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-    decoder = std::make_unique<GIFImageDecoder>(alpha_option, color_behavior,
-                                                max_decoded_bytes);
-#endif
   } else if (mime_type == "image/webp") {
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-    decoder = std::make_unique<WEBPImageDecoder>(alpha_option, color_behavior,
-                                                 max_decoded_bytes);
-#endif
   } else if (mime_type == "image/x-icon" ||
              mime_type == "image/vnd.microsoft.icon") {
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-    decoder = std::make_unique<ICOImageDecoder>(alpha_option, color_behavior,
-                                                max_decoded_bytes);
-#endif
   } else if (mime_type == "image/bmp" || mime_type == "image/x-xbitmap") {
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-    decoder =
-        CreateBmpImageDecoder(alpha_option, high_bit_depth_decoding_option,
-                              color_behavior, max_decoded_bytes);
-#endif
 #if BUILDFLAG(ENABLE_AV1_DECODER)
   } else if (mime_type == "image/avif") {
     decoder = std::make_unique<AVIFImageDecoder>(
@@ -434,49 +405,6 @@ ImageDecoder::CompressionFormat ImageDecoder::GetCompressionFormat(
   // compression algorithm. Note: Will return kWebPAnimationFormat in the case
   // of an animated WebP image.
   size_t available_data = image_data ? image_data->size() : 0;
-#if !defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
-  if (EqualIgnoringAsciiCase(mime_type, "image/webp") && available_data >= 16) {
-    // Attempt to sniff only 8 bytes (the second half of the first 16). This
-    // will be sufficient to determine lossy vs. lossless in most WebP images
-    // (all but the extended format).
-    const FastSharedBufferReader fast_reader(
-        SegmentReader::CreateFromSharedBuffer(image_data));
-    std::array<uint8_t, 8> buffer;
-    base::span<const uint8_t> contents =
-        fast_reader.GetConsecutiveData(8, 8, buffer);
-
-    if (base::byte_span_from_cstring("WEBPVP8 ") == contents) {
-      // Simple lossy WebP format.
-      return kLossyFormat;
-    }
-    if (base::byte_span_from_cstring("WEBPVP8L") == contents) {
-      // Simple Lossless WebP format.
-      return kLosslessFormat;
-    }
-    if (base::byte_span_from_cstring("WEBPVP8X") == contents) {
-      // Extended WebP format; more content will need to be sniffed to make a
-      // determination.
-      auto long_buffer = base::HeapArray<uint8_t>::Uninit(available_data);
-      contents = fast_reader.GetConsecutiveData(0, available_data, long_buffer);
-      WebPBitstreamFeatures webp_features{};
-      VP8StatusCode status =
-          WebPGetFeatures(contents.data(), contents.size(), &webp_features);
-      // It is possible that there is not have enough image data available to
-      // make a determination.
-      if (status == VP8_STATUS_OK) {
-        DCHECK_LT(webp_features.format,
-                  CompressionFormat::kWebPAnimationFormat);
-        return webp_features.has_animation
-                   ? CompressionFormat::kWebPAnimationFormat
-                   : static_cast<CompressionFormat>(webp_features.format);
-      } else if (status != VP8_STATUS_NOT_ENOUGH_DATA) {
-        return kUndefinedFormat;
-      }
-    } else {
-      NOTREACHED();
-    }
-  }
-#endif
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
   // Attempt to sniff whether an AVIF image is using a lossy or lossless

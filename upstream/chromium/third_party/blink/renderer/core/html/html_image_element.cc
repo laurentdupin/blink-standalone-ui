@@ -120,8 +120,7 @@ HTMLImageElement::HTMLImageElement(Document& document, bool created_by_parser)
       is_lcp_element_(false),
       is_auto_sized_(false),
       is_predicted_lcp_element_(false) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr,
                "image_reachability.stage=html_image_element_ctor\n");
   std::fflush(stderr);
@@ -331,8 +330,7 @@ void HTMLImageElement::SetBestFitURLAndDPRFromImageCandidate(
 void HTMLImageElement::ParseAttribute(
     const AttributeModificationParams& params) {
   const QualifiedName& name = params.name;
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   if (name == html_names::kSrcAttr || name == html_names::kSrcsetAttr ||
       name == html_names::kSizesAttr) {
     std::string value = params.new_value.GetString().Utf8();
@@ -534,8 +532,7 @@ ImageCandidate HTMLImageElement::FindBestFitImageFromPictureParent() {
 }
 
 LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr,
                "image_reachability.stage=html_image_create_layout_object\n");
   std::fflush(stderr);
@@ -557,8 +554,7 @@ LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
               : MakeGarbageCollected<LayoutImage>(this);
       image->SetImageResource(MakeGarbageCollected<LayoutImageResource>());
       image->SetImageDevicePixelRatio(image_device_pixel_ratio_);
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
       std::fprintf(stderr,
                    "image_reachability.stage=html_image_create_layout_object_done\n");
       std::fflush(stderr);
@@ -575,14 +571,12 @@ LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
 }
 
 void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr, "image_reachability.stage=html_image_attach_layout_tree\n");
   std::fflush(stderr);
 #endif
   HTMLElement::AttachLayoutTree(context);
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr,
                "image_reachability.stage=html_image_attach_after_base\n");
   std::fflush(stderr);
@@ -591,15 +585,13 @@ void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
     if (is_fallback_image_) {
       layout_image->ImageResource()->UseBrokenImage();
     }
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     std::fprintf(stderr,
                  "image_reachability.stage=html_image_before_loader_on_attach\n");
     std::fflush(stderr);
 #endif
     GetImageLoader().OnAttachLayoutTree();
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     std::fprintf(stderr,
                  "image_reachability.stage=html_image_after_loader_on_attach\n");
     std::fflush(stderr);
@@ -609,8 +601,7 @@ void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
 
 Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
     ContainerNode& insertion_point) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr, "image_reachability.stage=html_image_inserted_into\n");
   std::fflush(stderr);
 #endif
@@ -666,8 +657,7 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
 
   Node::InsertionNotificationRequest result =
       HTMLElement::InsertedInto(insertion_point);
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr, "image_reachability.stage=html_image_inserted_into_done\n");
   std::fflush(stderr);
 #endif
@@ -1063,8 +1053,7 @@ void HTMLImageElement::ForceReload() const {
 
 void HTMLImageElement::SelectSourceURL(
     ImageLoader::UpdateFromElementBehavior behavior) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::fprintf(stderr, "image_reachability.stage=html_image_select_source\n");
   std::fflush(stderr);
 #endif
@@ -1081,8 +1070,7 @@ void HTMLImageElement::SelectSourceURL(
         FastGetAttribute(html_names::kSrcAttr),
         FastGetAttribute(html_names::kSrcsetAttr), &GetDocument());
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   std::string candidate_url = candidate.Url().GetString().Utf8();
   std::fprintf(stderr,
                "image_reachability.stage=html_image_selected_candidate empty=%d url=%s\n",

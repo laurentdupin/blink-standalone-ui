@@ -934,11 +934,9 @@ int main(int argc, char** argv) {
                  font_file.c_str());
   }
   const html_css_renderer::Size initial_viewport = create_info.viewport;
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
   html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
   html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
       resource_base_path);
-#endif
 
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
   std::unique_ptr<html_css_renderer::RendererState> state;

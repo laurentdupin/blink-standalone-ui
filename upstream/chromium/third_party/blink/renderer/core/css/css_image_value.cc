@@ -121,11 +121,7 @@ StyleImage* CSSImageValue::CacheImage(
 
     FetchParameters params = PrepareFetch(document, cross_origin);
     ImageResourceContent* image_content = nullptr;
-#if defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
     image_content = ImageResourceContent::Fetch(params, document.Fetcher());
-#else
-    image_content = document.GetStyleEngine().CacheImageContent(params);
-#endif
     cached_image_ = MakeGarbageCollected<StyleFetchedImage>(
         image_content, *url_data.MakeResolvedIfDanglingMarkup(document),
         document,

@@ -1357,8 +1357,7 @@ Element* HTMLConstructionSite::CreateElement(
            ? static_cast<const QualifiedName&>(
                  html_names::TagToQualifiedName(token->GetHTMLTag()))
            : QualifiedName(g_null_atom, token->GetName(), namespace_uri));
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   if (tag_name == html_names::kImgTag) {
     std::fprintf(stderr,
                  "image_reachability.stage=construction_site_create_img\n");

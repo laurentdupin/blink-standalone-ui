@@ -1503,8 +1503,7 @@ void ContainerNode::RemovedFrom(ContainerNode& insertion_point) {
 DISABLE_CFI_PERF
 void ContainerNode::AttachLayoutTree(AttachContext& context) {
   for (Node* child = firstChild(); child; child = child->nextSibling()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     if (auto* element = DynamicTo<Element>(child)) {
       if (element->localName() == html_names::kImgTag.LocalName()) {
         std::fprintf(stderr,
@@ -1514,8 +1513,7 @@ void ContainerNode::AttachLayoutTree(AttachContext& context) {
     }
 #endif
     child->AttachLayoutTree(context);
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
     if (auto* element = DynamicTo<Element>(child)) {
       if (element->localName() == html_names::kImgTag.LocalName()) {
         std::fprintf(stderr,

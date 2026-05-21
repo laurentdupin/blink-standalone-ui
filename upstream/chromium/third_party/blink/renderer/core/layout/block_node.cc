@@ -194,8 +194,7 @@ NOINLINE void DetermineAlgorithmAndRun(const LayoutAlgorithmParams& params,
 inline const LayoutResult* LayoutWithAlgorithm(
     const LayoutAlgorithmParams& params) {
   const LayoutResult* result = nullptr;
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   if (const LayoutBox* box = params.node.GetLayoutBox()) {
     if (box->IsLayoutImage() || box->IsLayoutReplaced()) {
       std::fprintf(stderr,
@@ -211,8 +210,7 @@ inline const LayoutResult* LayoutWithAlgorithm(
                            [&result]<typename Algorithm>(Algorithm* algorithm) {
                              result = algorithm->Layout();
                            });
-#if defined(HTML_CSS_RENDERER_STANDALONE) && \
-    defined(HTML_CSS_RENDERER_ENABLE_REAL_BLINK_IMAGE_PNG)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
   if (const LayoutBox* box = params.node.GetLayoutBox()) {
     if (box->IsLayoutImage() || box->IsLayoutReplaced()) {
       std::fprintf(stderr,
