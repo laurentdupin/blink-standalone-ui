@@ -154,6 +154,8 @@ extern "C" int g_standalone_oof_zero_size_fragments;
 extern "C" int g_standalone_oof_safety_limit_hit;
 extern "C" void StandaloneRendererResetOutOfFlowDiagnostics();
 extern "C" void StandaloneRendererResetMediaQueryDiagnostics();
+extern "C" void StandaloneRendererResetListItemFactoryDiagnostics();
+extern "C" int StandaloneRendererListItemFactoryDiagnosticValue(int);
 extern "C" int StandaloneRendererMediaQueryDiagnosticsJsonSize();
 extern "C" int StandaloneRendererMediaQueryDiagnosticsJson(char*, int);
 extern "C" int StandaloneRendererMediaQueryDiagnosticCount();
@@ -3024,6 +3026,20 @@ std::string ListMarkerDiagnosticsJsonForStandaloneRenderer(Document& document,
        << diagnostics.marker_layout_object_count
        << ",\"marker_pseudo_element_count\":"
        << diagnostics.marker_pseudo_element_count
+       << ",\"layout_object_factory\":{\"calls\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(0)
+       << ",\"li_calls\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(1)
+       << ",\"display_list_item_calls\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(2)
+       << ",\"li_display_list_item_calls\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(3)
+       << ",\"returned_layout_list_item\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(4)
+       << ",\"returned_block_flow_for_li\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(5)
+       << ",\"backdrop_skips\":"
+       << StandaloneRendererListItemFactoryDiagnosticValue(6) << "}"
        << ",\"li_layout_object_debug_names\":[";
   for (size_t i = 0; i < diagnostics.li_layout_object_debug_names.size(); ++i) {
     if (i) {
@@ -5223,6 +5239,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   StandaloneRendererResetImageReachabilityDiagnostics();
   StandaloneRendererResetOutOfFlowDiagnostics();
   StandaloneRendererResetMediaQueryDiagnostics();
+  StandaloneRendererResetListItemFactoryDiagnostics();
   cache.image_reachability = ImageReachabilityDiagnostics();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");

@@ -284,6 +284,58 @@ StyleDifference AdjustForCompositableAnimationPaint(
 
 }  // namespace
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+namespace {
+
+struct StandaloneListItemFactoryDiagnostics {
+  int calls = 0;
+  int li_calls = 0;
+  int display_list_item_calls = 0;
+  int li_display_list_item_calls = 0;
+  int returned_layout_list_item = 0;
+  int returned_block_flow_for_li = 0;
+  int backdrop_skips = 0;
+};
+
+StandaloneListItemFactoryDiagnostics& GetStandaloneListItemFactoryDiagnostics() {
+  static StandaloneListItemFactoryDiagnostics diagnostics;
+  return diagnostics;
+}
+
+bool IsStandaloneLiElement(const Element* element) {
+  return element && element->HasTagName(html_names::kLiTag);
+}
+
+}  // namespace
+
+extern "C" void StandaloneRendererResetListItemFactoryDiagnostics() {
+  GetStandaloneListItemFactoryDiagnostics() =
+      StandaloneListItemFactoryDiagnostics();
+}
+
+extern "C" int StandaloneRendererListItemFactoryDiagnosticValue(int field) {
+  const auto& diagnostics = GetStandaloneListItemFactoryDiagnostics();
+  switch (field) {
+    case 0:
+      return diagnostics.calls;
+    case 1:
+      return diagnostics.li_calls;
+    case 2:
+      return diagnostics.display_list_item_calls;
+    case 3:
+      return diagnostics.li_display_list_item_calls;
+    case 4:
+      return diagnostics.returned_layout_list_item;
+    case 5:
+      return diagnostics.returned_block_flow_for_li;
+    case 6:
+      return diagnostics.backdrop_skips;
+    default:
+      return 0;
+  }
+}
+#endif
+
 static int g_allow_destroying_layout_object_in_finalizer = 0;
 
 void ApplyVisibleOverflowToClipRect(OverflowClipAxes overflow_clip,
@@ -511,13 +563,40 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
 LayoutBlockFlow* LayoutObject::CreateBlockFlowOrListItem(
     Element* element,
     const ComputedStyle& style) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  auto& diagnostics = GetStandaloneListItemFactoryDiagnostics();
+  ++diagnostics.calls;
+  const bool is_li = IsStandaloneLiElement(element);
+  if (is_li) {
+    ++diagnostics.li_calls;
+  }
+  if (style.IsDisplayListItem()) {
+    ++diagnostics.display_list_item_calls;
+    if (is_li) {
+      ++diagnostics.li_display_list_item_calls;
+    }
+  }
+#endif
   if (style.IsDisplayListItem() && element &&
       element->GetPseudoId() != kPseudoIdBackdrop) {
     // Create a LayoutBlockFlow with a ListItemOrdinal and maybe a ::marker.
     // ::backdrop is excluded since it's not tree-abiding, and ListItemOrdinal
     // needs to traverse the tree.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    ++diagnostics.returned_layout_list_item;
+#endif
     return MakeGarbageCollected<LayoutListItem>(element);
   }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (is_li) {
+    ++diagnostics.returned_block_flow_for_li;
+    if (style.IsDisplayListItem() && element &&
+        element->GetPseudoId() == kPseudoIdBackdrop) {
+      ++diagnostics.backdrop_skips;
+    }
+  }
+#endif
 
   // Create a plain LayoutBlockFlow
   return MakeGarbageCollected<LayoutBlockFlow>(element);
