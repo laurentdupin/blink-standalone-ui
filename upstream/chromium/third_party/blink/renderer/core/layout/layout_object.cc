@@ -433,6 +433,25 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kGridLanes:
     case EDisplay::kInlineGridLanes:
       return MakeGarbageCollected<LayoutGridLanes>(element);
+    case EDisplay::kTable:
+    case EDisplay::kInlineTable:
+      return MakeGarbageCollected<LayoutTable>(element);
+    case EDisplay::kTableRowGroup:
+    case EDisplay::kTableHeaderGroup:
+    case EDisplay::kTableFooterGroup:
+      return MakeGarbageCollected<LayoutTableSection>(element);
+    case EDisplay::kTableRow:
+      return MakeGarbageCollected<LayoutTableRow>(element);
+    case EDisplay::kTableColumnGroup:
+    case EDisplay::kTableColumn:
+      // Standalone does not yet have a safe column-hint path. Creating real
+      // LayoutTableColumn currently sends col/colgroup tables into an
+      // unbounded layout pass; rows/cells still use real table layout.
+      return nullptr;
+    case EDisplay::kTableCell:
+      return MakeGarbageCollected<LayoutTableCell>(element);
+    case EDisplay::kTableCaption:
+      return MakeGarbageCollected<LayoutTableCaption>(element);
     default:
       return CreateBlockFlowOrListItem(element, style);
   }
@@ -490,14 +509,6 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
       return MakeGarbageCollected<LayoutInline>(element);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    case EDisplay::kRuby:
-    case EDisplay::kRubyText:
-      return MakeGarbageCollected<LayoutInline>(element);
-    default:
-      return CreateBlockFlowOrListItem(element, style);
-  }
-#else
     case EDisplay::kInlineListItem:
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
@@ -564,7 +575,6 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
   }
 
   NOTREACHED();
-#endif
 #endif
 }
 

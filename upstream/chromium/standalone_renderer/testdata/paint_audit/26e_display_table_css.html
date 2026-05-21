@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: white; font: 14px Arial, sans-serif; }
+  .table {
+    display: table;
+    margin: 16px;
+    width: 340px;
+    border-collapse: collapse;
+    background: #f8fafc;
+  }
+  .row { display: table-row; }
+  .cell {
+    display: table-cell;
+    border: 2px solid #334155;
+    padding: 8px 12px;
+  }
+  .cell:nth-child(1) { background: #ede9fe; }
+  .cell:nth-child(2) { background: #fae8ff; }
+</style>
+<div class="table" data-debug-id="table">
+  <div class="row" data-debug-id="row-1">
+    <div class="cell" data-debug-id="cell-a1">CSS table</div>
+    <div class="cell" data-debug-id="cell-b1">first row</div>
+  </div>
+  <div class="row" data-debug-id="row-2">
+    <div class="cell" data-debug-id="cell-a2">second</div>
+    <div class="cell" data-debug-id="cell-b2">row</div>
+  </div>
+</div>

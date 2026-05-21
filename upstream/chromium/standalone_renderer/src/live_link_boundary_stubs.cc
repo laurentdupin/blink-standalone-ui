@@ -6,8 +6,10 @@
 #include "third_party/blink/renderer/core/css/style_sheet.h"
 #include "third_party/blink/renderer/core/html/custom/ce_reactions_scope.h"
 #include "third_party/blink/renderer/core/layout/mathml/math_fraction_layout_algorithm.h"
+#include "third_party/blink/renderer/core/layout/mathml/math_layout_utils.h"
 #include "third_party/blink/renderer/core/layout/mathml/math_padded_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/mathml/math_space_layout_algorithm.h"
+#include "third_party/blink/renderer/core/mathml/mathml_table_cell_element.h"
 
 #include "base/trace_event/trace_arguments.h"
 #include "base/cpu.h"
@@ -55,6 +57,12 @@
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/html/html_table_caption_element.h"
+#include "third_party/blink/renderer/core/html/html_table_cell_element.h"
+#include "third_party/blink/renderer/core/html/html_table_col_element.h"
+#include "third_party/blink/renderer/core/html/html_table_element.h"
+#include "third_party/blink/renderer/core/html/html_table_row_element.h"
+#include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
@@ -2842,6 +2850,11 @@ void DatasetDOMStringMap::Trace(Visitor* visitor) const {
 
 bool RuntimeEnabledFeaturesBase::is_css_resource_integrity_enforcement_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_at_rule_counter_style_image_symbols_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_table_border_color_no_implicit_border_enabled_ = true;
+bool RuntimeEnabledFeaturesBase::
+    is_table_default_border_color_current_color_enabled_ = true;
+bool RuntimeEnabledFeaturesBase::is_table_is_auto_fixed_layout_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_mobile_layout_theme_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_base_appearance_inline_sizing_enabled_ =
     false;
@@ -3107,6 +3120,18 @@ const WrapperTypeInfo& HTMLUListElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLUListElement");
 const WrapperTypeInfo& HTMLUnknownElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLUnknownElement");
+const WrapperTypeInfo& HTMLTableCaptionElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTableCaptionElement");
+const WrapperTypeInfo& HTMLTableCellElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTableCellElement");
+const WrapperTypeInfo& HTMLTableColElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTableColElement");
+const WrapperTypeInfo& HTMLTableElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTableElement");
+const WrapperTypeInfo& HTMLTableRowElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTableRowElement");
+const WrapperTypeInfo& HTMLTableSectionElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTableSectionElement");
 const WrapperTypeInfo& MediaList::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("MediaList");
 const WrapperTypeInfo& EventTarget::wrapper_type_info_ =
@@ -15917,6 +15942,7 @@ ShapeOutsideInfo::InfoMap& ShapeOutsideInfo::GetInfoMap() {
   return *static_cast<ShapeOutsideInfo::InfoMap*>(nullptr);
 }
 #endif
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 const TableBorders* TableNode::GetTableBorders() const {
   return nullptr;
 }
@@ -15929,6 +15955,7 @@ LayoutUnit TableNode::ComputeCaptionBlockSize(const ConstraintSpace&) const {
   return LayoutUnit();
 }
 void FinalizeTableCellLayout(LayoutUnit, BoxFragmentBuilder*) {}
+#endif
 void MeasureCache::LayoutObjectWillBeDestroyed() {}
 void MeasureCache::Clear() {}
 void MeasureCache::Add(const LayoutResult*) {}
@@ -15943,7 +15970,9 @@ const LayoutResult* MeasureCache::Find(
 const LayoutResult* MeasureCache::GetLastForTesting() const {
   return nullptr;
 }
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutTableCell::InvalidateLayoutResultCacheAfterMeasure() const {}
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void FragmentItems::ClearAssociatedFragments(LayoutObject*) {}
 void FragmentItems::FinalizeAfterLayout(
@@ -16822,6 +16851,7 @@ const LayoutResult* FlexLayoutAlgorithm::Layout() {
   return nullptr;
 }
 #endif
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 MinMaxSizesResult TableLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
   return MinMaxSizesResult();
@@ -16841,6 +16871,7 @@ TableSectionLayoutAlgorithm::TableSectionLayoutAlgorithm(
 const LayoutResult* TableSectionLayoutAlgorithm::Layout() {
   return nullptr;
 }
+#endif
 MinMaxSizesResult CustomLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesFloatInput&) {
   return MinMaxSizesResult();
@@ -17915,6 +17946,7 @@ bool FragmentItem::IsBlockInInline() const {
   return false;
 }
 #endif
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 LayoutTable* LayoutTableCell::Table() const {
   return nullptr;
 }
@@ -17930,6 +17962,7 @@ bool LayoutTableSection::IsEmpty() const {
 Color TableBorders::BorderColor(const ComputedStyle*, EdgeSide) {
   return Color();
 }
+#endif
 const AtomicString& LayoutCounter::ListStyle(const LayoutObject*,
                                              const ComputedStyle&) {
   return g_null_atom;
@@ -17944,6 +17977,17 @@ PhysicalRect ListMarker::RelativeSymbolMarkerRect(const ComputedStyle&,
 bool LayoutCounter::IsDirectionalSymbolMarker() const {
   return false;
 }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+unsigned MathMLTableCellElement::colSpan() const {
+  return 1;
+}
+unsigned MathMLTableCellElement::rowSpan() const {
+  return 1;
+}
+LayoutUnit MathTableBaseline(const ComputedStyle&, LayoutUnit block_offset) {
+  return LayoutUnit(block_offset / 2);
+}
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 bool FragmentItem::IsFloating() const {
   return false;
