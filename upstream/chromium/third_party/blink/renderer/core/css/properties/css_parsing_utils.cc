@@ -9834,6 +9834,22 @@ bool ShouldLowerCaseCounterStyleNameOnParse(const AtomicString& name,
     DCHECK_EQ(name, name.ToAsciiLower());
     return false;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The full UA counter-style map lazily builds every predefined counter style.
+  // In the standalone renderer that path currently depends on unavailable
+  // counter-style parser and ICU resources. Keep parsing deterministic for the
+  // static predefined names we support without initializing the UA map here.
+  const AtomicString lower_name = name.ToAsciiLower();
+  return lower_name == AtomicString("disc") ||
+         lower_name == AtomicString("circle") ||
+         lower_name == AtomicString("square") ||
+         lower_name == AtomicString("decimal") ||
+         lower_name == AtomicString("decimal-leading-zero") ||
+         lower_name == AtomicString("lower-alpha") ||
+         lower_name == AtomicString("upper-alpha") ||
+         lower_name == AtomicString("lower-roman") ||
+         lower_name == AtomicString("upper-roman");
+#endif
   return CounterStyleMap::GetUACounterStyleMap()->FindCounterStyleAcrossScopes(
       name.ToAsciiLower());
 }
