@@ -110,6 +110,13 @@ void LayoutImageResource::SetImageResource(ImageResourceContent* new_image) {
   cached_image_ = new_image;
   if (cached_image_) {
     cached_image_->AddObserver(layout_object_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (cached_image_->HasImage()) {
+      layout_object_->ImageChanged(
+          cached_image_.Get(),
+          ImageResourceObserver::CanDeferInvalidation::kNo);
+    }
+#endif
     if (cached_image_->ErrorOccurred()) {
       layout_object_->ImageChanged(
           cached_image_.Get(),
