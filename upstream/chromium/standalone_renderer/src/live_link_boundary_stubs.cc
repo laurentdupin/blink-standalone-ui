@@ -2847,6 +2847,7 @@ void DatasetDOMStringMap::Trace(Visitor* visitor) const {
 }
 
 bool RuntimeEnabledFeaturesBase::is_css_resource_integrity_enforcement_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_css_at_rule_counter_style_image_symbols_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_mobile_layout_theme_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_base_appearance_inline_sizing_enabled_ =
     false;
@@ -7104,12 +7105,14 @@ scoped_refptr<QuotesData> LayoutLocale::GetQuotesData() const {
 }
 #endif
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 CSSValue* AtRuleDescriptorParser::ParseAtCounterStyleDescriptor(
     AtRuleDescriptorID,
     CSSParserTokenStream&,
     const CSSParserContext&) {
   return nullptr;
 }
+#endif
 
 CSSValue* AtRuleDescriptorParser::ParseAtFontPaletteValuesDescriptor(
     AtRuleDescriptorID,

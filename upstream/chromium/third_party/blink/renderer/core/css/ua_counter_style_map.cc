@@ -14,6 +14,10 @@ namespace blink {
 namespace {
 
 bool IsPredefinedSymbolMarkerName(const AtomicString& name) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return name == "disc" || name == "square" || name == "circle" ||
+         name == "disclosure-open" || name == "disclosure-closed";
+#else
   static const AtomicString* predefined_symbol_markers[] = {
       &keywords::kDisc, &keywords::kSquare, &keywords::kCircle,
       &keywords::kDisclosureOpen, &keywords::kDisclosureClosed};
@@ -23,10 +27,38 @@ bool IsPredefinedSymbolMarkerName(const AtomicString& name) {
     }
   }
   return false;
+#endif
 }
 
 HashMap<AtomicString, String> CollectUACounterStyleRules() {
   HashMap<AtomicString, String> ua_rules;
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The standalone renderer currently supports the common static list marker
+  // styles used by its fixtures. Avoid constructing the full UA counter-style
+  // map here because that path depends on browser ICU resources that are not
+  // available in the standalone process.
+  ua_rules.Set(AtomicString("decimal"), R"CSS(
+    system: numeric;
+    symbols: '0' '1' '2' '3' '4' '5' '6' '7' '8' '9';
+  )CSS");
+  ua_rules.Set(AtomicString("disc"), R"CSS(
+    system: cyclic;
+    symbols: \2022;
+    suffix: " ";
+  )CSS");
+  ua_rules.Set(AtomicString("circle"), R"CSS(
+    system: cyclic;
+    symbols: \25E6;
+    suffix: " ";
+  )CSS");
+  ua_rules.Set(AtomicString("square"), R"CSS(
+    system: cyclic;
+    symbols: \25A0;
+    suffix: " ";
+  )CSS");
+  return ua_rules;
+#endif
 
   // https://drafts.csswg.org/css-counter-styles-3/#simple-numeric
 
@@ -473,12 +505,49 @@ const HashMap<AtomicString, String>& GetUACounterStyleRules() {
   return ua_rules;
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+String StandaloneUACounterStyleRuleBody(const AtomicString& name) {
+  if (name == "decimal") {
+    return R"CSS(
+    system: numeric;
+    symbols: '0' '1' '2' '3' '4' '5' '6' '7' '8' '9';
+  )CSS";
+  }
+  if (name == "disc") {
+    return R"CSS(
+    system: cyclic;
+    symbols: \2022;
+    suffix: " ";
+  )CSS";
+  }
+  if (name == "circle") {
+    return R"CSS(
+    system: cyclic;
+    symbols: \25E6;
+    suffix: " ";
+  )CSS";
+  }
+  if (name == "square") {
+    return R"CSS(
+    system: cyclic;
+    symbols: \25A0;
+    suffix: " ";
+  )CSS";
+  }
+  return String();
+}
+#endif
+
 String GetUACounterStyleRuleText(const AtomicString& name) {
   StringBuilder builder;
   builder.Append("@counter-style ");
   builder.Append(name);
   builder.Append("{");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  builder.Append(StandaloneUACounterStyleRuleBody(name));
+#else
   builder.Append(GetUACounterStyleRules().at(name));
+#endif
   builder.Append("}");
   return builder.ReleaseString();
 }
@@ -492,17 +561,33 @@ CounterStyleMap* CounterStyleMap::CreateUACounterStyleMap() {
   // For UA counter style map, we only insert the names now, and defer the
   // creation of the CounterStyle objects until requested, so that we don't
   // waste memory on unused rules.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  map->counter_styles_.Set(AtomicString("decimal"), nullptr);
+  map->counter_styles_.Set(AtomicString("disc"), nullptr);
+  map->counter_styles_.Set(AtomicString("circle"), nullptr);
+  map->counter_styles_.Set(AtomicString("square"), nullptr);
+#else
   for (const AtomicString& name : GetUACounterStyleRules().Keys()) {
     map->counter_styles_.Set(name, nullptr);
   }
+#endif
   return map;
 }
 
 // static
 CounterStyleMap* CounterStyleMap::GetUACounterStyleMap() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  static Persistent<CounterStyleMap>* ua_counter_style_map = nullptr;
+  if (!ua_counter_style_map) {
+    ua_counter_style_map =
+        new Persistent<CounterStyleMap>(CreateUACounterStyleMap());
+  }
+  return ua_counter_style_map->Get();
+#else
   DEFINE_STATIC_LOCAL(Persistent<CounterStyleMap>, ua_counter_style_map,
                       (CreateUACounterStyleMap()));
   return ua_counter_style_map;
+#endif
 }
 
 CounterStyle& CounterStyleMap::CreateUACounterStyle(const AtomicString& name) {

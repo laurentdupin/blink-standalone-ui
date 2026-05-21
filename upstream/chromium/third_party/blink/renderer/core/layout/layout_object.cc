@@ -405,6 +405,15 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
 
 #if defined(STANDALONE_RENDERER_GN_PROBE) || \
     defined(HTML_CSS_RENDERER_STANDALONE)
+  if (element->GetPseudoId() == kPseudoIdMarker) {
+    const Element* parent = element->parentElement();
+    if (parent && parent->GetComputedStyle()->MarkerShouldBeInside(
+                      *parent, style.GetDisplayStyle())) {
+      return MakeGarbageCollected<LayoutInsideListMarker>(element);
+    }
+    return MakeGarbageCollected<LayoutOutsideListMarker>(element);
+  }
+
   switch (style.Display()) {
     case EDisplay::kNone:
     case EDisplay::kContents:
@@ -425,7 +434,7 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kInlineGridLanes:
       return MakeGarbageCollected<LayoutGridLanes>(element);
     default:
-      return MakeGarbageCollected<LayoutBlockFlow>(element);
+      return CreateBlockFlowOrListItem(element, style);
   }
 #else
   // Minimal support for content properties replacing an entire element.

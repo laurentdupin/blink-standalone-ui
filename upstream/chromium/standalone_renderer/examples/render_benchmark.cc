@@ -17,6 +17,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include <dbghelp.h>
+#include <crtdbg.h>
 #pragma comment(lib, "Dbghelp.lib")
 #endif
 
@@ -787,13 +788,19 @@ LONG WINAPI WriteBenchmarkCrashDump(EXCEPTION_POINTERS* exception_pointers) {
                ok ? "written" : "failed", g_crash_dump_path.c_str(), code,
                address, GetCurrentThreadId(), ok ? 0 : GetLastError());
   std::fflush(stderr);
-  return EXCEPTION_CONTINUE_SEARCH;
+  return EXCEPTION_EXECUTE_HANDLER;
 }
 #endif
 
 }  // namespace
 
 int main(int argc, char** argv) {
+#if defined(_WIN32)
+  SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX |
+               SEM_NOOPENFILEERRORBOX);
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+
   BenchmarkAssets assets;
   html_css_renderer::RendererCreateInfo create_info;
   create_info.asset_provider = &assets;

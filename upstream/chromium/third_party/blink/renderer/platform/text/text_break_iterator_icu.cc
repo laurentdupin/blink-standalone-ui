@@ -885,12 +885,26 @@ CharacterBreakIterator::CharacterBreakIterator(base::span<const UChar> buffer) {
 
 void CharacterBreakIterator::CreateIteratorForBuffer(
     base::span<const UChar> buffer) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Full ICU break iterator data is not shipped with the standalone renderer.
+  // Keep Blink-owned list marker text generation fail-soft by treating each
+  // UTF-16 code unit as a grapheme boundary when ICU cannot be used.
+  offset_ = 0;
+  length_ = static_cast<unsigned>(buffer.size());
+  return;
+#endif
   iterator_ = Pool::Get().TakeOrCreate();
   SetText16(iterator_.get(), buffer);
 }
 
 int CharacterBreakIterator::Next() {
   if (!is_8bit_) {
+    if (!iterator_) {
+      if (offset_ >= length_) {
+        return kTextBreakDone;
+      }
+      return ++offset_;
+    }
     return iterator_->next();
   }
 
@@ -904,6 +918,9 @@ int CharacterBreakIterator::Next() {
 
 int CharacterBreakIterator::Current() {
   if (!is_8bit_) {
+    if (!iterator_) {
+      return offset_;
+    }
     return iterator_->current();
   }
   return offset_;
@@ -911,6 +928,9 @@ int CharacterBreakIterator::Current() {
 
 bool CharacterBreakIterator::IsBreak(int offset) const {
   if (!is_8bit_) {
+    if (!iterator_) {
+      return offset >= 0 && offset <= static_cast<int>(length_);
+    }
     return iterator_->isBoundary(offset);
   }
   return !IsLFAfterCR(offset);
@@ -918,6 +938,12 @@ bool CharacterBreakIterator::IsBreak(int offset) const {
 
 int CharacterBreakIterator::Preceding(int offset) const {
   if (!is_8bit_) {
+    if (!iterator_) {
+      if (offset <= 0) {
+        return kTextBreakDone;
+      }
+      return offset - 1;
+    }
     return iterator_->preceding(offset);
   }
   if (offset <= 0) {
@@ -931,6 +957,12 @@ int CharacterBreakIterator::Preceding(int offset) const {
 
 int CharacterBreakIterator::Following(int offset) const {
   if (!is_8bit_) {
+    if (!iterator_) {
+      if (static_cast<unsigned>(offset) >= length_) {
+        return kTextBreakDone;
+      }
+      return offset + 1;
+    }
     return iterator_->following(offset);
   }
   if (static_cast<unsigned>(offset) >= length_) {
