@@ -67,6 +67,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/style/style_image.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
@@ -3067,6 +3068,113 @@ std::string ListMarkerDiagnosticsJsonForStandaloneRenderer(Document& document,
   return json.str();
 }
 
+std::string BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
+    const char* name,
+    const Document& document,
+    const ComputedStyle* style,
+    const ImageResourceObserver* primary_client,
+    const ImageResourceObserver* alternate_client,
+    const Node* node) {
+  std::ostringstream json;
+  json << "{\"name\":" << JsonStringForStandaloneRenderer(name);
+  if (!style) {
+    json << ",\"present\":false}";
+    return json.str();
+  }
+
+  const FillLayer& layers = style->BackgroundLayers();
+  const StyleImage* image = layers.GetImage();
+  int layer_count = 0;
+  int image_layer_count = 0;
+  for (const FillLayer* layer = &layers; layer; layer = layer->Next()) {
+    ++layer_count;
+    if (layer->GetImage()) {
+      ++image_layer_count;
+    }
+  }
+
+  json << ",\"present\":true"
+       << ",\"has_background\":" << (style->HasBackground() ? "true" : "false")
+       << ",\"has_background_image\":"
+       << (style->HasBackgroundImage() ? "true" : "false")
+       << ",\"layer_count\":" << layer_count
+       << ",\"image_layer_count\":" << image_layer_count
+       << ",\"first_layer_clip\":" << static_cast<int>(layers.Clip())
+       << ",\"first_layer_attachment\":" << static_cast<int>(layers.Attachment())
+       << ",\"first_image_present\":" << (image ? "true" : "false");
+  if (!image) {
+    json << "}";
+    return json.str();
+  }
+
+  json << ",\"first_image_can_render\":"
+       << (image->CanRender() ? "true" : "false")
+       << ",\"first_image_is_pending\":"
+       << (image->IsPendingImage() ? "true" : "false")
+       << ",\"first_image_is_generated\":"
+       << (image->IsGeneratedImage() ? "true" : "false")
+       << ",\"first_image_is_loaded\":"
+       << (image->IsLoaded() ? "true" : "false");
+
+  const gfx::SizeF target_size(
+      document.GetLayoutView() ? document.GetLayoutView()->ViewWidth() : 0,
+      document.GetLayoutView() ? document.GetLayoutView()->ViewHeight() : 0);
+  json << ",\"diagnostic_target_size\":[" << target_size.width() << ","
+       << target_size.height() << "]";
+  if (primary_client && node) {
+    scoped_refptr<Image> primary_image =
+        image->GetImage(*primary_client, *node, *style, target_size);
+    json << ",\"primary_client_get_image\":"
+         << (primary_image ? "true" : "false");
+  } else {
+    json << ",\"primary_client_get_image\":null";
+  }
+  if (alternate_client && node) {
+    scoped_refptr<Image> alternate_image =
+        image->GetImage(*alternate_client, *node, *style, target_size);
+    json << ",\"alternate_client_get_image\":"
+         << (alternate_image ? "true" : "false");
+  } else {
+    json << ",\"alternate_client_get_image\":null";
+  }
+  json << "}";
+  return json.str();
+}
+
+std::string RootBackgroundDiagnosticsJsonForStandaloneRenderer(
+    Document& document) {
+  LayoutView* layout_view = document.GetLayoutView();
+  Element* html = document.documentElement();
+  HTMLElement* body = document.body();
+  const LayoutBox* root_box = layout_view ? &layout_view->RootBox() : nullptr;
+  const Node* node = html ? static_cast<const Node*>(html)
+                          : static_cast<const Node*>(&document);
+  std::ostringstream json;
+  json << "{\"layout_view_present\":" << (layout_view ? "true" : "false")
+       << ",\"root_box_present\":" << (root_box ? "true" : "false");
+  if (layout_view) {
+    json << ",\"layout_view_size\":[" << layout_view->ViewWidth() << ","
+         << layout_view->ViewHeight() << "]";
+  } else {
+    json << ",\"layout_view_size\":[0,0]";
+  }
+  json << ",\"styles\":["
+       << BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
+              "viewport", document,
+              layout_view ? &layout_view->StyleRef() : nullptr, layout_view,
+              root_box, node)
+       << ","
+       << BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
+              "html", document, html ? html->GetComputedStyle() : nullptr,
+              html ? html->GetLayoutObject() : nullptr, layout_view, node)
+       << ","
+       << BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
+              "body", document, body ? body->GetComputedStyle() : nullptr,
+              body ? body->GetLayoutObject() : nullptr, layout_view, node)
+       << "]}";
+  return json.str();
+}
+
 std::string BlinkStringToStdStringForStandaloneRenderer(const String& value) {
   return value.Utf8();
 }
@@ -4574,6 +4682,12 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
             "\"marker_layout_object_count\":0,"
             "\"marker_pseudo_element_count\":0,"
             "\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string root_background_diagnostics_json =
+      cache.holder
+          ? RootBackgroundDiagnosticsJsonForStandaloneRenderer(
+                cache.holder->GetDocument())
+          : "{\"layout_view_present\":false,\"root_box_present\":false,"
+            "\"styles\":[]}";
   TraceLiveFrameProbeStage("paint audit after page evidence");
   const bool evidence_has_non_translation_transform =
       page_evidence_json.find("\"has_non_translation_transform\":true") !=
@@ -4625,6 +4739,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << media_query_diagnostics_json
        << ",\"list_marker_diagnostics\":"
        << list_marker_diagnostics_json
+       << ",\"root_background_diagnostics\":"
+       << root_background_diagnostics_json
        << ",\"paint_artifact_audit_safe_mode\":"
        << (artifact_audit_safe_mode ? "true" : "false")
        << ",\"paint_artifact_audit_safe_mode_reason\":"

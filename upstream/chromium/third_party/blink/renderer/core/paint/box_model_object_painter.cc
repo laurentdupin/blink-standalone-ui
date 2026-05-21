@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
+#include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/paint/background_image_geometry.h"
 #include "third_party/blink/renderer/core/paint/box_decoration_data.h"
 #include "third_party/blink/renderer/core/paint/object_painter.h"
@@ -59,9 +60,20 @@ BoxPainterBase::FillLayerInfo BoxModelObjectPainter::GetFillLayerInfo(
     BackgroundBleedAvoidance bleed_avoidance,
     bool is_painting_background_in_contents_space,
     PaintFlags paint_flags) const {
+  bool is_scroll_container = box_model_.IsScrollContainer();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The root background is painted by LayoutView using viewport paint geometry.
+  // StyleResolver propagates root/body background-attachment: scroll to local,
+  // but standalone LayoutView does not have a normal scrolled-content box here.
+  // Treat only this root background fill as non-scroll-container so Blink's
+  // generated background image path keeps the viewport paint rect.
+  if (IsA<LayoutView>(box_model_)) {
+    is_scroll_container = false;
+  }
+#endif
   return BoxPainterBase::FillLayerInfo(
       box_model_.GetDocument(), box_model_.StyleRef(),
-      box_model_.IsScrollContainer(), color, bg_layer, bleed_avoidance,
+      is_scroll_container, color, bg_layer, bleed_avoidance,
       PhysicalBoxSides(), box_model_.IsLayoutInline(),
       is_painting_background_in_contents_space, paint_flags);
 }
