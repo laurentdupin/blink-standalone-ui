@@ -474,11 +474,7 @@ PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
   bool should_paint_background =
       should_paint_content && !selection_drag_image_only;
   if (should_paint_background) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    if (IsA<LayoutView>(object)) {
-    } else
-#endif
-      PaintWithPhase(PaintPhase::kSelfBlockBackgroundOnly, context, paint_flags);
+    PaintWithPhase(PaintPhase::kSelfBlockBackgroundOnly, context, paint_flags);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   }
