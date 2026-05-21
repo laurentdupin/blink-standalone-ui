@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin: 8px; background: white; }
+  .grid { display: grid; grid-template-columns: 180px 1fr; gap: 12px; width: 360px; }
+  .text { background: rgb(250,250,250); border: 1px solid rgb(210,220,230); padding: 8px; }
+  img { display: block; max-width: 100%; height: 96px; background: rgb(233,240,246); }
+</style>
+<div class="grid" data-debug-id="grid"><div class="text">Text column should not be covered.</div><img data-debug-id="target" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAYAAACzzX7wAAAAGklEQVR4nGN4ZmT0H4Y1FgQgcMozMGagvQIAbjZICVJoMboAAAAASUVORK5CYII=" alt="wide fixed height"></div>

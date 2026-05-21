@@ -78,12 +78,20 @@
 
 namespace blink {
 
-namespace {
-
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 thread_local std::vector<PhysicalOffset>* g_standalone_fragment_offsets =
     nullptr;
+
+std::optional<PhysicalOffset> StandaloneCurrentFragmentPaintOffsetOverride() {
+  if (!g_standalone_fragment_offsets ||
+      g_standalone_fragment_offsets->empty()) {
+    return std::nullopt;
+  }
+  return g_standalone_fragment_offsets->back();
+}
 #endif
+
+namespace {
 
 inline bool HasSelection(const LayoutObject* layout_object) {
   return layout_object->GetSelectionState() != SelectionState::kNone;
@@ -1214,7 +1222,20 @@ void BoxFragmentPainter::PaintBlockChild(
     return;
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  std::vector<PhysicalOffset> local_offsets;
+  std::vector<PhysicalOffset>* previous_offsets =
+      g_standalone_fragment_offsets;
+  if (!g_standalone_fragment_offsets)
+    g_standalone_fragment_offsets = &local_offsets;
+  g_standalone_fragment_offsets->push_back(paint_offset + child.offset);
+#endif
   PaintFragment(box_child_fragment, paint_info_for_descendants);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  g_standalone_fragment_offsets->pop_back();
+  if (g_standalone_fragment_offsets == &local_offsets)
+    g_standalone_fragment_offsets = previous_offsets;
+#endif
 }
 
 void BoxFragmentPainter::PaintFloatingItems(const PaintInfo& paint_info,

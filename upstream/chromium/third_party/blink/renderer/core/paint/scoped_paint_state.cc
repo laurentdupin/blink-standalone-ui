@@ -13,6 +13,12 @@
 
 namespace blink {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+// BoxFragmentPainter computes the correct physical-fragment paint offset for
+// legacy descendants that cannot be painted by fragment traversal.
+std::optional<PhysicalOffset> StandaloneCurrentFragmentPaintOffsetOverride();
+#endif
+
 ScopedPaintState::ScopedPaintState(const LayoutObject& object,
                                    const PaintInfo& paint_info,
                                    const FragmentData* fragment_data)
@@ -27,6 +33,12 @@ ScopedPaintState::ScopedPaintState(const LayoutObject& object,
   }
 
   paint_offset_ = fragment_to_paint_->PaintOffset();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (std::optional<PhysicalOffset> standalone_paint_offset =
+          StandaloneCurrentFragmentPaintOffsetOverride()) {
+    paint_offset_ = *standalone_paint_offset;
+  }
+#endif
   if (paint_info.phase == PaintPhase::kOverlayOverflowControls ||
       (object.HasLayer() &&
        To<LayoutBoxModelObject>(object).HasSelfPaintingLayer())) {
