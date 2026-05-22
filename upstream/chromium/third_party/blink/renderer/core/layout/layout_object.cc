@@ -444,10 +444,7 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
       return MakeGarbageCollected<LayoutTableRow>(element);
     case EDisplay::kTableColumnGroup:
     case EDisplay::kTableColumn:
-      // Standalone does not yet have a safe column-hint path. Creating real
-      // LayoutTableColumn currently sends col/colgroup tables into an
-      // unbounded layout pass; rows/cells still use real table layout.
-      return nullptr;
+      return MakeGarbageCollected<LayoutTableColumn>(element);
     case EDisplay::kTableCell:
       return MakeGarbageCollected<LayoutTableCell>(element);
     case EDisplay::kTableCaption:

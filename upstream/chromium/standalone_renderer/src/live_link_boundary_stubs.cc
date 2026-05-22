@@ -3321,6 +3321,37 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
     return MakeGarbageCollected<HTMLParagraphElement>(document);
   if (local_name == html_names::kUlTag.LocalName())
     return MakeGarbageCollected<HTMLUListElement>(document);
+  if (local_name == html_names::kTableTag.LocalName())
+    return MakeGarbageCollected<HTMLTableElement>(document);
+  if (local_name == html_names::kCaptionTag.LocalName())
+    return MakeGarbageCollected<HTMLTableCaptionElement>(document);
+  if (local_name == html_names::kColTag.LocalName())
+    return MakeGarbageCollected<HTMLTableColElement>(html_names::kColTag,
+                                                     document);
+  if (local_name == html_names::kColgroupTag.LocalName()) {
+    return MakeGarbageCollected<HTMLTableColElement>(html_names::kColgroupTag,
+                                                     document);
+  }
+  if (local_name == html_names::kTbodyTag.LocalName()) {
+    return MakeGarbageCollected<HTMLTableSectionElement>(
+        html_names::kTbodyTag, document);
+  }
+  if (local_name == html_names::kTheadTag.LocalName()) {
+    return MakeGarbageCollected<HTMLTableSectionElement>(
+        html_names::kTheadTag, document);
+  }
+  if (local_name == html_names::kTfootTag.LocalName()) {
+    return MakeGarbageCollected<HTMLTableSectionElement>(
+        html_names::kTfootTag, document);
+  }
+  if (local_name == html_names::kTrTag.LocalName())
+    return MakeGarbageCollected<HTMLTableRowElement>(document);
+  if (local_name == html_names::kTdTag.LocalName())
+    return MakeGarbageCollected<HTMLTableCellElement>(html_names::kTdTag,
+                                                      document);
+  if (local_name == html_names::kThTag.LocalName())
+    return MakeGarbageCollected<HTMLTableCellElement>(html_names::kThTag,
+                                                      document);
   QualifiedName tag_name(g_null_atom, local_name,
                          html_names::xhtmlNamespaceURI);
   return MakeGarbageCollected<HTMLElement>(tag_name, document);

@@ -3397,8 +3397,8 @@ std::string TableColumnDiagnosticsJsonForStandaloneRenderer(
         AtomicString("table"));
   }
   std::ostringstream json;
-  json << "{\"real_layout_table_column_creation_enabled\":false"
-       << ",\"production_failsoft_active\":true"
+  json << "{\"real_layout_table_column_creation_enabled\":true"
+       << ",\"production_failsoft_active\":false"
        << ",\"source\":{\"table_count\":" << diagnostics.source_table_count
        << ",\"colgroup_count\":" << diagnostics.source_colgroup_count
        << ",\"col_count\":" << diagnostics.source_col_count << "}"
@@ -5112,8 +5112,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       cache.holder
           ? TableColumnDiagnosticsJsonForStandaloneRenderer(
                 cache.holder->GetDocument(), cache.body_html)
-          : "{\"real_layout_table_column_creation_enabled\":false,"
-            "\"production_failsoft_active\":true,"
+          : "{\"real_layout_table_column_creation_enabled\":true,"
+            "\"production_failsoft_active\":false,"
             "\"first_missing_stage\":\"document_unavailable\"}";
   const std::string root_background_diagnostics_json =
       cache.holder
