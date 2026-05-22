@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_selected_content_element.h"
+#include "third_party/blink/renderer/core/dom/opaque_range.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
@@ -98,6 +99,7 @@
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlscriptelement_svgscriptelement.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable_creation_key.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_value.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_mutation_observer_init.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlelement_long.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmloptgroupelement_htmloptionelement.h"
@@ -632,6 +634,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/html_summary_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/file_input_type.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_label_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
@@ -647,6 +650,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/core/html/forms/radio_button_group_scope.h"
 #include "third_party/blink/renderer/core/html/forms/radio_node_list.h"
 #include "third_party/blink/renderer/core/html/forms/listed_element.h"
+#include "third_party/blink/renderer/core/html/forms/step_range.h"
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_embed_element.h"
@@ -1011,6 +1015,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/platform/geometry/stroke_data.h"
 #include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/platform/bindings/frozen_array_base.h"
+#include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
@@ -2935,6 +2940,10 @@ bool RuntimeEnabledFeaturesBase::is_selection_collapsed_direction_none_enabled_ 
 bool RuntimeEnabledFeaturesBase::is_selection_set_base_and_extent_non_null_node_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_use_selection_in_dom_tree_anchor_in_extend_selection_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_selection_remove_range_not_found_error_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_delegates_focus_text_control_input_fix_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_dispatch_selectionchange_event_per_element_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_html_parser_yield_and_delay_often_for_testing_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_html_processing_instruction_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_input_in_select_enabled_ = false;
@@ -3100,6 +3109,8 @@ const WrapperTypeInfo& HTMLOptionsCollection::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLOptionsCollection");
 const WrapperTypeInfo& HTMLSelectElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLSelectElement");
+const WrapperTypeInfo& HTMLInputElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLInputElement");
 const WrapperTypeInfo& HTMLSelectedContentElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLSelectedContentElement");
 const WrapperTypeInfo& HTMLSpanElement::wrapper_type_info_ =
@@ -3298,6 +3309,12 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
   if (local_name == html_names::kFormTag.LocalName()) {
     return MakeGarbageCollected<HTMLFormElement>(document);
   }
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (local_name == html_names::kInputTag.LocalName()) {
+    return MakeGarbageCollected<HTMLInputElement>(document,
+                                                  CreateElementFlags());
+  }
+#endif
   if (local_name == html_names::kTitleTag.LocalName())
     return MakeGarbageCollected<HTMLTitleElement>(document);
   if (local_name == html_names::kBrTag.LocalName())
@@ -5136,6 +5153,7 @@ void CloseWatcher::destroy() {}
 
 void HTMLDialogElement::SetFocusForDialog() {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool HTMLInputElement::IsBaseAppearanceCombobox() const {
   return false;
 }
@@ -5151,6 +5169,7 @@ HTMLDataListElement* HTMLInputElement::DataList() const {
 bool HTMLInputElement::IsTelephone() const {
   return false;
 }
+#endif
 
 bool HTMLSubmitButtonBehavior::HandleActivation(Event&) {
   return false;
@@ -6166,6 +6185,67 @@ bool PictureInPictureController::IsElementInPictureInPicture(const Element*) {
 }
 
 void RadioButtonGroupScope::Trace(Visitor*) const {}
+void RadioButtonGroupScope::AddButton(HTMLInputElement*) {}
+void RadioButtonGroupScope::UpdateCheckedState(HTMLInputElement*) {}
+void RadioButtonGroupScope::UpdateLastFocusedState(HTMLInputElement*) {}
+void RadioButtonGroupScope::RequiredAttributeChanged(HTMLInputElement*) {}
+void RadioButtonGroupScope::RemoveButton(HTMLInputElement*) {}
+unsigned RadioButtonGroupScope::GroupSizeFor(const HTMLInputElement*) const {
+  return 0;
+}
+
+Vector<String> FileInputType::FilesFromFormControlState(
+    const FormControlState&) {
+  return Vector<String>();
+}
+
+void SpellChecker::DidEndEditingOnTextField(Element*) {}
+
+void ListedElement::UpdateWillValidateCache(WillValidateReason) {}
+
+void FontCache::PrewarmFamily(const AtomicString&) {}
+
+bool RuntimeEnabledFeaturesBase::OpaqueRangeEnabled(
+    const FeatureContext*) {
+  return false;
+}
+
+void HTMLFormElement::InvalidateDefaultButtonStyle() const {}
+
+void DOMTokenList::Add(const AtomicString&) {}
+void DOMTokenList::Remove(const AtomicString&) {}
+
+String ExceptionMessages::NotAFiniteNumber(double, const char*) {
+  return String("Value is not a finite number.");
+}
+
+String ExceptionMessages::IndexExceedsMinimumBound(const char*,
+                                                   bool,
+                                                   const String&,
+                                                   const String&) {
+  return String("Index is below the minimum bound.");
+}
+
+String ExceptionMessages::IndexExceedsMaximumBound(const char*,
+                                                   bool,
+                                                   const String&,
+                                                   const String&) {
+  return String("Index is above the maximum bound.");
+}
+
+bool IsWordBreak(char16_t) {
+  return false;
+}
+
+void EventDispatcher::DispatchSimulatedEnterEvent(HTMLInputElement&) {}
+
+void HitTestResult::OverrideNodeAndPosition(Node*, PhysicalOffset) {}
+
+void OpaqueRange::Trace(Visitor*) const {}
+
+v8::Local<v8::Value> ScriptValue::V8Value() const {
+  return v8::Local<v8::Value>();
+}
 
 ElementInternals::ElementInternals(HTMLElement& target) : target_(target) {}
 
@@ -6379,6 +6459,7 @@ bool HTMLMenuItemElement::IsSubmenuOpen() const {
   return false;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool HTMLInputElement::IsCheckable() const {
   return false;
 }
@@ -6386,6 +6467,7 @@ bool HTMLInputElement::IsCheckable() const {
 bool HTMLInputElement::HasBeenPasswordField() const {
   return false;
 }
+#endif
 
 bool SelectorQuery::Matches(Element&) const {
   return false;
@@ -10561,10 +10643,12 @@ void ScriptLoader::DocumentBaseURLChanged() {}
 const AtomicString& HTMLMetaElement::GetName() const {
   return g_null_atom;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 ShadowRoot* HTMLInputElement::EnsureShadowSubtree() {
   return nullptr;
 }
 void HTMLInputElement::EndEditing() {}
+#endif
 void SVGUseElement::BuildPendingResource() {}
 void SVGResource::NotifyContentChanged() {}
 Element* DisplayLockUtilities::LockedAncestorPreventingStyle(const Node&) {
@@ -10959,9 +11043,11 @@ String CreateMarkup(const Position&,
                     const CreateMarkupOptions&) {
   return String();
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 TextControlElement* EnclosingTextControl(const Node*) {
   return nullptr;
 }
+#endif
 template int
 PositionTemplate<EditingStrategy>::ComputeOffsetInContainerNode() const;
 template PositionTemplate<EditingStrategy>
@@ -12045,10 +12131,12 @@ DocumentLoader::GetContentSettings() {
       new mojom::RendererContentSettingsPtr();
   return *settings;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 Vector<String> HTMLInputElement::FilesFromFileInputFormControlState(
     const FormControlState&) {
   return Vector<String>();
 }
+#endif
 AutofillEvent::AutofillEvent(
     const AtomicString& type,
     HeapVector<std::pair<Member<Element>, String>>,
@@ -12412,9 +12500,11 @@ bool CSSValue::MayContainUrl() const {
   return false;
 }
 void CSSValue::ReResolveUrl(const Document&) const {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool HTMLInputElement::IsButton() const {
   return false;
 }
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 Text* LayoutTextFragment::AssociatedTextNode() const {
   return nullptr;
@@ -15932,6 +16022,7 @@ unsigned CSSValue::Hash() const {
   return static_cast<unsigned>(GetClassType());
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool HTMLInputElement::IsTextField() const {
   return false;
 }
@@ -15944,9 +16035,11 @@ bool HTMLInputElement::GetSizeWithDecoration(int&) const {
 HTMLInputElement* HTMLInputElement::UploadButton() const {
   return nullptr;
 }
+#endif
 float ComputeTextWidth(const StringView&, const ComputedStyle&) {
   return 0.0f;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 namespace layout_text_control {
 int ScrollbarThickness(const LayoutBox&) {
   return 0;
@@ -15958,6 +16051,7 @@ bool HasValidAvgCharWidth(const Font&) {
   return false;
 }
 }  // namespace layout_text_control
+#endif
 
 WebThemeEngine* WebThemeEngineHelper::GetNativeThemeEngine() {
   return nullptr;
@@ -18203,6 +18297,7 @@ const double HTMLProgressElement::kIndeterminatePosition = -1;
 double HTMLProgressElement::position() const {
   return kIndeterminatePosition;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool HTMLInputElement::IsTextButton() const {
   return false;
 }
@@ -18230,6 +18325,7 @@ bool HTMLInputElement::ShouldApplyMiddleEllipsis() const {
 Decimal HTMLInputElement::RatioValue() const {
   return Decimal(0);
 }
+#endif
 HTMLInputElement* SliderThumbElement::HostInput() const {
   return nullptr;
 }
@@ -19172,6 +19268,22 @@ const base::FeatureParam<int> kCullRectChangedEnoughDistance{
 }  // namespace features
 
 }  // namespace blink
+
+namespace v8 {
+
+MaybeLocal<Value> Date::New(Local<Context>, double) {
+  return MaybeLocal<Value>();
+}
+
+bool Value::IsDate() const {
+  return false;
+}
+
+double Date::ValueOf() const {
+  return 0;
+}
+
+}  // namespace v8
 
 void ShowAllPropertyTrees(const blink::LocalFrameView&) {}
 

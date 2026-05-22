@@ -32,7 +32,9 @@
 
 #include "base/compiler_specific.h"
 #include "third_party/blink/public/common/features.h"
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 #include "third_party/blink/public/mojom/choosers/date_time_chooser.mojom-blink.h"
+#endif
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -2279,6 +2281,9 @@ OpaqueRange* HTMLInputElement::createValueRange(
 
 bool HTMLInputElement::SetupDateTimeChooserParameters(
     DateTimeChooserParameters& parameters) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   if (!GetDocument().View())
     return false;
 
@@ -2329,6 +2334,7 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
     }
   }
   return true;
+#endif
 }
 
 bool HTMLInputElement::SupportsInputModeAttribute() const {

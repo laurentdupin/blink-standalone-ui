@@ -328,6 +328,9 @@ bool TextFieldInputType::HandleKeydownForFilterableSelect(
 }
 
 void TextFieldInputType::HandleKeydownEventForSpinButton(KeyboardEvent& event) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (GetElement().IsDisabledOrReadOnly())
     return;
   const AtomicString key(event.key());
@@ -350,9 +353,15 @@ void TextFieldInputType::HandleKeydownEventForSpinButton(KeyboardEvent& event) {
   }
   GetElement().DispatchFormControlChangeEvent();
   event.SetDefaultHandled();
+#endif
 }
 
 void TextFieldInputType::ForwardEvent(Event& event) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (event.type() == event_type_names::kInput)
+    FilterOptions();
+  return;
+#else
   if (SpinButtonElement* spin_button = GetSpinButtonElement()) {
     spin_button->ForwardEvent(event);
     if (event.DefaultHandled())
@@ -391,6 +400,7 @@ void TextFieldInputType::ForwardEvent(Event& event) {
 
     GetElement().ForwardEvent(event);
   }
+#endif
 }
 
 void TextFieldInputType::HandleBlurEvent() {
@@ -398,6 +408,9 @@ void TextFieldInputType::HandleBlurEvent() {
   HTMLInputElement& input = GetElement();
 
   input.EndEditing();
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (SpinButtonElement* spin_button = GetSpinButtonElement())
     spin_button->ReleaseCapture();
 
@@ -424,6 +437,7 @@ void TextFieldInputType::HandleBlurEvent() {
   if (HTMLSelectElement* select = input.FilterTarget()) {
     select->StopFiltering();
   }
+#endif
 }
 
 bool TextFieldInputType::ShouldSubmitImplicitly(const Event& event) {
@@ -463,6 +477,11 @@ void TextFieldInputType::CreateShadowSubtree() {
   ShadowRoot* shadow_root = GetElement().UserAgentShadowRoot();
   DCHECK(!shadow_root->HasChildren());
 
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  HTMLElement* inner_editor = GetElement().CreateInnerEditorElement();
+  shadow_root->AppendChild(inner_editor);
+  return;
+#else
   bool should_have_spin_button = GetElement().IsSteppable();
   bool should_have_data_list_indicator = GetElement().HasValidDataListOptions();
   bool creates_container = should_have_spin_button ||
@@ -504,6 +523,7 @@ void TextFieldInputType::CreateShadowSubtree() {
   }
 
   // See listAttributeTargetChanged too.
+#endif
 }
 
 Element* TextFieldInputType::ContainerElement() const {
@@ -513,11 +533,16 @@ Element* TextFieldInputType::ContainerElement() const {
 
 void TextFieldInputType::DestroyShadowSubtree() {
   InputTypeView::DestroyShadowSubtree();
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
   if (SpinButtonElement* spin_button = GetSpinButtonElement())
     spin_button->RemoveSpinButtonOwner();
+#endif
 }
 
 void TextFieldInputType::ListAttributeTargetChanged() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (!HasCreatedShadowSubtree()) {
     return;
   }
@@ -562,6 +587,7 @@ void TextFieldInputType::ListAttributeTargetChanged() {
   } else {
     picker->remove(ASSERT_NO_EXCEPTION);
   }
+#endif
 }
 
 void TextFieldInputType::ValueAttributeChanged() {
@@ -569,8 +595,12 @@ void TextFieldInputType::ValueAttributeChanged() {
 }
 
 void TextFieldInputType::DisabledOrReadonlyAttributeChanged() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (SpinButtonElement* spin_button = GetSpinButtonElement())
     spin_button->ReleaseCapture();
+#endif
 }
 
 void TextFieldInputType::DisabledAttributeChanged() {
@@ -639,6 +669,9 @@ void TextFieldInputType::HandleBeforeTextInsertedEvent(
   // that case, and nothing in the text field will be removed.
   unsigned selection_length = 0;
   if (GetElement().IsFocused()) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+    selection_length = 0;
+#else
     // TODO(editing-dev): Use of UpdateStyleAndLayout
     // needs to be audited.  See http://crbug.com/590369 for more details.
     GetElement().GetDocument().UpdateStyleAndLayout(
@@ -655,6 +688,7 @@ void TextFieldInputType::HandleBeforeTextInsertedEvent(
          editable_element->IsDescendantOrShadowDescendantOf(&GetElement()))) {
       selection_length = selection.SelectedText().length();
     }
+#endif
   }
   DCHECK_GE(old_length, selection_length);
 
@@ -762,15 +796,22 @@ void TextFieldInputType::SubtreeHasChanged() {
 }
 
 void TextFieldInputType::OpenPopupView() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (GetElement().IsDisabledOrReadOnly() ||
       GetElement().IsBaseAppearanceCombobox()) {
     return;
   }
   if (ChromeClient* chrome_client = GetChromeClient())
     chrome_client->OpenTextDataListChooser(GetElement());
+#endif
 }
 
 void TextFieldInputType::DidSetValueByUserEdit() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (!GetElement().IsFocused())
     return;
   if (ChromeClient* chrome_client = GetChromeClient()) {
@@ -789,20 +830,29 @@ void TextFieldInputType::DidSetValueByUserEdit() {
       datalist->ShowPopoverInternal(&GetElement(), /*exception_state=*/nullptr);
     }
   }
+#endif
 }
 
 void TextFieldInputType::SpinButtonStepDown() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   ScopedBlinkAXEventIntent intent(
       BlinkAXEventIntent(ax::mojom::blink::Command::kSpinButtonDecrement),
       &GetElement().GetDocument());
   StepUpFromLayoutObject(-1);
+#endif
 }
 
 void TextFieldInputType::SpinButtonStepUp() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   ScopedBlinkAXEventIntent intent(
       BlinkAXEventIntent(ax::mojom::blink::Command::kSpinButtonIncrement),
       &GetElement().GetDocument());
   StepUpFromLayoutObject(1);
+#endif
 }
 
 void TextFieldInputType::UpdateView() {
@@ -820,12 +870,20 @@ void TextFieldInputType::UpdateView() {
 }
 
 void TextFieldInputType::FocusAndSelectSpinButtonOwner() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   GetElement().Focus(FocusParams(FocusTrigger::kUserGesture));
   GetElement().SetSelectionRange(0, std::numeric_limits<int>::max());
+#endif
 }
 
 bool TextFieldInputType::ShouldSpinButtonRespondToMouseEvents() {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   return !GetElement().IsDisabledOrReadOnly();
+#endif
 }
 
 bool TextFieldInputType::ShouldSpinButtonRespondToWheelEvents() {
@@ -834,13 +892,20 @@ bool TextFieldInputType::ShouldSpinButtonRespondToWheelEvents() {
 
 void TextFieldInputType::SpinButtonDidReleaseMouseCapture(
     SpinButtonElement::EventDispatch event_dispatch) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   if (event_dispatch == SpinButtonElement::kEventDispatchAllowed)
     GetElement().DispatchFormControlChangeEvent();
+#endif
 }
 
 void TextFieldInputType::HandleFocusInEvent(
     Element* old_focused_element,
     mojom::blink::FocusType focus_type) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   HTMLInputElement& input = GetElement();
   if (input.IsBaseAppearanceCombobox()) {
     if (auto* datalist = input.DataList()) {
@@ -853,6 +918,7 @@ void TextFieldInputType::HandleFocusInEvent(
     // already doing for the list attribute in order to remove the
     // :active-option pseudo.
   }
+#endif
 }
 
 namespace {

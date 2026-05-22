@@ -210,9 +210,11 @@ const ComputedStyle* TextControlInnerEditorElement::CustomStyleForLayoutObject(
     style_builder.SetDisplay(EDisplay::kFlowRoot);
   }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
   // Using StyleAdjuster::adjustComputedStyle updates unwanted style. We'd like
   // to apply only editing-related and alignment-related.
   StyleAdjuster::AdjustStyleForEditing(style_builder, this);
+#endif
   if (!is_visible_)
     style_builder.SetOpacity(0);
 

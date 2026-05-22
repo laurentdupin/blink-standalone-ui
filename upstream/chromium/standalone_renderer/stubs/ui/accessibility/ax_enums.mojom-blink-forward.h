@@ -10,6 +10,8 @@ enum class Role {
 
 enum class Command {
   kNone = 0,
+  kSpinButtonDecrement,
+  kSpinButtonIncrement,
 };
 
 enum class NameFrom {

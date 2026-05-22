@@ -3712,6 +3712,28 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << ",\"controls_with_shadow_layout_text_count\":"
        << diagnostics.controls_with_shadow_layout_text_count
        << ",\"standalone_source_status\":{"
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+       << "\"html_input_element_source_linked\":true,"
+       << "\"html_select_element_source_linked\":true,"
+       << "\"text_control_shadow_subtree_stubbed\":false,"
+       << "\"native_select_shadow_path_unsafe_in_prior_experiment\":true,"
+       << "\"text_input_subset_enabled\":true,"
+       << "\"enabled_input_type_names\":[\"text\",\"search\",\"password\","
+          "\"empty-default-to-text\"],"
+       << "\"unsupported_input_behavior\":\"unsupported input types normalize "
+          "to the standalone text-control subset rather than linking "
+          "file/date/color/radio/chooser UI paths\","
+       << "\"standalone_guards\":["
+       << "\"InputType factory is narrowed to text/search/password/default\","
+       << "\"numeric range/step validation and spin-button paths are no-op\","
+       << "\"datalist/browser chooser paths are disabled\","
+       << "\"text-control selection/editing APIs use cached selection only\","
+       << "\"opaque ranges are unsupported in standalone text input\"],"
+       << "\"remaining_unsupported_controls\":[\"select\",\"textarea\","
+          "\"file\",\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
+       << "\"production_policy\":\"real Blink text input subset is enabled; "
+          "non-text browser-facing controls remain fail-soft\""
+#else
        << "\"html_input_element_source_linked\":false,"
        << "\"html_select_element_source_linked\":true,"
        << "\"text_control_shadow_subtree_stubbed\":true,"
@@ -3744,6 +3766,7 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
           "full input closure\"],"
        << "\"production_policy\":\"keep generic fail-soft control layout "
           "until a Blink-owned text-only source subset is linked\""
+#endif
        << "}"
        << ",\"controls\":[";
   for (size_t i = 0; i < diagnostics.controls.size(); ++i) {

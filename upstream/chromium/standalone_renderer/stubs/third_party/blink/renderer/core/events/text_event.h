@@ -8,10 +8,16 @@
 #include "third_party/blink/renderer/core/event_interface_names.h"
 #include "third_party/blink/renderer/core/events/ui_event.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 
-class TextEvent final : public UIEvent {};
+class TextEvent final : public UIEvent {
+ public:
+  bool IsPaste() const { return false; }
+  bool IsDrop() const { return false; }
+  String data() const { return String(); }
+};
 
 template <>
 struct DowncastTraits<TextEvent> {

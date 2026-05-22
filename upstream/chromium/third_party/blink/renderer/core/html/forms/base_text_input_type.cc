@@ -88,6 +88,9 @@ bool BaseTextInputType::TooShort(
 }
 
 bool BaseTextInputType::PatternMismatch(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return PatternMismatchPerValue(value);
+#else
   if (IsEmailInputType() && GetElement().Multiple()) {
     Vector<StringView> values = EmailInputType::ParseMultipleValues(value);
     for (const auto& val : values) {
@@ -97,6 +100,7 @@ bool BaseTextInputType::PatternMismatch(const String& value) const {
     return false;
   }
   return PatternMismatchPerValue(value);
+#endif
 }
 
 bool BaseTextInputType::PatternMismatchPerValue(const StringView& value) const {

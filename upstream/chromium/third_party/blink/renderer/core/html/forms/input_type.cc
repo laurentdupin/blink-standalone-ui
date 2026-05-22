@@ -161,6 +161,14 @@ InputType* InputType::Create(HTMLInputElement& element,
   if (type_name.empty())
     return MakeGarbageCollected<TextInputType>(element);
 
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (type_name == input_type_names::kText ||
+      type_name == input_type_names::kSearch ||
+      type_name == input_type_names::kPassword) {
+    return MakeGarbageCollected<TextInputType>(element);
+  }
+  return MakeGarbageCollected<TextInputType>(element);
+#else
 #define INPUT_TYPE_FACTORY(input_type, class_name) \
   if (type_name == input_type_names::input_type)   \
     return MakeGarbageCollected<class_name>(element);
@@ -168,6 +176,7 @@ InputType* InputType::Create(HTMLInputElement& element,
 #undef INPUT_TYPE_FACTORY
 
   return MakeGarbageCollected<TextInputType>(element);
+#endif
 }
 
 const AtomicString& InputType::NormalizeTypeName(
@@ -177,6 +186,15 @@ const AtomicString& InputType::NormalizeTypeName(
 
   AtomicString type_name_lower = type_name.ToAsciiLower();
 
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (type_name_lower == input_type_names::kSearch)
+    return input_type_names::kSearch;
+  if (type_name_lower == input_type_names::kPassword)
+    return input_type_names::kPassword;
+  if (type_name_lower == input_type_names::kText)
+    return input_type_names::kText;
+  return input_type_names::kText;
+#else
 #define NORMALIZE_INPUT_TYPE(input_type, class_name)   \
   if (type_name_lower == input_type_names::input_type) \
     return input_type_names::input_type;
@@ -184,6 +202,7 @@ const AtomicString& InputType::NormalizeTypeName(
 #undef NORMALIZE_INPUT_TYPE
 
   return input_type_names::kText;
+#endif
 }
 
 InputType::~InputType() = default;
@@ -213,6 +232,9 @@ bool ValidateInputType(const T& input_type, const String& value) {
 
 // Do not use virtual function for performance reason.
 bool InputType::IsValidValue(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return true;
+#else
   switch (type_) {
     case Type::kButton:
       return ValidateInputType(To<ButtonInputType>(*this), value);
@@ -260,6 +282,7 @@ bool InputType::IsValidValue(const String& value) const {
       return ValidateInputType(To<TextInputType>(*this), value);
   }
   NOTREACHED();
+#endif
 }
 
 bool InputType::ShouldSaveAndRestoreFormControlState() const {
@@ -327,6 +350,9 @@ bool InputType::SupportsValidation() const {
 
 // Do not use virtual function for performance reason.
 bool InputType::TypeMismatchFor(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   switch (type_) {
     case Type::kDate:
     case Type::kDateTimeLocal:
@@ -358,6 +384,7 @@ bool InputType::TypeMismatchFor(const String& value) const {
       return false;
   }
   NOTREACHED();
+#endif
 }
 
 bool InputType::TypeMismatch() const {
@@ -371,6 +398,9 @@ bool InputType::SupportsRequired() const {
 
 // Do not use virtual function for performance reason.
 bool InputType::ValueMissing(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   switch (type_) {
     case Type::kDate:
     case Type::kDateTimeLocal:
@@ -402,6 +432,7 @@ bool InputType::ValueMissing(const String& value) const {
       return false;
   }
   NOTREACHED();
+#endif
 }
 
 bool InputType::TooLong(const String&,
@@ -416,6 +447,9 @@ bool InputType::TooShort(const String&,
 
 // Do not use virtual function for performance reason.
 bool InputType::PatternMismatch(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   switch (type_) {
     case Type::kEmail:
     case Type::kPassword:
@@ -443,9 +477,13 @@ bool InputType::PatternMismatch(const String& value) const {
       return false;
   }
   NOTREACHED();
+#endif
 }
 
 bool InputType::RangeUnderflow(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   if (!IsSteppable())
     return false;
 
@@ -462,9 +500,13 @@ bool InputType::RangeUnderflow(const String& value) const {
   } else {
     return numeric_value < step_range.Minimum();
   }
+#endif
 }
 
 bool InputType::RangeOverflow(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   if (!IsSteppable())
     return false;
 
@@ -481,6 +523,7 @@ bool InputType::RangeOverflow(const String& value) const {
   } else {
     return numeric_value > step_range.Maximum();
   }
+#endif
 }
 
 Decimal InputType::DefaultValueForStepUp() const {
@@ -537,6 +580,9 @@ void InputType::InRangeChanged() const {
 }
 
 bool InputType::StepMismatch(const String& value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return false;
+#else
   if (!IsSteppable())
     return false;
 
@@ -545,6 +591,7 @@ bool InputType::StepMismatch(const String& value) const {
     return false;
 
   return CreateStepRange(kRejectAny).StepMismatch(numeric_value);
+#endif
 }
 
 String InputType::BadInputText() const {
@@ -557,6 +604,9 @@ String InputType::ValueNotEqualText(const Decimal& value) const {
 }
 
 String InputType::RangeOverflowText(const Decimal&) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return String();
+#else
   static auto* input_type = base::debug::AllocateCrashKeyString(
       "input-type", base::debug::CrashKeySize::Size32);
   base::debug::SetCrashKeyString(
@@ -565,9 +615,13 @@ String InputType::RangeOverflowText(const Decimal&) const {
                << FormControlTypeAsString()
                << "' should have a RangeOverflowText implementation."
                << "See crbug.com/1423280";
+#endif
 }
 
 String InputType::RangeUnderflowText(const Decimal&) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return String();
+#else
   static auto* input_type = base::debug::AllocateCrashKeyString(
       "input-type", base::debug::CrashKeySize::Size32);
   base::debug::SetCrashKeyString(
@@ -576,6 +630,7 @@ String InputType::RangeUnderflowText(const Decimal&) const {
                << FormControlTypeAsString()
                << "' should have a RangeUnderflowText implementation."
                << "See crbug.com/1423280";
+#endif
 }
 
 String InputType::ReversedRangeOutOfRangeText(const Decimal&,
@@ -584,6 +639,9 @@ String InputType::ReversedRangeOutOfRangeText(const Decimal&,
 }
 
 String InputType::RangeInvalidText(const Decimal&, const Decimal&) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return String();
+#else
   static auto* input_type = base::debug::AllocateCrashKeyString(
       "input-type", base::debug::CrashKeySize::Size32);
   base::debug::SetCrashKeyString(
@@ -592,6 +650,7 @@ String InputType::RangeInvalidText(const Decimal&, const Decimal&) const {
                << FormControlTypeAsString()
                << "' should have a RangeInvalidText implementation."
                << "See crbug.com/1474270";
+#endif
 }
 
 String InputType::TypeMismatchText() const {
@@ -604,6 +663,9 @@ String InputType::ValueMissingText() const {
 
 std::pair<String, String> InputType::ValidationMessage(
     const InputTypeView& input_type_view) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return std::make_pair(g_empty_string, g_empty_string);
+#else
   const String value = GetElement().Value();
 
   // The order of the following checks is meaningful. e.g. We'd like to show the
@@ -706,6 +768,7 @@ std::pair<String, String> InputType::ValidationMessage(
   }
 
   return std::make_pair(g_empty_string, g_empty_string);
+#endif
 }
 
 Decimal InputType::ParseToNumber(const String&,
@@ -733,6 +796,9 @@ Locale& InputType::GetLocale() const {
 
 // Do not use virtual function for performance reason.
 bool InputType::CanSetStringValue() const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return true;
+#else
   switch (type_) {
     case Type::kRadio:
     case Type::kCheckbox:
@@ -761,6 +827,7 @@ bool InputType::CanSetStringValue() const {
       return true;
   }
   NOTREACHED();
+#endif
 }
 
 bool InputType::IsKeyboardFocusableSlow(
@@ -1016,6 +1083,9 @@ void InputType::ApplyStep(const Decimal& current,
                           AnyStepHandling any_step_handling,
                           TextFieldEventBehavior event_behavior,
                           ExceptionState& exception_state) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   // https://html.spec.whatwg.org/C/#dom-input-stepup
 
   StepRange step_range(CreateStepRange(any_step_handling));
@@ -1113,19 +1183,34 @@ void InputType::ApplyStep(const Decimal& current,
 
   if (AXObjectCache* cache = GetElement().GetDocument().ExistingAXObjectCache())
     cache->HandleValueChanged(&GetElement());
+#endif
 }
 
 bool InputType::GetAllowedValueStep(Decimal* step) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  *step = Decimal::Nan();
+  return false;
+#else
   StepRange step_range(CreateStepRange(kRejectAny));
   *step = step_range.Step();
   return step_range.HasStep();
+#endif
 }
 
 StepRange InputType::CreateStepRange(AnyStepHandling) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return StepRange();
+#else
   NOTREACHED();
+#endif
 }
 
 void InputType::StepUp(double n, ExceptionState& exception_state) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                    "This form element is not steppable.");
+  return;
+#else
   // https://html.spec.whatwg.org/C/#dom-input-stepup
 
   // 1. If the stepDown() and stepUp() methods do not apply, as defined for the
@@ -1148,9 +1233,13 @@ void InputType::StepUp(double n, ExceptionState& exception_state) {
 
   ApplyStep(current, current_was_invalid, n, kRejectAny,
             TextFieldEventBehavior::kDispatchNoEvent, exception_state);
+#endif
 }
 
 void InputType::StepUpFromLayoutObject(int n) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return;
+#else
   // The only difference from stepUp()/stepDown() is the extra treatment
   // of the current value before applying the step:
   //
@@ -1236,6 +1325,7 @@ void InputType::StepUpFromLayoutObject(int n) {
   ApplyStep(current, current_was_invalid, n, kAnyIsDefaultStep,
             TextFieldEventBehavior::kDispatchChangeEvent,
             IGNORE_EXCEPTION_FOR_TESTING);
+#endif
 }
 
 void InputType::CountUsageIfVisible(WebFeature feature) const {
@@ -1247,6 +1337,9 @@ void InputType::CountUsageIfVisible(WebFeature feature) const {
 }
 
 Decimal InputType::FindStepBase(const Decimal& default_value) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return default_value;
+#else
   Decimal step_base = ParseToNumber(
       GetElement().FastGetAttribute(html_names::kMinAttr), Decimal::Nan());
   if (!step_base.IsFinite()) {
@@ -1254,6 +1347,7 @@ Decimal InputType::FindStepBase(const Decimal& default_value) const {
         GetElement().FastGetAttribute(html_names::kValueAttr), default_value);
   }
   return step_base;
+#endif
 }
 
 StepRange InputType::CreateReversibleStepRange(
@@ -1285,6 +1379,9 @@ StepRange InputType::CreateStepRange(
     const Decimal& maximum_default,
     const StepRange::StepDescription& step_description,
     bool supports_reversed_range) const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  return StepRange();
+#else
   bool has_min = false;
   bool has_max = false;
   const Decimal step_base = FindStepBase(step_base_default);
@@ -1309,6 +1406,7 @@ StepRange InputType::CreateStepRange(
       (has_min || has_max) && supports_reversed_range && maximum < minimum;
   return StepRange(step_base, minimum, maximum, has_min, has_max,
                    has_reversed_range, step, step_description);
+#endif
 }
 
 void InputType::AddWarningToConsole(const char* message_format,
