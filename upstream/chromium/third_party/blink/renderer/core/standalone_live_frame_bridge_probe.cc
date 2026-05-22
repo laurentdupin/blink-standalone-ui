@@ -56,7 +56,11 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
+#include "third_party/blink/renderer/core/layout/block_node.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/table/layout_table.h"
+#include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
+#include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/physical_fragment.h"
@@ -3066,6 +3070,432 @@ std::string ListMarkerDiagnosticsJsonForStandaloneRenderer(Document& document,
   return json.str();
 }
 
+std::string DisplayNameForTableDiagnostics(EDisplay display) {
+  switch (display) {
+    case EDisplay::kTable:
+      return "table";
+    case EDisplay::kInlineTable:
+      return "inline-table";
+    case EDisplay::kTableColumnGroup:
+      return "table-column-group";
+    case EDisplay::kTableColumn:
+      return "table-column";
+    case EDisplay::kTableRowGroup:
+      return "table-row-group";
+    case EDisplay::kTableHeaderGroup:
+      return "table-header-group";
+    case EDisplay::kTableFooterGroup:
+      return "table-footer-group";
+    case EDisplay::kTableRow:
+      return "table-row";
+    case EDisplay::kTableCell:
+      return "table-cell";
+    case EDisplay::kTableCaption:
+      return "table-caption";
+    default:
+      return std::to_string(static_cast<int>(display));
+  }
+}
+
+int CountLowercaseTokenForStandaloneRenderer(const std::string& lower_html,
+                                             const char* token) {
+  int count = 0;
+  size_t pos = 0;
+  while ((pos = lower_html.find(token, pos)) != std::string::npos) {
+    ++count;
+    pos += std::strlen(token);
+  }
+  return count;
+}
+
+int CountLowercaseStartTagForStandaloneRenderer(const std::string& lower_html,
+                                                const char* tag_name) {
+  const std::string prefix = std::string("<") + tag_name;
+  int count = 0;
+  size_t pos = 0;
+  while ((pos = lower_html.find(prefix, pos)) != std::string::npos) {
+    const size_t after = pos + prefix.size();
+    if (after < lower_html.size()) {
+      const char next = lower_html[after];
+      if (std::isalnum(static_cast<unsigned char>(next)) || next == '-' ||
+          next == '_') {
+        pos = after;
+        continue;
+      }
+    }
+    ++count;
+    pos = after;
+  }
+  return count;
+}
+
+struct TableColumnElementDiagnosticForStandaloneRenderer {
+  std::string tag_name;
+  std::string debug_id;
+  std::string width_attr;
+  std::string span_attr;
+  std::string computed_display;
+  std::string layout_object_type;
+  std::string parent_layout_object_type;
+  bool layout_object_present = false;
+  bool layout_table_column_object = false;
+  bool production_failsoft_skipped = false;
+};
+
+struct TableColumnDiagnosticsForStandaloneRenderer {
+  int source_table_count = 0;
+  int source_colgroup_count = 0;
+  int source_col_count = 0;
+  int dom_table_count = 0;
+  int dom_colgroup_count = 0;
+  int dom_col_count = 0;
+  int dom_tbody_like_count = 0;
+  int dom_tr_count = 0;
+  int dom_cell_count = 0;
+  int computed_table_column_group_count = 0;
+  int computed_table_column_count = 0;
+  int computed_css_table_column_group_count = 0;
+  int computed_css_table_column_count = 0;
+  int colgroup_with_layout_object_count = 0;
+  int col_with_layout_object_count = 0;
+  int layout_table_count = 0;
+  int layout_table_column_count = 0;
+  int layout_table_section_count = 0;
+  int layout_table_row_count = 0;
+  int layout_table_cell_count = 0;
+  int layout_table_caption_count = 0;
+  int production_failsoft_skipped_column_count = 0;
+  int column_width_hint_count = 0;
+  bool fixed_table_layout_requested = false;
+  std::vector<TableColumnElementDiagnosticForStandaloneRenderer> column_elements;
+};
+
+void CollectTableColumnLayoutDiagnosticsForStandaloneRenderer(
+    const LayoutObject* object,
+    TableColumnDiagnosticsForStandaloneRenderer& diagnostics) {
+  if (!object) {
+    return;
+  }
+  const std::string debug_name = BlinkStringToStdStringForStandaloneRenderer(
+      object->DebugName());
+  if (debug_name.find("LayoutTableCol") != std::string::npos ||
+      debug_name.find("LayoutTableColumn") != std::string::npos) {
+    ++diagnostics.layout_table_column_count;
+  } else if (debug_name.find("LayoutTableSection") != std::string::npos) {
+    ++diagnostics.layout_table_section_count;
+  } else if (debug_name.find("LayoutTableRow") != std::string::npos) {
+    ++diagnostics.layout_table_row_count;
+  } else if (debug_name.find("LayoutTableCell") != std::string::npos) {
+    ++diagnostics.layout_table_cell_count;
+  } else if (debug_name.find("LayoutTableCaption") != std::string::npos) {
+    ++diagnostics.layout_table_caption_count;
+  } else if (debug_name.find("LayoutTable") != std::string::npos) {
+    ++diagnostics.layout_table_count;
+  }
+  for (const LayoutObject* child = object->SlowFirstChild(); child;
+       child = child->NextSibling()) {
+    CollectTableColumnLayoutDiagnosticsForStandaloneRenderer(child,
+                                                            diagnostics);
+  }
+}
+
+void CollectTableColumnDomDiagnosticsForStandaloneRenderer(
+    Node* node,
+    TableColumnDiagnosticsForStandaloneRenderer& diagnostics) {
+  if (!node) {
+    return;
+  }
+  if (auto* element = DynamicTo<Element>(node)) {
+    const bool is_table = element->HasTagName(html_names::kTableTag);
+    const bool is_colgroup = element->HasTagName(html_names::kColgroupTag);
+    const bool is_col = element->HasTagName(html_names::kColTag);
+    const bool is_tbody_like = element->HasTagName(html_names::kTbodyTag) ||
+                               element->HasTagName(html_names::kTheadTag) ||
+                               element->HasTagName(html_names::kTfootTag);
+    const bool is_tr = element->HasTagName(html_names::kTrTag);
+    const bool is_cell = element->HasTagName(html_names::kTdTag) ||
+                         element->HasTagName(html_names::kThTag);
+    const ComputedStyle* style = element->GetComputedStyle();
+    const bool computed_column_group =
+        style && style->Display() == EDisplay::kTableColumnGroup;
+    const bool computed_column =
+        style && style->Display() == EDisplay::kTableColumn;
+    const bool is_column_diagnostic_element =
+        is_colgroup || is_col || computed_column_group || computed_column;
+    if (is_table) {
+      ++diagnostics.dom_table_count;
+    }
+    if (is_colgroup) {
+      ++diagnostics.dom_colgroup_count;
+    }
+    if (is_col) {
+      ++diagnostics.dom_col_count;
+    }
+    if (is_tbody_like) {
+      ++diagnostics.dom_tbody_like_count;
+    }
+    if (is_tr) {
+      ++diagnostics.dom_tr_count;
+    }
+    if (is_cell) {
+      ++diagnostics.dom_cell_count;
+    }
+
+    if (style && style->IsFixedTableLayout()) {
+      diagnostics.fixed_table_layout_requested = true;
+    }
+    if (style) {
+      if (computed_column_group) {
+        ++diagnostics.computed_table_column_group_count;
+        if (!is_colgroup) {
+          ++diagnostics.computed_css_table_column_group_count;
+        }
+      }
+      if (computed_column) {
+        ++diagnostics.computed_table_column_count;
+        if (!is_col) {
+          ++diagnostics.computed_css_table_column_count;
+        }
+      }
+    }
+
+    if (is_column_diagnostic_element) {
+      TableColumnElementDiagnosticForStandaloneRenderer item;
+      item.tag_name = BlinkStringToStdStringForStandaloneRenderer(
+          element->tagName());
+      item.debug_id = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(AtomicString("data-debug-id")));
+      item.width_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kWidthAttr));
+      item.span_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kSpanAttr));
+      if (!item.width_attr.empty()) {
+        ++diagnostics.column_width_hint_count;
+      }
+      if (style) {
+        item.computed_display = DisplayNameForTableDiagnostics(style->Display());
+      } else {
+        item.computed_display = "style_unavailable";
+      }
+      if (LayoutObject* layout_object = element->GetLayoutObject()) {
+        item.layout_object_present = true;
+        item.layout_object_type = BlinkStringToStdStringForStandaloneRenderer(
+            layout_object->DebugName());
+        item.layout_table_column_object =
+            DynamicTo<LayoutTableColumn>(layout_object) != nullptr;
+        if (layout_object->Parent()) {
+          item.parent_layout_object_type =
+              BlinkStringToStdStringForStandaloneRenderer(
+                  layout_object->Parent()->DebugName());
+        }
+        if (is_colgroup) {
+          ++diagnostics.colgroup_with_layout_object_count;
+        }
+        if (is_col) {
+          ++diagnostics.col_with_layout_object_count;
+        }
+      } else {
+        item.layout_object_type = "null";
+        item.production_failsoft_skipped =
+            computed_column_group || computed_column;
+        if (item.production_failsoft_skipped) {
+          ++diagnostics.production_failsoft_skipped_column_count;
+        }
+      }
+      diagnostics.column_elements.push_back(std::move(item));
+    }
+  }
+
+  for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
+    CollectTableColumnDomDiagnosticsForStandaloneRenderer(child, diagnostics);
+  }
+}
+
+std::string TableGroupedChildrenSummaryJsonForStandaloneRenderer(
+    Element* table_element) {
+  if (!table_element) {
+    return "{\"table_present\":false}";
+  }
+  LayoutObject* layout_object = table_element->GetLayoutObject();
+  auto* layout_table = DynamicTo<LayoutTable>(layout_object);
+  if (!layout_table) {
+    std::ostringstream missing;
+    missing << "{\"table_present\":true,\"layout_table_present\":false"
+            << ",\"layout_object_type\":";
+    if (layout_object) {
+      missing << JsonStringForStandaloneRenderer(
+          BlinkStringToStdStringForStandaloneRenderer(
+              layout_object->DebugName()));
+    } else {
+      missing << "null";
+    }
+    missing << "}";
+    return missing.str();
+  }
+
+  TableGroupedChildren grouped_children{BlockNode(layout_table)};
+  int rows = 0;
+  int cells = 0;
+  for (const BlockNode& section : grouped_children.bodies) {
+    for (LayoutInputNode row = section.FirstChild(); row;
+         row = row.NextSibling()) {
+      if (row.Style().Display() != EDisplay::kTableRow) {
+        continue;
+      }
+      ++rows;
+      BlockNode row_block = To<BlockNode>(row);
+      for (LayoutInputNode cell = row_block.FirstChild(); cell;
+           cell = cell.NextSibling()) {
+        if (cell.Style().Display() == EDisplay::kTableCell) {
+          ++cells;
+        }
+      }
+    }
+  }
+
+  std::ostringstream json;
+  json << "{\"table_present\":true,\"layout_table_present\":true"
+       << ",\"columns_count\":" << grouped_children.columns.size()
+       << ",\"captions_count\":" << grouped_children.captions.size()
+       << ",\"headers_count\":" << (grouped_children.header ? 1 : 0)
+       << ",\"footers_count\":" << (grouped_children.footer ? 1 : 0)
+       << ",\"bodies_count\":" << grouped_children.bodies.size()
+       << ",\"rows_count\":" << rows
+       << ",\"cells_count\":" << cells << "}";
+  return json.str();
+}
+
+std::string TableColumnDiagnosticsJsonForStandaloneRenderer(
+    Document& document,
+    const std::string& html) {
+  TableColumnDiagnosticsForStandaloneRenderer diagnostics;
+  std::string lower_html = html;
+  std::transform(lower_html.begin(), lower_html.end(), lower_html.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  diagnostics.source_table_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "table");
+  diagnostics.source_colgroup_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "colgroup");
+  diagnostics.source_col_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "col");
+  if (LayoutView* view = document.GetLayoutView()) {
+    CollectTableColumnLayoutDiagnosticsForStandaloneRenderer(view,
+                                                            diagnostics);
+  }
+  CollectTableColumnDomDiagnosticsForStandaloneRenderer(&document,
+                                                       diagnostics);
+
+  Element* table = document.body()
+                       ? FindElementByTagForStandaloneRenderer(
+                             *document.body(), html_names::kTableTag)
+                       : nullptr;
+  if (!table && document.body()) {
+    table = FindElementByAttributeValueForStandaloneRenderer(
+        *document.body(), AtomicString("data-debug-id"),
+        AtomicString("table"));
+  }
+  std::ostringstream json;
+  json << "{\"real_layout_table_column_creation_enabled\":false"
+       << ",\"production_failsoft_active\":true"
+       << ",\"source\":{\"table_count\":" << diagnostics.source_table_count
+       << ",\"colgroup_count\":" << diagnostics.source_colgroup_count
+       << ",\"col_count\":" << diagnostics.source_col_count << "}"
+       << ",\"dom\":{\"table_count\":" << diagnostics.dom_table_count
+       << ",\"colgroup_count\":" << diagnostics.dom_colgroup_count
+       << ",\"col_count\":" << diagnostics.dom_col_count
+       << ",\"tbody_like_count\":" << diagnostics.dom_tbody_like_count
+       << ",\"tr_count\":" << diagnostics.dom_tr_count
+       << ",\"cell_count\":" << diagnostics.dom_cell_count << "}"
+       << ",\"computed\":{\"table_column_group_count\":"
+       << diagnostics.computed_table_column_group_count
+       << ",\"table_column_count\":"
+       << diagnostics.computed_table_column_count
+       << ",\"css_table_column_group_count\":"
+       << diagnostics.computed_css_table_column_group_count
+       << ",\"css_table_column_count\":"
+       << diagnostics.computed_css_table_column_count
+       << ",\"fixed_table_layout_requested\":"
+       << (diagnostics.fixed_table_layout_requested ? "true" : "false")
+       << "}"
+       << ",\"layout_counts\":{\"layout_table\":"
+       << diagnostics.layout_table_count
+       << ",\"layout_table_column\":"
+       << diagnostics.layout_table_column_count
+       << ",\"layout_table_section\":"
+       << diagnostics.layout_table_section_count
+       << ",\"layout_table_row\":" << diagnostics.layout_table_row_count
+       << ",\"layout_table_cell\":" << diagnostics.layout_table_cell_count
+       << ",\"layout_table_caption\":"
+       << diagnostics.layout_table_caption_count << "}"
+       << ",\"table_grouped_children\":"
+       << TableGroupedChildrenSummaryJsonForStandaloneRenderer(table)
+       << ",\"column_width_hint_count\":"
+       << diagnostics.column_width_hint_count
+       << ",\"production_failsoft_skipped_column_count\":"
+       << diagnostics.production_failsoft_skipped_column_count
+       << ",\"column_elements\":[";
+  for (size_t i = 0; i < diagnostics.column_elements.size(); ++i) {
+    if (i) {
+      json << ",";
+    }
+    const auto& item = diagnostics.column_elements[i];
+    json << "{\"tag_name\":"
+         << JsonStringForStandaloneRenderer(item.tag_name)
+         << ",\"data_debug_id\":"
+         << JsonStringForStandaloneRenderer(item.debug_id)
+         << ",\"width_attr\":"
+         << JsonStringForStandaloneRenderer(item.width_attr)
+         << ",\"span_attr\":"
+         << JsonStringForStandaloneRenderer(item.span_attr)
+         << ",\"computed_display\":"
+         << JsonStringForStandaloneRenderer(item.computed_display)
+         << ",\"layout_object_present\":"
+         << (item.layout_object_present ? "true" : "false")
+         << ",\"layout_object_type\":"
+         << JsonStringForStandaloneRenderer(item.layout_object_type)
+         << ",\"parent_layout_object_type\":"
+         << JsonStringForStandaloneRenderer(item.parent_layout_object_type)
+         << ",\"layout_table_column_object\":"
+         << (item.layout_table_column_object ? "true" : "false")
+         << ",\"production_failsoft_skipped\":"
+         << (item.production_failsoft_skipped ? "true" : "false")
+         << "}";
+  }
+  json << "],\"first_missing_stage\":";
+  if (diagnostics.production_failsoft_skipped_column_count > 0) {
+    json << "\"standalone_table_column_layout_object_failsoft\"";
+  } else if (diagnostics.source_colgroup_count == 0 &&
+             diagnostics.source_col_count == 0 &&
+             diagnostics.computed_table_column_group_count == 0 &&
+             diagnostics.computed_table_column_count == 0) {
+    json << "\"no_table_columns_in_source\"";
+  } else if (diagnostics.dom_colgroup_count == 0 &&
+             diagnostics.dom_col_count == 0 &&
+             diagnostics.computed_table_column_group_count == 0 &&
+             diagnostics.computed_table_column_count == 0) {
+    json << "\"table_column_dom_nodes_not_created\"";
+  } else if (diagnostics.computed_table_column_group_count == 0 &&
+             diagnostics.computed_table_column_count == 0) {
+    json << "\"table_column_computed_display_missing\"";
+  } else if (diagnostics.layout_table_column_count == 0) {
+    json << "\"layout_table_column_object_not_created\"";
+  } else {
+    json << "\"layout_table_column_present\"";
+  }
+  json << ",\"diagnostic_experiment\":{\"last_known_native_path\":"
+       << "\"LayoutTableColumn constructed/inserted; TableGroupedChildren "
+          "grouped native table as columns=1 bodies=1; no "
+          "TableLayoutAlgorithm::Layout breadcrumb before timeout\","
+       << "\"css_display_table_column_contrast\":"
+       << "\"CSS display:table-column reaches layout/prepaint/paint with "
+          "real column creation, so the blocker is native col/colgroup "
+          "attachment/grouping/presentation, not generic table-column "
+          "display\"}}";
+  return json.str();
+}
+
 std::string BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
     const char* name,
     const Document& document,
@@ -4678,6 +5108,13 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
             "\"marker_layout_object_count\":0,"
             "\"marker_pseudo_element_count\":0,"
             "\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string table_column_diagnostics_json =
+      cache.holder
+          ? TableColumnDiagnosticsJsonForStandaloneRenderer(
+                cache.holder->GetDocument(), cache.body_html)
+          : "{\"real_layout_table_column_creation_enabled\":false,"
+            "\"production_failsoft_active\":true,"
+            "\"first_missing_stage\":\"document_unavailable\"}";
   const std::string root_background_diagnostics_json =
       cache.holder
           ? RootBackgroundDiagnosticsJsonForStandaloneRenderer(
@@ -4735,6 +5172,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << media_query_diagnostics_json
        << ",\"list_marker_diagnostics\":"
        << list_marker_diagnostics_json
+       << ",\"table_column_diagnostics\":"
+       << table_column_diagnostics_json
        << ",\"root_background_diagnostics\":"
        << root_background_diagnostics_json
        << ",\"paint_artifact_audit_safe_mode\":"
