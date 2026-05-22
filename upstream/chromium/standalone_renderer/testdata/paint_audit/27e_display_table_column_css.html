@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: white; font: 14px Arial, sans-serif; }
+  .table {
+    display: table;
+    margin: 16px;
+    width: 360px;
+    border-collapse: collapse;
+    background: #f8fafc;
+  }
+  .columns { display: table-column-group; }
+  .col-a { display: table-column; width: 100px; background: #dcfce7; }
+  .col-b { display: table-column; width: 260px; background: #e0e7ff; }
+  .row { display: table-row; }
+  .cell {
+    display: table-cell;
+    border: 2px solid #334155;
+    padding: 8px 12px;
+  }
+</style>
+<div class="table" data-debug-id="table">
+  <div class="columns" data-debug-id="columns">
+    <div class="col-a" data-debug-id="col-a"></div>
+    <div class="col-b" data-debug-id="col-b"></div>
+  </div>
+  <div class="row" data-debug-id="row-1">
+    <div class="cell" data-debug-id="cell-a1">CSS A</div>
+    <div class="cell" data-debug-id="cell-b1">CSS table column</div>
+  </div>
+  <div class="row" data-debug-id="row-2">
+    <div class="cell" data-debug-id="cell-a2">CSS B</div>
+    <div class="cell" data-debug-id="cell-b2">Second row</div>
+  </div>
+</div>

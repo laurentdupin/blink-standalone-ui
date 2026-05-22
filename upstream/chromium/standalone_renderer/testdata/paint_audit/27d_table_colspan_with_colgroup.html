@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; background: white; font: 14px Arial, sans-serif; }
+  table {
+    margin: 16px;
+    width: 390px;
+    border-collapse: collapse;
+    background: #f8fafc;
+  }
+  col.a { background: #dcfce7; }
+  col.b { background: #ffedd5; }
+  col.c { background: #dbeafe; }
+  td {
+    border: 2px solid #334155;
+    padding: 8px 12px;
+  }
+</style>
+<table data-debug-id="table">
+  <colgroup data-debug-id="columns">
+    <col class="a" data-debug-id="col-a" style="width: 90px">
+    <col class="b" data-debug-id="col-b" style="width: 150px">
+    <col class="c" data-debug-id="col-c" style="width: 150px">
+  </colgroup>
+  <tbody>
+    <tr data-debug-id="row-1">
+      <td data-debug-id="cell-a1">A</td>
+      <td data-debug-id="cell-b1" colspan="2">Spanning content</td>
+    </tr>
+    <tr data-debug-id="row-2">
+      <td data-debug-id="cell-a2">B</td>
+      <td data-debug-id="cell-b2">Middle</td>
+      <td data-debug-id="cell-c2">End</td>
+    </tr>
+  </tbody>
+</table>
