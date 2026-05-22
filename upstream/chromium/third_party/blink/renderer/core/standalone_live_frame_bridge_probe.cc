@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -3496,6 +3497,280 @@ std::string TableColumnDiagnosticsJsonForStandaloneRenderer(
   return json.str();
 }
 
+struct FormControlElementDiagnosticForStandaloneRenderer {
+  std::string tag_name;
+  std::string debug_id;
+  std::string type_attr;
+  std::string value_attr;
+  std::string computed_display;
+  std::string layout_object_type;
+  std::string parent_layout_object_type;
+  std::string first_missing_stage;
+  bool layout_object_present = false;
+  bool user_agent_shadow_root_present = false;
+  int user_agent_shadow_child_count = 0;
+  int shadow_layout_object_count = 0;
+  int shadow_layout_text_count = 0;
+  int option_count = 0;
+  int selected_option_count = 0;
+};
+
+struct FormControlDiagnosticsForStandaloneRenderer {
+  int source_input_count = 0;
+  int source_select_count = 0;
+  int source_option_count = 0;
+  int source_optgroup_count = 0;
+  int source_textarea_count = 0;
+  int source_button_count = 0;
+  int dom_input_count = 0;
+  int dom_select_count = 0;
+  int dom_option_count = 0;
+  int dom_optgroup_count = 0;
+  int dom_textarea_count = 0;
+  int dom_button_count = 0;
+  int controls_with_layout_object_count = 0;
+  int controls_with_user_agent_shadow_root_count = 0;
+  int controls_with_shadow_layout_text_count = 0;
+  bool input_missing_value_text_stage = false;
+  bool select_missing_shadow_stage = false;
+  std::vector<FormControlElementDiagnosticForStandaloneRenderer> controls;
+};
+
+void CollectShadowLayoutDiagnosticsForStandaloneRenderer(
+    Node* node,
+    FormControlElementDiagnosticForStandaloneRenderer& item) {
+  if (!node) {
+    return;
+  }
+  if (LayoutObject* layout_object = node->GetLayoutObject()) {
+    ++item.shadow_layout_object_count;
+    const std::string debug_name = BlinkStringToStdStringForStandaloneRenderer(
+        layout_object->DebugName());
+    if (debug_name.find("LayoutText") != std::string::npos) {
+      ++item.shadow_layout_text_count;
+    }
+  }
+  for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
+    CollectShadowLayoutDiagnosticsForStandaloneRenderer(child, item);
+  }
+}
+
+void CollectFormControlDomDiagnosticsForStandaloneRenderer(
+    Node* node,
+    FormControlDiagnosticsForStandaloneRenderer& diagnostics) {
+  if (!node) {
+    return;
+  }
+  if (auto* element = DynamicTo<Element>(node)) {
+    const bool is_input = element->HasTagName(html_names::kInputTag);
+    const bool is_select = element->HasTagName(html_names::kSelectTag);
+    const bool is_option = element->HasTagName(html_names::kOptionTag);
+    const bool is_optgroup = element->HasTagName(html_names::kOptgroupTag);
+    const bool is_textarea = element->HasTagName(html_names::kTextareaTag);
+    const bool is_button = element->HasTagName(html_names::kButtonTag);
+    if (is_input) {
+      ++diagnostics.dom_input_count;
+    }
+    if (is_select) {
+      ++diagnostics.dom_select_count;
+    }
+    if (is_option) {
+      ++diagnostics.dom_option_count;
+    }
+    if (is_optgroup) {
+      ++diagnostics.dom_optgroup_count;
+    }
+    if (is_textarea) {
+      ++diagnostics.dom_textarea_count;
+    }
+    if (is_button) {
+      ++diagnostics.dom_button_count;
+    }
+
+    if (is_input || is_select || is_textarea || is_button) {
+      FormControlElementDiagnosticForStandaloneRenderer item;
+      item.tag_name = BlinkStringToStdStringForStandaloneRenderer(
+          element->tagName());
+      item.debug_id = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(AtomicString("data-debug-id")));
+      item.type_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kTypeAttr));
+      item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kValueAttr));
+      if (const ComputedStyle* style = element->GetComputedStyle()) {
+        item.computed_display = DisplayNameForTableDiagnostics(style->Display());
+      } else {
+        item.computed_display = "style_unavailable";
+      }
+      if (LayoutObject* layout_object = element->GetLayoutObject()) {
+        item.layout_object_present = true;
+        ++diagnostics.controls_with_layout_object_count;
+        item.layout_object_type = BlinkStringToStdStringForStandaloneRenderer(
+            layout_object->DebugName());
+        if (layout_object->Parent()) {
+          item.parent_layout_object_type =
+              BlinkStringToStdStringForStandaloneRenderer(
+                  layout_object->Parent()->DebugName());
+        }
+      } else {
+        item.layout_object_type = "null";
+      }
+      if (ShadowRoot* shadow_root = element->UserAgentShadowRoot()) {
+        item.user_agent_shadow_root_present = true;
+        ++diagnostics.controls_with_user_agent_shadow_root_count;
+        for (Node* child = shadow_root->firstChild(); child;
+             child = child->nextSibling()) {
+          ++item.user_agent_shadow_child_count;
+          CollectShadowLayoutDiagnosticsForStandaloneRenderer(child, item);
+        }
+        if (item.shadow_layout_text_count > 0) {
+          ++diagnostics.controls_with_shadow_layout_text_count;
+        }
+      }
+      if (is_select) {
+        for (Node* child = element->firstChild(); child;
+             child = child->nextSibling()) {
+          if (auto* child_element = DynamicTo<Element>(child)) {
+            if (child_element->HasTagName(html_names::kOptionTag)) {
+              ++item.option_count;
+              if (child_element->FastHasAttribute(html_names::kSelectedAttr)) {
+                ++item.selected_option_count;
+              }
+            }
+          }
+        }
+      }
+
+      if (is_input && !item.user_agent_shadow_root_present) {
+        item.first_missing_stage =
+            "input_user_agent_shadow_root_missing_or_not_real_input_element";
+        diagnostics.input_missing_value_text_stage = !item.value_attr.empty();
+      } else if (is_input && item.shadow_layout_text_count == 0 &&
+                 !item.value_attr.empty()) {
+        item.first_missing_stage =
+            "input_value_shadow_layout_text_missing";
+        diagnostics.input_missing_value_text_stage = true;
+      } else if (is_select && !item.user_agent_shadow_root_present) {
+        item.first_missing_stage =
+            "select_user_agent_shadow_root_missing_or_not_real_select_element";
+        diagnostics.select_missing_shadow_stage = true;
+      } else if (is_select && item.option_count == 0) {
+        item.first_missing_stage = "select_option_dom_missing";
+      } else {
+        item.first_missing_stage = "control_layout_present";
+      }
+      diagnostics.controls.push_back(std::move(item));
+    }
+  }
+
+  for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
+    CollectFormControlDomDiagnosticsForStandaloneRenderer(child, diagnostics);
+  }
+}
+
+std::string FormControlDiagnosticsJsonForStandaloneRenderer(
+    Document& document,
+    const std::string& html) {
+  FormControlDiagnosticsForStandaloneRenderer diagnostics;
+  std::string lower_html = html;
+  std::transform(lower_html.begin(), lower_html.end(), lower_html.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  diagnostics.source_input_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "input");
+  diagnostics.source_select_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "select");
+  diagnostics.source_option_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "option");
+  diagnostics.source_optgroup_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "optgroup");
+  diagnostics.source_textarea_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "textarea");
+  diagnostics.source_button_count =
+      CountLowercaseStartTagForStandaloneRenderer(lower_html, "button");
+  CollectFormControlDomDiagnosticsForStandaloneRenderer(&document,
+                                                       diagnostics);
+
+  std::ostringstream json;
+  json << "{\"source\":{\"input_count\":" << diagnostics.source_input_count
+       << ",\"select_count\":" << diagnostics.source_select_count
+       << ",\"option_count\":" << diagnostics.source_option_count
+       << ",\"optgroup_count\":" << diagnostics.source_optgroup_count
+       << ",\"textarea_count\":" << diagnostics.source_textarea_count
+       << ",\"button_count\":" << diagnostics.source_button_count << "}"
+       << ",\"dom\":{\"input_count\":" << diagnostics.dom_input_count
+       << ",\"select_count\":" << diagnostics.dom_select_count
+       << ",\"option_count\":" << diagnostics.dom_option_count
+       << ",\"optgroup_count\":" << diagnostics.dom_optgroup_count
+       << ",\"textarea_count\":" << diagnostics.dom_textarea_count
+       << ",\"button_count\":" << diagnostics.dom_button_count << "}"
+       << ",\"controls_with_layout_object_count\":"
+       << diagnostics.controls_with_layout_object_count
+       << ",\"controls_with_user_agent_shadow_root_count\":"
+       << diagnostics.controls_with_user_agent_shadow_root_count
+       << ",\"controls_with_shadow_layout_text_count\":"
+       << diagnostics.controls_with_shadow_layout_text_count
+       << ",\"standalone_source_status\":{"
+       << "\"html_input_element_source_linked\":false,"
+       << "\"html_select_element_source_linked\":true,"
+       << "\"text_control_shadow_subtree_stubbed\":true,"
+       << "\"native_select_shadow_path_unsafe_in_prior_experiment\":true"
+       << "}"
+       << ",\"controls\":[";
+  for (size_t i = 0; i < diagnostics.controls.size(); ++i) {
+    if (i) {
+      json << ",";
+    }
+    const auto& item = diagnostics.controls[i];
+    json << "{\"tag_name\":" << JsonStringForStandaloneRenderer(item.tag_name)
+         << ",\"data_debug_id\":"
+         << JsonStringForStandaloneRenderer(item.debug_id)
+         << ",\"type_attr\":" << JsonStringForStandaloneRenderer(item.type_attr)
+         << ",\"value_length\":" << item.value_attr.size()
+         << ",\"computed_display\":"
+         << JsonStringForStandaloneRenderer(item.computed_display)
+         << ",\"layout_object_present\":"
+         << (item.layout_object_present ? "true" : "false")
+         << ",\"layout_object_type\":"
+         << JsonStringForStandaloneRenderer(item.layout_object_type)
+         << ",\"parent_layout_object_type\":"
+         << JsonStringForStandaloneRenderer(item.parent_layout_object_type)
+         << ",\"user_agent_shadow_root_present\":"
+         << (item.user_agent_shadow_root_present ? "true" : "false")
+         << ",\"user_agent_shadow_child_count\":"
+         << item.user_agent_shadow_child_count
+         << ",\"shadow_layout_object_count\":"
+         << item.shadow_layout_object_count
+         << ",\"shadow_layout_text_count\":" << item.shadow_layout_text_count
+         << ",\"option_count\":" << item.option_count
+         << ",\"selected_option_count\":" << item.selected_option_count
+         << ",\"first_missing_stage\":"
+         << JsonStringForStandaloneRenderer(item.first_missing_stage) << "}";
+  }
+  json << "],\"first_missing_stage\":";
+  if (diagnostics.source_input_count == 0 &&
+      diagnostics.source_select_count == 0 &&
+      diagnostics.source_textarea_count == 0 &&
+      diagnostics.source_button_count == 0) {
+    json << "\"no_form_controls_in_source\"";
+  } else if (diagnostics.dom_input_count + diagnostics.dom_select_count +
+                 diagnostics.dom_textarea_count + diagnostics.dom_button_count ==
+             0) {
+    json << "\"form_control_dom_nodes_not_created\"";
+  } else if (diagnostics.controls_with_layout_object_count == 0) {
+    json << "\"form_control_layout_objects_not_created\"";
+  } else if (diagnostics.input_missing_value_text_stage) {
+    json << "\"input_value_text_not_in_shadow_layout\"";
+  } else if (diagnostics.select_missing_shadow_stage) {
+    json << "\"select_shadow_tree_not_created_or_real_select_path_disabled\"";
+  } else {
+    json << "\"form_control_layout_present\"";
+  }
+  json << "}";
+  return json.str();
+}
+
 std::string BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
     const char* name,
     const Document& document,
@@ -5115,6 +5390,11 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           : "{\"real_layout_table_column_creation_enabled\":true,"
             "\"production_failsoft_active\":false,"
             "\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string form_control_diagnostics_json =
+      cache.holder
+          ? FormControlDiagnosticsJsonForStandaloneRenderer(
+                cache.holder->GetDocument(), cache.body_html)
+          : "{\"first_missing_stage\":\"document_unavailable\"}";
   const std::string root_background_diagnostics_json =
       cache.holder
           ? RootBackgroundDiagnosticsJsonForStandaloneRenderer(
@@ -5174,6 +5454,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << list_marker_diagnostics_json
        << ",\"table_column_diagnostics\":"
        << table_column_diagnostics_json
+       << ",\"form_control_diagnostics\":"
+       << form_control_diagnostics_json
        << ",\"root_background_diagnostics\":"
        << root_background_diagnostics_json
        << ",\"paint_artifact_audit_safe_mode\":"
