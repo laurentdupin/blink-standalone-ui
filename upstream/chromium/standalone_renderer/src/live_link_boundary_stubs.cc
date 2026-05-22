@@ -3315,6 +3315,24 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
                                                   CreateElementFlags());
   }
 #endif
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  if (local_name == html_names::kSelectTag.LocalName()) {
+    std::fprintf(stderr, "select_reachability.stage=create_html_select_element\n");
+    std::fflush(stderr);
+    return MakeGarbageCollected<HTMLSelectElement>(document);
+  }
+  if (local_name == html_names::kOptionTag.LocalName()) {
+    std::fprintf(stderr, "select_reachability.stage=create_html_option_element\n");
+    std::fflush(stderr);
+    return MakeGarbageCollected<HTMLOptionElement>(document);
+  }
+  if (local_name == html_names::kOptgroupTag.LocalName()) {
+    std::fprintf(stderr,
+                 "select_reachability.stage=create_html_optgroup_element\n");
+    std::fflush(stderr);
+    return MakeGarbageCollected<HTMLOptGroupElement>(document);
+  }
+#endif
   if (local_name == html_names::kTitleTag.LocalName())
     return MakeGarbageCollected<HTMLTitleElement>(document);
   if (local_name == html_names::kBrTag.LocalName())

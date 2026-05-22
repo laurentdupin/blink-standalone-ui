@@ -95,6 +95,10 @@ const int kDefaultListBoxSize = 4;
 HTMLSelectElement::HTMLSelectElement(Document& document)
     : HTMLFormControlElementWithState(html_names::kSelectTag, document),
       type_ahead_(this) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=html_select_ctor\n");
+  std::fflush(stderr);
+#endif
   // Make sure SelectType is created after initializing |uses_menu_list_|.
   select_type_ = SelectType::Create(*this);
   SetHasCustomStyleCallbacks();
@@ -466,6 +470,12 @@ bool HTMLSelectElement::CanSelectAll() const {
 // layout despite the standardized inline-block display property.
 LayoutObject* HTMLSelectElement::CreateLayoutObject(
     const ComputedStyle& style) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_create_layout_object uses_menu_list=%d\n",
+               UsesMenuList() ? 1 : 0);
+  std::fflush(stderr);
+#endif
   if (style.IsVerticalWritingMode()) {
     UseCounter::Count(GetDocument(), WebFeature::kVerticalFormControls);
   }
@@ -907,6 +917,12 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
   if (!GetDocument().IsActive())
     return;
 
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_inserted_skip_chrome_client\n");
+  std::fflush(stderr);
+  return;
+#endif
   GetDocument()
       .GetFrame()
       ->GetPage()
@@ -956,6 +972,12 @@ void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
   if (!GetDocument().IsActive())
     return;
 
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_removed_skip_chrome_client\n");
+  std::fflush(stderr);
+  return;
+#endif
   GetDocument()
       .GetFrame()
       ->GetPage()
@@ -1671,11 +1693,23 @@ void HTMLSelectElement::DidRecalcStyle(const StyleRecalcChange change) {
 }
 
 void HTMLSelectElement::AttachLayoutTree(AttachContext& context) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=html_select_attach_enter\n");
+  std::fflush(stderr);
+#endif
   HTMLFormControlElementWithState::AttachLayoutTree(context);
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=html_select_attach_after_base\n");
+  std::fflush(stderr);
+#endif
   // The call to UpdateTextStyle() needs to go after the call through
   // to the base class's AttachLayoutTree() because that can sometimes do a
   // close on the LayoutObject.
   select_type_->UpdateTextStyle();
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=html_select_attach_after_update_text\n");
+  std::fflush(stderr);
+#endif
 
   if (const ComputedStyle* style = GetComputedStyle()) {
     if (style->Visibility() != EVisibility::kHidden) {

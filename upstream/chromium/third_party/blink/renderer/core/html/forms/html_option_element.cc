@@ -534,6 +534,12 @@ HTMLElement* HTMLOptionElement::formForBinding() const {
 }
 
 void HTMLOptionElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  // Closed standalone select rendering uses the parent select's inner element
+  // for selected-value paint. The option UA shadow subtree is popup/listbox UI
+  // and is unsafe in the reduced standalone runtime.
+  return;
+#endif
   label_container_ = MakeGarbageCollected<HTMLSpanElement>(GetDocument());
   label_container_->SetShadowPseudoId(
       shadow_element_names::kOptionLabelContainer);
