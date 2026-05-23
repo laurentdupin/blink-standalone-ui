@@ -2697,6 +2697,12 @@ void Document::UpdateStyleAndLayoutTree(LayoutUpgrade& upgrade) {
 
 void Document::UpdateStyleAndLayoutTreeForThisDocument() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=document_update_style_layout_tree_enter document=%p lifecycle=%d\n",
+               static_cast<void*>(this), static_cast<int>(Lifecycle().GetState()));
+  std::fflush(stderr);
+#endif
 #endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
   DCHECK(IsMainThread());
@@ -2723,8 +2729,20 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   }
 #endif  // EXPENSIVE_DCHECKS_ARE_ON()
 
+  #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=document_before_process_scheduled_shadow_trees document=%p\n",
+               static_cast<void*>(this));
+  std::fflush(stderr);
+#endif
   ProcessScheduledShadowTreeCreationsNow();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=document_after_process_scheduled_shadow_trees document=%p\n",
+               static_cast<void*>(this));
+  std::fflush(stderr);
+#endif
 #endif
 
   auto advance_to_style_clean = [this]() {
@@ -2862,7 +2880,19 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   InvalidateStyleAndLayoutForFontUpdates();
   UpdateStyleInvalidationIfNeeded();
 #endif
+  #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=document_before_update_style document=%p\n",
+               static_cast<void*>(this));
+  std::fflush(stderr);
+#endif
   UpdateStyle();
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=document_after_update_style document=%p\n",
+               static_cast<void*>(this));
+  std::fflush(stderr);
+#endif
   GetStyleResolver().ClearResizedForViewportUnits();
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
   InvalidatePendingSVGResources();

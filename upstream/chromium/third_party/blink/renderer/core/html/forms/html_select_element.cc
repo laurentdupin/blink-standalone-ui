@@ -890,11 +890,38 @@ void HTMLSelectElement::ElementInserted(Node& node) {
 
 void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
                                        bool option_is_selected) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_inserted_enter select=%p option=%p selected=%d size=%d multiple=%d last_on_change=%p\n",
+               static_cast<void*>(this), static_cast<void*>(&option),
+               option_is_selected ? 1 : 0, size_, IsMultiple() ? 1 : 0,
+               static_cast<void*>(last_on_change_option_.Get()));
+  std::fflush(stderr);
+#endif
   DCHECK_EQ(option.OwnerSelectElement(), this);
   SetRecalcListItems();
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_inserted_after_set_recalc select=%p option=%p\n",
+               static_cast<void*>(this), static_cast<void*>(&option));
+  std::fflush(stderr);
+#endif
   if (option_is_selected) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=html_select_option_inserted_before_select_option select=%p option=%p\n",
+                 static_cast<void*>(this), static_cast<void*>(&option));
+    std::fflush(stderr);
+#endif
     SelectOption(&option, kDontUpdateSelectedcontentFlag |
                               (IsMultiple() ? 0 : kDeselectOtherOptionsFlag));
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=html_select_option_inserted_after_select_option select=%p option=%p last_on_change=%p\n",
+                 static_cast<void*>(this), static_cast<void*>(&option),
+                 static_cast<void*>(last_on_change_option_.Get()));
+    std::fflush(stderr);
+#endif
   } else if (!last_on_change_option_) {
     // The newly added option is not selected and we do not already have a
     // selected option. We should re-run the selection algorithm if there is a
@@ -908,11 +935,45 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
     //
     // https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm
     if (size_ <= 1 && !option.IsDisabledFormControl()) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+      std::fprintf(stderr,
+                   "select_reachability.stage=html_select_option_inserted_before_reset_default select=%p option=%p\n",
+                   static_cast<void*>(this), static_cast<void*>(&option));
+      std::fflush(stderr);
+#endif
       ResetToDefaultSelection(kResetReasonOptionInsertedOrRemoved);
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+      std::fprintf(stderr,
+                   "select_reachability.stage=html_select_option_inserted_after_reset_default select=%p option=%p last_on_change=%p\n",
+                   static_cast<void*>(this), static_cast<void*>(&option),
+                   static_cast<void*>(last_on_change_option_.Get()));
+      std::fflush(stderr);
+#endif
     }
   }
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_inserted_before_validity select=%p option=%p\n",
+               static_cast<void*>(this), static_cast<void*>(&option));
+  std::fflush(stderr);
+#endif
   SetNeedsValidityCheck();
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_inserted_before_clear_last select=%p option=%p last_on_change=%p\n",
+               static_cast<void*>(this), static_cast<void*>(&option),
+               static_cast<void*>(last_on_change_option_.Get()));
+  std::fflush(stderr);
+#endif
   select_type_->ClearLastOnChangeSelection();
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=html_select_option_inserted_after_clear_last select=%p option=%p last_on_change=%p active=%d\n",
+               static_cast<void*>(this), static_cast<void*>(&option),
+               static_cast<void*>(last_on_change_option_.Get()),
+               GetDocument().IsActive() ? 1 : 0);
+  std::fflush(stderr);
+#endif
 
   if (!GetDocument().IsActive())
     return;

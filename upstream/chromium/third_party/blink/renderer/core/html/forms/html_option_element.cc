@@ -570,24 +570,76 @@ void HTMLOptionElement::UpdateAncestors() {
 
 Node::InsertionNotificationRequest HTMLOptionElement::InsertedInto(
     ContainerNode& insertion_point) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=option_inserted_enter option=%p insertion_point=%p selected=%d\n",
+               static_cast<void*>(this), static_cast<void*>(&insertion_point),
+               Selected() ? 1 : 0);
+  std::fflush(stderr);
+#endif
   auto return_value = HTMLElement::InsertedInto(insertion_point);
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=option_inserted_after_base option=%p return=%d\n",
+               static_cast<void*>(this), static_cast<int>(return_value));
+  std::fflush(stderr);
+#endif
 
   HTMLSelectElement* old_ancestor_select = nearest_ancestor_select_;
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=option_inserted_before_update_ancestors option=%p old_select=%p\n",
+               static_cast<void*>(this), static_cast<void*>(old_ancestor_select));
+  std::fflush(stderr);
+#endif
   UpdateAncestors();
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=option_inserted_after_update_ancestors option=%p new_select=%p optgroup=%p datalist=%p\n",
+               static_cast<void*>(this),
+               static_cast<void*>(nearest_ancestor_select_.Get()),
+               static_cast<void*>(nearest_ancestor_optgroup_.Get()),
+               static_cast<void*>(nearest_ancestor_datalist_.Get()));
+  std::fflush(stderr);
+#endif
 
   if (nearest_ancestor_select_ &&
       nearest_ancestor_select_ != old_ancestor_select) {
     CHECK(!old_ancestor_select);
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=option_inserted_before_select_callback option=%p selected=%d\n",
+                 static_cast<void*>(this), Selected() ? 1 : 0);
+    std::fflush(stderr);
+#endif
     nearest_ancestor_select_->OptionInserted(*this, Selected());
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=option_inserted_after_select_callback option=%p\n",
+                 static_cast<void*>(this));
+    std::fflush(stderr);
+#endif
   }
 
   // TODO(crbug.com/453705243): Call OptionInserted on the ancestor datalist if
   // it changed.
 
   if (RuntimeEnabledFeatures::SelectedcontentSpecEnabled() && Selected()) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=option_inserted_selectedcontent_notify option=%p\n",
+                 static_cast<void*>(this));
+    std::fflush(stderr);
+#endif
     return InsertionNotificationRequest::
         kInsertionShouldCallDidNotifySubtreeInsertions;
   }
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=option_inserted_return option=%p return=%d\n",
+               static_cast<void*>(this), static_cast<int>(return_value));
+  std::fflush(stderr);
+#endif
   return return_value;
 }
 

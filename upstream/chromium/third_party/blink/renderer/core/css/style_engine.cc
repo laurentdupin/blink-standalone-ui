@@ -4185,7 +4185,10 @@ void StyleEngine::ReattachContainerSubtree(Element& container) {
 }
 
 void StyleEngine::UpdateStyleAndLayoutTree() {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=style_engine_update_tree_enter needs_style=%d needs_rebuild=%d\n",
+               NeedsStyleRecalc(), NeedsLayoutTreeRebuild());
 #endif
   // All of layout tree dirtiness and rebuilding needs to happen on a stable
   // flat tree. We have an invariant that all of that happens in this method
@@ -4197,7 +4200,10 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
   DCHECK(!NeedsLayoutTreeRebuild());
 
   UpdateViewportStyle();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr,
+               "select_reachability.stage=style_engine_after_viewport_style needs_style=%d needs_rebuild=%d\n",
+               NeedsStyleRecalc(), NeedsLayoutTreeRebuild());
 #endif
 
   if (GetDocument().documentElement()) {
@@ -4205,13 +4211,22 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
 #else
     UpdateViewportSize();
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=style_engine_before_nth_cache needs_style=%d needs_rebuild=%d\n",
+                 NeedsStyleRecalc(), NeedsLayoutTreeRebuild());
 #endif
     NthIndexCache nth_index_cache(GetDocument());
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=style_engine_after_nth_cache needs_style=%d needs_rebuild=%d\n",
+                 NeedsStyleRecalc(), NeedsLayoutTreeRebuild());
 #endif
     if (NeedsStyleRecalc()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+      std::fprintf(stderr,
+                   "select_reachability.stage=style_engine_before_recalc_style root=%p\n",
+                   GetDocument().documentElement());
 #endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
       TRACE_EVENT0("blink,blink_style", "Document::recalcStyle");
@@ -4226,13 +4241,19 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
 #else
       RecalcStyle();
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+      std::fprintf(stderr,
+                   "select_reachability.stage=style_engine_after_recalc_style needs_style=%d needs_rebuild=%d\n",
+                   NeedsStyleRecalc(), NeedsLayoutTreeRebuild());
 #endif
       if (viewport_defining != GetDocument().ViewportDefiningElement()) {
         ViewportDefiningElementDidChange();
       }
     }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=style_engine_before_rebuild_check needs_rebuild=%d\n",
+                 NeedsLayoutTreeRebuild());
 #endif
     if (NeedsLayoutTreeRebuild()) {
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -4241,7 +4262,10 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
 #endif
       RebuildLayoutTree();
     }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    std::fprintf(stderr,
+                 "select_reachability.stage=style_engine_after_rebuild_check needs_rebuild=%d\n",
+                 NeedsLayoutTreeRebuild());
 #endif
     // Update quotes only if there are any scopes marked dirty.
     if (StyleContainmentScopeTree* tree = GetStyleContainmentScopeTree()) {
@@ -4255,13 +4279,16 @@ void StyleEngine::UpdateStyleAndLayoutTree() {
   } else {
     style_recalc_root_.Clear();
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=style_engine_before_color_scheme\n");
 #endif
   UpdateColorSchemeBackground();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=style_engine_before_propagate_viewport\n");
 #endif
   GetStyleResolver().PropagateStyleToViewport();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+  std::fprintf(stderr, "select_reachability.stage=style_engine_update_tree_exit\n");
 #endif
 }
 
