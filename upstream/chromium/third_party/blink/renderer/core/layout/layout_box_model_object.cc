@@ -360,7 +360,8 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutBoxModelObject::EnsureLayerAfterAttachForStandalone() {
   NOT_DESTROYED();
-  if (!Layer() && LayerTypeRequired() != kNoPaintLayer) {
+  if (!Layer() && StyleRef().HasOpacity() &&
+      LayerTypeRequired() != kNoPaintLayer) {
     CreateLayerAfterStyleChange();
   }
 }

@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background: rgb(244, 246, 252);
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .panel {
+    width: 640px;
+    margin: 48px auto;
+    overflow: hidden;
+    background: white;
+    border: 1px solid rgb(210, 218, 236);
+    border-radius: 18px;
+    box-shadow: 0 18px 44px rgba(24, 39, 75, 0.08);
+  }
+
+  .panel-header {
+    padding: 24px 28px 18px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.15;
+  }
+
+  table {
+    width: 100%;
+    padding: 0 28px 28px;
+    border: 0;
+  }
+
+  th,
+  td {
+    padding: 16px 18px;
+    border: 1px solid rgb(228, 233, 245);
+    text-align: left;
+  }
+
+  th {
+    background: rgb(31, 41, 74);
+    color: white;
+  }
+
+  .pill {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgb(220, 252, 231);
+    color: rgb(22, 101, 52);
+    font-size: 13px;
+    font-weight: 700;
+  }
+</style>
+<section class="panel">
+  <header class="panel-header">
+    <h1>Table padding with inline block cell</h1>
+  </header>
+  <table>
+    <thead>
+      <tr>
+        <th>Engine</th>
+        <th>Scenes</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Unity</td>
+        <td>18</td>
+        <td><span class="pill">Stable</span></td>
+      </tr>
+      <tr>
+        <td>Godot</td>
+        <td>14</td>
+        <td><span class="pill">Verify</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>

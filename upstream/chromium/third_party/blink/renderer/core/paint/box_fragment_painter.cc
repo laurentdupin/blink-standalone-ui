@@ -2304,7 +2304,21 @@ void BoxFragmentPainter::PaintBoxItem(const FragmentItem& item,
     // with the layout object.
     ScopedDisplayItemFragment display_item_fragment(paint_info.context,
                                                     item.FragmentId());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    std::vector<PhysicalOffset> local_offsets;
+    std::vector<PhysicalOffset>* previous_offsets =
+        g_standalone_fragment_offsets;
+    if (!g_standalone_fragment_offsets)
+      g_standalone_fragment_offsets = &local_offsets;
+    g_standalone_fragment_offsets->push_back(paint_offset +
+                                             item.OffsetInContainerFragment());
+#endif
     PaintFragment(child_fragment, paint_info);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    g_standalone_fragment_offsets->pop_back();
+    if (g_standalone_fragment_offsets == &local_offsets)
+      g_standalone_fragment_offsets = previous_offsets;
+#endif
     return;
   }
 
