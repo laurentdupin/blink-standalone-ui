@@ -672,7 +672,9 @@ PaintResult PaintLayerPainter::PaintChildren(
 #endif
 
   PaintLayerPaintOrderIterator iterator(&paint_layer_, children_to_visit);
+  int visited_child_count = 0;
   while (PaintLayer* child = iterator.Next()) {
+    ++visited_child_count;
     // Painting of the whole subtree of an SVG foreignObject, including
     // stacked children, is handled by SVGForeignObjectPainter, so don't
     // paint stacked children here.
@@ -714,6 +716,32 @@ PaintResult PaintLayerPainter::PaintChildren(
     }
 #endif
   }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // In reduced standalone builds some stacked descendants can be linked into
+  // the PaintLayer sibling tree while the stacking-node order lists remain
+  // empty. The fragment painter correctly skips self-painting descendants, so
+  // without this Blink-side fail-soft those real PaintLayers never paint. Keep
+  // this to the normal/positive pass and only when the real iterator produced
+  // nothing, so ordinary layer-order traversal remains authoritative.
+  if (!visited_child_count &&
+      children_to_visit == kNormalFlowAndPositiveZOrderChildren) {
+    for (PaintLayer* child = paint_layer_.FirstChild(); child;
+         child = child->NextSibling()) {
+      if (child->GetLayoutObject().IsSVGForeignObject()) {
+        continue;
+      }
+      if (!layout_object.IsViewTransitionRoot() &&
+          ViewTransitionUtils::IsViewTransitionRoot(child->GetLayoutObject())) {
+        continue;
+      }
+      if (PaintLayerPainter(*child).Paint(context, paint_flags) ==
+          kMayBeClippedByCullRect) {
+        result = kMayBeClippedByCullRect;
+      }
+    }
+  }
+#endif
 
   return result;
 }

@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #eef4f8;
+      font-family: Arial, sans-serif;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 120px 1fr 120px;
+      gap: 16px;
+      padding: 24px;
+    }
+    .panel {
+      background: #ffffff;
+      border: 2px solid #315b7d;
+      color: #16324a;
+      min-height: 80px;
+      padding: 12px;
+    }
+    .main {
+      min-height: 180px;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid" data-debug-id="grid">
+    <aside class="panel" data-debug-id="left">static left</aside>
+    <main class="panel main" data-debug-id="main">main content</main>
+    <aside class="panel" data-debug-id="right">static right</aside>
+  </div>
+</body>
+</html>

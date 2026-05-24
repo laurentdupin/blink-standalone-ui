@@ -68,6 +68,7 @@
 #include "third_party/blink/renderer/core/layout/physical_fragment_link.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
@@ -2624,8 +2625,81 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
        << ",\"has_self_painting_layer\":";
   if (auto* box_model_object = DynamicTo<LayoutBoxModelObject>(layout_object)) {
     json << (box_model_object->HasSelfPaintingLayer() ? "true" : "false");
+    if (PaintLayer* layer = box_model_object->Layer()) {
+      json << ",\"paint_layer\":{\"is_self_painting\":"
+           << (layer->IsSelfPaintingLayer() ? "true" : "false")
+           << ",\"layout_object_is_stacked\":"
+           << (layer->GetLayoutObject().IsStacked() ? "true" : "false")
+           << ",\"layout_object_is_stacking_context\":"
+           << (layer->GetLayoutObject().IsStackingContext() ? "true"
+                                                            : "false")
+           << ",\"has_visible_content\":"
+           << (layer->HasVisibleContent() ? "true" : "false")
+           << ",\"has_visible_self_painting_descendant\":"
+           << (layer->HasVisibleSelfPaintingDescendant() ? "true" : "false")
+           << ",\"has_self_painting_descendant\":"
+           << (layer->HasSelfPaintingLayerDescendant() ? "true" : "false");
+      if (PaintLayer* parent_layer = layer->Parent()) {
+        int paint_order_index = 0;
+        int paint_order_visit_count = 0;
+        bool parent_iterator_visits_target = false;
+        PaintLayerPaintOrderIterator iterator(parent_layer, kAllChildren);
+        while (PaintLayer* ordered_child = iterator.Next()) {
+          ++paint_order_visit_count;
+          if (ordered_child == layer) {
+            parent_iterator_visits_target = true;
+            paint_order_index = paint_order_visit_count - 1;
+          }
+        }
+        json << ",\"parent\":{\"layout_object\":"
+             << JsonStringForStandaloneRenderer(
+                    BlinkStringToStdStringForStandaloneRenderer(
+                        parent_layer->GetLayoutObject().DebugName()))
+             << ",\"is_self_painting\":"
+             << (parent_layer->IsSelfPaintingLayer() ? "true" : "false")
+             << ",\"layout_object_is_stacking_context\":"
+             << (parent_layer->GetLayoutObject().IsStackingContext() ? "true"
+                                                                      : "false")
+             << ",\"has_visible_content\":"
+             << (parent_layer->HasVisibleContent() ? "true" : "false")
+             << ",\"has_visible_self_painting_descendant\":"
+             << (parent_layer->HasVisibleSelfPaintingDescendant() ? "true"
+                                                                  : "false")
+             << ",\"has_self_painting_descendant\":"
+             << (parent_layer->HasSelfPaintingLayerDescendant() ? "true"
+                                                                : "false")
+             << ",\"paint_order_visit_count\":" << paint_order_visit_count
+             << ",\"paint_order_visits_target\":"
+             << (parent_iterator_visits_target ? "true" : "false")
+             << ",\"paint_order_index\":"
+             << (parent_iterator_visits_target ? paint_order_index : -1)
+             << "}";
+      } else {
+        json << ",\"parent\":null";
+      }
+      if (PaintLayer* previous_sibling = layer->PreviousSibling()) {
+        json << ",\"previous_sibling\":"
+             << JsonStringForStandaloneRenderer(
+                    BlinkStringToStdStringForStandaloneRenderer(
+                        previous_sibling->GetLayoutObject().DebugName()));
+      } else {
+        json << ",\"previous_sibling\":null";
+      }
+      if (PaintLayer* next_sibling = layer->NextSibling()) {
+        json << ",\"next_sibling\":"
+             << JsonStringForStandaloneRenderer(
+                    BlinkStringToStdStringForStandaloneRenderer(
+                        next_sibling->GetLayoutObject().DebugName()));
+      } else {
+        json << ",\"next_sibling\":null";
+      }
+      json << "}";
+    } else {
+      json << ",\"paint_layer\":null";
+    }
   } else {
     json << "false";
+    json << ",\"paint_layer\":null";
   }
   json
        << ",\"containing_block\":";
