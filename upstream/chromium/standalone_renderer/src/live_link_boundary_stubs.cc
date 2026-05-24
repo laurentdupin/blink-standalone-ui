@@ -54,6 +54,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_selected_content_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/dom/opaque_range.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
@@ -2056,6 +2057,8 @@ bool RuntimeEnabledFeaturesBase::
 bool RuntimeEnabledFeaturesBase::is_select_remove_overflow_hidden_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_image_srcset_reselection_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_text_area_scroll_top_preview_enabled_ =
+    false;
 bool RuntimeEnabledFeaturesBase::is_shared_storage_api_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
     is_lazy_image_conformant_load_event_timing_enabled_ = false;
@@ -3112,6 +3115,8 @@ const WrapperTypeInfo& HTMLSelectElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLSelectElement");
 const WrapperTypeInfo& HTMLInputElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLInputElement");
+const WrapperTypeInfo& HTMLTextAreaElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLTextAreaElement");
 const WrapperTypeInfo& HTMLSelectedContentElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLSelectedContentElement");
 const WrapperTypeInfo& HTMLSpanElement::wrapper_type_info_ =
@@ -3314,6 +3319,9 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
   if (local_name == html_names::kInputTag.LocalName()) {
     return MakeGarbageCollected<HTMLInputElement>(document,
                                                   CreateElementFlags());
+  }
+  if (local_name == html_names::kTextareaTag.LocalName()) {
+    return MakeGarbageCollected<HTMLTextAreaElement>(document);
   }
 #endif
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
@@ -12871,6 +12879,7 @@ const AtomicString& http_names::kLastModified =
     *new AtomicString("Last-Modified");
 const AtomicString event_interface_names::kErrorEvent("ErrorEvent");
 const AtomicString event_interface_names::kHashChangeEvent("HashChangeEvent");
+const AtomicString event_interface_names::kWheelEvent("WheelEvent");
 
 }  // namespace blink
 
@@ -18892,6 +18901,12 @@ bool HTMLFormElement::MatchesToolFormActivePseudoClass() const {
 void FormData::AppendFromElement(const String&, const String&) {}
 String Locale::ConvertToLocalizedNumber(const String& value) {
   return value;
+}
+String Locale::ValidationMessageTooLongText(unsigned, int) {
+  return String();
+}
+String Locale::ValidationMessageTooShortText(unsigned, int) {
+  return String();
 }
 String Locale::QueryString(int, const String&) {
   return String();

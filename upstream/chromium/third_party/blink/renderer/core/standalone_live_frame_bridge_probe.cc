@@ -53,6 +53,10 @@
 #include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_select_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
+#include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
@@ -3624,12 +3628,16 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string debug_id;
   std::string type_attr;
   std::string value_attr;
+  std::string element_interface;
   std::string computed_display;
   std::string layout_object_type;
   std::string parent_layout_object_type;
   std::string first_missing_stage;
   bool layout_object_present = false;
   bool user_agent_shadow_root_present = false;
+  bool text_control_inner_editor_present = false;
+  bool placeholder_attr_present = false;
+  bool placeholder_visible = false;
   int user_agent_shadow_child_count = 0;
   int shadow_layout_object_count = 0;
   int shadow_layout_text_count = 0;
@@ -3736,6 +3744,30 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
           element->getAttribute(html_names::kTypeAttr));
       item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kValueAttr));
+      item.placeholder_attr_present =
+          element->FastHasAttribute(html_names::kPlaceholderAttr);
+      if (auto* input = DynamicTo<HTMLInputElement>(element)) {
+        item.element_interface = "HTMLInputElement";
+      } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+        item.element_interface = "HTMLSelectElement";
+      } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
+        item.element_interface = "HTMLTextAreaElement";
+        item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
+            textarea->Value());
+        item.placeholder_visible =
+            item.placeholder_attr_present && item.value_attr.empty();
+      } else if (auto* text_control =
+                     DynamicTo<TextControlElement>(element)) {
+        item.element_interface = "TextControlElement";
+        item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
+            text_control->Value());
+      } else {
+        item.element_interface = "HTMLElement";
+      }
+      if (auto* text_control = DynamicTo<TextControlElement>(element)) {
+        item.text_control_inner_editor_present =
+            text_control->InnerEditorElement();
+      }
       if (const ComputedStyle* style = element->GetComputedStyle()) {
         item.computed_display = DisplayNameForTableDiagnostics(style->Display());
       } else {
@@ -3866,9 +3898,11 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << ",\"standalone_source_status\":{"
 #if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
        << "\"html_input_element_source_linked\":true,"
+       << "\"html_text_area_element_source_linked\":true,"
        << "\"html_select_element_source_linked\":true,"
        << "\"text_control_shadow_subtree_stubbed\":false,"
        << "\"text_input_subset_enabled\":true,"
+       << "\"textarea_text_control_enabled\":true,"
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
        << "\"select_control_subset_enabled\":true,"
        << "\"native_select_shadow_path_unsafe_in_prior_experiment\":false,"
@@ -3892,16 +3926,17 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"text-control selection/editing APIs use cached selection only\","
        << "\"opaque ranges are unsupported in standalone text input\"],"
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-       << "\"remaining_unsupported_controls\":[\"textarea\","
-          "\"file\",\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
+       << "\"remaining_unsupported_controls\":[\"file\",\"color\","
+          "\"date/time\",\"radio\",\"checkbox\",\"range\"],"
        << "\"production_policy\":\"real Blink text input and closed/basic "
-          "select subsets are enabled; picker-icon/popup/browser-facing "
-          "controls remain fail-soft\""
+          "select subsets and real textarea text-control layout are enabled; "
+          "picker-icon/popup/browser-facing controls remain fail-soft\""
 #else
-       << "\"remaining_unsupported_controls\":[\"select\",\"textarea\","
-          "\"file\",\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
+       << "\"remaining_unsupported_controls\":[\"select\",\"file\","
+          "\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
        << "\"production_policy\":\"real Blink text input subset is enabled; "
-          "non-text browser-facing controls remain fail-soft\""
+          "real textarea text-control layout is enabled; non-text "
+          "browser-facing controls remain fail-soft\""
 #endif
 #else
        << "\"html_input_element_source_linked\":false,"
@@ -3949,6 +3984,8 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << JsonStringForStandaloneRenderer(item.debug_id)
          << ",\"type_attr\":" << JsonStringForStandaloneRenderer(item.type_attr)
          << ",\"value_length\":" << item.value_attr.size()
+         << ",\"element_interface\":"
+         << JsonStringForStandaloneRenderer(item.element_interface)
          << ",\"computed_display\":"
          << JsonStringForStandaloneRenderer(item.computed_display)
          << ",\"layout_object_present\":"
@@ -3959,6 +3996,12 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << JsonStringForStandaloneRenderer(item.parent_layout_object_type)
          << ",\"user_agent_shadow_root_present\":"
          << (item.user_agent_shadow_root_present ? "true" : "false")
+         << ",\"text_control_inner_editor_present\":"
+         << (item.text_control_inner_editor_present ? "true" : "false")
+         << ",\"placeholder_attr_present\":"
+         << (item.placeholder_attr_present ? "true" : "false")
+         << ",\"placeholder_visible\":"
+         << (item.placeholder_visible ? "true" : "false")
          << ",\"user_agent_shadow_child_count\":"
          << item.user_agent_shadow_child_count
          << ",\"shadow_layout_object_count\":"
