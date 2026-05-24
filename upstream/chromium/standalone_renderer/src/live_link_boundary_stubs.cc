@@ -14725,6 +14725,129 @@ bool Isolate::HasPendingException() {
 }
 }  // namespace v8
 
+namespace {
+
+struct StandaloneFontResolutionDiagnostic {
+  std::string requested_family;
+  std::string effective_family;
+  std::string resolved_family;
+  std::string fallback_reason;
+  float computed_size = 0.0f;
+  float test_string_width = 0.0f;
+  float test_string_rounded_glyph_width = 0.0f;
+  float metrics_ascent = 0.0f;
+  float metrics_descent = 0.0f;
+  float metrics_leading = 0.0f;
+  int weight = 0;
+  int width = 0;
+  int slant = 0;
+  bool requested_family_was_empty = false;
+  bool requested_family_was_generic = false;
+  bool synthetic_bold = false;
+  bool synthetic_italic = false;
+};
+
+std::vector<StandaloneFontResolutionDiagnostic>&
+StandaloneFontResolutionDiagnostics() {
+  static std::vector<StandaloneFontResolutionDiagnostic>* diagnostics =
+      new std::vector<StandaloneFontResolutionDiagnostic>();
+  return *diagnostics;
+}
+
+std::string StandaloneEscapeJsonString(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size() + 8);
+  for (char c : value) {
+    switch (c) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped += c;
+        break;
+    }
+  }
+  return escaped;
+}
+
+std::string StandaloneJsonString(const std::string& value) {
+  return "\"" + StandaloneEscapeJsonString(value) + "\"";
+}
+
+void StandaloneRecordFontResolutionDiagnostic(
+    StandaloneFontResolutionDiagnostic diagnostic) {
+  auto& diagnostics = StandaloneFontResolutionDiagnostics();
+  if (diagnostics.size() >= 256) {
+    return;
+  }
+  diagnostics.push_back(std::move(diagnostic));
+}
+
+}  // namespace
+
+extern "C" int StandaloneRendererFontResolutionDiagnosticCount() {
+  return static_cast<int>(StandaloneFontResolutionDiagnostics().size());
+}
+
+extern "C" int StandaloneRendererFontResolutionDiagnosticJsonAt(
+    int index,
+    char* buffer,
+    int buffer_size) {
+  if (!buffer || buffer_size <= 0) {
+    return 0;
+  }
+  buffer[0] = '\0';
+  const auto& diagnostics = StandaloneFontResolutionDiagnostics();
+  if (index < 0 || static_cast<size_t>(index) >= diagnostics.size()) {
+    return 0;
+  }
+  const auto& diagnostic = diagnostics[static_cast<size_t>(index)];
+  std::ostringstream json;
+  json << "{\"requested_family\":"
+       << StandaloneJsonString(diagnostic.requested_family)
+       << ",\"effective_family\":"
+       << StandaloneJsonString(diagnostic.effective_family)
+       << ",\"resolved_family\":"
+       << StandaloneJsonString(diagnostic.resolved_family)
+       << ",\"fallback_reason\":"
+       << StandaloneJsonString(diagnostic.fallback_reason)
+       << ",\"computed_size\":" << diagnostic.computed_size
+       << ",\"test_string\":\"Custom Property Math\""
+       << ",\"test_string_width\":" << diagnostic.test_string_width
+       << ",\"test_string_rounded_glyph_width\":"
+       << diagnostic.test_string_rounded_glyph_width
+       << ",\"metrics_ascent\":" << diagnostic.metrics_ascent
+       << ",\"metrics_descent\":" << diagnostic.metrics_descent
+       << ",\"metrics_leading\":" << diagnostic.metrics_leading
+       << ",\"weight\":" << diagnostic.weight
+       << ",\"width\":" << diagnostic.width
+       << ",\"slant\":" << diagnostic.slant
+       << ",\"requested_family_was_empty\":"
+       << (diagnostic.requested_family_was_empty ? "true" : "false")
+       << ",\"requested_family_was_generic\":"
+       << (diagnostic.requested_family_was_generic ? "true" : "false")
+       << ",\"synthetic_bold\":"
+       << (diagnostic.synthetic_bold ? "true" : "false")
+       << ",\"synthetic_italic\":"
+       << (diagnostic.synthetic_italic ? "true" : "false") << "}";
+  const std::string payload = json.str();
+  std::snprintf(buffer, static_cast<size_t>(buffer_size), "%s",
+                payload.c_str());
+  return static_cast<int>(payload.size());
+}
+
 namespace blink {
 std::array<std::atomic_int, InstanceCounters::kCounterTypeLength>
     InstanceCounters::counters_;
@@ -15461,13 +15584,20 @@ const SimpleFontData* FontCache::GetFontData(
   }
 
   sk_sp<SkTypeface> typeface;
+  std::string fallback_reason = "empty_font_manager";
   if (sk_sp<SkFontMgr> font_manager = skia::DefaultFontMgr()) {
     typeface =
         font_manager->matchFamilyStyle(requested_family.c_str(),
                                        requested_style);
+    if (typeface) {
+      fallback_reason = "match_family_style";
+    }
     if (!typeface) {
       typeface = font_manager->legacyMakeTypeface(requested_family.c_str(),
                                                   requested_style);
+      if (typeface) {
+        fallback_reason = "legacy_make_typeface";
+      }
     }
     if (!typeface && font_manager->countFamilies() > 0) {
       SkString family_name;
@@ -15475,10 +15605,14 @@ const SimpleFontData* FontCache::GetFontData(
       typeface =
           font_manager->matchFamilyStyle(family_name.c_str(),
                                          requested_style);
+      if (typeface) {
+        fallback_reason = "first_family_fallback";
+      }
     }
   }
   if (!typeface) {
     typeface = SkTypeface::MakeEmpty();
+    fallback_reason = "empty_typeface";
   }
 
   auto* platform_data = new Persistent<FontPlatformData>();
@@ -15488,6 +15622,53 @@ const SimpleFontData* FontCache::GetFontData(
   const bool synthetic_italic =
       font_description.Style() == kItalicSlopeValue && typeface &&
       !typeface->isItalic();
+  SkString resolved_family;
+  if (typeface) {
+    typeface->getFamilyName(&resolved_family);
+  }
+  StandaloneFontResolutionDiagnostic diagnostic;
+  diagnostic.requested_family =
+      family_name.empty() ? std::string() : family_name.GetString().Utf8();
+  diagnostic.effective_family = requested_family;
+  diagnostic.resolved_family = resolved_family.c_str();
+  diagnostic.fallback_reason = fallback_reason;
+  diagnostic.computed_size = computed_size;
+  SkFont diagnostic_font(typeface, computed_size);
+  diagnostic_font.setEmbolden(synthetic_bold);
+  diagnostic_font.setSkewX(synthetic_italic ? -0.25f : 0.0f);
+  diagnostic_font.setEdging(SkFont::Edging::kAntiAlias);
+  diagnostic_font.setSubpixel(true);
+  diagnostic.test_string_width = diagnostic_font.measureText(
+      "Custom Property Math", 20, SkTextEncoding::kUTF8);
+  const char kDiagnosticText[] = "Custom Property Math";
+  const int glyph_count = diagnostic_font.textToGlyphs(
+      kDiagnosticText, 20, SkTextEncoding::kUTF8, {});
+  if (glyph_count > 0) {
+    std::vector<SkGlyphID> glyphs(static_cast<size_t>(glyph_count));
+    diagnostic_font.textToGlyphs(kDiagnosticText, 20, SkTextEncoding::kUTF8,
+                                 SkSpan<SkGlyphID>(glyphs.data(),
+                                                   glyphs.size()));
+    std::vector<SkScalar> widths(static_cast<size_t>(glyph_count));
+    diagnostic_font.getWidths(glyphs, widths);
+    for (SkScalar width : widths) {
+      diagnostic.test_string_rounded_glyph_width +=
+          static_cast<float>(SkScalarRoundToInt(width));
+    }
+  }
+  SkFontMetrics font_metrics;
+  diagnostic_font.getMetrics(&font_metrics);
+  diagnostic.metrics_ascent = font_metrics.fAscent;
+  diagnostic.metrics_descent = font_metrics.fDescent;
+  diagnostic.metrics_leading = font_metrics.fLeading;
+  diagnostic.weight = requested_style.weight();
+  diagnostic.width = requested_style.width();
+  diagnostic.slant = requested_style.slant();
+  diagnostic.requested_family_was_empty = family_name.empty();
+  diagnostic.requested_family_was_generic =
+      font_description.Family().FamilyIsGeneric();
+  diagnostic.synthetic_bold = synthetic_bold;
+  diagnostic.synthetic_italic = synthetic_italic;
+  StandaloneRecordFontResolutionDiagnostic(std::move(diagnostic));
   *platform_data = MakeGarbageCollected<FontPlatformData>(
       std::move(typeface), std::string(), computed_size, synthetic_bold,
       synthetic_italic, TextRenderingMode::kAutoTextRendering,
@@ -18843,6 +19024,9 @@ SkFont FontPlatformData::CreateSkFont(const FontDescription*) const {
   SkFont font(typeface_, text_size_ > 0 ? text_size_ : 12.0f);
   font.setEmbolden(synthetic_bold_);
   font.setSkewX(synthetic_italic_ ? -0.25f : 0.0f);
+  font.setEdging(SkFont::Edging::kAntiAlias);
+  font.setSubpixel(true);
+  font.setEmbeddedBitmaps(true);
   return font;
 }
 void FontPlatformData::Trace(Visitor*) const {}

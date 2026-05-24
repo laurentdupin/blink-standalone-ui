@@ -106,6 +106,10 @@ extern "C" uint64_t StandaloneRendererDiagnosticTypefaceFallbackCount();
 extern "C" int StandaloneRendererSameProcessTypefaceFamilyAt(int,
                                                               char*,
                                                               int);
+extern "C" int StandaloneRendererFontResolutionDiagnosticCount();
+extern "C" int StandaloneRendererFontResolutionDiagnosticJsonAt(int,
+                                                                 char*,
+                                                                 int);
 extern "C" void StandaloneRendererResetImageReachabilityDiagnostics();
 extern "C" int StandaloneRendererImageResourceContentFetchCalled();
 extern "C" int StandaloneRendererLayoutImageSetResourceCalled();
@@ -5739,6 +5743,21 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       json << ",";
     }
     json << JsonStringForStandaloneRenderer(family);
+  }
+  json << "]}"
+       << ",\"font_resolution_diagnostics\":{\"count\":"
+       << StandaloneRendererFontResolutionDiagnosticCount()
+       << ",\"entries\":[";
+  for (int i = 0; i < StandaloneRendererFontResolutionDiagnosticCount(); ++i) {
+    char entry[2048] = {};
+    if (StandaloneRendererFontResolutionDiagnosticJsonAt(
+            i, entry, sizeof(entry)) <= 0) {
+      continue;
+    }
+    if (i > 0) {
+      json << ",";
+    }
+    json << entry;
   }
   json << "]}"
        << ",\"extraction_text_blob_resources\":{\"enabled\":"
