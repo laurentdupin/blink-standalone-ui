@@ -3716,8 +3716,18 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"html_input_element_source_linked\":true,"
        << "\"html_select_element_source_linked\":true,"
        << "\"text_control_shadow_subtree_stubbed\":false,"
-       << "\"native_select_shadow_path_unsafe_in_prior_experiment\":true,"
        << "\"text_input_subset_enabled\":true,"
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+       << "\"select_control_subset_enabled\":true,"
+       << "\"native_select_shadow_path_unsafe_in_prior_experiment\":false,"
+       << "\"select_picker_icon_pseudo_failsoft\":true,"
+       << "\"select_picker_icon_failsoft_reason\":\"standalone does not "
+          "provide browser/theme-backed picker icon pseudo machinery\","
+#else
+       << "\"select_control_subset_enabled\":false,"
+       << "\"native_select_shadow_path_unsafe_in_prior_experiment\":true,"
+       << "\"select_picker_icon_pseudo_failsoft\":false,"
+#endif
        << "\"enabled_input_type_names\":[\"text\",\"search\",\"password\","
           "\"empty-default-to-text\"],"
        << "\"unsupported_input_behavior\":\"unsupported input types normalize "
@@ -3729,10 +3739,18 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"datalist/browser chooser paths are disabled\","
        << "\"text-control selection/editing APIs use cached selection only\","
        << "\"opaque ranges are unsupported in standalone text input\"],"
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+       << "\"remaining_unsupported_controls\":[\"textarea\","
+          "\"file\",\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
+       << "\"production_policy\":\"real Blink text input and closed/basic "
+          "select subsets are enabled; picker-icon/popup/browser-facing "
+          "controls remain fail-soft\""
+#else
        << "\"remaining_unsupported_controls\":[\"select\",\"textarea\","
           "\"file\",\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
        << "\"production_policy\":\"real Blink text input subset is enabled; "
           "non-text browser-facing controls remain fail-soft\""
+#endif
 #else
        << "\"html_input_element_source_linked\":false,"
        << "\"html_select_element_source_linked\":true,"

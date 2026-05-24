@@ -5151,12 +5151,7 @@ const ComputedStyle* Element::ParentComputedStyle() const {
 // pseudo-elements.
 void Element::RecalcStyle(const StyleRecalcChange change,
                           const StyleRecalcContext& style_recalc_context) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_recalc_enter element=%p tag=%s has_shadow=%d layout=%p needs=%d child_needs=%d reattach=%d\n",
-               this, localName().Ascii().c_str(), GetShadowRoot() ? 1 : 0,
-               GetLayoutObject(), NeedsStyleRecalc(), ChildNeedsStyleRecalc(),
-               NeedsReattachLayoutTree());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   DCHECK(InActiveDocument());
   DCHECK(GetDocument().InStyleRecalc());
@@ -5171,17 +5166,7 @@ void Element::RecalcStyle(const StyleRecalcChange change,
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   if (HasCustomStyleCallbacks()) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_before_will_callbacks element=%p tag=%s\n",
-                 this, localName().Ascii().c_str());
-#endif
     WillRecalcStyle(change);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_after_will_callbacks element=%p tag=%s\n",
-                 this, localName().Ascii().c_str());
-#endif
   }
 
   StyleScopeFrame style_scope_frame(
@@ -5194,18 +5179,10 @@ void Element::RecalcStyle(const StyleRecalcChange change,
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   if (change.ShouldRecalcStyleFor(*this)) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_before_own element=%p tag=%s\n",
-                 this, localName().Ascii().c_str());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
     child_change = RecalcOwnStyle(change, local_style_recalc_context);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_after_own element=%p tag=%s child_traverse=%d child_reattach=%d\n",
-                 this, localName().Ascii().c_str(),
-                 child_change.TraverseChildren(*this),
-                 child_change.ReattachLayoutTree());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
     if (GetStyleChangeType() == kSubtreeStyleChange) {
       child_change =
@@ -5329,10 +5306,7 @@ void Element::RecalcStyle(const StyleRecalcChange change,
 #endif
 
   if (child_change.TraversePseudoElements(*this)) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_before_after_pseudos element=%p tag=%s need_check=%d\n",
-                 this, localName().Ascii().c_str(), need_to_check_pseudos);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
     // Backdrop handling depends on feature flags.
     // TODO: When the OverlayProperty feature flag is removed,
@@ -5382,52 +5356,19 @@ void Element::RecalcStyle(const StyleRecalcChange change,
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
     if (ShadowRoot* root = GetShadowRoot()) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=element_recalc_before_shadow_children element=%p tag=%s shadow=%p\n",
-                   this, localName().Ascii().c_str(), root);
-#endif
       root->RecalcDescendantStyles(child_change, child_recalc_context, *this);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=element_recalc_after_shadow_children element=%p tag=%s\n",
-                   this, localName().Ascii().c_str());
-#endif
       if (child_change.RecalcDescendants()) {
         MarkNonSlottedHostChildrenForStyleRecalc();
       }
     } else if (auto* slot = ToHTMLSlotElementIfSupportsAssignmentOrNull(this)) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=element_recalc_before_slot_children element=%p tag=%s\n",
-                   this, localName().Ascii().c_str());
-#endif
       SelectorFilterParentScope filter_scope(
           this, SelectorFilterParentScope::ScopeType::kParent);
       slot->RecalcStyleForSlotChildren(child_change, child_recalc_context);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=element_recalc_after_slot_children element=%p tag=%s\n",
-                   this, localName().Ascii().c_str());
-#endif
     } else {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=element_recalc_before_dom_children element=%p tag=%s\n",
-                   this, localName().Ascii().c_str());
-#endif
       RecalcDescendantStyles(child_change, child_recalc_context, *this);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=element_recalc_after_dom_children element=%p tag=%s\n",
-                   this, localName().Ascii().c_str());
-#endif
     }
   }
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_recalc_exit element=%p tag=%s\n",
-               this, localName().Ascii().c_str());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
 
   if (child_change.TraversePseudoElements(*this)) {
@@ -5450,16 +5391,11 @@ void Element::RecalcStyle(const StyleRecalcChange change,
       UpdatePseudoElement(kPseudoIdAfter, child_change, child_recalc_context);
       if (IsA<HTMLSelectElement>(this)) {
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-        std::fprintf(stderr,
-                     "select_reachability.stage=element_recalc_before_picker_icon element=%p tag=%s\n",
-                     this, localName().Ascii().c_str());
-#endif
+        // Standalone supports closed select value layout/paint, but not the
+        // browser/theme-backed picker icon pseudo-element yet.
+#else
         UpdatePseudoElement(kPseudoIdPickerIcon, child_change,
                             child_recalc_context);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-        std::fprintf(stderr,
-                     "select_reachability.stage=element_recalc_after_picker_icon element=%p tag=%s\n",
-                     this, localName().Ascii().c_str());
 #endif
       }
 
@@ -5505,31 +5441,13 @@ void Element::RecalcStyle(const StyleRecalcChange change,
   }
 
   ClearChildNeedsStyleRecalc();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_recalc_after_clear_child_needs element=%p tag=%s\n",
-               this, localName().Ascii().c_str());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   // We've updated all the children that needs an update (might be 0).
   display_lock_style_scope.DidUpdateChildStyle();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_recalc_after_display_lock_child element=%p tag=%s\n",
-               this, localName().Ascii().c_str());
-#endif
 
   if (HasCustomStyleCallbacks()) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_before_did_callbacks element=%p tag=%s\n",
-                 this, localName().Ascii().c_str());
-#endif
     DidRecalcStyle(child_change);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_recalc_after_did_callbacks element=%p tag=%s\n",
-                 this, localName().Ascii().c_str());
-#endif
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
@@ -5645,10 +5563,7 @@ void Element::NotifyAXOfAttachedSubtree() {
 StyleRecalcChange Element::RecalcOwnStyle(
     const StyleRecalcChange change,
     const StyleRecalcContext& style_recalc_context) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_own_style_enter element=%p tag=%s old_style=%p\n",
-               this, localName().Ascii().c_str(), GetComputedStyle());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   DCHECK(GetDocument().InStyleRecalc());
 
@@ -5689,10 +5604,7 @@ StyleRecalcChange Element::RecalcOwnStyle(
 #endif
 
   const ComputedStyle* parent_style = ParentComputedStyle();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_own_before_style_for_layout element=%p tag=%s parent_style=%p\n",
-               this, localName().Ascii().c_str(), parent_style);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   if (parent_style && old_style && change.IndependentInherit(*old_style)) {
     // When propagating inherited changes, we don't need to do a full style
@@ -5717,10 +5629,7 @@ StyleRecalcChange Element::RecalcOwnStyle(
     // the element's style more or less from scratch (typically
     // ending up calling StyleResolver::ResolveStyle()).
     new_style = StyleForLayoutObject(new_style_recalc_context);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_own_after_style_for_layout element=%p tag=%s new_style=%p\n",
-                 this, localName().Ascii().c_str(), new_style);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   }
   bool base_is_display_none =
@@ -5822,12 +5731,6 @@ StyleRecalcChange Element::RecalcOwnStyle(
     }
   }
   SetComputedStyle(new_style);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_own_after_set_computed element=%p tag=%s new_style=%p diff=%d child_reattach=%d\n",
-               this, localName().Ascii().c_str(), new_style,
-               static_cast<int>(diff), child_change.ReattachLayoutTree());
-#endif
 
   if ((!old_style && new_style && new_style->GetCounterDirectives()) ||
       (old_style && new_style &&
@@ -6010,11 +5913,6 @@ StyleRecalcChange Element::RecalcOwnStyle(
     if (new_style || old_style) {
       SetNeedsReattachLayoutTree();
     }
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=element_own_return_reattach element=%p tag=%s\n",
-                 this, localName().Ascii().c_str());
-#endif
     return child_change;
   }
 
@@ -6111,13 +6009,6 @@ StyleRecalcChange Element::RecalcOwnStyle(
       layout_object->UpdateAfterReinsert(*old_style);
     }
   }
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=element_own_exit element=%p tag=%s child_traverse=%d child_reattach=%d\n",
-               this, localName().Ascii().c_str(),
-               child_change.TraverseChildren(*this),
-               child_change.ReattachLayoutTree());
-#endif
 
   return child_change;
 }

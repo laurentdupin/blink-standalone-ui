@@ -95,10 +95,6 @@ const int kDefaultListBoxSize = 4;
 HTMLSelectElement::HTMLSelectElement(Document& document)
     : HTMLFormControlElementWithState(html_names::kSelectTag, document),
       type_ahead_(this) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=html_select_ctor\n");
-  std::fflush(stderr);
-#endif
   // Make sure SelectType is created after initializing |uses_menu_list_|.
   select_type_ = SelectType::Create(*this);
   SetHasCustomStyleCallbacks();
@@ -470,12 +466,6 @@ bool HTMLSelectElement::CanSelectAll() const {
 // layout despite the standardized inline-block display property.
 LayoutObject* HTMLSelectElement::CreateLayoutObject(
     const ComputedStyle& style) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_create_layout_object uses_menu_list=%d\n",
-               UsesMenuList() ? 1 : 0);
-  std::fflush(stderr);
-#endif
   if (style.IsVerticalWritingMode()) {
     UseCounter::Count(GetDocument(), WebFeature::kVerticalFormControls);
   }
@@ -890,38 +880,11 @@ void HTMLSelectElement::ElementInserted(Node& node) {
 
 void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
                                        bool option_is_selected) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_inserted_enter select=%p option=%p selected=%d size=%d multiple=%d last_on_change=%p\n",
-               static_cast<void*>(this), static_cast<void*>(&option),
-               option_is_selected ? 1 : 0, size_, IsMultiple() ? 1 : 0,
-               static_cast<void*>(last_on_change_option_.Get()));
-  std::fflush(stderr);
-#endif
   DCHECK_EQ(option.OwnerSelectElement(), this);
   SetRecalcListItems();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_inserted_after_set_recalc select=%p option=%p\n",
-               static_cast<void*>(this), static_cast<void*>(&option));
-  std::fflush(stderr);
-#endif
   if (option_is_selected) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=html_select_option_inserted_before_select_option select=%p option=%p\n",
-                 static_cast<void*>(this), static_cast<void*>(&option));
-    std::fflush(stderr);
-#endif
     SelectOption(&option, kDontUpdateSelectedcontentFlag |
                               (IsMultiple() ? 0 : kDeselectOtherOptionsFlag));
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=html_select_option_inserted_after_select_option select=%p option=%p last_on_change=%p\n",
-                 static_cast<void*>(this), static_cast<void*>(&option),
-                 static_cast<void*>(last_on_change_option_.Get()));
-    std::fflush(stderr);
-#endif
   } else if (!last_on_change_option_) {
     // The newly added option is not selected and we do not already have a
     // selected option. We should re-run the selection algorithm if there is a
@@ -935,53 +898,16 @@ void HTMLSelectElement::OptionInserted(HTMLOptionElement& option,
     //
     // https://html.spec.whatwg.org/multipage/form-elements.html#selectedness-setting-algorithm
     if (size_ <= 1 && !option.IsDisabledFormControl()) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=html_select_option_inserted_before_reset_default select=%p option=%p\n",
-                   static_cast<void*>(this), static_cast<void*>(&option));
-      std::fflush(stderr);
-#endif
       ResetToDefaultSelection(kResetReasonOptionInsertedOrRemoved);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=html_select_option_inserted_after_reset_default select=%p option=%p last_on_change=%p\n",
-                   static_cast<void*>(this), static_cast<void*>(&option),
-                   static_cast<void*>(last_on_change_option_.Get()));
-      std::fflush(stderr);
-#endif
     }
   }
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_inserted_before_validity select=%p option=%p\n",
-               static_cast<void*>(this), static_cast<void*>(&option));
-  std::fflush(stderr);
-#endif
   SetNeedsValidityCheck();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_inserted_before_clear_last select=%p option=%p last_on_change=%p\n",
-               static_cast<void*>(this), static_cast<void*>(&option),
-               static_cast<void*>(last_on_change_option_.Get()));
-  std::fflush(stderr);
-#endif
   select_type_->ClearLastOnChangeSelection();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_inserted_after_clear_last select=%p option=%p last_on_change=%p active=%d\n",
-               static_cast<void*>(this), static_cast<void*>(&option),
-               static_cast<void*>(last_on_change_option_.Get()),
-               GetDocument().IsActive() ? 1 : 0);
-  std::fflush(stderr);
-#endif
 
   if (!GetDocument().IsActive())
     return;
 
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_inserted_skip_chrome_client\n");
-  std::fflush(stderr);
   return;
 #endif
   GetDocument()
@@ -1034,9 +960,6 @@ void HTMLSelectElement::OptionRemoved(HTMLOptionElement& option) {
     return;
 
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=html_select_option_removed_skip_chrome_client\n");
-  std::fflush(stderr);
   return;
 #endif
   GetDocument()
@@ -1754,23 +1677,11 @@ void HTMLSelectElement::DidRecalcStyle(const StyleRecalcChange change) {
 }
 
 void HTMLSelectElement::AttachLayoutTree(AttachContext& context) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=html_select_attach_enter\n");
-  std::fflush(stderr);
-#endif
   HTMLFormControlElementWithState::AttachLayoutTree(context);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=html_select_attach_after_base\n");
-  std::fflush(stderr);
-#endif
   // The call to UpdateTextStyle() needs to go after the call through
   // to the base class's AttachLayoutTree() because that can sometimes do a
   // close on the LayoutObject.
   select_type_->UpdateTextStyle();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=html_select_attach_after_update_text\n");
-  std::fflush(stderr);
-#endif
 
   if (const ComputedStyle* style = GetComputedStyle()) {
     if (style->Visibility() != EVisibility::kHidden) {

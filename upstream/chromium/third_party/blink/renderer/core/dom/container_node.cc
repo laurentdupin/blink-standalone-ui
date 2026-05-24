@@ -1699,13 +1699,6 @@ void ContainerNode::RecalcDescendantStyles(
   SelectorFilter::Mark mark;
 
   for (Node* child = firstChild(); child; child = child->nextSibling()) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-    std::fprintf(stderr,
-                 "select_reachability.stage=container_recalc_child container=%p child=%p traverse=%d is_text=%d is_element=%d\n",
-                 this, child, change.TraverseChild(*child),
-                 DynamicTo<Text>(child) ? 1 : 0,
-                 DynamicTo<Element>(child) ? 1 : 0);
-#endif
     if (!change.TraverseChild(*child)) {
       continue;
     }
@@ -1713,14 +1706,6 @@ void ContainerNode::RecalcDescendantStyles(
       child_text_node->RecalcTextStyle(change);
 
     if (auto* child_element = DynamicTo<Element>(child)) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      Node* diagnostic_next_before = child->nextSibling();
-      std::fprintf(stderr,
-                   "select_reachability.stage=container_before_child_element container=%p child=%p tag=%s next_before=%p\n",
-                   this, child_element,
-                   child_element->localName().Ascii().c_str(),
-                   diagnostic_next_before);
-#endif
       if (!seen_any_child_elements) {
         // Push the parent, lazily. (We don't want to spend time
         // on this if we only have text nodes as children.)
@@ -1729,11 +1714,6 @@ void ContainerNode::RecalcDescendantStyles(
         seen_any_child_elements = true;
       }
       child_element->RecalcStyle(change, style_recalc_context);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      std::fprintf(stderr,
-                   "select_reachability.stage=container_after_child_element container=%p child=%p next_before=%p\n",
-                   this, child_element, diagnostic_next_before);
-#endif
     }
   }
   if (seen_any_child_elements) {

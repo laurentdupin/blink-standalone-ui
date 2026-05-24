@@ -328,10 +328,6 @@ class MenuListSelectType final : public SelectType {
 
 MenuListSelectType::MenuListSelectType(HTMLSelectElement& select)
     : SelectType(select) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_select_type_ctor\n");
-  std::fflush(stderr);
-#endif
   // MenuList selects always have two implicitly anchored elements: the
   // ::picker and the autofill popover.
   select_->SetMayBeImplicitAnchor();
@@ -587,10 +583,6 @@ bool MenuListSelectType::HandlePopupOpenKeyboardEvent() {
 }
 
 void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_create_shadow_enter\n");
-  std::fflush(stderr);
-#endif
   Document& doc = select_->GetDocument();
 
   inner_element_ = MakeGarbageCollected<MenuListInnerElement>(doc);
@@ -600,8 +592,6 @@ void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
   inner_element_->appendChild(Text::Create(doc, g_empty_string));
   root.AppendChild(inner_element_);
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_create_shadow_inner_done\n");
-  std::fflush(stderr);
   // The standalone renderer supports closed/basic select layout and paint, but
   // not browser popup/autofill picker UI. Keep Blink's select value and inner
   // text path while avoiding the popup-only shadow subtree.
@@ -611,18 +601,10 @@ void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
   button_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
   button_slot_->SetShadowPseudoId(shadow_element_names::kSelectButtonSlot);
   root.appendChild(button_slot_);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_create_shadow_button_slot_done\n");
-  std::fflush(stderr);
-#endif
 
   popover_ = MakeGarbageCollected<PopoverElementForAppearanceBase>(doc);
   popover_->SetShadowPseudoId(shadow_element_names::kPickerSelect);
   root.appendChild(popover_);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_create_shadow_popover_done\n");
-  std::fflush(stderr);
-#endif
   popover_->setAttribute(html_names::kPopoverAttr, AtomicString("auto"));
 
   popover_options_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
@@ -642,17 +624,9 @@ void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
   autofill_popover_text_->SetShadowPseudoId(
       shadow_element_names::kSelectAutofillPreviewText);
   autofill_popover_->appendChild(autofill_popover_text_);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_create_shadow_done\n");
-  std::fflush(stderr);
-#endif
 }
 
 void MenuListSelectType::ManuallyAssignSlots() {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_assign_slots_enter\n");
-  std::fflush(stderr);
-#endif
   VectorOf<Node> option_nodes;
   HTMLButtonElement* first_button = nullptr;
   VectorOf<Node> all_children_except_first_button;
@@ -678,34 +652,17 @@ void MenuListSelectType::ManuallyAssignSlots() {
 
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
   if (!button_slot_ || !popover_options_slot_) {
-    std::fprintf(stderr,
-                 "select_reachability.stage=menu_list_assign_slots_skip_no_popup_slots\n");
-    std::fflush(stderr);
     return;
   }
 #endif
   CHECK(button_slot_);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=menu_list_assign_slots_before_button option_nodes=%u other_nodes=%u\n",
-               option_nodes.size(), all_children_except_first_button.size());
-  std::fflush(stderr);
-#endif
   bool had_slotted_button = !button_slot_->ManuallyAssignedNodes().empty();
   if (select_->last_on_change_option_ && had_slotted_button != !!first_button) {
     select_->last_on_change_option_->UpdateMutationObserver(
         /*in_style_recalc=*/true);
   }
   button_slot_->Assign(first_button);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_assign_slots_after_button\n");
-  std::fflush(stderr);
-#endif
   popover_options_slot_->Assign(all_children_except_first_button);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_assign_slots_after_popover\n");
-  std::fflush(stderr);
-#endif
 }
 
 HTMLButtonElement* MenuListSelectType::SlottedButton() const {
@@ -1004,10 +961,6 @@ void MenuListSelectType::DidDetachLayoutTree() {
 }
 
 void MenuListSelectType::DidRecalcStyle(const StyleRecalcChange change) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_did_recalc_style_enter\n");
-  std::fflush(stderr);
-#endif
   if (auto* style = select_->GetComputedStyle()) {
     bool is_appearance_base_select =
         select_->SupportsBaseAppearance(style->EffectiveAppearance());
@@ -1039,15 +992,7 @@ void MenuListSelectType::DidRecalcStyle(const StyleRecalcChange change) {
 
   if (change.ReattachLayoutTree())
     return;
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_did_recalc_style_before_update_text\n");
-  std::fflush(stderr);
-#endif
   UpdateTextStyle();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_did_recalc_style_after_update_text\n");
-  std::fflush(stderr);
-#endif
   if (auto* layout_object = select_->GetLayoutObject()) {
     // Invalidate paint to ensure that the focus ring is updated.
     layout_object->SetShouldDoFullPaintInvalidation();
@@ -1147,20 +1092,8 @@ String MenuListSelectType::UpdateTextStyleInternal() {
 }
 
 void MenuListSelectType::UpdateTextStyleAndContent() {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_update_text_enter\n");
-  std::fflush(stderr);
-#endif
   String text = UpdateTextStyleInternal();
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_update_text_after_internal\n");
-  std::fflush(stderr);
-#endif
   select_->InnerElement().firstChild()->setNodeValue(text);
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_update_text_done\n");
-  std::fflush(stderr);
-#endif
   if (auto* box = select_->GetLayoutBox()) {
     if (auto* cache = select_->GetDocument().ExistingAXObjectCache())
       cache->TextChanged(box);
@@ -1192,10 +1125,6 @@ void MenuListSelectType::DidUpdateActiveOption(HTMLOptionElement* option) {
 }
 
 HTMLOptionElement* MenuListSelectType::OptionToBeShown() const {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr, "select_reachability.stage=menu_list_option_to_be_shown\n");
-  std::fflush(stderr);
-#endif
   if (auto* option =
           select_->OptionAtListIndex(select_->index_to_select_on_cancel_))
     return option;
@@ -2065,12 +1994,6 @@ void ListBoxSelectType::UpdateOptionMutationObservers(bool in_style_recalc) {
 SelectType::SelectType(HTMLSelectElement& select) : select_(select) {}
 
 SelectType* SelectType::Create(HTMLSelectElement& select) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  std::fprintf(stderr,
-               "select_reachability.stage=select_type_create uses_menu_list=%d\n",
-               select.UsesMenuList() ? 1 : 0);
-  std::fflush(stderr);
-#endif
   if (select.UsesMenuList())
     return MakeGarbageCollected<MenuListSelectType>(select);
   else
