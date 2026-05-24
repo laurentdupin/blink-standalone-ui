@@ -145,6 +145,7 @@
 #include "unicode/uchar.h"
 #include "third_party/skia/include/core/SkFlattenable.h"
 #include "third_party/skia/src/shaders/SkLocalMatrixShader.h"
+#include "third_party/skia/src/shaders/SkPictureShader.h"
 #include "third_party/skia/src/shaders/SkShaderBase.h"
 #include "third_party/skia/src/shaders/gradients/SkGradientBaseShader.h"
 #include "unicode/uscript.h"
@@ -19885,6 +19886,7 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
   SkRegisterColorShaderFlattenable();
   SkRegisterEmptyShaderFlattenable();
   SK_REGISTER_FLATTENABLE(SkLocalMatrixShader);
+  SK_REGISTER_FLATTENABLE(SkPictureShader);
   SkRegisterConicalGradientShaderFlattenable();
   SkRegisterLinearGradientShaderFlattenable();
   SkRegisterRadialGradientShaderFlattenable();
