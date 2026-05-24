@@ -2088,6 +2088,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     auto nearly_equal = [](float left, float right) {
       return std::abs(left - right) <= 0.01f;
     };
+    auto nearly_equal_root_space_origin = [](float left, float right) {
+      return std::abs(left - right) <= 1.5f;
+    };
     for (int i = 0; i < exported_draw_op_count; ++i) {
       int type = 0;
       float x = 0.0f;
@@ -2567,8 +2570,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             active_chunk_property_state.effect_chain_depth <= 1;
         const bool duplicates_chunk_root_space_origin =
             pure_translation && conservative_property_state &&
-            nearly_equal(width, active_chunk_bounds.x) &&
-            nearly_equal(g, active_chunk_bounds.y) &&
+            nearly_equal_root_space_origin(width, active_chunk_bounds.x) &&
+            nearly_equal_root_space_origin(g, active_chunk_bounds.y) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
         if (duplicates_chunk_root_space_origin) {
           Matrix4 skipped_matrix;
