@@ -1,6 +1,7 @@
 #include "html_css_renderer/retained_scene.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <optional>
@@ -38,6 +39,22 @@ uint64_t HashRect(Rect rect) {
   hash = HashCombine(hash, HashFloat(rect.width));
   hash = HashCombine(hash, HashFloat(rect.height));
   return hash;
+}
+
+bool NearlyEqual(float a, float b) {
+  return std::fabs(a - b) <= 0.01f;
+}
+
+bool NeedsGroupedOpacityLayer(const PaintPropertyStateSnapshot& state) {
+  return state.effect_has_non_default_opacity && state.effect_opacity >= 0.0f &&
+         state.effect_opacity < 1.0f;
+}
+
+bool SameOpacityGroup(const PaintPropertyStateSnapshot& a,
+                      const PaintPropertyStateSnapshot& b) {
+  return NeedsGroupedOpacityLayer(a) && NeedsGroupedOpacityLayer(b) &&
+         a.effect_node_id == b.effect_node_id &&
+         NearlyEqual(a.effect_opacity, b.effect_opacity);
 }
 
 uint64_t HashMatrix(Matrix4 matrix) {
@@ -466,7 +483,42 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
         ResourceCommand::FromLoadCommand(command));
   }
 
-  for (const RetainedPaintChunk& retained_chunk : scene.chunks) {
+  bool opacity_layer_open = false;
+  uint64_t active_opacity_effect_node_id = 0;
+  float active_opacity = 1.0f;
+  for (size_t chunk_index = 0; chunk_index < scene.chunks.size();
+       ++chunk_index) {
+    const RetainedPaintChunk& retained_chunk = scene.chunks[chunk_index];
+    const bool needs_opacity_layer =
+        NeedsGroupedOpacityLayer(retained_chunk.property_state);
+    if (opacity_layer_open &&
+        (!needs_opacity_layer ||
+         retained_chunk.property_state.effect_node_id !=
+             active_opacity_effect_node_id ||
+         !NearlyEqual(retained_chunk.property_state.effect_opacity,
+                      active_opacity))) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
+      opacity_layer_open = false;
+    }
+    if (needs_opacity_layer && !opacity_layer_open) {
+      Rect opacity_bounds = retained_chunk.placement_bounds;
+      for (size_t next_index = chunk_index + 1; next_index < scene.chunks.size();
+           ++next_index) {
+        if (!SameOpacityGroup(retained_chunk.property_state,
+                              scene.chunks[next_index].property_state)) {
+          break;
+        }
+        opacity_bounds = UnionRectBounds(opacity_bounds,
+                                         scene.chunks[next_index].placement_bounds);
+      }
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::SaveLayer(
+          opacity_bounds, retained_chunk.property_state.effect_opacity)));
+      opacity_layer_open = true;
+      active_opacity_effect_node_id =
+          retained_chunk.property_state.effect_node_id;
+      active_opacity = retained_chunk.property_state.effect_opacity;
+    }
+
     SceneChunk chunk;
     chunk.debug_index = retained_chunk.debug_index;
     chunk.stable_key = retained_chunk.stable_key.empty()
@@ -507,6 +559,9 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
     }
     frame.scene_commands.push_back(SceneCommand::EndChunk(chunk.chunk_id));
     frame.scene_chunks.push_back(std::move(chunk));
+  }
+  if (opacity_layer_open) {
+    frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
   }
 
   RenderPass root_pass;

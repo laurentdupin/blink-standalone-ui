@@ -357,6 +357,15 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
   SetNeedsPaintPropertyUpdate();
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void LayoutBoxModelObject::EnsureLayerAfterAttachForStandalone() {
+  NOT_DESTROYED();
+  if (!Layer() && LayerTypeRequired() != kNoPaintLayer) {
+    CreateLayerAfterStyleChange();
+  }
+}
+#endif
+
 void LayoutBoxModelObject::DestroyLayer() {
   NOT_DESTROYED();
   DCHECK(HasLayer() && Layer());

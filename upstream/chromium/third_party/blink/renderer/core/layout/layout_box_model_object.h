@@ -163,6 +163,9 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
     NOT_DESTROYED();
     return FirstFragment().Layer();
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void EnsureLayerAfterAttachForStandalone();
+#endif
   // The type of PaintLayer to instantiate. Any value returned from this
   // function other than NoPaintLayer will lead to a PaintLayer being created.
   virtual PaintLayerType LayerTypeRequired() const = 0;

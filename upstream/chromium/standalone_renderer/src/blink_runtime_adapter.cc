@@ -83,7 +83,15 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
     uint32_t* transform_chain_depth,
     uint64_t* scroll_node_id,
     uint32_t* clip_chain_depth,
-    uint32_t* effect_chain_depth);
+    uint32_t* effect_chain_depth,
+    uint64_t* effect_node_id,
+    uint64_t* effect_parent_id,
+    float* effect_opacity,
+    int* effect_has_non_default_opacity,
+    int* effect_has_filter,
+    int* effect_has_backdrop_filter,
+    int* effect_has_blend_mode,
+    uint64_t* effect_output_clip_id);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -2212,12 +2220,23 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           uint64_t scroll_node_id = 0;
           uint32_t clip_chain_depth = 0;
           uint32_t effect_chain_depth = 0;
+          uint64_t effect_node_id = 0;
+          uint64_t effect_parent_id = 0;
+          float effect_opacity = 1.0f;
+          int effect_has_non_default_opacity = 0;
+          int effect_has_filter = 0;
+          int effect_has_backdrop_filter = 0;
+          int effect_has_blend_mode = 0;
+          uint64_t effect_output_clip_id = 0;
           if (live_probe::
                   StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRenderer(
                       probe_html.c_str(), chunk_index, &transform_node_id,
                       &transform_parent_id, &transform_chain_depth,
-                      &scroll_node_id, &clip_chain_depth,
-                      &effect_chain_depth)) {
+                      &scroll_node_id, &clip_chain_depth, &effect_chain_depth,
+                      &effect_node_id, &effect_parent_id, &effect_opacity,
+                      &effect_has_non_default_opacity, &effect_has_filter,
+                      &effect_has_backdrop_filter, &effect_has_blend_mode,
+                      &effect_output_clip_id)) {
             active_chunk_property_state.transform_node_id = transform_node_id;
             active_chunk_property_state.transform_parent_id =
                 transform_parent_id;
@@ -2226,6 +2245,19 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             active_chunk_property_state.scroll_node_id = scroll_node_id;
             active_chunk_property_state.clip_chain_depth = clip_chain_depth;
             active_chunk_property_state.effect_chain_depth = effect_chain_depth;
+            active_chunk_property_state.effect_node_id = effect_node_id;
+            active_chunk_property_state.effect_parent_id = effect_parent_id;
+            active_chunk_property_state.effect_opacity = effect_opacity;
+            active_chunk_property_state.effect_has_non_default_opacity =
+                effect_has_non_default_opacity != 0;
+            active_chunk_property_state.effect_has_filter =
+                effect_has_filter != 0;
+            active_chunk_property_state.effect_has_backdrop_filter =
+                effect_has_backdrop_filter != 0;
+            active_chunk_property_state.effect_has_blend_mode =
+                effect_has_blend_mode != 0;
+            active_chunk_property_state.effect_output_clip_id =
+                effect_output_clip_id;
           }
         }
         active_chunk_key =

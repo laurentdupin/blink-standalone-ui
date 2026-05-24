@@ -81,6 +81,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -1603,47 +1604,10 @@ bool AppendPaintArtifactExtractedOps(
   const DisplayItemList& display_items = artifact.GetDisplayItemList();
   const PaintChunks& chunks = artifact.GetPaintChunks();
   bool complete = true;
-  const EffectPaintPropertyNode* active_opacity_effect = nullptr;
   for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
        ++chunk_index) {
     const PaintChunk& chunk = chunks[chunk_index];
     const PropertyTreeState chunk_state = chunk.properties.Unalias();
-    const EffectPaintPropertyNode* chunk_effect = &chunk_state.Effect();
-    const float effect_opacity = chunk_effect->Opacity();
-    const bool needs_effect_opacity_layer =
-        effect_opacity >= 0.0f && effect_opacity < 1.0f;
-    if (active_opacity_effect &&
-        (!needs_effect_opacity_layer ||
-         chunk_effect != active_opacity_effect)) {
-      AppendRestoreOp(exported_draw_ops);
-      active_opacity_effect = nullptr;
-    }
-    if (needs_effect_opacity_layer && !active_opacity_effect) {
-      gfx::Rect opacity_layer_bounds = chunk.bounds;
-      for (wtf_size_t next_chunk_index = chunk_index + 1;
-           next_chunk_index < chunks.size(); ++next_chunk_index) {
-        const PaintChunk& next_chunk = chunks[next_chunk_index];
-        const PropertyTreeState next_chunk_state =
-            next_chunk.properties.Unalias();
-        const EffectPaintPropertyNode* next_effect =
-            &next_chunk_state.Effect();
-        if (next_effect != chunk_effect ||
-            next_effect->Opacity() != effect_opacity) {
-          break;
-        }
-        opacity_layer_bounds.Union(next_chunk.bounds);
-      }
-      AppendSaveLayerAlphaOp(
-          SkRectFromGfxRectForStandaloneRenderer(opacity_layer_bounds), 0.0f,
-          0.0f, effect_opacity, viewport_width, viewport_height,
-          exported_draw_ops);
-      active_opacity_effect = chunk_effect;
-      diagnostics.push_back(
-          "paint_op_extraction applied grouped effect opacity saveLayer "
-          "chunk_index=" +
-          std::to_string(chunk_index) + " opacity=" +
-          std::to_string(effect_opacity));
-    }
     bool projection_has_non_translation = false;
     gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
         chunk_state, nullptr, &projection_has_non_translation);
@@ -1685,9 +1649,6 @@ bool AppendPaintArtifactExtractedOps(
     }
     AppendRestoreOp(exported_draw_ops);
     AppendEndChunkOp(exported_draw_ops);
-  }
-  if (active_opacity_effect) {
-    AppendRestoreOp(exported_draw_ops);
   }
   return complete && !exported_draw_ops.empty();
 }
@@ -2485,6 +2446,157 @@ std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
        << ",\"img\":" << ElementEvidenceJsonForStandaloneRenderer(img)
        << ",\"table\":" << ElementEvidenceJsonForStandaloneRenderer(table)
        << "}";
+  return json.str();
+}
+
+std::string OpacityElementDiagnosticsJsonForStandaloneRenderer(
+    const char* selector,
+    Element* element) {
+  std::ostringstream json;
+  json << "{\"selector\":"
+       << JsonStringForStandaloneRenderer(selector ? selector : "");
+  if (!element) {
+    json << ",\"present\":false,\"first_missing_stage\":\"element_not_found\"}";
+    return json.str();
+  }
+  json << ",\"present\":true"
+       << ",\"tag_name\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(element->tagName()))
+       << ",\"id\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  element->GetIdAttribute()))
+       << ",\"class\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  element->getAttribute(html_names::kClassAttr)))
+       << ",\"data_debug_id\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  element->getAttribute(AtomicString("data-debug-id"))));
+
+  const ComputedStyle* style = element->GetComputedStyle();
+  if (style) {
+    json << ",\"computed_style\":{\"opacity\":" << style->Opacity()
+         << ",\"has_opacity\":" << (style->HasOpacity() ? "true" : "false")
+         << ",\"display\":" << static_cast<int>(style->Display())
+         << ",\"position\":" << static_cast<int>(style->GetPosition())
+         << ",\"is_stacking_context_without_containment\":"
+         << (style->IsStackingContextWithoutContainment() ? "true" : "false")
+         << "}";
+  } else {
+    json << ",\"computed_style\":null";
+  }
+
+  LayoutObject* layout_object = element->GetLayoutObject();
+  if (!layout_object) {
+    json << ",\"layout_object_present\":false"
+         << ",\"first_missing_stage\":\"layout_object_missing\"}";
+    return json.str();
+  }
+
+  json << ",\"layout_object_present\":true"
+       << ",\"layout_object_type\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(
+                  layout_object->DebugName()))
+       << ",\"layout_flags\":{\"has_layer\":"
+       << (layout_object->HasLayer() ? "true" : "false")
+       << ",\"is_stacked\":" << (layout_object->IsStacked() ? "true" : "false")
+       << ",\"is_stacking_context\":"
+       << (layout_object->IsStackingContext() ? "true" : "false")
+       << ",\"needs_paint_property_update\":"
+       << (layout_object->NeedsPaintPropertyUpdate() ? "true" : "false")
+       << "}";
+
+  if (auto* box_model = DynamicTo<LayoutBoxModelObject>(layout_object)) {
+    json << ",\"box_model\":{\"layer_type_required\":"
+         << static_cast<int>(box_model->LayerTypeRequired())
+         << ",\"has_self_painting_layer\":"
+         << (box_model->HasSelfPaintingLayer() ? "true" : "false");
+    PaintLayer* layer = box_model->Layer();
+    json << ",\"paint_layer_present\":" << (layer ? "true" : "false");
+    if (layer) {
+      json << ",\"paint_layer\":{\"is_self_painting\":"
+           << (layer->IsSelfPaintingLayer() ? "true" : "false")
+           << ",\"has_visible_content\":"
+           << (layer->HasVisibleContent() ? "true" : "false")
+           << ",\"has_visible_self_painting_descendant\":"
+           << (layer->HasVisibleSelfPaintingDescendant() ? "true" : "false")
+           << ",\"has_self_painting_descendant\":"
+           << (layer->HasSelfPaintingLayerDescendant() ? "true" : "false")
+           << "}";
+    }
+    json << "}";
+  }
+
+  const ObjectPaintProperties* properties =
+      layout_object->FirstFragment().PaintProperties();
+  if (properties) {
+    const auto* effect = properties->Effect();
+    json << ",\"object_paint_properties\":{\"present\":true"
+         << ",\"effect_present\":" << (effect ? "true" : "false")
+         << ",\"effect_opacity\":"
+         << (effect ? std::to_string(effect->Opacity()) : "1")
+         << ",\"effect_has_non_default_opacity\":"
+         << (effect && effect->Opacity() != 1.0f ? "true" : "false")
+         << "}";
+  } else {
+    json << ",\"object_paint_properties\":{\"present\":false}";
+  }
+
+  std::string missing_stage = "ok";
+  if (style && style->Opacity() != 1.0f) {
+    if (!layout_object->HasLayer()) {
+      missing_stage = "opacity_layout_object_has_no_paint_layer";
+    } else if (!properties) {
+      missing_stage = "opacity_object_paint_properties_missing";
+    } else if (!properties->Effect()) {
+      missing_stage = "opacity_effect_node_missing";
+    } else if (properties->Effect()->Opacity() == 1.0f) {
+      missing_stage = "opacity_effect_node_default_opacity";
+    }
+  }
+  json << ",\"first_missing_stage\":"
+       << JsonStringForStandaloneRenderer(missing_stage) << "}";
+  return json.str();
+}
+
+std::string OpacityDiagnosticsJsonForStandaloneRenderer(Document& document) {
+  Element* body = document.body();
+  Element* debug_opacity =
+      body ? FindElementByAttributeForStandaloneRenderer(
+                 *body, AtomicString("data-debug-id"))
+           : nullptr;
+  Element* stage =
+      body ? FindElementByClassForStandaloneRenderer(*body,
+                                                     AtomicString("stage"))
+           : nullptr;
+  Element* clip_stage =
+      body ? FindElementByClassForStandaloneRenderer(
+                 *body, AtomicString("clip-stage"))
+           : nullptr;
+  Element* fade =
+      body ? FindElementByClassForStandaloneRenderer(*body,
+                                                     AtomicString("fade"))
+           : nullptr;
+  std::ostringstream json;
+  json << "{\"runtime\":{\"stacking_context_is_not_stacked_enabled\":"
+       << (RuntimeEnabledFeatures::StackingContextIsNotStackedEnabled()
+               ? "true"
+               : "false")
+       << "},\"targets\":["
+       << OpacityElementDiagnosticsJsonForStandaloneRenderer(
+              "[data-debug-id]", debug_opacity)
+       << ","
+       << OpacityElementDiagnosticsJsonForStandaloneRenderer(".stage", stage)
+       << ","
+       << OpacityElementDiagnosticsJsonForStandaloneRenderer(".clip-stage",
+                                                            clip_stage)
+       << ","
+       << OpacityElementDiagnosticsJsonForStandaloneRenderer(".fade", fade)
+       << "]}";
   return json.str();
 }
 
@@ -5857,6 +5969,11 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           ? OverflowClipDiagnosticsJsonForStandaloneRenderer(
                 cache.holder->GetDocument())
           : "{\"containers\":[],\"children\":[],\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string opacity_diagnostics_json =
+      cache.holder
+          ? OpacityDiagnosticsJsonForStandaloneRenderer(
+                cache.holder->GetDocument())
+          : "{\"targets\":[],\"first_missing_stage\":\"document_unavailable\"}";
   const std::string media_query_diagnostics_json =
       MediaQueryDiagnosticsJsonForStandaloneRenderer(cache);
   const std::string list_marker_diagnostics_json =
@@ -5901,7 +6018,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       page_evidence_json.find("\"is_scroll_container\":true") !=
           std::string::npos;
   const bool opacity_style_without_effect_chunk =
-      evidence_has_effect_opacity && effect_opacity_chunk_count == 0;
+      (evidence_has_effect_opacity ||
+       lowered_input.find("opacity") != std::string::npos) &&
+      effect_opacity_chunk_count == 0;
   std::vector<std::string> warnings;
   if (lowered_input.find("linear-gradient") != std::string::npos &&
       total_raw_audit.shader_count == 0) {
@@ -6399,12 +6518,18 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"effect_opacity_chunk_with_clip_count\":"
        << effect_opacity_chunk_with_clip_count
        << ",\"replay_strategy\":\"chunk_saveLayer_for_non_default_effect_opacity\""
+       << ",\"stacking_context_is_not_stacked_enabled\":"
+       << (RuntimeEnabledFeatures::StackingContextIsNotStackedEnabled()
+               ? "true"
+               : "false")
        << ",\"unsupported_effect_reason\":"
        << JsonStringForStandaloneRenderer(
               opacity_style_without_effect_chunk
                   ? "style_or_layout_evidence_has_opacity_but_no_non_default_PaintArtifact_effect_chunk_was_exported"
                   : "")
        << "}"
+       << ",\"opacity_element_diagnostics\":"
+       << opacity_diagnostics_json
        << ",\"text_decoration_diagnostics\":{"
        << "\"text_decoration_painter_constructed\":"
        << g_standalone_text_decoration_painter_constructed
@@ -7014,7 +7139,15 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
     uint32_t* transform_chain_depth,
     uint64_t* scroll_node_id,
     uint32_t* clip_chain_depth,
-    uint32_t* effect_chain_depth) {
+    uint32_t* effect_chain_depth,
+    uint64_t* effect_node_id,
+    uint64_t* effect_parent_id,
+    float* effect_opacity,
+    int* effect_has_non_default_opacity,
+    int* effect_has_filter,
+    int* effect_has_backdrop_filter,
+    int* effect_has_blend_mode,
+    uint64_t* effect_output_clip_id) {
   RunLiveFramePaintProbe(body_html);
   const auto& states = ProbeCache().chunk_property_states;
   if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
@@ -7039,6 +7172,31 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
   }
   if (effect_chain_depth) {
     *effect_chain_depth = state.effect_chain_depth;
+  }
+  if (effect_node_id) {
+    *effect_node_id = state.effect_node_id;
+  }
+  if (effect_parent_id) {
+    *effect_parent_id = state.effect_parent_id;
+  }
+  if (effect_opacity) {
+    *effect_opacity = state.effect_opacity;
+  }
+  if (effect_has_non_default_opacity) {
+    *effect_has_non_default_opacity =
+        state.effect_has_non_default_opacity ? 1 : 0;
+  }
+  if (effect_has_filter) {
+    *effect_has_filter = state.effect_has_filter ? 1 : 0;
+  }
+  if (effect_has_backdrop_filter) {
+    *effect_has_backdrop_filter = state.effect_has_backdrop_filter ? 1 : 0;
+  }
+  if (effect_has_blend_mode) {
+    *effect_has_blend_mode = state.effect_has_blend_mode ? 1 : 0;
+  }
+  if (effect_output_clip_id) {
+    *effect_output_clip_id = state.effect_output_clip_id;
   }
   return 1;
 }
