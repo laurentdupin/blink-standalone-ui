@@ -3633,6 +3633,8 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string layout_object_type;
   std::string parent_layout_object_type;
   std::string first_missing_stage;
+  std::string standalone_support_status;
+  std::string unsupported_closure_boundary;
   bool layout_object_present = false;
   bool checked = false;
   bool user_agent_shadow_root_present = false;
@@ -3664,6 +3666,7 @@ struct FormControlDiagnosticsForStandaloneRenderer {
   int controls_with_shadow_layout_text_count = 0;
   bool input_missing_value_text_stage = false;
   bool unsupported_input_type_stage = false;
+  bool temporal_input_type_stage = false;
   bool select_missing_shadow_stage = false;
   bool select_picker_icon_stage = false;
   bool textarea_missing_shadow_stage = false;
@@ -3692,6 +3695,18 @@ bool IsStandaloneSupportedCheckableInputTypeForDiagnostics(
                    return static_cast<char>(std::tolower(c));
                  });
   return lower_type == "checkbox" || lower_type == "radio";
+}
+
+bool IsStandaloneTemporalInputTypeForDiagnostics(
+    const std::string& type_attr) {
+  std::string lower_type = type_attr;
+  std::transform(lower_type.begin(), lower_type.end(), lower_type.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return lower_type == "date" || lower_type == "time" ||
+         lower_type == "datetime-local" || lower_type == "month" ||
+         lower_type == "week";
 }
 
 void CollectShadowLayoutDiagnosticsForStandaloneRenderer(
@@ -3827,39 +3842,76 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
       const bool is_supported_checkable_input =
           is_input &&
           IsStandaloneSupportedCheckableInputTypeForDiagnostics(item.type_attr);
+      const bool is_temporal_input =
+          is_input &&
+          IsStandaloneTemporalInputTypeForDiagnostics(item.type_attr);
       if (is_input && is_supported_checkable_input &&
           item.layout_object_present) {
         item.first_missing_stage = "checkable_control_layout_present";
+        item.standalone_support_status = "supported_checkable_input";
+      } else if (is_temporal_input) {
+        item.first_missing_stage =
+            "temporal_input_type_requires_date_time_view_or_chooser_path";
+        item.standalone_support_status =
+            "unsupported_temporal_input_normalized_to_text_subset";
+        item.unsupported_closure_boundary =
+            "BaseTemporalInputType::CreateView selects "
+            "ChooserOnlyTemporalInputTypeView or "
+            "MultipleFieldsTemporalInputTypeView; both require date/time "
+            "shadow edit fields, picker indicator/chooser plumbing, and "
+            "browser-facing DateTimeChooser support that is intentionally "
+            "outside the standalone subset";
+        diagnostics.temporal_input_type_stage = true;
+        diagnostics.unsupported_input_type_stage = true;
       } else if (is_input &&
           !IsStandaloneSupportedTextInputTypeForDiagnostics(item.type_attr)) {
         item.first_missing_stage =
             "unsupported_input_type_normalized_to_text_subset";
+        item.standalone_support_status =
+            "unsupported_input_normalized_to_text_subset";
+        item.unsupported_closure_boundary =
+            "InputType::Create is narrowed to text/search/password/"
+            "checkbox/radio/default in standalone; browser-facing input "
+            "families remain fail-soft";
         diagnostics.unsupported_input_type_stage = true;
       } else if (is_input && !item.user_agent_shadow_root_present) {
         item.first_missing_stage =
             "input_user_agent_shadow_root_missing_or_not_real_input_element";
+        item.standalone_support_status = "text_input_shadow_missing";
         diagnostics.input_missing_value_text_stage = !item.value_attr.empty();
       } else if (is_input && item.shadow_layout_text_count == 0 &&
                  !item.value_attr.empty()) {
         item.first_missing_stage =
             "input_value_shadow_layout_text_missing";
+        item.standalone_support_status = "text_input_value_layout_missing";
         diagnostics.input_missing_value_text_stage = true;
       } else if (is_select && !item.user_agent_shadow_root_present) {
         item.first_missing_stage =
             "select_user_agent_shadow_root_missing_or_not_real_select_element";
+        item.standalone_support_status = "select_shadow_missing";
         diagnostics.select_missing_shadow_stage = true;
       } else if (is_select && item.option_count == 0) {
         item.first_missing_stage = "select_option_dom_missing";
+        item.standalone_support_status = "select_option_dom_missing";
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
       } else if (is_select) {
         item.first_missing_stage = "select_picker_icon_theme_pseudo_failsoft";
+        item.standalone_support_status =
+            "closed_select_value_layout_supported_picker_icon_failsoft";
+        item.unsupported_closure_boundary =
+            "Closed/basic select UA shadow, option text, layout, and paint are "
+            "enabled; ::picker-icon remains disabled because the real pseudo "
+            "path previously failed during style recalc and depends on "
+            "browser/theme-backed control machinery absent from standalone";
         diagnostics.select_picker_icon_stage = true;
 #endif
       } else if (is_textarea && !item.user_agent_shadow_root_present) {
         item.first_missing_stage = "textarea_text_control_shadow_not_linked";
+        item.standalone_support_status = "textarea_shadow_missing";
         diagnostics.textarea_missing_shadow_stage = true;
       } else {
         item.first_missing_stage = "control_layout_present";
+        item.standalone_support_status = "supported_control_layout_present";
       }
       diagnostics.controls.push_back(std::move(item));
     }
@@ -3937,6 +3989,13 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"unsupported_input_behavior\":\"unsupported input types normalize "
           "to the standalone text-control subset rather than linking "
           "file/date/color/range/chooser UI paths\","
+       << "\"temporal_input_support_status\":\"unsupported_failsoft\","
+       << "\"temporal_input_blocker\":\"BaseTemporalInputType::CreateView "
+          "selects ChooserOnlyTemporalInputTypeView or "
+          "MultipleFieldsTemporalInputTypeView. The closed/static date-time "
+          "path still requires DateTimeEditElement or DateTimeChooser/"
+          "picker-indicator plumbing, including browser-facing chooser UI "
+          "hooks that are intentionally out of scope for standalone.\","
        << "\"standalone_guards\":["
        << "\"InputType factory is narrowed to text/search/password/checkbox/"
           "radio/default\","
@@ -3955,9 +4014,9 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"remaining_unsupported_controls\":[\"select\",\"file\","
           "\"color\",\"date/time\",\"range\"],"
        << "\"production_policy\":\"real Blink text input subset is enabled; "
-          "real textarea text-control layout and real checkbox/radio input "
-          "types are enabled; non-text browser-facing controls remain "
-          "fail-soft\""
+         "real textarea text-control layout and real checkbox/radio input "
+         "types are enabled; non-text browser-facing controls remain "
+         "fail-soft\""
 #endif
 #else
        << "\"html_input_element_source_linked\":false,"
@@ -3989,7 +4048,9 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
           "paths unconditionally\","
        << "\"date_time_chooser.mojom-blink.h is absent in standalone\","
        << "\"TextEvent and AX command stubs are missing members needed by the "
-          "full input closure\"],"
+         "full input closure\"],"
+       << "\"temporal_input_support_status\":\"blocked_until_text_input_subset_"
+          "is_linked\","
        << "\"production_policy\":\"keep generic fail-soft control layout "
           "until a Blink-owned text-only source subset is linked\""
 #endif
@@ -4016,6 +4077,10 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << JsonStringForStandaloneRenderer(item.layout_object_type)
          << ",\"parent_layout_object_type\":"
          << JsonStringForStandaloneRenderer(item.parent_layout_object_type)
+         << ",\"standalone_support_status\":"
+         << JsonStringForStandaloneRenderer(item.standalone_support_status)
+         << ",\"unsupported_closure_boundary\":"
+         << JsonStringForStandaloneRenderer(item.unsupported_closure_boundary)
          << ",\"user_agent_shadow_root_present\":"
          << (item.user_agent_shadow_root_present ? "true" : "false")
          << ",\"text_control_inner_editor_present\":"
@@ -4050,6 +4115,8 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
     json << "\"input_value_text_not_in_shadow_layout\"";
   } else if (diagnostics.select_missing_shadow_stage) {
     json << "\"select_shadow_tree_not_created_or_real_select_path_disabled\"";
+  } else if (diagnostics.temporal_input_type_stage) {
+    json << "\"temporal_input_type_requires_date_time_view_or_chooser_path\"";
   } else if (diagnostics.unsupported_input_type_stage) {
     json << "\"unsupported_input_type_normalized_to_text_subset\"";
   } else if (diagnostics.select_picker_icon_stage) {
