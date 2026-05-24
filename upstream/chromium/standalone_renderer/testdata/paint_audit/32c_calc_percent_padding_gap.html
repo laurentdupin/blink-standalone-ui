@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background: white;
+  }
+  .target {
+    display: flex;
+    gap: calc(5% + 4px);
+    margin: 24px;
+    width: 640px;
+    padding: calc(4% + 6px);
+    border-radius: 26px;
+    background: rgb(230, 236, 246);
+  }
+  .block {
+    width: 36%;
+    padding: calc(5% - 2px) calc(10% - 8px);
+    border-radius: 20px;
+    background: rgb(252, 253, 255);
+  }
+  .offset {
+    margin-top: 10%;
+  }
+</style>
+<div class="target" data-debug-id="target">
+  <div class="block offset"></div>
+  <div class="block"></div>
+</div>
