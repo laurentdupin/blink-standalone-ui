@@ -3634,6 +3634,7 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string parent_layout_object_type;
   std::string first_missing_stage;
   bool layout_object_present = false;
+  bool checked = false;
   bool user_agent_shadow_root_present = false;
   bool text_control_inner_editor_present = false;
   bool placeholder_attr_present = false;
@@ -3681,6 +3682,16 @@ bool IsStandaloneSupportedTextInputTypeForDiagnostics(
                  });
   return lower_type == "text" || lower_type == "search" ||
          lower_type == "password";
+}
+
+bool IsStandaloneSupportedCheckableInputTypeForDiagnostics(
+    const std::string& type_attr) {
+  std::string lower_type = type_attr;
+  std::transform(lower_type.begin(), lower_type.end(), lower_type.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return lower_type == "checkbox" || lower_type == "radio";
 }
 
 void CollectShadowLayoutDiagnosticsForStandaloneRenderer(
@@ -3748,6 +3759,7 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
           element->FastHasAttribute(html_names::kPlaceholderAttr);
       if (auto* input = DynamicTo<HTMLInputElement>(element)) {
         item.element_interface = "HTMLInputElement";
+        item.checked = input->Checked();
       } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
         item.element_interface = "HTMLSelectElement";
       } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
@@ -3812,7 +3824,13 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         }
       }
 
-      if (is_input &&
+      const bool is_supported_checkable_input =
+          is_input &&
+          IsStandaloneSupportedCheckableInputTypeForDiagnostics(item.type_attr);
+      if (is_input && is_supported_checkable_input &&
+          item.layout_object_present) {
+        item.first_missing_stage = "checkable_control_layout_present";
+      } else if (is_input &&
           !IsStandaloneSupportedTextInputTypeForDiagnostics(item.type_attr)) {
         item.first_missing_stage =
             "unsupported_input_type_normalized_to_text_subset";
@@ -3915,28 +3933,31 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"select_picker_icon_pseudo_failsoft\":false,"
 #endif
        << "\"enabled_input_type_names\":[\"text\",\"search\",\"password\","
-          "\"empty-default-to-text\"],"
+          "\"checkbox\",\"radio\",\"empty-default-to-text\"],"
        << "\"unsupported_input_behavior\":\"unsupported input types normalize "
           "to the standalone text-control subset rather than linking "
-          "file/date/color/radio/chooser UI paths\","
+          "file/date/color/range/chooser UI paths\","
        << "\"standalone_guards\":["
-       << "\"InputType factory is narrowed to text/search/password/default\","
+       << "\"InputType factory is narrowed to text/search/password/checkbox/"
+          "radio/default\","
        << "\"numeric range/step validation and spin-button paths are no-op\","
        << "\"datalist/browser chooser paths are disabled\","
        << "\"text-control selection/editing APIs use cached selection only\","
        << "\"opaque ranges are unsupported in standalone text input\"],"
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
        << "\"remaining_unsupported_controls\":[\"file\",\"color\","
-          "\"date/time\",\"radio\",\"checkbox\",\"range\"],"
+          "\"date/time\",\"range\"],"
        << "\"production_policy\":\"real Blink text input and closed/basic "
-          "select subsets and real textarea text-control layout are enabled; "
-          "picker-icon/popup/browser-facing controls remain fail-soft\""
+          "select subsets, real textarea text-control layout, and real "
+          "checkbox/radio input types are enabled; picker-icon/popup/browser-"
+          "facing controls remain fail-soft\""
 #else
        << "\"remaining_unsupported_controls\":[\"select\",\"file\","
-          "\"color\",\"date/time\",\"radio\",\"checkbox\",\"range\"],"
+          "\"color\",\"date/time\",\"range\"],"
        << "\"production_policy\":\"real Blink text input subset is enabled; "
-          "real textarea text-control layout is enabled; non-text "
-          "browser-facing controls remain fail-soft\""
+          "real textarea text-control layout and real checkbox/radio input "
+          "types are enabled; non-text browser-facing controls remain "
+          "fail-soft\""
 #endif
 #else
        << "\"html_input_element_source_linked\":false,"
@@ -3986,6 +4007,7 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << ",\"value_length\":" << item.value_attr.size()
          << ",\"element_interface\":"
          << JsonStringForStandaloneRenderer(item.element_interface)
+         << ",\"checked\":" << (item.checked ? "true" : "false")
          << ",\"computed_display\":"
          << JsonStringForStandaloneRenderer(item.computed_display)
          << ",\"layout_object_present\":"

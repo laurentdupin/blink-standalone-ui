@@ -167,6 +167,10 @@ InputType* InputType::Create(HTMLInputElement& element,
       type_name == input_type_names::kPassword) {
     return MakeGarbageCollected<TextInputType>(element);
   }
+  if (type_name == input_type_names::kCheckbox)
+    return MakeGarbageCollected<CheckboxInputType>(element);
+  if (type_name == input_type_names::kRadio)
+    return MakeGarbageCollected<RadioInputType>(element);
   return MakeGarbageCollected<TextInputType>(element);
 #else
 #define INPUT_TYPE_FACTORY(input_type, class_name) \
@@ -193,6 +197,10 @@ const AtomicString& InputType::NormalizeTypeName(
     return input_type_names::kPassword;
   if (type_name_lower == input_type_names::kText)
     return input_type_names::kText;
+  if (type_name_lower == input_type_names::kCheckbox)
+    return input_type_names::kCheckbox;
+  if (type_name_lower == input_type_names::kRadio)
+    return input_type_names::kRadio;
   return input_type_names::kText;
 #else
 #define NORMALIZE_INPUT_TYPE(input_type, class_name)   \

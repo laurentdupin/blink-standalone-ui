@@ -2059,6 +2059,10 @@ bool RuntimeEnabledFeaturesBase::is_select_remove_overflow_hidden_enabled_ =
 bool RuntimeEnabledFeaturesBase::is_image_srcset_reselection_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_text_area_scroll_top_preview_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::
+    is_checkable_input_type_layout_inline_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_css_user_valid_and_user_invalid_for_radio_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_shared_storage_api_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
     is_lazy_image_conformant_load_event_timing_enabled_ = false;
@@ -6212,6 +6216,17 @@ void RadioButtonGroupScope::RequiredAttributeChanged(HTMLInputElement*) {}
 void RadioButtonGroupScope::RemoveButton(HTMLInputElement*) {}
 unsigned RadioButtonGroupScope::GroupSizeFor(const HTMLInputElement*) const {
   return 0;
+}
+HTMLInputElement* RadioButtonGroupScope::CheckedButtonForGroup(
+    const AtomicString&) const {
+  return nullptr;
+}
+HTMLInputElement* RadioButtonGroupScope::LastFocusedButtonForGroup(
+    const AtomicString&) const {
+  return nullptr;
+}
+bool RadioButtonGroupScope::IsInRequiredGroup(HTMLInputElement*) const {
+  return false;
 }
 
 Vector<String> FileInputType::FilesFromFormControlState(
@@ -18897,6 +18912,9 @@ bool HTMLFormElement::NoValidate() const {
 }
 bool HTMLFormElement::MatchesToolFormActivePseudoClass() const {
   return false;
+}
+const Node* HTMLFormElement::GetListedElementsScope() const {
+  return this;
 }
 void FormData::AppendFromElement(const String&, const String&) {}
 String Locale::ConvertToLocalizedNumber(const String& value) {

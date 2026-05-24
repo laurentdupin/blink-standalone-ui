@@ -1001,6 +1001,17 @@ void HTMLInputElement::ParserDidSetAttributes() {
   DCHECK(parsing_in_progress_);
   InitializeTypeInParsing();
   TextControlElement::ParserDidSetAttributes();
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  // The standalone parser route does not always invoke FinishParsingChildren()
+  // for void input elements before style/layout. Mirror the normal delayed
+  // checked-attribute initialization here so checkable controls reach Blink's
+  // LayoutTheme paint path with the correct state.
+  if (IsCheckable() && FastHasAttribute(html_names::kCheckedAttr) &&
+      !dirty_checkedness_) {
+    SetChecked(true);
+    dirty_checkedness_ = false;
+  }
+#endif
 }
 
 void HTMLInputElement::FinishParsingChildren() {

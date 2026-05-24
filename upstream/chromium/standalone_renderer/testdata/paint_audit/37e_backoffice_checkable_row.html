@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background: #eef2f7;
+    font: 14px Arial, sans-serif;
+  }
+  .toolbar {
+    margin: 28px;
+    padding: 16px;
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    background: white;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+  }
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #1f2937;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 18px;
+    height: 18px;
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <label><input data-debug-id="notify" type="checkbox" checked>Notify</label>
+    <label><input data-debug-id="manual" type="checkbox">Manual review</label>
+    <label><input data-debug-id="priority-high" type="radio" name="priority" checked>High</label>
+    <label><input data-debug-id="priority-low" type="radio" name="priority">Low</label>
+  </div>
+</body>
+</html>
