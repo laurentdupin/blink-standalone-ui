@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>35 backoffice mixed controls</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #eef2f6;
+      color: #1f2937;
+      font: 16px "Segoe UI", Tahoma, sans-serif;
+      margin: 0;
+      padding: 24px;
+    }
+
+    .surface {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 28px;
+      width: 760px;
+    }
+
+    .field-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      color: #475569;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    input,
+    select,
+    textarea {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      color: inherit;
+      font: inherit;
+      padding: 12px 14px;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .checks {
+      display: grid;
+      gap: 10px;
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  </style>
+</head>
+<body>
+  <section class="surface">
+    <div class="field-grid">
+      <div class="field" data-debug-id="search-field">
+        <label for="search">Search manifest</label>
+        <input id="search" type="search" value="HX-440">
+      </div>
+      <div class="field" data-debug-id="select-field">
+        <label for="state">Queue state</label>
+        <select id="state">
+          <option selected>Needs review</option>
+          <option>Open</option>
+          <option>Resolved</option>
+        </select>
+      </div>
+      <div class="field" data-debug-id="date-field">
+        <label for="date">Arrival date</label>
+        <input id="date" type="date" value="2026-03-19">
+      </div>
+      <div class="field" data-debug-id="priority-field">
+        <label for="priority">Priority</label>
+        <select id="priority">
+          <option>Low</option>
+          <option selected>High</option>
+          <option>Critical</option>
+        </select>
+      </div>
+      <div class="field wide" data-debug-id="notes-field">
+        <label for="notes">Case notes</label>
+        <textarea id="notes" rows="3">Hold release until the paper packet and diagnostics agree.</textarea>
+      </div>
+      <div class="checks" data-debug-id="checkbox-fields">
+        <label><input type="checkbox" checked> Awaiting paper confirmation</label>
+        <label><input type="checkbox"> Notify control center</label>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

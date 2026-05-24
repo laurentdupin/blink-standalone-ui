@@ -3654,9 +3654,26 @@ struct FormControlDiagnosticsForStandaloneRenderer {
   int controls_with_user_agent_shadow_root_count = 0;
   int controls_with_shadow_layout_text_count = 0;
   bool input_missing_value_text_stage = false;
+  bool unsupported_input_type_stage = false;
   bool select_missing_shadow_stage = false;
+  bool select_picker_icon_stage = false;
+  bool textarea_missing_shadow_stage = false;
   std::vector<FormControlElementDiagnosticForStandaloneRenderer> controls;
 };
+
+bool IsStandaloneSupportedTextInputTypeForDiagnostics(
+    const std::string& type_attr) {
+  if (type_attr.empty()) {
+    return true;
+  }
+  std::string lower_type = type_attr;
+  std::transform(lower_type.begin(), lower_type.end(), lower_type.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return lower_type == "text" || lower_type == "search" ||
+         lower_type == "password";
+}
 
 void CollectShadowLayoutDiagnosticsForStandaloneRenderer(
     Node* node,
@@ -3763,7 +3780,12 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         }
       }
 
-      if (is_input && !item.user_agent_shadow_root_present) {
+      if (is_input &&
+          !IsStandaloneSupportedTextInputTypeForDiagnostics(item.type_attr)) {
+        item.first_missing_stage =
+            "unsupported_input_type_normalized_to_text_subset";
+        diagnostics.unsupported_input_type_stage = true;
+      } else if (is_input && !item.user_agent_shadow_root_present) {
         item.first_missing_stage =
             "input_user_agent_shadow_root_missing_or_not_real_input_element";
         diagnostics.input_missing_value_text_stage = !item.value_attr.empty();
@@ -3778,6 +3800,14 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         diagnostics.select_missing_shadow_stage = true;
       } else if (is_select && item.option_count == 0) {
         item.first_missing_stage = "select_option_dom_missing";
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+      } else if (is_select) {
+        item.first_missing_stage = "select_picker_icon_theme_pseudo_failsoft";
+        diagnostics.select_picker_icon_stage = true;
+#endif
+      } else if (is_textarea && !item.user_agent_shadow_root_present) {
+        item.first_missing_stage = "textarea_text_control_shadow_not_linked";
+        diagnostics.textarea_missing_shadow_stage = true;
       } else {
         item.first_missing_stage = "control_layout_present";
       }
@@ -3955,6 +3985,12 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
     json << "\"input_value_text_not_in_shadow_layout\"";
   } else if (diagnostics.select_missing_shadow_stage) {
     json << "\"select_shadow_tree_not_created_or_real_select_path_disabled\"";
+  } else if (diagnostics.unsupported_input_type_stage) {
+    json << "\"unsupported_input_type_normalized_to_text_subset\"";
+  } else if (diagnostics.select_picker_icon_stage) {
+    json << "\"select_picker_icon_theme_pseudo_failsoft\"";
+  } else if (diagnostics.textarea_missing_shadow_stage) {
+    json << "\"textarea_text_control_shadow_not_linked\"";
   } else {
     json << "\"form_control_layout_present\"";
   }
