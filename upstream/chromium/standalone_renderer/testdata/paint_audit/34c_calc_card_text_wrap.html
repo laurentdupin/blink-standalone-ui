@@ -1,0 +1,63 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Calc card text wrap</title>
+<style>
+  :root {
+    --accent: 34px;
+  }
+
+  body {
+    margin: 0;
+    background: rgb(244, 247, 252);
+    color: rgb(32, 37, 46);
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .wrap {
+    padding: 32px;
+  }
+
+  .panel {
+    width: calc(260px + 20px);
+    padding: calc(12px + 10px);
+    border-radius: 24px;
+    background: rgb(252, 253, 255);
+    box-shadow: 0 18px 34px rgba(73, 93, 130, 0.12);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 24px;
+    line-height: normal;
+  }
+
+  p {
+    margin: 14px 0 0;
+    line-height: 1.5;
+  }
+
+  .track {
+    margin-top: 18px;
+    width: calc(100% - 12px);
+    height: 60px;
+    border-radius: 18px;
+    background: rgb(231, 236, 246);
+    overflow: hidden;
+  }
+
+  .bar {
+    width: calc(50% + var(--accent));
+    height: 100%;
+    margin-left: calc(var(--accent) / 2);
+    background: rgb(90, 106, 214);
+  }
+</style>
+<div class="wrap">
+  <article class="panel" data-debug-id="card">
+    <h2 data-debug-id="heading">Custom Property Math</h2>
+    <p data-debug-id="copy">The accent block uses a theme token inside calc() for both width and horizontal offset.</p>
+    <div class="track" data-debug-id="track">
+      <div class="bar" data-debug-id="bar"></div>
+    </div>
+  </article>
+</div>

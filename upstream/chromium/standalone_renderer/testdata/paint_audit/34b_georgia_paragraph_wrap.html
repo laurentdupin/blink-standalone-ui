@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Georgia paragraph wrap</title>
+<style>
+  body {
+    margin: 0;
+    background: rgb(244, 247, 252);
+    color: rgb(32, 37, 46);
+    font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .wrap {
+    padding: 32px;
+  }
+
+  .panel {
+    width: calc(260px + 20px);
+    padding: 22px;
+    border-radius: 24px;
+    background: rgb(252, 253, 255);
+  }
+
+  p {
+    margin: 0;
+    line-height: 1.5;
+  }
+</style>
+<div class="wrap">
+  <article class="panel" data-debug-id="card">
+    <p data-debug-id="copy">The accent block uses a theme token inside calc() for both width and horizontal offset.</p>
+  </article>
+</div>
