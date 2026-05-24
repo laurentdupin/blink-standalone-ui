@@ -107,6 +107,21 @@ int StandaloneBlinkLiveFrameBridgeExportedGlyphAtForStandaloneRenderer(
     uint32_t* glyph_id,
     float* x,
     float* y);
+int StandaloneBlinkLiveFrameBridgeExportedDrawLooperLayerCountForStandaloneRenderer(
+    const char* body_html,
+    int op_index);
+int StandaloneBlinkLiveFrameBridgeExportedDrawLooperLayerAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int layer_index,
+    float* offset_x,
+    float* offset_y,
+    float* blur_sigma,
+    float* r,
+    float* g,
+    float* b,
+    float* a,
+    uint32_t* flags);
 int StandaloneBlinkLiveFrameBridgeExportedRRectRadiiAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -2092,6 +2107,39 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const Color color =
           Color::Rgba(normalize_component(r), normalize_component(g),
                       normalize_component(b), normalize_component(a));
+      auto append_draw_looper_layers = [&](DrawCommand& command) {
+        const int layer_count =
+            live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedDrawLooperLayerCountForStandaloneRenderer(
+                    probe_html.c_str(), i);
+        for (int layer_index = 0; layer_index < layer_count; ++layer_index) {
+          float layer_offset_x = 0.0f;
+          float layer_offset_y = 0.0f;
+          float layer_blur_sigma = 0.0f;
+          float layer_r = 0.0f;
+          float layer_g = 0.0f;
+          float layer_b = 0.0f;
+          float layer_a = 1.0f;
+          uint32_t layer_flags = 0;
+          if (!live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedDrawLooperLayerAtForStandaloneRenderer(
+                      probe_html.c_str(), i, layer_index, &layer_offset_x,
+                      &layer_offset_y, &layer_blur_sigma, &layer_r, &layer_g,
+                      &layer_b, &layer_a, &layer_flags)) {
+            continue;
+          }
+          DrawLooperLayer layer;
+          layer.offset_x = layer_offset_x;
+          layer.offset_y = layer_offset_y;
+          layer.blur_sigma = layer_blur_sigma;
+          layer.color = Color::Rgba(normalize_component(layer_r),
+                                    normalize_component(layer_g),
+                                    normalize_component(layer_b),
+                                    normalize_component(layer_a));
+          layer.flags = layer_flags;
+          command.draw_looper_layers.push_back(layer);
+        }
+      };
       if (type == 12) {
         if (inside_chunk) {
           current_scene.chunks.push_back(MakeRetainedPaintChunk(
@@ -2214,23 +2262,30 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_chunk_debug_index = -1;
         active_commands = &commands;
       } else if (type == 1) {
-        active_commands->push_back(
-            DrawCommand::FillRect(Rect{x, y, width, height}, color));
+        DrawCommand command = DrawCommand::FillRect(
+            Rect{x, y, width, height}, color);
+        append_draw_looper_layers(command);
+        active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 4) {
-        active_commands->push_back(DrawCommand::StrokeRect(
+        DrawCommand command = DrawCommand::StrokeRect(
             Rect{x, y, width, height}, color,
-            font_size > 0.0f ? font_size : 1.0f));
+            font_size > 0.0f ? font_size : 1.0f);
+        append_draw_looper_layers(command);
+        active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 5) {
-        active_commands->push_back(
-            DrawCommand::FillRRect(Rect{x, y, width, height}, radius_x,
-                                   radius_y, color));
+        DrawCommand command = DrawCommand::FillRRect(
+            Rect{x, y, width, height}, radius_x, radius_y, color);
+        append_draw_looper_layers(command);
+        active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 6) {
-        active_commands->push_back(DrawCommand::StrokeRRect(
+        DrawCommand command = DrawCommand::StrokeRRect(
             Rect{x, y, width, height}, radius_x, radius_y, color,
-            font_size > 0.0f ? font_size : 1.0f));
+            font_size > 0.0f ? font_size : 1.0f);
+        append_draw_looper_layers(command);
+        active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 7 || type == 22) {
         std::array<char, 128> debug_label{};

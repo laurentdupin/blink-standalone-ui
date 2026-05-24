@@ -75,6 +75,14 @@ struct GlyphRun {
   Color color;
 };
 
+struct DrawLooperLayer {
+  float offset_x = 0.0f;
+  float offset_y = 0.0f;
+  float blur_sigma = 0.0f;
+  Color color;
+  uint32_t flags = 0;
+};
+
 struct DrawCommand {
   DrawCommandType type = DrawCommandType::kDiagnostic;
   Rect rect;
@@ -99,6 +107,7 @@ struct DrawCommand {
   std::string src_rect_constraint = "strict";
   float image_alpha = 1.0f;
   std::string paint_flags_summary;
+  std::vector<DrawLooperLayer> draw_looper_layers;
 
   static DrawCommand Save();
   static DrawCommand Restore();

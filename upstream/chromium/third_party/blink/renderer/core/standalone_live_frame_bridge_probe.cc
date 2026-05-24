@@ -230,6 +230,17 @@ struct LiveExportedGlyph {
   float y = 0.0f;
 };
 
+struct LiveExportedDrawLooperLayer {
+  float offset_x = 0.0f;
+  float offset_y = 0.0f;
+  float blur_sigma = 0.0f;
+  float r = 0.0f;
+  float g = 0.0f;
+  float b = 0.0f;
+  float a = 1.0f;
+  uint32_t flags = 0;
+};
+
 struct LiveExportedChunkPropertyState {
   uint64_t state_hash = 0;
   std::array<float, 16> transform_to_root = {
@@ -305,6 +316,7 @@ struct LiveExportedDrawOp {
   float src_y = 0.0f;
   float src_width = 0.0f;
   float src_height = 0.0f;
+  std::vector<LiveExportedDrawLooperLayer> draw_looper_layers;
   std::string debug_label;
 };
 
@@ -395,12 +407,34 @@ void AppendSkColor(LiveExportedDrawOp& op, const SkColor4f& color) {
   op.a = color.fA;
 }
 
+void AppendDrawLooperLayers(const cc::PaintFlags& flags,
+                            LiveExportedDrawOp& exported) {
+  const sk_sp<cc::DrawLooper>& looper = flags.getLooper();
+  if (!looper) {
+    return;
+  }
+  looper->ForEachLayer([&exported](SkPoint offset, float blur_sigma,
+                                   SkColor4f color, uint32_t flags) {
+    LiveExportedDrawLooperLayer layer;
+    layer.offset_x = offset.fX;
+    layer.offset_y = offset.fY;
+    layer.blur_sigma = blur_sigma;
+    layer.r = color.fR;
+    layer.g = color.fG;
+    layer.b = color.fB;
+    layer.a = color.fA;
+    layer.flags = flags;
+    exported.draw_looper_layers.push_back(layer);
+  });
+}
+
 void AppendFillRectOp(float x,
                       float y,
                       float width,
                       float height,
                       const SkColor4f& color,
-                      std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+                      std::vector<LiveExportedDrawOp>& exported_draw_ops,
+                      const cc::PaintFlags* flags = nullptr) {
   if (width <= 0.0f || height <= 0.0f) {
     return;
   }
@@ -411,6 +445,9 @@ void AppendFillRectOp(float x,
   exported.width = width;
   exported.height = height;
   AppendSkColor(exported, color);
+  if (flags) {
+    AppendDrawLooperLayers(*flags, exported);
+  }
   exported_draw_ops.push_back(exported);
 }
 
@@ -418,24 +455,27 @@ void AppendSkRectFillOp(const SkRect& rect,
                         float translate_x,
                         float translate_y,
                         const SkColor4f& color,
-                        std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+                        std::vector<LiveExportedDrawOp>& exported_draw_ops,
+                        const cc::PaintFlags* flags = nullptr) {
   if (!rect.isFinite()) {
     return;
   }
   AppendFillRectOp(translate_x + rect.x(), translate_y + rect.y(),
-                   rect.width(), rect.height(), color, exported_draw_ops);
+                   rect.width(), rect.height(), color, exported_draw_ops,
+                   flags);
 }
 
 void AppendSkIRectFillOp(const SkIRect& rect,
                          float translate_x,
                          float translate_y,
                          const SkColor4f& color,
-                         std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+                         std::vector<LiveExportedDrawOp>& exported_draw_ops,
+                         const cc::PaintFlags* flags = nullptr) {
   AppendFillRectOp(translate_x + static_cast<float>(rect.x()),
                    translate_y + static_cast<float>(rect.y()),
                    static_cast<float>(rect.width()),
                    static_cast<float>(rect.height()), color,
-                   exported_draw_ops);
+                   exported_draw_ops, flags);
 }
 
 void AppendStrokeRectOp(float x,
@@ -468,7 +508,8 @@ void AppendRRectOp(float x,
                    SkScalar stroke_width,
                    const SkColor4f& color,
                    bool stroke,
-                   std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+                   std::vector<LiveExportedDrawOp>& exported_draw_ops,
+                   const cc::PaintFlags* flags = nullptr) {
   if (width <= 0.0f || height <= 0.0f) {
     return;
   }
@@ -482,6 +523,9 @@ void AppendRRectOp(float x,
   exported.radius_y = radius_y;
   exported.font_size = stroke_width > 0.0f ? stroke_width : 1.0f;
   AppendSkColor(exported, color);
+  if (flags) {
+    AppendDrawLooperLayers(*flags, exported);
+  }
   exported_draw_ops.push_back(exported);
 }
 
@@ -891,7 +935,7 @@ void AppendSkIRectOpWithFlags(
     return;
   }
   AppendSkIRectFillOp(rect, translate_x, translate_y, flags.getColor4f(),
-                      exported_draw_ops);
+                      exported_draw_ops, &flags);
 }
 
 void AppendSkRRectOpWithFlags(
@@ -955,7 +999,7 @@ void AppendSkRRectOpWithFlags(
                 rect.height(), radii.x(), radii.y(), flags.getStrokeWidth(),
                 flags.getColor4f(),
                 flags.getStyle() == cc::PaintFlags::kStroke_Style,
-                exported_draw_ops);
+                exported_draw_ops, &flags);
 }
 
 void AppendSkPathOpWithFlags(
@@ -4481,12 +4525,26 @@ struct RawPaintRecordAudit {
   int shader_count = 0;
   int path_count = 0;
   int filter_count = 0;
+  int draw_looper_count = 0;
+  int draw_looper_layer_count = 0;
   bool has_non_text_visual_paint = false;
   bool has_non_translation_transform = false;
   bool has_effect_opacity = false;
 };
 
 bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type);
+
+int DrawLooperLayerCountForStandaloneRenderer(const cc::PaintFlags& flags) {
+  const sk_sp<cc::DrawLooper>& looper = flags.getLooper();
+  if (!looper) {
+    return 0;
+  }
+  int count = 0;
+  looper->ForEachLayer([&count](SkPoint, float, SkColor4f, uint32_t) {
+    ++count;
+  });
+  return count;
+}
 
 void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
                                 RawPaintRecordAudit& audit,
@@ -4558,6 +4616,12 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
     if (flags && flags->getImageFilter()) {
       ++audit.filter_count;
     }
+    const int draw_looper_layer_count =
+        flags ? DrawLooperLayerCountForStandaloneRenderer(*flags) : 0;
+    if (draw_looper_layer_count > 0) {
+      ++audit.draw_looper_count;
+      audit.draw_looper_layer_count += draw_looper_layer_count;
+    }
 
     if (paint_ops_json) {
       if (!first) {
@@ -4579,6 +4643,10 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
                       << (flags && flags->getImageFilter() ? "true" : "false")
                       << ",\"has_color_filter\":"
                       << (flags && flags->getColorFilter() ? "true" : "false")
+                      << ",\"has_draw_looper\":"
+                      << (draw_looper_layer_count > 0 ? "true" : "false")
+                      << ",\"draw_looper_layer_count\":"
+                      << draw_looper_layer_count
                       << ",\"bounds_or_geometry\":"
                       << PaintOpGeometryJsonForStandaloneRenderer(op) << "}";
     }
@@ -5172,6 +5240,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       chunk_raw_audit.shader_count += item_audit.shader_count;
       chunk_raw_audit.path_count += item_audit.path_count;
       chunk_raw_audit.filter_count += item_audit.filter_count;
+      chunk_raw_audit.draw_looper_count += item_audit.draw_looper_count;
+      chunk_raw_audit.draw_looper_layer_count +=
+          item_audit.draw_looper_layer_count;
       chunk_raw_audit.has_non_text_visual_paint |=
           item_audit.has_non_text_visual_paint;
       chunk_raw_audit.has_non_translation_transform |=
@@ -5217,6 +5288,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     total_raw_audit.shader_count += chunk_raw_audit.shader_count;
     total_raw_audit.path_count += chunk_raw_audit.path_count;
     total_raw_audit.filter_count += chunk_raw_audit.filter_count;
+    total_raw_audit.draw_looper_count += chunk_raw_audit.draw_looper_count;
+    total_raw_audit.draw_looper_layer_count +=
+        chunk_raw_audit.draw_looper_layer_count;
     total_raw_audit.has_non_text_visual_paint |=
         chunk_raw_audit.has_non_text_visual_paint;
     total_raw_audit.has_non_translation_transform |=
@@ -5639,7 +5713,10 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"image_count\":" << total_raw_audit.image_count
        << ",\"shader_count\":" << total_raw_audit.shader_count
        << ",\"path_count\":" << total_raw_audit.path_count
-       << ",\"filter_count\":" << total_raw_audit.filter_count << "}"
+       << ",\"filter_count\":" << total_raw_audit.filter_count
+       << ",\"draw_looper_count\":" << total_raw_audit.draw_looper_count
+       << ",\"draw_looper_layer_count\":"
+       << total_raw_audit.draw_looper_layer_count << "}"
        << ",\"typeface_resources\":{\"count\":"
        << StandaloneRendererSameProcessTypefaceResourceCount()
        << ",\"same_process_only\":true"
@@ -6848,6 +6925,68 @@ int StandaloneBlinkLiveFrameBridgeExportedGlyphAtForStandaloneRenderer(
   }
   if (y) {
     *y = glyph.y;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedDrawLooperLayerCountForStandaloneRenderer(
+    const char* body_html,
+    int op_index) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  return static_cast<int>(
+      ops[static_cast<size_t>(op_index)].draw_looper_layers.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedDrawLooperLayerAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int layer_index,
+    float* offset_x,
+    float* offset_y,
+    float* blur_sigma,
+    float* r,
+    float* g,
+    float* b,
+    float* a,
+    uint32_t* flags) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const auto& layers = ops[static_cast<size_t>(op_index)].draw_looper_layers;
+  if (layer_index < 0 || static_cast<size_t>(layer_index) >= layers.size()) {
+    return 0;
+  }
+  const LiveExportedDrawLooperLayer& layer =
+      layers[static_cast<size_t>(layer_index)];
+  if (offset_x) {
+    *offset_x = layer.offset_x;
+  }
+  if (offset_y) {
+    *offset_y = layer.offset_y;
+  }
+  if (blur_sigma) {
+    *blur_sigma = layer.blur_sigma;
+  }
+  if (r) {
+    *r = layer.r;
+  }
+  if (g) {
+    *g = layer.g;
+  }
+  if (b) {
+    *b = layer.b;
+  }
+  if (a) {
+    *a = layer.a;
+  }
+  if (flags) {
+    *flags = layer.flags;
   }
   return 1;
 }

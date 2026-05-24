@@ -64,6 +64,13 @@ class CC_PAINT_EXPORT DrawLooper : public SkRefCnt {
 
   bool EqualsForTesting(const DrawLooper& other) const;
 
+  template <typename Proc>
+  void ForEachLayer(Proc proc) const {
+    for (const Layer& layer : layers_) {
+      proc(layer.offset, layer.blur_sigma, layer.color, layer.flags);
+    }
+  }
+
  private:
   // Keep this in sync with the fields in Flags
   // Used to mask out illegal bits when constructing Layer

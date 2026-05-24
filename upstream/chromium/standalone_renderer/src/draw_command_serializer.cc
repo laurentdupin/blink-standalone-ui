@@ -594,6 +594,23 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
       break;
   }
 
+  if (!command.draw_looper_layers.empty()) {
+    out << ",\"draw_looper_layer_count\":"
+        << command.draw_looper_layers.size() << ",\"draw_looper_layers\":[";
+    for (size_t i = 0; i < command.draw_looper_layers.size(); ++i) {
+      if (i > 0) {
+        out << ",";
+      }
+      const DrawLooperLayer& layer = command.draw_looper_layers[i];
+      out << "{\"offset\":";
+      WritePoint(out, Point{layer.offset_x, layer.offset_y});
+      out << ",\"blur_sigma\":" << layer.blur_sigma << ",\"color\":";
+      WriteColor(out, layer.color);
+      out << ",\"flags\":" << layer.flags << "}";
+    }
+    out << "]";
+  }
+
   out << "}";
   return out.str();
 }

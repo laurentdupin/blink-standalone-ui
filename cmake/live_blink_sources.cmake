@@ -815,6 +815,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_description.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/geometry/length.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/color.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/draw_looper_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/platform/color_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/writing_direction_mode.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkBitmap.cpp

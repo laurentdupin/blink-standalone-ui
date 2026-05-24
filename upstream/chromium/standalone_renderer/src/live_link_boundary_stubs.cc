@@ -17701,17 +17701,6 @@ float Filter::ApplyVerticalScale(float value) const {
 gfx::RectF FilterEffect::MapRect(const gfx::RectF& rect) const {
   return rect;
 }
-DrawLooperBuilder::DrawLooperBuilder() = default;
-DrawLooperBuilder::~DrawLooperBuilder() = default;
-void DrawLooperBuilder::AddShadow(const gfx::Vector2dF&,
-                                  float,
-                                  const Color&,
-                                  ShadowTransformMode,
-                                  ShadowAlphaMode) {}
-void DrawLooperBuilder::AddUnmodifiedContent() {}
-sk_sp<cc::DrawLooper> DrawLooperBuilder::DetachDrawLooper() {
-  return nullptr;
-}
 bool StyleImage::IsCorsSameOrigin() const {
   return true;
 }

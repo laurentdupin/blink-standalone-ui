@@ -29,6 +29,10 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkTypeface.h"
+#include "third_party/skia/include/core/SkBlurTypes.h"
+#include "third_party/skia/include/core/SkColorFilter.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkMaskFilter.h"
 #include "html_css_renderer/typeface_resource_registry.h"
 
 namespace html_css_renderer {
@@ -52,6 +56,13 @@ uint8_t ClampByte(float value) {
 SkColor ToSkColor(Color color) {
   return SkColorSetARGB(ClampByte(color.a), ClampByte(color.r),
                         ClampByte(color.g), ClampByte(color.b));
+}
+
+SkColor4f ToSkColor4f(Color color) {
+  return SkColor4f{std::max(0.0f, std::min(1.0f, color.r)),
+                   std::max(0.0f, std::min(1.0f, color.g)),
+                   std::max(0.0f, std::min(1.0f, color.b)),
+                   std::max(0.0f, std::min(1.0f, color.a))};
 }
 
 SkRect ToSkRect(Rect rect) {
@@ -108,6 +119,48 @@ uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
 void StoreCommandCoverage(CommandCoverageRecord record) {
   std::lock_guard<std::mutex> lock(CommandCoverageMutex());
   CommandCoverageRecords().push_back(std::move(record));
+}
+
+template <typename DrawProc>
+void DrawWithLooperLayers(SkCanvas& canvas,
+                          const DrawCommand& command,
+                          const SkPaint& base_paint,
+                          DrawProc draw_proc) {
+  if (command.draw_looper_layers.empty()) {
+    draw_proc(canvas, base_paint);
+    return;
+  }
+
+  constexpr uint32_t kPostTransformFlag = 1u << 0;
+  constexpr uint32_t kOverrideAlphaFlag = 1u << 1;
+  constexpr uint32_t kDontModifyPaintFlag = 1u << 2;
+
+  for (auto layer_it = command.draw_looper_layers.rbegin();
+       layer_it != command.draw_looper_layers.rend(); ++layer_it) {
+    const DrawLooperLayer& layer = *layer_it;
+    SkAutoCanvasRestore auto_restore(&canvas, true);
+    SkPaint paint(base_paint);
+    if (!(layer.flags & kDontModifyPaintFlag)) {
+      if (layer.flags & kOverrideAlphaFlag) {
+        paint.setAlpha(0xFF);
+      }
+      if (layer.blur_sigma > 0.0f) {
+        paint.setMaskFilter(SkMaskFilter::MakeBlur(
+            kNormal_SkBlurStyle, layer.blur_sigma,
+            !(layer.flags & kPostTransformFlag)));
+      }
+      paint.setColorFilter(SkColorFilters::Blend(
+          ToSkColor4f(layer.color), SkColorSpace::MakeSRGB(),
+          SkBlendMode::kSrcIn));
+    }
+    if (layer.flags & kPostTransformFlag) {
+      canvas.setMatrix(canvas.getLocalToDevice().postTranslate(
+          layer.offset_x, layer.offset_y));
+    } else {
+      canvas.translate(layer.offset_x, layer.offset_y);
+    }
+    draw_proc(canvas, paint);
+  }
 }
 
 uint32_t PackRgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
@@ -256,12 +309,22 @@ void DrawCommandWithSkia(SkCanvas& canvas,
   switch (command.type) {
     case DrawCommandType::kFillRect:
       paint.setStyle(SkPaint::kFill_Style);
-      canvas.drawRect(ToSkRect(command.rect), paint);
+      DrawWithLooperLayers(canvas, command, paint,
+                           [&](SkCanvas& layer_canvas,
+                               const SkPaint& layer_paint) {
+                             layer_canvas.drawRect(ToSkRect(command.rect),
+                                                   layer_paint);
+                           });
       break;
     case DrawCommandType::kStrokeRect:
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
-      canvas.drawRect(ToSkRect(command.rect), paint);
+      DrawWithLooperLayers(canvas, command, paint,
+                           [&](SkCanvas& layer_canvas,
+                               const SkPaint& layer_paint) {
+                             layer_canvas.drawRect(ToSkRect(command.rect),
+                                                   layer_paint);
+                           });
       break;
     case DrawCommandType::kFillRectShader:
       if (coverage) {
@@ -284,14 +347,24 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       break;
     case DrawCommandType::kFillRRect:
       paint.setStyle(SkPaint::kFill_Style);
-      canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
-                           command.radius_y, paint);
+      DrawWithLooperLayers(canvas, command, paint,
+                           [&](SkCanvas& layer_canvas,
+                               const SkPaint& layer_paint) {
+                             layer_canvas.drawRoundRect(
+                                 ToSkRect(command.rect), command.radius_x,
+                                 command.radius_y, layer_paint);
+                           });
       break;
     case DrawCommandType::kStrokeRRect:
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
-      canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
-                           command.radius_y, paint);
+      DrawWithLooperLayers(canvas, command, paint,
+                           [&](SkCanvas& layer_canvas,
+                               const SkPaint& layer_paint) {
+                             layer_canvas.drawRoundRect(
+                                 ToSkRect(command.rect), command.radius_x,
+                                 command.radius_y, layer_paint);
+                           });
       break;
     case DrawCommandType::kFillRRectShader:
       if (coverage) {
@@ -499,7 +572,11 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         }
         canvas.save();
         canvas.translate(command.rect.x, command.rect.y);
-        canvas.drawPath(*path, paint);
+        DrawWithLooperLayers(canvas, command, paint,
+                             [&](SkCanvas& layer_canvas,
+                                 const SkPaint& layer_paint) {
+                               layer_canvas.drawPath(*path, layer_paint);
+                             });
         canvas.restore();
       }
       break;
