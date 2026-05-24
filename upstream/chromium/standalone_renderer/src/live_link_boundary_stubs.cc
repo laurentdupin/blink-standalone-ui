@@ -17403,14 +17403,22 @@ void OutOfFlowLayoutPart::Run() {
       }
     }
 
-    LogicalOffset offset = candidate.StaticPosition().offset;
     const ComputedStyle& style = child.Style();
-    if (style.Left().IsFixed()) {
-      offset.inline_offset = LayoutUnit(style.Left().Pixels());
-    }
-    if (style.Top().IsFixed()) {
-      offset.block_offset = LayoutUnit(style.Top().Pixels());
-    }
+    const PhysicalToLogical<const Length&> logical_insets(
+        style.GetWritingDirection(), style.Top(), style.Right(),
+        style.Bottom(), style.Left());
+    const Length& inline_start = logical_insets.InlineStart();
+    const Length& inline_end = logical_insets.InlineEnd();
+    const Length& block_start = logical_insets.BlockStart();
+    const Length& block_end = logical_insets.BlockEnd();
+    const BoxStrut& container_borders = container_builder_->Borders();
+    const LogicalSize containing_size(
+        (container_builder_->InitialBorderBoxSize().inline_size -
+         container_borders.InlineSum())
+            .ClampNegativeToZero(),
+        (container_builder_->InitialBorderBoxSize().block_size -
+         container_borders.BlockSum())
+            .ClampNegativeToZero());
 
     const ConstraintSpace& parent_space = container_builder_->GetConstraintSpace();
     ConstraintSpaceBuilder child_space_builder(
@@ -17422,6 +17430,22 @@ void OutOfFlowLayoutPart::Run() {
     }
     if (style.LogicalHeight().IsFixed()) {
       available_size.block_size = LayoutUnit(style.LogicalHeight().Pixels());
+      child_space_builder.SetIsFixedBlockSize(true);
+    }
+    if (!style.LogicalWidth().IsFixed() && inline_start.IsFixed() &&
+        inline_end.IsFixed()) {
+      available_size.inline_size =
+          (containing_size.inline_size - LayoutUnit(inline_start.Pixels()) -
+           LayoutUnit(inline_end.Pixels()))
+              .ClampNegativeToZero();
+      child_space_builder.SetIsFixedInlineSize(true);
+    }
+    if (!style.LogicalHeight().IsFixed() && block_start.IsFixed() &&
+        block_end.IsFixed()) {
+      available_size.block_size =
+          (containing_size.block_size - LayoutUnit(block_start.Pixels()) -
+           LayoutUnit(block_end.Pixels()))
+              .ClampNegativeToZero();
       child_space_builder.SetIsFixedBlockSize(true);
     }
     child_space_builder.SetAvailableSize(available_size);
@@ -17440,6 +17464,27 @@ void OutOfFlowLayoutPart::Run() {
     }
     const auto& physical_fragment =
         To<PhysicalBoxFragment>(result->GetPhysicalFragment());
+    LogicalOffset offset = candidate.StaticPosition().offset;
+    if (inline_start.IsFixed()) {
+      offset.inline_offset =
+          container_borders.inline_start + LayoutUnit(inline_start.Pixels());
+    } else if (inline_end.IsFixed()) {
+      const LogicalSize child_size =
+          ToLogicalSize(physical_fragment.Size(), style.GetWritingMode());
+      offset.inline_offset =
+          container_borders.inline_start + containing_size.inline_size -
+          LayoutUnit(inline_end.Pixels()) - child_size.inline_size;
+    }
+    if (block_start.IsFixed()) {
+      offset.block_offset =
+          container_borders.block_start + LayoutUnit(block_start.Pixels());
+    } else if (block_end.IsFixed()) {
+      const LogicalSize child_size =
+          ToLogicalSize(physical_fragment.Size(), style.GetWritingMode());
+      offset.block_offset =
+          container_borders.block_start + containing_size.block_size -
+          LayoutUnit(block_end.Pixels()) - child_size.block_size;
+    }
     if ((physical_fragment.Size().width == LayoutUnit() ||
          physical_fragment.Size().height == LayoutUnit()) &&
         ((style.LogicalWidth().IsFixed() && style.LogicalWidth().Pixels() > 0) ||
