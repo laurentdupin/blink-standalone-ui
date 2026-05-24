@@ -864,6 +864,13 @@ void AppendEndChunkOp(std::vector<LiveExportedDrawOp>& exported_draw_ops) {
   exported_draw_ops.push_back(exported);
 }
 
+SkRect SkRectFromGfxRectForStandaloneRenderer(const gfx::Rect& rect) {
+  return SkRect::MakeXYWH(static_cast<SkScalar>(rect.x()),
+                          static_cast<SkScalar>(rect.y()),
+                          static_cast<SkScalar>(rect.width()),
+                          static_cast<SkScalar>(rect.height()));
+}
+
 void AppendSkRectOpWithFlags(
     const SkRect& rect,
     float translate_x,
@@ -1596,10 +1603,47 @@ bool AppendPaintArtifactExtractedOps(
   const DisplayItemList& display_items = artifact.GetDisplayItemList();
   const PaintChunks& chunks = artifact.GetPaintChunks();
   bool complete = true;
+  const EffectPaintPropertyNode* active_opacity_effect = nullptr;
   for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
        ++chunk_index) {
     const PaintChunk& chunk = chunks[chunk_index];
     const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    const EffectPaintPropertyNode* chunk_effect = &chunk_state.Effect();
+    const float effect_opacity = chunk_effect->Opacity();
+    const bool needs_effect_opacity_layer =
+        effect_opacity >= 0.0f && effect_opacity < 1.0f;
+    if (active_opacity_effect &&
+        (!needs_effect_opacity_layer ||
+         chunk_effect != active_opacity_effect)) {
+      AppendRestoreOp(exported_draw_ops);
+      active_opacity_effect = nullptr;
+    }
+    if (needs_effect_opacity_layer && !active_opacity_effect) {
+      gfx::Rect opacity_layer_bounds = chunk.bounds;
+      for (wtf_size_t next_chunk_index = chunk_index + 1;
+           next_chunk_index < chunks.size(); ++next_chunk_index) {
+        const PaintChunk& next_chunk = chunks[next_chunk_index];
+        const PropertyTreeState next_chunk_state =
+            next_chunk.properties.Unalias();
+        const EffectPaintPropertyNode* next_effect =
+            &next_chunk_state.Effect();
+        if (next_effect != chunk_effect ||
+            next_effect->Opacity() != effect_opacity) {
+          break;
+        }
+        opacity_layer_bounds.Union(next_chunk.bounds);
+      }
+      AppendSaveLayerAlphaOp(
+          SkRectFromGfxRectForStandaloneRenderer(opacity_layer_bounds), 0.0f,
+          0.0f, effect_opacity, viewport_width, viewport_height,
+          exported_draw_ops);
+      active_opacity_effect = chunk_effect;
+      diagnostics.push_back(
+          "paint_op_extraction applied grouped effect opacity saveLayer "
+          "chunk_index=" +
+          std::to_string(chunk_index) + " opacity=" +
+          std::to_string(effect_opacity));
+    }
     bool projection_has_non_translation = false;
     gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
         chunk_state, nullptr, &projection_has_non_translation);
@@ -1642,6 +1686,9 @@ bool AppendPaintArtifactExtractedOps(
     AppendRestoreOp(exported_draw_ops);
     AppendEndChunkOp(exported_draw_ops);
   }
+  if (active_opacity_effect) {
+    AppendRestoreOp(exported_draw_ops);
+  }
   return complete && !exported_draw_ops.empty();
 }
 
@@ -1682,10 +1729,43 @@ bool AppendPaintArtifactOracleBitmapOp(
 
   const DisplayItemList& display_items = artifact.GetDisplayItemList();
   const PaintChunks& chunks = artifact.GetPaintChunks();
+  const EffectPaintPropertyNode* active_opacity_effect = nullptr;
   for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
        ++chunk_index) {
     const PaintChunk& chunk = chunks[chunk_index];
     const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    const EffectPaintPropertyNode* chunk_effect = &chunk_state.Effect();
+    const float effect_opacity = chunk_effect->Opacity();
+    const bool needs_effect_opacity_layer =
+        effect_opacity >= 0.0f && effect_opacity < 1.0f;
+    if (active_opacity_effect &&
+        (!needs_effect_opacity_layer ||
+         chunk_effect != active_opacity_effect)) {
+      canvas->restore();
+      active_opacity_effect = nullptr;
+    }
+    if (needs_effect_opacity_layer && !active_opacity_effect) {
+      gfx::Rect opacity_layer_bounds = chunk.bounds;
+      for (wtf_size_t next_chunk_index = chunk_index + 1;
+           next_chunk_index < chunks.size(); ++next_chunk_index) {
+        const PaintChunk& next_chunk = chunks[next_chunk_index];
+        const PropertyTreeState next_chunk_state =
+            next_chunk.properties.Unalias();
+        const EffectPaintPropertyNode* next_effect =
+            &next_chunk_state.Effect();
+        if (next_effect != chunk_effect ||
+            next_effect->Opacity() != effect_opacity) {
+          break;
+        }
+        opacity_layer_bounds.Union(next_chunk.bounds);
+      }
+      SkPaint layer_paint;
+      layer_paint.setAlphaf(effect_opacity);
+      canvas->saveLayer(SkRectFromGfxRectForStandaloneRenderer(
+                            opacity_layer_bounds),
+                        &layer_paint);
+      active_opacity_effect = chunk_effect;
+    }
     gfx::Transform projection;
     if (!GeometryMapper::SourceToDestinationProjection(
             chunk_state.Transform(), PropertyTreeState::Root().Transform(),
@@ -1713,6 +1793,9 @@ bool AppendPaintArtifactOracleBitmapOp(
       }
       drawing->GetPaintRecord().Playback(canvas);
     }
+    canvas->restore();
+  }
+  if (active_opacity_effect) {
     canvas->restore();
   }
 
@@ -5238,6 +5321,10 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   int total_non_drawing_item_count = 0;
   RawPaintRecordAudit total_raw_audit;
   bool total_has_clip_state = false;
+  int effect_opacity_chunk_count = 0;
+  int grouped_opacity_layer_count = 0;
+  int nested_opacity_chunk_count = 0;
+  int effect_opacity_chunk_with_clip_count = 0;
   const bool artifact_audit_safe_mode = false;
   std::ostringstream chunks_json;
   chunks_json << "[";
@@ -5512,6 +5599,11 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     if (effect_opacity != 1.0f) {
       chunk_raw_audit.has_effect_opacity = true;
       total_raw_audit.has_effect_opacity = true;
+      ++effect_opacity_chunk_count;
+      ++grouped_opacity_layer_count;
+      if (effect_chain_depth > 1) {
+        ++nested_opacity_chunk_count;
+      }
     }
     TraceLiveFrameProbeStagef("paint audit before clip metadata %lu",
                               chunk_index);
@@ -5530,6 +5622,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
         (clip_chain_depth > 0 || clip_has_path || clip_paint_rect_rounded ||
          clip_layout_rect_has_radius)) {
       total_has_clip_state = true;
+      if (effect_opacity != 1.0f) {
+        ++effect_opacity_chunk_with_clip_count;
+      }
     }
     const bool has_projection = true;
     std::optional<FloatClipRect> clip;
@@ -5805,6 +5900,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           std::string::npos ||
       page_evidence_json.find("\"is_scroll_container\":true") !=
           std::string::npos;
+  const bool opacity_style_without_effect_chunk =
+      evidence_has_effect_opacity && effect_opacity_chunk_count == 0;
   std::vector<std::string> warnings;
   if (lowered_input.find("linear-gradient") != std::string::npos &&
       total_raw_audit.shader_count == 0) {
@@ -6295,6 +6392,19 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                ? "upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc"
                : "")
        << "\"}"
+       << ",\"effect_opacity_diagnostics\":{"
+       << "\"effect_opacity_chunk_count\":" << effect_opacity_chunk_count
+       << ",\"grouped_opacity_layer_count\":" << grouped_opacity_layer_count
+       << ",\"nested_opacity_chunk_count\":" << nested_opacity_chunk_count
+       << ",\"effect_opacity_chunk_with_clip_count\":"
+       << effect_opacity_chunk_with_clip_count
+       << ",\"replay_strategy\":\"chunk_saveLayer_for_non_default_effect_opacity\""
+       << ",\"unsupported_effect_reason\":"
+       << JsonStringForStandaloneRenderer(
+              opacity_style_without_effect_chunk
+                  ? "style_or_layout_evidence_has_opacity_but_no_non_default_PaintArtifact_effect_chunk_was_exported"
+                  : "")
+       << "}"
        << ",\"text_decoration_diagnostics\":{"
        << "\"text_decoration_painter_constructed\":"
        << g_standalone_text_decoration_painter_constructed
