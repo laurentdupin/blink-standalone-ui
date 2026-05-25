@@ -1235,7 +1235,11 @@ void LayoutBox::UpdateAfterLayout() {
   if (IsLayoutView() && !GetDocument().Printing()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
     // Standalone rendering has no browser chrome/viewport service. The caller
-    // owns the viewport, while Blink still commits the layout result above.
+    // owns the viewport, while Blink still commits layout overflow from the
+    // LayoutView document rect so real root scroll offsets can be applied.
+    GetFrameView()->AdjustViewSize();
+    if (auto* scrollable_area = GetScrollableArea())
+      scrollable_area->UpdateAfterOverflowRecalc();
 #else
     // Unlike every other layer, the root PaintLayer takes its size from the
     // layout viewport size. The call to AdjustViewSize() will update the

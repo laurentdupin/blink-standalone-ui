@@ -5245,7 +5245,11 @@ PaintLayerScrollableArea::EnsureSnappedQueryScrollSnapshot() {
 
 PhysicalRect PaintLayerScrollableArea::LayoutContentRect(
     IncludeScrollbarsInRect) const {
-  return PhysicalRect();
+  LayoutBox* box = GetLayoutBox();
+  if (!box)
+    return PhysicalRect();
+  return PhysicalRect(PhysicalOffset::FromPointFRound(ScrollPosition()),
+                      box->PhysicalPaddingBoxRect().size);
 }
 
 gfx::Size PaintLayerScrollableArea::ComputeScrollbarWidthsForViewportUnits(
@@ -8172,7 +8176,10 @@ bool DisplayLockContext::ShouldCommitForActivation(
 void DisplayLockContext::CommitForActivation(DisplayLockActivationReason) {}
 
 gfx::Size PaintLayerScrollableArea::ContentsSize() const {
-  return gfx::Size();
+  LayoutBox* box = GetLayoutBox();
+  return PixelSnappedContentsSize(
+      PhysicalOffset(box ? box->ClientLeft() : LayoutUnit(),
+                     box ? box->ClientTop() : LayoutUnit()));
 }
 void PaintLayerScrollableArea::EnqueueScrollEventIfNeeded() {}
 PaintLayer* PaintLayerScrollableArea::Layer() const {
@@ -8927,11 +8934,13 @@ void FontFaceSetDocument::DidLayout(Document&) {}
 void EventHandler::MarkHoverStateDirty() {}
 void PaintLayerScrollableArea::UpdateAllStickyConstraints() {}
 LayoutBox* PaintLayerScrollableArea::GetLayoutBox() const {
-  return nullptr;
+  return layer_ ? layer_->GetLayoutBox() : nullptr;
 }
 gfx::Rect PaintLayerScrollableArea::VisibleContentRect(
     IncludeScrollbarsInRect) const {
-  return gfx::Rect();
+  const PhysicalRect layout_content_rect(LayoutContentRect(kExcludeScrollbars));
+  return gfx::Rect(ToFlooredPoint(layout_content_rect.offset),
+                   ToRoundedSize(layout_content_rect.size));
 }
 std::optional<gfx::PointF> PaintLayerScrollableArea::GetSnapPositionAndSetTarget(
     const cc::SnapSelectionStrategy&) {
@@ -12300,9 +12309,15 @@ void ScrollAnimatorCompositorCoordinator::CancelAnimation() {}
 void ScrollAnimatorCompositorCoordinator::TakeOverCompositorAnimation() {}
 void ScrollAnimatorCompositorCoordinator::UpdateCompositorAnimations() {}
 void ScrollAnimatorCompositorCoordinator::ScrollOffsetChanged(
-    const ScrollOffset&,
-    mojom::blink::ScrollType,
-    cc::ScrollSourceType) {}
+    const ScrollOffset& offset,
+    mojom::blink::ScrollType scroll_type,
+    cc::ScrollSourceType source_type) {
+  ScrollableArea* area = GetScrollableArea();
+  if (!area)
+    return;
+  area->ScrollOffsetChanged(area->ClampScrollOffset(offset), scroll_type,
+                            source_type);
+}
 void ScrollAnimatorCompositorCoordinator::AdjustImplOnlyScrollOffsetAnimation(
     const gfx::Vector2d&) {}
 bool ScrollAnimatorCompositorCoordinator::AddAnimation(
@@ -12347,6 +12362,8 @@ void ProgrammaticScrollAnimator::ScrollToOffsetWithoutAnimation(
     cc::ScrollSourceType source_type) {
   target_offset_ = offset;
   source_type_ = source_type;
+  ScrollOffsetChanged(offset, mojom::blink::ScrollType::kProgrammatic,
+                      source_type);
 }
 void ProgrammaticScrollAnimator::AnimateToOffset(
     const ScrollOffset& offset,
@@ -12790,7 +12807,9 @@ void ScrollbarThemeSettings::SetMockScrollbarsEnabled(bool) {
 MainThread* Thread::MainThread() {
   return &StandaloneMainThread();
 }
-void VisualViewport::SetSize(const gfx::Size&) {}
+void VisualViewport::SetSize(const gfx::Size& size) {
+  size_ = size;
+}
 URLLoaderMockFactory* URLLoaderMockFactory::GetSingletonInstance() {
   return nullptr;
 }
@@ -16349,9 +16368,18 @@ void PaintLayerScrollableArea::SetScrollOffsetUnconditionally(
     mojom::blink::ScrollType) {}
 void PaintLayerScrollableArea::EnqueueForSnapUpdateIfNeeded() {}
 void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChange() {}
-void PaintLayerScrollableArea::UpdateAfterOverflowRecalc() {}
+void PaintLayerScrollableArea::UpdateAfterOverflowRecalc() {
+  LayoutBox* box = GetLayoutBox();
+  if (!box)
+    return;
+  PhysicalRect new_overflow_rect = box->ScrollableOverflowRect();
+  new_overflow_rect.Unite(
+      PhysicalRect(new_overflow_rect.offset,
+                   LayoutContentRect(kExcludeScrollbars).size));
+  overflow_rect_ = new_overflow_rect;
+}
 ScrollOffset PaintLayerScrollableArea::GetScrollOffset() const {
-  return ScrollOffset();
+  return scroll_offset_;
 }
 PhysicalAxes PaintLayerScrollableArea::ScrollableAxes() const {
   return PhysicalAxes();
@@ -16365,10 +16393,10 @@ int PaintLayerScrollableArea::HorizontalScrollbarHeight(
   return 0;
 }
 LayoutUnit PaintLayerScrollableArea::ScrollWidth() const {
-  return LayoutUnit();
+  return overflow_rect_.Width();
 }
 LayoutUnit PaintLayerScrollableArea::ScrollHeight() const {
-  return LayoutUnit();
+  return overflow_rect_.Height();
 }
 gfx::Vector2d PaintLayerScrollableArea::ScrollOffsetInt() const {
   return gfx::Vector2d();
@@ -17705,7 +17733,11 @@ gfx::Vector2d PaintLayerScrollableArea::MinimumScrollOffsetInt() const {
   return gfx::Vector2d();
 }
 gfx::Vector2d PaintLayerScrollableArea::MaximumScrollOffsetInt() const {
-  return gfx::Vector2d();
+  gfx::Size visible_size = VisibleContentRect(kExcludeScrollbars).size();
+  return gfx::Vector2d(std::max(0, ContentsSize().width() -
+                                       visible_size.width()),
+                       std::max(0, ContentsSize().height() -
+                                       visible_size.height()));
 }
 PhysicalRect PaintLayerScrollableArea::VisibleScrollSnapportRect(
     IncludeScrollbarsInRect) const {
@@ -17810,9 +17842,11 @@ Node* PaintLayerScrollableArea::GetSnapEventTargetAlongAxis(
 bool PaintLayerScrollableArea::ShouldAvoidHidingOverlayScrollbars() const {
   return true;
 }
-void PaintLayerScrollableArea::UpdateScrollOffset(const ScrollOffset&,
+void PaintLayerScrollableArea::UpdateScrollOffset(const ScrollOffset& offset,
                                                   mojom::blink::ScrollType,
-                                                  cc::ScrollSourceType) {}
+                                                  cc::ScrollSourceType) {
+  scroll_offset_ = offset;
+}
 String PaintLayerScrollableArea::ScrollingBackgroundDisplayItemClient::DebugName()
     const {
   return String();
@@ -19346,7 +19380,8 @@ bool PaintLayerScrollableArea::HasVerticalOverflow() const {
 }
 gfx::Size PaintLayerScrollableArea::PixelSnappedContentsSize(
     const PhysicalOffset&) const {
-  return gfx::Size();
+  return ToPixelSnappedRect(PhysicalRect(PhysicalOffset(), overflow_rect_.size))
+      .size();
 }
 bool PaintLayerScrollableArea::BackgroundNeedsRepaintOnScroll() const {
   return false;

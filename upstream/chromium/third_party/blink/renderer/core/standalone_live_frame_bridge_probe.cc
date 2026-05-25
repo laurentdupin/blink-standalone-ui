@@ -44,8 +44,11 @@
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
+#include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
@@ -368,6 +371,18 @@ struct LiveFramePaintProbeCache {
   int scroll_contents_height = 0;
   int scroll_visible_width = 0;
   int scroll_visible_height = 0;
+  int frame_view_width = 0;
+  int frame_view_height = 0;
+  int frame_layout_width = 0;
+  int frame_layout_height = 0;
+  int visual_viewport_width = 0;
+  int visual_viewport_height = 0;
+  int layout_view_border_width = 0;
+  int layout_view_border_height = 0;
+  int layout_view_scroll_width = 0;
+  int layout_view_scroll_height = 0;
+  int layout_view_fragment_count = 0;
+  bool scroll_area_is_root_frame_viewport = false;
   bool scroll_offset_requested = false;
   bool scroll_offset_applied = false;
   bool scroll_offset_changed = false;
@@ -418,6 +433,44 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
   cache.scroll_contents_height = 0;
   cache.scroll_visible_width = 0;
   cache.scroll_visible_height = 0;
+  cache.frame_view_width = frame_view.Size().width();
+  cache.frame_view_height = frame_view.Size().height();
+  cache.frame_layout_width = frame_view.GetLayoutSize().width();
+  cache.frame_layout_height = frame_view.GetLayoutSize().height();
+  cache.visual_viewport_width = 0;
+  cache.visual_viewport_height = 0;
+  if (Page* page = frame_view.GetFrame().GetPage()) {
+    page->GetVisualViewport().SetSize(
+        gfx::Size(cache.viewport_width, cache.viewport_height));
+    const gfx::Size visual_viewport_size = page->GetVisualViewport().Size();
+    cache.visual_viewport_width = visual_viewport_size.width();
+    cache.visual_viewport_height = visual_viewport_size.height();
+  }
+  cache.layout_view_border_width = 0;
+  cache.layout_view_border_height = 0;
+  cache.layout_view_scroll_width = 0;
+  cache.layout_view_scroll_height = 0;
+  cache.layout_view_fragment_count = 0;
+  if (LayoutView* layout_view = frame_view.GetLayoutView()) {
+    if (layout_view->PhysicalFragmentCount()) {
+      layout_view->SetScrollableOverflowFromLayoutResults();
+      if (PaintLayerScrollableArea* layout_viewport =
+              layout_view->GetScrollableArea()) {
+        layout_viewport->UpdateAfterOverflowRecalc();
+      }
+    }
+    if (!frame_view.GetRootFrameViewport() && layout_view->GetScrollableArea()) {
+      frame_view.InitializeRootScroller();
+    }
+    const PhysicalRect border_box = layout_view->PhysicalBorderBoxRect();
+    cache.layout_view_border_width = border_box.Width().ToInt();
+    cache.layout_view_border_height = border_box.Height().ToInt();
+    cache.layout_view_scroll_width = layout_view->ScrollWidth().ToInt();
+    cache.layout_view_scroll_height = layout_view->ScrollHeight().ToInt();
+    cache.layout_view_fragment_count =
+        static_cast<int>(layout_view->PhysicalFragmentCount());
+  }
+  cache.scroll_area_is_root_frame_viewport = false;
   cache.scroll_offset_applied = false;
   cache.scroll_offset_changed = false;
   cache.scroll_offset_status = cache.scroll_offset_requested ? "requested"
@@ -427,6 +480,9 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
     cache.scroll_offset_status = "frame_scrollable_area_missing";
     return;
   }
+  cache.scroll_area_is_root_frame_viewport =
+      static_cast<ScrollableArea*>(frame_view.GetRootFrameViewport()) ==
+      viewport;
   const ScrollOffset maximum = viewport->MaximumScrollOffset();
   cache.max_scroll_x = maximum.x();
   cache.max_scroll_y = maximum.y();
@@ -6237,7 +6293,24 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"height\":" << cache.scroll_contents_height
        << "},\"visible_size\":{\"width\":" << cache.scroll_visible_width
        << ",\"height\":" << cache.scroll_visible_height
-       << "},\"requested_non_zero\":"
+       << "},\"frame_view_size\":{\"width\":" << cache.frame_view_width
+       << ",\"height\":" << cache.frame_view_height
+       << "},\"frame_layout_size\":{\"width\":" << cache.frame_layout_width
+       << ",\"height\":" << cache.frame_layout_height
+       << "},\"visual_viewport_size\":{\"width\":"
+       << cache.visual_viewport_width << ",\"height\":"
+       << cache.visual_viewport_height
+       << "},\"layout_view_border_box\":{\"width\":"
+       << cache.layout_view_border_width << ",\"height\":"
+       << cache.layout_view_border_height
+       << "},\"layout_view_scroll_size\":{\"width\":"
+       << cache.layout_view_scroll_width << ",\"height\":"
+       << cache.layout_view_scroll_height
+       << "},\"layout_view_fragment_count\":"
+       << cache.layout_view_fragment_count
+       << ",\"scroll_area_is_root_frame_viewport\":"
+       << (cache.scroll_area_is_root_frame_viewport ? "true" : "false")
+       << ",\"requested_non_zero\":"
        << (cache.scroll_offset_requested ? "true" : "false")
        << ",\"applied_to_blink\":"
        << (cache.scroll_offset_applied ? "true" : "false")
