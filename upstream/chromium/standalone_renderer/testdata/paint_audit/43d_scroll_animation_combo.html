@@ -1,0 +1,32 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    height: 1200px;
+    background: white;
+  }
+  .spacer {
+    height: 640px;
+  }
+  .header {
+    width: 180px;
+    height: 80px;
+    margin: 32px 0 0 48px;
+    background: rgb(40, 120, 200);
+  }
+  .box {
+    width: 180px;
+    height: 120px;
+    margin-left: 48px;
+    background: rgb(115, 70, 190);
+    animation: fade 1000ms linear forwards;
+  }
+  @keyframes fade {
+    from { opacity: 0.25; }
+    to { opacity: 1; }
+  }
+</style>
+<div class="header"></div>
+<div class="spacer"></div>
+<div class="box"></div>

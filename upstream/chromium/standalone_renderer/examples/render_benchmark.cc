@@ -735,7 +735,8 @@ void PrintUsage() {
                "Usage: blink_standalone_render_benchmark_skia --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
                "[--resource-root <path>] "
-               "[--viewport WxH] [--scroll-x px] [--scroll-y px] --out <out.bmp> "
+               "[--viewport WxH] [--scroll-x px] [--scroll-y px] "
+               "[--time-ms ms] --out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
                "[--dump-page-setup <setup.json>] "
@@ -924,6 +925,14 @@ int main(int argc, char** argv) {
         return 2;
       }
       input.scroll_offsets_by_element_id["document"].y = scroll_y;
+    } else if (arg == "--time-ms") {
+      const char* value = next_value();
+      float time_ms = 0.0f;
+      if (!value || !ParseFloat(value, &time_ms)) {
+        PrintUsage();
+        return 2;
+      }
+      input.timeline_time_seconds = std::max(0.0f, time_ms) / 1000.0;
     } else if (arg == "--out") {
       const char* value = next_value();
       if (!value) {

@@ -76,9 +76,10 @@ async function main() {
   const viewportArg = argValue("--viewport") || "320x200";
   const scrollX = Number(argValue("--scroll-x") || "0");
   const scrollY = Number(argValue("--scroll-y") || "0");
+  const timeMs = Number(argValue("--time-ms") || "0");
   const outJson = argValue("--out-json");
   if (!html || !out) {
-    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--out-json path]");
+    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--time-ms ms] [--out-json path]");
     process.exit(2);
   }
   const [width, height] = viewportArg.split("x").map((v) => Number(v));
@@ -95,6 +96,10 @@ async function main() {
       });
       await page.waitForTimeout(50);
     }
+    const playwrightTimeMode = timeMs > 0 ? "wall_clock_wait" : "not_requested";
+    if (timeMs > 0) {
+      await page.waitForTimeout(timeMs);
+    }
     await page.screenshot({ path: out });
     if (outJson) {
       const state = await page.evaluate(() => ({
@@ -109,6 +114,9 @@ async function main() {
           document.documentElement.scrollHeight,
           document.body ? document.body.scrollHeight : 0),
       }));
+      state.requestedTimeMs = timeMs;
+      state.appliedTimeMs = timeMs > 0 ? timeMs : 0;
+      state.playwrightTimeMode = playwrightTimeMode;
       fs.writeFileSync(outJson, JSON.stringify(state, null, 2));
     }
   } finally {

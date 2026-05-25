@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background: white;
+  }
+  .box {
+    width: 120px;
+    height: 120px;
+    margin: 40px;
+    background: rgb(230, 80, 55);
+    animation: slide 1000ms linear forwards;
+  }
+  @keyframes slide {
+    from { transform: translateX(0); }
+    to { transform: translateX(120px); }
+  }
+</style>
+<div class="box"></div>

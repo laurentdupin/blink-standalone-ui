@@ -387,6 +387,11 @@ struct LiveFramePaintProbeCache {
   bool scroll_offset_applied = false;
   bool scroll_offset_changed = false;
   std::string scroll_offset_status = "not_requested";
+  double requested_animation_time_ms = 0.0;
+  double applied_animation_time_ms = 0.0;
+  bool animation_time_requested = false;
+  bool animation_time_applied = false;
+  std::string animation_time_status = "not_requested";
   bool disable_retained_extraction = false;
   bool force_oracle_bitmap = false;
   bool trace_stages = false;
@@ -6318,6 +6323,20 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.scroll_offset_changed ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.scroll_offset_status) << "}"
+       << ",\"animation_time_diagnostics\":{\"requested_ms\":"
+       << cache.requested_animation_time_ms << ",\"applied_ms\":"
+       << cache.applied_animation_time_ms << ",\"requested_non_zero\":"
+       << (cache.animation_time_requested ? "true" : "false")
+       << ",\"applied_to_blink\":"
+       << (cache.animation_time_applied ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.animation_time_status)
+       << ",\"first_missing_stage\":"
+       << JsonStringForStandaloneRenderer(
+              cache.animation_time_requested
+                  ? "document_timeline_page_animator_time_not_wired_to_standalone_render_state"
+                  : "")
+       << "}"
        << ",\"device_scale_factor\":1"
        << ",\"media_query_diagnostics\":"
        << media_query_diagnostics_json
@@ -7267,6 +7286,32 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
   cache.scroll_offset_applied = false;
   cache.scroll_offset_changed = false;
   cache.scroll_offset_status = requested ? "requested" : "not_requested";
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
+    double time_ms) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const double clamped_time_ms = std::max(0.0, time_ms);
+  const bool requested = clamped_time_ms > 0.001;
+  if (cache.animation_time_requested == requested &&
+      std::abs(cache.requested_animation_time_ms - clamped_time_ms) <= 0.001) {
+    return;
+  }
+  cache.requested_animation_time_ms = clamped_time_ms;
+  cache.applied_animation_time_ms = 0.0;
+  cache.animation_time_requested = requested;
+  cache.animation_time_applied = false;
+  cache.animation_time_status =
+      requested ? "unsupported_missing_real_blink_animation_time_input"
+                : "not_requested";
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

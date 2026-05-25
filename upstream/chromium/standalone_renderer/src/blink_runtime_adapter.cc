@@ -25,6 +25,8 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
 void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
     float x,
     float y);
+void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
+    double time_ms);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
@@ -1895,6 +1897,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     AppendLivePaintDiagnostics(snapshot_.html, snapshot_.stylesheets,
                                snapshot_.viewport,
                                SnapshotDocumentScrollOffset(snapshot_),
+                               snapshot_.timeline_time_seconds,
                                report.diagnostics);
     return report;
   }
@@ -1908,6 +1911,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                result.successor_snapshot.stylesheets,
                                result.successor_snapshot.viewport,
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
+                               result.successor_snapshot.timeline_time_seconds,
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, false,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -1923,6 +1927,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                result.successor_snapshot.stylesheets,
                                result.successor_snapshot.viewport,
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
+                               result.successor_snapshot.timeline_time_seconds,
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, true,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -1952,6 +1957,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const std::vector<Stylesheet>& stylesheets,
       Size viewport,
       Point document_scroll_offset,
+      double timeline_time_seconds,
       std::vector<std::string>& diagnostics) {
     namespace live_probe = ::blink::standalone_renderer_probe;
     const std::string probe_html = BuildLiveBlinkProbeHtml(html, stylesheets);
@@ -1959,6 +1965,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         static_cast<int>(viewport.width), static_cast<int>(viewport.height));
     live_probe::StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
         document_scroll_offset.x, document_scroll_offset.y);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
+        timeline_time_seconds * 1000.0);
+    if (timeline_time_seconds > 0.0) {
+      diagnostics.push_back(
+          "live Blink animation time requested_ms=" +
+          std::to_string(timeline_time_seconds * 1000.0) +
+          " status=unsupported_missing_real_blink_animation_time_input");
+    }
     diagnostics.push_back(
         "live Blink bridge recipe version: " +
         std::to_string(live_probe::
@@ -2032,6 +2046,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
         SnapshotDocumentScrollOffset(result.successor_snapshot).x,
         SnapshotDocumentScrollOffset(result.successor_snapshot).y);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
+        result.successor_snapshot.timeline_time_seconds * 1000.0);
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);

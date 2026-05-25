@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture first/scrolled Playwright views and standalone scroll support status."""
+"""Capture viewport/scroll/time Playwright views and standalone state status."""
 
 from __future__ import annotations
 
@@ -102,6 +102,9 @@ def write_html(out_dir: Path, rows: list[dict]) -> Path:
             f"<td>{html.escape(str(row['actual_scroll'].get('scrollY', '')))}</td>"
             f"<td>{html.escape(str(row.get('actual_standalone_scroll', {}).get('y', '')))}</td>"
             f"<td>{html.escape(row['standalone_scrolled_viewport_status'])}</td>"
+            f"<td>{html.escape(str(row.get('requested_time_ms', 0)))}</td>"
+            f"<td>{html.escape(str(row.get('playwright_time_mode', '')))}</td>"
+            f"<td>{html.escape(str(row.get('actual_standalone_time', {}).get('status', '')))}</td>"
             + image_cell(item_dir / f"{row['name']}-standalone-first-viewport.bmp", out_dir, "standalone first viewport")
             + image_cell(item_dir / f"{row['name']}-oracle-first-viewport.bmp", out_dir, "oracle first viewport")
             + image_cell(item_dir / f"{row['name']}-standalone-scroll-y-{row['requested_scroll']['y']}.bmp", out_dir, "standalone scrolled viewport")
@@ -137,6 +140,7 @@ def write_html(out_dir: Path, rows: list[dict]) -> Path:
     <th>Example</th><th>Bench first</th><th>Bench scrolled</th><th>PW first</th><th>PW scrolled</th>
     <th>First R/O %</th><th>First O/P %</th><th>Scrolled R/O %</th><th>Scrolled O/P %</th>
     <th>Requested Y</th><th>PW actual Y</th><th>Standalone actual Y</th><th>Standalone scrolled status</th>
+    <th>Requested time ms</th><th>PW time mode</th><th>Standalone time status</th>
     <th>Standalone first</th><th>Oracle first</th><th>Standalone scrolled</th><th>Oracle scrolled</th><th>PW first</th><th>PW scrolled</th><th>Artifacts</th>
   </tr></thead>
   <tbody>{''.join(html_rows)}</tbody>
@@ -153,8 +157,9 @@ def main() -> int:
     parser.add_argument("--fixtures", type=Path, required=True)
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--viewport", default="1366x768")
-    parser.add_argument("--scroll-y", type=int, required=True)
+    parser.add_argument("--scroll-y", type=int, default=0)
     parser.add_argument("--scroll-x", type=int, default=0)
+    parser.add_argument("--time-ms", type=int, default=0)
     parser.add_argument("--timeout", type=int, default=90)
     args = parser.parse_args()
 
@@ -190,6 +195,8 @@ def main() -> int:
                 str(args.fixtures),
                 "--viewport",
                 args.viewport,
+                "--time-ms",
+                str(args.time_ms),
                 "--out",
                 str(retained),
                 "--dump-paint-artifact",
@@ -219,6 +226,8 @@ def main() -> int:
                 str(args.scroll_x),
                 "--scroll-y",
                 str(args.scroll_y),
+                "--time-ms",
+                str(args.time_ms),
                 "--out",
                 str(retained_scrolled),
                 "--dump-paint-artifact",
@@ -245,6 +254,8 @@ def main() -> int:
                 str(playwright_first),
                 "--viewport",
                 args.viewport,
+                "--time-ms",
+                str(args.time_ms),
             ],
             item_dir / f"{name}-playwright-first.log",
             args.timeout,
@@ -263,6 +274,8 @@ def main() -> int:
                 str(args.scroll_x),
                 "--scroll-y",
                 str(args.scroll_y),
+                "--time-ms",
+                str(args.time_ms),
                 "--out-json",
                 str(playwright_scroll_state),
             ],
@@ -361,6 +374,12 @@ def main() -> int:
                 audit_scrolled_json.get("raw_audit", {})
                 .get("document_scroll_diagnostics", {})
             )
+        time_diagnostics = audit_scrolled_json.get("animation_time_diagnostics", {})
+        if not time_diagnostics:
+            time_diagnostics = (
+                audit_scrolled_json.get("raw_audit", {})
+                .get("animation_time_diagnostics", {})
+            )
         actual_standalone_scroll = scroll_diagnostics.get("applied", {})
         expected_scroll_x = actual_scroll.get("scrollX", actual_scroll.get("x", 0.0))
         expected_scroll_y = actual_scroll.get("scrollY", actual_scroll.get("y", 0.0))
@@ -396,6 +415,17 @@ def main() -> int:
             "actual_standalone_scroll": actual_standalone_scroll,
             "expected_scroll": actual_scroll,
             "blink_scroll_diagnostics": scroll_diagnostics,
+            "requested_time_ms": args.time_ms,
+            "actual_standalone_time": {
+                "requested_ms": time_diagnostics.get("requested_ms", 0),
+                "applied_ms": time_diagnostics.get("applied_ms", 0),
+                "status": time_diagnostics.get("status", "not_reported"),
+                "applied_to_blink": time_diagnostics.get("applied_to_blink", False),
+            },
+            "playwright_time_mode": actual_scroll.get(
+                "playwrightTimeMode", "not_reported"
+            ),
+            "blink_animation_time_diagnostics": time_diagnostics,
             "reason": (
                 ""
                 if standalone_scroll_supported

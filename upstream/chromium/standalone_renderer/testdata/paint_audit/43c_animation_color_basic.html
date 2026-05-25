@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background: white;
+  }
+  .box {
+    width: 180px;
+    height: 120px;
+    margin: 32px;
+    color: white;
+    font: 28px/120px Arial, sans-serif;
+    text-align: center;
+    background: rgb(70, 160, 90);
+    animation: color-shift 1000ms linear forwards;
+  }
+  @keyframes color-shift {
+    from { background-color: rgb(70, 160, 90); }
+    to { background-color: rgb(210, 120, 30); }
+  }
+</style>
+<div class="box">Color</div>
