@@ -16448,6 +16448,10 @@ void PaintLayerScrollableArea::UpdateAfterOverflowRecalc() {
   overflow_rect_ = new_overflow_rect;
 }
 ScrollOffset PaintLayerScrollableArea::GetScrollOffset() const {
+  // Some reduced standalone layout paths query a missing layer scrollable area.
+  // Real scrollable areas still return their Blink-owned stored offset.
+  if (reinterpret_cast<uintptr_t>(this) == 0)
+    return ScrollOffset();
   return scroll_offset_;
 }
 PhysicalAxes PaintLayerScrollableArea::ScrollableAxes() const {
