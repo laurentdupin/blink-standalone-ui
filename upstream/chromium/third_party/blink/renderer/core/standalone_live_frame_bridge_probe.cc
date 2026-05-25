@@ -75,6 +75,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
@@ -87,6 +88,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 
@@ -356,6 +358,20 @@ struct LiveFramePaintProbeCache {
   std::string raw_paint_artifact_audit_json;
   int viewport_width = 320;
   int viewport_height = 200;
+  float requested_scroll_x = 0.0f;
+  float requested_scroll_y = 0.0f;
+  float applied_scroll_x = 0.0f;
+  float applied_scroll_y = 0.0f;
+  float max_scroll_x = 0.0f;
+  float max_scroll_y = 0.0f;
+  int scroll_contents_width = 0;
+  int scroll_contents_height = 0;
+  int scroll_visible_width = 0;
+  int scroll_visible_height = 0;
+  bool scroll_offset_requested = false;
+  bool scroll_offset_applied = false;
+  bool scroll_offset_changed = false;
+  std::string scroll_offset_status = "not_requested";
   bool disable_retained_extraction = false;
   bool force_oracle_bitmap = false;
   bool trace_stages = false;
@@ -390,6 +406,52 @@ void TraceLiveFrameProbeStagef(const char* format,
                 static_cast<unsigned long>(first),
                 static_cast<unsigned long>(second));
   TraceLiveFrameProbeStage(buffer);
+}
+
+void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.applied_scroll_x = 0.0f;
+  cache.applied_scroll_y = 0.0f;
+  cache.max_scroll_x = 0.0f;
+  cache.max_scroll_y = 0.0f;
+  cache.scroll_contents_width = 0;
+  cache.scroll_contents_height = 0;
+  cache.scroll_visible_width = 0;
+  cache.scroll_visible_height = 0;
+  cache.scroll_offset_applied = false;
+  cache.scroll_offset_changed = false;
+  cache.scroll_offset_status = cache.scroll_offset_requested ? "requested"
+                                                             : "not_requested";
+  ScrollableArea* viewport = frame_view.GetScrollableArea();
+  if (!viewport) {
+    cache.scroll_offset_status = "frame_scrollable_area_missing";
+    return;
+  }
+  const ScrollOffset maximum = viewport->MaximumScrollOffset();
+  cache.max_scroll_x = maximum.x();
+  cache.max_scroll_y = maximum.y();
+  const gfx::Size contents_size = viewport->ContentsSize();
+  cache.scroll_contents_width = contents_size.width();
+  cache.scroll_contents_height = contents_size.height();
+  const gfx::Rect visible_rect =
+      viewport->VisibleContentRect(kExcludeScrollbars);
+  cache.scroll_visible_width = visible_rect.width();
+  cache.scroll_visible_height = visible_rect.height();
+  if (cache.scroll_offset_requested) {
+    const ScrollOffset requested_offset = viewport->ScrollPositionToOffset(
+        gfx::PointF(cache.requested_scroll_x, cache.requested_scroll_y));
+    const ScrollOffset clamped_offset =
+        viewport->ClampScrollOffset(requested_offset);
+    cache.scroll_offset_changed = viewport->SetScrollOffset(
+        clamped_offset, mojom::blink::ScrollType::kProgrammatic,
+        cc::ScrollSourceType::kAbsoluteScroll,
+        mojom::blink::ScrollBehavior::kInstant);
+    cache.scroll_offset_status = "applied_to_frame_scrollable_area";
+  }
+  const gfx::PointF applied_position = viewport->ScrollPosition();
+  cache.applied_scroll_x = applied_position.x();
+  cache.applied_scroll_y = applied_position.y();
+  cache.scroll_offset_applied = true;
 }
 
 bool LifecycleStopEqualsForStandaloneRenderer(const char* value) {
@@ -6165,6 +6227,24 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   json << "{\"source\":\"real Blink PaintArtifact\""
        << ",\"viewport\":{\"width\":" << cache.viewport_width
        << ",\"height\":" << cache.viewport_height << "}"
+       << ",\"document_scroll_diagnostics\":{\"requested\":{\"x\":"
+       << cache.requested_scroll_x << ",\"y\":" << cache.requested_scroll_y
+       << "},\"applied\":{\"x\":" << cache.applied_scroll_x
+       << ",\"y\":" << cache.applied_scroll_y
+       << "},\"maximum\":{\"x\":" << cache.max_scroll_x
+       << ",\"y\":" << cache.max_scroll_y
+       << "},\"contents_size\":{\"width\":" << cache.scroll_contents_width
+       << ",\"height\":" << cache.scroll_contents_height
+       << "},\"visible_size\":{\"width\":" << cache.scroll_visible_width
+       << ",\"height\":" << cache.scroll_visible_height
+       << "},\"requested_non_zero\":"
+       << (cache.scroll_offset_requested ? "true" : "false")
+       << ",\"applied_to_blink\":"
+       << (cache.scroll_offset_applied ? "true" : "false")
+       << ",\"changed\":"
+       << (cache.scroll_offset_changed ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.scroll_offset_status) << "}"
        << ",\"device_scale_factor\":1"
        << ",\"media_query_diagnostics\":"
        << media_query_diagnostics_json
@@ -6962,6 +7042,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before required layout lifecycle update");
   frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest);
   TraceLiveFrameProbeStage("after required layout lifecycle update");
+  frame_view.SetNeedsUpdateGeometries();
+  frame_view.UpdateGeometry();
+  TraceLiveFrameProbeStage("before document scroll offset apply");
+  ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
+  TraceLiveFrameProbeStage("after document scroll offset apply");
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
       g_standalone_oof_fragment_created == 0) {
     cache.image_reachability =
@@ -7001,6 +7086,15 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.lifecycle_reached_paint_clean =
       frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
   TraceLiveFrameProbeStage("after lifecycle update");
+  TraceLiveFrameProbeStage("before post-lifecycle document scroll offset apply");
+  ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
+  TraceLiveFrameProbeStage("after post-lifecycle document scroll offset apply");
+  if (cache.scroll_offset_changed) {
+    TraceLiveFrameProbeStage("before post-scroll lifecycle update");
+    result.lifecycle_reached_paint_clean =
+        frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
+    TraceLiveFrameProbeStage("after post-scroll lifecycle update");
+  }
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
@@ -7070,6 +7164,36 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
 
 void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
+    float x,
+    float y) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool requested = std::abs(x) > 0.001f || std::abs(y) > 0.001f;
+  if (cache.scroll_offset_requested == requested &&
+      std::abs(cache.requested_scroll_x - x) <= 0.001f &&
+      std::abs(cache.requested_scroll_y - y) <= 0.001f) {
+    return;
+  }
+  cache.requested_scroll_x = x;
+  cache.requested_scroll_y = y;
+  cache.applied_scroll_x = 0.0f;
+  cache.applied_scroll_y = 0.0f;
+  cache.max_scroll_x = 0.0f;
+  cache.max_scroll_y = 0.0f;
+  cache.scroll_offset_requested = requested;
+  cache.scroll_offset_applied = false;
+  cache.scroll_offset_changed = false;
+  cache.scroll_offset_status = requested ? "requested" : "not_requested";
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

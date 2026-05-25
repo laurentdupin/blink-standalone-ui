@@ -630,6 +630,19 @@ bool WritePageSetupJson(const std::string& path,
   file << "  \"page_setup\": {\n";
   file << "    \"viewport\": {\"width\": " << info.viewport.width
        << ", \"height\": " << info.viewport.height << "},\n";
+  const auto requested_document_scroll =
+      result.successor_snapshot.scroll_offsets_by_element_id.find("document");
+  file << "    \"requested_scroll\": {\"x\": "
+       << (requested_document_scroll ==
+                   result.successor_snapshot.scroll_offsets_by_element_id.end()
+               ? 0.0f
+               : requested_document_scroll->second.x)
+       << ", \"y\": "
+       << (requested_document_scroll ==
+                   result.successor_snapshot.scroll_offsets_by_element_id.end()
+               ? 0.0f
+               : requested_document_scroll->second.y)
+       << "},\n";
   file << "    \"device_scale_factor\": 1,\n";
   file << "    \"css_pixel_ratio\": 1,\n";
   file << "    \"page_scale\": 1,\n";
@@ -722,7 +735,7 @@ void PrintUsage() {
                "Usage: blink_standalone_render_benchmark_skia --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
                "[--resource-root <path>] "
-               "[--viewport WxH] --out <out.bmp> "
+               "[--viewport WxH] [--scroll-x px] [--scroll-y px] --out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
                "[--dump-page-setup <setup.json>] "
@@ -895,6 +908,22 @@ int main(int argc, char** argv) {
         PrintUsage();
         return 2;
       }
+    } else if (arg == "--scroll-x") {
+      const char* value = next_value();
+      float scroll_x = 0.0f;
+      if (!value || !ParseFloat(value, &scroll_x)) {
+        PrintUsage();
+        return 2;
+      }
+      input.scroll_offsets_by_element_id["document"].x = scroll_x;
+    } else if (arg == "--scroll-y") {
+      const char* value = next_value();
+      float scroll_y = 0.0f;
+      if (!value || !ParseFloat(value, &scroll_y)) {
+        PrintUsage();
+        return 2;
+      }
+      input.scroll_offsets_by_element_id["document"].y = scroll_y;
     } else if (arg == "--out") {
       const char* value = next_value();
       if (!value) {

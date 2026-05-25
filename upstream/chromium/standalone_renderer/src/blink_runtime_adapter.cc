@@ -22,6 +22,9 @@
 namespace blink::standalone_renderer_probe {
 void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
                                                                     int height);
+void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
+    float x,
+    float y);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
@@ -1891,6 +1894,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         "live Blink runtime adapter is linked");
     AppendLivePaintDiagnostics(snapshot_.html, snapshot_.stylesheets,
                                snapshot_.viewport,
+                               SnapshotDocumentScrollOffset(snapshot_),
                                report.diagnostics);
     return report;
   }
@@ -1903,6 +1907,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     AppendLivePaintDiagnostics(result.successor_snapshot.html,
                                result.successor_snapshot.stylesheets,
                                result.successor_snapshot.viewport,
+                               SnapshotDocumentScrollOffset(result.successor_snapshot),
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, false,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -1917,6 +1922,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     AppendLivePaintDiagnostics(result.successor_snapshot.html,
                                result.successor_snapshot.stylesheets,
                                result.successor_snapshot.viewport,
+                               SnapshotDocumentScrollOffset(result.successor_snapshot),
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, true,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -1945,11 +1951,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const std::string& html,
       const std::vector<Stylesheet>& stylesheets,
       Size viewport,
+      Point document_scroll_offset,
       std::vector<std::string>& diagnostics) {
     namespace live_probe = ::blink::standalone_renderer_probe;
     const std::string probe_html = BuildLiveBlinkProbeHtml(html, stylesheets);
     live_probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(viewport.width), static_cast<int>(viewport.height));
+    live_probe::StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
+        document_scroll_offset.x, document_scroll_offset.y);
     diagnostics.push_back(
         "live Blink bridge recipe version: " +
         std::to_string(live_probe::
@@ -2020,6 +2029,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(result.successor_snapshot.viewport.width),
         static_cast<int>(result.successor_snapshot.viewport.height));
+    live_probe::StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
+        SnapshotDocumentScrollOffset(result.successor_snapshot).x,
+        SnapshotDocumentScrollOffset(result.successor_snapshot).y);
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
