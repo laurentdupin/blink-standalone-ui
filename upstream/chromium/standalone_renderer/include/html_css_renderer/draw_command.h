@@ -99,6 +99,7 @@ struct DrawCommand {
   std::vector<uint8_t> path_bytes;
   std::vector<uint8_t> text_blob_bytes;
   std::vector<uint8_t> shader_bytes;
+  std::vector<uint8_t> path_effect_bytes;
   std::string resource_id;
   Rect source_rect;
   GlyphRun glyph_run;

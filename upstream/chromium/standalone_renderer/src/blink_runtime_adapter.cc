@@ -161,6 +161,15 @@ int StandaloneBlinkLiveFrameBridgeExportedPathBytesAtForStandaloneRenderer(
     int op_index,
     uint8_t* destination,
     int destination_size);
+int StandaloneBlinkLiveFrameBridgeExportedPathEffectInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count);
+int StandaloneBlinkLiveFrameBridgeExportedPathEffectBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size);
 int StandaloneBlinkLiveFrameBridgeExportedTextBlobInfoAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -2151,6 +2160,23 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           command.draw_looper_layers.push_back(layer);
         }
       };
+      auto append_path_effect_bytes = [&](DrawCommand& command) {
+        int byte_count = 0;
+        if (!live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedPathEffectInfoAtForStandaloneRenderer(
+                    probe_html.c_str(), i, &byte_count) ||
+            byte_count <= 0) {
+          return;
+        }
+        std::vector<uint8_t> bytes(static_cast<size_t>(byte_count));
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedPathEffectBytesAtForStandaloneRenderer(
+                    probe_html.c_str(), i, bytes.data(), byte_count) !=
+            byte_count) {
+          return;
+        }
+        command.path_effect_bytes = std::move(bytes);
+      };
       if (type == 12) {
         if (inside_chunk) {
           current_scene.chunks.push_back(MakeRetainedPaintChunk(
@@ -2307,6 +2333,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             Rect{x, y, width, height}, color,
             font_size > 0.0f ? font_size : 1.0f);
         append_draw_looper_layers(command);
+        append_path_effect_bytes(command);
         active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 5) {
@@ -2320,6 +2347,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             Rect{x, y, width, height}, radius_x, radius_y, color,
             font_size > 0.0f ? font_size : 1.0f);
         append_draw_looper_layers(command);
+        append_path_effect_bytes(command);
         active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 7 || type == 22) {
@@ -2549,6 +2577,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 font_size > 0.0f ? font_size : 0.0f,
                 std::move(shader_bytes)));
             active_commands->back().rect = Rect{x, y, width, height};
+            append_path_effect_bytes(active_commands->back());
             ++translated_command_count;
           }
         }

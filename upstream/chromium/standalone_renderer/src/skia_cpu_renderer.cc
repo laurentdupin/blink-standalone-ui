@@ -33,6 +33,7 @@
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkMaskFilter.h"
+#include "third_party/skia/include/core/SkPathEffect.h"
 #include "html_css_renderer/typeface_resource_registry.h"
 
 namespace html_css_renderer {
@@ -101,6 +102,38 @@ sk_sp<SkShader> DeserializeShader(const std::vector<uint8_t>& bytes) {
     return nullptr;
   }
   return sk_sp<SkShader>(static_cast<SkShader*>(flattenable.release()));
+}
+
+sk_sp<SkPathEffect> DeserializePathEffect(const std::vector<uint8_t>& bytes) {
+  if (bytes.empty()) {
+    return nullptr;
+  }
+  return SkPathEffect::Deserialize(bytes.data(), bytes.size());
+}
+
+void ApplyPathEffect(const DrawCommand& command,
+                     SkPaint& paint,
+                     CommandCoverageRecord* coverage) {
+  if (command.path_effect_bytes.empty()) {
+    return;
+  }
+  if (coverage) {
+    coverage->path_effect_resource_present = true;
+    coverage->path_effect_byte_count = command.path_effect_bytes.size();
+  }
+  sk_sp<SkPathEffect> path_effect =
+      DeserializePathEffect(command.path_effect_bytes);
+  if (!path_effect) {
+    if (coverage) {
+      coverage->skipped = true;
+      coverage->skip_reason = "path_effect_deserialize_failed";
+    }
+    return;
+  }
+  if (coverage) {
+    coverage->path_effect_deserialize_success = true;
+  }
+  paint.setPathEffect(std::move(path_effect));
 }
 
 uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
@@ -319,6 +352,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
     case DrawCommandType::kStrokeRect:
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
+      ApplyPathEffect(command, paint, coverage);
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
                                const SkPaint& layer_paint) {
@@ -358,6 +392,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
     case DrawCommandType::kStrokeRRect:
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
+      ApplyPathEffect(command, paint, coverage);
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
                                const SkPaint& layer_paint) {
@@ -552,6 +587,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                                                    : SkPaint::kFill_Style);
         paint.setStrokeWidth(command.stroke_width > 0.0f ? command.stroke_width
                                                          : 1.0f);
+        ApplyPathEffect(command, paint, coverage);
         if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
           paint.setShader(std::move(shader));
           paint.setColor(SkColorSetARGB(ClampByte(command.color.a), 255, 255,

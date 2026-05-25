@@ -145,6 +145,7 @@
 #include "unicode/ubidi.h"
 #include "unicode/uchar.h"
 #include "third_party/skia/include/core/SkFlattenable.h"
+#include "third_party/skia/src/effects/SkDashImpl.h"
 #include "third_party/skia/src/shaders/SkLocalMatrixShader.h"
 #include "third_party/skia/src/shaders/SkPictureShader.h"
 #include "third_party/skia/src/shaders/SkShaderBase.h"
@@ -20130,9 +20131,11 @@ Program::~Program() {
 void SkFlattenable::PrivateInitializer::InitEffects() {
   // The standalone build owns a narrow Skia initialization boundary instead of
   // linking Skia's full ports/SkGlobalInitialization_default.cc. Register the
-  // shader flattenables required to deserialize Blink PaintFlags shader
-  // resources (CSS gradients, local-matrix wrapped gradients, and simple
-  // shader composition) without pulling browser/network services into the cut.
+  // shader/path-effect flattenables required to deserialize Blink PaintFlags
+  // resources (CSS gradients, local-matrix wrapped gradients, simple shader
+  // composition, and dashed/dotted border strokes) without pulling
+  // browser/network services into the cut.
+  SK_REGISTER_FLATTENABLE(SkDashImpl);
   SkRegisterBlendShaderFlattenable();
   SkRegisterColorShaderFlattenable();
   SkRegisterEmptyShaderFlattenable();

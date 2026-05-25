@@ -130,6 +130,11 @@ void WriteCommandCoverageRecords(std::ostringstream& out) {
         << ",\"shader_byte_count\":" << record.shader_byte_count
         << ",\"shader_deserialize_success\":"
         << (record.shader_deserialize_success ? "true" : "false")
+        << ",\"path_effect_resource_present\":"
+        << (record.path_effect_resource_present ? "true" : "false")
+        << ",\"path_effect_byte_count\":" << record.path_effect_byte_count
+        << ",\"path_effect_deserialize_success\":"
+        << (record.path_effect_deserialize_success ? "true" : "false")
         << ",\"text_blob_resource_present\":"
         << (record.text_blob_resource_present ? "true" : "false")
         << ",\"text_blob_byte_count\":" << record.text_blob_byte_count
@@ -526,10 +531,16 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
           command.type == DrawCommandType::kFillRRectShader) {
         out << ",\"shader_byte_count\":" << command.shader_bytes.size();
       }
+      if (!command.path_effect_bytes.empty()) {
+        out << ",\"path_effect_byte_count\":"
+            << command.path_effect_bytes.size();
+      }
       break;
     case DrawCommandType::kFillPath:
       out << ",\"path_byte_count\":" << command.path_bytes.size()
           << ",\"shader_byte_count\":" << command.shader_bytes.size()
+          << ",\"path_effect_byte_count\":"
+          << command.path_effect_bytes.size()
           << ",\"stroke_width\":" << command.stroke_width
           << ",\"color\":";
       WriteColor(out, command.color);
@@ -679,6 +690,7 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
   int shader_count = 0;
   int path_count = 0;
   int filter_count = 0;
+  int path_effect_count = 0;
 
   for (const SceneCommand& scene_command : result.frame.scene_commands) {
     if (scene_command.type != SceneCommandType::kDrawCommand) {
@@ -698,6 +710,9 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     }
     if (!command.path_bytes.empty()) {
       ++path_count;
+    }
+    if (!command.path_effect_bytes.empty()) {
+      ++path_effect_count;
     }
   }
   for (const std::string& diagnostic : result.diagnostics) {
@@ -720,6 +735,7 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     std::ostringstream retained;
     retained << ",\"retained_draw_command_histogram\":";
     WriteStringIntMap(retained, command_histogram);
+    retained << ",\"retained_path_effect_count\":" << path_effect_count;
     retained << ",\"extracted_retained_scene\":{\"chunk_count\":"
              << result.frame.scene_chunks.size()
              << ",\"scene_command_count\":" << result.frame.scene_commands.size()

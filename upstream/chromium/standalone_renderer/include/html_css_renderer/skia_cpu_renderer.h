@@ -30,6 +30,9 @@ struct CommandCoverageRecord {
   bool shader_resource_present = false;
   uint64_t shader_byte_count = 0;
   bool shader_deserialize_success = false;
+  bool path_effect_resource_present = false;
+  uint64_t path_effect_byte_count = 0;
+  bool path_effect_deserialize_success = false;
   bool text_blob_resource_present = false;
   uint64_t text_blob_byte_count = 0;
   bool text_blob_deserialize_success = false;

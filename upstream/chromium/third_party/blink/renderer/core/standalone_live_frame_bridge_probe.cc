@@ -30,6 +30,7 @@
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
+#include "third_party/skia/include/core/SkPathEffect.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkString.h"
@@ -317,6 +318,7 @@ struct LiveExportedDrawOp {
   int mask_width = 0;
   int mask_height = 0;
   std::vector<uint8_t> path_bytes;
+  std::vector<uint8_t> path_effect_bytes;
   std::vector<uint8_t> text_blob_bytes;
   std::vector<uint8_t> shader_bytes;
   std::vector<uint8_t> alpha_mask;
@@ -437,6 +439,20 @@ void AppendDrawLooperLayers(const cc::PaintFlags& flags,
   });
 }
 
+std::vector<uint8_t> SerializePathEffectBytes(const cc::PaintFlags& flags) {
+  SkPaint paint = flags.ToSkPaint();
+  sk_sp<SkPathEffect> path_effect = paint.refPathEffect();
+  if (!path_effect) {
+    return {};
+  }
+  sk_sp<SkData> data = path_effect->serialize();
+  if (!data || data->isEmpty()) {
+    return {};
+  }
+  const auto* bytes = static_cast<const uint8_t*>(data->data());
+  return std::vector<uint8_t>(bytes, bytes + data->size());
+}
+
 void AppendFillRectOp(float x,
                       float y,
                       float width,
@@ -493,7 +509,8 @@ void AppendStrokeRectOp(float x,
                         float height,
                         SkScalar stroke_width,
                         const SkColor4f& color,
-                        std::vector<LiveExportedDrawOp>& exported_draw_ops) {
+                        std::vector<LiveExportedDrawOp>& exported_draw_ops,
+                        const cc::PaintFlags* flags = nullptr) {
   if (width <= 0.0f || height <= 0.0f) {
     return;
   }
@@ -505,6 +522,9 @@ void AppendStrokeRectOp(float x,
   exported.height = height;
   exported.font_size = stroke_width > 0.0f ? stroke_width : 1.0f;
   AppendSkColor(exported, color);
+  if (flags) {
+    exported.path_effect_bytes = SerializePathEffectBytes(*flags);
+  }
   exported_draw_ops.push_back(exported);
 }
 
@@ -534,6 +554,9 @@ void AppendRRectOp(float x,
   AppendSkColor(exported, color);
   if (flags) {
     AppendDrawLooperLayers(*flags, exported);
+    if (stroke) {
+      exported.path_effect_bytes = SerializePathEffectBytes(*flags);
+    }
   }
   exported_draw_ops.push_back(exported);
 }
@@ -928,7 +951,7 @@ void AppendSkRectOpWithFlags(
   if (flags.getStyle() == cc::PaintFlags::kStroke_Style) {
     AppendStrokeRectOp(translate_x + rect.x(), translate_y + rect.y(),
                        rect.width(), rect.height(), flags.getStrokeWidth(),
-                       flags.getColor4f(), exported_draw_ops);
+                       flags.getColor4f(), exported_draw_ops, &flags);
     return;
   }
   AppendSkRectFillOp(rect, translate_x, translate_y, flags.getColor4f(),
@@ -947,7 +970,7 @@ void AppendSkIRectOpWithFlags(
                        static_cast<float>(rect.width()),
                        static_cast<float>(rect.height()),
                        flags.getStrokeWidth(), flags.getColor4f(),
-                       exported_draw_ops);
+                       exported_draw_ops, &flags);
     return;
   }
   AppendSkIRectFillOp(rect, translate_x, translate_y, flags.getColor4f(),
@@ -1050,6 +1073,7 @@ void AppendSkPathOpWithFlags(
   if (flags.HasShader()) {
     exported.shader_bytes = SerializeShaderBytes(flags);
   }
+  exported.path_effect_bytes = SerializePathEffectBytes(flags);
 
   exported_draw_ops.push_back(std::move(exported));
 }
@@ -4894,6 +4918,7 @@ struct RawPaintRecordAudit {
   int filter_count = 0;
   int draw_looper_count = 0;
   int draw_looper_layer_count = 0;
+  int path_effect_count = 0;
   bool has_non_text_visual_paint = false;
   bool has_non_translation_transform = false;
   bool has_effect_opacity = false;
@@ -4983,6 +5008,10 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
     if (flags && flags->getImageFilter()) {
       ++audit.filter_count;
     }
+    const bool has_path_effect = flags && flags->getPathEffect();
+    if (has_path_effect) {
+      ++audit.path_effect_count;
+    }
     const int draw_looper_layer_count =
         flags ? DrawLooperLayerCountForStandaloneRenderer(*flags) : 0;
     if (draw_looper_layer_count > 0) {
@@ -5014,6 +5043,8 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
                       << (draw_looper_layer_count > 0 ? "true" : "false")
                       << ",\"draw_looper_layer_count\":"
                       << draw_looper_layer_count
+                      << ",\"has_path_effect\":"
+                      << (has_path_effect ? "true" : "false")
                       << ",\"bounds_or_geometry\":"
                       << PaintOpGeometryJsonForStandaloneRenderer(op) << "}";
     }
@@ -5614,6 +5645,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       chunk_raw_audit.draw_looper_count += item_audit.draw_looper_count;
       chunk_raw_audit.draw_looper_layer_count +=
           item_audit.draw_looper_layer_count;
+      chunk_raw_audit.path_effect_count += item_audit.path_effect_count;
       chunk_raw_audit.has_non_text_visual_paint |=
           item_audit.has_non_text_visual_paint;
       chunk_raw_audit.has_non_translation_transform |=
@@ -5662,6 +5694,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     total_raw_audit.draw_looper_count += chunk_raw_audit.draw_looper_count;
     total_raw_audit.draw_looper_layer_count +=
         chunk_raw_audit.draw_looper_layer_count;
+    total_raw_audit.path_effect_count += chunk_raw_audit.path_effect_count;
     total_raw_audit.has_non_text_visual_paint |=
         chunk_raw_audit.has_non_text_visual_paint;
     total_raw_audit.has_non_translation_transform |=
@@ -6104,7 +6137,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"filter_count\":" << total_raw_audit.filter_count
        << ",\"draw_looper_count\":" << total_raw_audit.draw_looper_count
        << ",\"draw_looper_layer_count\":"
-       << total_raw_audit.draw_looper_layer_count << "}"
+       << total_raw_audit.draw_looper_layer_count
+       << ",\"path_effect_count\":" << total_raw_audit.path_effect_count
+       << "}"
        << ",\"typeface_resources\":{\"count\":"
        << StandaloneRendererSameProcessTypefaceResourceCount()
        << ",\"same_process_only\":true"
@@ -7578,6 +7613,46 @@ int StandaloneBlinkLiveFrameBridgeExportedPathBytesAtForStandaloneRenderer(
   }
   std::memcpy(destination, op.path_bytes.data(), op.path_bytes.size());
   return static_cast<int>(op.path_bytes.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedPathEffectInfoAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* byte_count) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.path_effect_bytes.empty()) {
+    return 0;
+  }
+  if (byte_count) {
+    *byte_count = static_cast<int>(op.path_effect_bytes.size());
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedPathEffectBytesAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    uint8_t* destination,
+    int destination_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() ||
+      !destination || destination_size <= 0) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.path_effect_bytes.empty() ||
+      destination_size < static_cast<int>(op.path_effect_bytes.size())) {
+    return 0;
+  }
+  std::memcpy(destination, op.path_effect_bytes.data(),
+              op.path_effect_bytes.size());
+  return static_cast<int>(op.path_effect_bytes.size());
 }
 
 int StandaloneBlinkLiveFrameBridgeExportedTextBlobInfoAtForStandaloneRenderer(
