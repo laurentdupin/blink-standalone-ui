@@ -1,6 +1,7 @@
 #ifndef STANDALONE_RENDERER_INCLUDE_HTML_CSS_RENDERER_RENDER_FRAME_H_
 #define STANDALONE_RENDERER_INCLUDE_HTML_CSS_RENDERER_RENDER_FRAME_H_
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -74,6 +75,9 @@ struct PaintPropertyStateSnapshot {
   uint32_t transform_chain_depth = 0;
   bool has_clip_rect = false;
   Rect clip_rect;
+  bool has_clip_rrect = false;
+  Rect clip_rrect;
+  std::array<Point, 4> clip_rrect_radii = {};
   uint64_t clip_node_id = 0;
   uint64_t clip_parent_id = 0;
   uint64_t clip_local_transform_id = 0;

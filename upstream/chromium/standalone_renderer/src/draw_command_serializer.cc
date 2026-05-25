@@ -171,7 +171,20 @@ void WritePropertyState(std::ostringstream& out,
       << ",\"has_clip_rect\":" << (state.has_clip_rect ? "true" : "false")
       << ",\"clip_rect\":";
   WriteRect(out, state.clip_rect);
-  out << ",\"clip_node_id\":" << state.clip_node_id
+  out << ",\"has_clip_rrect\":"
+      << (state.has_clip_rrect ? "true" : "false")
+      << ",\"clip_rrect\":";
+  WriteRect(out, state.clip_rrect);
+  out << ",\"clip_rrect_radii\":[";
+  for (size_t i = 0; i < state.clip_rrect_radii.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    out << "{\"x\":" << state.clip_rrect_radii[i].x
+        << ",\"y\":" << state.clip_rrect_radii[i].y << "}";
+  }
+  out << "]"
+      << ",\"clip_node_id\":" << state.clip_node_id
       << ",\"clip_parent_id\":" << state.clip_parent_id
       << ",\"clip_local_transform_id\":" << state.clip_local_transform_id
       << ",\"clip_chain_depth\":" << state.clip_chain_depth

@@ -57,6 +57,17 @@ bool SameOpacityGroup(const PaintPropertyStateSnapshot& a,
          NearlyEqual(a.effect_opacity, b.effect_opacity);
 }
 
+Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
+  Rect bounds = chunk.placement_bounds;
+  if (chunk.property_state.has_clip_rect) {
+    bounds = UnionRectBounds(bounds, chunk.property_state.clip_rect);
+  }
+  if (chunk.property_state.has_clip_rrect) {
+    bounds = UnionRectBounds(bounds, chunk.property_state.clip_rrect);
+  }
+  return bounds;
+}
+
 uint64_t HashMatrix(Matrix4 matrix) {
   uint64_t hash = 0;
   for (const float value : matrix.values) {
@@ -77,6 +88,14 @@ uint64_t HashPropertyState(PaintPropertyStateSnapshot state) {
   hash = HashCombine(hash, state.has_clip_rect ? 1u : 0u);
   if (state.has_clip_rect) {
     hash = HashCombine(hash, HashRect(state.clip_rect));
+  }
+  hash = HashCombine(hash, state.has_clip_rrect ? 1u : 0u);
+  if (state.has_clip_rrect) {
+    hash = HashCombine(hash, HashRect(state.clip_rrect));
+    for (const Point radius : state.clip_rrect_radii) {
+      hash = HashCombine(hash, HashFloat(radius.x));
+      hash = HashCombine(hash, HashFloat(radius.y));
+    }
   }
   hash = HashCombine(hash, state.clip_node_id);
   hash = HashCombine(hash, state.clip_parent_id);
@@ -501,15 +520,16 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
       opacity_layer_open = false;
     }
     if (needs_opacity_layer && !opacity_layer_open) {
-      Rect opacity_bounds = retained_chunk.placement_bounds;
+      Rect opacity_bounds = OpacityLayerContributionBounds(retained_chunk);
       for (size_t next_index = chunk_index + 1; next_index < scene.chunks.size();
            ++next_index) {
         if (!SameOpacityGroup(retained_chunk.property_state,
                               scene.chunks[next_index].property_state)) {
           break;
         }
-        opacity_bounds = UnionRectBounds(opacity_bounds,
-                                         scene.chunks[next_index].placement_bounds);
+        opacity_bounds = UnionRectBounds(
+            opacity_bounds,
+            OpacityLayerContributionBounds(scene.chunks[next_index]));
       }
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::SaveLayer(
           opacity_bounds, retained_chunk.property_state.effect_opacity)));
@@ -554,8 +574,17 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
 
     frame.scene_commands.push_back(
         SceneCommand::BeginChunk(chunk.chunk_id, chunk.bounds));
+    if (retained_chunk.property_state.has_clip_rrect) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Save()));
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::ClipRRect(
+          retained_chunk.property_state.clip_rrect,
+          retained_chunk.property_state.clip_rrect_radii, false)));
+    }
     for (const DrawCommand& command : chunk.commands) {
       frame.scene_commands.push_back(SceneCommand::Draw(command));
+    }
+    if (retained_chunk.property_state.has_clip_rrect) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
     }
     frame.scene_commands.push_back(SceneCommand::EndChunk(chunk.chunk_id));
     frame.scene_chunks.push_back(std::move(chunk));

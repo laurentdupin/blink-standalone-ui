@@ -92,6 +92,22 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
     int* effect_has_backdrop_filter,
     int* effect_has_blend_mode,
     uint64_t* effect_output_clip_id);
+int StandaloneBlinkLiveFrameBridgePaintChunkRoundedClipAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int* has_rounded_clip,
+    float* clip_x,
+    float* clip_y,
+    float* clip_width,
+    float* clip_height,
+    float* top_left_x,
+    float* top_left_y,
+    float* top_right_x,
+    float* top_right_y,
+    float* bottom_right_x,
+    float* bottom_right_y,
+    float* bottom_left_x,
+    float* bottom_left_y);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -2287,6 +2303,38 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 effect_has_blend_mode != 0;
             active_chunk_property_state.effect_output_clip_id =
                 effect_output_clip_id;
+          }
+          int has_rounded_clip = 0;
+          float rounded_clip_x = 0.0f;
+          float rounded_clip_y = 0.0f;
+          float rounded_clip_width = 0.0f;
+          float rounded_clip_height = 0.0f;
+          float top_left_x = 0.0f;
+          float top_left_y = 0.0f;
+          float top_right_x = 0.0f;
+          float top_right_y = 0.0f;
+          float bottom_right_x = 0.0f;
+          float bottom_right_y = 0.0f;
+          float bottom_left_x = 0.0f;
+          float bottom_left_y = 0.0f;
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgePaintChunkRoundedClipAtForStandaloneRenderer(
+                      probe_html.c_str(), chunk_index, &has_rounded_clip,
+                      &rounded_clip_x, &rounded_clip_y, &rounded_clip_width,
+                      &rounded_clip_height, &top_left_x, &top_left_y,
+                      &top_right_x, &top_right_y, &bottom_right_x,
+                      &bottom_right_y, &bottom_left_x, &bottom_left_y) &&
+              has_rounded_clip != 0) {
+            active_chunk_property_state.has_clip_rrect = true;
+            active_chunk_property_state.clip_rrect =
+                Rect{rounded_clip_x, rounded_clip_y, rounded_clip_width,
+                     rounded_clip_height};
+            active_chunk_property_state.clip_rrect_radii = {
+                Point{top_left_x, top_left_y},
+                Point{top_right_x, top_right_y},
+                Point{bottom_right_x, bottom_right_y},
+                Point{bottom_left_x, bottom_left_y},
+            };
           }
         }
         active_chunk_key =

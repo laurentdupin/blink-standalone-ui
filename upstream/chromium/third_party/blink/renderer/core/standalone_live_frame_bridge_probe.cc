@@ -264,6 +264,19 @@ struct LiveExportedChunkPropertyState {
   float clip_y = 0.0f;
   float clip_width = 0.0f;
   float clip_height = 0.0f;
+  bool has_clip_rrect = false;
+  float clip_rrect_x = 0.0f;
+  float clip_rrect_y = 0.0f;
+  float clip_rrect_width = 0.0f;
+  float clip_rrect_height = 0.0f;
+  float clip_rrect_top_left_x = 0.0f;
+  float clip_rrect_top_left_y = 0.0f;
+  float clip_rrect_top_right_x = 0.0f;
+  float clip_rrect_top_right_y = 0.0f;
+  float clip_rrect_bottom_right_x = 0.0f;
+  float clip_rrect_bottom_right_y = 0.0f;
+  float clip_rrect_bottom_left_x = 0.0f;
+  float clip_rrect_bottom_left_y = 0.0f;
   bool transform_is_2d = true;
   bool transform_has_perspective = false;
   bool transform_has_non_translation = false;
@@ -706,6 +719,33 @@ uint64_t HashChunkPropertyStateForStandaloneRenderer(
     hash = HashCombineForStandaloneRenderer(
         hash, HashFloatForStandaloneRenderer(state.clip_height));
   }
+  hash = HashCombineForStandaloneRenderer(hash, state.has_clip_rrect ? 1u : 0u);
+  if (state.has_clip_rrect) {
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_y));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_width));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_height));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_top_left_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_top_left_y));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_top_right_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_top_right_y));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_bottom_right_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_bottom_right_y));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_bottom_left_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(state.clip_rrect_bottom_left_y));
+  }
   hash = HashCombineForStandaloneRenderer(hash, state.clip_node_id);
   hash = HashCombineForStandaloneRenderer(hash, state.clip_parent_id);
   hash = HashCombineForStandaloneRenderer(hash, state.clip_local_transform_id);
@@ -739,6 +779,25 @@ uint32_t TransformChainDepthForStandaloneRenderer(
 uint32_t ClipChainDepthForStandaloneRenderer(const ClipPaintPropertyNode& clip);
 uint32_t EffectChainDepthForStandaloneRenderer(
     const EffectPaintPropertyNode& effect);
+
+const FloatRoundedRect* RoundedClipInChainForStandaloneRenderer(
+    const ClipPaintPropertyNode& clip) {
+  const auto* node = &clip;
+  const auto* root = &PropertyTreeState::Root().Clip();
+  uint32_t depth = 0;
+  while (node && depth < 256) {
+    const FloatRoundedRect& paint_clip = node->PaintClipRect();
+    if (paint_clip.IsRounded()) {
+      return &paint_clip;
+    }
+    if (node == root) {
+      break;
+    }
+    node = node->UnaliasedParent();
+    ++depth;
+  }
+  return nullptr;
+}
 
 void AppendChunkPropertyStateForStandaloneRenderer(
     wtf_size_t chunk_index,
@@ -818,6 +877,25 @@ void AppendChunkPropertyStateForStandaloneRenderer(
     state.clip_y = rect.y();
     state.clip_width = rect.width();
     state.clip_height = rect.height();
+  }
+  if (state.has_clip_rect) {
+    if (const FloatRoundedRect* rounded_clip =
+            RoundedClipInChainForStandaloneRenderer(chunk_state.Clip())) {
+      const FloatRoundedRect::Radii& radii = rounded_clip->GetRadii();
+      state.has_clip_rrect = true;
+      state.clip_rrect_x = state.clip_x;
+      state.clip_rrect_y = state.clip_y;
+      state.clip_rrect_width = state.clip_width;
+      state.clip_rrect_height = state.clip_height;
+      state.clip_rrect_top_left_x = radii.TopLeft().width();
+      state.clip_rrect_top_left_y = radii.TopLeft().height();
+      state.clip_rrect_top_right_x = radii.TopRight().width();
+      state.clip_rrect_top_right_y = radii.TopRight().height();
+      state.clip_rrect_bottom_right_x = radii.BottomRight().width();
+      state.clip_rrect_bottom_right_y = radii.BottomRight().height();
+      state.clip_rrect_bottom_left_x = radii.BottomLeft().width();
+      state.clip_rrect_bottom_left_y = radii.BottomLeft().height();
+    }
   }
   state.state_hash = HashChunkPropertyStateForStandaloneRenderer(state);
   property_states[chunk_index] = state;
@@ -5922,6 +6000,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                 << (clip && !clip->IsInfinite() ? "true" : "false")
                 << ",\"clip_rect\":"
                 << clip_json
+                << ",\"clip_has_rounded_clip\":"
+                << (clip_paint_rect_rounded ? "true" : "false")
                 << ",\"clip_chain_depth\":" << clip_chain_depth
                 << ",\"effect_chain_depth\":" << effect_chain_depth
                 << ",\"effect_opacity\":" << effect_opacity
@@ -7232,6 +7312,71 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
   }
   if (effect_output_clip_id) {
     *effect_output_clip_id = state.effect_output_clip_id;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgePaintChunkRoundedClipAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int* has_rounded_clip,
+    float* clip_x,
+    float* clip_y,
+    float* clip_width,
+    float* clip_height,
+    float* top_left_x,
+    float* top_left_y,
+    float* top_right_x,
+    float* top_right_y,
+    float* bottom_right_x,
+    float* bottom_right_y,
+    float* bottom_left_x,
+    float* bottom_left_y) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& states = ProbeCache().chunk_property_states;
+  if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
+    return 0;
+  }
+  const LiveExportedChunkPropertyState& state =
+      states[static_cast<size_t>(chunk_index)];
+  if (has_rounded_clip) {
+    *has_rounded_clip = state.has_clip_rrect ? 1 : 0;
+  }
+  if (clip_x) {
+    *clip_x = state.clip_rrect_x;
+  }
+  if (clip_y) {
+    *clip_y = state.clip_rrect_y;
+  }
+  if (clip_width) {
+    *clip_width = state.clip_rrect_width;
+  }
+  if (clip_height) {
+    *clip_height = state.clip_rrect_height;
+  }
+  if (top_left_x) {
+    *top_left_x = state.clip_rrect_top_left_x;
+  }
+  if (top_left_y) {
+    *top_left_y = state.clip_rrect_top_left_y;
+  }
+  if (top_right_x) {
+    *top_right_x = state.clip_rrect_top_right_x;
+  }
+  if (top_right_y) {
+    *top_right_y = state.clip_rrect_top_right_y;
+  }
+  if (bottom_right_x) {
+    *bottom_right_x = state.clip_rrect_bottom_right_x;
+  }
+  if (bottom_right_y) {
+    *bottom_right_y = state.clip_rrect_bottom_right_y;
+  }
+  if (bottom_left_x) {
+    *bottom_left_x = state.clip_rrect_bottom_left_x;
+  }
+  if (bottom_left_y) {
+    *bottom_left_y = state.clip_rrect_bottom_left_y;
   }
   return 1;
 }
