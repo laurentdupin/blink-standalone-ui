@@ -1583,6 +1583,11 @@ namespace blink {
 extern "C" bool g_standalone_blink_saw_font_draw_text = false;
 extern "C" int g_standalone_blink_viewport_width = 800;
 extern "C" int g_standalone_blink_viewport_height = 600;
+extern "C" int g_standalone_css_animation_timeline_update_called = 0;
+extern "C" int g_standalone_css_animation_update_called = 0;
+extern "C" int g_standalone_css_transition_update_called = 0;
+extern "C" int g_standalone_document_animations_update_called = 0;
+extern "C" int g_standalone_page_animator_service_called = 0;
 extern "C" int g_standalone_oof_layout_part_run_called = 0;
 extern "C" int g_standalone_oof_candidate_count = 0;
 extern "C" int g_standalone_oof_descendant_collected = 0;
@@ -7428,14 +7433,18 @@ bool CSSAnimations::IsAnimatingDisplayProperty(const ElementAnimations*) {
 }
 void CSSAnimations::CalculateTimelineUpdate(CSSAnimationUpdate&,
                                             Element&,
-                                            const ComputedStyleBuilder&) {}
+                                            const ComputedStyleBuilder&) {
+  ++g_standalone_css_animation_timeline_update_called;
+}
 void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate&,
                                              Element&,
                                              Element&,
                                              const ComputedStyleBuilder&,
                                              const ComputedStyle*,
                                              StyleResolver*,
-                                             bool) {}
+                                             bool) {
+  ++g_standalone_css_animation_update_called;
+}
 void CSSAnimations::CalculateCompositorAnimationUpdate(CSSAnimationUpdate&,
                                                        Element&,
                                                        Element&,
@@ -7448,7 +7457,9 @@ void CSSAnimations::CalculateTransitionUpdate(CSSAnimationUpdate&,
                                               const ComputedStyleBuilder&,
                                               const ComputedStyle*,
                                               const StyleRecalcContext&,
-                                              bool) {}
+                                              bool) {
+  ++g_standalone_css_transition_update_called;
+}
 void CSSAnimations::SnapshotCompositorKeyframes(Element&,
                                                 CSSAnimationUpdate&,
                                                 const ComputedStyle&,
@@ -7703,7 +7714,9 @@ HeapVector<Member<Animation>> DocumentAnimations::getAnimations(
 void DocumentAnimations::UpdateAnimationTriggerAttachments() {}
 void DocumentAnimations::UpdateAnimations(DocumentLifecycle::LifecycleState,
                                           const PaintArtifactCompositor*,
-                                          bool) {}
+                                          bool) {
+  ++g_standalone_document_animations_update_called;
+}
 void DocumentAnimations::UpdateAnimationTimingForAnimationFrame() {}
 size_t DocumentAnimations::GetAnimationsCount() {
   return 0;
@@ -9310,7 +9323,9 @@ PageAnimator::PageAnimator(Page& page)
       servicing_animations_(false),
       updating_layout_and_style_for_painting_(false) {}
 void PageAnimator::SetSuppressFrameRequestsWorkaroundFor704763Only(bool) {}
-void PageAnimator::ServiceScriptedAnimations(base::TimeTicks) {}
+void PageAnimator::ServiceScriptedAnimations(base::TimeTicks) {
+  ++g_standalone_page_animator_service_called;
+}
 void PageAnimator::UpdateLifecycleToLayoutClean(LocalFrame&,
                                                 DocumentUpdateReason) {}
 void PageAnimator::UpdateAllLifecyclePhasesExceptPaint(

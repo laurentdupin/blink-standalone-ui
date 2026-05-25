@@ -100,6 +100,11 @@ namespace blink::standalone_renderer_probe {
 extern "C" bool g_standalone_blink_saw_font_draw_text;
 extern "C" int g_standalone_blink_viewport_width;
 extern "C" int g_standalone_blink_viewport_height;
+extern "C" int g_standalone_css_animation_timeline_update_called;
+extern "C" int g_standalone_css_animation_update_called;
+extern "C" int g_standalone_css_transition_update_called;
+extern "C" int g_standalone_document_animations_update_called;
+extern "C" int g_standalone_page_animator_service_called;
 extern "C" uint64_t
 StandaloneRendererRegisterSameProcessTypefaceForSkTextBlob(SkTypeface*);
 extern "C" int StandaloneRendererSameProcessTypefaceResourceCount();
@@ -5638,6 +5643,72 @@ std::string ExtractHtmlAttributeForStandaloneRenderer(
   return tag.substr(value_start, value_end - value_start);
 }
 
+std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
+    const std::string& body_html,
+    const LiveFramePaintProbeCache& cache) {
+  const std::string lower_html = LowerAsciiForStandaloneRenderer(body_html);
+  const int keyframes_count =
+      CountLowercaseTokenForStandaloneRenderer(lower_html, "@keyframes");
+  const int animation_declaration_count =
+      CountLowercaseTokenForStandaloneRenderer(lower_html, "animation:");
+  const int transition_declaration_count =
+      CountLowercaseTokenForStandaloneRenderer(lower_html, "transition:");
+  const int request_animation_frame_count =
+      CountLowercaseTokenForStandaloneRenderer(lower_html,
+                                               "requestanimationframe");
+  const bool has_css_animation =
+      keyframes_count > 0 || animation_declaration_count > 0;
+  const bool css_animation_update_stubbed =
+      has_css_animation &&
+      g_standalone_css_animation_update_called > 0;
+  std::string first_missing_stage;
+  if (has_css_animation && css_animation_update_stubbed) {
+    first_missing_stage =
+        "real_css_animations_calculate_animation_update_not_linked";
+  } else if (transition_declaration_count > 0 &&
+             g_standalone_css_transition_update_called > 0) {
+    first_missing_stage =
+        "real_css_animations_calculate_transition_update_not_linked";
+  } else if (has_css_animation && cache.animation_time_requested &&
+             !cache.animation_time_applied) {
+    first_missing_stage =
+        "document_timeline_page_animator_time_not_wired_to_standalone_render_state";
+  } else if (request_animation_frame_count > 0) {
+    first_missing_stage = "scripted_animation_runtime_not_supported";
+  }
+  std::ostringstream json;
+  json << "{\"source_counts\":{\"keyframes\":" << keyframes_count
+       << ",\"animation_declarations\":" << animation_declaration_count
+       << ",\"transition_declarations\":" << transition_declaration_count
+       << ",\"request_animation_frame_calls\":"
+       << request_animation_frame_count << "}"
+       << ",\"stub_counters\":{\"css_timeline_update\":"
+       << g_standalone_css_animation_timeline_update_called
+       << ",\"css_animation_update\":"
+       << g_standalone_css_animation_update_called
+       << ",\"css_transition_update\":"
+       << g_standalone_css_transition_update_called
+       << ",\"document_animations_update\":"
+       << g_standalone_document_animations_update_called
+       << ",\"page_animator_service\":"
+       << g_standalone_page_animator_service_called << "}"
+       << ",\"real_css_animation_update_linked\":false"
+       << ",\"real_document_timeline_linked\":false"
+       << ",\"real_page_animator_linked\":false"
+       << ",\"css_animation_creation_status\":"
+       << JsonStringForStandaloneRenderer(
+              has_css_animation ? "blocked_by_css_animations_update_stub"
+                                : "not_requested")
+       << ",\"css_transition_creation_status\":"
+       << JsonStringForStandaloneRenderer(
+              transition_declaration_count > 0
+                  ? "blocked_by_css_animations_transition_update_stub"
+                  : "not_requested")
+       << ",\"first_missing_stage\":"
+       << JsonStringForStandaloneRenderer(first_missing_stage) << "}";
+  return json.str();
+}
+
 void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                              LiveFramePaintProbeCache& cache) {
   TraceLiveFrameProbeStage("paint audit begin");
@@ -6232,6 +6303,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           ? FormControlDiagnosticsJsonForStandaloneRenderer(
                 cache.holder->GetDocument(), cache.body_html)
           : "{\"first_missing_stage\":\"document_unavailable\"}";
+  const std::string animation_runtime_diagnostics_json =
+      AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(cache.body_html,
+                                                           cache);
   const std::string root_background_diagnostics_json =
       cache.holder
           ? RootBackgroundDiagnosticsJsonForStandaloneRenderer(
@@ -6346,6 +6420,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << table_column_diagnostics_json
        << ",\"form_control_diagnostics\":"
        << form_control_diagnostics_json
+       << ",\"animation_runtime_diagnostics\":"
+       << animation_runtime_diagnostics_json
        << ",\"root_background_diagnostics\":"
        << root_background_diagnostics_json
        << ",\"paint_artifact_audit_safe_mode\":"
@@ -6984,6 +7060,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   StandaloneRendererResetOutOfFlowDiagnostics();
   StandaloneRendererResetMediaQueryDiagnostics();
   StandaloneRendererResetListItemFactoryDiagnostics();
+  g_standalone_css_animation_timeline_update_called = 0;
+  g_standalone_css_animation_update_called = 0;
+  g_standalone_css_transition_update_called = 0;
+  g_standalone_document_animations_update_called = 0;
+  g_standalone_page_animator_service_called = 0;
   cache.image_reachability = ImageReachabilityDiagnostics();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
