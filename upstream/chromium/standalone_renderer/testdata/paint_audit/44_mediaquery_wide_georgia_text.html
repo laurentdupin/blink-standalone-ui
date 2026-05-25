@@ -1,0 +1,69 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background-color: rgb(255, 255, 255);
+    color: rgb(37, 35, 31);
+    font-family: Georgia, "Times New Roman", serif;
+  }
+  .shell {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 28px 20px;
+  }
+  .hero {
+    padding: 22px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 34px;
+    line-height: 1.15;
+    width: 78%;
+  }
+  p {
+    margin: 14px 0 0;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    margin-top: 20px;
+  }
+  .panel {
+    padding: 20px;
+  }
+  h2 {
+    margin: 0;
+    font-size: 24px;
+  }
+  @media (min-width: 900px) {
+    .layout {
+      flex-direction: row;
+    }
+    .primary {
+      width: 68%;
+    }
+    .secondary {
+      width: 32%;
+    }
+  }
+</style>
+<main class="shell">
+  <section class="hero">
+    <h1>Responsive media layouts should preserve text metrics</h1>
+    <p>Wide viewports switch the content into two columns while keeping the same Georgia text shaping.</p>
+  </section>
+  <section class="layout">
+    <article class="panel primary">
+      <h2>Responsive Feature Card</h2>
+      <p>The panel should use the wide media branch and still wrap text using the same font metrics.</p>
+    </article>
+    <article class="panel secondary">
+      <h2>Sidebar Card</h2>
+      <p>This compact panel exposes smaller Georgia text in the two-column branch.</p>
+    </article>
+  </section>
+</main>
