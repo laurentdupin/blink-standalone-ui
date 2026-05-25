@@ -235,6 +235,68 @@ Rect Translate(Rect rect, Point delta) {
   return rect;
 }
 
+bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  return state.transform_is_2d && !state.transform_has_perspective &&
+         state.transform_has_non_translation && state.effect_chain_depth == 0 &&
+         !state.effect_has_non_default_opacity && chunk.bounds.width > 0.0f &&
+         chunk.bounds.height > 0.0f;
+}
+
+void LocalizeRect(Rect& rect, Point origin) {
+  rect.x -= origin.x;
+  rect.y -= origin.y;
+}
+
+DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
+  switch (command.type) {
+    case DrawCommandType::kClipRect:
+    case DrawCommandType::kClipRRect:
+    case DrawCommandType::kSaveLayer:
+    case DrawCommandType::kFillRect:
+    case DrawCommandType::kStrokeRect:
+    case DrawCommandType::kFillRectShader:
+    case DrawCommandType::kFillRRect:
+    case DrawCommandType::kStrokeRRect:
+    case DrawCommandType::kFillRRectShader:
+    case DrawCommandType::kDrawImage:
+    case DrawCommandType::kDrawImageRect:
+    case DrawCommandType::kDrawTextBlob:
+    case DrawCommandType::kDrawText:
+      LocalizeRect(command.rect, origin);
+      break;
+    case DrawCommandType::kDrawGlyphRun:
+      for (Point& position : command.glyph_run.positions) {
+        position.x -= origin.x;
+        position.y -= origin.y;
+      }
+      break;
+    case DrawCommandType::kSave:
+    case DrawCommandType::kRestore:
+    case DrawCommandType::kTransform:
+    case DrawCommandType::kClipPath:
+    case DrawCommandType::kFillPath:
+    case DrawCommandType::kDiagnostic:
+      break;
+  }
+  return command;
+}
+
+DrawCommandList LocalizeRootSpaceCommandsForTransform(
+    const RetainedPaintChunk& chunk) {
+  if (!ShouldLocalizeRootSpaceCommands(chunk)) {
+    return chunk.commands;
+  }
+
+  DrawCommandList commands;
+  commands.reserve(chunk.commands.size());
+  const Point origin{chunk.bounds.x, chunk.bounds.y};
+  for (const DrawCommand& command : chunk.commands) {
+    commands.push_back(LocalizeRootSpaceCommand(command, origin));
+  }
+  return commands;
+}
+
 void RecordChange(RetainedSceneDiff& diff, RetainedChunkDiff chunk_diff) {
   switch (chunk_diff.kind) {
     case RetainedChunkChangeKind::kRetained:
@@ -549,7 +611,7 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
     chunk.property_state = retained_chunk.property_state;
     chunk.content_hash = retained_chunk.content_hash;
     chunk.resource_hash = retained_chunk.resource_hash;
-    chunk.commands = retained_chunk.commands;
+    chunk.commands = LocalizeRootSpaceCommandsForTransform(retained_chunk);
     chunk.retained_from_previous_frame = true;
     for (const PresentationChunkUpdate& update : plan.chunk_updates) {
       if (update.key == retained_chunk.key) {

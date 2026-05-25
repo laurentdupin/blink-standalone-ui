@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    background: white;
+  }
+  .stage {
+    position: relative;
+    width: 260px;
+    height: 170px;
+    margin: 24px;
+    overflow: hidden;
+    border: 1px solid rgb(210, 218, 214);
+    border-radius: 18px;
+    background: rgb(246, 249, 246);
+  }
+  .chip {
+    position: absolute;
+    left: 20px;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    transform-origin: left top;
+  }
+  .first {
+    top: 28px;
+    background: rgb(255, 118, 73);
+    transform: translateX(28px) scale(2);
+  }
+  .second {
+    top: 92px;
+    background: rgb(71, 128, 255);
+    transform: scale(2) translateX(28px);
+  }
+</style>
+<div class="stage">
+  <div class="chip first"></div>
+  <div class="chip second"></div>
+</div>
