@@ -361,6 +361,7 @@ LIVE_CORE_ISLAND_SOURCES = (
     "core/paint/paint_layer_paint_order_iterator.cc",
     "core/paint/paint_layer_painter.cc",
     "core/paint/paint_layer_resource_info.cc",
+    "core/paint/paint_layer_stacking_node.cc",
     "core/paint/paint_property_tree_builder.cc",
     "core/paint/paint_invalidator.cc",
     "core/paint/object_paint_invalidator.cc",

@@ -17671,26 +17671,6 @@ NamingScope* ToTriggerScopedName(const ScopedCSSName&, const Element&) {
 }
 void NamingScope::Trace(Visitor*) const {}
 
-bool PaintLayerStackingNode::StyleDidChange(PaintLayer&,
-                                            const ComputedStyle*) {
-  return false;
-}
-PaintLayerStackingNode::PaintLayerStackingNode(PaintLayer* layer)
-    : layer_(layer), z_order_lists_dirty_(true) {}
-void PaintLayerStackingNode::DirtyZOrderLists() {
-  pos_z_order_list_.clear();
-  neg_z_order_list_.clear();
-  z_order_lists_dirty_ = true;
-}
-void PaintLayerStackingNode::UpdateZOrderLists() {
-  z_order_lists_dirty_ = false;
-}
-void PaintLayerStackingNode::Trace(Visitor* visitor) const {
-  visitor->Trace(layer_);
-  visitor->Trace(pos_z_order_list_);
-  visitor->Trace(neg_z_order_list_);
-  visitor->Trace(layer_to_overlay_overflow_controls_painting_after_);
-}
 PaintLayerScrollableArea::~PaintLayerScrollableArea() = default;
 PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
     : ScrollableArea(nullptr),
@@ -17730,6 +17710,9 @@ gfx::Point PaintLayerScrollableArea::ConvertFromRootFrameToVisualViewport(
   return point;
 }
 bool PaintLayerScrollableArea::ShouldOverflowControlsPaintAsOverlay() const {
+  return false;
+}
+bool PaintLayerScrollableArea::HasOverlayOverflowControls() const {
   return false;
 }
 ChromeClient* PaintLayerScrollableArea::GetChromeClient() const {
