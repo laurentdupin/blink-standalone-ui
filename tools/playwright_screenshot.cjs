@@ -74,8 +74,11 @@ async function main() {
   const html = argValue("--html-file");
   const out = argValue("--out");
   const viewportArg = argValue("--viewport") || "320x200";
+  const scrollX = Number(argValue("--scroll-x") || "0");
+  const scrollY = Number(argValue("--scroll-y") || "0");
+  const outJson = argValue("--out-json");
   if (!html || !out) {
-    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH]");
+    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--out-json path]");
     process.exit(2);
   }
   const [width, height] = viewportArg.split("x").map((v) => Number(v));
@@ -85,7 +88,29 @@ async function main() {
   try {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     await page.goto(`file:///${html.replace(/\\/g, "/")}`);
+    if (scrollX || scrollY) {
+      await page.evaluate(({ x, y }) => window.scrollTo(x, y), {
+        x: scrollX,
+        y: scrollY,
+      });
+      await page.waitForTimeout(50);
+    }
     await page.screenshot({ path: out });
+    if (outJson) {
+      const state = await page.evaluate(() => ({
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        documentWidth: Math.max(
+          document.documentElement.scrollWidth,
+          document.body ? document.body.scrollWidth : 0),
+        documentHeight: Math.max(
+          document.documentElement.scrollHeight,
+          document.body ? document.body.scrollHeight : 0),
+      }));
+      fs.writeFileSync(outJson, JSON.stringify(state, null, 2));
+    }
   } finally {
     await browser.close();
   }
