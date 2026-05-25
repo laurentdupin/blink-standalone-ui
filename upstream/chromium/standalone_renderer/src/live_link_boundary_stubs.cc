@@ -14791,6 +14791,8 @@ struct StandaloneFontResolutionDiagnostic {
   std::string effective_family;
   std::string resolved_family;
   std::string fallback_reason;
+  std::string skfont_edging;
+  std::string skfont_hinting;
   float computed_size = 0.0f;
   float test_string_width = 0.0f;
   float test_string_rounded_glyph_width = 0.0f;
@@ -14804,6 +14806,10 @@ struct StandaloneFontResolutionDiagnostic {
   bool requested_family_was_generic = false;
   bool synthetic_bold = false;
   bool synthetic_italic = false;
+  bool skfont_antialias = false;
+  bool skfont_subpixel_positioning = false;
+  bool skfont_embedded_bitmaps = false;
+  bool skfont_linear_metrics = false;
 };
 
 std::vector<StandaloneFontResolutionDiagnostic>&
@@ -14845,6 +14851,32 @@ std::string StandaloneJsonString(const std::string& value) {
   return "\"" + StandaloneEscapeJsonString(value) + "\"";
 }
 
+std::string StandaloneSkFontEdgingName(SkFont::Edging edging) {
+  switch (edging) {
+    case SkFont::Edging::kAlias:
+      return "alias";
+    case SkFont::Edging::kAntiAlias:
+      return "antialias";
+    case SkFont::Edging::kSubpixelAntiAlias:
+      return "subpixel_antialias";
+  }
+  return "unknown";
+}
+
+std::string StandaloneSkFontHintingName(SkFontHinting hinting) {
+  switch (hinting) {
+    case SkFontHinting::kNone:
+      return "none";
+    case SkFontHinting::kSlight:
+      return "slight";
+    case SkFontHinting::kNormal:
+      return "normal";
+    case SkFontHinting::kFull:
+      return "full";
+  }
+  return "unknown";
+}
+
 void StandaloneRecordFontResolutionDiagnostic(
     StandaloneFontResolutionDiagnostic diagnostic) {
   auto& diagnostics = StandaloneFontResolutionDiagnostics();
@@ -14882,6 +14914,18 @@ extern "C" int StandaloneRendererFontResolutionDiagnosticJsonAt(
        << StandaloneJsonString(diagnostic.resolved_family)
        << ",\"fallback_reason\":"
        << StandaloneJsonString(diagnostic.fallback_reason)
+       << ",\"skfont_edging\":"
+       << StandaloneJsonString(diagnostic.skfont_edging)
+       << ",\"skfont_antialias\":"
+       << (diagnostic.skfont_antialias ? "true" : "false")
+       << ",\"skfont_subpixel_positioning\":"
+       << (diagnostic.skfont_subpixel_positioning ? "true" : "false")
+       << ",\"skfont_embedded_bitmaps\":"
+       << (diagnostic.skfont_embedded_bitmaps ? "true" : "false")
+       << ",\"skfont_linear_metrics\":"
+       << (diagnostic.skfont_linear_metrics ? "true" : "false")
+       << ",\"skfont_hinting\":"
+       << StandaloneJsonString(diagnostic.skfont_hinting)
        << ",\"computed_size\":" << diagnostic.computed_size
        << ",\"test_string\":\"Custom Property Math\""
        << ",\"test_string_width\":" << diagnostic.test_string_width
@@ -15695,8 +15739,18 @@ const SimpleFontData* FontCache::GetFontData(
   SkFont diagnostic_font(typeface, computed_size);
   diagnostic_font.setEmbolden(synthetic_bold);
   diagnostic_font.setSkewX(synthetic_italic ? -0.25f : 0.0f);
-  diagnostic_font.setEdging(SkFont::Edging::kAntiAlias);
+  diagnostic_font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
   diagnostic_font.setSubpixel(true);
+  diagnostic_font.setEmbeddedBitmaps(true);
+  diagnostic.skfont_edging =
+      StandaloneSkFontEdgingName(diagnostic_font.getEdging());
+  diagnostic.skfont_antialias =
+      diagnostic_font.getEdging() != SkFont::Edging::kAlias;
+  diagnostic.skfont_subpixel_positioning = diagnostic_font.isSubpixel();
+  diagnostic.skfont_embedded_bitmaps = diagnostic_font.isEmbeddedBitmaps();
+  diagnostic.skfont_linear_metrics = diagnostic_font.isLinearMetrics();
+  diagnostic.skfont_hinting =
+      StandaloneSkFontHintingName(diagnostic_font.getHinting());
   diagnostic.test_string_width = diagnostic_font.measureText(
       "Custom Property Math", 20, SkTextEncoding::kUTF8);
   const char kDiagnosticText[] = "Custom Property Math";
@@ -19152,7 +19206,7 @@ SkFont FontPlatformData::CreateSkFont(const FontDescription*) const {
   SkFont font(typeface_, text_size_ > 0 ? text_size_ : 12.0f);
   font.setEmbolden(synthetic_bold_);
   font.setSkewX(synthetic_italic_ ? -0.25f : 0.0f);
-  font.setEdging(SkFont::Edging::kAntiAlias);
+  font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
   font.setSubpixel(true);
   font.setEmbeddedBitmaps(true);
   return font;

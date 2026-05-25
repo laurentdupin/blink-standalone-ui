@@ -27,6 +27,7 @@
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkSurface.h"
+#include "third_party/skia/include/core/SkSurfaceProps.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/core/SkBlurTypes.h"
@@ -47,6 +48,11 @@ std::mutex& CommandCoverageMutex() {
 std::vector<CommandCoverageRecord>& CommandCoverageRecords() {
   static auto* records = new std::vector<CommandCoverageRecord>();
   return *records;
+}
+
+SkiaCpuSurfaceDiagnostics& LastSurfaceDiagnostics() {
+  static auto* diagnostics = new SkiaCpuSurfaceDiagnostics();
+  return *diagnostics;
 }
 
 uint8_t ClampByte(float value) {
@@ -109,6 +115,46 @@ sk_sp<SkPathEffect> DeserializePathEffect(const std::vector<uint8_t>& bytes) {
     return nullptr;
   }
   return SkPathEffect::Deserialize(bytes.data(), bytes.size());
+}
+
+const char* ColorTypeName(SkColorType color_type) {
+  switch (color_type) {
+    case kRGBA_8888_SkColorType:
+      return "rgba_8888";
+    case kBGRA_8888_SkColorType:
+      return "bgra_8888";
+    default:
+      return "other";
+  }
+}
+
+const char* AlphaTypeName(SkAlphaType alpha_type) {
+  switch (alpha_type) {
+    case kOpaque_SkAlphaType:
+      return "opaque";
+    case kPremul_SkAlphaType:
+      return "premul";
+    case kUnpremul_SkAlphaType:
+      return "unpremul";
+    default:
+      return "unknown";
+  }
+}
+
+const char* PixelGeometryName(SkPixelGeometry geometry) {
+  switch (geometry) {
+    case kUnknown_SkPixelGeometry:
+      return "unknown";
+    case kRGB_H_SkPixelGeometry:
+      return "rgb_h";
+    case kBGR_H_SkPixelGeometry:
+      return "bgr_h";
+    case kRGB_V_SkPixelGeometry:
+      return "rgb_v";
+    case kBGR_V_SkPixelGeometry:
+      return "bgr_v";
+  }
+  return "unknown";
 }
 
 void ApplyPathEffect(const DrawCommand& command,
@@ -281,9 +327,9 @@ ImageAtlas BuildImageAtlas(const std::vector<ResourceCommand>& commands) {
         image.pixels.size(), static_cast<size_t>(image.width) *
                                  static_cast<size_t>(image.height) * 4u);
     SkBitmap bitmap;
-    SkImageInfo info = SkImageInfo::Make(image.width, image.height,
-                                         kRGBA_8888_SkColorType,
-                                         kPremul_SkAlphaType);
+  SkImageInfo info = SkImageInfo::Make(image.width, image.height,
+                        kRGBA_8888_SkColorType,
+                        kPremul_SkAlphaType);
     if (bitmap.installPixels(info, image.pixels.data(),
                              static_cast<size_t>(image.width) * 4u)) {
       image.image = bitmap.asImage();
@@ -637,8 +683,20 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
                         kPremul_SkAlphaType);
   std::vector<uint8_t> pixels(static_cast<size_t>(image.width) * image.height *
                               4u);
+  SkSurfaceProps surface_props(0, kRGB_H_SkPixelGeometry);
+  {
+    std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+    auto& diagnostics = LastSurfaceDiagnostics();
+    diagnostics.color_type = ColorTypeName(info.colorType());
+    diagnostics.alpha_type = AlphaTypeName(info.alphaType());
+    diagnostics.pixel_geometry = PixelGeometryName(surface_props.pixelGeometry());
+    diagnostics.surface_props_flags = surface_props.flags();
+    diagnostics.use_device_independent_fonts =
+        surface_props.isUseDeviceIndependentFonts();
+  }
   sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      info, pixels.data(), static_cast<size_t>(image.width) * 4u);
+      info, pixels.data(), static_cast<size_t>(image.width) * 4u,
+      &surface_props);
   if (!surface) {
     return RasterizeDrawCommands(commands, viewport, options);
   }
@@ -705,6 +763,11 @@ void ResetCommandCoverageDiagnostics() {
 std::vector<CommandCoverageRecord> SnapshotCommandCoverageDiagnostics() {
   std::lock_guard<std::mutex> lock(CommandCoverageMutex());
   return CommandCoverageRecords();
+}
+
+SkiaCpuSurfaceDiagnostics SnapshotSkiaCpuSurfaceDiagnostics() {
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  return LastSurfaceDiagnostics();
 }
 
 CpuImage RasterizeDrawCommandsWithSkiaCpu(const DrawCommandList& commands,

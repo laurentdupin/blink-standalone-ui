@@ -845,6 +845,17 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
              << ",\"diagnostic_typeface_fallback_count\":"
              << StandaloneRendererDiagnosticTypefaceFallbackCount()
              << "}";
+    const SkiaCpuSurfaceDiagnostics surface =
+        SnapshotSkiaCpuSurfaceDiagnostics();
+    retained << ",\"skia_cpu_surface_diagnostics\":{\"color_type\":\""
+             << EscapeJson(surface.color_type)
+             << "\",\"alpha_type\":\"" << EscapeJson(surface.alpha_type)
+             << "\",\"pixel_geometry\":\""
+             << EscapeJson(surface.pixel_geometry)
+             << "\",\"surface_props_flags\":" << surface.surface_props_flags
+             << ",\"use_device_independent_fonts\":"
+             << (surface.use_device_independent_fonts ? "true" : "false")
+             << "}";
     retained << ",\"debug_command_coverage\":";
     WriteCommandCoverageRecords(retained);
 
@@ -877,6 +888,14 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
       << ",\"shader_count\":" << shader_count
       << ",\"path_count\":" << path_count
       << ",\"filter_count\":" << filter_count << "}";
+  const SkiaCpuSurfaceDiagnostics surface = SnapshotSkiaCpuSurfaceDiagnostics();
+  out << ",\"skia_cpu_surface_diagnostics\":{\"color_type\":\""
+      << EscapeJson(surface.color_type)
+      << "\",\"alpha_type\":\"" << EscapeJson(surface.alpha_type)
+      << "\",\"pixel_geometry\":\"" << EscapeJson(surface.pixel_geometry)
+      << "\",\"surface_props_flags\":" << surface.surface_props_flags
+      << ",\"use_device_independent_fonts\":"
+      << (surface.use_device_independent_fonts ? "true" : "false") << "}";
   out << ",\"chunks\":[";
   for (size_t i = 0; i < result.frame.scene_chunks.size(); ++i) {
     const SceneChunk& chunk = result.frame.scene_chunks[i];

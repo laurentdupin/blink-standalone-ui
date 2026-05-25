@@ -44,8 +44,17 @@ struct CommandCoverageRecord {
   int image_height = 0;
 };
 
+struct SkiaCpuSurfaceDiagnostics {
+  std::string color_type;
+  std::string alpha_type;
+  std::string pixel_geometry;
+  uint32_t surface_props_flags = 0;
+  bool use_device_independent_fonts = false;
+};
+
 void ResetCommandCoverageDiagnostics();
 std::vector<CommandCoverageRecord> SnapshotCommandCoverageDiagnostics();
+SkiaCpuSurfaceDiagnostics SnapshotSkiaCpuSurfaceDiagnostics();
 
 CpuImage RasterizeDrawCommandsWithSkiaCpu(
     const DrawCommandList& commands,
