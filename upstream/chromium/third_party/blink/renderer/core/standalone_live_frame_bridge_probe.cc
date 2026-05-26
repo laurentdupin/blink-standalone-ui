@@ -189,6 +189,9 @@ extern "C" int StandaloneRendererMediaQueryDiagnosticFieldAt(int,
                                                              char*,
                                                              int);
 
+void ResetStandaloneStackingPaintProvenanceForProbe();
+std::string StandaloneStackingPaintProvenanceJsonForProbe();
+
 namespace {
 
 struct StandaloneTypefacePayload {
@@ -2151,6 +2154,97 @@ std::string PhysicalOffsetJsonForStandaloneRenderer(const PhysicalOffset& offset
 std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 uint64_t NodeIdForStandaloneRenderer(const void* node);
+
+namespace {
+
+struct StandaloneStackingPaintEvent {
+  int sequence = 0;
+  std::string source;
+  std::string layout_object;
+  std::string tag;
+  std::string class_name;
+  int phase = -1;
+  int children_to_visit = -1;
+  int visit_index = -1;
+  int z_index = 0;
+  int raw_z_index = 0;
+  bool has_auto_z_index = false;
+  bool allows_z_index = false;
+  bool is_stacked = false;
+  bool is_stacking_context = false;
+  bool has_layer = false;
+  bool layer_self_painting = false;
+  bool has_visible_content = false;
+  bool has_visible_self_painting_descendant = false;
+  bool has_self_painting_descendant = false;
+};
+
+std::vector<StandaloneStackingPaintEvent>&
+StandaloneStackingPaintEventsForProbe() {
+  static std::vector<StandaloneStackingPaintEvent>* events =
+      new std::vector<StandaloneStackingPaintEvent>();
+  return *events;
+}
+
+int& StandaloneStackingPaintEventSequenceForProbe() {
+  static int* sequence = new int(0);
+  return *sequence;
+}
+
+std::string ElementTagForStandalonePaintEvent(const LayoutObject& object) {
+  Node* node = object.GetNode();
+  if (auto* element = DynamicTo<Element>(node)) {
+    return BlinkStringToStdStringForStandaloneRenderer(element->tagName());
+  }
+  return "";
+}
+
+std::string ElementClassForStandalonePaintEvent(const LayoutObject& object) {
+  Node* node = object.GetNode();
+  if (auto* element = DynamicTo<Element>(node)) {
+    return BlinkStringToStdStringForStandaloneRenderer(
+        element->getAttribute(html_names::kClassAttr));
+  }
+  return "";
+}
+
+StandaloneStackingPaintEvent MakeStandaloneStackingPaintEvent(
+    const char* source,
+    const LayoutObject& object,
+    int phase,
+    int children_to_visit,
+    int visit_index) {
+  StandaloneStackingPaintEvent event;
+  event.sequence = StandaloneStackingPaintEventSequenceForProbe()++;
+  event.source = source ? source : "";
+  event.layout_object =
+      BlinkStringToStdStringForStandaloneRenderer(object.DebugName());
+  event.tag = ElementTagForStandalonePaintEvent(object);
+  event.class_name = ElementClassForStandalonePaintEvent(object);
+  event.phase = phase;
+  event.children_to_visit = children_to_visit;
+  event.visit_index = visit_index;
+  event.z_index = object.StyleRef().EffectiveZIndex();
+  event.raw_z_index = object.StyleRef().ZIndex();
+  event.has_auto_z_index = object.StyleRef().HasAutoZIndex();
+  event.allows_z_index = object.StyleRef().AllowsZIndex();
+  event.is_stacked = object.IsStacked();
+  event.is_stacking_context = object.IsStackingContext();
+  if (auto* box_model_object = DynamicTo<LayoutBoxModelObject>(&object)) {
+    event.has_layer = box_model_object->Layer();
+    if (PaintLayer* layer = box_model_object->Layer()) {
+      event.layer_self_painting = layer->IsSelfPaintingLayer();
+      event.has_visible_content = layer->HasVisibleContent();
+      event.has_visible_self_painting_descendant =
+          layer->HasVisibleSelfPaintingDescendant();
+      event.has_self_painting_descendant =
+          layer->HasSelfPaintingLayerDescendant();
+    }
+  }
+  return event;
+}
+
+}  // namespace
 
 std::string PhysicalSizeJsonForStandaloneRenderer(const PhysicalSize& size) {
   std::ostringstream json;
@@ -6444,6 +6538,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << "\"scroll_background_failsoft_enabled\":true}"
        << ",\"overflow_clip_diagnostics\":"
        << overflow_clip_diagnostics_json
+       << ",\"stacking_paint_provenance\":"
+       << StandaloneStackingPaintProvenanceJsonForProbe()
        << ",\"raw_chunk_count\":" << chunk_count
        << ",\"raw_display_item_count\":" << display_item_count
        << ",\"raw_drawing_display_item_count\":" << total_drawing_item_count
@@ -7060,6 +7156,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   StandaloneRendererResetOutOfFlowDiagnostics();
   StandaloneRendererResetMediaQueryDiagnostics();
   StandaloneRendererResetListItemFactoryDiagnostics();
+  ResetStandaloneStackingPaintProvenanceForProbe();
   g_standalone_css_animation_timeline_update_called = 0;
   g_standalone_css_animation_update_called = 0;
   g_standalone_css_transition_update_called = 0;
@@ -7308,6 +7405,90 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
 }
 
 }  // namespace
+
+void ResetStandaloneStackingPaintProvenanceForProbe() {
+  StandaloneStackingPaintEventsForProbe().clear();
+  StandaloneStackingPaintEventSequenceForProbe() = 0;
+}
+
+void RecordStandalonePaintLayerProvenanceForProbe(const char* source,
+                                                  const PaintLayer& layer,
+                                                  int phase,
+                                                  int children_to_visit,
+                                                  int visit_index) {
+  auto& events = StandaloneStackingPaintEventsForProbe();
+  if (events.size() >= 512) {
+    return;
+  }
+  events.push_back(MakeStandaloneStackingPaintEvent(
+      source, layer.GetLayoutObject(), phase, children_to_visit, visit_index));
+}
+
+void RecordStandaloneFragmentPaintProvenanceForProbe(
+    const char* source,
+    const LayoutObject* layout_object,
+    int phase,
+    bool fragment_has_self_painting_layer,
+    bool fragment_can_traverse) {
+  if (!layout_object) {
+    return;
+  }
+  auto& events = StandaloneStackingPaintEventsForProbe();
+  if (events.size() >= 512) {
+    return;
+  }
+  StandaloneStackingPaintEvent event = MakeStandaloneStackingPaintEvent(
+      source, *layout_object, phase, -1, -1);
+  event.has_visible_content =
+      event.has_visible_content || fragment_has_self_painting_layer;
+  event.has_visible_self_painting_descendant =
+      event.has_visible_self_painting_descendant || fragment_can_traverse;
+  events.push_back(std::move(event));
+}
+
+std::string StandaloneStackingPaintProvenanceJsonForProbe() {
+  const auto& events = StandaloneStackingPaintEventsForProbe();
+  std::ostringstream json;
+  json << "{\"event_count\":" << events.size() << ",\"events\":[";
+  bool first = true;
+  for (const StandaloneStackingPaintEvent& event : events) {
+    if (!first) {
+      json << ",";
+    }
+    first = false;
+    json << "{\"sequence\":" << event.sequence
+         << ",\"source\":" << JsonStringForStandaloneRenderer(event.source)
+         << ",\"layout_object\":"
+         << JsonStringForStandaloneRenderer(event.layout_object)
+         << ",\"tag\":" << JsonStringForStandaloneRenderer(event.tag)
+         << ",\"class\":"
+         << JsonStringForStandaloneRenderer(event.class_name)
+         << ",\"phase\":" << event.phase
+         << ",\"children_to_visit\":" << event.children_to_visit
+         << ",\"visit_index\":" << event.visit_index
+         << ",\"z_index\":" << event.z_index
+         << ",\"raw_z_index\":" << event.raw_z_index
+         << ",\"has_auto_z_index\":"
+         << (event.has_auto_z_index ? "true" : "false")
+         << ",\"allows_z_index\":"
+         << (event.allows_z_index ? "true" : "false")
+         << ",\"is_stacked\":" << (event.is_stacked ? "true" : "false")
+         << ",\"is_stacking_context\":"
+         << (event.is_stacking_context ? "true" : "false")
+         << ",\"has_layer\":" << (event.has_layer ? "true" : "false")
+         << ",\"layer_self_painting\":"
+         << (event.layer_self_painting ? "true" : "false")
+         << ",\"has_visible_content\":"
+         << (event.has_visible_content ? "true" : "false")
+         << ",\"has_visible_self_painting_descendant\":"
+         << (event.has_visible_self_painting_descendant ? "true" : "false")
+         << ",\"has_self_painting_descendant\":"
+         << (event.has_self_painting_descendant ? "true" : "false")
+         << "}";
+  }
+  json << "]}";
+  return json.str();
+}
 
 void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
     int width,

@@ -51,6 +51,16 @@
 
 namespace blink {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+namespace standalone_renderer_probe {
+void RecordStandalonePaintLayerProvenanceForProbe(const char* source,
+                                                  const PaintLayer& layer,
+                                                  int phase,
+                                                  int children_to_visit,
+                                                  int visit_index);
+}
+#endif
+
 namespace {
 
 constexpr char kDevToolsTimelineCategory[] = "devtools.timeline";
@@ -331,6 +341,10 @@ PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
 
   bool selection_drag_image_only =
       paint_flags & PaintFlag::kSelectionDragImageOnly;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  standalone_renderer_probe::RecordStandalonePaintLayerProvenanceForProbe(
+      "PaintLayerPainter::Paint", paint_layer_, -1, -1, -1);
+#endif
   if (selection_drag_image_only && !object.IsSelected())
     return kFullyPainted;
 
@@ -675,6 +689,11 @@ PaintResult PaintLayerPainter::PaintChildren(
   int visited_child_count = 0;
   while (PaintLayer* child = iterator.Next()) {
     ++visited_child_count;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    standalone_renderer_probe::RecordStandalonePaintLayerProvenanceForProbe(
+        "PaintLayerPainter::PaintChildren", *child, -1, children_to_visit,
+        visited_child_count - 1);
+#endif
     // Painting of the whole subtree of an SVG foreignObject, including
     // stacked children, is handled by SVGForeignObjectPainter, so don't
     // paint stacked children here.
@@ -716,32 +735,6 @@ PaintResult PaintLayerPainter::PaintChildren(
     }
 #endif
   }
-
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  // In reduced standalone builds some stacked descendants can be linked into
-  // the PaintLayer sibling tree while the stacking-node order lists remain
-  // empty. The fragment painter correctly skips self-painting descendants, so
-  // without this Blink-side fail-soft those real PaintLayers never paint. Keep
-  // this to the normal/positive pass and only when the real iterator produced
-  // nothing, so ordinary layer-order traversal remains authoritative.
-  if (!visited_child_count &&
-      children_to_visit == kNormalFlowAndPositiveZOrderChildren) {
-    for (PaintLayer* child = paint_layer_.FirstChild(); child;
-         child = child->NextSibling()) {
-      if (child->GetLayoutObject().IsSVGForeignObject()) {
-        continue;
-      }
-      if (!layout_object.IsViewTransitionRoot() &&
-          ViewTransitionUtils::IsViewTransitionRoot(child->GetLayoutObject())) {
-        continue;
-      }
-      if (PaintLayerPainter(*child).Paint(context, paint_flags) ==
-          kMayBeClippedByCullRect) {
-        result = kMayBeClippedByCullRect;
-      }
-    }
-  }
-#endif
 
   return result;
 }
@@ -795,6 +788,9 @@ void PaintLayerPainter::PaintFragmentWithPhase(
 
   if (physical_fragment) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    standalone_renderer_probe::RecordStandalonePaintLayerProvenanceForProbe(
+        "PaintLayerPainter::PaintFragmentWithPhase", paint_layer_,
+        static_cast<int>(phase), -1, static_cast<int>(fragment_data_idx));
 #endif
     BoxFragmentPainter(*physical_fragment).Paint(paint_info);
   } else if (const auto* layout_inline =

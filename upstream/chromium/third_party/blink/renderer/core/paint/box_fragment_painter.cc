@@ -79,6 +79,17 @@
 namespace blink {
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+namespace standalone_renderer_probe {
+void RecordStandaloneFragmentPaintProvenanceForProbe(
+    const char* source,
+    const LayoutObject* layout_object,
+    int phase,
+    bool fragment_has_self_painting_layer,
+    bool fragment_can_traverse);
+}
+#endif
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
 thread_local std::vector<PhysicalOffset>* g_standalone_fragment_offsets =
     nullptr;
 
@@ -1144,6 +1155,12 @@ void BoxFragmentPainter::PaintBlockChildren(const PaintInfo& paint_info,
   for (const PhysicalFragmentLink& child : box_fragment_.Children()) {
     const PhysicalFragment& child_fragment = *child;
     DCHECK(child_fragment.IsBox());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
+        "BoxFragmentPainter::PaintBlockChildren",
+        child_fragment.GetLayoutObject(), static_cast<int>(paint_info.phase),
+        child_fragment.HasSelfPaintingLayer(), child_fragment.CanTraverse());
+#endif
     if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating())
       continue;
     PaintBlockChild(child, paint_info, paint_info_for_descendants,
@@ -1160,6 +1177,12 @@ void BoxFragmentPainter::PaintBlockChild(
   DCHECK(child_fragment.IsBox());
   DCHECK(!child_fragment.HasSelfPaintingLayer());
   DCHECK(!child_fragment.IsFloating());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
+      "BoxFragmentPainter::PaintBlockChild", child_fragment.GetLayoutObject(),
+      static_cast<int>(paint_info_for_descendants.phase),
+      child_fragment.HasSelfPaintingLayer(), child_fragment.CanTraverse());
+#endif
   const auto& box_child_fragment = To<PhysicalBoxFragment>(child_fragment);
   if (box_child_fragment.CanTraverse()) {
     if (box_child_fragment.IsFragmentainerBox()) {
@@ -2281,6 +2304,12 @@ void BoxFragmentPainter::PaintBoxItem(const FragmentItem& item,
   DCHECK_EQ(&item, cursor.Current().Item());
   DCHECK_EQ(item.PostLayoutBoxFragment(), &child_fragment);
   DCHECK(!child_fragment.IsHiddenForPaint());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
+      "BoxFragmentPainter::PaintBoxItem", child_fragment.GetLayoutObject(),
+      static_cast<int>(paint_info.phase), child_fragment.HasSelfPaintingLayer(),
+      child_fragment.CanTraverse());
+#endif
   if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif

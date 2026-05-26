@@ -74,6 +74,7 @@
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/css/parser/sizes_attribute_parser.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/html/parser/html_srcset_parser.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
 #include "third_party/blink/renderer/core/html/html_image_fallback_helper.h"
@@ -5657,7 +5658,16 @@ bool StyleAdjuster::IsCacheCompatible(const ComputedStyle&,
   return true;
 }
 
-void StyleAdjuster::AdjustComputedStyle(StyleResolverState&, Element*) {}
+void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element*) {
+  ComputedStyleBuilder& builder = state.StyleBuilder();
+  builder.SetForcesStackingContext(false);
+  if (builder.GetPosition() != EPosition::kStatic) {
+    builder.SetAllowsZIndex(true);
+    if (!builder.HasAutoZIndex()) {
+      builder.SetForcesStackingContext(true);
+    }
+  }
+}
 
 CompositingReasons
 CompositingReasonFinder::PotentialCompositingReasonsFor3DTransform(
