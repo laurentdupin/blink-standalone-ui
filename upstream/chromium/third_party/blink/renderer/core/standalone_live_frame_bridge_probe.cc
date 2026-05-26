@@ -2177,6 +2177,8 @@ struct StandaloneStackingPaintEvent {
   bool has_visible_content = false;
   bool has_visible_self_painting_descendant = false;
   bool has_self_painting_descendant = false;
+  float fragment_width = -1.0f;
+  float fragment_height = -1.0f;
 };
 
 std::vector<StandaloneStackingPaintEvent>&
@@ -7429,7 +7431,9 @@ void RecordStandaloneFragmentPaintProvenanceForProbe(
     const LayoutObject* layout_object,
     int phase,
     bool fragment_has_self_painting_layer,
-    bool fragment_can_traverse) {
+    bool fragment_can_traverse,
+    float fragment_width,
+    float fragment_height) {
   if (!layout_object) {
     return;
   }
@@ -7443,6 +7447,8 @@ void RecordStandaloneFragmentPaintProvenanceForProbe(
       event.has_visible_content || fragment_has_self_painting_layer;
   event.has_visible_self_painting_descendant =
       event.has_visible_self_painting_descendant || fragment_can_traverse;
+  event.fragment_width = fragment_width;
+  event.fragment_height = fragment_height;
   events.push_back(std::move(event));
 }
 
@@ -7484,6 +7490,8 @@ std::string StandaloneStackingPaintProvenanceJsonForProbe() {
          << (event.has_visible_self_painting_descendant ? "true" : "false")
          << ",\"has_self_painting_descendant\":"
          << (event.has_self_painting_descendant ? "true" : "false")
+         << ",\"fragment_size\":[" << event.fragment_width << ","
+         << event.fragment_height << "]"
          << "}";
   }
   json << "]}";

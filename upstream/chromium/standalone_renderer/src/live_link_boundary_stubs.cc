@@ -84,6 +84,7 @@
 #include "third_party/blink/renderer/core/image_replacement/image_replacement.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_image_replacement.h"
+#include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/layout/layout_media.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
@@ -17536,12 +17537,19 @@ void OutOfFlowLayoutPart::Run() {
     ConstraintSpaceBuilder child_space_builder(
         parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
     LogicalSize available_size = parent_space.AvailableSize();
+    const BoxStrut child_border_padding =
+        ComputeBorders(parent_space, child) +
+        ComputePadding(parent_space, style);
     if (style.LogicalWidth().IsFixed()) {
-      available_size.inline_size = LayoutUnit(style.LogicalWidth().Pixels());
+      available_size.inline_size =
+          LayoutUnit(style.LogicalWidth().Pixels()) +
+          child_border_padding.InlineSum();
       child_space_builder.SetIsFixedInlineSize(true);
     }
     if (style.LogicalHeight().IsFixed()) {
-      available_size.block_size = LayoutUnit(style.LogicalHeight().Pixels());
+      available_size.block_size =
+          LayoutUnit(style.LogicalHeight().Pixels()) +
+          child_border_padding.BlockSum();
       child_space_builder.SetIsFixedBlockSize(true);
     }
     if (!style.LogicalWidth().IsFixed() && inline_start.IsFixed() &&

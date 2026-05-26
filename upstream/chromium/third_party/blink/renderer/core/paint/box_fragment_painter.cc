@@ -85,7 +85,9 @@ void RecordStandaloneFragmentPaintProvenanceForProbe(
     const LayoutObject* layout_object,
     int phase,
     bool fragment_has_self_painting_layer,
-    bool fragment_can_traverse);
+    bool fragment_can_traverse,
+    float fragment_width = -1.0f,
+    float fragment_height = -1.0f);
 }
 #endif
 
@@ -606,6 +608,13 @@ void BoxFragmentPainter::Paint(const PaintInfo& paint_info) {
 }
 
 void BoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
+      "BoxFragmentPainter::PaintInternal", box_fragment_.GetLayoutObject(),
+      static_cast<int>(paint_info.phase), box_fragment_.HasSelfPaintingLayer(),
+      box_fragment_.CanTraverse(), box_fragment_.Size().width.ToFloat(),
+      box_fragment_.Size().height.ToFloat());
+#endif
   // Avoid initialization of Optional ScopedPaintState::chunk_properties_
   // and ScopedPaintState::adjusted_paint_info_.
   STACK_UNINITIALIZED ScopedPaintState paint_state(box_fragment_, paint_info);
@@ -1159,7 +1168,9 @@ void BoxFragmentPainter::PaintBlockChildren(const PaintInfo& paint_info,
     standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
         "BoxFragmentPainter::PaintBlockChildren",
         child_fragment.GetLayoutObject(), static_cast<int>(paint_info.phase),
-        child_fragment.HasSelfPaintingLayer(), child_fragment.CanTraverse());
+        child_fragment.HasSelfPaintingLayer(), child_fragment.CanTraverse(),
+        To<PhysicalBoxFragment>(child_fragment).Size().width.ToFloat(),
+        To<PhysicalBoxFragment>(child_fragment).Size().height.ToFloat());
 #endif
     if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating())
       continue;
@@ -1177,13 +1188,15 @@ void BoxFragmentPainter::PaintBlockChild(
   DCHECK(child_fragment.IsBox());
   DCHECK(!child_fragment.HasSelfPaintingLayer());
   DCHECK(!child_fragment.IsFloating());
+  const auto& box_child_fragment = To<PhysicalBoxFragment>(child_fragment);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
       "BoxFragmentPainter::PaintBlockChild", child_fragment.GetLayoutObject(),
       static_cast<int>(paint_info_for_descendants.phase),
-      child_fragment.HasSelfPaintingLayer(), child_fragment.CanTraverse());
+      child_fragment.HasSelfPaintingLayer(), child_fragment.CanTraverse(),
+      box_child_fragment.Size().width.ToFloat(),
+      box_child_fragment.Size().height.ToFloat());
 #endif
-  const auto& box_child_fragment = To<PhysicalBoxFragment>(child_fragment);
   if (box_child_fragment.CanTraverse()) {
     if (box_child_fragment.IsFragmentainerBox()) {
       // It's normally FragmentData that provides us with the paint offset.
@@ -2308,7 +2321,8 @@ void BoxFragmentPainter::PaintBoxItem(const FragmentItem& item,
   standalone_renderer_probe::RecordStandaloneFragmentPaintProvenanceForProbe(
       "BoxFragmentPainter::PaintBoxItem", child_fragment.GetLayoutObject(),
       static_cast<int>(paint_info.phase), child_fragment.HasSelfPaintingLayer(),
-      child_fragment.CanTraverse());
+      child_fragment.CanTraverse(), child_fragment.Size().width.ToFloat(),
+      child_fragment.Size().height.ToFloat());
 #endif
   if (child_fragment.HasSelfPaintingLayer() || child_fragment.IsFloating()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
