@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    font: 16px Georgia, "Times New Roman", serif;
+    background: #f7f3ea;
+  }
+  .stage {
+    position: relative;
+    width: 760px;
+    height: 112px;
+    margin: 24px;
+    background: rgba(55, 30, 15, 0.06);
+  }
+  .card {
+    position: absolute;
+    top: 0;
+    padding: 8px 10px;
+    border-radius: 12px;
+    color: white;
+    box-sizing: border-box;
+  }
+  .floor {
+    left: 0;
+    width: 22px;
+    min-width: max-content;
+    background: #a75329;
+  }
+  .ceiling {
+    left: 420px;
+    width: 240px;
+    max-width: min-content;
+    background: #5f5ab4;
+  }
+</style>
+<div class="stage">
+  <div class="card floor">alpha beta gamma delta</div>
+  <div class="card ceiling">alpha beta gamma delta</div>
+</div>

@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  body {
+    margin: 0;
+    font: 16px Georgia, "Times New Roman", serif;
+    background: #f7f3ea;
+  }
+  .stage {
+    position: relative;
+    width: 88px;
+    height: 244px;
+    margin: 24px;
+    padding: 12px;
+    border: 1px dashed rgba(55, 30, 15, 0.35);
+    background: rgba(55, 30, 15, 0.08);
+    box-sizing: border-box;
+  }
+  .chip {
+    position: absolute;
+    left: 12px;
+    padding: 8px 10px;
+    border-radius: 12px;
+    color: white;
+    box-sizing: border-box;
+  }
+  .min {
+    top: 12px;
+    width: min-content;
+    background: #b74a3b;
+  }
+  .fit {
+    top: 98px;
+    width: fit-content(80px);
+    background: #2f7f67;
+  }
+  .max {
+    top: 184px;
+    width: max-content;
+    background: #4766b0;
+  }
+</style>
+<div class="stage">
+  <div class="chip min">alpha beta gamma delta</div>
+  <div class="chip fit">alpha beta gamma delta</div>
+  <div class="chip max">alpha beta gamma delta</div>
+</div>

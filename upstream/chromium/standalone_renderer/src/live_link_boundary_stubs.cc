@@ -17569,6 +17569,34 @@ void OutOfFlowLayoutPart::Run() {
       child_space_builder.SetIsFixedBlockSize(true);
     }
     child_space_builder.SetAvailableSize(available_size);
+    const ConstraintSpace child_intrinsic_space =
+        child_space_builder.ToConstraintSpace();
+    auto MinMaxSizesFunc = [&](SizeType type) -> MinMaxSizesResult {
+      return child.ComputeMinMaxSizes(style.GetWritingMode(), type,
+                                      child_intrinsic_space);
+    };
+    if (style.LogicalWidth().HasContentOrIntrinsic()) {
+      const LayoutUnit inline_size = ResolveMainInlineLength(
+          child_intrinsic_space, style, child_border_padding, MinMaxSizesFunc,
+          style.LogicalWidth(), &Length::FitContent(),
+          available_size.inline_size);
+      if (inline_size != kIndefiniteSize) {
+        available_size.inline_size = inline_size;
+        child_space_builder.SetIsFixedInlineSize(true);
+      }
+    }
+    if (style.LogicalMinWidth().HasContentOrIntrinsic() ||
+        style.LogicalMaxWidth().HasContentOrIntrinsic()) {
+      const MinMaxSizes min_max_inline_sizes = ComputeMinMaxInlineSizes(
+          child_intrinsic_space, child, child_border_padding,
+          /* auto_min_length */ nullptr, MinMaxSizesFunc,
+          TransferredSizesMode::kNormal, FitContentMode::kNormal,
+          available_size.inline_size);
+      available_size.inline_size =
+          min_max_inline_sizes.ClampSizeToMinAndMax(available_size.inline_size);
+      child_space_builder.SetIsFixedInlineSize(true);
+    }
+    child_space_builder.SetAvailableSize(available_size);
     child_space_builder.SetPercentageResolutionSize(
         parent_space.PercentageResolutionSize());
     if (parent_space.IsHiddenForPaint()) {
