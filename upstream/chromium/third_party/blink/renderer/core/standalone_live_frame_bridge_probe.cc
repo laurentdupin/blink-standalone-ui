@@ -3112,6 +3112,8 @@ std::string OverflowClipDiagnosticsJsonForStandaloneRenderer(Document& document)
   return json.str();
 }
 
+std::string LengthDiagnosticsJsonForStandaloneRenderer(const Length& length);
+
 std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
     Document& document) {
   Element* body = document.body();
@@ -3147,6 +3149,12 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
          << JsonStringForStandaloneRenderer(
                 BlinkStringToStdStringForStandaloneRenderer(
                     style->LogicalWidth().ToString()))
+         << ",\"width_length\":"
+         << LengthDiagnosticsJsonForStandaloneRenderer(style->LogicalWidth())
+         << ",\"min_width_length\":"
+         << LengthDiagnosticsJsonForStandaloneRenderer(style->LogicalMinWidth())
+         << ",\"max_width_length\":"
+         << LengthDiagnosticsJsonForStandaloneRenderer(style->LogicalMaxWidth())
          << ",\"height\":"
          << JsonStringForStandaloneRenderer(
                 BlinkStringToStdStringForStandaloneRenderer(
@@ -3384,6 +3392,27 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
                ? "[\"dropped out-of-flow candidate at LayoutView because its containing block is not represented by the current standalone subset; likely inline containing block support\"]"
                : "[]")
        << ",\"first_missing_stage\":\"see_paint_artifact_display_items\"}";
+  return json.str();
+}
+
+std::string LengthDiagnosticsJsonForStandaloneRenderer(const Length& length) {
+  std::ostringstream json;
+  json << "{\"text\":"
+       << JsonStringForStandaloneRenderer(
+              BlinkStringToStdStringForStandaloneRenderer(length.ToString()))
+       << ",\"type\":" << static_cast<int>(length.GetType())
+       << ",\"is_auto\":" << (length.IsAuto() ? "true" : "false")
+       << ",\"is_fixed\":" << (length.IsFixed() ? "true" : "false")
+       << ",\"is_fit_content\":"
+       << (length.IsFitContent() ? "true" : "false")
+       << ",\"has_fit_content\":"
+       << (length.HasFitContent() ? "true" : "false")
+       << ",\"has_min_content\":"
+       << (length.HasMinContent() ? "true" : "false")
+       << ",\"has_max_content\":"
+       << (length.HasMaxContent() ? "true" : "false")
+       << ",\"has_content_or_intrinsic\":"
+       << (length.HasContentOrIntrinsic() ? "true" : "false") << "}";
   return json.str();
 }
 
