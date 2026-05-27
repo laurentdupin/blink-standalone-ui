@@ -7295,21 +7295,6 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before active style update");
   document.GetStyleEngine().UpdateActiveStyle();
   TraceLiveFrameProbeStage("after active style update");
-  if (HasUnsupportedInlineContainingBlockOofForStandaloneRenderer(document) ||
-      SourceMentionsInlineContainingBlockOofForStandaloneRenderer(input_html)) {
-    g_standalone_oof_unsupported_inline_containing_block = 1;
-    cache.body_html = input_html;
-    cache.raw_paint_artifact_audit_json =
-        std::string("{\"source\":\"real Blink PaintArtifact\",") +
-        "\"status\":\"stopped_before_layout_due_to_unsupported_oof\","
-        "\"reason\":\"standalone OOF subset does not support inline-block "
-        "containing block absolute positioning yet\","
-        "\"out_of_flow_diagnostics\":" +
-        OutOfFlowElementEvidenceJsonForStandaloneRenderer(document) + "}";
-    cache.result = result;
-    cache.initialized = true;
-    return result;
-  }
   if (LifecycleStopEqualsForStandaloneRenderer("style")) {
     result.lifecycle_reached_paint_clean = 0;
     cache.body_html = input_html;

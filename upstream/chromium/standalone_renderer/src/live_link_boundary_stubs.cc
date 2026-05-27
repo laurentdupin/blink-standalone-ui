@@ -17496,14 +17496,20 @@ void OutOfFlowLayoutPart::Run() {
 
     LayoutBox* child_box = child.GetLayoutBox();
     LayoutBox* container_box = container_builder_->Node().GetLayoutBox();
+    LayoutBox* standalone_containing_block_box = container_box;
     if (child_box && container_box &&
         child_box->ContainingBlock() != container_box) {
       if (auto* containing_block_box = child_box->ContainingBlock();
           containing_block_box && !containing_block_box->IsLayoutView() &&
           child.Style().GetPosition() != EPosition::kFixed) {
-        ++g_standalone_oof_candidate_dropped_at_root;
-        ++g_standalone_oof_unsupported_inline_containing_block;
-        continue;
+        if (containing_block_box->StyleRef().Display() == EDisplay::kInlineBlock &&
+            containing_block_box->LocationContainer() == container_box) {
+          standalone_containing_block_box = containing_block_box;
+        } else {
+          ++g_standalone_oof_candidate_dropped_at_root;
+          ++g_standalone_oof_unsupported_inline_containing_block;
+          continue;
+        }
       } else {
         if (container_box->IsLayoutView()) {
           ++g_standalone_oof_candidate_dropped_at_root;
@@ -17525,13 +17531,31 @@ void OutOfFlowLayoutPart::Run() {
     const Length& inline_end = logical_insets.InlineEnd();
     const Length& block_start = logical_insets.BlockStart();
     const Length& block_end = logical_insets.BlockEnd();
-    const BoxStrut& container_borders = container_builder_->Borders();
+    const ConstraintSpace& parent_space = container_builder_->GetConstraintSpace();
+    BoxStrut container_borders = container_builder_->Borders();
+    LogicalOffset containing_block_offset;
+    LogicalSize containing_border_box_size =
+        container_builder_->InitialBorderBoxSize();
+    if (standalone_containing_block_box &&
+        standalone_containing_block_box != container_box) {
+      BlockNode containing_block_node(standalone_containing_block_box);
+      container_borders = ComputeBorders(parent_space, containing_block_node);
+      containing_border_box_size = ToLogicalSize(
+          standalone_containing_block_box->StitchedSize(),
+          parent_space.GetWritingMode());
+      PhysicalSize container_physical_size =
+          ToPhysicalSize(container_builder_->InitialBorderBoxSize(),
+                         parent_space.GetWritingMode());
+      WritingModeConverter converter(parent_space.GetWritingDirection(),
+                                     container_physical_size);
+      containing_block_offset = converter.ToLogical(
+          standalone_containing_block_box->PhysicalLocation(),
+          standalone_containing_block_box->StitchedSize());
+    }
     const LogicalSize containing_size(
-        (container_builder_->InitialBorderBoxSize().inline_size -
-         container_borders.InlineSum())
+        (containing_border_box_size.inline_size - container_borders.InlineSum())
             .ClampNegativeToZero(),
-        (container_builder_->InitialBorderBoxSize().block_size -
-         container_borders.BlockSum())
+        (containing_border_box_size.block_size - container_borders.BlockSum())
             .ClampNegativeToZero());
     auto ResolveStandaloneInset =
         [](const Length& length,
@@ -17550,7 +17574,6 @@ void OutOfFlowLayoutPart::Run() {
     const std::optional<LayoutUnit> block_end_offset =
         ResolveStandaloneInset(block_end, containing_size.block_size);
 
-    const ConstraintSpace& parent_space = container_builder_->GetConstraintSpace();
     ConstraintSpaceBuilder child_space_builder(
         parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
     LogicalSize available_size = parent_space.AvailableSize();
@@ -17629,25 +17652,31 @@ void OutOfFlowLayoutPart::Run() {
     }
     const auto& physical_fragment =
         To<PhysicalBoxFragment>(result->GetPhysicalFragment());
-    LogicalOffset offset = candidate.StaticPosition().offset;
+    LogicalOffset offset =
+        containing_block_offset + candidate.StaticPosition().offset;
     if (inline_start_offset) {
       offset.inline_offset =
-          container_borders.inline_start + *inline_start_offset;
+          containing_block_offset.inline_offset + container_borders.inline_start +
+          *inline_start_offset;
     } else if (inline_end_offset) {
       const LogicalSize child_size =
           ToLogicalSize(physical_fragment.Size(), style.GetWritingMode());
       offset.inline_offset =
-          container_borders.inline_start + containing_size.inline_size -
-          *inline_end_offset - child_size.inline_size;
+          containing_block_offset.inline_offset + container_borders.inline_start +
+          containing_size.inline_size - *inline_end_offset -
+          child_size.inline_size;
     }
     if (block_start_offset) {
-      offset.block_offset = container_borders.block_start + *block_start_offset;
+      offset.block_offset =
+          containing_block_offset.block_offset + container_borders.block_start +
+          *block_start_offset;
     } else if (block_end_offset) {
       const LogicalSize child_size =
           ToLogicalSize(physical_fragment.Size(), style.GetWritingMode());
       offset.block_offset =
-          container_borders.block_start + containing_size.block_size -
-          *block_end_offset - child_size.block_size;
+          containing_block_offset.block_offset + container_borders.block_start +
+          containing_size.block_size - *block_end_offset -
+          child_size.block_size;
     }
     if ((physical_fragment.Size().width == LayoutUnit() ||
          physical_fragment.Size().height == LayoutUnit()) &&
