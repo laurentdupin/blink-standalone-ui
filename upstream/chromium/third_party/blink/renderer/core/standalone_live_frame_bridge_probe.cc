@@ -1853,11 +1853,8 @@ bool AppendPaintArtifactExtractedOps(
     }
     AppendBeginChunkOp(chunk_index, chunk.bounds, exported_draw_ops);
     AppendSaveOp(exported_draw_ops);
-    const FloatClipRect clip =
-        projection_has_non_translation
-            ? FloatClipRect()
-            : GeometryMapper::LocalToAncestorClipRect(
-                  chunk_state, PropertyTreeState::Root());
+    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
+        chunk_state, PropertyTreeState::Root());
     AppendChunkPropertyStateForStandaloneRenderer(chunk_index, chunk_state,
                                                   projection, clip,
                                                   property_states);
