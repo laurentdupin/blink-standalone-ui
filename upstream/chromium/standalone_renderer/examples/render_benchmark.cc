@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -62,6 +63,32 @@ struct Metrics {
   int content_right = 0;
   int content_bottom = 0;
 };
+
+struct BenchmarkTimingDiagnostics {
+  double process_elapsed_ms = 0.0;
+  double input_setup_ms = 0.0;
+  double blink_embedder_create_ms = 0.0;
+  double blink_initialize_ms = 0.0;
+  double advance_and_render_ms = 0.0;
+  double cpu_raster_replay_ms = 0.0;
+  double output_image_write_ms = 0.0;
+  double metrics_json_write_ms = 0.0;
+  double audit_json_write_ms = 0.0;
+  double page_setup_json_write_ms = 0.0;
+  double oracle_advance_and_render_ms = 0.0;
+  double oracle_cpu_raster_replay_ms = 0.0;
+  double oracle_output_write_ms = 0.0;
+  bool used_blink = false;
+  bool used_skia_cpu = false;
+  bool cold_process = true;
+};
+
+using BenchmarkClock = std::chrono::steady_clock;
+
+double ElapsedMs(BenchmarkClock::time_point start,
+                 BenchmarkClock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
 
 std::vector<uint8_t> ReadBinaryFile(const std::string& path) {
   std::ifstream file(path, std::ios::binary);
@@ -359,7 +386,8 @@ void WriteJsonString(std::ofstream& file, const std::string& value) {
 bool WriteJson(const std::string& path,
                const Metrics& metrics,
                const html_css_renderer::RenderResult& result,
-               const std::string& font_path) {
+               const std::string& font_path,
+               const BenchmarkTimingDiagnostics& timing) {
   std::ofstream file(path);
   if (!file) {
     return false;
@@ -378,6 +406,66 @@ bool WriteJson(const std::string& path,
   file << "  \"missing_resource_count\": " << result.missing_resources.size()
        << ",\n";
   file << "  \"default_font_path\": \"" << font_path << "\",\n";
+  file << "  \"render_timing_diagnostics\": {\n";
+  file << "    \"mode\": \"in_process_benchmark_chrono\",\n";
+  file << "    \"warm_or_cold\": "
+       << (timing.cold_process ? "\"cold_process\"" : "\"warm_process\"")
+       << ",\n";
+  file << "    \"caveat\": \"internal timings exclude subprocess startup; "
+          "comparison summaries separately report command wall-clock elapsed "
+          "time where available\",\n";
+  file << "    \"used_blink\": " << (timing.used_blink ? "true" : "false")
+       << ",\n";
+  file << "    \"used_skia_cpu\": "
+       << (timing.used_skia_cpu ? "true" : "false") << ",\n";
+  file << "    \"viewport\": {\"width\": "
+       << result.successor_snapshot.viewport.width << ", \"height\": "
+       << result.successor_snapshot.viewport.height << "},\n";
+  const auto requested_document_scroll =
+      result.successor_snapshot.scroll_offsets_by_element_id.find("document");
+  file << "    \"scroll_input\": {\"x\": "
+       << (requested_document_scroll ==
+                   result.successor_snapshot.scroll_offsets_by_element_id.end()
+               ? 0.0f
+               : requested_document_scroll->second.x)
+       << ", \"y\": "
+       << (requested_document_scroll ==
+                   result.successor_snapshot.scroll_offsets_by_element_id.end()
+               ? 0.0f
+               : requested_document_scroll->second.y)
+       << "},\n";
+  file << "    \"time_input_ms\": "
+       << result.successor_snapshot.timeline_time_seconds * 1000.0 << ",\n";
+  file << "    \"process_elapsed_ms\": " << timing.process_elapsed_ms
+       << ",\n";
+  file << "    \"input_setup_ms\": " << timing.input_setup_ms << ",\n";
+  file << "    \"blink_embedder_create_ms\": "
+       << timing.blink_embedder_create_ms << ",\n";
+  file << "    \"blink_initialize_ms\": " << timing.blink_initialize_ms
+       << ",\n";
+  file << "    \"advance_and_render_ms\": " << timing.advance_and_render_ms
+       << ",\n";
+  file << "    \"cpu_raster_replay_ms\": " << timing.cpu_raster_replay_ms
+       << ",\n";
+  file << "    \"output_image_write_ms\": " << timing.output_image_write_ms
+       << ",\n";
+  file << "    \"metrics_json_write_ms\": " << timing.metrics_json_write_ms
+       << ",\n";
+  file << "    \"audit_json_write_ms\": " << timing.audit_json_write_ms
+       << ",\n";
+  file << "    \"page_setup_json_write_ms\": "
+       << timing.page_setup_json_write_ms << ",\n";
+  file << "    \"oracle_advance_and_render_ms\": "
+       << timing.oracle_advance_and_render_ms << ",\n";
+  file << "    \"oracle_cpu_raster_replay_ms\": "
+       << timing.oracle_cpu_raster_replay_ms << ",\n";
+  file << "    \"oracle_output_write_ms\": " << timing.oracle_output_write_ms
+       << ",\n";
+  file << "    \"raw_chunk_count\": " << result.frame.scene_chunks.size()
+       << ",\n";
+  file << "    \"retained_command_count\": "
+       << result.frame.scene_commands.size() << "\n";
+  file << "  },\n";
   file << "  \"diagnostics\": [";
   for (size_t i = 0; i < result.diagnostics.size(); ++i) {
     if (i != 0) {
@@ -809,6 +897,7 @@ LONG WINAPI WriteBenchmarkCrashDump(EXCEPTION_POINTERS* exception_pointers) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  const auto process_start = BenchmarkClock::now();
 #if defined(_WIN32)
   SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX |
                SEM_NOOPENFILEERRORBOX);
@@ -844,7 +933,9 @@ int main(int argc, char** argv) {
   bool debug_command_coverage = false;
   bool strict_text_blob_typefaces = true;
   bool use_blink = true;
+  BenchmarkTimingDiagnostics timing;
 
+  const auto input_setup_start = BenchmarkClock::now();
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     auto next_value = [&]() -> const char* {
@@ -1064,6 +1155,10 @@ int main(int argc, char** argv) {
       return 2;
     }
   }
+  timing.input_setup_ms =
+      ElapsedMs(input_setup_start, BenchmarkClock::now());
+  timing.used_blink = use_blink;
+  timing.used_skia_cpu = use_skia_cpu;
 
   if (create_info.html.empty() || (out_path.empty() && !disable_skia_raster)) {
     PrintUsage();
@@ -1098,15 +1193,24 @@ int main(int argc, char** argv) {
     blink_create_info.trace_stages = trace_stages;
     blink_create_info.debug_text_blob_replay = debug_text_blob_replay;
     blink_create_info.lifecycle_stop = lifecycle_stop;
+    const auto create_start = BenchmarkClock::now();
     blink_embedder =
         html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
+    timing.blink_embedder_create_ms =
+        ElapsedMs(create_start, BenchmarkClock::now());
     if (!blink_embedder) {
       std::fprintf(stderr, "failed to create Blink adapter\n");
       return 1;
     }
+    const auto initialize_start = BenchmarkClock::now();
     const html_css_renderer::BlinkLifecycleReport init =
         blink_embedder->Initialize();
+    timing.blink_initialize_ms =
+        ElapsedMs(initialize_start, BenchmarkClock::now());
+    const auto render_start = BenchmarkClock::now();
     result = blink_embedder->AdvanceAndRender(input);
+    timing.advance_and_render_ms =
+        ElapsedMs(render_start, BenchmarkClock::now());
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
     if (!HasRealBlinkPaintArtifact(result) &&
@@ -1128,6 +1232,7 @@ int main(int argc, char** argv) {
   }
 
   if (!paint_artifact_dump_path.empty()) {
+    const auto audit_write_start = BenchmarkClock::now();
     std::ofstream audit_file(paint_artifact_dump_path);
     if (!audit_file) {
       std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
@@ -1136,13 +1241,22 @@ int main(int argc, char** argv) {
     }
     audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
                << "\n";
+    timing.audit_json_write_ms +=
+        ElapsedMs(audit_write_start, BenchmarkClock::now());
   }
   if (!page_setup_dump_path.empty() &&
-      !WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle, result,
-                          html_file, lifecycle_stop, use_blink)) {
-    std::fprintf(stderr, "failed to write page setup dump: %s\n",
-                 page_setup_dump_path.c_str());
-    return 1;
+      true) {
+    const auto page_setup_write_start = BenchmarkClock::now();
+    const bool wrote_page_setup =
+        WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle,
+                           result, html_file, lifecycle_stop, use_blink);
+    timing.page_setup_json_write_ms +=
+        ElapsedMs(page_setup_write_start, BenchmarkClock::now());
+    if (!wrote_page_setup) {
+      std::fprintf(stderr, "failed to write page setup dump: %s\n",
+                   page_setup_dump_path.c_str());
+      return 1;
+    }
   }
 
   if (disable_skia_raster) {
@@ -1150,7 +1264,14 @@ int main(int argc, char** argv) {
       Metrics empty_metrics;
       empty_metrics.width = static_cast<int>(result.successor_snapshot.viewport.width);
       empty_metrics.height = static_cast<int>(result.successor_snapshot.viewport.height);
-      if (!WriteJson(json_path, empty_metrics, result, loaded_font_path)) {
+      timing.process_elapsed_ms =
+          ElapsedMs(process_start, BenchmarkClock::now());
+      const auto metrics_write_start = BenchmarkClock::now();
+      const bool wrote_metrics =
+          WriteJson(json_path, empty_metrics, result, loaded_font_path, timing);
+      timing.metrics_json_write_ms =
+          ElapsedMs(metrics_write_start, BenchmarkClock::now());
+      if (!wrote_metrics) {
         std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
         return 1;
       }
@@ -1183,6 +1304,7 @@ int main(int argc, char** argv) {
   html_css_renderer::CpuRenderOptions cpu_options;
   cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
   cpu_options.debug_command_coverage = debug_command_coverage;
+  const auto raster_start = BenchmarkClock::now();
   html_css_renderer::CpuImage image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
       use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
@@ -1191,18 +1313,32 @@ int main(int argc, char** argv) {
 #endif
                    html_css_renderer::RasterizeRenderResult(result,
                                                             cpu_options);
+  timing.cpu_raster_replay_ms =
+      ElapsedMs(raster_start, BenchmarkClock::now());
 
   const Metrics metrics = ComputeMetrics(image);
+  const auto output_write_start = BenchmarkClock::now();
   if (!WriteBmp(out_path, image)) {
     std::fprintf(stderr, "failed to write output image: %s\n", out_path.c_str());
     return 1;
   }
-  if (!json_path.empty() && !WriteJson(json_path, metrics, result,
-                                       loaded_font_path)) {
-    std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
-    return 1;
+  timing.output_image_write_ms =
+      ElapsedMs(output_write_start, BenchmarkClock::now());
+  if (!json_path.empty()) {
+    timing.process_elapsed_ms =
+        ElapsedMs(process_start, BenchmarkClock::now());
+    const auto metrics_write_start = BenchmarkClock::now();
+    const bool wrote_metrics =
+        WriteJson(json_path, metrics, result, loaded_font_path, timing);
+    timing.metrics_json_write_ms =
+        ElapsedMs(metrics_write_start, BenchmarkClock::now());
+    if (!wrote_metrics) {
+      std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
+      return 1;
+    }
   }
   if (!paint_artifact_dump_path.empty()) {
+    const auto audit_write_start = BenchmarkClock::now();
     std::ofstream audit_file(paint_artifact_dump_path);
     if (!audit_file) {
       std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
@@ -1211,13 +1347,22 @@ int main(int argc, char** argv) {
     }
     audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
                << "\n";
+    timing.audit_json_write_ms +=
+        ElapsedMs(audit_write_start, BenchmarkClock::now());
   }
   if (!page_setup_dump_path.empty() &&
-      !WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle, result,
-                          html_file, lifecycle_stop, use_blink)) {
-    std::fprintf(stderr, "failed to write page setup dump: %s\n",
-                 page_setup_dump_path.c_str());
-    return 1;
+      true) {
+    const auto page_setup_write_start = BenchmarkClock::now();
+    const bool wrote_page_setup =
+        WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle,
+                           result, html_file, lifecycle_stop, use_blink);
+    timing.page_setup_json_write_ms +=
+        ElapsedMs(page_setup_write_start, BenchmarkClock::now());
+    if (!wrote_page_setup) {
+      std::fprintf(stderr, "failed to write page setup dump: %s\n",
+                   page_setup_dump_path.c_str());
+      return 1;
+    }
   }
 
   if (!paint_oracle.empty()) {
@@ -1240,8 +1385,11 @@ int main(int argc, char** argv) {
         return 1;
       }
       (void)oracle_embedder->Initialize();
+      const auto oracle_render_start = BenchmarkClock::now();
       html_css_renderer::RenderResult oracle_result =
           oracle_embedder->AdvanceAndRender(input);
+      timing.oracle_advance_and_render_ms =
+          ElapsedMs(oracle_render_start, BenchmarkClock::now());
       if (!HasRealBlinkPaintArtifact(oracle_result)) {
         std::fprintf(stderr,
                      "skia_paint_record_oracle failed before PaintArtifact\n");
@@ -1258,14 +1406,20 @@ int main(int argc, char** argv) {
       html_css_renderer::CpuRenderOptions oracle_options;
       oracle_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
       oracle_options.debug_command_coverage = false;
+      const auto oracle_raster_start = BenchmarkClock::now();
       const html_css_renderer::CpuImage oracle_image =
           html_css_renderer::RasterizeRenderResultWithSkiaCpu(oracle_result,
                                                               oracle_options);
+      timing.oracle_cpu_raster_replay_ms =
+          ElapsedMs(oracle_raster_start, BenchmarkClock::now());
+      const auto oracle_output_start = BenchmarkClock::now();
       if (!WriteBmp(oracle_out_path, oracle_image)) {
         std::fprintf(stderr, "failed to write oracle image: %s\n",
                      oracle_out_path.c_str());
         return 1;
       }
+      timing.oracle_output_write_ms =
+          ElapsedMs(oracle_output_start, BenchmarkClock::now());
       const Metrics oracle_metrics = ComputeMetrics(oracle_image);
       const std::string oracle_json_path = oracle_out_path + ".json";
       if (!WriteOracleProvenanceJson(oracle_json_path, oracle_metrics,
@@ -1291,6 +1445,20 @@ int main(int argc, char** argv) {
     } else {
       std::fprintf(stderr, "unknown paint oracle: %s\n", paint_oracle.c_str());
       return 2;
+    }
+  }
+
+  if (!json_path.empty()) {
+    timing.process_elapsed_ms =
+        ElapsedMs(process_start, BenchmarkClock::now());
+    const auto metrics_write_start = BenchmarkClock::now();
+    const bool wrote_metrics =
+        WriteJson(json_path, metrics, result, loaded_font_path, timing);
+    timing.metrics_json_write_ms =
+        ElapsedMs(metrics_write_start, BenchmarkClock::now());
+    if (!wrote_metrics) {
+      std::fprintf(stderr, "failed to write metrics: %s\n", json_path.c_str());
+      return 1;
     }
   }
 

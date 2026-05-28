@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -400,6 +401,16 @@ struct LiveFramePaintProbeCache {
   bool animation_time_requested = false;
   bool animation_time_applied = false;
   std::string animation_time_status = "not_requested";
+  double timing_total_ms = 0.0;
+  double timing_input_setup_ms = 0.0;
+  double timing_html_document_setup_ms = 0.0;
+  double timing_style_update_ms = 0.0;
+  double timing_layout_lifecycle_ms = 0.0;
+  double timing_prepaint_and_paint_lifecycle_ms = 0.0;
+  double timing_paint_artifact_generation_ms = 0.0;
+  double timing_paint_artifact_audit_ms = 0.0;
+  double timing_paint_artifact_extraction_ms = 0.0;
+  bool timing_cache_hit = false;
   bool disable_retained_extraction = false;
   bool force_oracle_bitmap = false;
   bool trace_stages = false;
@@ -411,6 +422,13 @@ struct LiveFramePaintProbeCache {
 LiveFramePaintProbeCache& ProbeCache() {
   static LiveFramePaintProbeCache* cache = new LiveFramePaintProbeCache();
   return *cache;
+}
+
+using StandaloneProbeClock = std::chrono::steady_clock;
+
+double StandaloneProbeElapsedMs(StandaloneProbeClock::time_point start,
+                                StandaloneProbeClock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
 void TraceLiveFrameProbeStage(const char* stage) {
@@ -6533,6 +6551,27 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                   ? "document_timeline_page_animator_time_not_wired_to_standalone_render_state"
                   : "")
        << "}"
+       << ",\"render_timing_diagnostics\":{\"mode\":\"in_process_probe_chrono\","
+       << "\"warm_or_cold\":\"cold_or_rebuilt_probe_state\","
+       << "\"cache_hit\":" << (cache.timing_cache_hit ? "true" : "false")
+       << ",\"input_setup_ms\":" << cache.timing_input_setup_ms
+       << ",\"html_parse_document_setup_ms\":"
+       << cache.timing_html_document_setup_ms
+       << ",\"style_update_ms\":" << cache.timing_style_update_ms
+       << ",\"layout_lifecycle_ms\":"
+       << cache.timing_layout_lifecycle_ms
+       << ",\"prepaint_paint_lifecycle_ms\":"
+       << cache.timing_prepaint_and_paint_lifecycle_ms
+       << ",\"paint_artifact_generation_ms\":"
+       << cache.timing_paint_artifact_generation_ms
+       << ",\"paint_artifact_audit_json_ms\":"
+       << cache.timing_paint_artifact_audit_ms
+       << ",\"paint_artifact_extraction_ms\":"
+       << cache.timing_paint_artifact_extraction_ms
+       << ",\"total_probe_ms\":" << cache.timing_total_ms
+       << ",\"caveat\":\"probe timings exclude process startup and CPU replay; "
+          "PaintArtifact extraction is reported by the caller after audit "
+          "serialization in some paths\"}"
        << ",\"device_scale_factor\":1"
        << ",\"media_query_diagnostics\":"
        << media_query_diagnostics_json
@@ -7173,12 +7212,15 @@ void EnsureWtfInitializedForStandaloneRenderer() {
 }
 
 LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
+  const auto total_start = StandaloneProbeClock::now();
   EnsureWtfInitializedForStandaloneRenderer();
   LiveFramePaintProbeCache& cache = ProbeCache();
   const std::string input_html = body_html ? body_html : "";
   if (cache.initialized && cache.body_html == input_html) {
+    cache.timing_cache_hit = true;
     return cache.result;
   }
+  const auto setup_start = StandaloneProbeClock::now();
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
   StandaloneRendererResetImageReachabilityDiagnostics();
   StandaloneRendererResetOutOfFlowDiagnostics();
@@ -7191,6 +7233,16 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   g_standalone_document_animations_update_called = 0;
   g_standalone_page_animator_service_called = 0;
   cache.image_reachability = ImageReachabilityDiagnostics();
+  cache.timing_total_ms = 0.0;
+  cache.timing_input_setup_ms = 0.0;
+  cache.timing_html_document_setup_ms = 0.0;
+  cache.timing_style_update_ms = 0.0;
+  cache.timing_layout_lifecycle_ms = 0.0;
+  cache.timing_prepaint_and_paint_lifecycle_ms = 0.0;
+  cache.timing_paint_artifact_generation_ms = 0.0;
+  cache.timing_paint_artifact_audit_ms = 0.0;
+  cache.timing_paint_artifact_extraction_ms = 0.0;
+  cache.timing_cache_hit = false;
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
@@ -7200,6 +7252,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("after DummyPageHolder");
   Document& document = cache.holder->GetDocument();
   TraceLiveFrameProbeStage("after GetDocument");
+  cache.timing_input_setup_ms =
+      StandaloneProbeElapsedMs(setup_start, StandaloneProbeClock::now());
 
   if (!document.documentElement() || !document.body()) {
     TraceLiveFrameProbeStage("missing body");
@@ -7218,6 +7272,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   }
 
   TraceLiveFrameProbeStage("before SetInnerHTML");
+  const auto html_setup_start = StandaloneProbeClock::now();
   g_standalone_blink_saw_font_draw_text = false;
   const std::string head_open = "<head>";
   const std::string head_close = "</head>";
@@ -7273,6 +7328,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         String::FromUtf8(body_fragment));
   }
   TraceLiveFrameProbeStage("after SetInnerHTML");
+  cache.timing_html_document_setup_ms =
+      StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
   if (LifecycleStopEqualsForStandaloneRenderer("html")) {
@@ -7293,8 +7350,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     settings->SetDefaultFixedFontSize(13);
   }
   TraceLiveFrameProbeStage("before active style update");
+  const auto style_update_start = StandaloneProbeClock::now();
   document.GetStyleEngine().UpdateActiveStyle();
   TraceLiveFrameProbeStage("after active style update");
+  cache.timing_style_update_ms =
+      StandaloneProbeElapsedMs(style_update_start, StandaloneProbeClock::now());
   if (LifecycleStopEqualsForStandaloneRenderer("style")) {
     result.lifecycle_reached_paint_clean = 0;
     cache.body_html = input_html;
@@ -7323,6 +7383,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     return result;
   }
   TraceLiveFrameProbeStage("before required layout lifecycle update");
+  const auto layout_lifecycle_start = StandaloneProbeClock::now();
   frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest);
   TraceLiveFrameProbeStage("after required layout lifecycle update");
   frame_view.SetNeedsUpdateGeometries();
@@ -7330,6 +7391,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before document scroll offset apply");
   ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
   TraceLiveFrameProbeStage("after document scroll offset apply");
+  cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
+      layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
       g_standalone_oof_fragment_created == 0) {
     cache.image_reachability =
@@ -7366,6 +7429,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     return result;
   }
   TraceLiveFrameProbeStage("before lifecycle update");
+  const auto paint_lifecycle_start = StandaloneProbeClock::now();
   result.lifecycle_reached_paint_clean =
       frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
   TraceLiveFrameProbeStage("after lifecycle update");
@@ -7378,6 +7442,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
     TraceLiveFrameProbeStage("after post-scroll lifecycle update");
   }
+  cache.timing_prepaint_and_paint_lifecycle_ms =
+      StandaloneProbeElapsedMs(paint_lifecycle_start,
+                               StandaloneProbeClock::now());
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
@@ -7393,6 +7460,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     const gfx::Size view_size = document.GetLayoutView()->GetLayoutSize();
   }
   DumpNodeForStandaloneRenderer(*document.body(), 0);
+  const auto paint_artifact_start = StandaloneProbeClock::now();
   const PaintArtifact& artifact = frame_view.GetPaintArtifact();
   TraceLiveFrameProbeStage("after GetPaintArtifact");
   TraceLiveFrameProbeStage("before paint chunk count");
@@ -7403,15 +7471,28 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
+  cache.timing_paint_artifact_generation_ms =
+      StandaloneProbeElapsedMs(paint_artifact_start,
+                               StandaloneProbeClock::now());
   cache.body_html = input_html;
+  cache.timing_total_ms =
+      StandaloneProbeElapsedMs(total_start, StandaloneProbeClock::now());
+  const auto audit_start = StandaloneProbeClock::now();
   BuildPaintArtifactAudit(artifact, cache);
+  cache.timing_paint_artifact_audit_ms =
+      StandaloneProbeElapsedMs(audit_start, StandaloneProbeClock::now());
   if (LifecycleStopEqualsForStandaloneRenderer("artifact")) {
     cache.body_html = input_html;
     cache.result = result;
     cache.initialized = true;
     return result;
   }
+  const auto extraction_start = StandaloneProbeClock::now();
   ExportDrawOpsForStandaloneRenderer(artifact, cache);
+  cache.timing_paint_artifact_extraction_ms =
+      StandaloneProbeElapsedMs(extraction_start, StandaloneProbeClock::now());
+  cache.timing_total_ms =
+      StandaloneProbeElapsedMs(total_start, StandaloneProbeClock::now());
   cache.result = result;
   cache.initialized = true;
   return result;

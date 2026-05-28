@@ -18,7 +18,7 @@ DEFAULT_BENCHMARK = ROOT / "build" / "cmake-live-image-png-ninja-vs" / "blink_st
 COMPARE_SCRIPT = ROOT / "tools" / "content_aware_compare.py"
 
 
-def run(cmd: list[str], log_path: Path, timeout: int) -> int:
+def run(cmd: list[str], log_path: Path, timeout: int) -> tuple[int, float]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.time()
     try:
@@ -42,7 +42,7 @@ def run(cmd: list[str], log_path: Path, timeout: int) -> int:
         encoding="utf-8",
         errors="replace",
     )
-    return code
+    return code, elapsed
 
 
 def read_json(path: Path) -> dict:
@@ -97,11 +97,19 @@ def summarize_row(fixture: Path, fixture_root: Path, item_dir: Path, out_dir: Pa
     audit = read_json(item_dir / f"{name}-audit.json")
     retained_oracle = read_json(item_dir / f"{name}-retained-vs-oracle.json")
     oracle_pw = read_json(item_dir / f"{name}-oracle-vs-playwright.json")
+    status = read_json(item_dir / f"{name}-status.json")
     return {
         "name": name,
         "fixture": str(fixture),
-        "benchmark_exit": read_json(item_dir / f"{name}-status.json").get("benchmark_exit", ""),
-        "playwright_exit": read_json(item_dir / f"{name}-status.json").get("playwright_exit", ""),
+        "benchmark_exit": status.get("benchmark_exit", ""),
+        "playwright_exit": status.get("playwright_exit", ""),
+        "benchmark_elapsed_seconds": status.get("benchmark_elapsed_seconds", ""),
+        "playwright_elapsed_seconds": status.get("playwright_elapsed_seconds", ""),
+        "playwright_timing_mode": status.get("playwright_timing_mode", ""),
+        "standalone_render_timing_mode": metric_value(metrics, "render_timing_diagnostics", "mode"),
+        "standalone_advance_and_render_ms": metric_value(metrics, "render_timing_diagnostics", "advance_and_render_ms"),
+        "standalone_cpu_raster_replay_ms": metric_value(metrics, "render_timing_diagnostics", "cpu_raster_replay_ms"),
+        "standalone_process_elapsed_ms": metric_value(metrics, "render_timing_diagnostics", "process_elapsed_ms"),
         "raw_chunks": metric_value(audit, "raw_chunk_count") or metric_value(audit, "paint_artifact", "raw_chunk_count"),
         "raw_ops": metric_value(audit, "raw_op_histogram") or metric_value(audit, "paint_artifact", "raw_op_histogram"),
         "retained_commands": metric_value(metrics, "retained_command_histogram"),
@@ -109,6 +117,14 @@ def summarize_row(fixture: Path, fixture_root: Path, item_dir: Path, out_dir: Pa
         "retained_vs_oracle_threshold": metric_value(retained_oracle, "thresholded_changed_percent_full_viewport"),
         "oracle_vs_playwright_exact": metric_value(oracle_pw, "exact_pixel_difference_count"),
         "oracle_vs_playwright_threshold": metric_value(oracle_pw, "thresholded_changed_percent_full_viewport"),
+        "diff_classification": metric_value(oracle_pw, "diff_classification"),
+        "text_explained_diff_percent": metric_value(oracle_pw, "text_explained_diff_percent"),
+        "non_text_diff_percent": metric_value(oracle_pw, "non_text_diff_percent"),
+        "edge_diff_percent": metric_value(oracle_pw, "edge_diff_percent"),
+        "largest_diff_component_bbox": metric_value(oracle_pw, "diff_classification_metrics", "largest_diff_component_bbox"),
+        "largest_diff_component_area": metric_value(oracle_pw, "diff_classification_metrics", "largest_diff_component_area"),
+        "large_component_diff_percent": metric_value(oracle_pw, "diff_classification_metrics", "large_component_diff_percent"),
+        "small_component_count": metric_value(oracle_pw, "diff_classification_metrics", "small_component_count"),
         "retained": rel(item_dir / f"{name}-retained.bmp", out_dir),
         "oracle": rel(item_dir / f"{name}-oracle.bmp", out_dir),
         "playwright": rel(item_dir / f"{name}-playwright.png", out_dir),
@@ -130,6 +146,9 @@ def write_html(out_dir: Path, rows: list[dict]) -> Path:
             f"<td>{html.escape(str(row['playwright_exit']))}</td>"
             f"<td>{html.escape(str(row['retained_vs_oracle_exact']))}</td>"
             f"<td>{html.escape(str(row['oracle_vs_playwright_exact']))}</td>"
+            f"<td>{html.escape(str(row.get('diff_classification', '')))}</td>"
+            f"<td>{html.escape(str(row.get('standalone_advance_and_render_ms', '')))}</td>"
+            f"<td>{html.escape(str(row.get('playwright_elapsed_seconds', '')))}</td>"
             + image_cell(item_dir / f"{row['name']}-retained.bmp", out_dir, "retained")
             + image_cell(item_dir / f"{row['name']}-oracle.bmp", out_dir, "oracle")
             + image_cell(item_dir / f"{row['name']}-playwright.png", out_dir, "playwright")
@@ -157,10 +176,10 @@ def write_html(out_dir: Path, rows: list[dict]) -> Path:
   a {{ color: #0969da; text-decoration: none; }}
 </style>
 <h1>Blink Standalone All Examples Comparison</h1>
-<p class="meta">Generated {html.escape(generated)}. Columns show benchmark/Playwright exit codes, exact retained-vs-oracle diff, exact oracle-vs-Playwright diff, and image previews.</p>
+<p class="meta">Generated {html.escape(generated)}. Columns show benchmark/Playwright exit codes, exact retained-vs-oracle diff, exact oracle-vs-Playwright diff, heuristic diff classification, timing, and image previews.</p>
 <table>
   <thead><tr>
-    <th>Example</th><th>Bench</th><th>PW</th><th>R/O exact</th><th>O/P exact</th>
+    <th>Example</th><th>Bench</th><th>PW</th><th>R/O exact</th><th>O/P exact</th><th>Class</th><th>Standalone render ms</th><th>PW elapsed s</th>
     <th>Retained</th><th>Oracle</th><th>Playwright</th><th>Artifacts</th>
   </tr></thead>
   <tbody>
@@ -235,7 +254,9 @@ def main() -> int:
             "--strict-text-blob-typefaces",
             "--skia-cpu",
         ]
-        status["benchmark_exit"] = run(bench_cmd, item_dir / f"{name}-benchmark.log", args.timeout)
+        status["benchmark_exit"], status["benchmark_elapsed_seconds"] = run(
+            bench_cmd, item_dir / f"{name}-benchmark.log", args.timeout
+        )
 
         pw_cmd = [
             "node",
@@ -247,10 +268,17 @@ def main() -> int:
             "--viewport",
             args.viewport,
         ]
-        status["playwright_exit"] = run(pw_cmd, item_dir / f"{name}-playwright.log", args.timeout)
+        status["playwright_exit"], status["playwright_elapsed_seconds"] = run(
+            pw_cmd, item_dir / f"{name}-playwright.log", args.timeout
+        )
+        status["playwright_timing_mode"] = "wall_clock_command"
+        status["playwright_timing_caveat"] = (
+            "elapsed time covers the Playwright screenshot command, not a "
+            "Chromium trace phase breakdown"
+        )
 
         if retained.exists() and oracle.exists():
-            status["retained_vs_oracle_exit"] = run(
+            status["retained_vs_oracle_exit"], status["retained_vs_oracle_elapsed_seconds"] = run(
                 [
                     sys.executable,
                     str(COMPARE_SCRIPT),
@@ -269,7 +297,7 @@ def main() -> int:
                 args.timeout,
             )
         if oracle.exists() and pw.exists():
-            status["oracle_vs_playwright_exit"] = run(
+            status["oracle_vs_playwright_exit"], status["oracle_vs_playwright_elapsed_seconds"] = run(
                 [
                     sys.executable,
                     str(COMPARE_SCRIPT),

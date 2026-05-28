@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Iterable, Tuple
 
 try:
-    from PIL import Image, ImageChops
+    from PIL import Image, ImageChops, ImageFilter
 except ImportError as exc:  # pragma: no cover - diagnostic script.
     raise SystemExit("Pillow is required: python -m pip install pillow") from exc
 
@@ -102,6 +102,134 @@ def count_exact_changed(a: Image.Image, b: Image.Image, bbox: BBox | None = None
     return sum(1 for left, right in zip(a_rgb.getdata(), b_rgb.getdata()) if left != right)
 
 
+def changed_mask(a: Image.Image, b: Image.Image, threshold: int) -> list[bool]:
+    a_rgb = a.convert("RGB")
+    b_rgb = b.convert("RGB")
+    return [
+        any(abs(int(left[i]) - int(right[i])) > threshold for i in range(3))
+        for left, right in zip(a_rgb.getdata(), b_rgb.getdata())
+    ]
+
+
+def text_like_mask(image: Image.Image) -> Image.Image:
+    rgb = image.convert("RGB")
+    mask = Image.new("L", rgb.size, 0)
+    out = []
+    for r, g, b in rgb.getdata():
+        dark = max(r, g, b) < 120
+        neutral = max(r, g, b) - min(r, g, b) < 42
+        out.append(255 if dark and neutral else 0)
+    mask.putdata(out)
+    return mask.filter(ImageFilter.MaxFilter(5))
+
+
+def edge_like_mask(image: Image.Image, threshold: int) -> Image.Image:
+    gray = image.convert("L")
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    mask = Image.new("L", gray.size, 0)
+    mask.putdata([255 if value > max(18, threshold * 2) else 0 for value in edges.getdata()])
+    return mask.filter(ImageFilter.MaxFilter(3))
+
+
+def union_l_masks(*masks: Image.Image) -> Image.Image:
+    if not masks:
+        raise ValueError("at least one mask is required")
+    result = masks[0]
+    for mask in masks[1:]:
+        result = ImageChops.lighter(result, mask)
+    return result
+
+
+def count_changed_under_mask(changed: list[bool], mask: Image.Image) -> int:
+    return sum(1 for is_changed, value in zip(changed, mask.getdata()) if is_changed and value)
+
+
+def changed_components(changed: list[bool], width: int, height: int) -> dict:
+    seen = bytearray(width * height)
+    largest_area = 0
+    largest_bbox: BBox | None = None
+    small_count = 0
+    large_count = 0
+    component_count = 0
+    for start, is_changed in enumerate(changed):
+        if not is_changed or seen[start]:
+            continue
+        component_count += 1
+        stack = [start]
+        seen[start] = 1
+        area_count = 0
+        min_x = width
+        min_y = height
+        max_x = -1
+        max_y = -1
+        while stack:
+            index = stack.pop()
+            area_count += 1
+            x = index % width
+            y = index // width
+            min_x = min(min_x, x)
+            min_y = min(min_y, y)
+            max_x = max(max_x, x)
+            max_y = max(max_y, y)
+            if x > 0:
+                neighbor = index - 1
+                if changed[neighbor] and not seen[neighbor]:
+                    seen[neighbor] = 1
+                    stack.append(neighbor)
+            if x + 1 < width:
+                neighbor = index + 1
+                if changed[neighbor] and not seen[neighbor]:
+                    seen[neighbor] = 1
+                    stack.append(neighbor)
+            if y > 0:
+                neighbor = index - width
+                if changed[neighbor] and not seen[neighbor]:
+                    seen[neighbor] = 1
+                    stack.append(neighbor)
+            if y + 1 < height:
+                neighbor = index + width
+                if changed[neighbor] and not seen[neighbor]:
+                    seen[neighbor] = 1
+                    stack.append(neighbor)
+        if area_count <= 16:
+            small_count += 1
+        if area_count >= max(128, int(width * height * 0.001)):
+            large_count += 1
+        if area_count > largest_area:
+            largest_area = area_count
+            largest_bbox = (min_x, min_y, max_x + 1, max_y + 1)
+    return {
+        "component_count": component_count,
+        "small_component_count": small_count,
+        "large_component_count": large_count,
+        "largest_diff_component_area": largest_area,
+        "largest_diff_component_bbox": largest_bbox,
+        "large_component_diff_percent": percent(largest_area, width * height),
+    }
+
+
+def classify_diff(changed_count: int,
+                  total: int,
+                  text_count: int,
+                  edge_count: int,
+                  largest_area: int,
+                  mask_difference_percent: float) -> str:
+    if changed_count == 0:
+        return "exact_or_threshold_match"
+    text_ratio = text_count / max(1, changed_count)
+    edge_ratio = edge_count / max(1, changed_count)
+    largest_percent = percent(largest_area, total)
+    if mask_difference_percent > 8.0 or largest_percent > 2.0:
+        return "missing_resource_or_large_region"
+    if text_ratio >= 0.70:
+        return "mostly_text_aa"
+    if edge_ratio >= 0.70:
+        return "mostly_edge_aa"
+    if largest_percent > 0.35:
+        return "structural_layout_or_paint"
+    return "mixed"
+
+
 def area(bbox: BBox | None) -> int:
     if not bbox:
         return 0
@@ -146,6 +274,7 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
     reference_bbox = bbox_from_mask(reference_mask, width, height)
     content_bbox = union_bbox(standalone_bbox, reference_bbox)
     changed_full = count_changed(standalone, reference, threshold)
+    changed = changed_mask(standalone, reference, threshold)
     changed_union = count_changed(standalone, reference, threshold, content_bbox)
     changed_reference = count_changed(standalone, reference, threshold, reference_bbox)
     exact_changed_full = count_exact_changed(standalone, reference)
@@ -156,6 +285,20 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
     mask_artifact_suspected = changed_full == 0 and mask_difference > 0
     reported_missing = 0 if mask_artifact_suspected else missing
     reported_extra = 0 if mask_artifact_suspected else extra
+    text_mask = union_l_masks(text_like_mask(standalone), text_like_mask(reference))
+    edge_mask = union_l_masks(edge_like_mask(standalone, threshold), edge_like_mask(reference, threshold))
+    text_changed = count_changed_under_mask(changed, text_mask)
+    edge_changed = count_changed_under_mask(changed, edge_mask)
+    non_text_changed = max(0, changed_full - text_changed)
+    components = changed_components(changed, width, height)
+    classification = classify_diff(
+        changed_full,
+        total,
+        text_changed,
+        edge_changed,
+        components["largest_diff_component_area"],
+        percent(mask_difference, total),
+    )
     result = {
         "standalone": str(standalone_path),
         "reference": str(reference_path),
@@ -190,6 +333,19 @@ def compare(standalone_path: Path, reference_path: Path, background_mode: str, t
         "reported_extra_content_percent": percent(reported_extra, max(1, reference_content)),
         "mask_missing_content_percent": percent(missing, max(1, reference_content)),
         "mask_extra_content_percent": percent(extra, max(1, reference_content)),
+        "diff_classification": classification,
+        "text_explained_diff_percent": percent(text_changed, max(1, changed_full)),
+        "non_text_diff_percent": percent(non_text_changed, max(1, changed_full)),
+        "edge_diff_percent": percent(edge_changed, max(1, changed_full)),
+        "diff_classification_metrics": {
+            "mode": "heuristic_dark_text_edge_connected_components",
+            "caveat": "classification metadata only; pass/fail metrics are unchanged",
+            "changed_pixel_count": changed_full,
+            "text_explained_changed_pixel_count": text_changed,
+            "edge_changed_pixel_count": edge_changed,
+            "non_text_changed_pixel_count": non_text_changed,
+            **components,
+        },
     }
     result.update(write_crops(standalone, reference, content_bbox, out_dir))
     return result

@@ -5660,8 +5660,66 @@ bool StyleAdjuster::IsCacheCompatible(const ComputedStyle&,
   return true;
 }
 
+static EDisplay StandaloneEquivalentBlockDisplay(EDisplay display) {
+  switch (display) {
+    case EDisplay::kFlowRootListItem:
+    case EDisplay::kBlock:
+    case EDisplay::kTable:
+    case EDisplay::kWebkitBox:
+    case EDisplay::kFlex:
+    case EDisplay::kGrid:
+    case EDisplay::kBlockMath:
+    case EDisplay::kBlockRuby:
+    case EDisplay::kListItem:
+    case EDisplay::kFlowRoot:
+    case EDisplay::kLayoutCustom:
+    case EDisplay::kGridLanes:
+      return display;
+    case EDisplay::kInlineTable:
+      return EDisplay::kTable;
+    case EDisplay::kWebkitInlineBox:
+      return EDisplay::kWebkitBox;
+    case EDisplay::kInlineFlex:
+      return EDisplay::kFlex;
+    case EDisplay::kInlineGrid:
+      return EDisplay::kGrid;
+    case EDisplay::kMath:
+      return EDisplay::kBlockMath;
+    case EDisplay::kRuby:
+      return EDisplay::kBlockRuby;
+    case EDisplay::kInlineLayoutCustom:
+      return EDisplay::kLayoutCustom;
+    case EDisplay::kInlineListItem:
+      return EDisplay::kListItem;
+    case EDisplay::kInlineFlowRootListItem:
+      return EDisplay::kFlowRootListItem;
+    case EDisplay::kInlineGridLanes:
+      return EDisplay::kGridLanes;
+    case EDisplay::kContents:
+    case EDisplay::kInline:
+    case EDisplay::kInlineBlock:
+    case EDisplay::kTableRowGroup:
+    case EDisplay::kTableHeaderGroup:
+    case EDisplay::kTableFooterGroup:
+    case EDisplay::kTableRow:
+    case EDisplay::kTableColumnGroup:
+    case EDisplay::kTableColumn:
+    case EDisplay::kTableCell:
+    case EDisplay::kTableCaption:
+    case EDisplay::kRubyText:
+      return EDisplay::kBlock;
+    case EDisplay::kNone:
+      return display;
+  }
+  return EDisplay::kBlock;
+}
+
 void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element*) {
   ComputedStyleBuilder& builder = state.StyleBuilder();
+  if (builder.Display() != EDisplay::kContents &&
+      builder.HasOutOfFlowPosition()) {
+    builder.SetDisplay(StandaloneEquivalentBlockDisplay(builder.Display()));
+  }
   builder.SetForcesStackingContext(false);
   if (builder.GetPosition() != EPosition::kStatic) {
     builder.SetAllowsZIndex(true);
