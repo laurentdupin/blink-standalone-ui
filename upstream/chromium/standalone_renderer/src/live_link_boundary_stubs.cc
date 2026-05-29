@@ -4343,6 +4343,8 @@ scoped_refptr<Image> LoadStandaloneDecodedImage(
                  "mime=%s bytes=%zu\n",
                  result.mime_type.c_str(), result.encoded_bytes.size());
     std::fprintf(stderr,
+                 "image_reachability.stage=mime_bearing_image_resource_info_not_linked\n");
+    std::fprintf(stderr,
                  "image_reachability.stage=real_encoded_image_resource_content_not_linked\n");
     std::fflush(stderr);
     return nullptr;
