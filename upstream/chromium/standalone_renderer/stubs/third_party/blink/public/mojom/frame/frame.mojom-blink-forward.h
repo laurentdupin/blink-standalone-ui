@@ -12,6 +12,7 @@
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/network/public/mojom/load_timing_info.mojom-blink.h"
 #include "services/network/public/mojom/source_location.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/confidence_level.mojom-blink-forward.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -59,8 +60,8 @@ using CSPViolationPtr = std::unique_ptr<CSPViolation>;
 struct CrossOriginOpenerPolicyReporterParams;
 using CrossOriginOpenerPolicyReporterParamsPtr =
     CrossOriginOpenerPolicyReporterParams*;
-struct LoadTimingInfo {};
-using LoadTimingInfoPtr = std::unique_ptr<LoadTimingInfo>;
+using LoadTimingInfo = ::network::mojom::blink::LoadTimingInfo;
+using LoadTimingInfoPtr = ::network::mojom::blink::LoadTimingInfoPtr;
 }
 namespace blink::network::mojom::blink {
 using CSPViolationPtr = ::network::mojom::blink::CSPViolationPtr;

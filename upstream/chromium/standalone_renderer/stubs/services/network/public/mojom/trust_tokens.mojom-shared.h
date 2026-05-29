@@ -7,9 +7,17 @@ namespace network::mojom {
 
 enum class TrustTokenOperationStatus {
   kOk,
+  kAlreadyExists,
+  kOperationSuccessfullyFulfilledLocally,
+  kMissingIssuerKeys,
   kInvalidArgument,
   kResourceExhausted,
+  kResourceLimited,
+  kSiteIssuerLimit,
   kFailedPrecondition,
+  kUnauthorized,
+  kBadResponse,
+  kMaxValue = kBadResponse,
 };
 
 }  // namespace network::mojom

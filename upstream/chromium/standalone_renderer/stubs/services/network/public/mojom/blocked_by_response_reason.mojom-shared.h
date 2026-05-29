@@ -5,7 +5,14 @@ namespace network::mojom {
 
 enum class BlockedByResponseReason {
   kCoepFrameResourceNeedsCoepHeader,
+  kCoopSandboxedIFrameCannotNavigateToCoopPage,
   kCorpNotSameOrigin,
+  kCorpNotSameOriginAfterDefaultedToSameOriginByCoep,
+  kCorpNotSameOriginAfterDefaultedToSameOriginByDip,
+  kCorpNotSameOriginAfterDefaultedToSameOriginByCoepAndDip,
+  kCorpNotSameSite,
+  kSRIMessageSignatureMismatch,
+  kMaxValue = kSRIMessageSignatureMismatch,
 };
 
 }  // namespace network::mojom
