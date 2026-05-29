@@ -220,7 +220,41 @@ std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
   if (metadata.find("image/bmp") != std::string::npos ||
       metadata.find("image/x-ms-bmp") != std::string::npos)
     return "image/bmp";
+  if (metadata.find("image/svg+xml") != std::string::npos)
+    return "image/svg+xml";
   return std::string();
+}
+
+bool IsSvgImageMime(const std::string& mime_type) {
+  return mime_type == "image/svg+xml";
+}
+
+std::vector<uint8_t> PercentDecodeBytes(const std::string& input) {
+  auto hex_value = [](char c) -> int {
+    if (c >= '0' && c <= '9')
+      return c - '0';
+    if (c >= 'a' && c <= 'f')
+      return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+      return c - 'A' + 10;
+    return -1;
+  };
+
+  std::vector<uint8_t> output;
+  output.reserve(input.size());
+  for (size_t i = 0; i < input.size(); ++i) {
+    if (input[i] == '%' && i + 2 < input.size()) {
+      int high = hex_value(input[i + 1]);
+      int low = hex_value(input[i + 2]);
+      if (high >= 0 && low >= 0) {
+        output.push_back(static_cast<uint8_t>((high << 4) | low));
+        i += 2;
+        continue;
+      }
+    }
+    output.push_back(static_cast<uint8_t>(input[i]));
+  }
+  return output;
 }
 
 StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
@@ -242,27 +276,42 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
   std::string mime_type = SupportedImageMimeFromMetadata(metadata);
   if (mime_type.empty()) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
-                       "only PNG/JPEG/BMP data URLs are enabled", "");
+                       "only PNG/JPEG/BMP/SVG data URLs are enabled", "");
   }
-  if (metadata.find(";base64") == std::string::npos) {
+
+  const bool is_base64 = metadata.find(";base64") != std::string::npos;
+  if (!is_base64 && !IsSvgImageMime(mime_type)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "image data URL is not base64 encoded", mime_type);
   }
 
-  blink::Vector<uint8_t> blink_encoded;
   std::string payload = url.substr(comma + 1);
-  if (!blink::Base64Decode(blink::String(payload.c_str()), blink_encoded,
-                           blink::Base64DecodePolicy::kForgiving) ||
-      blink_encoded.empty()) {
-    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "base64 decode failed", mime_type);
-  }
 
   StandaloneResourceResult result;
   result.source_kind = StandaloneResourceSourceKind::kDataUrl;
   result.mime_type = std::move(mime_type);
-  result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
   result.cache_key = url;
+  if (is_base64) {
+    blink::Vector<uint8_t> blink_encoded;
+    if (!blink::Base64Decode(blink::String(payload.c_str()), blink_encoded,
+                             blink::Base64DecodePolicy::kForgiving) ||
+        blink_encoded.empty()) {
+      return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                         "base64 decode failed", result.mime_type);
+    }
+    result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
+  } else {
+    result.encoded_bytes = PercentDecodeBytes(payload);
+    if (result.encoded_bytes.empty()) {
+      return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                         "SVG data URL is empty", result.mime_type);
+    }
+  }
+  if (IsSvgImageMime(result.mime_type)) {
+    result.status = StandaloneResourceStatus::kSuccess;
+    result.error = "encoded SVG available; real Blink SVG image path not linked";
+    return result;
+  }
   return DecodeImageBytes(std::move(result));
 }
 
@@ -310,6 +359,8 @@ std::string SupportedImageMimeFromExtension(std::string extension) {
     return "image/jpeg";
   if (extension == ".bmp")
     return "image/bmp";
+  if (extension == ".svg")
+    return "image/svg+xml";
   return std::string();
 }
 
@@ -373,7 +424,7 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
   }
   if (result.mime_type.empty()) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
-    result.error = "only local PNG/JPEG/BMP images are enabled";
+    result.error = "only local PNG/JPEG/BMP/SVG images are enabled";
     return result;
   }
   if (!std::filesystem::exists(candidate) ||
@@ -394,6 +445,11 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
   if (result.encoded_bytes.empty()) {
     result.status = StandaloneResourceStatus::kDecodeFailed;
     result.error = "local image file is empty";
+    return result;
+  }
+  if (IsSvgImageMime(result.mime_type)) {
+    result.status = StandaloneResourceStatus::kSuccess;
+    result.error = "encoded SVG available; real Blink SVG image path not linked";
     return result;
   }
   return DecodeImageBytes(std::move(result));

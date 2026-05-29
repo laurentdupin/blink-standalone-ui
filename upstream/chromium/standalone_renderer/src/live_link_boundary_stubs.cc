@@ -4320,7 +4320,7 @@ class StandaloneDataUrlPngImage final : public Image {
   PaintImage paint_image_;
 };
 
-scoped_refptr<Image> DecodeStandalonePngImage(
+scoped_refptr<Image> LoadStandaloneDecodedImage(
     const KURL& url,
     html_css_renderer::StandaloneResourceInitiator initiator) {
   html_css_renderer::StandaloneResourceRequest request;
@@ -4328,11 +4328,26 @@ scoped_refptr<Image> DecodeStandalonePngImage(
   request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
   request.initiator = initiator;
   request.accepted_mime_types.push_back("image/png");
+  request.accepted_mime_types.push_back("image/jpeg");
+  request.accepted_mime_types.push_back("image/bmp");
+  request.accepted_mime_types.push_back("image/svg+xml");
   html_css_renderer::StandaloneResourceResult result =
       html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
           request);
-  if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess ||
-      !result.decoded_image) {
+  if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess) {
+    return nullptr;
+  }
+  if (result.mime_type == "image/svg+xml" && !result.encoded_bytes.empty()) {
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_resource_content_fetch_encoded_svg_available "
+                 "mime=%s bytes=%zu\n",
+                 result.mime_type.c_str(), result.encoded_bytes.size());
+    std::fprintf(stderr,
+                 "image_reachability.stage=real_encoded_image_resource_content_not_linked\n");
+    std::fflush(stderr);
+    return nullptr;
+  }
+  if (!result.decoded_image) {
     return nullptr;
   }
   return StandaloneDataUrlPngImage::Create(std::move(result.decoded_image));
@@ -4365,7 +4380,7 @@ ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
         html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
   }
   if (scoped_refptr<Image> image =
-          DecodeStandalonePngImage(params.Url(), initiator)) {
+          LoadStandaloneDecodedImage(params.Url(), initiator)) {
     std::fprintf(stderr,
                  "image_reachability.stage=image_resource_content_fetch_decoded\n");
     std::fflush(stderr);
