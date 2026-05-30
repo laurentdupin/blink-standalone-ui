@@ -133,6 +133,9 @@ add_executable(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/overrides
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/platform/default
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/base/allocator/partition_allocator/src
@@ -226,6 +229,9 @@ add_executable(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_CHROMIUM_ROOT}
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/overrides
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/platform/default
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/base/allocator/partition_allocator/src

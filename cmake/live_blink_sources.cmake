@@ -23,6 +23,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/css_property_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/parser/at_rule_descriptors.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css_value_keywords.cc
@@ -75,14 +76,17 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_history_item_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/hardening.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/raw_logging.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/throw_delegate.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/container/internal/raw_hash_set.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/hash/internal/city.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/hash/internal/hash.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/numeric/int128.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/ascii.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/charconv.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/escaping.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_bigint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_parse.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/escaping.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/memutil.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/bind.cc
@@ -93,6 +97,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/utf8.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/match.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
