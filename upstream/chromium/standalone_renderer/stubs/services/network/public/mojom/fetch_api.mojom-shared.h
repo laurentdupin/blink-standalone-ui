@@ -1,6 +1,8 @@
 #ifndef STANDALONE_RENDERER_STUBS_SERVICES_NETWORK_PUBLIC_MOJOM_FETCH_API_MOJOM_SHARED_H_
 #define STANDALONE_RENDERER_STUBS_SERVICES_NETWORK_PUBLIC_MOJOM_FETCH_API_MOJOM_SHARED_H_
 
+#include <ostream>
+
 namespace network::mojom {
 
 #if !defined(STANDALONE_RENDERER_NETWORK_FETCH_API_ENUMS_DEFINED)
@@ -70,6 +72,10 @@ enum class FetchResponseSource {
   kHttpCache,
   kCacheStorage,
 };
+
+inline std::ostream& operator<<(std::ostream& os, RequestMode mode) {
+  return os << static_cast<int>(mode);
+}
 
 }  // namespace network::mojom
 

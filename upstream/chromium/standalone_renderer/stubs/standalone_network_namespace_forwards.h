@@ -135,7 +135,13 @@ class PendingSharedURLLoaderFactory;
 class SharedURLLoaderFactory;
 struct ParsedPermissionsPolicyDeclaration;
 enum class MetaCHType;
+namespace cors {}
 }  // namespace network
+
+namespace network::cors {
+bool IsCorsSameOriginResponseType(::network::mojom::FetchResponseType);
+bool IsCorsCrossOriginResponseType(::network::mojom::FetchResponseType);
+}  // namespace network::cors
 
 namespace blink::network {
 using ConnectionAllowlists = ::network::ConnectionAllowlists;
@@ -185,6 +191,9 @@ class SchemefulSiteDataView;
 }  // namespace blink::network::mojom
 
 namespace blink::network::cors {
+using ::network::cors::IsCorsCrossOriginResponseType;
+using ::network::cors::IsCorsSameOriginResponseType;
+
 class OriginAccessEntry {
  public:
   enum class MatchResult {

@@ -10,7 +10,13 @@ namespace network::mojom {
 enum class CorsError {
   kDisallowedByMode,
   kInvalidResponse,
-  kMaxValue = kInvalidResponse,
+  kWildcardOriginNotAllowed,
+  kMissingAllowOriginHeader,
+  kMultipleAllowOriginValues,
+  kInvalidAllowOriginValue,
+  kAllowOriginMismatch,
+  kInvalidAllowCredentials,
+  kMaxValue = kInvalidAllowCredentials,
 };
 
 }  // namespace network::mojom
