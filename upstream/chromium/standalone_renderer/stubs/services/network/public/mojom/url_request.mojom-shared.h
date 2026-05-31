@@ -3,6 +3,11 @@
 
 namespace network::mojom {
 
+struct DataElementBytesDataView {};
+struct DataElementFileDataView {};
+struct DataElementDataPipeDataView {};
+struct DataElementChunkedDataPipeDataView {};
+
 struct DataElementDataView {
   enum class Tag {
     kBytes,
@@ -12,6 +17,10 @@ struct DataElementDataView {
   };
 };
 
+struct EnabledClientHintsDataView {};
+struct TrustedUrlRequestParamsDataView {};
+struct WebBundleTokenParamsDataView {};
+struct URLRequestDataView {};
 struct URLRequestBodyDataView {};
 
 }  // namespace network::mojom
