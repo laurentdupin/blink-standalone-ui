@@ -1023,12 +1023,15 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/platform/bindings/exception_messages.h"
 #include "third_party/blink/renderer/platform/instrumentation/instance_counters.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "third_party/blink/renderer/platform/instrumentation/tracing/web_memory_allocator_dump.h"
+#include "third_party/blink/renderer/platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/document_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_loader.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/script_regexp.h"
@@ -1071,6 +1074,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/platform/text/layout_locale.h"
 #include "third_party/blink/renderer/platform/text/quotes_data.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
+#include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/blink/renderer/platform/text/hyphenation.h"
 #include "third_party/blink/renderer/platform/wtf/text/case_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_encoding.h"
@@ -3017,6 +3021,14 @@ BASE_FEATURE(kCaptureJSExecutionLocation,
 BASE_FEATURE(kSpeculativeImageDecodes,
              "SpeculativeImageDecodes",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kReleaseResourceDecodedDataOnMemoryPressure,
+             "ReleaseResourceDecodedDataOnMemoryPressure",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kMemoryCacheStrongReference,
+             "MemoryCacheStrongReference",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<double> kMemoryCacheDecayRate{
+    &kMemoryCacheStrongReference, "memory-cache-decay-rate", 0.0};
 BASE_FEATURE(kLCPCriticalPathPredictor,
              "LCPCriticalPathPredictor",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -4232,6 +4244,9 @@ int ItalicMathVariant(int character) {
 }
 }  // namespace unicode
 
+const char* const Partitions::kAllocatedObjectPoolName =
+    "blink_gc/allocated_objects";
+
 KURL MemoryCache::RemoveFragmentIdentifierIfNeeded(const KURL& url) {
   return url;
 }
@@ -4241,6 +4256,14 @@ MemoryCache* MemoryCache::Get() {
 Resource* MemoryCache::ResourceForURL(const KURL&, const String&) const {
   return nullptr;
 }
+String MemoryCache::DefaultCacheIdentifier() {
+  return String();
+}
+void MemoryCache::Remove(Resource*) {}
+bool MemoryCache::Contains(const Resource*) const {
+  return false;
+}
+void MemoryCache::Update(Resource*, size_t, size_t) {}
 
 namespace {
 class StandaloneDataUrlPngImage final : public Image {
@@ -4447,15 +4470,69 @@ bool ImageResource::IsAboveSpeculativeDecodeSizeThreshold(const gfx::Size&) {
   return false;
 }
 
-void Resource::Trace(Visitor* visitor) const {
-  visitor->Trace(clients_);
-}
+MemoryPressureListenerRegistration::MemoryPressureListenerRegistration(
+    base::Location,
+    base::MemoryPressureListenerTag,
+    base::MemoryPressureListener*) {}
+MemoryPressureListenerRegistration::~MemoryPressureListenerRegistration() =
+    default;
+void MemoryPressureListenerRegistration::Dispose() {}
 
-void IntegrityReport::SendReports(UseCounterAndConsoleLogger*) const {}
+WebMemoryAllocatorDump::WebMemoryAllocatorDump(
+    base::trace_event::MemoryAllocatorDump*)
+    : guid_(0) {}
+void WebMemoryAllocatorDump::AddScalar(const char*, const char*, uint64_t) {}
+void WebMemoryAllocatorDump::AddString(const char*, const char*, const String&) {
+}
+WebMemoryAllocatorDumpGuid WebMemoryAllocatorDump::Guid() const {
+  return guid_;
+}
+WebMemoryAllocatorDump* WebProcessMemoryDump::CreateMemoryAllocatorDump(
+    const String&) {
+  return nullptr;
+}
+void WebProcessMemoryDump::AddSuballocation(WebMemoryAllocatorDumpGuid,
+                                            const String&) {}
 
 void SubresourceIntegrity::ParseIntegrityAttribute(const String&,
                                                    IntegrityMetadataSet&,
                                                    const FeatureContext*) {}
+bool SubresourceIntegrity::CheckUnencodedDigests(
+    const Vector<network::IntegrityMetadata>&,
+    const SegmentedBuffer*) {
+  return true;
+}
+bool SubresourceIntegrity::CheckSubresourceIntegrity(
+    const IntegrityMetadataSet&,
+    const SegmentedBuffer*,
+    const KURL&,
+    const Resource&,
+    const FeatureContext*,
+    IntegrityReport&,
+    HashMap<HashAlgorithm, String>*) {
+  return true;
+}
+String SubresourceIntegrity::GetSubresourceIntegrityHash(
+    const SegmentedBuffer*,
+    HashAlgorithm) {
+  return String();
+}
+
+FetchContext& ResourceFetcher::Context() const {
+  return *static_cast<FetchContext*>(nullptr);
+}
+
+FetchContext& ResourceLoader::Context() const {
+  return *static_cast<FetchContext*>(nullptr);
+}
+void ResourceLoader::ScheduleCancel() {}
+void ResourceLoader::DidChangePriority(ResourceLoadPriority, int) {}
+void ResourceLoader::Trace(Visitor* visitor) const {
+  visitor->Trace(resource_);
+  visitor->Trace(fetcher_);
+}
+
+void ParseCommaDelimitedHeader(const StringView&, CommaDelimitedHeaderSet&) {}
 
 String TimelineOffset::TimelineRangeNameToString(V8TimelineRange::Enum) {
   return String();
@@ -5066,11 +5143,6 @@ network::mojom::ReferrerPolicy CSSStyleSheetResource::GetReferrerPolicy()
 
 void CSSStyleSheetResource::Trace(Visitor* visitor) const {
   TextResource::Trace(visitor);
-}
-
-const ResourceRequestHead& Resource::LastResourceRequest() const {
-  static ResourceRequestHead empty_request;
-  return empty_request;
 }
 
 TextEncoding TextResource::Encoding() const {

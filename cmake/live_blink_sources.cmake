@@ -7,6 +7,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_string_conversion_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/matcher_string_pattern.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/substring_set_matcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/clock.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/default_clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum-dtoa.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/cached-powers.cc
@@ -47,6 +49,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xmlns_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/cors/cors_error_status.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/fetch_retry_options.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/integrity_report.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_error.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_load_timing.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_request.cc
