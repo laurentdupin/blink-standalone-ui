@@ -12,6 +12,8 @@ struct DataElementDataView {
   };
 };
 
+struct URLRequestBodyDataView {};
+
 }  // namespace network::mojom
 
 #endif  // STANDALONE_RENDERER_STUBS_SERVICES_NETWORK_PUBLIC_MOJOM_URL_REQUEST_MOJOM_SHARED_H_

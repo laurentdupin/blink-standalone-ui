@@ -16,6 +16,7 @@
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "services/network/public/mojom/no_vary_search.mojom.h"
 #include "services/network/public/mojom/supports_loading_mode.mojom-blink.h"
+#include "services/network/public/mojom/timing_allow_origin.mojom.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom.h"
 
 namespace network::mojom {
@@ -67,34 +68,6 @@ struct LinkHeader {
   std::string mime_type;
 };
 using LinkHeaderPtr = std::unique_ptr<LinkHeader>;
-
-struct TimingAllowOrigin {
-  enum class Tag { kSerializedOrigins, kAll };
-
-  static std::unique_ptr<TimingAllowOrigin> NewSerializedOrigins(
-      std::vector<std::string> origins) {
-    auto out = std::make_unique<TimingAllowOrigin>();
-    out->tag_ = Tag::kSerializedOrigins;
-    out->serialized_origins_ = std::move(origins);
-    return out;
-  }
-
-  static std::unique_ptr<TimingAllowOrigin> NewAll(int) {
-    auto out = std::make_unique<TimingAllowOrigin>();
-    out->tag_ = Tag::kAll;
-    return out;
-  }
-
-  Tag which() const { return tag_; }
-  const std::vector<std::string>& get_serialized_origins() const {
-    return serialized_origins_;
-  }
-
- private:
-  Tag tag_ = Tag::kAll;
-  std::vector<std::string> serialized_origins_;
-};
-using TimingAllowOriginPtr = std::unique_ptr<TimingAllowOrigin>;
 
 struct ParsedHeaders {
   template <typename... Args>
