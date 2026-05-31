@@ -4340,6 +4340,104 @@ scoped_refptr<Image> LoadStandaloneDecodedImage(
   }
   return StandaloneDataUrlPngImage::Create(std::move(result.decoded_image));
 }
+
+html_css_renderer::StandaloneResourceInitiator StandaloneInitiatorForFetch(
+    const FetchParameters& params) {
+  if (params.Options().initiator_info.name == fetch_initiator_type_names::kCSS ||
+      params.Options().initiator_info.name ==
+          fetch_initiator_type_names::kUacss) {
+    return html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
+  }
+  return html_css_renderer::StandaloneResourceInitiator::kImgElement;
+}
+
+html_css_renderer::StandaloneResourceResult LoadStandaloneEncodedImageResource(
+    const KURL& url,
+    html_css_renderer::StandaloneResourceInitiator initiator) {
+  html_css_renderer::StandaloneResourceRequest request;
+  request.url = url.GetString().Utf8();
+  request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
+  request.initiator = initiator;
+  request.accepted_mime_types.push_back("image/png");
+  request.accepted_mime_types.push_back("image/jpeg");
+  request.accepted_mime_types.push_back("image/bmp");
+  request.accepted_mime_types.push_back("image/svg+xml");
+  return html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
+      request);
+}
+
+Resource* CreateStandaloneProviderBackedResource(
+    const FetchParameters& params,
+    const ResourceFactory& factory,
+    base::SingleThreadTaskRunner* task_runner) {
+  if (factory.GetType() != ResourceType::kImage) {
+    std::fprintf(stderr,
+                 "resource_reachability.stage=provider_backed_fetcher_non_image_blocked\n");
+    std::fflush(stderr);
+    return nullptr;
+  }
+
+  html_css_renderer::StandaloneResourceResult result =
+      LoadStandaloneEncodedImageResource(params.Url(),
+                                         StandaloneInitiatorForFetch(params));
+  std::fprintf(stderr,
+               "resource_reachability.stage=provider_backed_fetcher_attempt "
+               "url=%s status=%s mime=%s bytes=%zu\n",
+               params.Url().GetString().Utf8().c_str(),
+               html_css_renderer::ToString(result.status),
+               result.mime_type.c_str(), result.encoded_bytes.size());
+  std::fflush(stderr);
+
+  Resource* resource = factory.Create(params.GetResourceRequest(),
+                                      params.Options(),
+                                      params.DecoderOptions());
+
+  if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess ||
+      result.encoded_bytes.empty()) {
+    std::fprintf(stderr,
+                 "resource_reachability.stage=provider_backed_fetcher_failed\n");
+    std::fflush(stderr);
+    resource->FinishAsError(ResourceError::CancelledError(params.Url()),
+                            task_runner);
+    return resource;
+  }
+
+  ResourceResponse response;
+  response.SetHttpStatusCode(200);
+  response.SetHttpStatusText(AtomicString("OK"));
+  response.SetCurrentRequestUrl(params.Url());
+  response.SetExpectedContentLength(
+      static_cast<int64_t>(result.encoded_bytes.size()));
+  response.SetTextEncodingName(g_empty_atom);
+  response.SetMimeType(AtomicString(result.mime_type.c_str()));
+  response.AddHttpHeaderField(http_names::kContentType, response.MimeType());
+
+  scoped_refptr<SharedBuffer> data = SharedBuffer::Create(
+      base::span<const uint8_t>(result.encoded_bytes.data(),
+                                result.encoded_bytes.size()));
+
+  resource->NotifyStartLoad();
+  resource->ResponseReceived(response);
+  resource->SetDataBufferingPolicy(kBufferData);
+  resource->SetResourceBuffer(data);
+  resource->SetCacheIdentifier(result.cache_key.empty()
+                                   ? params.Url().GetString()
+                                   : String(result.cache_key.c_str()));
+  resource->Finish(base::TimeTicks(), task_runner);
+
+  std::fprintf(stderr,
+               "resource_reachability.stage=provider_backed_fetcher_finished "
+               "mime=%s bytes=%zu\n",
+               result.mime_type.c_str(), result.encoded_bytes.size());
+  if (result.mime_type == "image/svg+xml") {
+    std::fprintf(stderr,
+                 "image_reachability.stage=provider_backed_resource_response_mime_available\n");
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_resource_content_not_wired_to_provider_backed_fetcher\n");
+  }
+  std::fflush(stderr);
+  return resource;
+}
 }  // namespace
 
 ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
@@ -4520,6 +4618,66 @@ String SubresourceIntegrity::GetSubresourceIntegrityHash(
 
 FetchContext& ResourceFetcher::Context() const {
   return *static_cast<FetchContext*>(nullptr);
+}
+
+Resource* ResourceFetcher::CreateResourceForStaticData(
+    const FetchParameters& params,
+    const ResourceFactory& factory) {
+  return CreateStandaloneProviderBackedResource(
+      params, factory, freezable_task_runner_.get());
+}
+
+Resource* ResourceFetcher::RequestResource(FetchParameters& params,
+                                           const ResourceFactory& factory,
+                                           ResourceClient* client) {
+  std::fprintf(stderr,
+               "resource_reachability.stage=provider_backed_request_resource "
+               "url=%s type=%d\n",
+               params.Url().GetString().Utf8().c_str(),
+               static_cast<int>(factory.GetType()));
+  std::fflush(stderr);
+  Resource* resource = CreateStandaloneProviderBackedResource(
+      params, factory, freezable_task_runner_.get());
+  if (resource) {
+    if (client) {
+      client->SetResource(resource, freezable_task_runner_.get());
+    }
+    return resource;
+  }
+
+  std::fprintf(stderr,
+               "resource_reachability.stage=provider_backed_external_network_blocked\n");
+  std::fflush(stderr);
+  resource = factory.Create(params.GetResourceRequest(), params.Options(),
+                            params.DecoderOptions());
+  if (client) {
+    client->SetResource(resource, freezable_task_runner_.get());
+  }
+  resource->FinishAsError(ResourceError::CancelledError(params.Url()),
+                          freezable_task_runner_.get());
+  return resource;
+}
+
+bool ResourceFetcher::ShouldDeferImageLoad(const KURL& url) const {
+  if (url.ProtocolIsData() || url.ProtocolIs("file") || !url.Protocol()) {
+    return false;
+  }
+  return true;
+}
+
+bool ResourceFetcher::StartLoad(Resource* resource,
+                                bool) {
+  if (!resource) {
+    return false;
+  }
+  std::fprintf(stderr,
+               "resource_reachability.stage=provider_backed_start_load_blocked "
+               "url=%s\n",
+               resource->Url().GetString().Utf8().c_str());
+  std::fflush(stderr);
+  resource->FinishAsError(ResourceError::CancelledError(resource->Url()),
+                          freezable_task_runner_.get());
+  return false;
 }
 
 FetchContext& ResourceLoader::Context() const {
