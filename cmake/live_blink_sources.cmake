@@ -23,7 +23,10 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_byte_range.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_connection_info.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/platform/network/http_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/css_property_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/parser/at_rule_descriptors.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css_value_keywords.cc
@@ -42,7 +45,12 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xlink_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xml_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xmlns_names.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/cors/cors_error_status.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/fetch_retry_options.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_error.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_load_timing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_request.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_response.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/associated_interface_provider_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_adapter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_lifecycle_shim.cc

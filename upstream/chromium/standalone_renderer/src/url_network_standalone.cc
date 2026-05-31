@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "net/base/schemeful_site.h"
+#include "net/base/net_errors.h"
+#include "services/network/public/cpp/cors/cors.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -11,6 +14,29 @@
 #include "url/gurl.h"
 
 namespace net {
+
+std::string ErrorToShortString(int error) {
+  if (error == OK) {
+    return "OK";
+  }
+  switch (error) {
+#define NET_ERROR(label, value) \
+  case ERR_##label:            \
+    return "ERR_" #label;
+#include "net/base/net_error_list.h"
+#undef NET_ERROR
+    default:
+      return "ERR_UNKNOWN";
+  }
+}
+
+std::string ErrorToString(int error) {
+  return "net::" + ErrorToShortString(error);
+}
+
+std::string ExtendedErrorToString(int error, int) {
+  return ErrorToString(error);
+}
 
 SchemefulSite::SchemefulSite(const url::Origin& origin)
     : site_as_origin_(origin) {}
@@ -89,6 +115,21 @@ bool SchemefulSite::SchemelesslyEqual(const SchemefulSite&) const {
 
 namespace network {
 
+namespace cors {
+
+bool IsCorsSameOriginResponseType(mojom::FetchResponseType type) {
+  return type == mojom::FetchResponseType::kDefault ||
+         type == mojom::FetchResponseType::kBasic ||
+         type == mojom::FetchResponseType::kCors;
+}
+
+bool IsCorsCrossOriginResponseType(mojom::FetchResponseType type) {
+  return type == mojom::FetchResponseType::kOpaque ||
+         type == mojom::FetchResponseType::kOpaqueRedirect;
+}
+
+}  // namespace cors
+
 OriginWithPossibleWildcards::OriginWithPossibleWildcards() = default;
 OriginWithPossibleWildcards::OriginWithPossibleWildcards(
     const OriginWithPossibleWildcards&) = default;
@@ -122,6 +163,13 @@ bool operator==(const OriginWithPossibleWildcards&,
 std::strong_ordering operator<=>(const OriginWithPossibleWildcards&,
                                  const OriginWithPossibleWildcards&) {
   return std::strong_ordering::equal;
+}
+
+bool PermissionsPolicy::IsFeatureEnabledForOrigin(
+    mojom::PermissionsPolicyFeature,
+    const url::Origin&,
+    bool) const {
+  return false;
 }
 
 ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration()

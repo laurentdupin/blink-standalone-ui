@@ -3764,36 +3764,6 @@ const WrapperTypeInfo& PageTransitionEvent::wrapper_type_info_ =
 const WrapperTypeInfo& TrustedTypePolicyFactory::wrapper_type_info_ =
     StandaloneDummyWrapperTypeInfo();
 
-ResourceRequestHead::ResourceRequestHead() = default;
-ResourceRequestHead::ResourceRequestHead(const KURL& url) : url_(url) {}
-ResourceRequestHead::ResourceRequestHead(ResourceRequestHead&&) = default;
-ResourceRequestHead::~ResourceRequestHead() = default;
-
-ResourceRequestHead::WebBundleTokenParams::WebBundleTokenParams(
-    const WebBundleTokenParams& other)
-    : bundle_url(other.bundle_url), token(other.token) {}
-
-ResourceRequestHead::WebBundleTokenParams&
-ResourceRequestHead::WebBundleTokenParams::operator=(
-    const WebBundleTokenParams& other) {
-  bundle_url = other.bundle_url;
-  token = other.token;
-  handle.reset();
-  return *this;
-}
-
-ResourceRequestBody::ResourceRequestBody() = default;
-ResourceRequestBody::ResourceRequestBody(ResourceRequestBody&&) = default;
-ResourceRequestBody::~ResourceRequestBody() = default;
-
-ResourceRequest::ResourceRequest() = default;
-ResourceRequest::ResourceRequest(const String&) : ResourceRequest() {}
-ResourceRequest::ResourceRequest(const KURL& url) : ResourceRequest() {
-  SetUrl(url);
-}
-ResourceRequest::ResourceRequest(const ResourceRequestHead&) : ResourceRequest() {}
-ResourceRequest::ResourceRequest(ResourceRequest&&) = default;
-ResourceRequest::~ResourceRequest() = default;
 FrameLoadRequest::FrameLoadRequest(LocalDOMWindow* origin_window,
                                    const ResourceRequest&)
     : origin_window_(origin_window),
@@ -3860,13 +3830,6 @@ void ResourceClient::Prefinalize() {
   ClearResource();
 }
 
-void ResourceRequestHead::SetFetchIntegrity(const String&, const FeatureContext*) {}
-void ResourceRequestHead::RemoveUserAndPassFromURL() {}
-void ResourceRequestHead::SetHTTPOrigin(const SecurityOrigin*) {}
-void ResourceRequestHead::SetPriority(WebURLRequest::Priority, int) {}
-void ResourceRequestHead::SetHasUserGesture(bool value) {
-  has_user_gesture_ = value;
-}
 Referrer SecurityPolicy::GenerateReferrer(network::mojom::ReferrerPolicy policy,
                                           const KURL&,
                                           const String& referrer) {
@@ -8697,15 +8660,6 @@ void ResourceFetcher::SetDefersLoading(LoaderFreezeMode) {}
 String ResourceFetcher::GetCacheIdentifier(const KURL&, bool) const {
   return String();
 }
-const KURL& ResourceRequestHead::Url() const {
-  return url_;
-}
-void ResourceRequestHead::SetUrl(const KURL& url) {
-  url_ = url;
-}
-void ResourceRequestHead::SetCacheMode(mojom::blink::FetchCacheMode) {}
-void ResourceRequestHead::SetHttpHeaderField(const AtomicString&,
-                                             const AtomicString&) {}
 void FetchParameters::SetLazyImageDeferred() {
   image_request_behavior_ = ImageRequestBehavior::kDeferImageLoad;
 }
@@ -12301,6 +12255,8 @@ const AtomicString& AutofillEvent::InterfaceName() const {
   return event_interface_names::kEvent;
 }
 void KURL::SetQuery(const String&) {}
+void KURL::SetUser(const String&) {}
+void KURL::SetPass(const String&) {}
 bool KURL::IsEmpty() const {
   return string_.empty();
 }
@@ -13012,8 +12968,6 @@ void FragmentDirective::Trace(Visitor* visitor) const {
   visitor->Trace(directives_);
   visitor->Trace(owner_document_);
 }
-const AtomicString& http_names::kLastModified =
-    *new AtomicString("Last-Modified");
 const AtomicString event_interface_names::kErrorEvent("ErrorEvent");
 const AtomicString event_interface_names::kHashChangeEvent("HashChangeEvent");
 const AtomicString event_interface_names::kWheelEvent("WheelEvent");
@@ -13933,6 +13887,9 @@ void TaskRunnerTraits::Destruct(const TaskRunner* task_runner) {
 UnguessableToken UnguessableToken::Create() {
   return UnguessableToken();
 }
+std::ostream& operator<<(std::ostream& out, const UnguessableToken& token) {
+  return out << token.ToString();
+}
 MemoryPressureListener::MemoryPressureListener() = default;
 class AsyncMemoryPressureListenerRegistration::MainThread {};
 AsyncMemoryPressureListenerRegistration::
@@ -14307,6 +14264,9 @@ bool InterfacePtrStateBase::InitializeEndpointClient(
     MessageToMethodInfoCallback,
     MessageToMethodNameCallback) {
   return false;
+}
+PendingRemoteState InterfacePtrStateBase::Unbind() {
+  return PendingRemoteState();
 }
 void InterfacePtrStateBase::Swap(InterfacePtrStateBase*) {}
 void AssociatedInterfacePtrStateBase::Swap(AssociatedInterfacePtrStateBase*) {}
@@ -15086,12 +15046,6 @@ void Data(perfetto::TracedValue,
           const LayoutObject*,
           LayoutInvalidationReasonForTracing) {}
 }  // namespace inspector_layout_invalidation_tracking_event
-
-namespace http_names {
-const AtomicString& kCacheControl = *new AtomicString("Cache-Control");
-const AtomicString& kSourceMap = *new AtomicString("SourceMap");
-const AtomicString& kXSourceMap = *new AtomicString("X-SourceMap");
-}  // namespace http_names
 
 bool RuntimeEnabledFeaturesBase::is_css_caret_animation_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_caret_shape_enabled_ = false;

@@ -68,6 +68,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/code_cache_host.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
+#include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_timing_utils.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
@@ -212,8 +213,6 @@ bool HostStringIsLocalhost(std::string_view) {
 
 namespace network {
 
-CorsErrorStatus::CorsErrorStatus(const CorsErrorStatus&) = default;
-CorsErrorStatus::~CorsErrorStatus() = default;
 IntegrityMetadata::IntegrityMetadata() = default;
 IntegrityMetadata::~IntegrityMetadata() = default;
 IntegrityMetadata::IntegrityMetadata(const IntegrityMetadata&) = default;
@@ -899,29 +898,6 @@ bool DisplayLockUtilities::AssertStyleAllowed(const Node&) {
 bool DisplayLockUtilities::IsPotentialStyleRecalcRoot(const Node&) {
   return false;
 }
-namespace http_names {
-const AtomicString& kContentEncoding = *new AtomicString("content-encoding");
-const AtomicString& kOriginTrial = *new AtomicString("origin-trial");
-const AtomicString& kReferrerPolicy = *new AtomicString("referrer-policy");
-const AtomicString& kFeaturePolicy = *new AtomicString("feature-policy");
-const AtomicString& kPermissionsPolicy = *new AtomicString("permissions-policy");
-const AtomicString& kDocumentPolicyReportOnly =
-    *new AtomicString("document-policy-report-only");
-const AtomicString& kRefresh = *new AtomicString("refresh");
-const AtomicString& kXDNSPrefetchControl =
-    *new AtomicString("x-dns-prefetch-control");
-const AtomicString& kContentLanguage = *new AtomicString("content-language");
-const AtomicString& kReportTo = *new AtomicString("report-to");
-const AtomicString& kReportingEndpoints =
-    *new AtomicString("reporting-endpoints");
-const AtomicString& kNoVarySearch = *new AtomicString("no-vary-search");
-const AtomicString& kRequestOTR = *new AtomicString("request-otr");
-const AtomicString& kSecSessionRegistration =
-    *new AtomicString("sec-session-registration");
-const AtomicString& kSecureSessionRegistration =
-    *new AtomicString("secure-session-registration");
-}  // namespace http_names
-
 KURL::KURL(const AtomicString& canonical_string,
            const url::Parsed& parsed,
            bool is_valid)
@@ -1714,343 +1690,33 @@ WebURLError::WebURLError(
       url_(url),
       trust_token_operation_error_(trust_token_operation_error) {}
 
-ResourceError ResourceError::CancelledError(const KURL& url) {
-  return ResourceError(-3, url, std::nullopt);
-}
-ResourceError ResourceError::CancelledDueToAccessCheckError(
-    const KURL& url,
-    ResourceRequestBlockedReason reason) {
-  ResourceError error(-3, url, std::nullopt);
-  error.is_access_check_ = true;
-  return error;
-}
-ResourceError ResourceError::CancelledDueToAccessCheckError(
-    const KURL& url,
-    ResourceRequestBlockedReason,
-    const String& localized_description) {
-  ResourceError error = CancelledDueToAccessCheckError(
-      url, static_cast<ResourceRequestBlockedReason>(0));
-  error.localized_description_ = localized_description;
-  return error;
-}
-ResourceError ResourceError::BlockedByResponse(
-    const KURL& url,
-    network::mojom::BlockedByResponseReason reason) {
-  ResourceError error(-2, url, std::nullopt);
-  error.blocked_by_response_reason_ = reason;
-  return error;
-}
-ResourceError ResourceError::CacheMissError(const KURL& url) {
-  ResourceError error(-400, url, std::nullopt);
-  error.has_copy_in_cache_ = true;
-  return error;
-}
-ResourceError ResourceError::TimeoutError(const KURL& url) {
-  return ResourceError(-7, url, std::nullopt);
-}
-ResourceError ResourceError::Failure(const KURL& url) {
-  return ResourceError(-2, url, std::nullopt);
-}
-ResourceError ResourceError::HttpError(const KURL& url) {
-  ResourceError error = CancelledError(url);
-  error.is_cancelled_from_http_error_ = true;
-  return error;
-}
-ResourceError::ResourceError(
-    int error_code,
-    const KURL& failing_url,
-    std::optional<network::CorsErrorStatus> cors_error_status)
-    : error_code_(error_code),
-      failing_url_(failing_url),
-      is_access_check_(cors_error_status.has_value()),
-      cors_error_status_(cors_error_status) {
-  InitializeDescription();
-}
-ResourceError::ResourceError(const KURL& failing_url,
-                             const network::CorsErrorStatus& status)
-    : ResourceError(-2, failing_url, status) {}
-ResourceError::ResourceError(const WebURLError& error)
-    : error_code_(error.reason()),
-      extended_error_code_(error.extended_reason()),
-      resolve_error_info_(error.resolve_error_info()),
-      failing_url_(error.url()),
-      is_access_check_(error.is_web_security_violation()),
-      has_copy_in_cache_(error.has_copy_in_cache()),
-      cors_error_status_(error.cors_error_status()),
-      should_collapse_inititator_(error.should_collapse_initiator()),
-      blocked_by_response_reason_(error.blocked_by_response_reason()),
-      trust_token_operation_error_(error.trust_token_operation_error()) {
-  InitializeDescription();
-}
-bool ResourceError::IsCancellation() const {
-  return error_code_ == -3;
-}
-bool ResourceError::IsTrustTokenCacheHit() const {
-  return false;
-}
-bool ResourceError::IsUnactionableTrustTokensStatus() const {
-  return false;
-}
-bool ResourceError::IsTimeout() const {
-  return error_code_ == -7;
-}
-bool ResourceError::IsCacheMiss() const {
-  return error_code_ == -400;
-}
-bool ResourceError::WasBlockedByResponse() const {
-  return blocked_by_response_reason_.has_value();
-}
-bool ResourceError::WasBlockedByORB() const {
-  return false;
-}
-std::optional<ResourceRequestBlockedReason>
-ResourceError::GetResourceRequestBlockedReason() const {
-  return std::nullopt;
-}
-std::optional<network::mojom::BlockedByResponseReason>
-ResourceError::GetBlockedByResponseReason() const {
-  return blocked_by_response_reason_;
-}
-ResourceError::operator WebURLError() const {
-  return WebURLError(error_code_, failing_url_);
-}
-bool ResourceError::Compare(const ResourceError& a, const ResourceError& b) {
-  return a.error_code_ == b.error_code_ && a.failing_url_ == b.failing_url_;
-}
-void ResourceError::InitializeDescription() {
-  localized_description_ = String();
-}
-std::ostream& operator<<(std::ostream& stream, const ResourceError& error) {
-  return stream << "ResourceError(" << error.ErrorCode() << ")";
-}
-
-ResourceResponse::ResourceResponse()
-    : was_cached_(false),
-      connection_reused_(false),
-      is_null_(true),
-      have_parsed_age_header_(false),
-      have_parsed_date_header_(false),
-      have_parsed_expires_header_(false),
-      have_parsed_last_modified_header_(false),
-      has_major_certificate_errors_(false),
-      has_range_requested_(false),
-      timing_allow_passed_(false),
-      was_fetched_via_spdy_(false),
-      was_fetched_via_service_worker_(false),
-      from_synthetic_response_(false),
-      did_service_worker_navigation_preload_(false),
-      did_use_shared_dictionary_(false),
-      async_revalidation_requested_(false),
-      is_signed_exchange_inner_response_(false),
-      is_web_bundle_inner_response_(false),
-      was_in_prefetch_cache_(false),
-      was_cookie_in_request_(false),
-      network_accessed_(false),
-      from_archive_(false),
-      was_alternate_protocol_available_(false),
-      was_alpn_negotiated_(false),
-      has_authorization_covered_by_wildcard_on_preflight_(false),
-      is_validated_(false),
-      request_include_credentials_(false),
-      should_use_source_hash_for_js_code_cache_(false) {}
-ResourceResponse::ResourceResponse(const KURL& current_request_url)
-    : ResourceResponse() {
-  current_request_url_ = current_request_url;
-  is_null_ = false;
-}
-ResourceResponse::ResourceResponse(const ResourceResponse&) = default;
-ResourceResponse& ResourceResponse::operator=(const ResourceResponse&) =
-    default;
-ResourceResponse::~ResourceResponse() = default;
-bool ResourceResponse::IsHTTP() const {
-  return current_request_url_.ProtocolIsInHttpFamily();
-}
-bool ResourceResponse::ShouldPopulateResourceTiming() const {
-  return !is_null_;
-}
-const KURL& ResourceResponse::CurrentRequestUrl() const {
-  return current_request_url_;
-}
-void ResourceResponse::SetCurrentRequestUrl(const KURL& url) {
-  current_request_url_ = url;
-  is_null_ = false;
-}
-KURL ResourceResponse::ResponseUrl() const {
-  return current_request_url_;
-}
-bool ResourceResponse::IsServiceWorkerPassThrough() const {
-  return false;
-}
-const AtomicString& ResourceResponse::MimeType() const {
-  return mime_type_;
-}
-void ResourceResponse::SetMimeType(const AtomicString& mime_type) {
-  mime_type_ = mime_type;
-}
-int64_t ResourceResponse::ExpectedContentLength() const {
-  return expected_content_length_;
-}
-void ResourceResponse::SetExpectedContentLength(int64_t length) {
-  expected_content_length_ = length;
-}
-const AtomicString& ResourceResponse::TextEncodingName() const {
-  return text_encoding_name_;
-}
-void ResourceResponse::SetTextEncodingName(const AtomicString& name) {
-  text_encoding_name_ = name;
-}
-int ResourceResponse::HttpStatusCode() const {
-  return http_status_code_;
-}
-void ResourceResponse::SetHttpStatusCode(int code) {
-  http_status_code_ = code;
-}
-const AtomicString& ResourceResponse::HttpStatusText() const {
-  return http_status_text_;
-}
-void ResourceResponse::SetHttpStatusText(const AtomicString& text) {
-  http_status_text_ = text;
-}
-const AtomicString& ResourceResponse::HttpHeaderField(
-    const AtomicString& name) const {
-  return http_header_fields_.Get(name);
-}
-void ResourceResponse::SetHttpHeaderField(const AtomicString& name,
-                                          const AtomicString& value) {
-  http_header_fields_.Set(name, value);
-}
-void ResourceResponse::AddHttpHeaderField(const AtomicString& name,
-                                          const AtomicString& value) {
-  http_header_fields_.Add(name, value);
-}
-void ResourceResponse::AddHttpHeaderFieldWithMultipleValues(
-    const AtomicString& name,
-    const Vector<AtomicString>& values) {
-  for (const auto& value : values) {
-    AddHttpHeaderField(name, value);
-  }
-}
-void ResourceResponse::ClearHttpHeaderField(const AtomicString& name) {
-  http_header_fields_.Remove(name);
-}
-const HTTPHeaderMap& ResourceResponse::HttpHeaderFields() const {
-  return http_header_fields_;
-}
-bool ResourceResponse::IsAttachment() const {
-  return false;
-}
-AtomicString ResourceResponse::HttpContentType() const {
-  return mime_type_;
-}
-AtomicString ResourceResponse::GetFilteredHttpContentEncoding() const {
-  return g_null_atom;
-}
-bool ResourceResponse::CacheControlContainsNoCache() const {
-  return false;
-}
-bool ResourceResponse::CacheControlContainsNoStore() const {
-  return false;
-}
-bool ResourceResponse::CacheControlContainsMustRevalidate() const {
-  return false;
-}
-bool ResourceResponse::HasCacheValidatorFields() const {
-  return false;
-}
-std::optional<base::TimeDelta> ResourceResponse::CacheControlMaxAge() const {
-  return std::nullopt;
-}
-std::optional<base::Time> ResourceResponse::Date() const {
-  return std::nullopt;
-}
-std::optional<base::TimeDelta> ResourceResponse::Age() const {
-  return std::nullopt;
-}
-std::optional<base::Time> ResourceResponse::Expires() const {
-  return std::nullopt;
-}
-std::optional<base::Time> ResourceResponse::LastModified() const {
-  return std::nullopt;
-}
-base::TimeDelta ResourceResponse::CacheControlStaleWhileRevalidate() const {
-  return base::TimeDelta();
-}
-unsigned ResourceResponse::ConnectionID() const {
-  return connection_id_;
-}
-void ResourceResponse::SetConnectionID(unsigned id) {
-  connection_id_ = id;
-}
-bool ResourceResponse::ConnectionReused() const {
-  return connection_reused_;
-}
-void ResourceResponse::SetConnectionReused(bool value) {
-  connection_reused_ = value;
-}
-bool ResourceResponse::WasCached() const {
-  return was_cached_;
-}
-void ResourceResponse::SetWasCached(bool value) {
-  was_cached_ = value;
-}
-ResourceLoadTiming* ResourceResponse::GetResourceLoadTiming() const {
-  return resource_load_timing_.get();
-}
-void ResourceResponse::SetResourceLoadTiming(
-    scoped_refptr<ResourceLoadTiming> timing) {
-  resource_load_timing_ = std::move(timing);
-}
-void ResourceResponse::SetSSLInfo(const net::SSLInfo& ssl_info) {
-  ssl_info_ = ssl_info;
-}
-void ResourceResponse::SetServiceWorkerRouterInfo(
-    scoped_refptr<ServiceWorkerRouterInfo> value) {
-  service_worker_router_info_ = std::move(value);
-}
-bool ResourceResponse::IsCorsSameOrigin() const {
-  return response_type_ == network::mojom::FetchResponseType::kDefault ||
-         response_type_ == network::mojom::FetchResponseType::kBasic ||
-         response_type_ == network::mojom::FetchResponseType::kCors;
-}
-bool ResourceResponse::IsCorsCrossOrigin() const {
-  return !IsCorsSameOrigin();
-}
-AtomicString ResourceResponse::ConnectionInfoString() const {
-  return g_null_atom;
-}
-mojom::blink::CacheState ResourceResponse::CacheState() const {
-  return was_cached_ ? mojom::blink::CacheState::kLocal
-                     : mojom::blink::CacheState::kNone;
-}
-void ResourceResponse::SetIsValidated(bool is_validated) {
-  is_validated_ = is_validated;
-}
-void ResourceResponse::SetEncodedDataLength(int64_t value) {
-  encoded_data_length_ = value;
-}
-void ResourceResponse::SetEncodedBodyLength(uint64_t value) {
-  encoded_body_length_ = value;
-}
-void ResourceResponse::SetDecodedBodyLength(int64_t value) {
-  decoded_body_length_ = value;
-}
-network::mojom::CrossOriginEmbedderPolicyValue
-ResourceResponse::GetCrossOriginEmbedderPolicy() const {
-  return network::mojom::CrossOriginEmbedderPolicyValue::kNone;
-}
-const Vector<network::IntegrityMetadata>&
-ResourceResponse::GetUnencodedDigests() const {
-  return unencoded_digests_;
-}
-void ResourceResponse::SetUnencodedDigests(
-    Vector<network::IntegrityMetadata> digests) {
-  unencoded_digests_ = std::move(digests);
-}
-void ResourceResponse::UpdateHeaderParsedState(const AtomicString&) {}
-
 void NavigationBodyLoader::StartLoadingBodyInBackground(
     std::unique_ptr<BodyTextDecoder>,
     bool) {}
+
+AtomicString ExtractMIMETypeFromMediaType(const AtomicString& media_type) {
+  String value = media_type.GetString().StripWhiteSpace();
+  wtf_size_t semicolon = value.find(';');
+  if (semicolon != kNotFound) {
+    value = value.DeprecatedSubstring(0, semicolon).StripWhiteSpace();
+  }
+  return AtomicString(value);
+}
+
+CacheControlHeader ParseCacheControlDirectives(
+    const AtomicString& cache_control_header,
+    const AtomicString& pragma_header) {
+  CacheControlHeader result;
+  result.parsed = true;
+  String cache_control = cache_control_header.GetString().ToAsciiLower();
+  String pragma = pragma_header.GetString().ToAsciiLower();
+  result.contains_no_cache =
+      cache_control.contains("no-cache") || pragma.contains("no-cache");
+  result.contains_no_store = cache_control.contains("no-store");
+  result.contains_must_revalidate =
+      cache_control.contains("must-revalidate");
+  return result;
+}
 
 StringView KURL::User() const {
   return StringView();

@@ -1,6 +1,8 @@
 #ifndef STANDALONE_RENDERER_STUBS_SERVICES_NETWORK_PUBLIC_MOJOM_IP_ADDRESS_SPACE_MOJOM_SHARED_H_
 #define STANDALONE_RENDERER_STUBS_SERVICES_NETWORK_PUBLIC_MOJOM_IP_ADDRESS_SPACE_MOJOM_SHARED_H_
 
+#include <ostream>
+
 namespace network::mojom {
 
 enum class IPAddressSpace {
@@ -10,6 +12,10 @@ enum class IPAddressSpace {
   kUnknown,
   kMaxValue = kUnknown,
 };
+
+inline std::ostream& operator<<(std::ostream& os, IPAddressSpace value) {
+  return os << static_cast<int>(value);
+}
 
 }  // namespace network::mojom
 
