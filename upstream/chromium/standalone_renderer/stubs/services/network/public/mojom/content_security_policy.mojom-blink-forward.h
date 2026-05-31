@@ -22,6 +22,16 @@ enum class CSPRequireTrustedTypesFor {
 
 using ContentSecurityPolicy = ::network::mojom::ContentSecurityPolicy;
 using ContentSecurityPolicyPtr = ::network::mojom::ContentSecurityPolicyPtr;
+using ContentSecurityPolicyHeader =
+    ::network::mojom::ContentSecurityPolicyHeader;
+using ContentSecurityPolicyHeaderPtr =
+    ::network::mojom::ContentSecurityPolicyHeaderPtr;
+using CSPSource = ::network::mojom::CSPSource;
+using CSPSourcePtr = ::network::mojom::CSPSourcePtr;
+using CSPSourceList = ::network::mojom::CSPSourceList;
+using CSPSourceListPtr = ::network::mojom::CSPSourceListPtr;
+using CSPTrustedTypes = ::network::mojom::CSPTrustedTypes;
+using CSPTrustedTypesPtr = ::network::mojom::CSPTrustedTypesPtr;
 
 }  // namespace network::mojom::blink
 
@@ -29,7 +39,17 @@ namespace blink::network::mojom::blink {
 
 using ContentSecurityPolicy = ::network::mojom::ContentSecurityPolicy;
 using ContentSecurityPolicyPtr = ::network::mojom::ContentSecurityPolicyPtr;
+using ContentSecurityPolicyHeader =
+    ::network::mojom::ContentSecurityPolicyHeader;
+using ContentSecurityPolicyHeaderPtr =
+    ::network::mojom::ContentSecurityPolicyHeaderPtr;
 using CSPDisposition = ::network::mojom::blink::CSPDisposition;
+using CSPSource = ::network::mojom::CSPSource;
+using CSPSourcePtr = ::network::mojom::CSPSourcePtr;
+using CSPSourceList = ::network::mojom::CSPSourceList;
+using CSPSourceListPtr = ::network::mojom::CSPSourceListPtr;
+using CSPTrustedTypes = ::network::mojom::CSPTrustedTypes;
+using CSPTrustedTypesPtr = ::network::mojom::CSPTrustedTypesPtr;
 using ContentSecurityPolicyType =
     ::network::mojom::blink::ContentSecurityPolicyType;
 using ContentSecurityPolicySource =
