@@ -32,6 +32,9 @@ using CSPSourceList = ::network::mojom::CSPSourceList;
 using CSPSourceListPtr = ::network::mojom::CSPSourceListPtr;
 using CSPTrustedTypes = ::network::mojom::CSPTrustedTypes;
 using CSPTrustedTypesPtr = ::network::mojom::CSPTrustedTypesPtr;
+using AllowCSPFromHeaderValue = ::network::mojom::AllowCSPFromHeaderValue;
+using AllowCSPFromHeaderValuePtr =
+    ::network::mojom::AllowCSPFromHeaderValuePtr;
 
 }  // namespace network::mojom::blink
 
@@ -50,6 +53,9 @@ using CSPSourceList = ::network::mojom::CSPSourceList;
 using CSPSourceListPtr = ::network::mojom::CSPSourceListPtr;
 using CSPTrustedTypes = ::network::mojom::CSPTrustedTypes;
 using CSPTrustedTypesPtr = ::network::mojom::CSPTrustedTypesPtr;
+using AllowCSPFromHeaderValue = ::network::mojom::AllowCSPFromHeaderValue;
+using AllowCSPFromHeaderValuePtr =
+    ::network::mojom::AllowCSPFromHeaderValuePtr;
 using ContentSecurityPolicyType =
     ::network::mojom::blink::ContentSecurityPolicyType;
 using ContentSecurityPolicySource =

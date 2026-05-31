@@ -33,7 +33,12 @@
 #include "services/network/public/cpp/connection_allowlist.h"
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/integrity_policy.h"
+#include "services/network/public/cpp/no_vary_search_header_parser.h"
+#include "services/network/public/cpp/parsed_headers.h"
 #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+#include "services/network/public/cpp/sri_message_signatures.h"
+#include "services/network/public/cpp/timing_allow_origin_parser.h"
+#include "services/network/public/cpp/unencoded_digests.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
 #include "services/network/public/mojom/cross_origin_opener_policy.mojom-blink-forward.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink-forward.h"
@@ -161,9 +166,17 @@ using ResourceRequest = ::network::ResourceRequest;
 using ResourceRequestBody = ::network::ResourceRequestBody;
 using SharedURLLoaderFactory = ::network::SharedURLLoaderFactory;
 using ::network::NoVarySearchHasBooleanParamsMember;
+using ::network::GetNoVarySearchHintConsoleMessage;
+using ::network::ParseContentSecurityPolicies;
+using ::network::ParseNoVarySearchHeaderValue;
+using ::network::ParseSRIMessageSignaturesFromHeaders;
+using ::network::ParseTimingAllowOrigin;
+using ::network::ParseUnencodedDigestsFromHeaders;
+using ::network::PopulateParsedHeaders;
 }  // namespace blink::network
 
 namespace blink::network::mojom {
+using namespace ::network::mojom;
 using CSPDisposition = ::network::mojom::CSPDisposition;
 using CorsPreflightPolicy = ::network::mojom::CorsPreflightPolicy;
 enum class CorsDomainMatchMode {

@@ -19,13 +19,18 @@
 #include "services/network/public/mojom/timing_allow_origin.mojom.h"
 #include "services/network/public/mojom/web_client_hints_types.mojom.h"
 
+#ifndef STANDALONE_NETWORK_LINK_REL_ATTRIBUTE_DEFINED
+#define STANDALONE_NETWORK_LINK_REL_ATTRIBUTE_DEFINED
 namespace network::mojom {
-
 enum class LinkRelAttribute {
   kUnspecified,
   kPreload,
   kModulePreload,
 };
+}  // namespace network::mojom
+#endif
+
+namespace network::mojom {
 
 enum class LinkAsAttribute {
   kUnspecified,

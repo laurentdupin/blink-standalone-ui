@@ -7,7 +7,7 @@ namespace network::mojom {
 struct CSPSource;
 struct ContentSecurityPolicy;
 using CSPSourcePtr = std::unique_ptr<CSPSource>;
-using ContentSecurityPolicyPtr = ContentSecurityPolicy*;
+using ContentSecurityPolicyPtr = std::unique_ptr<ContentSecurityPolicy>;
 }
 
 #endif

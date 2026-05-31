@@ -6,6 +6,7 @@
 #define SERVICES_NETWORK_PUBLIC_CPP_INTEGRITY_POLICY_H_
 
 #include <string>
+#include <memory>
 #include <vector>
 
 #include "base/component_export.h"
@@ -20,6 +21,9 @@ namespace network {
 // from the blink public API, given that we cannot include .mojo.h there due to
 // DEPS rules.
 struct COMPONENT_EXPORT(NETWORK_CPP_INTEGRITY_POLICY) IntegrityPolicy {
+  using Destination = mojom::IntegrityPolicy_Destination;
+  using Source = mojom::IntegrityPolicy_Source;
+
   IntegrityPolicy();
   ~IntegrityPolicy();
 
@@ -36,6 +40,8 @@ struct COMPONENT_EXPORT(NETWORK_CPP_INTEGRITY_POLICY) IntegrityPolicy {
   std::vector<std::string> endpoints;
   std::vector<std::string> parsing_errors;
 };
+
+using IntegrityPolicyPtr = std::unique_ptr<IntegrityPolicy>;
 
 }  // namespace network
 

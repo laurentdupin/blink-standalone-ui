@@ -28,11 +28,25 @@ struct SearchParamsVariance {
     return out;
   }
 
+  template <typename Params>
+  static std::unique_ptr<SearchParamsVariance> NewNoVaryParams(Params&&) {
+    auto out = std::make_unique<SearchParamsVariance>();
+    out->tag_ = Tag::kNoVaryParams;
+    return out;
+  }
+
   static std::unique_ptr<SearchParamsVariance> NewVaryParams(
       std::vector<std::string> params) {
     auto out = std::make_unique<SearchParamsVariance>();
     out->tag_ = Tag::kVaryParams;
     out->params_ = std::move(params);
+    return out;
+  }
+
+  template <typename Params>
+  static std::unique_ptr<SearchParamsVariance> NewVaryParams(Params&&) {
+    auto out = std::make_unique<SearchParamsVariance>();
+    out->tag_ = Tag::kVaryParams;
     return out;
   }
 
@@ -102,7 +116,20 @@ using NoVarySearchWithParseErrorPtr =
 
 namespace network::mojom::blink {
 
+using SearchParamsVariance = ::network::mojom::SearchParamsVariance;
+using SearchParamsVariancePtr = ::network::mojom::SearchParamsVariancePtr;
+
 struct NoVarySearch {
+  static std::unique_ptr<NoVarySearch> New(
+      SearchParamsVariancePtr search_params_variance,
+      bool vary_on_key_order) {
+    auto out = std::make_unique<NoVarySearch>();
+    out->search_variance = std::move(search_params_variance);
+    out->vary_on_key_order = vary_on_key_order;
+    return out;
+  }
+
+  SearchParamsVariancePtr search_variance;
   bool vary_on_key_order = true;
 };
 using NoVarySearchPtr = std::unique_ptr<NoVarySearch>;
@@ -130,6 +157,8 @@ using NoVarySearchWithParseError =
     ::network::mojom::blink::NoVarySearchWithParseError;
 using NoVarySearchWithParseErrorPtr =
     ::network::mojom::blink::NoVarySearchWithParseErrorPtr;
+using SearchParamsVariance = ::network::mojom::SearchParamsVariance;
+using SearchParamsVariancePtr = ::network::mojom::SearchParamsVariancePtr;
 
 }  // namespace blink::network::mojom::blink
 

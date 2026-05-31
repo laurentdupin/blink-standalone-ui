@@ -6,6 +6,7 @@
 #define SERVICES_NETWORK_PUBLIC_CPP_INTEGRITY_METADATA_H_
 
 #include <compare>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -37,8 +38,30 @@ struct COMPONENT_EXPORT(NETWORK_CPP_INTEGRITY_METADATA) IntegrityMetadata {
 
   mojom::IntegrityAlgorithm algorithm;
   std::vector<uint8_t> value;
+
+  static std::unique_ptr<IntegrityMetadata> New(mojom::IntegrityAlgorithm algorithm,
+                                                std::vector<uint8_t> value) {
+    return std::make_unique<IntegrityMetadata>(algorithm, std::move(value));
+  }
+
+  template <typename Value>
+  static std::unique_ptr<IntegrityMetadata> New(mojom::IntegrityAlgorithm algorithm,
+                                                Value&&) {
+    return std::make_unique<IntegrityMetadata>(algorithm,
+                                               std::vector<uint8_t>());
+  }
 };
 
 }  // namespace network
+
+namespace network::mojom {
+using IntegrityMetadata = ::network::IntegrityMetadata;
+using IntegrityMetadataPtr = std::unique_ptr<IntegrityMetadata>;
+}  // namespace network::mojom
+
+namespace network::mojom::blink {
+using IntegrityMetadata = ::network::IntegrityMetadata;
+using IntegrityMetadataPtr = std::unique_ptr<IntegrityMetadata>;
+}  // namespace network::mojom::blink
 
 #endif  // SERVICES_NETWORK_PUBLIC_CPP_INTEGRITY_METADATA_H_

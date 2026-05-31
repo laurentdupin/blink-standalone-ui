@@ -55,7 +55,29 @@ class ProgressClient {
       nullptr;
 
   template <typename ImplRefTraits>
-  class Stub_ {};
+  class Stub_ : public mojo::MessageReceiverWithResponderStatus {
+   public:
+    using ImplPointerType = typename ImplRefTraits::PointerType;
+    Stub_() = default;
+
+    void set_sink(ImplPointerType sink) { sink_ = std::move(sink); }
+    ImplPointerType& sink() { return sink_; }
+
+    bool Accept(mojo::Message*) override { return true; }
+    bool AcceptWithResponder(mojo::Message*,
+                             std::unique_ptr<mojo::MessageReceiverWithStatus>)
+        override {
+      return true;
+    }
+
+   private:
+    ImplPointerType sink_;
+  };
+
+  class RequestValidator_ : public mojo::MessageReceiver {
+   public:
+    bool Accept(mojo::Message*) override { return true; }
+  };
 
   class ResponseValidator_ : public mojo::MessageReceiver {
    public:
