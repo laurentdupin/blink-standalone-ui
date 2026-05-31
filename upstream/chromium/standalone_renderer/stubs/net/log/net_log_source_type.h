@@ -1,0 +1,14 @@
+#ifndef STANDALONE_RENDERER_STUBS_NET_LOG_NET_LOG_SOURCE_TYPE_H_
+#define STANDALONE_RENDERER_STUBS_NET_LOG_NET_LOG_SOURCE_TYPE_H_
+
+namespace net {
+
+enum class NetLogSourceType {
+  NONE = 0,
+  URL_REQUEST = 1,
+  COUNT,
+};
+
+}  // namespace net
+
+#endif  // STANDALONE_RENDERER_STUBS_NET_LOG_NET_LOG_SOURCE_TYPE_H_

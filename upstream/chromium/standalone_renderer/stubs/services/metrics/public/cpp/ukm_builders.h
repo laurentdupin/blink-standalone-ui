@@ -29,6 +29,15 @@ class Blink_SVGImage {
   void Record(UkmRecorder*) {}
 };
 
+class Network_DataUrls {
+ public:
+  explicit Network_DataUrls(SourceId) {}
+  Network_DataUrls& SetUrlLength(int64_t) { return *this; }
+  Network_DataUrls& SetParseTime(int64_t) { return *this; }
+  Network_DataUrls& SetIsImage(bool) { return *this; }
+  void Record(UkmRecorder*) {}
+};
+
 class MainFrameNavigation_ZstdContentEncoding {
  public:
   explicit MainFrameNavigation_ZstdContentEncoding(SourceId) {}
