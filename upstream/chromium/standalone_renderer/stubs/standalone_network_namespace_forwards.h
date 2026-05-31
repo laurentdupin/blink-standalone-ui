@@ -132,9 +132,11 @@ namespace network {
 class OptionalTrustTokenParams;
 class PermissionsPolicy;
 class PendingSharedURLLoaderFactory;
+class ResourceRequestBody;
 class SharedURLLoaderFactory;
 struct ParsedPermissionsPolicyDeclaration;
 enum class MetaCHType;
+bool NoVarySearchHasBooleanParamsMember(std::string_view);
 namespace cors {}
 }  // namespace network
 
@@ -156,7 +158,9 @@ using ParsedPermissionsPolicyDeclaration =
 using PendingSharedURLLoaderFactory = ::network::PendingSharedURLLoaderFactory;
 using PermissionsPolicy = ::network::PermissionsPolicy;
 using ResourceRequest = ::network::ResourceRequest;
+using ResourceRequestBody = ::network::ResourceRequestBody;
 using SharedURLLoaderFactory = ::network::SharedURLLoaderFactory;
+using ::network::NoVarySearchHasBooleanParamsMember;
 }  // namespace blink::network
 
 namespace blink::network::mojom {

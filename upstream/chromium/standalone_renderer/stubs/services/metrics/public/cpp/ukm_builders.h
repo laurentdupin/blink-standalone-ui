@@ -45,6 +45,13 @@ class MainFrameNavigation_ZstdContentEncoding {
   void Record(UkmRecorder*) {}
 };
 
+class SubresourceLoad_ZstdContentEncoding {
+ public:
+  explicit SubresourceLoad_ZstdContentEncoding(SourceId) {}
+  SubresourceLoad_ZstdContentEncoding& SetUsedZstd(bool) { return *this; }
+  void Record(UkmRecorder*) {}
+};
+
 }  // namespace ukm::builders
 
 #endif  // STANDALONE_RENDERER_STUBS_SERVICES_METRICS_PUBLIC_CPP_UKM_BUILDERS_H_

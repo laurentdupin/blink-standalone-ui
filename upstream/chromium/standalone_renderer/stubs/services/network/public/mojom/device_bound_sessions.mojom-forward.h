@@ -3,4 +3,10 @@
 
 #include "services/network/public/mojom/device_bound_sessions.mojom-shared.h"
 
+namespace network::mojom {
+
+class DeviceBoundSessionAccessObserver;
+
+}  // namespace network::mojom
+
 #endif  // STANDALONE_RENDERER_STUBS_SERVICES_NETWORK_PUBLIC_MOJOM_DEVICE_BOUND_SESSIONS_MOJOM_FORWARD_H_

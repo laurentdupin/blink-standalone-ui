@@ -1,7 +1,7 @@
 #ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_DEVTOOLS_CONSOLE_MESSAGE_MOJOM_BLINK_FORWARD_H_
 #define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_DEVTOOLS_CONSOLE_MESSAGE_MOJOM_BLINK_FORWARD_H_
 namespace blink::mojom::blink {
-enum class ConsoleMessageCategory { kCors, kOther };
+enum class ConsoleMessageCategory { kCors, Cors = kCors, kOther };
 enum class ConsoleMessageLevel { kVerbose, kInfo, kWarning, kError };
 enum class ConsoleMessageSource {
   kOther,
