@@ -115,9 +115,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/match.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_split.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/mime_util.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/parse_number.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc

@@ -38,6 +38,7 @@
 #include "base/win/scoped_handle.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
+#include "include/codec/SkCodec.h"
 #ifdef DrawText
 #undef DrawText
 #endif
@@ -1398,6 +1399,59 @@ bool HasDecoder(std::string_view) {
   return true;
 }
 }  // namespace SkCodecs
+
+SkCodec::Result SkCodec::startIncrementalDecode(
+    const SkImageInfo& info,
+    void* pixels,
+    size_t row_bytes,
+    const SkCodec::Options* options) {
+  fStartedIncrementalDecode = false;
+
+  if (!this->onSupportsIncrementalDecode(info)) {
+    return kUnimplemented;
+  }
+  if (kUnknown_SkColorType == info.colorType()) {
+    return kInvalidConversion;
+  }
+  if (!pixels) {
+    return kInvalidParameters;
+  }
+
+  Options options_storage;
+  if (!options) {
+    options = &options_storage;
+  } else if (options->fSubset) {
+    SkIRect size = SkIRect::MakeSize(info.dimensions());
+    if (!size.contains(*options->fSubset)) {
+      return kInvalidParameters;
+    }
+
+    const int top = options->fSubset->top();
+    const int bottom = options->fSubset->bottom();
+    if (top < 0 || top >= info.height() || top >= bottom ||
+        bottom > info.height()) {
+      return kInvalidParameters;
+    }
+  }
+
+  if (options->fFrameIndex != 0 || options->fPriorFrame != kNoFrame) {
+    return kUnimplemented;
+  }
+
+  if (!this->dimensionsSupported(info.dimensions())) {
+    return kInvalidScale;
+  }
+
+  fDstInfo = info;
+  fOptions = *options;
+
+  const Result result =
+      this->onStartIncrementalDecode(info, pixels, row_bytes, fOptions);
+  if (result == kSuccess) {
+    fStartedIncrementalDecode = true;
+  }
+  return result;
+}
 
 namespace blink {
 CEReactionsScope* CEReactionsScope::top_of_stack_ = nullptr;
