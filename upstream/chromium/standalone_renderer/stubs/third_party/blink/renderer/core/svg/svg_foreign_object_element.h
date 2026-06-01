@@ -14,11 +14,6 @@ class SVGForeignObjectElement final : public SVGElement {
   using SVGElement::SVGElement;
 };
 
-template <>
-struct DowncastTraits<SVGForeignObjectElement> {
-  static bool AllowFrom(const Node&) { return false; }
-};
-
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_
