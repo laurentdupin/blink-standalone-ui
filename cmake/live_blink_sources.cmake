@@ -28,7 +28,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_byte_range.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_connection_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_content_disposition.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_response_headers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/cicp.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/platform/network/http_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/css_property_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/parser/at_rule_descriptors.cc
@@ -116,7 +120,13 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_decoding_store.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/fast_shared_buffer_reader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/image_frame.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/rw_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/skia/skia_image_decoder_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/header_field_tokenizer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkCodecColorProfile.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkExif.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_input_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_timeline.cc

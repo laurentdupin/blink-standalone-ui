@@ -14072,6 +14072,8 @@ File::File() = default;
 File::File(File&&) = default;
 File::~File() = default;
 File& File::operator=(File&&) = default;
+FileTracing::ScopedEnabler::ScopedEnabler() = default;
+FileTracing::ScopedEnabler::~ScopedEnabler() = default;
 FilePath::FilePath() = default;
 FilePath::FilePath(const FilePath& that) = default;
 FilePath::FilePath(StringViewType path) : path_(path) {}
@@ -14098,7 +14100,6 @@ FilePath FilePath::Append(const FilePath& component) const {
   result.path_.append(component.path_);
   return result;
 }
-FileTracing::ScopedEnabler::~ScopedEnabler() = default;
 CommandLine::CommandLine(NoProgram) : argv_(1) {}
 CommandLine* CommandLine::ForCurrentProcess() {
   static CommandLine* command_line = new CommandLine(NO_PROGRAM);
@@ -14108,6 +14109,7 @@ bool CommandLine::HasSwitch(const char* const) const {
   return false;
 }
 namespace win {
+void VerifierTraits::StartTracking(void*, const void*, const void*, const void*) {}
 void VerifierTraits::StopTracking(void*, const void*, const void*, const void*) {}
 bool HandleTraits::CloseHandle(HANDLE handle) {
   return CloseHandle(handle) != 0;
@@ -14214,6 +14216,10 @@ sk_sp<SkFontMgr> DefaultFontMgr() {
 }
 base::span<const uint8_t> as_byte_span(const SkData& data) {
   return base::span(static_cast<const uint8_t*>(data.data()), data.size());
+}
+base::span<uint8_t> as_writable_byte_span(SkData& data) {
+  CHECK(data.empty() || data.unique());
+  return base::span(static_cast<uint8_t*>(data.writable_data()), data.size());
 }
 void DrawGainmapImage(SkCanvas*,
                       sk_sp<SkImage>,
