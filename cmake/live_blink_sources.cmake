@@ -115,6 +115,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/match.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_split.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/mime_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/parse_number.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
@@ -127,7 +130,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/header_field_tokenizer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/server_timing_header.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkCodecColorProfile.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkEncodedInfo.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkExif.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkTiffUtility.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_input_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_timeline.cc

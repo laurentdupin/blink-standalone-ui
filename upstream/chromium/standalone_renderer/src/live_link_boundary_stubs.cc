@@ -15070,6 +15070,17 @@ void DelegatingUkmRecorder::RemoveDelegate(UkmRecorder*) {}
 namespace gfx {
 HDRMetadata::HDRMetadata(const HDRMetadata& rhs) = default;
 HDRMetadata& HDRMetadata::operator=(const HDRMetadata& rhs) = default;
+HDRMetadata::HDRMetadata(const skhdr::Metadata& sk_hdr_metadata) {
+  skhdr::ContentLightLevelInformation clli;
+  if (sk_hdr_metadata.getContentLightLevelInformation(&clli)) {
+    clli_ = clli;
+  }
+
+  skhdr::MasteringDisplayColorVolume mdcv;
+  if (sk_hdr_metadata.getMasteringDisplayColorVolume(&mdcv)) {
+    mdcv_ = mdcv;
+  }
+}
 bool HdrMetadataAgtm::IsEnabled() {
   return false;
 }
@@ -20887,11 +20898,62 @@ SkMesh::~SkMesh() {}
 SkMesh::SkMesh(const SkMesh&) = default;
 
 namespace skhdr {
+bool ContentLightLevelInformation::operator==(
+    const ContentLightLevelInformation& other) const {
+  return fMaxCLL == other.fMaxCLL && fMaxFALL == other.fMaxFALL;
+}
+bool MasteringDisplayColorVolume::operator==(
+    const MasteringDisplayColorVolume& other) const {
+  return fDisplayPrimaries.fRX == other.fDisplayPrimaries.fRX &&
+         fDisplayPrimaries.fRY == other.fDisplayPrimaries.fRY &&
+         fDisplayPrimaries.fGX == other.fDisplayPrimaries.fGX &&
+         fDisplayPrimaries.fGY == other.fDisplayPrimaries.fGY &&
+         fDisplayPrimaries.fBX == other.fDisplayPrimaries.fBX &&
+         fDisplayPrimaries.fBY == other.fDisplayPrimaries.fBY &&
+         fDisplayPrimaries.fWX == other.fDisplayPrimaries.fWX &&
+         fDisplayPrimaries.fWY == other.fDisplayPrimaries.fWY &&
+         fMaximumDisplayMasteringLuminance ==
+             other.fMaximumDisplayMasteringLuminance &&
+         fMinimumDisplayMasteringLuminance ==
+             other.fMinimumDisplayMasteringLuminance;
+}
+Metadata Metadata::MakeEmpty() {
+  return Metadata();
+}
+bool Metadata::getContentLightLevelInformation(
+    ContentLightLevelInformation* clli) const {
+  if (!fContentLightLevelInformation.has_value()) {
+    return false;
+  }
+  if (clli) {
+    *clli = fContentLightLevelInformation.value();
+  }
+  return true;
+}
+bool Metadata::getMasteringDisplayColorVolume(
+    MasteringDisplayColorVolume* mdcv) const {
+  if (!fMasteringDisplayColorVolume.has_value()) {
+    return false;
+  }
+  if (mdcv) {
+    *mdcv = fMasteringDisplayColorVolume.value();
+  }
+  return true;
+}
 void Metadata::setMasteringDisplayColorVolume(
-    const MasteringDisplayColorVolume&) {}
+    const MasteringDisplayColorVolume& mdcv) {
+  fMasteringDisplayColorVolume = mdcv;
+}
 void Metadata::setContentLightLevelInformation(
-    const ContentLightLevelInformation&) {}
+    const ContentLightLevelInformation& clli) {
+  fContentLightLevelInformation = clli;
+}
 void Metadata::setAdaptiveGlobalToneMap(const AdaptiveGlobalToneMap&) {}
+bool Metadata::operator==(const Metadata& other) const {
+  return fContentLightLevelInformation == other.fContentLightLevelInformation &&
+         fMasteringDisplayColorVolume == other.fMasteringDisplayColorVolume &&
+         fAdaptiveGlobalToneMap == other.fAdaptiveGlobalToneMap;
+}
 sk_sp<SkColorFilter> Metadata::makeToneMapColorFilter(
     float,
     const SkColorSpace*) const {
