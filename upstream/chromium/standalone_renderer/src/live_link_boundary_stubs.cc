@@ -7221,10 +7221,12 @@ LayoutSVGText* LayoutSVGText::LocateLayoutSVGTextAncestor(LayoutObject*) {
   return nullptr;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 float SVGLayoutSupport::CalculateScreenFontSizeScalingFactor(
     const LayoutObject*) {
   return 1.0f;
 }
+#endif
 
 void AnchorPositionScrollData::Trace(Visitor* visitor) const {
   PostLayoutSnapshotClient::Trace(visitor);
@@ -19283,9 +19285,11 @@ gfx::SizeF LayoutSVGRoot::ViewportSize() const {
 gfx::RectF LayoutSVGRoot::ViewBoxRect() const {
   return gfx::RectF();
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 gfx::RectF LayoutSVGViewportContainer::ViewBoxRect() const {
   return gfx::RectF();
 }
+#endif
 void LayoutSVGRoot::LayoutRoot(const PhysicalRect&) {}
 void ScrollMarkerGroupPseudoElement::ClearFocusGroup() {}
 bool HTMLMarqueeElement::IsHorizontal() const {
@@ -19883,10 +19887,12 @@ bool SVGObjectPainter::PreparePaint(PaintFlags,
                                     const AffineTransform*) {
   return false;
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 void SVGLayoutSupport::ApplyStrokeStyleToStrokeData(StrokeData&,
                                                     const ComputedStyle&,
                                                     const LayoutObject&,
                                                     float) {}
+#endif
 extern const int32_t kSerializedCharacterDataSize = 0;
 alignas(4) extern const uint8_t kSerializedCharacterData[] = {};
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -20297,9 +20303,11 @@ void SVGElementResourceClient::UpdateFilterData(CompositorFilterOperations&) {}
 bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
   return false;
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 AffineTransform LayoutSVGViewportContainer::ComputeViewboxTransform() const {
   return AffineTransform();
 }
+#endif
 AffineTransform SVGRootPainter::TransformToPixelSnappedBorderBox(
     const PhysicalOffset&) const {
   return AffineTransform();
@@ -20328,12 +20336,14 @@ void CullRectUpdater::PaintPropertiesChanged(
     const LayoutObject&,
     const PaintPropertiesChangeInfo&) {}
 #endif
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 bool SVGLayoutSupport::IsIsolationRequired(const LayoutObject*) {
   return false;
 }
 bool SVGLayoutSupport::IsOverflowHidden(const LayoutObject&) {
   return false;
 }
+#endif
 bool LayoutShiftTracker::NeedsToTrack(const LayoutObject&) const {
   return false;
 }
