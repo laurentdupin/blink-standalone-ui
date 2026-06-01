@@ -26,6 +26,9 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/synchronization/lock.h"
+#include "base/task/task_traits.h"
+#include "base/trace_event/memory_allocator_dump.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/traced_value.h"
 #include "base/time/default_tick_clock.h"
 #include "base/sequence_checker.h"
@@ -1028,6 +1031,8 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_memory_allocator_dump.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/web_process_memory_dump.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/traced_value.h"
+#include "third_party/blink/renderer/platform/disk_data_allocator.h"
+#include "third_party/blink/renderer/platform/disk_data_metadata.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/document_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/loader/fetch/memory_cache.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
@@ -11538,6 +11543,9 @@ String KURL::Protocol() const {
 bool operator==(const KURL& a, const KURL& b) {
   return a.GetString() == b.GetString();
 }
+bool operator==(const String& a, const KURL& b) {
+  return a == b.GetString();
+}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const AtomicString& QualifiedName::LocalNameUpperSlow() const {
   return LocalName();
@@ -13459,6 +13467,8 @@ Point ToFlooredPoint(const PointF& point) {
 #endif
 DisplayColorSpaces::DisplayColorSpaces() = default;
 DisplayColorSpaces::DisplayColorSpaces(const DisplayColorSpaces&) = default;
+ColorSpace::ColorSpace(const SkColorSpace&, bool)
+    : ColorSpace(ColorSpace::CreateSRGB()) {}
 Quaternion Quaternion::FromAxisAngle(double x, double y, double z, double w) {
   return Quaternion(x, y, z, w);
 }
@@ -13689,6 +13699,11 @@ uint64_t GetNextGlobalTraceId() {
   static uint64_t next = 1;
   return next++;
 }
+MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
+    const std::string&) {
+  return nullptr;
+}
+void MemoryAllocatorDump::AddScalar(const char*, const char*, uint64_t) {}
 }  // namespace base::trace_event
 
 namespace base::perfetto_track_event::internal {
@@ -13878,12 +13893,18 @@ std::optional<DictValue> JSONReader::ReadDict(std::string_view,
 std::ostream& operator<<(std::ostream& os, TimeDelta time_delta) {
   return os << time_delta.InMicroseconds() << " us";
 }
+std::ostream& operator<<(std::ostream& os, TimeTicks) {
+  return os << "TimeTicks()";
+}
 ConditionVariable::ConditionVariable(Lock*) {}
 ConditionVariable::~ConditionVariable() = default;
 void Location::WriteIntoTrace(perfetto::TracedValue) const {}
 void UmaHistogramSparse(const char*, int) {}
 void UmaHistogramBoolean(const char*, bool) {}
 void UmaHistogramCounts100(const char*, int) {}
+void UmaHistogramCounts1000(const char*, int) {}
+void UmaHistogramCounts10000(const char*, int) {}
+void UmaHistogramCounts100000(const char*, int) {}
 void UmaHistogramExactLinear(const char*, int, int) {}
 void UmaHistogramCustomTimes(const char*,
                              TimeDelta,
@@ -14047,7 +14068,10 @@ SharedMemoryMapping::SharedMemoryMapping() = default;
 SharedMemoryMapping::~SharedMemoryMapping() = default;
 WritableSharedMemoryMapping::WritableSharedMemoryMapping() = default;
 MemoryMappedFile::~MemoryMappedFile() = default;
+File::File() = default;
+File::File(File&&) = default;
 File::~File() = default;
+File& File::operator=(File&&) = default;
 FilePath::FilePath() = default;
 FilePath::FilePath(const FilePath& that) = default;
 FilePath::FilePath(StringViewType path) : path_(path) {}
@@ -15086,7 +15110,91 @@ bool ApproximatelyEqualSkColorSpaces(sk_sp<SkColorSpace> src_color_space,
   dst_color_space->toProfile(&dst_profile);
   return skcms_ApproximatelyEqualProfiles(&src_profile, &dst_profile);
 }
+
+DiskDataAllocator::DiskDataAllocator() = default;
+DiskDataAllocator::~DiskDataAllocator() = default;
+DiskDataAllocator& DiskDataAllocator::Instance() {
+  static auto* allocator = new DiskDataAllocator();
+  return *allocator;
+}
+void DiskDataAllocator::Bind(
+    mojo::PendingReceiver<mojom::blink::DiskAllocator>) {}
+void DiskDataAllocator::ProvideTemporaryFile(base::File) {}
+bool DiskDataAllocator::may_write() {
+  return false;
+}
+void DiskDataAllocator::set_may_write_for_testing(bool) {}
+std::unique_ptr<ReservedChunk> DiskDataAllocator::TryReserveChunk(size_t) {
+  return nullptr;
+}
+std::unique_ptr<DiskDataMetadata> DiskDataAllocator::Write(
+    std::unique_ptr<ReservedChunk>,
+    base::span<const uint8_t>) {
+  return nullptr;
+}
+void DiskDataAllocator::Read(const DiskDataMetadata&,
+                             base::span<uint8_t>) {}
+void DiskDataAllocator::Discard(std::unique_ptr<DiskDataMetadata>) {}
+std::optional<size_t> DiskDataAllocator::DoWrite(
+    int64_t,
+    base::span<const uint8_t>) {
+  return std::nullopt;
+}
+void DiskDataAllocator::DoRead(int64_t, base::span<uint8_t>) {}
+ReservedChunk::ReservedChunk(DiskDataAllocator* allocator,
+                             std::unique_ptr<DiskDataMetadata> metadata)
+    : allocator_(allocator), metadata_(std::move(metadata)) {}
+ReservedChunk::~ReservedChunk() = default;
+std::unique_ptr<DiskDataMetadata> ReservedChunk::Take() {
+  return std::move(metadata_);
+}
+
+PaintImage Image::ResizeAndOrientImage(
+    const PaintImage& image,
+    ImageOrientation orientation,
+    gfx::Vector2dF image_scale,
+    float opacity,
+    InterpolationQuality interpolation_quality) {
+  return ResizeAndOrientImage(image, orientation, image_scale, opacity,
+                              interpolation_quality, nullptr);
+}
+
+PaintImage Image::ResizeAndOrientImage(const PaintImage& image,
+                                       ImageOrientation orientation,
+                                       gfx::Vector2dF image_scale,
+                                       float opacity,
+                                       InterpolationQuality,
+                                       sk_sp<SkColorSpace>) {
+  if (orientation == ImageOrientationEnum::kDefault &&
+      image_scale == gfx::Vector2dF(1, 1) && opacity == 1.0f) {
+    return image;
+  }
+  return PaintImage();
+}
+
+ThreadScheduler* ThreadScheduler::Current() {
+  return nullptr;
+}
+
+namespace worker_pool {
+void PostTask(const base::Location&, CrossThreadOnceClosure) {}
+void PostTask(const base::Location&,
+              const base::TaskTraits&,
+              CrossThreadOnceClosure) {}
+}  // namespace worker_pool
 }  // namespace blink
+
+namespace blink::mojom::blink {
+bool DiskAllocatorStubDispatch::Accept(DiskAllocator*, mojo::Message*) {
+  return false;
+}
+bool DiskAllocatorStubDispatch::AcceptWithResponder(
+    DiskAllocator*,
+    mojo::Message*,
+    std::unique_ptr<mojo::MessageReceiverWithStatus>) {
+  return false;
+}
+}  // namespace blink::mojom::blink
 
 namespace base {
 void ThreadCheckerImpl::EnableStackLogging() {}
@@ -20385,6 +20493,8 @@ template <bool AllowDangling>
 void RawPtrBackupRefImpl<AllowDangling>::ReleaseInternal(uintptr_t) {}
 template <bool AllowDangling>
 void RawPtrBackupRefImpl<AllowDangling>::ReportIfDanglingInternal(uintptr_t) {}
+template bool RawPtrBackupRefImpl<false>::IsPointeeAlive(uintptr_t);
+template bool RawPtrBackupRefImpl<true>::IsPointeeAlive(uintptr_t);
 template void RawPtrBackupRefImpl<false>::AcquireInternal(uintptr_t);
 template void RawPtrBackupRefImpl<true>::AcquireInternal(uintptr_t);
 template void RawPtrBackupRefImpl<false>::ReleaseInternal(uintptr_t);
