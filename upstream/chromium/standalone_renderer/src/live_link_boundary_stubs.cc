@@ -1412,6 +1412,13 @@ std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
 }
 }  // namespace SkPngRustDecoder
 
+extern "C" void png_save_uint_32(unsigned char* buf, unsigned int i) {
+  buf[0] = static_cast<unsigned char>((i >> 24) & 0xffU);
+  buf[1] = static_cast<unsigned char>((i >> 16) & 0xffU);
+  buf[2] = static_cast<unsigned char>((i >> 8) & 0xffU);
+  buf[3] = static_cast<unsigned char>(i & 0xffU);
+}
+
 bool SkGainmapInfo::Parse(const SkData*, SkGainmapInfo&) {
   return false;
 }
@@ -3572,9 +3579,11 @@ std::optional<NaturalSizingInfo> SVGImageForContainer::GetNaturalDimensions(
   return std::nullopt;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 void SVGImage::CheckLoaded() const {}
 void SVGImage::UpdateUseCountersAfterLoad(const Document&) const {}
 void SVGImage::MaybeRecordSvgImageProcessingTime(Document const&) {}
+#endif
 
 mojom::blink::FetchPriorityHint GetFetchPriorityAttributeValue(
     const String&) {
@@ -6814,9 +6823,11 @@ String TrustedTypesCheckForScriptURL(
   return String();
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 bool SVGImage::IsInSVGImage(const Node*) {
   return false;
 }
+#endif
 
 void SVGElement::SetNeedsStyleRecalcForInstances(
     StyleChangeType,

@@ -11,6 +11,9 @@ namespace blink {
 
 class SVGRectElement;
 class SVGStyleElement;
+class SVGFEImageElement;
+class SVGForeignObjectElement;
+class SVGImageElement;
 
 template <>
 struct DowncastTraits<SVGRectElement> {
@@ -23,6 +26,27 @@ template <>
 struct DowncastTraits<SVGStyleElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGStyleElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGFEImageElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGFEImageElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGForeignObjectElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGForeignObjectElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGImageElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGImageElement;
   }
 };
 
