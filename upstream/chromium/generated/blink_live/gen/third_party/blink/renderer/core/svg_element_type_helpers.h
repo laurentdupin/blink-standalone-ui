@@ -17,6 +17,7 @@ class SVGFilterElement;
 class SVGForeignObjectElement;
 class SVGGElement;
 class SVGImageElement;
+class SVGSymbolElement;
 class SVGViewElement;
 
 template <>
@@ -72,6 +73,13 @@ template <>
 struct DowncastTraits<SVGImageElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGImageElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGSymbolElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGSymbolElement;
   }
 };
 

@@ -6933,6 +6933,7 @@ bool SVGImage::IsInSVGImage(const Node*) {
 }
 #endif
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 void SVGElement::SetNeedsStyleRecalcForInstances(
     StyleChangeType,
     const StyleChangeReasonForTracing&) {}
@@ -6940,6 +6941,7 @@ void SVGElement::SetNeedsStyleRecalcForInstances(
 SVGElement* SVGElement::CorrespondingElement() const {
   return nullptr;
 }
+#endif
 
 bool EventHandler::UsesHandCursor(const Node*) {
   return false;
@@ -7099,12 +7101,14 @@ bool RuntimeEnabledFeaturesBase::ContainerTimingEnabled(
   return false;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 bool SVGElement::IsOutermostSVGSVGElement() const {
   return false;
 }
 bool SVGElement::IsResourceTarget() const {
   return false;
 }
+#endif
 
 void ScrollMarkerGroupData::ClearFocusGroup() {
   focus_group_.clear();
@@ -7125,9 +7129,11 @@ bool DisplayLockUtilities::IsDisplayLockedPreventingPaint(const Node*, bool) {
   return false;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 bool SVGElement::HasSVGParent() const {
   return false;
 }
+#endif
 
 void EditContext::AttachElement(HTMLElement*) {}
 
@@ -7778,9 +7784,11 @@ URLPattern* URLPattern::Create(v8::Isolate*,
   return nullptr;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 MutableCSSPropertyValueSet* SVGElement::AnimatedSMILStyleProperties() const {
   return nullptr;
 }
+#endif
 
 namespace inspector_style_resolver_resolve_style_event {
 void Data(perfetto::TracedValue, Element*, PseudoId) {}
@@ -8650,7 +8658,9 @@ std::ostream& operator<<(std::ostream& stream, const QualifiedName& name) {
   return stream << name.ToString().Utf8();
 }
 #endif
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 void SVGElement::SynchronizeSVGAttribute(const QualifiedName&) const {}
+#endif
 
 bool MenuSafeTriangle::ShouldDeferInterestGained(Element*,
                                                  Element*,
@@ -9077,10 +9087,12 @@ void FrameOverlay::Destroy() {}
 void FrameOverlay::UpdatePrePaint() {}
 void FrameOverlay::Paint(GraphicsContext&) const {}
 void FrameOverlay::Trace(Visitor*) const {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 NaturalSizingInfo LayoutSVGRoot::UnscaledNaturalSizingInfo(
     const SVGRect*) const {
   return NaturalSizingInfo();
 }
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
@@ -9698,9 +9710,11 @@ bool PaintLayerScrollableArea::HasRunningAnimation() {
   return false;
 }
 void ScrollMarkerGroupPseudoElement::ScrollSelectedIntoView(bool) {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 bool SVGGraphicsElement::IsNonRendered(const LayoutObject*) const {
   return false;
 }
+#endif
 
 DOMRectList::DOMRectList() = default;
 DOMRect::DOMRect(double x, double y, double width, double height)
@@ -10516,9 +10530,11 @@ DOMRectReadOnly::DOMRectReadOnly(double x,
                                  double width,
                                  double height)
     : x_(x), y_(y), width_(width), height_(height) {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 void SVGGraphicsElement::Trace(Visitor* visitor) const {
   SVGElement::Trace(visitor);
 }
+#endif
 std::unique_ptr<TracedValue> TracedLayoutObject::Create(const LayoutView&,
                                                         bool) {
   return nullptr;
@@ -10543,7 +10559,9 @@ void IntersectionObserverController::DeliverNotifications(
 void IntersectionObserverController::UpdateIntersectionObserverStatus() {}
 void DOMFeaturePolicy::Trace(Visitor* visitor) const {
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
 void SVGElement::Trace(Visitor*) const {}
+#endif
 void MediaQueryMatcher::MediaFeaturesChanged() {}
 HTMLResourcePreloader::HTMLResourcePreloader(Document& document)
     : document_(document) {}
@@ -12907,12 +12925,14 @@ void FrameSelection::CommitAppearanceIfNeeded() {}
 bool LayoutSVGText::NeedsTextMetricsUpdate() const {
   return false;
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 bool LayoutSVGRoot::IsEmbeddedThroughSVGImage() const {
   return false;
 }
 bool LayoutSVGRoot::IsEmbeddedThroughFrameContainingSVGDocument() const {
   return false;
 }
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutListItem::UpdateCounterStyle() {}
 void LayoutInlineListItem::UpdateCounterStyle() {}
@@ -19377,6 +19397,7 @@ PhysicalRect ComputeReferenceBox(const LayoutBox&) {
   return PhysicalRect();
 }
 #endif
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 bool LayoutSVGRoot::HasNonIsolatedBlendingDescendants() const {
   return false;
 }
@@ -19389,12 +19410,15 @@ gfx::SizeF LayoutSVGRoot::ViewportSize() const {
 gfx::RectF LayoutSVGRoot::ViewBoxRect() const {
   return gfx::RectF();
 }
+#endif
 #ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 gfx::RectF LayoutSVGViewportContainer::ViewBoxRect() const {
   return gfx::RectF();
 }
 #endif
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 void LayoutSVGRoot::LayoutRoot(const PhysicalRect&) {}
+#endif
 void ScrollMarkerGroupPseudoElement::ClearFocusGroup() {}
 bool HTMLMarqueeElement::IsHorizontal() const {
   return true;

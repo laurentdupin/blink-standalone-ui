@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#if defined(BLINK_STANDALONE_USE_REAL_SVG_SVG_ELEMENT)
+#include_next "third_party/blink/renderer/core/svg/svg_svg_element.h"
+#else
+
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_SVG_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_SVG_ELEMENT_H_
 
@@ -24,3 +28,5 @@ struct DowncastTraits<SVGSVGElement> {
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_SVG_ELEMENT_H_
+
+#endif  // defined(BLINK_STANDALONE_USE_REAL_SVG_SVG_ELEMENT)
