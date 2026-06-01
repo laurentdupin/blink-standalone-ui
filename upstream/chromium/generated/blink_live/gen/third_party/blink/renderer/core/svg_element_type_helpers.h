@@ -12,8 +12,12 @@ namespace blink {
 class SVGRectElement;
 class SVGStyleElement;
 class SVGFEImageElement;
+class SVGFEMergeNodeElement;
+class SVGFilterElement;
 class SVGForeignObjectElement;
+class SVGGElement;
 class SVGImageElement;
+class SVGViewElement;
 
 template <>
 struct DowncastTraits<SVGRectElement> {
@@ -37,6 +41,20 @@ struct DowncastTraits<SVGFEImageElement> {
 };
 
 template <>
+struct DowncastTraits<SVGFEMergeNodeElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGFEMergeNodeElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGFilterElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGFilterElement;
+  }
+};
+
+template <>
 struct DowncastTraits<SVGForeignObjectElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGForeignObjectElement;
@@ -44,9 +62,23 @@ struct DowncastTraits<SVGForeignObjectElement> {
 };
 
 template <>
+struct DowncastTraits<SVGGElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGGElement;
+  }
+};
+
+template <>
 struct DowncastTraits<SVGImageElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGImageElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGViewElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGViewElement;
   }
 };
 

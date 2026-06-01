@@ -8952,12 +8952,14 @@ gfx::PointF LayoutEmbeddedContent::EmbeddedContentFromBorderBox(
     const gfx::PointF& point) const {
   return point;
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 bool SVGDocumentExtensions::ServiceSmilOnAnimationFrame(Document&) {
   return false;
 }
 bool SVGDocumentExtensions::ZoomAndPanEnabled() const {
   return false;
 }
+#endif
 void PageAnimator::SetHasSmilAnimation() {}
 void PageAnimator::ScheduleVisualUpdate(LocalFrame*) {}
 void FrameView::UpdateRenderThrottlingStatus(bool, bool, bool, bool) {}
@@ -10378,8 +10380,10 @@ void V8UnionStringOrTrustedHTML::Trace(Visitor* visitor) const {
 void ViewTransitionSupplement::Trace(Visitor*) const {}
 void NodeIterator::Trace(Visitor*) const {}
 void Range::Trace(Visitor*) const {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 SVGDocumentExtensions::~SVGDocumentExtensions() = default;
 void SVGDocumentExtensions::Trace(Visitor*) const {}
+#endif
 HTMLAllCollection::HTMLAllCollection(ContainerNode& node, CollectionType type)
     : HTMLCollection(node, type) {}
 HTMLAllCollection::~HTMLAllCollection() = default;
@@ -10658,7 +10662,9 @@ void ResourceFetcher::ScheduleWarnUnusedPreloads(
     base::OnceCallback<void(Vector<KURL>)>) {}
 void ResourceFetcher::MaybeRecordLCPPSubresourceMetrics(const KURL&) {}
 void MediaQueryMatcher::DocumentDetached() {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 SVGDocumentExtensions::SVGDocumentExtensions(Document*) {}
+#endif
 bool RuntimeEnabledFeaturesBase::AutofillEventEnabled(
     const FeatureContext*) {
   return false;
@@ -10715,8 +10721,10 @@ void ResourceLoadScheduler::LoosenThrottlingPolicy() {}
 void ViewTransitionSupplement::WillInsertBody() {}
 void RenderBlockingResourceManager::WillInsertDocumentBody() {}
 void FrameLoader::DidFinishNavigation(FrameLoader::NavigationFinishState) {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 void SVGDocumentExtensions::DispatchSVGLoadEventToOutermostSVGElements() {}
 void SVGDocumentExtensions::StartAnimations() {}
+#endif
 void HttpRefreshScheduler::MaybeStartTimer() {}
 void ViewportDescription::ReportMobilePageStats(const LocalFrame*) const {}
 const KURL& DocumentLoader::Url() const {
@@ -11138,7 +11146,9 @@ gfx::Rect PaintLayerScrollableArea::ScrollingBackgroundVisualRect(
 }
 void DocumentMarkerController::InvalidateRectsForAllTextMatchMarkers() {}
 void DocumentMarkerController::PrepareForDestruction() {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 void SVGDocumentExtensions::PauseAnimations() {}
+#endif
 void HttpRefreshScheduler::Cancel() {}
 HttpRefreshScheduler::HttpRefreshScheduler(Document* document)
     : document_(document) {}
