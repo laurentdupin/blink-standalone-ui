@@ -7,6 +7,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_string_conversion_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/matcher_string_pattern.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/substring_set_matcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/default_clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum-dtoa.cc
@@ -113,7 +114,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_decoding_store.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/rw_buffer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_input_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_timeline.cc

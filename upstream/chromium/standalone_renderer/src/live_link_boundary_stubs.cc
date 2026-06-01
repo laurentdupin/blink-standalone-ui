@@ -29,6 +29,7 @@
 #include "base/trace_event/traced_value.h"
 #include "base/time/default_tick_clock.h"
 #include "base/sequence_checker.h"
+#include "base/threading/thread_checker_impl.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/timer/lap_timer.h"
 #include "base/win/scoped_handle.h"
@@ -204,6 +205,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/skia/include/private/chromium/SkChromeRemoteGlyphCache.h"
 #include "third_party/skia/include/private/chromium/Slug.h"
 #include "third_party/skia/include/utils/SkNullCanvas.h"
+#include "third_party/skia/modules/skcms/skcms.h"
 #include "third_party/skia/src/gpu/ganesh/GrBackendSurfacePriv.h"
 #include "skia/public/mojom/hdr_metadata.mojom-shared-internal.h"
 #include "skia/public/mojom/skcolorspace_primaries.mojom-shared-internal.h"
@@ -15053,6 +15055,9 @@ ScriptCompiler::StreamedSource::~StreamedSource() = default;
 ExternalMemoryAccounter::~ExternalMemoryAccounter() = default;
 void ExternalMemoryAccounter::Increase(Isolate*, size_t) {}
 void ExternalMemoryAccounter::Decrease(Isolate*, size_t) {}
+Isolate* Isolate::GetCurrent() {
+  return nullptr;
+}
 Isolate* Isolate::TryGetCurrent() {
   return nullptr;
 }
@@ -15060,6 +15065,47 @@ bool Isolate::HasPendingException() {
   return false;
 }
 }  // namespace v8
+
+namespace blink {
+size_t Platform::GetMaxDecodedImageBytes() {
+  return kNoDecodedImageByteLimit;
+}
+
+bool ApproximatelyEqualSkColorSpaces(sk_sp<SkColorSpace> src_color_space,
+                                     sk_sp<SkColorSpace> dst_color_space) {
+  if ((!src_color_space && dst_color_space) ||
+      (src_color_space && !dst_color_space)) {
+    return false;
+  }
+  if (!src_color_space && !dst_color_space) {
+    return true;
+  }
+  skcms_ICCProfile src_profile;
+  skcms_ICCProfile dst_profile;
+  src_color_space->toProfile(&src_profile);
+  dst_color_space->toProfile(&dst_profile);
+  return skcms_ApproximatelyEqualProfiles(&src_profile, &dst_profile);
+}
+}  // namespace blink
+
+namespace base {
+void ThreadCheckerImpl::EnableStackLogging() {}
+ThreadCheckerImpl::ThreadCheckerImpl() = default;
+ThreadCheckerImpl::~ThreadCheckerImpl() = default;
+ThreadCheckerImpl::ThreadCheckerImpl(ThreadCheckerImpl&&) {}
+ThreadCheckerImpl& ThreadCheckerImpl::operator=(ThreadCheckerImpl&&) {
+  return *this;
+}
+bool ThreadCheckerImpl::CalledOnValidThread(
+    std::unique_ptr<debug::StackTrace>*) const {
+  return true;
+}
+void ThreadCheckerImpl::DetachFromThread() {}
+std::unique_ptr<debug::StackTrace> ThreadCheckerImpl::GetBoundAt() const {
+  return nullptr;
+}
+void ThreadCheckerImpl::EnsureAssigned() const {}
+}  // namespace base
 
 namespace {
 

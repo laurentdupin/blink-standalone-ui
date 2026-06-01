@@ -46,6 +46,12 @@
 #define TRACE_EVENT2(...) \
   do {                   \
   } while (false)
+#ifdef TRACE_COUNTER1
+#undef TRACE_COUNTER1
+#endif
+#define TRACE_COUNTER1(...) \
+  do {                     \
+  } while (false)
 #ifdef TRACE_EVENT_INSTANT
 #undef TRACE_EVENT_INSTANT
 #endif
