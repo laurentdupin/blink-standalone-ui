@@ -188,6 +188,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "url/gurl.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #include "third_party/skia/include/core/SkMesh.h"
@@ -10024,6 +10025,7 @@ KURL::KURL(const StringView& string)
         protocol_ == "http" || protocol_ == "https";
   }
 }
+KURL::KURL(const GURL& url) : KURL(String(url.spec().c_str())) {}
 KURL::KURL(const KURL& other)
     : is_valid_(other.is_valid_),
       protocol_is_in_http_family_(other.protocol_is_in_http_family_),
@@ -11523,7 +11525,7 @@ bool SchemeRegistry::ShouldTreatURLAsFirstPartyWhenTopLevelEmbeddingSecure(
   return false;
 }
 bool KURL::ProtocolIsInHttpFamily() const {
-  return false;
+  return protocol_is_in_http_family_;
 }
 bool KURL::ProtocolIsJavaScript() const {
   return false;
@@ -11539,6 +11541,54 @@ StringView KURL::Host() const {
 }
 String KURL::Protocol() const {
   return protocol_;
+}
+KURL::operator GURL() const {
+  return GURL(GetString().Utf8());
+}
+bool KURL::SetProtocol(const StringView& protocol) {
+  std::string protocol_text = protocol.ToString().Utf8();
+  std::string value = GetString().Utf8();
+  const size_t colon = value.find(':');
+  if (colon == std::string::npos) {
+    value = protocol_text + "://" + value;
+  } else {
+    value.replace(0, colon, protocol_text);
+  }
+  *this = KURL(String(value.c_str()));
+  return true;
+}
+void KURL::SetHost(const String& host) {
+  std::string value = GetString().Utf8();
+  std::string host_text = host.Utf8();
+  size_t host_start = value.find("://");
+  if (host_start == std::string::npos) {
+    value = "://" + host_text + value;
+  } else {
+    host_start += 3;
+    size_t host_end = value.find_first_of("/:?#", host_start);
+    if (host_end == std::string::npos) {
+      host_end = value.size();
+    }
+    value.replace(host_start, host_end - host_start, host_text);
+  }
+  *this = KURL(String(value.c_str()));
+}
+void KURL::SetPort(uint16_t port) {
+  std::string value = GetString().Utf8();
+  size_t host_start = value.find("://");
+  host_start = host_start == std::string::npos ? 0 : host_start + 3;
+  size_t port_start = value.find(':', host_start);
+  size_t host_end = value.find_first_of("/?#", host_start);
+  if (host_end == std::string::npos) {
+    host_end = value.size();
+  }
+  const std::string port_text = ":" + std::to_string(port);
+  if (port_start != std::string::npos && port_start < host_end) {
+    value.replace(port_start, host_end - port_start, port_text);
+  } else {
+    value.insert(host_end, port_text);
+  }
+  *this = KURL(String(value.c_str()));
 }
 bool operator==(const KURL& a, const KURL& b) {
   return a.GetString() == b.GetString();

@@ -125,6 +125,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/rw_buffer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/skia/skia_image_decoder_base.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/header_field_tokenizer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/server_timing_header.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkCodecColorProfile.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkExif.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
