@@ -4448,6 +4448,7 @@ Resource* CreateStandaloneProviderBackedResource(
 }
 }  // namespace
 
+#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
     : image_(std::move(image)) {
   content_status_ = image_ ? ResourceStatus::kCached : ResourceStatus::kNotStarted;
@@ -4575,6 +4576,7 @@ void ImageResourceContent::RecordDecodedImageC2PA(UseCounter*) {}
 bool ImageResource::IsAboveSpeculativeDecodeSizeThreshold(const gfx::Size&) {
   return false;
 }
+#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 
 MemoryPressureListenerRegistration::MemoryPressureListenerRegistration(
     base::Location,
@@ -13104,6 +13106,7 @@ void ImageElementTiming::NotifyImageFinished(const LayoutObject&,
 void ImageElementTiming::NotifyImageRemoved(const LayoutObject*,
                                             const ImageResourceContent*) {}
 void ImageElementTiming::Trace(Visitor*) const {}
+#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 bool ImageResourceContent::ErrorOccurred() const {
   return false;
 }
@@ -13116,6 +13119,7 @@ const std::optional<AdProvenance>& ImageResourceContent::GetAdProvenance()
       new std::optional<AdProvenance>();
   return *provenance;
 }
+#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 bool Sanitizer::ShouldReplaceNodeWithChildren(Node*) const {
   return false;
 }
@@ -16515,9 +16519,11 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
     mojom::blink::RequestContextType,
     network::mojom::RequestDestination,
     const AtomicString&) {}
+#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 void ImageResourceContent::EmulateLoadStartedForInspector(ResourceFetcher*,
                                                           const AtomicString&) {
 }
+#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 CSSPaintImageGenerator* CSSPaintImageGenerator::Create(const String&,
                                                        const Document&,
                                                        Observer*) {
@@ -17160,9 +17166,11 @@ ListBasedHitTestBehavior HitTestResult::AddNodeToListBasedTestResult(
 void HitTestResult::SetInnerNode(Node* node) {
   inner_node_ = node;
 }
+#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 Image* ImageResourceContent::GetImage() const {
   return image_ ? image_.get() : nullptr;
 }
+#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
       image_observer_(observer),
