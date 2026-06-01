@@ -45,6 +45,7 @@
 #undef DrawText
 #endif
 #include "html_css_renderer/standalone_resource_provider.h"
+#include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/delegated_capability_request_token.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
@@ -1477,6 +1478,109 @@ OriginAccessEntry::OriginAccessEntry(
 }  // namespace network::cors
 
 namespace network {
+scoped_refptr<SharedURLLoaderFactory> SharedURLLoaderFactory::Create(
+    std::unique_ptr<PendingSharedURLLoaderFactory> pending_factory) {
+  return pending_factory ? pending_factory->CreateFactory() : nullptr;
+}
+
+bool SharedURLLoaderFactory::BypassRedirectChecks() const {
+  return false;
+}
+
+SharedURLLoaderFactory::~SharedURLLoaderFactory() = default;
+
+PendingSharedURLLoaderFactory::PendingSharedURLLoaderFactory() = default;
+PendingSharedURLLoaderFactory::~PendingSharedURLLoaderFactory() = default;
+
+class SingleRequestURLLoaderFactory::HandlerState
+    : public base::RefCounted<SingleRequestURLLoaderFactory::HandlerState> {
+ public:
+  explicit HandlerState(FullRequestHandler handler)
+      : handler_(std::move(handler)) {}
+
+  HandlerState(const HandlerState&) = delete;
+  HandlerState& operator=(const HandlerState&) = delete;
+
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<mojom::URLLoader> loader,
+      int32_t request_id,
+      uint32_t options,
+      const ResourceRequest& request,
+      mojo::PendingRemote<mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+    if (handler_) {
+      std::move(handler_).Run(std::move(loader), request_id, options, request,
+                              std::move(client), traffic_annotation);
+    }
+  }
+
+ private:
+  friend class base::RefCounted<HandlerState>;
+  ~HandlerState() = default;
+
+  FullRequestHandler handler_;
+};
+
+class SingleRequestURLLoaderFactory::PendingFactory
+    : public PendingSharedURLLoaderFactory {
+ public:
+  explicit PendingFactory(scoped_refptr<HandlerState> state)
+      : state_(std::move(state)) {}
+  ~PendingFactory() override = default;
+
+ private:
+  scoped_refptr<SharedURLLoaderFactory> CreateFactory() override {
+    return base::WrapRefCounted(
+        new SingleRequestURLLoaderFactory(std::move(state_)));
+  }
+
+  scoped_refptr<HandlerState> state_;
+};
+
+SingleRequestURLLoaderFactory::SingleRequestURLLoaderFactory(
+    RequestHandler handler)
+    : state_(base::MakeRefCounted<HandlerState>(base::BindOnce(
+          [](RequestHandler handler,
+             mojo::PendingReceiver<mojom::URLLoader> loader,
+             int32_t,
+             uint32_t,
+             const ResourceRequest& request,
+             mojo::PendingRemote<mojom::URLLoaderClient> client,
+             const net::MutableNetworkTrafficAnnotationTag&) {
+            std::move(handler).Run(request, std::move(loader),
+                                   std::move(client));
+          },
+          std::move(handler)))) {}
+
+SingleRequestURLLoaderFactory::SingleRequestURLLoaderFactory(
+    FullRequestHandler full_handler)
+    : state_(base::MakeRefCounted<HandlerState>(std::move(full_handler))) {}
+
+SingleRequestURLLoaderFactory::SingleRequestURLLoaderFactory(
+    scoped_refptr<HandlerState> state)
+    : state_(std::move(state)) {}
+
+SingleRequestURLLoaderFactory::~SingleRequestURLLoaderFactory() = default;
+
+void SingleRequestURLLoaderFactory::CreateLoaderAndStart(
+    mojo::PendingReceiver<mojom::URLLoader> loader,
+    int32_t request_id,
+    uint32_t options,
+    const ResourceRequest& request,
+    mojo::PendingRemote<mojom::URLLoaderClient> client,
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+  state_->CreateLoaderAndStart(std::move(loader), request_id, options, request,
+                               std::move(client), traffic_annotation);
+}
+
+void SingleRequestURLLoaderFactory::Clone(
+    mojo::PendingReceiver<mojom::URLLoaderFactory>) {}
+
+std::unique_ptr<PendingSharedURLLoaderFactory>
+SingleRequestURLLoaderFactory::Clone() {
+  return std::make_unique<PendingFactory>(state_);
+}
+
 ConnectionAllowlist::~ConnectionAllowlist() = default;
 ConnectionAllowlists::ConnectionAllowlists() = default;
 ConnectionAllowlists::~ConnectionAllowlists() = default;
