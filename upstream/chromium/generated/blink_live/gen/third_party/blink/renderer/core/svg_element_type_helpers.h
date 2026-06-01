@@ -10,6 +10,7 @@
 namespace blink {
 
 class SVGRectElement;
+class SVGClipPathElement;
 class SVGStyleElement;
 class SVGFEImageElement;
 class SVGFEMergeNodeElement;
@@ -24,6 +25,13 @@ template <>
 struct DowncastTraits<SVGRectElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGRectElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGClipPathElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGClipPathElement;
   }
 };
 
