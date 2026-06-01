@@ -110,7 +110,6 @@ set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngset.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngtrans.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c

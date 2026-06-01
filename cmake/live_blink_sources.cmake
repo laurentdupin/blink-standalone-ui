@@ -134,6 +134,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCodecBase.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCodec.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCompositeChunkReader.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPixmapUtils.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkSampler.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkSwizzler.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkTiffUtility.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
@@ -147,7 +149,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngset.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngtrans.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c
