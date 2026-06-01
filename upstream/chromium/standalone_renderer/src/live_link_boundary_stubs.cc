@@ -12143,6 +12143,78 @@ void SettingsBase::SetDefaultFixedFontSize(int default_fixed_font_size) {
   default_fixed_font_size_ = default_fixed_font_size;
   Invalidate(SettingsDelegate::ChangeType::kStyle);
 }
+void SettingsBase::SetAcceptLanguages(const String& accept_languages) {
+  if (accept_languages_ == accept_languages) {
+    return;
+  }
+  accept_languages_ = accept_languages;
+  Invalidate(SettingsDelegate::ChangeType::kAcceptLanguages);
+}
+void SettingsBase::SetForceDarkModeEnabled(bool force_dark_mode_enabled) {
+  if (force_dark_mode_enabled_ == force_dark_mode_enabled) {
+    return;
+  }
+  force_dark_mode_enabled_ = force_dark_mode_enabled;
+  Invalidate(SettingsDelegate::ChangeType::kColorScheme);
+  Invalidate(SettingsDelegate::ChangeType::kStyle);
+  Invalidate(SettingsDelegate::ChangeType::kPaint);
+}
+void SettingsBase::SetImageAnimationPolicy(
+    mojom::blink::ImageAnimationPolicy image_animation_policy) {
+  if (image_animation_policy_ == image_animation_policy) {
+    return;
+  }
+  image_animation_policy_ = image_animation_policy;
+}
+void SettingsBase::SetInForcedColors(bool in_forced_colors) {
+  if (in_forced_colors_ == in_forced_colors) {
+    return;
+  }
+  in_forced_colors_ = in_forced_colors;
+}
+void SettingsBase::SetMinimumFontSize(int minimum_font_size) {
+  if (minimum_font_size_ == minimum_font_size) {
+    return;
+  }
+  minimum_font_size_ = minimum_font_size;
+  Invalidate(SettingsDelegate::ChangeType::kStyle);
+}
+void SettingsBase::SetMinimumLogicalFontSize(int minimum_logical_font_size) {
+  if (minimum_logical_font_size_ == minimum_logical_font_size) {
+    return;
+  }
+  minimum_logical_font_size_ = minimum_logical_font_size;
+  Invalidate(SettingsDelegate::ChangeType::kStyle);
+}
+void SettingsBase::SetPluginsEnabled(bool plugins_enabled) {
+  if (plugins_enabled_ == plugins_enabled) {
+    return;
+  }
+  plugins_enabled_ = plugins_enabled;
+  Invalidate(SettingsDelegate::ChangeType::kPlugins);
+}
+void SettingsBase::SetPreferredColorScheme(
+    mojom::blink::PreferredColorScheme preferred_color_scheme) {
+  if (preferred_color_scheme_ == preferred_color_scheme) {
+    return;
+  }
+  preferred_color_scheme_ = preferred_color_scheme;
+  Invalidate(SettingsDelegate::ChangeType::kColorScheme);
+}
+void SettingsBase::SetPrefersReducedMotion(bool prefers_reduced_motion) {
+  if (prefers_reduced_motion_ == prefers_reduced_motion) {
+    return;
+  }
+  prefers_reduced_motion_ = prefers_reduced_motion;
+  Invalidate(SettingsDelegate::ChangeType::kMediaQuery);
+}
+void SettingsBase::SetScriptEnabled(bool script_enabled) {
+  if (script_enabled_ == script_enabled) {
+    return;
+  }
+  script_enabled_ = script_enabled;
+  Invalidate(SettingsDelegate::ChangeType::kMediaQuery);
+}
 SettingsDelegate::SettingsDelegate(std::unique_ptr<Settings> settings)
     : settings_(std::move(settings)) {}
 SettingsDelegate::~SettingsDelegate() = default;
@@ -13869,7 +13941,7 @@ void MemoryAllocatorDump::AddScalar(const char*, const char*, uint64_t) {}
 }  // namespace base::trace_event
 
 namespace base::perfetto_track_event::internal {
-const ::perfetto::internal::TrackEventCategoryRegistry kCategoryRegistry(
+extern const ::perfetto::internal::TrackEventCategoryRegistry kCategoryRegistry(
     0,
     nullptr,
     nullptr);
@@ -20070,6 +20142,10 @@ bool RuntimeEnabledFeaturesBase::is_paint_under_invalidation_checking_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_svg_filter_paints_for_hidden_content_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::
+    is_svg_avoid_resetting_filter_quality_for_tiled_pattern_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_svg_sizing_with_preserve_aspect_ratio_none_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_hit_test_container_transform_state_for_preserve_3d_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_hit_test_border_radius_for_stacking_context_enabled_ =
