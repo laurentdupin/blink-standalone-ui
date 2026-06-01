@@ -4841,6 +4841,7 @@ void ResourceLoader::Trace(Visitor* visitor) const {
   visitor->Trace(fetcher_);
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_RESOURCE_RESPONSE_PARSERS
 AtomicString ExtractMIMETypeFromMediaType(const AtomicString& media_type) {
   unsigned length = media_type.length();
   unsigned pos = 0;
@@ -4890,6 +4891,7 @@ CacheControlHeader ParseCacheControlDirectives(
       cache_control.contains("must-revalidate");
   return parsed;
 }
+#endif  // BLINK_STANDALONE_USE_REAL_RESOURCE_RESPONSE_PARSERS
 
 bool ParseMultipartHeadersFromBody(base::span<const uint8_t>,
                                    ResourceResponse*,
@@ -6672,6 +6674,7 @@ unsigned FirstLetterPseudoElement::FirstLetterLength(
   return string.empty() ? 0u : 1u;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 LocalSVGResource::LocalSVGResource(TreeScope& tree_scope, const AtomicString&)
     : tree_scope_(&tree_scope) {}
 void LocalSVGResource::Unregister() {}
@@ -6679,6 +6682,7 @@ void LocalSVGResource::Trace(Visitor* visitor) const {
   SVGResource::Trace(visitor);
   visitor->Trace(tree_scope_);
 }
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 DOMSelection::DOMSelection(const TreeScope*) : ExecutionContextClient(nullptr) {}
 void DOMSelection::Trace(Visitor* visitor) const {
@@ -7675,9 +7679,11 @@ HTMLElement* CustomElementDefinition::CreateElement(Document&,
   return nullptr;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 SVGResource::SVGResource() = default;
 SVGResource::~SVGResource() = default;
 void SVGResource::Trace(Visitor*) const {}
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 namespace bindings {
 ObservableArrayBase::ObservableArrayBase(
@@ -10487,9 +10493,11 @@ ShareableElementData* ElementDataCache::CachedShareableElementDataWithAttributes
     const Vector<Attribute, kAttributePrealloc>&) {
   return nullptr;
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
 void SVGUseElement::Trace(Visitor* visitor) const {
   SVGGraphicsElement::Trace(visitor);
 }
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
 void ViewTransition::SkipTransition(PromiseResponse) {}
 CanvasFontCache::~CanvasFontCache() = default;
 void CanvasFontCache::Trace(Visitor*) const {}
@@ -11221,8 +11229,12 @@ ShadowRoot* HTMLInputElement::EnsureShadowSubtree() {
 }
 void HTMLInputElement::EndEditing() {}
 #endif
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
 void SVGUseElement::BuildPendingResource() {}
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 void SVGResource::NotifyContentChanged() {}
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 Element* DisplayLockUtilities::LockedAncestorPreventingStyle(const Node&) {
   return nullptr;
 }
@@ -16053,10 +16065,12 @@ v8::Local<v8::Object> ScriptWrappable::AssociateWithWrapper(
   return wrapper;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 ExternalSVGResourceDocumentContent::ExternalSVGResourceDocumentContent(
     const KURL& url,
     const CSSUrlRequestModifiers& modifiers)
     : SVGResource(), url_(url), modifiers_(modifiers) {}
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 void FrameSelection::LayoutBlockWillBeDestroyed(const LayoutBlock&) {}
 void LayoutSVGText::SetNeedsTextMetricsUpdate() {}
@@ -16718,6 +16732,7 @@ TextIteratorBehavior::TextIteratorBehavior() {
   values_.all = 0;
 }
 
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 void SVGResource::AddClient(SVGResourceClient&) {}
 void SVGResource::RemoveClient(SVGResourceClient&) {}
 void SVGResource::AddObserver(ImageResourceObserver&) {}
@@ -16767,6 +16782,7 @@ void ExternalSVGResourceImageContent::ImageNotifyFinished(ImageResourceContent*)
 String ExternalSVGResourceImageContent::DebugName() const {
   return "ExternalSVGResourceImageContent";
 }
+#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 void MathMLSpaceElement::AddMathBaselineIfNeeded(
     ComputedStyleBuilder&,
