@@ -98,6 +98,33 @@ endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
 
+set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngerror.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngget.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngmem.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngpread.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngread.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrio.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrtran.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrutil.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngset.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngtrans.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/crc32.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/infback.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inffast.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inflate.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inftrees.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/zutil.c
+)
+set_source_files_properties(${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES}
+  PROPERTIES LANGUAGE CXX)
+
 add_library(blink_live_modp_b64 OBJECT
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/modp_b64/modp_b64.cc
 )
@@ -151,6 +178,9 @@ add_executable(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/win32/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/libpng
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/buildtools/third_party/libc++/src/include
     ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
@@ -183,6 +213,10 @@ add_executable(blink_standalone_render_benchmark_skia
     SKCMS_DISABLE_HSW=1
     SKCMS_DISABLE_SKX=1
     SK_ENABLE_OPTIMIZE_SIZE=1
+    PNG_SET_OPTION_SUPPORTED=1
+    PNG_INTEL_SSE=1
+    CPU_NO_SIMD=1
+    ZLIB_IMPLEMENTATION=1
   )
 
   target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
@@ -247,6 +281,9 @@ add_executable(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/win32/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/libpng
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/buildtools/third_party/libc++/src/include
       ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
@@ -279,6 +316,10 @@ add_executable(blink_standalone_render_benchmark_skia
       SKCMS_DISABLE_HSW=1
       SKCMS_DISABLE_SKX=1
       SK_ENABLE_OPTIMIZE_SIZE=1
+      PNG_SET_OPTION_SUPPORTED=1
+      PNG_INTEL_SSE=1
+      CPU_NO_SIMD=1
+      ZLIB_IMPLEMENTATION=1
       SDL_STATIC_LIB=1
     )
 

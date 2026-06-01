@@ -39,6 +39,8 @@
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
 #include "include/codec/SkCodec.h"
+#include "include/codec/SkPngRustDecoder.h"
+#include "src/codec/SkPngCodec.h"
 #ifdef DrawText
 #undef DrawText
 #endif
@@ -1394,63 +1396,24 @@ Local<Value> TryCatch::ReThrow() {
 }
 }  // namespace v8
 
-namespace SkCodecs {
-bool HasDecoder(std::string_view) {
-  return true;
+namespace SkPngRustDecoder {
+bool IsPng(const void* data, size_t len) {
+  return SkPngCodec::IsPng(data, len);
 }
-}  // namespace SkCodecs
 
-SkCodec::Result SkCodec::startIncrementalDecode(
-    const SkImageInfo& info,
-    void* pixels,
-    size_t row_bytes,
-    const SkCodec::Options* options) {
-  fStartedIncrementalDecode = false;
-
-  if (!this->onSupportsIncrementalDecode(info)) {
-    return kUnimplemented;
+std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
+                                SkCodec::Result* result,
+                                SkCodecs::DecodeContext) {
+  SkCodec::Result result_storage;
+  if (!result) {
+    result = &result_storage;
   }
-  if (kUnknown_SkColorType == info.colorType()) {
-    return kInvalidConversion;
-  }
-  if (!pixels) {
-    return kInvalidParameters;
-  }
+  return SkPngCodec::MakeFromStream(std::move(stream), result);
+}
+}  // namespace SkPngRustDecoder
 
-  Options options_storage;
-  if (!options) {
-    options = &options_storage;
-  } else if (options->fSubset) {
-    SkIRect size = SkIRect::MakeSize(info.dimensions());
-    if (!size.contains(*options->fSubset)) {
-      return kInvalidParameters;
-    }
-
-    const int top = options->fSubset->top();
-    const int bottom = options->fSubset->bottom();
-    if (top < 0 || top >= info.height() || top >= bottom ||
-        bottom > info.height()) {
-      return kInvalidParameters;
-    }
-  }
-
-  if (options->fFrameIndex != 0 || options->fPriorFrame != kNoFrame) {
-    return kUnimplemented;
-  }
-
-  if (!this->dimensionsSupported(info.dimensions())) {
-    return kInvalidScale;
-  }
-
-  fDstInfo = info;
-  fOptions = *options;
-
-  const Result result =
-      this->onStartIncrementalDecode(info, pixels, row_bytes, fOptions);
-  if (result == kSuccess) {
-    fStartedIncrementalDecode = true;
-  }
-  return result;
+bool SkGainmapInfo::Parse(const SkData*, SkGainmapInfo&) {
+  return false;
 }
 
 namespace blink {
@@ -20952,9 +20915,15 @@ SkMesh::~SkMesh() {}
 SkMesh::SkMesh(const SkMesh&) = default;
 
 namespace skhdr {
+bool ContentLightLevelInformation::parsePngChunk(const SkData*) {
+  return false;
+}
 bool ContentLightLevelInformation::operator==(
     const ContentLightLevelInformation& other) const {
   return fMaxCLL == other.fMaxCLL && fMaxFALL == other.fMaxFALL;
+}
+bool MasteringDisplayColorVolume::parse(const SkData*) {
+  return false;
 }
 bool MasteringDisplayColorVolume::operator==(
     const MasteringDisplayColorVolume& other) const {

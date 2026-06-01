@@ -126,10 +126,38 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/skia/skia_image_decoder_base.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/header_field_tokenizer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/server_timing_header.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkCodec.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkCodecColorProfile.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkColorPalette.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkEncodedInfo.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkExif.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCodecBase.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCodec.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCompositeChunkReader.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkSwizzler.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkTiffUtility.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngerror.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngget.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngmem.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngpread.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngread.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrio.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrtran.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrutil.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngset.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngtrans.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/crc32.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/infback.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inffast.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inflate.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inftrees.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/zutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_input_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_timeline.cc
