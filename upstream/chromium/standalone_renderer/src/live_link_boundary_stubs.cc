@@ -974,6 +974,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/platform/graphics/paint/paint_under_invalidation_checker.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
 #include "third_party/blink/renderer/platform/json/json_values.h"
+#include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #include "third_party/blink/renderer/platform/bindings/v8_histogram_accumulator.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
@@ -4695,9 +4696,75 @@ FetchContext& ResourceLoader::Context() const {
 }
 void ResourceLoader::ScheduleCancel() {}
 void ResourceLoader::DidChangePriority(ResourceLoadPriority, int) {}
+void ResourceLoader::AbortResponseBodyLoading() {}
+void ResourceLoader::DidFinishLoading(base::TimeTicks,
+                                      int64_t,
+                                      uint64_t,
+                                      int64_t) {}
+void ResourceLoader::DidFinishLoadingFirstPartInMultipart() {}
+scoped_refptr<base::SingleThreadTaskRunner>
+ResourceLoader::GetLoadingTaskRunner() {
+  return nullptr;
+}
 void ResourceLoader::Trace(Visitor* visitor) const {
   visitor->Trace(resource_);
   visitor->Trace(fetcher_);
+}
+
+AtomicString ExtractMIMETypeFromMediaType(const AtomicString& media_type) {
+  unsigned length = media_type.length();
+  unsigned pos = 0;
+  while (pos < length) {
+    UChar c = media_type[pos];
+    if (c != '\t' && c != ' ') {
+      break;
+    }
+    ++pos;
+  }
+  if (pos == length) {
+    return media_type;
+  }
+  unsigned type_start = pos;
+  unsigned type_end = pos;
+  while (pos < length) {
+    UChar c = media_type[pos];
+    if (c == ',' || c == ';') {
+      break;
+    }
+    if (c != '\t' && c != ' ') {
+      type_end = pos + 1;
+    }
+    ++pos;
+  }
+  return AtomicString(StringView(media_type, type_start,
+                                 type_end - type_start));
+}
+
+CacheControlHeader ParseCacheControlDirectives(
+    const AtomicString& cache_control_header,
+    const AtomicString& pragma_header) {
+  CacheControlHeader parsed;
+  parsed.parsed = true;
+  parsed.max_age = std::nullopt;
+  parsed.stale_while_revalidate = std::nullopt;
+  if (cache_control_header.empty() && pragma_header.empty()) {
+    return parsed;
+  }
+
+  const String cache_control = cache_control_header.ToAsciiLower();
+  const String pragma = pragma_header.ToAsciiLower();
+  parsed.contains_no_cache = cache_control.contains("no-cache") ||
+                             pragma.contains("no-cache");
+  parsed.contains_no_store = cache_control.contains("no-store");
+  parsed.contains_must_revalidate =
+      cache_control.contains("must-revalidate");
+  return parsed;
+}
+
+bool ParseMultipartHeadersFromBody(base::span<const uint8_t>,
+                                   ResourceResponse*,
+                                   wtf_size_t*) {
+  return false;
 }
 
 void ParseCommaDelimitedHeader(const StringView&, CommaDelimitedHeaderSet&) {}
@@ -10092,6 +10159,9 @@ NonMainThread* Thread::CompositorThread() {
 namespace network_utils {
 String GetDomainAndRegistry(const StringView&, PrivateRegistryFilter) {
   return String();
+}
+Vector<char> ParseMultipartBoundary(const AtomicString&) {
+  return Vector<char>();
 }
 }  // namespace network_utils
 bool IsInflightNetworkRequestBackForwardCacheSupportEnabled() {
