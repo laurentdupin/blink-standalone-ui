@@ -10,7 +10,9 @@
 namespace blink {
 
 class SVGRectElement;
+class SVGCircleElement;
 class SVGClipPathElement;
+class SVGEllipseElement;
 class SVGStyleElement;
 class SVGFEImageElement;
 class SVGFEMergeNodeElement;
@@ -18,7 +20,12 @@ class SVGFilterElement;
 class SVGForeignObjectElement;
 class SVGGElement;
 class SVGImageElement;
+class SVGLineElement;
+class SVGPathElement;
+class SVGPolygonElement;
+class SVGPolylineElement;
 class SVGSymbolElement;
+class SVGTextElement;
 class SVGViewElement;
 
 template <>
@@ -29,9 +36,23 @@ struct DowncastTraits<SVGRectElement> {
 };
 
 template <>
+struct DowncastTraits<SVGCircleElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGCircleElement;
+  }
+};
+
+template <>
 struct DowncastTraits<SVGClipPathElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGClipPathElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGEllipseElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGEllipseElement;
   }
 };
 
@@ -85,9 +106,44 @@ struct DowncastTraits<SVGImageElement> {
 };
 
 template <>
+struct DowncastTraits<SVGLineElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGLineElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGPathElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGPathElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGPolygonElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGPolygonElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGPolylineElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGPolylineElement;
+  }
+};
+
+template <>
 struct DowncastTraits<SVGSymbolElement> {
   static bool AllowFrom(const Node& node) {
     return node.GetElementType() == ElementType::kSVGSymbolElement;
+  }
+};
+
+template <>
+struct DowncastTraits<SVGTextElement> {
+  static bool AllowFrom(const Node& node) {
+    return node.GetElementType() == ElementType::kSVGTextElement;
   }
 };
 
