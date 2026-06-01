@@ -150,6 +150,16 @@ class PLATFORM_EXPORT FetchParameters {
       network::mojom::CSPDisposition content_security_policy_option) {
     options_.content_security_policy_option = content_security_policy_option;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void SetContentSecurityCheck(
+      network::mojom::blink::CSPDisposition content_security_policy_option) {
+    SetContentSecurityCheck(
+        content_security_policy_option ==
+                network::mojom::blink::CSPDisposition::DO_NOT_CHECK
+            ? network::mojom::CSPDisposition::DO_NOT_CHECK
+            : network::mojom::CSPDisposition::CHECK);
+  }
+#endif
   // Configures the request to use the "cors" mode and the credentials mode
   // specified by the crossOrigin attribute.
   void SetCrossOriginAccessControl(const SecurityOrigin*,
