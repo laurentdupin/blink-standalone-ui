@@ -7329,11 +7329,13 @@ void DOMTokenList::Trace(Visitor*) const {}
 
 void DOMRectList::Trace(Visitor*) const {}
 
+#ifndef BLINK_STANDALONE_USE_REAL_LAYOUT_SVG_TEXT
 void LayoutSVGText::NotifySubtreeStructureChanged(LayoutObject*, const char*) {}
 
 LayoutSVGText* LayoutSVGText::LocateLayoutSVGTextAncestor(LayoutObject*) {
   return nullptr;
 }
+#endif
 
 #ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 float SVGLayoutSupport::CalculateScreenFontSizeScalingFactor(
@@ -12934,9 +12936,11 @@ bool ViewTransitionStyleTracker::IsTransitionElement(const Element&) const {
   return false;
 }
 void FrameSelection::CommitAppearanceIfNeeded() {}
+#ifndef BLINK_STANDALONE_USE_REAL_LAYOUT_SVG_TEXT
 bool LayoutSVGText::NeedsTextMetricsUpdate() const {
   return false;
 }
+#endif
 #ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
 bool LayoutSVGRoot::IsEmbeddedThroughSVGImage() const {
   return false;
@@ -16073,7 +16077,9 @@ ExternalSVGResourceDocumentContent::ExternalSVGResourceDocumentContent(
 #endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 void FrameSelection::LayoutBlockWillBeDestroyed(const LayoutBlock&) {}
+#ifndef BLINK_STANDALONE_USE_REAL_LAYOUT_SVG_TEXT
 void LayoutSVGText::SetNeedsTextMetricsUpdate() {}
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void FragmentItems::DirtyLinesFromChangedChild(
     const LayoutObject&,
@@ -17983,12 +17989,14 @@ StringView InlineCursorPosition::Text(const InlineCursor&) const {
   return StringView();
 }
 #endif
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCES
 gfx::RectF SVGResources::ReferenceBoxForEffects(
     const LayoutObject&,
     GeometryBox,
     ForeignObjectQuirk) {
   return gfx::RectF();
 }
+#endif
 PhysicalOffset StickyPositionScrollingConstraints::StickyOffset() const {
   return PhysicalOffset();
 }
@@ -20014,10 +20022,12 @@ void SVGMaskPainter::PaintSVGMaskLayer(GraphicsContext&,
                                        float,
                                        SkBlendMode,
                                        bool) {}
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCES
 void SVGResources::UpdatePaints(const LayoutObject&,
                                 const ComputedStyle*,
                                 const ComputedStyle&) {}
 void SVGResources::ClearPaints(const LayoutObject&, const ComputedStyle*) {}
+#endif
 bool SVGObjectPainter::HasFill(const ComputedStyle&,
                                const SvgContextPaints*) {
   return false;
@@ -20448,10 +20458,12 @@ std::optional<gfx::RectF> CSSMaskPainter::MaskBoundingBox(
 SkBlendMode ToSkBlendMode(BlendMode) {
   return SkBlendMode::kSrcOver;
 }
+#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCES
 SVGElementResourceClient* SVGResources::GetClient(const LayoutObject&) {
   return nullptr;
 }
 void SVGElementResourceClient::UpdateFilterData(CompositorFilterOperations&) {}
+#endif
 bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
   return false;
 }
