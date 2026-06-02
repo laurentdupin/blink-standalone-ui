@@ -3710,12 +3710,6 @@ std::optional<NaturalSizingInfo> SVGImageForContainer::GetNaturalDimensions(
   return std::nullopt;
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-void SVGImage::CheckLoaded() const {}
-void SVGImage::UpdateUseCountersAfterLoad(const Document&) const {}
-void SVGImage::MaybeRecordSvgImageProcessingTime(Document const&) {}
-#endif
-
 mojom::blink::FetchPriorityHint GetFetchPriorityAttributeValue(
     const String&) {
   return mojom::blink::FetchPriorityHint::kAuto;
@@ -6907,22 +6901,6 @@ String TrustedTypesCheckForScriptURL(const String& script_url,
   return script_url;
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-bool SVGImage::IsInSVGImage(const Node*) {
-  return false;
-}
-#endif
-
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-void SVGElement::SetNeedsStyleRecalcForInstances(
-    StyleChangeType,
-    const StyleChangeReasonForTracing&) {}
-
-SVGElement* SVGElement::CorrespondingElement() const {
-  return nullptr;
-}
-#endif
-
 bool EventHandler::UsesHandCursor(const Node*) {
   return false;
 }
@@ -7081,15 +7059,6 @@ bool RuntimeEnabledFeaturesBase::ContainerTimingEnabled(
   return false;
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-bool SVGElement::IsOutermostSVGSVGElement() const {
-  return false;
-}
-bool SVGElement::IsResourceTarget() const {
-  return false;
-}
-#endif
-
 void ScrollMarkerGroupData::ClearFocusGroup() {
   focus_group_.clear();
 }
@@ -7108,12 +7077,6 @@ Element* DisplayLockUtilities::LockedAncestorPreventingPaint(
 bool DisplayLockUtilities::IsDisplayLockedPreventingPaint(const Node*, bool) {
   return false;
 }
-
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-bool SVGElement::HasSVGParent() const {
-  return false;
-}
-#endif
 
 void EditContext::AttachElement(HTMLElement*) {}
 
@@ -7304,14 +7267,6 @@ void NamedNodeMap::Trace(Visitor*) const {}
 void DOMTokenList::Trace(Visitor*) const {}
 
 void DOMRectList::Trace(Visitor*) const {}
-
-#ifndef BLINK_STANDALONE_USE_REAL_LAYOUT_SVG_TEXT
-void LayoutSVGText::NotifySubtreeStructureChanged(LayoutObject*, const char*) {}
-
-LayoutSVGText* LayoutSVGText::LocateLayoutSVGTextAncestor(LayoutObject*) {
-  return nullptr;
-}
-#endif
 
 void AnchorPositionScrollData::Trace(Visitor* visitor) const {
   PostLayoutSnapshotClient::Trace(visitor);
@@ -7754,12 +7709,6 @@ URLPattern* URLPattern::Create(v8::Isolate*,
                                ExceptionState&) {
   return nullptr;
 }
-
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-MutableCSSPropertyValueSet* SVGElement::AnimatedSMILStyleProperties() const {
-  return nullptr;
-}
-#endif
 
 namespace inspector_style_resolver_resolve_style_event {
 void Data(perfetto::TracedValue, Element*, PseudoId) {}
@@ -8629,10 +8578,6 @@ std::ostream& operator<<(std::ostream& stream, const QualifiedName& name) {
   return stream << name.ToString().Utf8();
 }
 #endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-void SVGElement::SynchronizeSVGAttribute(const QualifiedName&) const {}
-#endif
-
 bool MenuSafeTriangle::ShouldDeferInterestGained(Element*,
                                                  Element*,
                                                  Element::InterestState) {
@@ -9039,14 +8984,6 @@ gfx::PointF LayoutEmbeddedContent::EmbeddedContentFromBorderBox(
     const gfx::PointF& point) const {
   return point;
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-bool SVGDocumentExtensions::ServiceSmilOnAnimationFrame(Document&) {
-  return false;
-}
-bool SVGDocumentExtensions::ZoomAndPanEnabled() const {
-  return false;
-}
-#endif
 void PageAnimator::SetHasSmilAnimation() {}
 void PageAnimator::ScheduleVisualUpdate(LocalFrame*) {}
 void FrameView::UpdateRenderThrottlingStatus(bool, bool, bool, bool) {}
@@ -9058,12 +8995,6 @@ void FrameOverlay::Destroy() {}
 void FrameOverlay::UpdatePrePaint() {}
 void FrameOverlay::Paint(GraphicsContext&) const {}
 void FrameOverlay::Trace(Visitor*) const {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-NaturalSizingInfo LayoutSVGRoot::UnscaledNaturalSizingInfo(
-    const SVGRect*) const {
-  return NaturalSizingInfo();
-}
-#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
@@ -9681,11 +9612,6 @@ bool PaintLayerScrollableArea::HasRunningAnimation() {
   return false;
 }
 void ScrollMarkerGroupPseudoElement::ScrollSelectedIntoView(bool) {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-bool SVGGraphicsElement::IsNonRendered(const LayoutObject*) const {
-  return false;
-}
-#endif
 
 DOMRectList::DOMRectList() = default;
 DOMRect::DOMRect(double x, double y, double width, double height)
@@ -10457,11 +10383,6 @@ ShareableElementData* ElementDataCache::CachedShareableElementDataWithAttributes
     const Vector<Attribute, kAttributePrealloc>&) {
   return nullptr;
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
-void SVGUseElement::Trace(Visitor* visitor) const {
-  SVGGraphicsElement::Trace(visitor);
-}
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
 void ViewTransition::SkipTransition(PromiseResponse) {}
 CanvasFontCache::~CanvasFontCache() = default;
 void CanvasFontCache::Trace(Visitor*) const {}
@@ -10472,10 +10393,6 @@ void V8UnionStringOrTrustedHTML::Trace(Visitor* visitor) const {
 void ViewTransitionSupplement::Trace(Visitor*) const {}
 void NodeIterator::Trace(Visitor*) const {}
 void Range::Trace(Visitor*) const {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-SVGDocumentExtensions::~SVGDocumentExtensions() = default;
-void SVGDocumentExtensions::Trace(Visitor*) const {}
-#endif
 HTMLAllCollection::HTMLAllCollection(ContainerNode& node, CollectionType type)
     : HTMLCollection(node, type) {}
 HTMLAllCollection::~HTMLAllCollection() = default;
@@ -10502,11 +10419,6 @@ DOMRectReadOnly::DOMRectReadOnly(double x,
                                  double width,
                                  double height)
     : x_(x), y_(y), width_(width), height_(height) {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-void SVGGraphicsElement::Trace(Visitor* visitor) const {
-  SVGElement::Trace(visitor);
-}
-#endif
 std::unique_ptr<TracedValue> TracedLayoutObject::Create(const LayoutView&,
                                                         bool) {
   return nullptr;
@@ -10531,9 +10443,6 @@ void IntersectionObserverController::DeliverNotifications(
 void IntersectionObserverController::UpdateIntersectionObserverStatus() {}
 void DOMFeaturePolicy::Trace(Visitor* visitor) const {
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_DOM_SUPPORT
-void SVGElement::Trace(Visitor*) const {}
-#endif
 void MediaQueryMatcher::MediaFeaturesChanged() {}
 HTMLResourcePreloader::HTMLResourcePreloader(Document& document)
     : document_(document) {}
@@ -10758,9 +10667,6 @@ void ResourceFetcher::ScheduleWarnUnusedPreloads(
     base::OnceCallback<void(Vector<KURL>)>) {}
 void ResourceFetcher::MaybeRecordLCPPSubresourceMetrics(const KURL&) {}
 void MediaQueryMatcher::DocumentDetached() {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-SVGDocumentExtensions::SVGDocumentExtensions(Document*) {}
-#endif
 bool RuntimeEnabledFeaturesBase::AutofillEventEnabled(
     const FeatureContext*) {
   return false;
@@ -10817,10 +10723,6 @@ void ResourceLoadScheduler::LoosenThrottlingPolicy() {}
 void ViewTransitionSupplement::WillInsertBody() {}
 void RenderBlockingResourceManager::WillInsertDocumentBody() {}
 void FrameLoader::DidFinishNavigation(FrameLoader::NavigationFinishState) {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-void SVGDocumentExtensions::DispatchSVGLoadEventToOutermostSVGElements() {}
-void SVGDocumentExtensions::StartAnimations() {}
-#endif
 void HttpRefreshScheduler::MaybeStartTimer() {}
 void ViewportDescription::ReportMobilePageStats(const LocalFrame*) const {}
 const KURL& DocumentLoader::Url() const {
@@ -11193,9 +11095,6 @@ ShadowRoot* HTMLInputElement::EnsureShadowSubtree() {
 }
 void HTMLInputElement::EndEditing() {}
 #endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
-void SVGUseElement::BuildPendingResource() {}
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
 Element* DisplayLockUtilities::LockedAncestorPreventingStyle(const Node&) {
   return nullptr;
 }
@@ -11243,9 +11142,6 @@ gfx::Rect PaintLayerScrollableArea::ScrollingBackgroundVisualRect(
 }
 void DocumentMarkerController::InvalidateRectsForAllTextMatchMarkers() {}
 void DocumentMarkerController::PrepareForDestruction() {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
-void SVGDocumentExtensions::PauseAnimations() {}
-#endif
 void HttpRefreshScheduler::Cancel() {}
 HttpRefreshScheduler::HttpRefreshScheduler(Document* document)
     : document_(document) {}
@@ -12895,19 +12791,6 @@ bool ViewTransitionStyleTracker::IsTransitionElement(const Element&) const {
   return false;
 }
 void FrameSelection::CommitAppearanceIfNeeded() {}
-#ifndef BLINK_STANDALONE_USE_REAL_LAYOUT_SVG_TEXT
-bool LayoutSVGText::NeedsTextMetricsUpdate() const {
-  return false;
-}
-#endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-bool LayoutSVGRoot::IsEmbeddedThroughSVGImage() const {
-  return false;
-}
-bool LayoutSVGRoot::IsEmbeddedThroughFrameContainingSVGDocument() const {
-  return false;
-}
-#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutListItem::UpdateCounterStyle() {}
 void LayoutInlineListItem::UpdateCounterStyle() {}
@@ -16028,17 +15911,7 @@ v8::Local<v8::Object> ScriptWrappable::AssociateWithWrapper(
   return wrapper;
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-ExternalSVGResourceDocumentContent::ExternalSVGResourceDocumentContent(
-    const KURL& url,
-    const CSSUrlRequestModifiers& modifiers)
-    : SVGResource(), url_(url), modifiers_(modifiers) {}
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-
 void FrameSelection::LayoutBlockWillBeDestroyed(const LayoutBlock&) {}
-#ifndef BLINK_STANDALONE_USE_REAL_LAYOUT_SVG_TEXT
-void LayoutSVGText::SetNeedsTextMetricsUpdate() {}
-#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void FragmentItems::DirtyLinesFromChangedChild(
     const LayoutObject&,
@@ -17928,14 +17801,6 @@ StringView InlineCursorPosition::Text(const InlineCursor&) const {
   return StringView();
 }
 #endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCES
-gfx::RectF SVGResources::ReferenceBoxForEffects(
-    const LayoutObject&,
-    GeometryBox,
-    ForeignObjectQuirk) {
-  return gfx::RectF();
-}
-#endif
 PhysicalOffset StickyPositionScrollingConstraints::StickyOffset() const {
   return PhysicalOffset();
 }
@@ -19362,28 +19227,6 @@ PhysicalRect ComputeReferenceBox(const LayoutBox&) {
   return PhysicalRect();
 }
 #endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-bool LayoutSVGRoot::HasNonIsolatedBlendingDescendants() const {
-  return false;
-}
-double LayoutSVGRoot::LogicalSizeScaleFactorForPercentageLengths() const {
-  return 1.0;
-}
-gfx::SizeF LayoutSVGRoot::ViewportSize() const {
-  return gfx::SizeF();
-}
-gfx::RectF LayoutSVGRoot::ViewBoxRect() const {
-  return gfx::RectF();
-}
-#endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-gfx::RectF LayoutSVGViewportContainer::ViewBoxRect() const {
-  return gfx::RectF();
-}
-#endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-void LayoutSVGRoot::LayoutRoot(const PhysicalRect&) {}
-#endif
 void ScrollMarkerGroupPseudoElement::ClearFocusGroup() {}
 bool HTMLMarqueeElement::IsHorizontal() const {
   return true;
@@ -19961,12 +19804,6 @@ void SVGMaskPainter::PaintSVGMaskLayer(GraphicsContext&,
                                        float,
                                        SkBlendMode,
                                        bool) {}
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCES
-void SVGResources::UpdatePaints(const LayoutObject&,
-                                const ComputedStyle*,
-                                const ComputedStyle&) {}
-void SVGResources::ClearPaints(const LayoutObject&, const ComputedStyle*) {}
-#endif
 bool SVGObjectPainter::HasFill(const ComputedStyle&,
                                const SvgContextPaints*) {
   return false;
@@ -20378,20 +20215,9 @@ std::optional<gfx::RectF> CSSMaskPainter::MaskBoundingBox(
 SkBlendMode ToSkBlendMode(BlendMode) {
   return SkBlendMode::kSrcOver;
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCES
-SVGElementResourceClient* SVGResources::GetClient(const LayoutObject&) {
-  return nullptr;
-}
-void SVGElementResourceClient::UpdateFilterData(CompositorFilterOperations&) {}
-#endif
 bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
   return false;
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-AffineTransform LayoutSVGViewportContainer::ComputeViewboxTransform() const {
-  return AffineTransform();
-}
-#endif
 AffineTransform SVGRootPainter::TransformToPixelSnappedBorderBox(
     const PhysicalOffset&) const {
   return AffineTransform();
