@@ -6930,6 +6930,13 @@ String TrustedTypesCheckForScriptURL(
     ExceptionState&) {
   return String();
 }
+String TrustedTypesCheckForScriptURL(const String& script_url,
+                                     const ExecutionContext*,
+                                     const AtomicString&,
+                                     const AtomicString&,
+                                     ExceptionState&) {
+  return script_url;
+}
 
 #ifndef BLINK_STANDALONE_USE_REAL_SVG_IMAGE
 bool SVGImage::IsInSVGImage(const Node*) {
@@ -9733,7 +9740,6 @@ DOMRect* DOMRect::FromRectF(const gfx::RectF& rect) {
 }
 
 bool IsTrustedTypesEventHandlerAttribute(const QualifiedName&) { return false; }
-bool SVGAnimatedHref::IsKnownAttribute(const QualifiedName&) { return false; }
 AtomicString TrustedTypesCheckFor(
     SpecificTrustedType,
     const V8UnionTrustedHTMLOrTrustedScriptOrTrustedScriptURL*,
