@@ -729,6 +729,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_point_tear_off.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio_tear_off.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_string.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_transform_tear_off.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_transform_distance.cc
