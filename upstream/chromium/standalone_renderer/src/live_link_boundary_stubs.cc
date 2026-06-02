@@ -3273,6 +3273,8 @@ const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGTransformList");
 const WrapperTypeInfo& SVGTransformTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGTransform");
+const WrapperTypeInfo& SVGUseElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGUseElement");
 
 const WrapperTypeInfo& HTMLBRElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBRElement");
@@ -6792,6 +6794,10 @@ String ExceptionMessages::IndexExceedsMaximumBound(const char*,
                                                    const String&,
                                                    const String&) {
   return String("Index is above the maximum bound.");
+}
+
+String ExceptionMessages::ReadOnly(const char*) {
+  return String("The object is read-only.");
 }
 
 bool IsWordBreak(char16_t) {
