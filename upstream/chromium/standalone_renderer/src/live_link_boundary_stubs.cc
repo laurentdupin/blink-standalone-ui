@@ -108,6 +108,7 @@
 #include "third_party/blink/renderer/core/svg/svg_number_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_point_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_list_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_tear_off.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
@@ -3292,6 +3293,8 @@ const WrapperTypeInfo& SVGPointTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGPoint");
 const WrapperTypeInfo& SVGPreserveAspectRatioTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGPreserveAspectRatio");
+const WrapperTypeInfo& SVGSVGElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGSVGElement");
 const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGTransformList");
 const WrapperTypeInfo& SVGTransformTearOff::wrapper_type_info_ =
