@@ -4868,58 +4868,6 @@ void ResourceLoader::Trace(Visitor* visitor) const {
   visitor->Trace(fetcher_);
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_RESOURCE_RESPONSE_PARSERS
-AtomicString ExtractMIMETypeFromMediaType(const AtomicString& media_type) {
-  unsigned length = media_type.length();
-  unsigned pos = 0;
-  while (pos < length) {
-    UChar c = media_type[pos];
-    if (c != '\t' && c != ' ') {
-      break;
-    }
-    ++pos;
-  }
-  if (pos == length) {
-    return media_type;
-  }
-  unsigned type_start = pos;
-  unsigned type_end = pos;
-  while (pos < length) {
-    UChar c = media_type[pos];
-    if (c == ',' || c == ';') {
-      break;
-    }
-    if (c != '\t' && c != ' ') {
-      type_end = pos + 1;
-    }
-    ++pos;
-  }
-  return AtomicString(StringView(media_type, type_start,
-                                 type_end - type_start));
-}
-
-CacheControlHeader ParseCacheControlDirectives(
-    const AtomicString& cache_control_header,
-    const AtomicString& pragma_header) {
-  CacheControlHeader parsed;
-  parsed.parsed = true;
-  parsed.max_age = std::nullopt;
-  parsed.stale_while_revalidate = std::nullopt;
-  if (cache_control_header.empty() && pragma_header.empty()) {
-    return parsed;
-  }
-
-  const String cache_control = cache_control_header.ToAsciiLower();
-  const String pragma = pragma_header.ToAsciiLower();
-  parsed.contains_no_cache = cache_control.contains("no-cache") ||
-                             pragma.contains("no-cache");
-  parsed.contains_no_store = cache_control.contains("no-store");
-  parsed.contains_must_revalidate =
-      cache_control.contains("must-revalidate");
-  return parsed;
-}
-#endif  // BLINK_STANDALONE_USE_REAL_RESOURCE_RESPONSE_PARSERS
-
 bool ParseMultipartHeadersFromBody(base::span<const uint8_t>,
                                    ResourceResponse*,
                                    wtf_size_t*) {
