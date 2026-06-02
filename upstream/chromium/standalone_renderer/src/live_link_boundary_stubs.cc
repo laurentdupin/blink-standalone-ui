@@ -97,6 +97,12 @@
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length.h"
+#include "third_party/blink/renderer/core/svg/svg_angle_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_length_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_number_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_transform_list_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_transform_tear_off.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 #include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
@@ -3248,6 +3254,25 @@ const WrapperTypeInfo& StandaloneWrapperTypeInfo(const char* name) {
   return info;
 }
 }  // namespace
+
+const WrapperTypeInfo& SVGAngleTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAngle");
+const WrapperTypeInfo& SVGAnimatedLength::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedLength");
+const WrapperTypeInfo& SVGAnimatedString::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedString");
+const WrapperTypeInfo& SVGElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGElement");
+const WrapperTypeInfo& SVGGraphicsElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGGraphicsElement");
+const WrapperTypeInfo& SVGLengthTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGLength");
+const WrapperTypeInfo& SVGNumberTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGNumber");
+const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGTransformList");
+const WrapperTypeInfo& SVGTransformTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGTransform");
 
 const WrapperTypeInfo& HTMLBRElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBRElement");
