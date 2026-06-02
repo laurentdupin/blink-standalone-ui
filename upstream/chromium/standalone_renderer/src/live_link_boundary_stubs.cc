@@ -20111,6 +20111,8 @@ bool RuntimeEnabledFeaturesBase::is_hit_test_border_radius_for_stacking_context_
 bool RuntimeEnabledFeaturesBase::is_svg_filter_user_space_viewport_for_svg_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::
+    is_svg_inline_root_pixel_snapping_scale_adjustment_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
     is_invisible_svg_animation_throttling_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
     is_svg_transform_on_nested_svg_element_enabled_ = false;
@@ -20243,10 +20245,6 @@ SkBlendMode ToSkBlendMode(BlendMode) {
 }
 bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
   return false;
-}
-AffineTransform SVGRootPainter::TransformToPixelSnappedBorderBox(
-    const PhysicalOffset&) const {
-  return AffineTransform();
 }
 bool PaintArtifactCompositor::DirectlyUpdateScrollOffsetTransform(
     const TransformPaintPropertyNode&) {
