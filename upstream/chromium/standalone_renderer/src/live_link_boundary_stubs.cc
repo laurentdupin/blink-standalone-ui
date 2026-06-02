@@ -16263,11 +16263,6 @@ LayoutImageResourceStyleImage::LayoutImageResourceStyleImage(StyleImage*) {}
 StyleImageSet::StyleImageSet(StyleImage* image, CSSImageSetValue* value)
     : best_fit_image_(image), image_set_value_(value) {}
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-gfx::RectF TransformHelper::ComputeReferenceBox(const LayoutObject&) {
-  return gfx::RectF();
-}
-#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void ReferenceFilterOperation::AddClient(SVGResourceClient&) {}
 void ReferenceFilterOperation::RemoveClient(SVGResourceClient&) {}
@@ -20388,19 +20383,6 @@ bool CompositorAnimations::CanStartTransformAnimationOnCompositorForSVG(
     const SVGElement&) {
   return false;
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-AffineTransform TransformHelper::ComputeTransform(
-    UseCounter&,
-    const ComputedStyle&,
-    const gfx::RectF&,
-    ComputedStyle::ApplyTransformOrigin) {
-  return AffineTransform();
-}
-gfx::PointF TransformHelper::ComputeTransformOrigin(const ComputedStyle&,
-                                                    const gfx::RectF&) {
-  return gfx::PointF();
-}
-#endif
 std::optional<gfx::RectF> CSSMaskPainter::MaskBoundingBox(
     const LayoutObject&,
     const PhysicalOffset&) {
