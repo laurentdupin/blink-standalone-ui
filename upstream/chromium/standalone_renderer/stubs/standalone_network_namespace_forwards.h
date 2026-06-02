@@ -111,6 +111,14 @@ struct DowncastTraits<SVGUseElement> {
   }
   static bool AllowFrom(const Node&) { return false; }
 };
+class SVGSwitchElement;
+template <>
+struct DowncastTraits<SVGSwitchElement> {
+  static bool AllowFrom(const Element& element) {
+    return element.GetElementType() == ElementType::kSVGSwitchElement;
+  }
+  static bool AllowFrom(const Node&) { return false; }
+};
 #endif  // STANDALONE_RENDERER_MATHML_DOWNCAST_TRAITS_DEFINED
 
 namespace probe {

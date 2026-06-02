@@ -21,6 +21,7 @@ class SVGAElement final : public SVGGraphicsElement {
 template <>
 struct DowncastTraits<SVGAElement> {
   static bool AllowFrom(const Element&) { return false; }
+  static bool AllowFrom(const Node&) { return false; }
 };
 
 }  // namespace blink
