@@ -83,6 +83,8 @@
 #include "third_party/blink/renderer/core/svg/svg_filter_element.h"
 #include "third_party/blink/renderer/core/svg/svg_line_element.h"
 #include "third_party/blink/renderer/core/svg/svg_marker_element.h"
+#include "third_party/blink/renderer/core/svg/svg_resource_document_content.h"
+#include "third_party/blink/renderer/core/svg/svg_string_list_tear_off.h"
 #include "third_party/blink/renderer/core/html/loading_attribute.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
@@ -3146,6 +3148,8 @@ bool RuntimeEnabledFeaturesBase::is_css_scroll_snap_changing_event_enabled_ =
 bool RuntimeEnabledFeaturesBase::
     is_svg_partition_svg_document_resources_in_memory_cache_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
+    is_allow_svg_use_to_reference_external_document_root_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
     is_dispatch_hidden_visibility_transitions_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_web_preferences_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
@@ -3312,6 +3316,8 @@ const WrapperTypeInfo& SVGRectTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGRect");
 const WrapperTypeInfo& SVGSVGElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGSVGElement");
+const WrapperTypeInfo& SVGStringListTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGStringList");
 const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGTransformList");
 const WrapperTypeInfo& SVGTransformTearOff::wrapper_type_info_ =
@@ -16610,6 +16616,9 @@ TextIteratorBehavior::TextIteratorBehavior() {
   values_.all = 0;
 }
 
+ExternalSVGResourceDocumentContent::ExternalSVGResourceDocumentContent(
+    const KURL&,
+    const CSSUrlRequestModifiers&) {}
 void ExternalSVGResourceDocumentContent::Load(Document&,
                                               CrossOriginAttributeValue) {}
 void ExternalSVGResourceDocumentContent::LoadWithoutCSP(Document&) {}
@@ -16646,6 +16655,49 @@ void ExternalSVGResourceImageContent::ImageNotifyFinished(ImageResourceContent*)
 String ExternalSVGResourceImageContent::DebugName() const {
   return "ExternalSVGResourceImageContent";
 }
+
+const KURL& SVGResourceDocumentContent::Url() const {
+  static const KURL* empty_url = new KURL();
+  return *empty_url;
+}
+SVGResourceDocumentContent* SVGResourceDocumentContent::Fetch(
+    FetchParameters&,
+    Document&) {
+  return nullptr;
+}
+SVGResourceDocumentContent::SVGResourceDocumentContent(
+    AgentGroupScheduler&,
+    scoped_refptr<base::SingleThreadTaskRunner>) {}
+SVGResourceDocumentContent::~SVGResourceDocumentContent() = default;
+bool SVGResourceDocumentContent::IsLoaded() const {
+  return false;
+}
+bool SVGResourceDocumentContent::IsLoading() const {
+  return false;
+}
+bool SVGResourceDocumentContent::ErrorOccurred() const {
+  return true;
+}
+Document* SVGResourceDocumentContent::GetDocument() const {
+  return nullptr;
+}
+void SVGResourceDocumentContent::NotifyStartLoad() {}
+SVGResourceDocumentContent::UpdateResult SVGResourceDocumentContent::UpdateDocument(
+    scoped_refptr<SharedBuffer>,
+    const KURL&) {
+  return UpdateResult::kError;
+}
+void SVGResourceDocumentContent::ClearDocument() {}
+void SVGResourceDocumentContent::Dispose() {}
+void SVGResourceDocumentContent::UpdateStatus(ResourceStatus) {}
+void SVGResourceDocumentContent::AddObserver(SVGResourceDocumentObserver*) {}
+void SVGResourceDocumentContent::RemoveObserver(SVGResourceDocumentObserver*) {}
+void SVGResourceDocumentContent::NotifyObservers() {}
+SVGResourceTarget* SVGResourceDocumentContent::GetResourceTarget(
+    const AtomicString&) {
+  return nullptr;
+}
+void SVGResourceDocumentContent::Trace(Visitor*) const {}
 
 void MathMLSpaceElement::AddMathBaselineIfNeeded(
     ComputedStyleBuilder&,

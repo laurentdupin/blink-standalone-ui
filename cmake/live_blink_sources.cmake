@@ -772,7 +772,10 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_rect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_rect_tear_off.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_resource.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_static_string_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_string.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_string_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_string_list_tear_off.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_svg_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_tests.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_transform.cc
