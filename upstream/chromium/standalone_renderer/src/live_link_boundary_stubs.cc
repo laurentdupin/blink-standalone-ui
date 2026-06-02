@@ -78,6 +78,10 @@
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_picture_element.h"
 #include "third_party/blink/renderer/core/html/html_source_element.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_angle.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_enumeration_base.h"
+#include "third_party/blink/renderer/core/svg/svg_line_element.h"
+#include "third_party/blink/renderer/core/svg/svg_marker_element.h"
 #include "third_party/blink/renderer/core/html/loading_attribute.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
@@ -3267,6 +3271,10 @@ const WrapperTypeInfo& SVGAngleTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAngle");
 const WrapperTypeInfo& SVGAnimatedLength::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedLength");
+const WrapperTypeInfo& SVGAnimatedAngle::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedAngle");
+const WrapperTypeInfo& SVGAnimatedEnumerationBase::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedEnumerationBase");
 const WrapperTypeInfo& SVGAnimatedNumber::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedNumber");
 const WrapperTypeInfo& SVGAnimatedPreserveAspectRatio::wrapper_type_info_ =
@@ -3283,6 +3291,10 @@ const WrapperTypeInfo& SVGGeometryElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGeometryElement");
 const WrapperTypeInfo& SVGGraphicsElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGraphicsElement");
+const WrapperTypeInfo& SVGLineElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGLineElement");
+const WrapperTypeInfo& SVGMarkerElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGMarkerElement");
 const WrapperTypeInfo& SVGLengthTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLength");
 const WrapperTypeInfo& SVGMatrixTearOff::wrapper_type_info_ =
@@ -3293,6 +3305,8 @@ const WrapperTypeInfo& SVGPointTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGPoint");
 const WrapperTypeInfo& SVGPreserveAspectRatioTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGPreserveAspectRatio");
+const WrapperTypeInfo& SVGRectTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGRect");
 const WrapperTypeInfo& SVGSVGElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGSVGElement");
 const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
