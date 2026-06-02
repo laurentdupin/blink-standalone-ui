@@ -119,6 +119,38 @@ struct DowncastTraits<SVGMarkerElement> {
   }
   static bool AllowFrom(const Node&) { return false; }
 };
+class SVGFEDiffuseLightingElement;
+template <>
+struct DowncastTraits<SVGFEDiffuseLightingElement> {
+  static bool AllowFrom(const Element& element) {
+    return element.GetElementType() == ElementType::kSVGFEDiffuseLightingElement;
+  }
+  static bool AllowFrom(const Node&) { return false; }
+};
+class SVGFEDropShadowElement;
+template <>
+struct DowncastTraits<SVGFEDropShadowElement> {
+  static bool AllowFrom(const Element& element) {
+    return element.GetElementType() == ElementType::kSVGFEDropShadowElement;
+  }
+  static bool AllowFrom(const Node&) { return false; }
+};
+class SVGFEFloodElement;
+template <>
+struct DowncastTraits<SVGFEFloodElement> {
+  static bool AllowFrom(const Element& element) {
+    return element.GetElementType() == ElementType::kSVGFEFloodElement;
+  }
+  static bool AllowFrom(const Node&) { return false; }
+};
+class SVGFESpecularLightingElement;
+template <>
+struct DowncastTraits<SVGFESpecularLightingElement> {
+  static bool AllowFrom(const Element& element) {
+    return element.GetElementType() == ElementType::kSVGFESpecularLightingElement;
+  }
+  static bool AllowFrom(const Node&) { return false; }
+};
 class SVGSwitchElement;
 template <>
 struct DowncastTraits<SVGSwitchElement> {

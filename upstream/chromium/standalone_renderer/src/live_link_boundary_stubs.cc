@@ -80,6 +80,7 @@
 #include "third_party/blink/renderer/core/html/html_source_element.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_angle.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_enumeration_base.h"
+#include "third_party/blink/renderer/core/svg/svg_filter_element.h"
 #include "third_party/blink/renderer/core/svg/svg_line_element.h"
 #include "third_party/blink/renderer/core/svg/svg_marker_element.h"
 #include "third_party/blink/renderer/core/html/loading_attribute.h"
@@ -3291,6 +3292,8 @@ const WrapperTypeInfo& SVGGeometryElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGeometryElement");
 const WrapperTypeInfo& SVGGraphicsElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGraphicsElement");
+const WrapperTypeInfo& SVGFilterElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGFilterElement");
 const WrapperTypeInfo& SVGLineElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLineElement");
 const WrapperTypeInfo& SVGMarkerElement::wrapper_type_info_ =
@@ -15788,6 +15791,8 @@ bool RuntimeEnabledFeaturesBase::is_color_space_display_p_3_linear_enabled_ =
 bool RuntimeEnabledFeaturesBase::is_timeline_trigger_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_composite_clip_path_animation_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::
+    is_clip_path_nested_raster_optimization_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_text_emphasis_position_auto_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_overlay_global_rule_removal_enabled_ =
@@ -18794,9 +18799,6 @@ float Filter::ApplyHorizontalScale(float value) const {
 float Filter::ApplyVerticalScale(float value) const {
   return value * scale_;
 }
-gfx::RectF FilterEffect::MapRect(const gfx::RectF& rect) const {
-  return rect;
-}
 bool StyleImage::IsCorsSameOrigin() const {
   return true;
 }
@@ -19831,9 +19833,6 @@ bool AutoscrollController::AutoscrollInProgressFor(const LayoutBox*) const {
 void AutoscrollController::StopAutoscroll() {}
 
 void HitTestResult::Append(const HitTestResult&) {}
-bool ClipPathClipper::HitTest(const LayoutObject&, const HitTestLocation&) {
-  return false;
-}
 void SVGMaskPainter::Paint(GraphicsContext&,
                            const LayoutObject&,
                            const DisplayItemClient&) {}
@@ -19844,21 +19843,6 @@ void SVGMaskPainter::PaintSVGMaskLayer(GraphicsContext&,
                                        float,
                                        SkBlendMode,
                                        bool) {}
-bool SVGObjectPainter::HasFill(const ComputedStyle&,
-                               const SvgContextPaints*) {
-  return false;
-}
-bool SVGObjectPainter::HasVisibleStroke(const ComputedStyle&,
-                                        const SvgContextPaints*) {
-  return false;
-}
-bool SVGObjectPainter::PreparePaint(PaintFlags,
-                                    const ComputedStyle&,
-                                    LayoutSVGResourceMode,
-                                    cc::PaintFlags&,
-                                    const AffineTransform*) {
-  return false;
-}
 extern const int32_t kSerializedCharacterDataSize = 0;
 alignas(4) extern const uint8_t kSerializedCharacterData[] = {};
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -20092,9 +20076,6 @@ std::pair<bool, bool> JustificationContext::CheckOpportunity8(TextJustify,
   return {false, false};
 }
 #endif
-void ClipPathClipper::PaintClipPathAsMaskImage(GraphicsContext&,
-                                               const LayoutObject&,
-                                               const DisplayItemClient&) {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void PhysicalFragment::Trace(Visitor*) const {}
 #endif
@@ -20185,26 +20166,6 @@ bool PaintLayerScrollableArea::BackgroundNeedsRepaintOnScroll() const {
 }
 cc::ElementId PaintLayerScrollableArea::GetScrollCornerElementId() const {
   return cc::ElementId();
-}
-void ClipPathClipper::FallbackClipPathAnimationIfNecessary(const LayoutObject&,
-                                                           bool) {}
-bool ClipPathClipper::ClipPathStatusResolved(const LayoutObject&) {
-  return true;
-}
-std::optional<gfx::RectF> ClipPathClipper::LocalClipPathBoundingBox(
-    const LayoutObject&) {
-  return std::nullopt;
-}
-bool ClipPathClipper::HasCompositeClipPathAnimation(
-    const LayoutObject&,
-    CompositedStateResolutionType) {
-  return false;
-}
-void ClipPathClipper::FallbackClipPathAnimationDueToAbsentBounds(
-    const LayoutObject&) {}
-std::optional<Path> ClipPathClipper::PathBasedClip(const LayoutObject&,
-                                                   const gfx::Vector2dF&) {
-  return std::nullopt;
 }
 LayoutView* LayoutEmbeddedContent::ChildLayoutView() const {
   return nullptr;
