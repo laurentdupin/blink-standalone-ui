@@ -1,10 +1,18 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_text.h"
+#include "third_party/blink/renderer/core/svg/animation/element_smil_animations.h"
+#include "third_party/blink/renderer/core/svg/animation/smil_animation_sandwich.h"
 #include "third_party/blink/renderer/core/svg/properties/svg_animated_property.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_element_rare_data.h"
 #include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 
 namespace blink {
+
+ElementSMILAnimations::ElementSMILAnimations() = default;
+
+void ElementSMILAnimations::Trace(Visitor* visitor) const {
+  visitor->Trace(sandwiches_);
+}
 
 SVGElementRareData* SVGElement::EnsureSVGRareData() {
   if (!svg_rare_data_) {
