@@ -98,9 +98,16 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_length.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_number.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_rect.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_transform_list.h"
 #include "third_party/blink/renderer/core/svg/svg_angle_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_length_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_matrix_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_number_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_point_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_list_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_tear_off.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
@@ -3259,16 +3266,32 @@ const WrapperTypeInfo& SVGAngleTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAngle");
 const WrapperTypeInfo& SVGAnimatedLength::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedLength");
+const WrapperTypeInfo& SVGAnimatedNumber::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedNumber");
+const WrapperTypeInfo& SVGAnimatedPreserveAspectRatio::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedPreserveAspectRatio");
+const WrapperTypeInfo& SVGAnimatedRect::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedRect");
 const WrapperTypeInfo& SVGAnimatedString::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedString");
+const WrapperTypeInfo& SVGAnimatedTransformList::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedTransformList");
 const WrapperTypeInfo& SVGElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGElement");
+const WrapperTypeInfo& SVGGeometryElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGGeometryElement");
 const WrapperTypeInfo& SVGGraphicsElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGraphicsElement");
 const WrapperTypeInfo& SVGLengthTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLength");
+const WrapperTypeInfo& SVGMatrixTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGMatrix");
 const WrapperTypeInfo& SVGNumberTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGNumber");
+const WrapperTypeInfo& SVGPointTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGPoint");
+const WrapperTypeInfo& SVGPreserveAspectRatioTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGPreserveAspectRatio");
 const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGTransformList");
 const WrapperTypeInfo& SVGTransformTearOff::wrapper_type_info_ =
