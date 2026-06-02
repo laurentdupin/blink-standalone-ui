@@ -980,6 +980,7 @@ extern "C" const char icudt78_dat[] = {0};
 #include "third_party/blink/renderer/core/timing/render_blocking_metrics_reporter.h"
 #include "third_party/blink/renderer/core/timing/soft_navigation_heuristics.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_script.h"
+#include "third_party/blink/renderer/core/trustedtypes/trusted_script_url.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/core/frame/performance_monitor.h"
 #include "third_party/blink/renderer/core/frame/location_report_body.h"
@@ -2845,6 +2846,9 @@ Vector<AtomicString> EventListenerMap::EventTypes() const {
 
 void EventListenerMap::Clear() {}
 
+void EventListenerMap::CopyEventListenersNotCreatedFromMarkupToTarget(
+    EventTarget*) {}
+
 void EventListenerMap::Trace(Visitor* visitor) const {
   visitor->Trace(entries_);
 }
@@ -3324,6 +3328,8 @@ const WrapperTypeInfo& SVGTransformTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGTransform");
 const WrapperTypeInfo& SVGUseElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGUseElement");
+const WrapperTypeInfo& TrustedScriptURL::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("TrustedScriptURL");
 
 const WrapperTypeInfo& HTMLBRElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBRElement");
@@ -9671,6 +9677,9 @@ DOMRect* DOMRect::FromRectF(const gfx::RectF& rect) {
 }
 
 bool IsTrustedTypesEventHandlerAttribute(const QualifiedName&) { return false; }
+String GetTrustedTypesLiteral(const ScriptValue&, ScriptState*) {
+  return String();
+}
 AtomicString TrustedTypesCheckFor(
     SpecificTrustedType,
     const V8UnionTrustedHTMLOrTrustedScriptOrTrustedScriptURL*,
