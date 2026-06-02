@@ -7313,13 +7313,6 @@ LayoutSVGText* LayoutSVGText::LocateLayoutSVGTextAncestor(LayoutObject*) {
 }
 #endif
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-float SVGLayoutSupport::CalculateScreenFontSizeScalingFactor(
-    const LayoutObject*) {
-  return 1.0f;
-}
-#endif
-
 void AnchorPositionScrollData::Trace(Visitor* visitor) const {
   PostLayoutSnapshotClient::Trace(visitor);
   visitor->Trace(anchored_element_);
@@ -19989,12 +19982,6 @@ bool SVGObjectPainter::PreparePaint(PaintFlags,
                                     const AffineTransform*) {
   return false;
 }
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-void SVGLayoutSupport::ApplyStrokeStyleToStrokeData(StrokeData&,
-                                                    const ComputedStyle&,
-                                                    const LayoutObject&,
-                                                    float) {}
-#endif
 extern const int32_t kSerializedCharacterDataSize = 0;
 alignas(4) extern const uint8_t kSerializedCharacterData[] = {};
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -20432,14 +20419,6 @@ float TargetScaleForPage(const PhysicalBoxFragment&) {
 void CullRectUpdater::PaintPropertiesChanged(
     const LayoutObject&,
     const PaintPropertiesChangeInfo&) {}
-#endif
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_LAYOUT_SUPPORT
-bool SVGLayoutSupport::IsIsolationRequired(const LayoutObject*) {
-  return false;
-}
-bool SVGLayoutSupport::IsOverflowHidden(const LayoutObject&) {
-  return false;
-}
 #endif
 bool LayoutShiftTracker::NeedsToTrack(const LayoutObject&) const {
   return false;
