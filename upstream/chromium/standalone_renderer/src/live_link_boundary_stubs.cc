@@ -6701,16 +6701,6 @@ unsigned FirstLetterPseudoElement::FirstLetterLength(
   return string.empty() ? 0u : 1u;
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-LocalSVGResource::LocalSVGResource(TreeScope& tree_scope, const AtomicString&)
-    : tree_scope_(&tree_scope) {}
-void LocalSVGResource::Unregister() {}
-void LocalSVGResource::Trace(Visitor* visitor) const {
-  SVGResource::Trace(visitor);
-  visitor->Trace(tree_scope_);
-}
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-
 DOMSelection::DOMSelection(const TreeScope*) : ExecutionContextClient(nullptr) {}
 void DOMSelection::Trace(Visitor* visitor) const {
   ScriptWrappable::Trace(visitor);
@@ -7718,12 +7708,6 @@ HTMLElement* CustomElementDefinition::CreateElement(Document&,
                                                     const CreateElementFlags) {
   return nullptr;
 }
-
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-SVGResource::SVGResource() = default;
-SVGResource::~SVGResource() = default;
-void SVGResource::Trace(Visitor*) const {}
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 namespace bindings {
 ObservableArrayBase::ObservableArrayBase(
@@ -11271,9 +11255,6 @@ void HTMLInputElement::EndEditing() {}
 #ifndef BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
 void SVGUseElement::BuildPendingResource() {}
 #endif  // BLINK_STANDALONE_USE_REAL_SVG_USE_ELEMENT
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-void SVGResource::NotifyContentChanged() {}
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 Element* DisplayLockUtilities::LockedAncestorPreventingStyle(const Node&) {
   return nullptr;
 }
@@ -16775,20 +16756,6 @@ TextIteratorBehavior::TextIteratorBehavior() {
   values_.all = 0;
 }
 
-#ifndef BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
-void SVGResource::AddClient(SVGResourceClient&) {}
-void SVGResource::RemoveClient(SVGResourceClient&) {}
-void SVGResource::AddObserver(ImageResourceObserver&) {}
-void SVGResource::RemoveObserver(ImageResourceObserver&) {}
-SVGResourceClient* SVGResource::GetObserverResourceClient(
-    ImageResourceObserver&) {
-  return nullptr;
-}
-LayoutSVGResourceContainer* SVGResource::ResourceContainerNoCycleCheck()
-    const {
-  return nullptr;
-}
-
 void ExternalSVGResourceDocumentContent::Load(Document&,
                                               CrossOriginAttributeValue) {}
 void ExternalSVGResourceDocumentContent::LoadWithoutCSP(Document&) {}
@@ -16825,7 +16792,6 @@ void ExternalSVGResourceImageContent::ImageNotifyFinished(ImageResourceContent*)
 String ExternalSVGResourceImageContent::DebugName() const {
   return "ExternalSVGResourceImageContent";
 }
-#endif  // BLINK_STANDALONE_USE_REAL_SVG_RESOURCE
 
 void MathMLSpaceElement::AddMathBaselineIfNeeded(
     ComputedStyleBuilder&,
