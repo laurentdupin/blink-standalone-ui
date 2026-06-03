@@ -9024,6 +9024,11 @@ FrameSelection::FrameSelection(LocalFrame& frame)
       frame_caret_(nullptr) {}
 FrameSelection::~FrameSelection() = default;
 void FrameSelection::Trace(Visitor*) const {}
+void FrameSelection::Clear() {
+  granularity_ = TextGranularity::kCharacter;
+  is_handle_visible_ = false;
+  is_directional_ = false;
+}
 String FrameSelection::SelectedText() const {
   return String();
 }
