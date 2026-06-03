@@ -1,10 +1,24 @@
 set(BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base64.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_op.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/case_conversion.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/i18n_constants.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/string_escape.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pickle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/simdutf_shim.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/escape.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_split.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_number_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_util_constants.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/sys_string_conversions_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_util_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_offset_string_conversions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_ostream_operators.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_string_conversion_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_string_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/matcher_string_pattern.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/substring_set_matcher.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker.cc
@@ -18,6 +32,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/fixed-dtoa.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/string-to-double.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/strtod.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_usage_estimator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/value_iterators.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/values.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/hit_test_opaqueness.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_snap_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_utils.cc
@@ -26,13 +43,19 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/mime_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/net_string_util_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/parse_number.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/url_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_byte_range.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_connection_info.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_content_disposition.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_response_headers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_status_code.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/cicp.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/simdutf/simdutf.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/platform/network/http_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/css_property_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/parser/at_rule_descriptors.cc

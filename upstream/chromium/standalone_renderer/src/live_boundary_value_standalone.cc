@@ -205,9 +205,6 @@ SSLInfo::~SSLInfo() = default;
 AuthChallengeInfo::AuthChallengeInfo() = default;
 AuthChallengeInfo::AuthChallengeInfo(const AuthChallengeInfo&) = default;
 AuthChallengeInfo::~AuthChallengeInfo() = default;
-bool HostStringIsLocalhost(std::string_view) {
-  return false;
-}
 
 }  // namespace net
 

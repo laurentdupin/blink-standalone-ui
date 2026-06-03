@@ -14,6 +14,7 @@
 #include "base/trace_event/trace_arguments.h"
 #include "base/cpu.h"
 #include "base/feature_list.h"
+#include "base/features.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/observer_list_types.h"
 #include "base/metrics/histogram_functions.h"
@@ -154,6 +155,7 @@
 #include "components/subresource_filter/core/common/scoped_rule.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/http/http_log_util.h"
 #include "third_party/abseil-cpp/absl/container/internal/hashtablez_sampler.h"
 #include <cstdarg>
 #include <cmath>
@@ -13949,70 +13951,19 @@ TaskTimeObserver::~TaskTimeObserver() = default;
 }  // namespace sequence_manager
 CheckedObserver::CheckedObserver() = default;
 CheckedObserver::~CheckedObserver() = default;
-Value::~Value() = default;
-const char* Value::GetTypeName(Type) {
-  return "none";
-}
-int Value::GetInt() const {
-  return 0;
-}
-const DictValue& Value::GetDict() const {
-  static const DictValue* empty = new DictValue();
-  return *empty;
-}
-const ListValue& Value::GetList() const {
-  static const ListValue* empty = new ListValue();
-  return *empty;
-}
-DictValue::DictValue() = default;
-DictValue::~DictValue() = default;
-ListValue::ListValue() = default;
-ListValue::~ListValue() = default;
-size_t ListValue::size() const {
-  return storage_.size();
-}
 RefCountedString::RefCountedString(std::string value)
     : string_(std::move(value)) {}
 RefCountedString::~RefCountedString() = default;
 span<const uint8_t> RefCountedString::AsSpan() const {
   return as_byte_span(string_);
 }
-const Value* DictValue::Find(std::string_view) const {
-  return nullptr;
-}
-Value* DictValue::Find(std::string_view) {
-  return nullptr;
-}
-std::optional<int> DictValue::FindInt(std::string_view) const {
-  return std::nullopt;
-}
-const std::string* DictValue::FindString(std::string_view) const {
-  return nullptr;
-}
-std::string* DictValue::FindString(std::string_view) {
-  return nullptr;
-}
-const ListValue* DictValue::FindList(std::string_view) const {
-  return nullptr;
-}
-ListValue* DictValue::FindList(std::string_view) {
-  return nullptr;
-}
-ListValue::const_iterator ListValue::begin() const {
-  const Value* data = storage_.data();
-  return const_iterator(data, data);
-}
-ListValue::const_iterator ListValue::end() const {
-  const Value* data = storage_.data();
-  return const_iterator(data, data + storage_.size());
-}
-const Value& ListValue::operator[](size_t index) const {
-  return storage_[index];
-}
 std::optional<DictValue> JSONReader::ReadDict(std::string_view,
                                               int,
                                               size_t) {
   return std::nullopt;
+}
+bool Time::FromStringInternal(const char*, bool, Time*) {
+  return false;
 }
 std::ostream& operator<<(std::ostream& os, TimeDelta time_delta) {
   return os << time_delta.InMicroseconds() << " us";
@@ -14282,6 +14233,24 @@ AsyncMemoryPressureListenerRegistration::
 AsyncMemoryPressureListenerRegistration::
     ~AsyncMemoryPressureListenerRegistration() = default;
 }  // namespace base
+
+namespace base::features {
+
+BASE_FEATURE(kSimdutfBase64Encode,
+             "SimdutfBase64Encode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+}  // namespace base::features
+
+namespace net {
+
+std::string ElideHeaderValueForNetLog(NetLogCaptureMode,
+                                      std::string_view,
+                                      std::string_view value) {
+  return std::string(value);
+}
+
+}  // namespace net
 
 namespace skresources {
 sk_sp<SkImage> ImageAsset::getFrame(float) {
@@ -15013,6 +14982,11 @@ TracedValue TracedArray::AppendItem() {
   return TracedValue(annotation_, event_context_, &checked_scope_);
 }
 
+TracedDictionary TracedArray::AppendDictionary() {
+  return TracedDictionary(
+      TracedValue(annotation_, event_context_, &checked_scope_));
+}
+
 TracedArray TracedValue::WriteArray() && {
   return TracedArray(annotation_, event_context_, &checked_scope_);
 }
@@ -15025,11 +14999,17 @@ TracedValue TracedDictionary::AddItem(StaticString) {
       static_cast<perfetto::protos::pbzero::DebugAnnotation*>(nullptr),
       event_context_, &checked_scope_);
 }
+TracedValue TracedDictionary::AddItem(DynamicString) {
+  return TracedValue(
+      static_cast<perfetto::protos::pbzero::DebugAnnotation*>(nullptr),
+      event_context_, &checked_scope_);
+}
 
 void TracedValue::WriteUInt64(uint64_t) && {}
 void TracedValue::WriteInt64(int64_t) && {}
 void TracedValue::WriteString(const char*) && {}
 void TracedValue::WriteString(const std::string&) && {}
+void TracedValue::WriteString(std::string_view) && {}
 void TracedValue::WriteBoolean(bool) && {}
 }  // namespace perfetto
 
@@ -20235,12 +20215,6 @@ DiscardableMemoryAllocator::AllocateLockedDiscardableMemoryWithRetryOrDie(
 std::string CommandLine::GetSwitchValueASCII(std::string_view) const {
   return std::string();
 }
-std::string Base64Encode(span<const uint8_t>) {
-  return std::string();
-}
-std::string Base64Encode(std::string_view) {
-  return std::string();
-}
 void StringAppendV(std::string* dst, const char* format, va_list ap) {
   if (!dst || !format)
     return;
@@ -20545,9 +20519,6 @@ SkColor SkRGBA4f<kUnpremul_SkAlphaType>::toSkColor() const {
 namespace std {
 int uncaught_exceptions() noexcept {
   return 0;
-}
-ostream& operator<<(ostream& out, const u16string&) {
-  return out;
 }
 }  // namespace std
 
