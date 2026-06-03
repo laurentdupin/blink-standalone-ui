@@ -82,7 +82,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_link_boundary_stubs.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_element_resource_support.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_resource_local.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/load_command.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_feature_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/paint_translator.cc

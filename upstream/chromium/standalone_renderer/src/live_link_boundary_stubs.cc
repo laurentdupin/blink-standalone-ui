@@ -16473,46 +16473,6 @@ TextIteratorBehavior::TextIteratorBehavior() {
   values_.all = 0;
 }
 
-ExternalSVGResourceDocumentContent::ExternalSVGResourceDocumentContent(
-    const KURL&,
-    const CSSUrlRequestModifiers&) {}
-void ExternalSVGResourceDocumentContent::Load(Document&,
-                                              CrossOriginAttributeValue) {}
-void ExternalSVGResourceDocumentContent::LoadWithoutCSP(Document&) {}
-void ExternalSVGResourceDocumentContent::Trace(Visitor* visitor) const {
-  SVGResource::Trace(visitor);
-}
-bool ExternalSVGResourceDocumentContent::IsLoading() const {
-  return false;
-}
-Element* ExternalSVGResourceDocumentContent::ResolveTarget() {
-  return nullptr;
-}
-void ExternalSVGResourceDocumentContent::ResourceNotifyFinished(
-    SVGResourceDocumentContent*) {}
-void ExternalSVGResourceDocumentContent::ResourceContentChanged(
-    SVGResourceDocumentContent*) {}
-
-ExternalSVGResourceImageContent::ExternalSVGResourceImageContent(
-    ImageResourceContent* image_content,
-    const AtomicString& fragment)
-    : image_content_(image_content), fragment_(fragment) {}
-void ExternalSVGResourceImageContent::Trace(Visitor* visitor) const {
-  SVGResource::Trace(visitor);
-  visitor->Trace(image_content_);
-}
-void ExternalSVGResourceImageContent::Prefinalize() {}
-bool ExternalSVGResourceImageContent::IsLoading() const {
-  return false;
-}
-Element* ExternalSVGResourceImageContent::ResolveTarget() {
-  return nullptr;
-}
-void ExternalSVGResourceImageContent::ImageNotifyFinished(ImageResourceContent*) {}
-String ExternalSVGResourceImageContent::DebugName() const {
-  return "ExternalSVGResourceImageContent";
-}
-
 const KURL& SVGResourceDocumentContent::Url() const {
   static const KURL* empty_url = new KURL();
   return *empty_url;
