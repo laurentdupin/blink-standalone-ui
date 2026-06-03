@@ -116,7 +116,8 @@ void CoreInitializer::Initialize() {
   const unsigned kCoreStaticStringsCount =
       kQualifiedNamesCount + event_target_names::kNamesCount +
       event_type_names::kNamesCount + fetch_initiator_type_names::kNamesCount +
-      html_tokenizer_names::kNamesCount + trusted_types_names::kNamesCount;
+      html_tokenizer_names::kNamesCount + http_names::kNamesCount +
+      trusted_types_names::kNamesCount;
 
   StringImpl::ReserveStaticStringsCapacityForSize(
       kCoreStaticStringsCount + StringImpl::AllStaticStrings().size());
@@ -132,6 +133,7 @@ void CoreInitializer::Initialize() {
 
   event_target_names::Init();
   event_type_names::Init();
+  http_names::Init();
   html_tokenizer_names::Init();
   trusted_types_names::Init();
 }
