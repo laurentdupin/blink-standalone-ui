@@ -120,12 +120,21 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/animation/element_smil_animations.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/trustedtypes/trusted_script_url.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/bitmap_image.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/bitmap_image_metrics.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/decoding_image_generator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/deferred_image_decoder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_decoder_wrapper.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_decoding_store.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_frame_generator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_orientation.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/parkable_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/parkable_image_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/fast_shared_buffer_reader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/image_decoder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/image_frame.cc

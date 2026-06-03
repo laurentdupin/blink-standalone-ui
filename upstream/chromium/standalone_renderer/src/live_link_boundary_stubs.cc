@@ -81,6 +81,8 @@
 #include "third_party/blink/renderer/core/svg/svg_animated_angle.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_enumeration_base.h"
 #include "third_party/blink/renderer/core/svg/svg_filter_element.h"
+#include "third_party/blink/renderer/core/svg/svg_fe_image_element.h"
+#include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_line_element.h"
 #include "third_party/blink/renderer/core/svg/svg_marker_element.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_document_content.h"
@@ -3302,6 +3304,10 @@ const WrapperTypeInfo& SVGGraphicsElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGraphicsElement");
 const WrapperTypeInfo& SVGFilterElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGFilterElement");
+const WrapperTypeInfo& SVGFEImageElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGFEImageElement");
+const WrapperTypeInfo& SVGImageElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGImageElement");
 const WrapperTypeInfo& SVGLineElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLineElement");
 const WrapperTypeInfo& SVGMarkerElement::wrapper_type_info_ =
@@ -20156,6 +20162,8 @@ bool RuntimeEnabledFeaturesBase::is_paint_under_invalidation_checking_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_svg_filter_paints_for_hidden_content_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::
+    is_svg_fe_image_skip_hidden_container_viewport_dependence_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
     is_svg_avoid_resetting_filter_quality_for_tiled_pattern_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::
