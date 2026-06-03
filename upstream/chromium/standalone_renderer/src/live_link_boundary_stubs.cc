@@ -155,6 +155,7 @@
 #include "components/subresource_filter/core/common/scoped_rule.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/base/platform_mime_util.h"
 #include "net/http/http_log_util.h"
 #include "third_party/abseil-cpp/absl/container/internal/hashtablez_sampler.h"
 #include <cstdarg>
@@ -163,6 +164,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <future>
 #include <iomanip>
 #include <iostream>
@@ -189,6 +191,30 @@
 #include "hb-ot.h"
 
 extern "C" const char icudt78_dat[] = {0};
+
+#if BUILDFLAG(IS_WIN)
+extern "C" {
+__declspec(dllimport) void* __stdcall GetModuleHandleW(const wchar_t*);
+__declspec(dllimport) void* __stdcall LoadLibraryW(const wchar_t*);
+__declspec(dllimport) void* __stdcall GetProcAddress(void*, const char*);
+}
+
+extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
+  using ProcessPrngFn = int(__stdcall*)(unsigned char*, size_t);
+  static ProcessPrngFn process_prng = []() -> ProcessPrngFn {
+    void* module = ::GetModuleHandleW(L"bcryptprimitives.dll");
+    if (!module) {
+      module = ::LoadLibraryW(L"bcryptprimitives.dll");
+    }
+    if (!module) {
+      return nullptr;
+    }
+    return reinterpret_cast<ProcessPrngFn>(
+        ::GetProcAddress(module, "ProcessPrng"));
+  }();
+  return process_prng && process_prng(buffer, length) ? 1 : 0;
+}
+#endif
 
 #include "cc/paint/paint_flags.h"
 #include "cc/base/region.h"
@@ -1615,14 +1641,6 @@ PermissionsPolicy::Allowlist::~Allowlist() = default;
 PermissionsPolicy::~PermissionsPolicy() = default;
 PermissionsPolicyFeaturesBitset::~PermissionsPolicyFeaturesBitset() = default;
 }  // namespace network
-
-namespace net::registry_controlled_domains {
-bool SameDomainOrHost(const url::Origin&,
-                      const url::Origin&,
-                      PrivateRegistryFilter) {
-  return false;
-}
-}  // namespace net::registry_controlled_domains
 
 namespace base {
 namespace debug {
@@ -13853,6 +13871,9 @@ void DCheckAsserter::warn() {}
 bool FeatureList::IsEnabled(const Feature& feature) {
   return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
 }
+FeatureList* FeatureList::GetInstance() {
+  return nullptr;
+}
 namespace internal {
 bool IsFeatureParamWithCacheEnabled() {
   return false;
@@ -13908,13 +13929,6 @@ size_t TokenHash::operator()(const Token&) {
 const UnguessableToken& UnguessableToken::Null() {
   static const UnguessableToken* token = new UnguessableToken();
   return *token;
-}
-std::string StrCat(span<const std::string_view> pieces) {
-  std::string out;
-  for (std::string_view piece : pieces) {
-    out.append(piece);
-  }
-  return out;
 }
 uint64_t FastHash(span<const uint8_t>) {
   return 0;
@@ -14022,11 +14036,6 @@ HistogramBase* Histogram::FactoryTimeGet(const char*,
 }
 void HistogramBase::AddTimeMillisecondsGranularity(const TimeDelta&) {}
 void HistogramBase::AddTimeMicrosecondsGranularity(const TimeDelta&) {}
-MetricsSubSampler::MetricsSubSampler() = default;
-bool MetricsSubSampler::ShouldSample(double) const {
-  return false;
-}
-InsecureRandomGenerator::InsecureRandomGenerator() = default;
 TimeDelta ElapsedTimer::Elapsed() const {
   return TimeDelta();
 }
@@ -14051,6 +14060,37 @@ Location::Location() = default;
 Location::Location(const Location&) = default;
 Time Time::Now() {
   return Time();
+}
+void Time::Explode(bool is_local, Exploded* exploded) const {
+  *exploded = Exploded();
+  int64_t micros = ToInternalValue();
+  int64_t seconds = micros / kMicrosecondsPerSecond;
+  int64_t micros_remainder = micros % kMicrosecondsPerSecond;
+  if (micros_remainder < 0) {
+    micros_remainder += kMicrosecondsPerSecond;
+    --seconds;
+  }
+
+  constexpr int64_t kWindowsToUnixEpochSeconds = 11644473600LL;
+  seconds -= kWindowsToUnixEpochSeconds;
+
+  std::time_t time_seconds = static_cast<std::time_t>(seconds);
+  std::tm time_parts = {};
+  errno_t result = is_local ? localtime_s(&time_parts, &time_seconds)
+                            : gmtime_s(&time_parts, &time_seconds);
+  if (result != 0) {
+    return;
+  }
+
+  exploded->year = time_parts.tm_year + 1900;
+  exploded->month = time_parts.tm_mon + 1;
+  exploded->day_of_week = time_parts.tm_wday;
+  exploded->day_of_month = time_parts.tm_mday;
+  exploded->hour = time_parts.tm_hour;
+  exploded->minute = time_parts.tm_min;
+  exploded->second = time_parts.tm_sec;
+  exploded->millisecond =
+      static_cast<int>(micros_remainder / kMicrosecondsPerMillisecond);
 }
 std::string UnlocalizedTimeFormatWithPattern(const Time&,
                                              std::string_view,
@@ -14113,17 +14153,11 @@ bool TimeTicks::IsHighResolution() {
 TimeTicks TimeTicks::Now() {
   return TimeTicks();
 }
-double RandDouble() {
-  return 0.5;
-}
 CPU::CPU() = default;
 CPU::CPU(CPU&&) = default;
 const CPU& CPU::GetInstanceNoAllocation() {
   static CPU* cpu = new CPU();
   return *cpu;
-}
-int RandIntInclusive(int from, int) {
-  return from;
 }
 std::string Token::ToString() const {
   return std::string();
@@ -14174,6 +14208,33 @@ FilePath FilePath::Append(const FilePath& component) const {
   }
   result.path_.append(component.path_);
   return result;
+}
+FilePath::StringType FilePath::Extension() const {
+  const StringType::size_type last_separator = path_.find_last_of(
+      kSeparators, StringType::npos, kSeparatorsLength - 1);
+  const StringType::size_type base_start =
+      last_separator == StringType::npos ? 0 : last_separator + 1;
+  if (base_start >= path_.size()) {
+    return StringType();
+  }
+
+  const StringType base_name = path_.substr(base_start);
+  if (base_name == kCurrentDirectory || base_name == kParentDirectory) {
+    return StringType();
+  }
+
+  const StringType::size_type dot = base_name.rfind(kExtensionSeparator);
+  if (dot == StringType::npos || dot == 0) {
+    return StringType();
+  }
+  return base_name.substr(dot);
+}
+std::string FilePath::AsUTF8Unsafe() const {
+#if BUILDFLAG(IS_WIN)
+  return WideToUTF8(path_);
+#else
+  return path_;
+#endif
 }
 CommandLine::CommandLine(NoProgram) : argv_(1) {}
 CommandLine* CommandLine::ForCurrentProcess() {
@@ -14249,6 +14310,22 @@ std::string ElideHeaderValueForNetLog(NetLogCaptureMode,
                                       std::string_view value) {
   return std::string(value);
 }
+
+bool PlatformMimeUtil::GetPlatformMimeTypeFromExtension(
+    const base::FilePath::StringType&,
+    std::string*) const {
+  return false;
+}
+
+bool PlatformMimeUtil::GetPlatformPreferredExtensionForMimeType(
+    std::string_view,
+    base::FilePath::StringType*) const {
+  return false;
+}
+
+void PlatformMimeUtil::GetPlatformExtensionsForMimeType(
+    std::string_view,
+    std::unordered_set<base::FilePath::StringType>*) const {}
 
 }  // namespace net
 

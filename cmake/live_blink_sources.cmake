@@ -7,8 +7,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/string_escape.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_writer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pickle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/simdutf_shim.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/escape.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/strcat.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_split.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_number_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_util.cc
@@ -43,9 +46,12 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/ip_address.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/mime_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/net_string_util_icu.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/parse_number.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/registry_controlled_domains/registry_controlled_domain.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/lookup_string_in_fixed_set.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/url_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_byte_range.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_connection_info.cc
@@ -56,6 +62,26 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/cicp.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/simdutf/simdutf.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/third_party/mozilla/url_parse.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_etc.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_filesystemurl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_fileurl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_host.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_ip.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_mailtourl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_non_special_url.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_path.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_pathurl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_query.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_relative.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_stdstring.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_stdurl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_idna_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_parse_file.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/platform/network/http_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/css_property_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/css/parser/at_rule_descriptors.cc

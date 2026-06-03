@@ -239,62 +239,6 @@ const ClientHintToNameMap& GetClientHintToNameMap() {
 
 namespace url {
 
-Parsed::Parsed() = default;
-Parsed::Parsed(const Parsed& other)
-    : scheme(other.scheme),
-      username(other.username),
-      password(other.password),
-      host(other.host),
-      port(other.port),
-      path(other.path),
-      query(other.query),
-      ref(other.ref),
-      potentially_dangling_markup(other.potentially_dangling_markup),
-      has_opaque_path(other.has_opaque_path) {
-  if (other.inner_parsed()) {
-    set_inner_parsed(*other.inner_parsed());
-  }
-}
-Parsed& Parsed::operator=(const Parsed& other) {
-  if (this == &other) {
-    return *this;
-  }
-  scheme = other.scheme;
-  username = other.username;
-  password = other.password;
-  host = other.host;
-  port = other.port;
-  path = other.path;
-  query = other.query;
-  ref = other.ref;
-  potentially_dangling_markup = other.potentially_dangling_markup;
-  has_opaque_path = other.has_opaque_path;
-  clear_inner_parsed();
-  if (other.inner_parsed()) {
-    set_inner_parsed(*other.inner_parsed());
-  }
-  return *this;
-}
-Parsed::~Parsed() {
-  clear_inner_parsed();
-}
-int Parsed::Length() const {
-  int length = 0;
-  for (const Component* component :
-       {&scheme, &username, &password, &host, &port, &path, &query, &ref}) {
-    if (component->is_valid() && component->end() > length) {
-      length = component->end();
-    }
-  }
-  return length;
-}
-int Parsed::CountCharactersBefore(ComponentType, bool) const {
-  return 0;
-}
-Component Parsed::GetContent() const {
-  return Component();
-}
-
 SchemeHostPort::SchemeHostPort() = default;
 SchemeHostPort::SchemeHostPort(std::string_view scheme,
                                std::string_view host,
@@ -423,46 +367,6 @@ bool Origin::Nonce::operator==(const Nonce&) const {
 bool IsSameOriginWith(const GURL&, const GURL&) {
   return true;
 }
-const std::vector<std::string>& GetLocalSchemes() {
-  static const std::vector<std::string>* schemes = new std::vector<std::string>();
-  return *schemes;
-}
-const std::vector<std::string>& GetNoAccessSchemes() {
-  static const std::vector<std::string>* schemes = new std::vector<std::string>();
-  return *schemes;
-}
-bool AllowNonStandardSchemesForAndroidWebView() {
-  return false;
-}
-bool CanonicalizeSpecialHost(std::string_view,
-                             const Component&,
-                             CanonOutput&,
-                             Component& out_host) {
-  out_host = Component();
-  return false;
-}
-bool CanonicalizeSpecialHost(std::u16string_view,
-                             const Component&,
-                             CanonOutput&,
-                             Component& out_host) {
-  out_host = Component();
-  return false;
-}
-bool CanonicalizeFileHost(std::string_view,
-                          const Component&,
-                          CanonOutput&,
-                          Component& out_host) {
-  out_host = Component();
-  return false;
-}
-bool CanonicalizeFileHost(std::u16string_view,
-                          const Component&,
-                          CanonOutput&,
-                          Component& out_host) {
-  out_host = Component();
-  return false;
-}
-
 }  // namespace url
 
 GURL::GURL() : is_valid_(false) {}
