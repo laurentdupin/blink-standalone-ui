@@ -5,7 +5,7 @@
 #include "third_party/blink/renderer/platform/image-decoders/png/png_image_decoder.h"
 
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
-#include "third_party/skia/include/codec/SkPngRustDecoder.h"
+#include "third_party/skia/include/codec/SkPngDecoder.h"
 #include "third_party/skia/include/core/SkStream.h"
 
 namespace blink {
@@ -25,7 +25,7 @@ std::unique_ptr<SkCodec> PngImageDecoder::OnCreateSkCodec(
     std::unique_ptr<SkStream> stream,
     SkCodec::Result* result) {
   std::unique_ptr<SkCodec> codec =
-      SkPngRustDecoder::Decode(std::move(stream), result);
+      SkPngDecoder::Decode(std::move(stream), result);
   return codec;
 }
 
