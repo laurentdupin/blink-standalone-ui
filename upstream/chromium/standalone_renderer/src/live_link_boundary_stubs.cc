@@ -3752,25 +3752,6 @@ float SizesAttributeParser::Size() {
   return 100.0f;
 }
 
-const SVGImageViewInfo* SVGImageForContainer::CreateViewInfo(
-    SVGImage&,
-    const Element&) {
-  return nullptr;
-}
-
-gfx::SizeF SVGImageForContainer::ConcreteObjectSize(
-    SVGImage&,
-    const SVGImageViewInfo*,
-    const gfx::SizeF& default_object_size) {
-  return default_object_size;
-}
-
-std::optional<NaturalSizingInfo> SVGImageForContainer::GetNaturalDimensions(
-    SVGImage&,
-    const SVGImageViewInfo*) {
-  return std::nullopt;
-}
-
 mojom::blink::FetchPriorityHint GetFetchPriorityAttributeValue(
     const String&) {
   return mojom::blink::FetchPriorityHint::kAuto;
@@ -4660,136 +4641,6 @@ Resource* CreateStandaloneProviderBackedResource(
   return resource;
 }
 }  // namespace
-
-#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
-ImageResourceContent::ImageResourceContent(scoped_refptr<blink::Image> image)
-    : image_(std::move(image)) {
-  content_status_ = image_ ? ResourceStatus::kCached : ResourceStatus::kNotStarted;
-  size_available_ = image_ ? Image::kSizeAvailable : Image::kSizeUnavailable;
-}
-
-ImageResourceContent* ImageResourceContent::CreateLoaded(
-    scoped_refptr<blink::Image> image) {
-  return MakeGarbageCollected<ImageResourceContent>(std::move(image));
-}
-
-ImageResourceContent* ImageResourceContent::Fetch(FetchParameters& params,
-                                                  ResourceFetcher*) {
-  std::fprintf(stderr, "image_reachability.stage=image_resource_content_fetch url=%s\n",
-               params.Url().GetString().Utf8().c_str());
-  std::fflush(stderr);
-  StandaloneRendererNoteImageResourceContentFetch(
-      params.Url().GetString().Utf8().c_str());
-  html_css_renderer::StandaloneResourceInitiator initiator =
-      html_css_renderer::StandaloneResourceInitiator::kImgElement;
-  if (params.Options().initiator_info.name == fetch_initiator_type_names::kCSS ||
-      params.Options().initiator_info.name == fetch_initiator_type_names::kUacss) {
-    initiator =
-        html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
-  }
-  if (scoped_refptr<Image> image =
-          LoadStandaloneDecodedImage(params.Url(), initiator)) {
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_fetch_decoded\n");
-    std::fflush(stderr);
-    return ImageResourceContent::CreateLoaded(std::move(image));
-  }
-  std::fprintf(stderr,
-               "image_reachability.stage=image_resource_content_fetch_decode_failed\n");
-  std::fflush(stderr);
-  return nullptr;
-}
-
-bool ImageResourceContent::IsAnimatedImage() const {
-  return false;
-}
-
-void ImageResourceContent::Trace(Visitor* visitor) const {
-  ImageObserver::Trace(visitor);
-}
-void ImageResourceContent::AddObserver(ImageResourceObserver*) {}
-void ImageResourceContent::RemoveObserver(ImageResourceObserver*) {}
-RespectImageOrientationEnum ImageResourceContent::ForceOrientationIfNecessary(
-    RespectImageOrientationEnum default_orientation) const {
-  return default_orientation;
-}
-const KURL& ImageResourceContent::Url() const {
-  static KURL* url = new KURL();
-  return *url;
-}
-void ImageResourceContent::SetIsSufficientContentLoadedForPaint() {}
-bool ImageResourceContent::IsSufficientContentLoadedForPaint() const {
-  return true;
-}
-uint64_t ImageResourceContent::ContentSizeForEntropy() const {
-  return 0;
-}
-bool ImageResourceContent::IsPaintedFirstFrame() const {
-  return image_.get();
-}
-std::optional<WebURLRequest::Priority> ImageResourceContent::RequestPriority()
-    const {
-  return std::nullopt;
-}
-bool ImageResourceContent::IsDataUrl() const {
-  return true;
-}
-AtomicString ImageResourceContent::MediaType() const {
-  return AtomicString("image");
-}
-bool ImageResourceContent::IsBroken() const {
-  return !image_;
-}
-void ImageResourceContent::SetIsBroken() {
-  is_broken_ = true;
-}
-float ImageResourceContent::DevicePixelRatioHeaderValue() const {
-  return 1.0f;
-}
-bool ImageResourceContent::HasDevicePixelRatioHeaderValue() const {
-  return false;
-}
-std::optional<ResourceError> ImageResourceContent::GetResourceError() const {
-  return std::nullopt;
-}
-const ResourceResponse& ImageResourceContent::GetResponse() const {
-  static ResourceResponse* response = new ResourceResponse();
-  return *response;
-}
-bool ImageResourceContent::IsLoading() const {
-  return false;
-}
-bool ImageResourceContent::IsLoaded() const {
-  return image_.get();
-}
-ResourceStatus ImageResourceContent::GetContentStatus() const {
-  return image_ ? ResourceStatus::kCached : ResourceStatus::kNotStarted;
-}
-bool ImageResourceContent::IsCorsSameOrigin() const {
-  return true;
-}
-base::TimeTicks ImageResourceContent::DiscoveryTime() const {
-  return base::TimeTicks();
-}
-base::TimeTicks ImageResourceContent::LoadStart() const {
-  return base::TimeTicks();
-}
-base::TimeTicks ImageResourceContent::LoadEnd() const {
-  return base::TimeTicks();
-}
-void ImageResourceContent::DecodedSizeChangedTo(const blink::Image*, size_t) {}
-bool ImageResourceContent::ShouldPauseAnimation(const blink::Image*) {
-  return false;
-}
-void ImageResourceContent::Changed(const blink::Image*) {}
-void ImageResourceContent::AsyncLoadCompleted(const blink::Image*) {}
-void ImageResourceContent::RecordDecodedImageType(UseCounter*) {}
-void ImageResourceContent::RecordDecodedImageC2PA(UseCounter*) {}
-
-bool ImageResource::IsAboveSpeculativeDecodeSizeThreshold(const gfx::Size&) {
-  return false;
-}
-#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 
 MemoryPressureListenerRegistration::MemoryPressureListenerRegistration(
     base::Location,
@@ -13334,20 +13185,6 @@ void ImageElementTiming::NotifyImageFinished(const LayoutObject&,
 void ImageElementTiming::NotifyImageRemoved(const LayoutObject*,
                                             const ImageResourceContent*) {}
 void ImageElementTiming::Trace(Visitor*) const {}
-#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
-bool ImageResourceContent::ErrorOccurred() const {
-  return false;
-}
-bool ImageResourceContent::LoadFailedOrCanceled() const {
-  return false;
-}
-const std::optional<AdProvenance>& ImageResourceContent::GetAdProvenance()
-    const {
-  static std::optional<AdProvenance>* provenance =
-      new std::optional<AdProvenance>();
-  return *provenance;
-}
-#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 bool Sanitizer::ShouldReplaceNodeWithChildren(Node*) const {
   return false;
 }
@@ -16784,11 +16621,6 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
     mojom::blink::RequestContextType,
     network::mojom::RequestDestination,
     const AtomicString&) {}
-#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
-void ImageResourceContent::EmulateLoadStartedForInspector(ResourceFetcher*,
-                                                          const AtomicString&) {
-}
-#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 CSSPaintImageGenerator* CSSPaintImageGenerator::Create(const String&,
                                                        const Document&,
                                                        Observer*) {
@@ -17431,11 +17263,6 @@ ListBasedHitTestBehavior HitTestResult::AddNodeToListBasedTestResult(
 void HitTestResult::SetInnerNode(Node* node) {
   inner_node_ = node;
 }
-#if !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
-Image* ImageResourceContent::GetImage() const {
-  return image_ ? image_.get() : nullptr;
-}
-#endif  // !defined(BLINK_STANDALONE_USE_REAL_IMAGE_RESOURCE)
 Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
       image_observer_(observer),
