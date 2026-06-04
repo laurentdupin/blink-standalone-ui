@@ -277,7 +277,15 @@ std::unique_ptr<ImageDecoder> ImageDecoder::Create(
     size_t platform_max_decoded_bytes,
     const SkISize& desired_size,
     AnimationOption animation_option) {
+  std::fprintf(stderr,
+               "image_reachability.stage=image_decoder_create_enter data=%d complete=%d\n",
+               data ? 1 : 0, data_complete ? 1 : 0);
+  std::fflush(stderr);
   auto type = SniffMimeTypeInternal(data);
+  std::fprintf(stderr,
+               "image_reachability.stage=image_decoder_create_sniffed type=%s\n",
+               type.Utf8().c_str());
+  std::fflush(stderr);
   if (type.empty()) {
     return nullptr;
   }
@@ -306,13 +314,24 @@ std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
   // MimeUtil::IsSupportedImageMimeType() (which forces lowercase).
   std::unique_ptr<ImageDecoder> decoder;
   mime_type = mime_type.ToAsciiLower();
+  std::fprintf(stderr,
+               "image_reachability.stage=image_decoder_create_by_mime mime=%s\n",
+               mime_type.Utf8().c_str());
+  std::fflush(stderr);
   if (mime_type == "image/jpeg" || mime_type == "image/pjpeg" ||
       mime_type == "image/jpg") {
   } else if (mime_type == "image/png" || mime_type == "image/x-png" ||
              mime_type == "image/apng") {
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_decoder_before_png_decoder_ctor\n");
+    std::fflush(stderr);
     decoder = std::make_unique<PngImageDecoder>(
         alpha_option, color_behavior, max_decoded_bytes,
         PngImageDecoder::kNoReadingOffset, high_bit_depth_decoding_option);
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_decoder_after_png_decoder_ctor decoder=%d\n",
+                 decoder ? 1 : 0);
+    std::fflush(stderr);
   } else if (mime_type == "image/gif") {
   } else if (mime_type == "image/webp") {
   } else if (mime_type == "image/x-icon" ||
@@ -334,7 +353,13 @@ std::unique_ptr<ImageDecoder> ImageDecoder::CreateByMimeType(
   }
 
   if (decoder) {
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_decoder_before_decoder_set_data\n");
+    std::fflush(stderr);
     decoder->SetData(std::move(data), data_complete);
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_decoder_after_decoder_set_data\n");
+    std::fflush(stderr);
   }
 
   return decoder;

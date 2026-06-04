@@ -64,6 +64,10 @@ SkiaImageDecoderBase::SkiaImageDecoderBase(
 SkiaImageDecoderBase::~SkiaImageDecoderBase() = default;
 
 void SkiaImageDecoderBase::OnSetData(scoped_refptr<SegmentReader> data) {
+  std::fprintf(stderr,
+               "image_reachability.stage=skia_image_decoder_on_set_data_enter data=%d segment_stream=%d codec=%d\n",
+               data ? 1 : 0, segment_stream_ ? 1 : 0, codec_ ? 1 : 0);
+  std::fflush(stderr);
   if (!data) {
     if (segment_stream_) {
       segment_stream_->SetReader(nullptr);
@@ -83,7 +87,14 @@ void SkiaImageDecoderBase::OnSetData(scoped_refptr<SegmentReader> data) {
     segment_stream->SetReader(std::move(data));
 
     SkCodec::Result codec_creation_result;
+    std::fprintf(stderr,
+                 "image_reachability.stage=skia_image_decoder_before_create_sk_codec\n");
+    std::fflush(stderr);
     codec_ = OnCreateSkCodec(std::move(segment_stream), &codec_creation_result);
+    std::fprintf(stderr,
+                 "image_reachability.stage=skia_image_decoder_after_create_sk_codec codec=%d result=%d\n",
+                 codec_ ? 1 : 0, static_cast<int>(codec_creation_result));
+    std::fflush(stderr);
 
     switch (codec_creation_result) {
       case SkCodec::kSuccess: {

@@ -24,8 +24,15 @@ const AtomicString& PngImageDecoder::MimeType() const {
 std::unique_ptr<SkCodec> PngImageDecoder::OnCreateSkCodec(
     std::unique_ptr<SkStream> stream,
     SkCodec::Result* result) {
+  std::fprintf(stderr,
+               "image_reachability.stage=png_image_decoder_before_sk_png_decode\n");
+  std::fflush(stderr);
   std::unique_ptr<SkCodec> codec =
       SkPngDecoder::Decode(std::move(stream), result);
+  std::fprintf(stderr,
+               "image_reachability.stage=png_image_decoder_after_sk_png_decode codec=%d result=%d\n",
+               codec ? 1 : 0, result ? static_cast<int>(*result) : -1);
+  std::fflush(stderr);
   return codec;
 }
 
