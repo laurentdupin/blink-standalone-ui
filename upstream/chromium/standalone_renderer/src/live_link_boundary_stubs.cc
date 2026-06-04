@@ -4610,9 +4610,16 @@ Resource* CreateStandaloneProviderBackedResource(
                result.mime_type.c_str(), result.encoded_bytes.size());
   std::fflush(stderr);
 
+  auto emit_stage = [](const char* stage) {
+    std::fprintf(stderr, "resource_reachability.stage=%s\n", stage);
+    std::fflush(stderr);
+  };
+
+  emit_stage("provider_backed_before_factory_create");
   Resource* resource = factory.Create(params.GetResourceRequest(),
                                       params.Options(),
                                       params.DecoderOptions());
+  emit_stage("provider_backed_after_factory_create");
 
   if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess ||
       result.encoded_bytes.empty()) {
@@ -4638,14 +4645,22 @@ Resource* CreateStandaloneProviderBackedResource(
       base::span<const uint8_t>(result.encoded_bytes.data(),
                                 result.encoded_bytes.size()));
 
+  emit_stage("provider_backed_before_notify_start");
   resource->NotifyStartLoad();
+  emit_stage("provider_backed_after_notify_start");
+  emit_stage("provider_backed_before_response_received");
   resource->ResponseReceived(response);
+  emit_stage("provider_backed_after_response_received");
   resource->SetDataBufferingPolicy(kBufferData);
+  emit_stage("provider_backed_before_set_resource_buffer");
   resource->SetResourceBuffer(data);
+  emit_stage("provider_backed_after_set_resource_buffer");
   resource->SetCacheIdentifier(result.cache_key.empty()
                                    ? params.Url().GetString()
                                    : String(result.cache_key.c_str()));
+  emit_stage("provider_backed_before_finish");
   resource->Finish(base::TimeTicks(), task_runner);
+  emit_stage("provider_backed_after_finish");
 
   std::fprintf(stderr,
                "resource_reachability.stage=provider_backed_fetcher_finished "
