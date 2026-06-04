@@ -556,6 +556,8 @@ void ImageResource::NotifyStartLoad() {
 
 void ImageResource::Finish(base::TimeTicks load_finish_time,
                            base::SingleThreadTaskRunner* task_runner) {
+  std::fprintf(stderr, "image_reachability.stage=image_resource_finish_enter\n");
+  std::fflush(stderr);
   const bool enforce_integrity =
       RuntimeEnabledFeatures::CSSResourceIntegrityEnforcementEnabled();
   if (enforce_integrity) {
@@ -572,7 +574,13 @@ void ImageResource::Finish(base::TimeTicks load_finish_time,
     if (Data())
       UpdateImageAndClearBuffer();
   } else {
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_resource_finish_before_update\n");
+    std::fflush(stderr);
     UpdateImage(Data(), ImageResourceContent::kUpdateImage, true);
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_resource_finish_after_update\n");
+    std::fflush(stderr);
     // As encoded image data can be obtained from Image::Data() via `content_`
     // (see ResourceBuffer()), we don't have to keep `data_`. Let's
     // clear it. As for the lifetimes of `content_` and `data_`, see this
@@ -580,7 +588,12 @@ void ImageResource::Finish(base::TimeTicks load_finish_time,
     // https://docs.google.com/document/d/1v0yTAZ6wkqX2U_M6BNIGUJpM1s0TIw1VsqpxoL7aciY/edit?usp=sharing
     ClearData();
   }
+  std::fprintf(stderr,
+               "image_reachability.stage=image_resource_finish_before_resource_finish\n");
+  std::fflush(stderr);
   Resource::Finish(load_finish_time, task_runner);
+  std::fprintf(stderr, "image_reachability.stage=image_resource_finish_exit\n");
+  std::fflush(stderr);
 }
 
 void ImageResource::FinishAsError(const ResourceError& error,
@@ -700,10 +713,18 @@ void ImageResource::UpdateImage(
     scoped_refptr<SharedBuffer> shared_buffer,
     ImageResourceContent::UpdateImageOption update_image_option,
     bool all_data_received) {
+  std::fprintf(stderr,
+               "image_reachability.stage=image_resource_update_image_enter data=%d all=%d\n",
+               shared_buffer ? 1 : 0, all_data_received ? 1 : 0);
+  std::fflush(stderr);
   bool is_multipart = !!multipart_parser_;
   auto result = GetContent()->UpdateImage(std::move(shared_buffer), GetStatus(),
                                           update_image_option,
                                           all_data_received, is_multipart);
+  std::fprintf(stderr,
+               "image_reachability.stage=image_resource_update_image_after_content result=%d\n",
+               static_cast<int>(result));
+  std::fflush(stderr);
   if (result == ImageResourceContent::UpdateImageResult::kShouldDecodeError) {
     // In case of decode error, we call imageNotifyFinished() iff we don't
     // initiate reloading:
@@ -720,6 +741,9 @@ void ImageResource::UpdateImage(
     //    (a) via didFinishLoading() called in decodeError(), or
     //    (b) after returning ImageResource::updateImage().
     DecodeError(all_data_received);
+    std::fprintf(stderr,
+                 "image_reachability.stage=image_resource_update_image_after_decode_error\n");
+    std::fflush(stderr);
   }
 }
 
