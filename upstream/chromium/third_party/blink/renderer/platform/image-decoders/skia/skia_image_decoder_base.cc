@@ -46,6 +46,39 @@ ImageFrame::AlphaBlendSource ConvertAlphaBlendSource(
   NOTREACHED();
 }
 
+bool GetFrameInfoOrStaticDefault(SkCodec* codec,
+                                 wtf_size_t index,
+                                 SkCodec::FrameInfo* frame_info) {
+  if (!codec || !frame_info ||
+      index > static_cast<wtf_size_t>(std::numeric_limits<int>::max())) {
+    return false;
+  }
+
+  if (codec->getFrameInfo(static_cast<int>(index), frame_info)) {
+    return true;
+  }
+
+  // SkCodec documents that non-animated codecs may return false from
+  // getFrameInfo(). Blink still needs frame metadata for its frame cache; for a
+  // real single-frame codec, derive that metadata from the codec's decoded
+  // image info rather than inventing load state.
+  if (index != 0 || codec->getFrameCount() != 1) {
+    return false;
+  }
+
+  SkImageInfo image_info = codec->getInfo();
+  frame_info->fRequiredFrame = SkCodec::kNoFrame;
+  frame_info->fDuration = 0;
+  frame_info->fFullyReceived = true;
+  frame_info->fAlphaType = image_info.alphaType();
+  frame_info->fHasAlphaWithinBounds =
+      image_info.alphaType() != kOpaque_SkAlphaType;
+  frame_info->fDisposalMethod = SkCodecAnimation::DisposalMethod::kKeep;
+  frame_info->fBlend = SkCodecAnimation::Blend::kSrc;
+  frame_info->fFrameRect = SkIRect::MakeSize(codec->dimensions());
+  return true;
+}
+
 }  // anonymous namespace
 
 SkiaImageDecoderBase::SkiaImageDecoderBase(
@@ -256,7 +289,8 @@ void SkiaImageDecoderBase::InitializeNewFrame(wtf_size_t index) {
   DCHECK(codec_);
 
   SkCodec::FrameInfo frame_info;
-  bool frame_info_received = codec_->getFrameInfo(index, &frame_info);
+  bool frame_info_received =
+      GetFrameInfoOrStaticDefault(codec_.get(), index, &frame_info);
   DCHECK(frame_info_received);
 
   ImageFrame& frame = frame_buffer_cache_[index];
@@ -375,7 +409,8 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
 
       SkCodec::FrameInfo frame_info;
       bool frame_info_received =
-          codec_->getFrameInfo(current_frame_index, &frame_info);
+          GetFrameInfoOrStaticDefault(codec_.get(), current_frame_index,
+                                      &frame_info);
       DCHECK(frame_info_received);
 
       SkAlphaType alpha_type = kOpaque_SkAlphaType;
@@ -443,7 +478,8 @@ void SkiaImageDecoderBase::Decode(wtf_size_t index) {
         already_started_frame_.reset();
         SkCodec::FrameInfo frame_info;
         bool frame_info_received =
-            codec_->getFrameInfo(current_frame_index, &frame_info);
+            GetFrameInfoOrStaticDefault(codec_.get(), current_frame_index,
+                                        &frame_info);
         DCHECK(frame_info_received);
         frame.SetHasAlpha(frame_info.fAlphaType !=
                           SkAlphaType::kOpaque_SkAlphaType);

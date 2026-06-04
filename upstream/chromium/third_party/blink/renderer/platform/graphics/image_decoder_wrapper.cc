@@ -89,13 +89,14 @@ ImageDecoderWrapper::~ImageDecoderWrapper() = default;
 namespace {
 
 bool IsLowEndDeviceOrPartialLowEndModeEnabled() {
+  Platform* platform = Platform::Current();
 #if BUILDFLAG(IS_ANDROID)
   // Since ImageFrameGeneratorTest depends on Platform::Current(), use
-  // Platform::Current()->IsLowEndDevice() here.
-  return Platform::Current()->IsLowEndDevice() ||
+  // Platform::Current()->IsLowEndDevice() here when a platform is installed.
+  return (platform && platform->IsLowEndDevice()) ||
          base::SysInfo::IsLowEndDeviceOrPartialLowEndModeEnabled();
 #else
-  return Platform::Current()->IsLowEndDevice();
+  return platform && platform->IsLowEndDevice();
 #endif
 }
 
