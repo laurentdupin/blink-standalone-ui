@@ -255,6 +255,112 @@ bool IsEmpty(Rect rect) {
   return rect.width <= 0.0f || rect.height <= 0.0f;
 }
 
+float EffectiveContributionOpacity(const RetainedPaintChunk& chunk) {
+  return chunk.property_state.effect_has_non_default_opacity
+             ? chunk.property_state.effect_opacity
+             : 1.0f;
+}
+
+bool SupportsContributionLocalization(const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  return state.transform_is_2d && !state.transform_has_perspective &&
+         !state.transform_has_non_translation && !state.has_clip_rect &&
+         !state.has_clip_rrect && !state.clip_has_path_clip &&
+         !state.effect_has_filter && !state.effect_has_backdrop_filter &&
+         !state.effect_has_blend_mode;
+}
+
+struct VisualContributionSignature {
+  uint64_t command_hash = 0;
+  uint64_t resource_hash = 0;
+  uint64_t opacity_hash = 0;
+};
+
+bool operator==(const VisualContributionSignature& left,
+                const VisualContributionSignature& right) {
+  return left.command_hash == right.command_hash &&
+         left.resource_hash == right.resource_hash &&
+         left.opacity_hash == right.opacity_hash;
+}
+
+struct VisualContributionSignatureHash {
+  size_t operator()(const VisualContributionSignature& signature) const {
+    uint64_t hash = 0;
+    hash = HashCombine(hash, signature.command_hash);
+    hash = HashCombine(hash, signature.resource_hash);
+    hash = HashCombine(hash, signature.opacity_hash);
+    return static_cast<size_t>(hash);
+  }
+};
+
+struct VisualContribution {
+  VisualContributionSignature signature;
+  Rect bounds;
+};
+
+std::vector<VisualContribution> CollectVisualContributions(
+    const RetainedPaintChunk* chunk) {
+  std::vector<VisualContribution> contributions;
+  if (!chunk || !SupportsContributionLocalization(*chunk)) {
+    return contributions;
+  }
+  const uint64_t opacity_hash = HashFloat(EffectiveContributionOpacity(*chunk));
+  for (const DrawCommand& command : chunk->commands) {
+    if (!IsVisualCommandType(command.type) || IsEmpty(command.rect)) {
+      continue;
+    }
+    contributions.push_back(VisualContribution{
+        VisualContributionSignature{
+            HashCommandContent(command),
+            HashCommandResources(command),
+            opacity_hash,
+        },
+        command.rect,
+    });
+  }
+  return contributions;
+}
+
+using ContributionCountMap =
+    std::unordered_map<VisualContributionSignature,
+                       int,
+                       VisualContributionSignatureHash>;
+
+ContributionCountMap BuildContributionCounts(const RetainedScene& scene) {
+  ContributionCountMap counts;
+  for (const RetainedPaintChunk& chunk : scene.chunks) {
+    for (const VisualContribution& contribution :
+         CollectVisualContributions(&chunk)) {
+      ++counts[contribution.signature];
+    }
+  }
+  return counts;
+}
+
+bool HasNonDefaultOpacity(const RetainedPaintChunk* chunk) {
+  return chunk && chunk->property_state.effect_has_non_default_opacity &&
+         chunk->property_state.effect_opacity >= 0.0f &&
+         chunk->property_state.effect_opacity < 1.0f;
+}
+
+Rect ConsumeContributionDamageBounds(const RetainedPaintChunk* chunk,
+                                     ContributionCountMap* remaining_counts) {
+  Rect bounds;
+  if (!chunk || !remaining_counts) {
+    return bounds;
+  }
+  for (const VisualContribution& contribution :
+       CollectVisualContributions(chunk)) {
+    auto found = remaining_counts->find(contribution.signature);
+    if (found == remaining_counts->end() || found->second <= 0) {
+      continue;
+    }
+    bounds = UnionRectBounds(bounds, contribution.bounds);
+    --found->second;
+  }
+  return bounds;
+}
+
 bool Intersects(Rect a, Rect b) {
   if (IsEmpty(a) || IsEmpty(b)) {
     return false;
@@ -689,6 +795,41 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
   }
 
   const RetainedSceneDiff diff = DiffRetainedScenes(current, previous);
+  bool has_opacity_transition = false;
+  for (const RetainedChunkDiff& chunk_diff : diff.chunks) {
+    const RetainedPaintChunk* previous_chunk =
+        previous && !chunk_diff.previous_key.empty()
+            ? FindChunkByKey(*previous, chunk_diff.previous_key)
+            : nullptr;
+    const RetainedPaintChunk* current_chunk =
+        !chunk_diff.current_key.empty()
+            ? FindChunkByKey(current, chunk_diff.current_key)
+            : nullptr;
+    if (HasNonDefaultOpacity(previous_chunk) || HasNonDefaultOpacity(current_chunk)) {
+      has_opacity_transition = true;
+      break;
+    }
+  }
+  ContributionCountMap previous_contribution_excess;
+  ContributionCountMap current_contribution_excess;
+  if (has_opacity_transition && previous != nullptr) {
+    const ContributionCountMap previous_counts = BuildContributionCounts(*previous);
+    const ContributionCountMap current_counts = BuildContributionCounts(current);
+    for (const auto& entry : previous_counts) {
+      const int current_count =
+          current_counts.count(entry.first) ? current_counts.at(entry.first) : 0;
+      if (entry.second > current_count) {
+        previous_contribution_excess[entry.first] = entry.second - current_count;
+      }
+    }
+    for (const auto& entry : current_counts) {
+      const int previous_count =
+          previous_counts.count(entry.first) ? previous_counts.at(entry.first) : 0;
+      if (entry.second > previous_count) {
+        current_contribution_excess[entry.first] = entry.second - previous_count;
+      }
+    }
+  }
   // Post-first-frame changes can be represented as local damage because
   // incremental replay now clears and redraws only the dirty region against
   // the current full scene command list.
@@ -740,22 +881,61 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
     }
 
     if (update.requires_redraw) {
+      Rect previous_contribution_bounds;
+      Rect current_contribution_bounds;
+      const bool previous_supports_contribution_localization =
+          previous_chunk && SupportsContributionLocalization(*previous_chunk);
+      const bool current_supports_contribution_localization =
+          current_chunk && SupportsContributionLocalization(*current_chunk);
+      if (has_opacity_transition) {
+        previous_contribution_bounds =
+            ConsumeContributionDamageBounds(previous_chunk,
+                                            &previous_contribution_excess);
+        current_contribution_bounds =
+            ConsumeContributionDamageBounds(current_chunk,
+                                            &current_contribution_excess);
+      }
       if (!scroll_reuse_candidate && update.previous_bounds &&
           HasVisualCommands(previous_chunk)) {
-        plan.dirty_rects.push_back(MapRectConservatively(
-            *update.previous_bounds,
-            previous_chunk ? PropertyStateForPresentation(*previous_chunk,
-                                                          previous_scroll_offset)
-                           : PaintPropertyStateSnapshot{},
-            plan.viewport_bounds));
+        if (has_opacity_transition &&
+            previous_supports_contribution_localization) {
+          if (!IsEmpty(previous_contribution_bounds)) {
+            plan.dirty_rects.push_back(MapRectConservatively(
+                previous_contribution_bounds,
+                previous_chunk
+                    ? PropertyStateForPresentation(*previous_chunk,
+                                                  previous_scroll_offset)
+                    : PaintPropertyStateSnapshot{},
+                plan.viewport_bounds));
+          }
+        } else {
+          plan.dirty_rects.push_back(MapRectConservatively(
+              *update.previous_bounds,
+              previous_chunk ? PropertyStateForPresentation(*previous_chunk,
+                                                            previous_scroll_offset)
+                             : PaintPropertyStateSnapshot{},
+              plan.viewport_bounds));
+        }
       }
       if (update.current_bounds && HasVisualCommands(current_chunk)) {
-        plan.dirty_rects.push_back(MapRectConservatively(
-            *update.current_bounds,
-            current_chunk ? PropertyStateForPresentation(*current_chunk,
-                                                         current_scroll_offset)
-                          : PaintPropertyStateSnapshot{},
-            plan.viewport_bounds));
+        if (has_opacity_transition &&
+            current_supports_contribution_localization) {
+          if (!IsEmpty(current_contribution_bounds)) {
+            plan.dirty_rects.push_back(MapRectConservatively(
+                current_contribution_bounds,
+                current_chunk ? PropertyStateForPresentation(*current_chunk,
+                                                             current_scroll_offset)
+                              : PaintPropertyStateSnapshot{},
+                plan.viewport_bounds));
+          }
+        } else {
+          plan.dirty_rects.push_back(MapRectConservatively(
+              *update.current_bounds,
+              current_chunk ? PropertyStateForPresentation(*current_chunk,
+                                                           current_scroll_offset)
+                            : PaintPropertyStateSnapshot{},
+              plan.viewport_bounds));
+        }
       }
     }
     plan.chunk_updates.push_back(std::move(update));
