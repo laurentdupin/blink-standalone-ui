@@ -46,6 +46,12 @@ Run the attribute-toggle demo:
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43f_incremental_attr_property_basic.html --viewport 240x200 --skia-cpu --incremental --toggle-attr card:data-state=off,on
 ```
 
+Run the multi-target click/toggle demo:
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43n_sdl_multi_toggle_demo.html --viewport 360x180 --skia-cpu --incremental --toggle-attr card-a:data-state=off,on --toggle-attr card-b:data-state=off,on --toggle-attr card-c:data-state=off,on
+```
+
 Run the scroll demo:
 
 ```powershell
@@ -55,7 +61,9 @@ build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --htm
 Controls:
 
 - `Space` or `T` toggles configured `--toggle-attr` values.
-- Mouse wheel updates document scroll by `--scroll-step`.
+- Left click toggles the configured target matching the hit element id.
+- Mouse wheel and arrow keys update document scroll by `--scroll-step`.
+- `PageUp` and `PageDown` scroll by the viewport; `Home` returns to the top.
 - `Esc` or window close exits.
 - `--quit-after-ms` exits after a fixed delay for explicit smoke runs.
 
