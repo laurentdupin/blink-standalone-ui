@@ -43,6 +43,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .mypy_cache/
+node_modules/
 
 # Editor/OS noise
 .DS_Store

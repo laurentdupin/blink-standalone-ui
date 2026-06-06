@@ -82,6 +82,21 @@ Rect FromSkIRect(const SkIRect& rect) {
               static_cast<float>(rect.height())};
 }
 
+SkIRect ToSkIRectClamped(Rect rect, int width, int height) {
+  const int left = std::max(0, static_cast<int>(std::floor(rect.x)));
+  const int top = std::max(0, static_cast<int>(std::floor(rect.y)));
+  const int right = std::min(
+      width, static_cast<int>(std::ceil(rect.x + rect.width)));
+  const int bottom = std::min(
+      height, static_cast<int>(std::ceil(rect.y + rect.height)));
+  return SkIRect::MakeLTRB(left, top, std::max(left, right),
+                           std::max(top, bottom));
+}
+
+bool IsEmpty(const SkIRect& rect) {
+  return rect.isEmpty();
+}
+
 std::array<float, 9> SnapshotMatrix(const SkMatrix& matrix) {
   std::array<float, 9> values = {};
   for (int i = 0; i < 9; ++i) {
@@ -674,7 +689,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
                                                   const ImageAtlas& images,
                                                   const GlyphAtlas& glyphs,
                                                   const CpuImage* previous,
-                                                  bool clear_before_render) {
+                                                  bool clear_before_render,
+                                                  const std::vector<Rect>* damage_rects) {
   CpuImage image;
   image.width = std::max(1, static_cast<int>(viewport.width));
   image.height = std::max(1, static_cast<int>(viewport.height));
@@ -719,38 +735,76 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   if (clear_before_render) {
     canvas->clear(ToSkColor(options.clear_color));
   }
+  if (!clear_before_render && previous && damage_rects) {
+    SkPaint clear_paint;
+    clear_paint.setBlendMode(SkBlendMode::kSrc);
+    clear_paint.setColor(ToSkColor(options.clear_color));
+    for (const Rect& damage_rect : *damage_rects) {
+      const SkIRect clip = ToSkIRectClamped(damage_rect, image.width,
+                                            image.height);
+      if (IsEmpty(clip)) {
+        continue;
+      }
+      canvas->save();
+      canvas->clipIRect(clip);
+      canvas->drawIRect(clip, clear_paint);
+      canvas->restore();
+    }
+  }
   int save_depth = 0;
   if (options.debug_command_coverage) {
     ResetCommandCoverageDiagnostics();
   }
-  for (size_t command_index = 0; command_index < commands.size();
-       ++command_index) {
-    const DrawCommand& command = commands[command_index];
-    std::vector<uint8_t> before_pixels;
-    CommandCoverageRecord coverage;
-    CommandCoverageRecord* coverage_ptr = nullptr;
-    if (options.debug_command_coverage) {
-      before_pixels = pixels;
-      coverage_ptr = &coverage;
-      coverage.command_index = static_cast<int>(command_index);
-      coverage.command_type = ToString(command.type);
-      coverage.bounds = command.rect;
-      coverage.active_matrix = SnapshotMatrix(canvas->getTotalMatrix());
-      SkIRect clip_bounds;
-      if (canvas->getDeviceClipBounds(&clip_bounds)) {
-        coverage.has_active_clip = true;
-        coverage.active_clip_bounds = FromSkIRect(clip_bounds);
+  auto replay_commands = [&](bool measure_coverage) {
+    for (size_t command_index = 0; command_index < commands.size();
+         ++command_index) {
+      const DrawCommand& command = commands[command_index];
+      std::vector<uint8_t> before_pixels;
+      CommandCoverageRecord coverage;
+      CommandCoverageRecord* coverage_ptr = nullptr;
+      if (measure_coverage) {
+        before_pixels = pixels;
+        coverage_ptr = &coverage;
+        coverage.command_index = static_cast<int>(command_index);
+        coverage.command_type = ToString(command.type);
+        coverage.bounds = command.rect;
+        coverage.active_matrix = SnapshotMatrix(canvas->getTotalMatrix());
+        SkIRect clip_bounds;
+        if (canvas->getDeviceClipBounds(&clip_bounds)) {
+          coverage.has_active_clip = true;
+          coverage.active_clip_bounds = FromSkIRect(clip_bounds);
+        }
+        coverage.save_depth_before = save_depth;
       }
-      coverage.save_depth_before = save_depth;
+      DrawCommandWithSkia(*canvas, command, images, glyphs,
+                          options.strict_text_blob_typefaces, &save_depth,
+                          coverage_ptr);
+      if (measure_coverage) {
+        coverage.save_depth_after = save_depth;
+        coverage.pixels_changed = CountChangedPixels(before_pixels, pixels);
+        StoreCommandCoverage(std::move(coverage));
+      }
     }
-    DrawCommandWithSkia(*canvas, command, images, glyphs,
-                        options.strict_text_blob_typefaces, &save_depth,
-                        coverage_ptr);
-    if (options.debug_command_coverage) {
-      coverage.save_depth_after = save_depth;
-      coverage.pixels_changed = CountChangedPixels(before_pixels, pixels);
-      StoreCommandCoverage(std::move(coverage));
+  };
+  if (damage_rects && !damage_rects->empty() && !clear_before_render &&
+      previous) {
+    for (size_t i = 0; i < damage_rects->size(); ++i) {
+      const SkIRect clip =
+          ToSkIRectClamped((*damage_rects)[i], image.width, image.height);
+      if (IsEmpty(clip)) {
+        continue;
+      }
+      canvas->save();
+      canvas->clipIRect(clip);
+      replay_commands(options.debug_command_coverage && i == 0);
+      while (save_depth > 0) {
+        canvas->restore();
+        --save_depth;
+      }
+      canvas->restore();
     }
+  } else {
+    replay_commands(options.debug_command_coverage);
   }
   while (save_depth > 0) {
     canvas->restore();
@@ -792,7 +846,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpu(const DrawCommandList& commands,
   const ImageAtlas images;
   const GlyphAtlas glyphs;
   return RasterizeDrawCommandsWithSkiaCpuInternal(commands, viewport, options,
-                                                 images, glyphs, nullptr, true);
+                                                 images, glyphs, nullptr, true,
+                                                 nullptr);
 }
 
 CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
@@ -803,7 +858,7 @@ CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
   const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
   CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
       commands, result.successor_snapshot.viewport, options, images, glyphs,
-      nullptr, true);
+      nullptr, true, nullptr);
   return image;
 }
 
@@ -820,6 +875,9 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
       previous->pixels_rgba.size() != static_cast<size_t>(width * height)) {
     return RasterizeRenderResultWithSkiaCpu(result, options);
   }
+  if (result.frame.damage_rects.empty()) {
+    return *previous;
+  }
 
   const DrawCommandList commands =
       FlattenSceneDrawCommands(result.frame.scene_commands);
@@ -827,7 +885,7 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
   const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
   CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
       commands, result.successor_snapshot.viewport, options, images, glyphs,
-      previous, false);
+      previous, false, &result.frame.damage_rects);
   return image;
 }
 

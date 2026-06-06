@@ -100,12 +100,29 @@ PixelRect FullImageClip(const CpuImage& image) {
   return PixelRect{0, 0, image.width, image.height};
 }
 
+bool IsEmpty(PixelRect rect) {
+  return rect.right <= rect.left || rect.bottom <= rect.top;
+}
+
 void FillRect(CpuImage& image, Rect rect, Color color, PixelRect clip) {
   const PixelRect clipped = Intersect(ClipRectToImage(rect, image), clip);
   for (int y = clipped.top; y < clipped.bottom; ++y) {
     for (int x = clipped.left; x < clipped.right; ++x) {
       uint32_t& pixel = image.pixels_rgba[y * image.width + x];
       pixel = BlendOver(pixel, color);
+    }
+  }
+}
+
+void ClearPixelRect(CpuImage& image, PixelRect rect, Color color) {
+  const PixelRect clipped = Intersect(rect, FullImageClip(image));
+  if (IsEmpty(clipped)) {
+    return;
+  }
+  const uint32_t packed = PackRgba(color);
+  for (int y = clipped.top; y < clipped.bottom; ++y) {
+    for (int x = clipped.left; x < clipped.right; ++x) {
+      image.pixels_rgba[y * image.width + x] = packed;
     }
   }
 }
@@ -196,9 +213,10 @@ CpuImage CreateClearedImage(Size viewport, CpuRenderOptions options) {
 
 void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
                                         const DrawCommandList& commands,
-                                        const CpuGlyphAtlas& atlas) {
+                                        const CpuGlyphAtlas& atlas,
+                                        PixelRect initial_clip) {
   std::vector<PixelRect> clip_stack;
-  clip_stack.push_back(FullImageClip(image));
+  clip_stack.push_back(Intersect(initial_clip, FullImageClip(image)));
 
   for (const DrawCommand& command : commands) {
     const PixelRect current_clip = clip_stack.back();
@@ -263,6 +281,13 @@ void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
         break;
     }
   }
+}
+
+void RasterizeDrawCommandsWithAtlasInto(CpuImage& image,
+                                        const DrawCommandList& commands,
+                                        const CpuGlyphAtlas& atlas) {
+  RasterizeDrawCommandsWithAtlasInto(image, commands, atlas,
+                                     FullImageClip(image));
 }
 
 CpuImage RasterizeDrawCommandsWithAtlas(const DrawCommandList& commands,
@@ -339,7 +364,17 @@ CpuImage RasterizeRenderResultIncremental(const RenderResult& result,
   const CpuGlyphAtlas atlas = BuildGlyphAtlas(result.frame.resource_commands);
   const DrawCommandList draw_commands =
       FlattenSceneDrawCommands(result.frame.scene_commands);
-  RasterizeDrawCommandsWithAtlasInto(image, draw_commands, atlas);
+  if (result.frame.damage_rects.empty()) {
+    return image;
+  }
+  for (const Rect& damage_rect : result.frame.damage_rects) {
+    const PixelRect clip = ClipRectToImage(damage_rect, image);
+    if (IsEmpty(clip)) {
+      continue;
+    }
+    ClearPixelRect(image, clip, options.clear_color);
+    RasterizeDrawCommandsWithAtlasInto(image, draw_commands, atlas, clip);
+  }
   return image;
 }
 
