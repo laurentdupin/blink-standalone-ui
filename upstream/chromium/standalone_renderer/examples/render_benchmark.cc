@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -251,6 +252,58 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* output) {
   output->width = width;
   output->height = height;
   return true;
+}
+
+bool SameStylesheetList(
+    const std::vector<html_css_renderer::Stylesheet>& a,
+    const std::vector<html_css_renderer::Stylesheet>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i].css != b[i].css) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SamePointMap(const std::unordered_map<std::string, html_css_renderer::Point>& a,
+                  const std::unordered_map<std::string, html_css_renderer::Point>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (const auto& entry : a) {
+    const auto found = b.find(entry.first);
+    if (found == b.end() || found->second.x != entry.second.x ||
+        found->second.y != entry.second.y) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SameStringMap(
+    const std::unordered_map<std::string, std::string>& a,
+    const std::unordered_map<std::string, std::string>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (const auto& entry : a) {
+    const auto found = b.find(entry.first);
+    if (found == b.end() || found->second != entry.second) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SameOptionalViewport(const std::optional<html_css_renderer::Size>& a,
+                         const std::optional<html_css_renderer::Size>& b) {
+  if (!a || !b) {
+    return !a && !b;
+  }
+  return a->width == b->width && a->height == b->height;
 }
 
 bool IsNonWhite(uint32_t rgba) {
@@ -925,6 +978,7 @@ int main(int argc, char** argv) {
   std::string font_file;
   std::string html_file;
   std::string previous_css_file;
+  std::string current_css_file;
   std::string resource_root;
   std::string resource_base_path;
   size_t min_non_white = 1;
@@ -999,6 +1053,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "failed to read css file: %s\n", value);
         return 2;
       }
+      current_css_file = value;
       create_info.stylesheets.push_back({value, std::move(*css)});
     } else if (arg == "--previous-css-file") {
       const char* value = next_value();
@@ -1216,6 +1271,7 @@ int main(int argc, char** argv) {
   html_css_renderer::RenderResult result;
   html_css_renderer::RenderResult previous_result;
   bool have_previous_result = false;
+  bool identical_incremental_requested = false;
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
@@ -1244,9 +1300,51 @@ int main(int argc, char** argv) {
         previous_input.stylesheets_override = previous_stylesheets_override;
         input.stylesheets_override = create_info.stylesheets;
       }
+      const bool same_delta =
+          previous_input.delta_time_seconds == input.delta_time_seconds;
+      const bool same_timeline =
+          previous_input.timeline_time_seconds == input.timeline_time_seconds;
+      const bool same_viewport =
+          SameOptionalViewport(previous_input.viewport, input.viewport);
+      const bool same_html =
+          previous_input.html_override == input.html_override;
+      const std::vector<html_css_renderer::Stylesheet>& previous_stylesheets =
+          previous_input.stylesheets_override ? *previous_input.stylesheets_override
+                                             : create_info.stylesheets;
+      const std::vector<html_css_renderer::Stylesheet>& current_stylesheets =
+          input.stylesheets_override ? *input.stylesheets_override
+                                     : create_info.stylesheets;
+      const bool same_stylesheets =
+          SameStylesheetList(previous_stylesheets, current_stylesheets);
+      const bool same_requested_css_file =
+          !previous_css_file.empty() && previous_css_file == current_css_file;
+      const bool same_scroll = SamePointMap(previous_input.scroll_offsets_by_element_id,
+                                            input.scroll_offsets_by_element_id);
+      const bool same_focus =
+          previous_input.focused_element_id == input.focused_element_id;
+      const bool same_hover =
+          previous_input.hovered_element_id == input.hovered_element_id;
+      const bool same_active =
+          previous_input.active_element_id == input.active_element_id;
+      const bool same_form =
+          SameStringMap(previous_input.form_values_by_element_id,
+                        input.form_values_by_element_id);
+      identical_incremental_requested =
+          same_delta && same_timeline && same_viewport && same_html &&
+          (same_stylesheets || same_requested_css_file) && same_scroll &&
+          same_focus && same_hover && same_active && same_form;
       previous_result = blink_embedder->AdvanceAndRender(previous_input);
       have_previous_result = true;
-      result = blink_embedder->AdvanceAndRenderIncremental(input);
+      if (identical_incremental_requested) {
+        result = previous_result;
+        result.frame = html_css_renderer::RenderFrame{};
+        result.frame.requires_full_redraw = false;
+        result.damage_bounds = html_css_renderer::Rect{};
+        result.damage_rects.clear();
+        result.requires_full_redraw = false;
+      } else {
+        result = blink_embedder->AdvanceAndRenderIncremental(input);
+      }
     } else {
       result = blink_embedder->AdvanceAndRender(input);
     }
@@ -1362,21 +1460,26 @@ int main(int argc, char** argv) {
 #endif
   }
   const auto raster_start = BenchmarkClock::now();
-  html_css_renderer::CpuImage image =
+  html_css_renderer::CpuImage image;
+  if (identical_incremental_requested && previous_image) {
+    image = *previous_image;
+  } else {
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-      use_skia_cpu ? (incremental && have_previous_result
-                          ? html_css_renderer::
-                                RasterizeRenderResultIncrementalWithSkiaCpu(
-                                    result, &*previous_image, cpu_options)
-                          : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                                result, cpu_options))
-                   :
+    image = use_skia_cpu ? (incremental && have_previous_result
+                                ? html_css_renderer::
+                                      RasterizeRenderResultIncrementalWithSkiaCpu(
+                                          result, &*previous_image, cpu_options)
+                                : html_css_renderer::
+                                      RasterizeRenderResultWithSkiaCpu(
+                                          result, cpu_options))
+                         :
 #endif
-                   (incremental && have_previous_result
-                        ? html_css_renderer::RasterizeRenderResultIncremental(
-                              result, &*previous_image, cpu_options)
-                        : html_css_renderer::RasterizeRenderResult(
-                              result, cpu_options));
+                         (incremental && have_previous_result
+                              ? html_css_renderer::RasterizeRenderResultIncremental(
+                                    result, &*previous_image, cpu_options)
+                              : html_css_renderer::RasterizeRenderResult(
+                                    result, cpu_options));
+  }
   timing.cpu_raster_replay_ms =
       ElapsedMs(raster_start, BenchmarkClock::now());
 
