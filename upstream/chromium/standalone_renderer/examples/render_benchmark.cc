@@ -893,7 +893,8 @@ void PrintUsage() {
                "[--previous-css-file <path>] "
                "[--attr id:name=value] [--previous-attr id:name=value] "
                "[--resource-root <path>] "
-               "[--viewport WxH] [--scroll-x px] [--scroll-y px] "
+               "[--viewport WxH] [--previous-scroll-x px] [--previous-scroll-y px] "
+               "[--scroll-x px] [--scroll-y px] "
                "[--time-ms ms] [--incremental] [--previous-time-ms ms] "
                "--out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
@@ -1110,6 +1111,22 @@ int main(int argc, char** argv) {
         PrintUsage();
         return 2;
       }
+    } else if (arg == "--previous-scroll-x") {
+      const char* value = next_value();
+      float scroll_x = 0.0f;
+      if (!value || !ParseFloat(value, &scroll_x)) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.scroll_offsets_by_element_id["document"].x = scroll_x;
+    } else if (arg == "--previous-scroll-y") {
+      const char* value = next_value();
+      float scroll_y = 0.0f;
+      if (!value || !ParseFloat(value, &scroll_y)) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.scroll_offsets_by_element_id["document"].y = scroll_y;
     } else if (arg == "--scroll-x") {
       const char* value = next_value();
       float scroll_x = 0.0f;
