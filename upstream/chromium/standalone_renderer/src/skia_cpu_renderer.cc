@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <optional>
 #include <mutex>
 #include <string>
@@ -23,6 +24,7 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkSamplingOptions.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkStream.h"
@@ -74,6 +76,56 @@ SkColor4f ToSkColor4f(Color color) {
 
 SkRect ToSkRect(Rect rect) {
   return SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height);
+}
+
+float ParseFloatAfter(const std::string& text,
+                      const char* key,
+                      float fallback) {
+  const size_t position = text.find(key);
+  if (position == std::string::npos) {
+    return fallback;
+  }
+  const char* begin = text.c_str() + position + std::strlen(key);
+  char* end = nullptr;
+  const float parsed = std::strtof(begin, &end);
+  return end != begin ? parsed : fallback;
+}
+
+int ParseIntAfter(const std::string& text, const char* key, int fallback) {
+  const size_t position = text.find(key);
+  if (position == std::string::npos) {
+    return fallback;
+  }
+  const char* begin = text.c_str() + position + std::strlen(key);
+  char* end = nullptr;
+  const long parsed = std::strtol(begin, &end, 10);
+  return end != begin ? static_cast<int>(parsed) : fallback;
+}
+
+SkSamplingOptions ParseSamplingOptions(const std::string& options) {
+  if (options.rfind("aniso=", 0) == 0) {
+    const int max_aniso = ParseIntAfter(options, "aniso=", 0);
+    if (max_aniso > 0) {
+      return SkSamplingOptions::Aniso(max_aniso);
+    }
+  }
+  if (options.rfind("cubic=", 0) == 0) {
+    return SkSamplingOptions(
+        SkCubicResampler{ParseFloatAfter(options, "B", 0.0f),
+                         ParseFloatAfter(options, "C", 0.0f)});
+  }
+
+  const SkFilterMode filter =
+      options.find("filter=linear") != std::string::npos
+          ? SkFilterMode::kLinear
+          : SkFilterMode::kNearest;
+  SkMipmapMode mipmap = SkMipmapMode::kNone;
+  if (options.find("mipmap=linear") != std::string::npos) {
+    mipmap = SkMipmapMode::kLinear;
+  } else if (options.find("mipmap=nearest") != std::string::npos) {
+    mipmap = SkMipmapMode::kNearest;
+  }
+  return SkSamplingOptions(filter, mipmap);
 }
 
 Rect FromSkIRect(const SkIRect& rect) {
@@ -582,7 +634,8 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         }
         if (resource.image) {
           canvas.drawImageRect(resource.image, ToSkRect(command.rect),
-                               SkSamplingOptions(), nullptr);
+                               ParseSamplingOptions(command.sampling_options),
+                               nullptr);
         }
       }
       break;
@@ -608,7 +661,8 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                   ? SkCanvas::kFast_SrcRectConstraint
                   : SkCanvas::kStrict_SrcRectConstraint;
           canvas.drawImageRect(resource.image, ToSkRect(command.source_rect),
-                               ToSkRect(command.rect), SkSamplingOptions(),
+                               ToSkRect(command.rect),
+                               ParseSamplingOptions(command.sampling_options),
                                &image_paint, constraint);
         }
       }

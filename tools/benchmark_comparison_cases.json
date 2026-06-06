@@ -16,8 +16,13 @@
     ],
     "image-layout": [
       "05e_object_fit_contain_cover",
+      "05i_image_data_png_alpha",
+      "05j_repeated_same_image",
       "16b_css_bg_data_png_size_cover",
       "14g_image_inside_overflow_clip",
+      "14e_nested_overflow_hidden",
+      "14f_transform_inside_overflow_clip",
+      "14h_absolute_inside_overflow_clip",
       "23_image_intrinsic_width_percent",
       "24_image_max_width_auto",
       "24d_image_local_svg_object_fit_contain"
@@ -49,6 +54,18 @@
       "name": "05g_image_data_png_red_2x2",
       "source": "paint_audit",
       "html": "05g_image_data_png_red_2x2.html"
+    },
+    {
+      "name": "05i_image_data_png_alpha",
+      "source": "paint_audit",
+      "html": "05i_image_data_png_alpha.html",
+      "note": "Alpha PNG resource smoke."
+    },
+    {
+      "name": "05j_repeated_same_image",
+      "source": "paint_audit",
+      "html": "05j_repeated_same_image.html",
+      "note": "Repeated same PNG image resource reuse."
     },
     {
       "name": "17_image_local_png",
@@ -91,6 +108,27 @@
       "html": "14g_image_inside_overflow_clip.html",
       "viewport": "320x200",
       "note": "PNG image clipped by overflow:hidden parent."
+    },
+    {
+      "name": "14e_nested_overflow_hidden",
+      "source": "paint_audit",
+      "html": "14e_nested_overflow_hidden.html",
+      "viewport": "320x200",
+      "note": "Nested overflow clipping layout smoke."
+    },
+    {
+      "name": "14f_transform_inside_overflow_clip",
+      "source": "paint_audit",
+      "html": "14f_transform_inside_overflow_clip.html",
+      "viewport": "320x200",
+      "note": "Transformed child clipped by overflow:hidden parent."
+    },
+    {
+      "name": "14h_absolute_inside_overflow_clip",
+      "source": "paint_audit",
+      "html": "14h_absolute_inside_overflow_clip.html",
+      "viewport": "320x200",
+      "note": "Absolutely positioned child clipped by overflow:hidden parent."
     },
     {
       "name": "23_image_intrinsic_width_percent",

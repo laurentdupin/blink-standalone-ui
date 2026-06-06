@@ -355,6 +355,7 @@ struct LiveExportedDrawOp {
   float src_y = 0.0f;
   float src_width = 0.0f;
   float src_height = 0.0f;
+  std::string sampling_options = "filter=nearest,mipmap=none";
   std::vector<LiveExportedDrawLooperLayer> draw_looper_layers;
   std::string debug_label;
 };
@@ -1511,6 +1512,7 @@ bool AppendPaintImageResourceOp(
     const cc::PaintImage& paint_image,
     const SkRect& src,
     const SkRect& dst,
+    const SkSamplingOptions& sampling,
     float translate_x,
     float translate_y,
     const char* debug_label,
@@ -1553,6 +1555,22 @@ bool AppendPaintImageResourceOp(
   exported.src_y = src.y();
   exported.src_width = src.width();
   exported.src_height = src.height();
+  if (sampling.isAniso()) {
+    exported.sampling_options =
+        "aniso=" + std::to_string(sampling.maxAniso);
+  } else if (sampling.useCubic) {
+    exported.sampling_options = "cubic=B" + std::to_string(sampling.cubic.B) +
+                                ",C" + std::to_string(sampling.cubic.C);
+  } else {
+    exported.sampling_options =
+        std::string("filter=") +
+        (sampling.filter == SkFilterMode::kLinear ? "linear" : "nearest") +
+        ",mipmap=" +
+        (sampling.mipmap == SkMipmapMode::kLinear
+             ? "linear"
+             : sampling.mipmap == SkMipmapMode::kNearest ? "nearest"
+                                                         : "none");
+  }
   exported.rgba_pixels = std::move(rgba_pixels);
   exported.debug_label = debug_label ? debug_label : "DrawImageRectOp";
   exported_draw_ops.push_back(std::move(exported));
@@ -1749,7 +1767,8 @@ bool AppendPaintRecordExtractedOps(
         const SkRect dst =
             SkRect::MakeXYWH(image_op.left, image_op.top, src.width(),
                              src.height());
-        if (!AppendPaintImageResourceOp(image_op.image, src, dst, translate_x,
+        if (!AppendPaintImageResourceOp(image_op.image, src, dst,
+                                        image_op.sampling, translate_x,
                                         translate_y, "DrawImageOp",
                                         exported_draw_ops)) {
           mark_unsupported(op);
@@ -1759,7 +1778,8 @@ bool AppendPaintRecordExtractedOps(
       case cc::PaintOpType::kDrawImageRect: {
         const auto& image_op = static_cast<const cc::DrawImageRectOp&>(op);
         if (!AppendPaintImageResourceOp(image_op.image, image_op.src,
-                                        image_op.dst, translate_x, translate_y,
+                                        image_op.dst, image_op.sampling,
+                                        translate_x, translate_y,
                                         "DrawImageRectOp",
                                         exported_draw_ops)) {
           mark_unsupported(op);
@@ -8863,6 +8883,29 @@ int StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer
   *src_width = op.src_width;
   *src_height = op.src_height;
   return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedImageSamplingOptionsAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    char* buffer,
+    int buffer_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size() || !buffer ||
+      buffer_size <= 0) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (op.type != 22) {
+    return 0;
+  }
+  const int copy_count =
+      std::min(static_cast<int>(op.sampling_options.size()), buffer_size - 1);
+  std::memcpy(buffer, op.sampling_options.data(),
+              static_cast<size_t>(copy_count));
+  buffer[copy_count] = '\0';
+  return copy_count;
 }
 
 }  // namespace blink::standalone_renderer_probe

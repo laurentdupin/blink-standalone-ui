@@ -263,6 +263,11 @@ int StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer
     float* src_y,
     float* src_width,
     float* src_height);
+int StandaloneBlinkLiveFrameBridgeExportedImageSamplingOptionsAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    char* buffer,
+    int buffer_size);
 }  // namespace blink::standalone_renderer_probe
 
 namespace blink::standalone_renderer_probe {
@@ -2596,6 +2601,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         image.bytes_hash = pixel_hash;
         Rect src_rect{0.0f, 0.0f, static_cast<float>(bitmap_width),
                       static_cast<float>(bitmap_height)};
+        std::string sampling_options = "filter=nearest,mipmap=none";
         if (type == 22) {
           float src_x = 0.0f;
           float src_y = 0.0f;
@@ -2608,6 +2614,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               src_width > 0.0f && src_height > 0.0f) {
             src_rect = Rect{src_x, src_y, src_width, src_height};
           }
+          std::array<char, 128> sampling_buffer{};
+          if (live_probe::
+                  StandaloneBlinkLiveFrameBridgeExportedImageSamplingOptionsAtForStandaloneRenderer(
+                      probe_html.c_str(), i, sampling_buffer.data(),
+                      static_cast<int>(sampling_buffer.size())) > 0) {
+            sampling_options = sampling_buffer.data();
+          }
           result.diagnostics.push_back(
               std::string("retained_image_resource source_raw_op=") +
               (debug_label[0] != '\0' ? debug_label.data()
@@ -2618,7 +2631,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         const std::string image_id = image.image_id;
         active_commands->push_back(
             type == 22 ? DrawCommand::DrawImageRect(
-                             image_id, src_rect, Rect{x, y, width, height})
+                             image_id, src_rect, Rect{x, y, width, height},
+                             sampling_options)
                        : DrawCommand::DrawImage(image_id,
                                                 Rect{x, y, width, height}));
         load_commands.push_back(LoadCommand::LoadImage(std::move(image)));
