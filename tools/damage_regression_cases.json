@@ -1,0 +1,145 @@
+{
+  "sets": {
+    "damage": [
+      "43f_property_color_off_to_on",
+      "43g_scroll_0_to_80",
+      "43g_scroll_80_to_80",
+      "43i_visibility_on_to_off",
+      "43i_visibility_off_to_on",
+      "43i_visibility_on_to_on",
+      "43j_geometry_a_to_b",
+      "43k_clipped_overflow_a_to_b",
+      "43l_opacity_low_to_high",
+      "43m_stacking_a_to_b"
+    ]
+  },
+  "cases": [
+    {
+      "name": "43f_property_color_off_to_on",
+      "html": "43f_incremental_attr_property_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-state=off"],
+      "current_attrs": ["card:data-state=on"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "tight",
+        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+      }
+    },
+    {
+      "name": "43g_scroll_0_to_80",
+      "html": "43g_incremental_scroll_basic.html",
+      "viewport": "240x200",
+      "previous_scroll": {"x": 0, "y": 0},
+      "current_scroll": {"x": 0, "y": 80},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "exposed_band",
+        "damage_bounds": {"x": 0, "y": 120, "width": 240, "height": 80}
+      }
+    },
+    {
+      "name": "43g_scroll_80_to_80",
+      "html": "43g_incremental_scroll_basic.html",
+      "viewport": "240x200",
+      "previous_scroll": {"x": 0, "y": 80},
+      "current_scroll": {"x": 0, "y": 80},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "none"
+      }
+    },
+    {
+      "name": "43i_visibility_on_to_off",
+      "html": "43i_incremental_attr_visibility_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-visible=on"],
+      "current_attrs": ["card:data-visible=off"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+      }
+    },
+    {
+      "name": "43i_visibility_off_to_on",
+      "html": "43i_incremental_attr_visibility_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-visible=off"],
+      "current_attrs": ["card:data-visible=on"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+      }
+    },
+    {
+      "name": "43i_visibility_on_to_on",
+      "html": "43i_incremental_attr_visibility_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-visible=on"],
+      "current_attrs": ["card:data-visible=on"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "none"
+      }
+    },
+    {
+      "name": "43j_geometry_a_to_b",
+      "html": "43j_incremental_attr_geometry_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-geom=a"],
+      "current_attrs": ["card:data-geom=b"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43k_clipped_overflow_a_to_b",
+      "html": "43k_incremental_attr_clip_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-pos=a"],
+      "current_attrs": ["card:data-pos=b"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+      }
+    },
+    {
+      "name": "43l_opacity_low_to_high",
+      "html": "43l_incremental_attr_opacity_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["card:data-alpha=low"],
+      "current_attrs": ["card:data-alpha=high"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "tight",
+        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+      }
+    },
+    {
+      "name": "43m_stacking_a_to_b",
+      "html": "43m_incremental_attr_stacking_basic.html",
+      "viewport": "240x200",
+      "previous_attrs": ["stack:data-order=a"],
+      "current_attrs": ["stack:data-order=b"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 144, "height": 144}
+      }
+    }
+  ]
+}
