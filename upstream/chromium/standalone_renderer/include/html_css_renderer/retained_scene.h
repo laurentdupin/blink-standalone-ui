@@ -52,6 +52,8 @@ struct RetainedScene {
 
 struct RetainedChunkDiff {
   std::string key;
+  std::string previous_key;
+  std::string current_key;
   RetainedChunkChangeKind kind = RetainedChunkChangeKind::kRetained;
   std::optional<Rect> previous_bounds;
   std::optional<Rect> current_bounds;
@@ -69,6 +71,8 @@ struct RetainedSceneDiff {
 
 struct PresentationChunkUpdate {
   std::string key;
+  std::string previous_key;
+  std::string current_key;
   RetainedChunkChangeKind change_kind = RetainedChunkChangeKind::kRetained;
   bool requires_redraw = false;
   bool requires_placement_update = false;

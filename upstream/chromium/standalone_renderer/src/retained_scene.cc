@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -95,6 +96,53 @@ bool HasVisualCommands(const RetainedPaintChunk* chunk) {
     }
   }
   return false;
+}
+
+struct ExactChunkMatchSignature {
+  RetainedChunkKind kind = RetainedChunkKind::kAnonymous;
+  Rect placement_bounds;
+  uint64_t content_hash = 0;
+  uint64_t resource_hash = 0;
+  uint64_t property_state_hash = 0;
+  bool ignores_scroll_offset = false;
+};
+
+bool operator==(const ExactChunkMatchSignature& left,
+                const ExactChunkMatchSignature& right) {
+  return left.kind == right.kind &&
+         left.placement_bounds.x == right.placement_bounds.x &&
+         left.placement_bounds.y == right.placement_bounds.y &&
+         left.placement_bounds.width == right.placement_bounds.width &&
+         left.placement_bounds.height == right.placement_bounds.height &&
+         left.content_hash == right.content_hash &&
+         left.resource_hash == right.resource_hash &&
+         left.property_state_hash == right.property_state_hash &&
+         left.ignores_scroll_offset == right.ignores_scroll_offset;
+}
+
+struct ExactChunkMatchSignatureHash {
+  size_t operator()(const ExactChunkMatchSignature& signature) const {
+    uint64_t hash = 0;
+    hash = HashCombine(hash, static_cast<uint64_t>(signature.kind));
+    hash = HashCombine(hash, HashRect(signature.placement_bounds));
+    hash = HashCombine(hash, signature.content_hash);
+    hash = HashCombine(hash, signature.resource_hash);
+    hash = HashCombine(hash, signature.property_state_hash);
+    hash = HashCombine(hash, signature.ignores_scroll_offset ? 1u : 0u);
+    return static_cast<size_t>(hash);
+  }
+};
+
+ExactChunkMatchSignature BuildExactChunkMatchSignature(
+    const RetainedPaintChunk& chunk) {
+  return ExactChunkMatchSignature{
+      chunk.kind,
+      chunk.placement_bounds,
+      chunk.content_hash,
+      chunk.resource_hash,
+      chunk.property_state.state_hash,
+      chunk.ignores_scroll_offset,
+  };
 }
 
 Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
@@ -526,16 +574,52 @@ RetainedSceneDiff DiffRetainedScenes(const RetainedScene& current,
                                      const RetainedScene* previous) {
   RetainedSceneDiff diff;
   std::unordered_map<std::string, const RetainedPaintChunk*> previous_by_key;
+  std::unordered_map<ExactChunkMatchSignature,
+                     std::vector<const RetainedPaintChunk*>,
+                     ExactChunkMatchSignatureHash>
+      previous_by_exact_signature;
   if (previous) {
     for (const RetainedPaintChunk& chunk : previous->chunks) {
       previous_by_key[chunk.key] = &chunk;
+      previous_by_exact_signature[BuildExactChunkMatchSignature(chunk)]
+          .push_back(&chunk);
     }
   }
 
   for (const RetainedPaintChunk& current_chunk : current.chunks) {
     const auto found = previous_by_key.find(current_chunk.key);
-    if (found == previous_by_key.end()) {
+    const RetainedPaintChunk* matched_previous_chunk = nullptr;
+    if (found != previous_by_key.end()) {
+      matched_previous_chunk = found->second;
+      auto signature_found = previous_by_exact_signature.find(
+          BuildExactChunkMatchSignature(*matched_previous_chunk));
+      if (signature_found != previous_by_exact_signature.end()) {
+        auto& candidates = signature_found->second;
+        candidates.erase(std::remove(candidates.begin(), candidates.end(),
+                                     matched_previous_chunk),
+                         candidates.end());
+        if (candidates.empty()) {
+          previous_by_exact_signature.erase(signature_found);
+        }
+      }
+      previous_by_key.erase(found);
+    } else {
+      auto signature_found = previous_by_exact_signature.find(
+          BuildExactChunkMatchSignature(current_chunk));
+      if (signature_found != previous_by_exact_signature.end() &&
+          !signature_found->second.empty()) {
+        matched_previous_chunk = signature_found->second.back();
+        signature_found->second.pop_back();
+        if (signature_found->second.empty()) {
+          previous_by_exact_signature.erase(signature_found);
+        }
+        previous_by_key.erase(matched_previous_chunk->key);
+      }
+    }
+    if (!matched_previous_chunk) {
       RecordChange(diff, RetainedChunkDiff{
+                             current_chunk.key,
+                             std::string(),
                              current_chunk.key,
                              RetainedChunkChangeKind::kAdded,
                              std::nullopt,
@@ -544,7 +628,7 @@ RetainedSceneDiff DiffRetainedScenes(const RetainedScene& current,
       continue;
     }
 
-    const RetainedPaintChunk& previous_chunk = *found->second;
+    const RetainedPaintChunk& previous_chunk = *matched_previous_chunk;
     RetainedChunkChangeKind kind = RetainedChunkChangeKind::kRetained;
     if (current_chunk.content_hash != previous_chunk.content_hash ||
         current_chunk.resource_hash != previous_chunk.resource_hash) {
@@ -562,16 +646,19 @@ RetainedSceneDiff DiffRetainedScenes(const RetainedScene& current,
 
     RecordChange(diff, RetainedChunkDiff{
                            current_chunk.key,
+                           previous_chunk.key,
+                           current_chunk.key,
                            kind,
                            previous_chunk.placement_bounds,
                            current_chunk.placement_bounds,
                        });
-    previous_by_key.erase(found);
   }
 
   for (const auto& entry : previous_by_key) {
     RecordChange(diff, RetainedChunkDiff{
                            entry.first,
+                           entry.first,
+                           std::string(),
                            RetainedChunkChangeKind::kRemoved,
                            entry.second->placement_bounds,
                            std::nullopt,
@@ -610,11 +697,15 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
   for (const RetainedChunkDiff& chunk_diff : diff.chunks) {
     PresentationChunkUpdate update;
     update.key = chunk_diff.key;
+    update.previous_key =
+        chunk_diff.previous_key.empty() ? chunk_diff.key : chunk_diff.previous_key;
+    update.current_key =
+        chunk_diff.current_key.empty() ? chunk_diff.key : chunk_diff.current_key;
     update.change_kind = chunk_diff.kind;
     const RetainedPaintChunk* previous_chunk =
-        previous ? FindChunkByKey(*previous, chunk_diff.key) : nullptr;
+        previous ? FindChunkByKey(*previous, update.previous_key) : nullptr;
     const RetainedPaintChunk* current_chunk =
-        FindChunkByKey(current, chunk_diff.key);
+        FindChunkByKey(current, update.current_key);
     update.previous_bounds =
         previous_chunk ? PlacementBoundsForPresentation(*previous_chunk,
                                                         previous_scroll_offset)
