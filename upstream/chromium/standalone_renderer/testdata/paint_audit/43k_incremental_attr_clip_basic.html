@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    .stage {
+      width: 240px;
+      height: 200px;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .clip {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      overflow: hidden;
+      border-radius: 8px;
+      background: rgb(235, 240, 250);
+    }
+
+    #card {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      background: rgb(40, 80, 220);
+    }
+
+    #card[data-pos="a"] {
+      left: -60px;
+      top: 0;
+    }
+
+    #card[data-pos="b"] {
+      left: 60px;
+      top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="clip">
+      <div id="card" data-pos="a"></div>
+    </div>
+  </div>
+</body>
+</html>
