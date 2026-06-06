@@ -1945,6 +1945,12 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     if (input.viewport) {
       snapshot_.viewport = *input.viewport;
     }
+    if (input.html_override) {
+      snapshot_.html = *input.html_override;
+    }
+    if (input.stylesheets_override) {
+      snapshot_.stylesheets = *input.stylesheets_override;
+    }
     snapshot_.scroll_offsets_by_element_id = input.scroll_offsets_by_element_id;
     snapshot_.focused_element_id = input.focused_element_id;
     snapshot_.hovered_element_id = input.hovered_element_id;

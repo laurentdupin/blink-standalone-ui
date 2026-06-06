@@ -822,6 +822,7 @@ void PrintUsage() {
   std::fprintf(stderr,
                "Usage: blink_standalone_render_benchmark_skia --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
+               "[--previous-css-file <path>] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--scroll-x px] [--scroll-y px] "
                "[--time-ms ms] [--incremental] [--previous-time-ms ms] "
@@ -923,6 +924,7 @@ int main(int argc, char** argv) {
   std::string lifecycle_stop;
   std::string font_file;
   std::string html_file;
+  std::string previous_css_file;
   std::string resource_root;
   std::string resource_base_path;
   size_t min_non_white = 1;
@@ -937,6 +939,7 @@ int main(int argc, char** argv) {
   bool use_blink = true;
   bool incremental = false;
   BenchmarkTimingDiagnostics timing;
+  std::vector<html_css_renderer::Stylesheet> previous_stylesheets_override;
 
   const auto input_setup_start = BenchmarkClock::now();
   for (int i = 1; i < argc; ++i) {
@@ -997,6 +1000,19 @@ int main(int argc, char** argv) {
         return 2;
       }
       create_info.stylesheets.push_back({value, std::move(*css)});
+    } else if (arg == "--previous-css-file") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      std::optional<std::string> css = ReadTextFile(value);
+      if (!css) {
+        std::fprintf(stderr, "failed to read previous css file: %s\n", value);
+        return 2;
+      }
+      previous_css_file = value;
+      previous_stylesheets_override.push_back({value, std::move(*css)});
     } else if (arg == "--viewport") {
       const char* value = next_value();
       if (!value || !ParseViewport(value, &create_info.viewport)) {
@@ -1224,6 +1240,10 @@ int main(int argc, char** argv) {
         ElapsedMs(initialize_start, BenchmarkClock::now());
     const auto render_start = BenchmarkClock::now();
     if (incremental) {
+      if (!previous_stylesheets_override.empty()) {
+        previous_input.stylesheets_override = previous_stylesheets_override;
+        input.stylesheets_override = create_info.stylesheets;
+      }
       previous_result = blink_embedder->AdvanceAndRender(previous_input);
       have_previous_result = true;
       result = blink_embedder->AdvanceAndRenderIncremental(input);
