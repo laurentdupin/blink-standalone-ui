@@ -361,6 +361,8 @@ struct LiveExportedDrawOp {
 
 struct LiveHitTestEntry {
   std::string element_id;
+  DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
+  int paint_order = -1;
   float x = 0.0f;
   float y = 0.0f;
   float width = 0.0f;
@@ -2224,6 +2226,7 @@ void CollectLiveHitTestEntriesForStandaloneRenderer(
         LiveHitTestEntry entry;
         entry.element_id =
             BlinkStringToStdStringForStandaloneRenderer(String(id));
+        entry.paint_client_id = element->GetLayoutObject()->Id();
         entry.x = rect.x();
         entry.y = rect.y();
         entry.width = rect.width();
@@ -2236,6 +2239,42 @@ void CollectLiveHitTestEntriesForStandaloneRenderer(
        child = child->nextSibling()) {
     CollectLiveHitTestEntriesForStandaloneRenderer(child, entries);
   }
+}
+
+void SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
+    const PaintArtifact& artifact,
+    std::vector<LiveHitTestEntry>& entries) {
+  if (entries.empty()) {
+    return;
+  }
+
+  std::unordered_map<DisplayItemClientId, int> last_paint_order_by_client;
+  const DisplayItemList& display_items = artifact.GetDisplayItemList();
+  for (wtf_size_t item_index = 0; item_index < display_items.size();
+       ++item_index) {
+    const DisplayItem& item = display_items[item_index];
+    if (!item.IsDrawing()) {
+      continue;
+    }
+    const DisplayItemClientId paint_client_id = item.ClientId();
+    if (paint_client_id == kInvalidDisplayItemClientId) {
+      continue;
+    }
+    last_paint_order_by_client[paint_client_id] = static_cast<int>(item_index);
+  }
+
+  for (LiveHitTestEntry& entry : entries) {
+    const auto order = last_paint_order_by_client.find(entry.paint_client_id);
+    if (order != last_paint_order_by_client.end()) {
+      entry.paint_order = order->second;
+    }
+  }
+
+  std::stable_sort(entries.begin(), entries.end(),
+                   [](const LiveHitTestEntry& a,
+                      const LiveHitTestEntry& b) {
+                     return a.paint_order < b.paint_order;
+                   });
 }
 
 namespace {
@@ -7593,6 +7632,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
+  SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
+      artifact, cache.hit_test_entries);
   cache.timing_paint_artifact_generation_ms =
       StandaloneProbeElapsedMs(paint_artifact_start,
                                StandaloneProbeClock::now());
