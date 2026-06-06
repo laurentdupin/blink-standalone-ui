@@ -5,6 +5,9 @@
       "05k_image_local_svg_route_map",
       "05g_image_data_png_red_2x2",
       "17_image_local_png",
+      "16_css_bg_data_png_simple",
+      "18_css_bg_local_png",
+      "18b_css_bg_relative_png",
       "43f_incremental_attr_property_basic_on"
     ],
     "hcsr-smoke": [
@@ -35,6 +38,24 @@
       "name": "17_image_local_png",
       "source": "paint_audit",
       "html": "17_image_local_png.html"
+    },
+    {
+      "name": "16_css_bg_data_png_simple",
+      "source": "paint_audit",
+      "html": "16_css_bg_data_png_simple.html",
+      "note": "CSS background-image data PNG smoke."
+    },
+    {
+      "name": "18_css_bg_local_png",
+      "source": "paint_audit",
+      "html": "18_css_bg_local_png.html",
+      "note": "CSS background-image local PNG resource-root smoke."
+    },
+    {
+      "name": "18b_css_bg_relative_png",
+      "source": "paint_audit",
+      "html": "18b_css_bg_relative_png.html",
+      "note": "CSS background-image relative PNG resource URL smoke."
     },
     {
       "name": "43f_incremental_attr_property_basic_on",
