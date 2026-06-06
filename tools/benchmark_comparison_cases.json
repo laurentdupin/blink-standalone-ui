@@ -1,0 +1,44 @@
+{
+  "sets": {
+    "smoke": [
+      "05b_image_data_svg",
+      "05g_image_data_png_red_2x2",
+      "17_image_local_png",
+      "43f_incremental_attr_property_basic_on"
+    ],
+    "hcsr-smoke": [
+      "hcsr_image_showcase"
+    ]
+  },
+  "cases": [
+    {
+      "name": "05b_image_data_svg",
+      "source": "paint_audit",
+      "html": "05b_image_data_svg.html"
+    },
+    {
+      "name": "05g_image_data_png_red_2x2",
+      "source": "paint_audit",
+      "html": "05g_image_data_png_red_2x2.html"
+    },
+    {
+      "name": "17_image_local_png",
+      "source": "paint_audit",
+      "html": "17_image_local_png.html"
+    },
+    {
+      "name": "43f_incremental_attr_property_basic_on",
+      "source": "paint_audit",
+      "html": "43f_incremental_attr_property_basic.html",
+      "attrs": [
+        "card:data-state=on"
+      ]
+    },
+    {
+      "name": "hcsr_image_showcase",
+      "source": "hcsr",
+      "catalog_name": "ImageShowcase",
+      "viewport": "1024x768"
+    }
+  ]
+}

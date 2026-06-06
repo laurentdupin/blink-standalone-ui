@@ -70,7 +70,37 @@ function argValue(name) {
   return index >= 0 && index + 1 < process.argv.length ? process.argv[index + 1] : null;
 }
 
+function argValues(name) {
+  const values = [];
+  for (let index = 0; index < process.argv.length; index += 1) {
+    if (process.argv[index] === name && index + 1 < process.argv.length) {
+      values.push(process.argv[index + 1]);
+      index += 1;
+    }
+  }
+  return values;
+}
+
+function parseAttrOverride(value) {
+  const colon = value.indexOf(":");
+  const equals = value.indexOf("=", colon + 1);
+  if (colon <= 0 || equals <= colon + 1) {
+    throw new Error(`Invalid --attr override '${value}', expected id:name=value`);
+  }
+  return {
+    id: value.slice(0, colon),
+    name: value.slice(colon + 1, equals),
+    value: value.slice(equals + 1),
+  };
+}
+
 async function main() {
+  if (process.argv.includes("--check-only")) {
+    requirePlaywright();
+    process.stdout.write(JSON.stringify({ playwrightAvailable: true }) + "\n");
+    return;
+  }
+
   const html = argValue("--html-file");
   const out = argValue("--out");
   const viewportArg = argValue("--viewport") || "320x200";
@@ -78,8 +108,9 @@ async function main() {
   const scrollY = Number(argValue("--scroll-y") || "0");
   const timeMs = Number(argValue("--time-ms") || "0");
   const outJson = argValue("--out-json");
+  const attrOverrides = argValues("--attr").map(parseAttrOverride);
   if (!html || !out) {
-    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--time-ms ms] [--out-json path]");
+    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--time-ms ms] [--attr id:name=value] [--out-json path]");
     process.exit(2);
   }
   const [width, height] = viewportArg.split("x").map((v) => Number(v));
@@ -89,6 +120,18 @@ async function main() {
   try {
     const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
     await page.goto(`file:///${html.replace(/\\/g, "/")}`);
+    if (attrOverrides.length > 0) {
+      await page.evaluate((overrides) => {
+        for (const override of overrides) {
+          const element = document.getElementById(override.id);
+          if (!element) {
+            continue;
+          }
+          element.setAttribute(override.name, override.value);
+        }
+      }, attrOverrides);
+      await page.waitForTimeout(50);
+    }
     if (scrollX || scrollY) {
       await page.evaluate(({ x, y }) => window.scrollTo(x, y), {
         x: scrollX,
