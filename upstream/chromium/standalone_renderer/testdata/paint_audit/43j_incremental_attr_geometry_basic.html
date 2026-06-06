@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    .stage {
+      width: 240px;
+      height: 200px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    #card {
+      position: absolute;
+      border-radius: 8px;
+      background: rgb(40, 80, 220);
+    }
+
+    #card[data-geom="a"] {
+      left: 24px;
+      top: 24px;
+      width: 80px;
+      height: 80px;
+    }
+
+    #card[data-geom="b"] {
+      left: 120px;
+      top: 72px;
+      width: 96px;
+      height: 64px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div id="card" data-geom="a"></div>
+  </div>
+</body>
+</html>

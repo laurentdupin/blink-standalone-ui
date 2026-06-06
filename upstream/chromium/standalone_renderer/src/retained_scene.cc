@@ -57,8 +57,44 @@ bool SameOpacityGroup(const PaintPropertyStateSnapshot& a,
          NearlyEqual(a.effect_opacity, b.effect_opacity);
 }
 
+bool IsVisualCommandType(DrawCommandType type) {
+  switch (type) {
+    case DrawCommandType::kFillRect:
+    case DrawCommandType::kStrokeRect:
+    case DrawCommandType::kFillRectShader:
+    case DrawCommandType::kFillRRect:
+    case DrawCommandType::kStrokeRRect:
+    case DrawCommandType::kFillRRectShader:
+    case DrawCommandType::kFillPath:
+    case DrawCommandType::kDrawImage:
+    case DrawCommandType::kDrawImageRect:
+    case DrawCommandType::kDrawGlyphRun:
+    case DrawCommandType::kDrawTextBlob:
+    case DrawCommandType::kDrawText:
+      return true;
+    case DrawCommandType::kSave:
+    case DrawCommandType::kRestore:
+    case DrawCommandType::kTransform:
+    case DrawCommandType::kClipRect:
+    case DrawCommandType::kClipRRect:
+    case DrawCommandType::kClipPath:
+    case DrawCommandType::kSaveLayer:
+    case DrawCommandType::kDiagnostic:
+      return false;
+  }
+  return false;
+}
+
 bool HasVisualCommands(const RetainedPaintChunk* chunk) {
-  return chunk && !chunk->commands.empty();
+  if (!chunk) {
+    return false;
+  }
+  for (const DrawCommand& command : chunk->commands) {
+    if (IsVisualCommandType(command.type)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
