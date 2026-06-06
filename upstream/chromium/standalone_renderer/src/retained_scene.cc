@@ -235,6 +235,96 @@ Rect Translate(Rect rect, Point delta) {
   return rect;
 }
 
+bool IsZero(Point point) {
+  return NearlyEqual(point.x, 0.0f) && NearlyEqual(point.y, 0.0f);
+}
+
+Matrix4 TranslationMatrix(Point delta) {
+  Matrix4 matrix;
+  matrix.values[12] = delta.x;
+  matrix.values[13] = delta.y;
+  return matrix;
+}
+
+Point PresentationScrollOffsetDelta(const RetainedPaintChunk& chunk,
+                                    Point current_scroll_offset) {
+  if (chunk.property_state.scroll_node_id == 0 || IsZero(current_scroll_offset)) {
+    return Point{};
+  }
+  return Point{-current_scroll_offset.x, -current_scroll_offset.y};
+}
+
+PaintPropertyStateSnapshot TranslatePropertyStateForPresentation(
+    PaintPropertyStateSnapshot property_state,
+    Point delta) {
+  if (IsZero(delta)) {
+    return property_state;
+  }
+  if (property_state.has_clip_rect) {
+    property_state.clip_rect = Translate(property_state.clip_rect, delta);
+  }
+  if (property_state.has_clip_rrect) {
+    property_state.clip_rrect = Translate(property_state.clip_rrect, delta);
+  }
+  if (property_state.scroll_container_rect.width > 0.0f ||
+      property_state.scroll_container_rect.height > 0.0f) {
+    property_state.scroll_container_rect =
+        Translate(property_state.scroll_container_rect, delta);
+  }
+  if (property_state.scroll_contents_rect.width > 0.0f ||
+      property_state.scroll_contents_rect.height > 0.0f) {
+    property_state.scroll_contents_rect =
+        Translate(property_state.scroll_contents_rect, delta);
+  }
+  return property_state;
+}
+
+Rect PlacementBoundsForPresentation(const RetainedPaintChunk& chunk,
+                                    Point current_scroll_offset) {
+  return Translate(chunk.placement_bounds,
+                   PresentationScrollOffsetDelta(chunk, current_scroll_offset));
+}
+
+PaintPropertyStateSnapshot PropertyStateForPresentation(
+    const RetainedPaintChunk& chunk,
+    Point current_scroll_offset) {
+  return TranslatePropertyStateForPresentation(
+      chunk.property_state,
+      PresentationScrollOffsetDelta(chunk, current_scroll_offset));
+}
+
+DrawCommandList CommandsForPresentation(const RetainedPaintChunk& chunk,
+                                        Point current_scroll_offset) {
+  const Point delta =
+      PresentationScrollOffsetDelta(chunk, current_scroll_offset);
+  if (IsZero(delta)) {
+    return chunk.commands;
+  }
+  DrawCommandList commands;
+  commands.reserve(chunk.commands.size() + 3);
+  commands.push_back(DrawCommand::Save());
+  commands.push_back(DrawCommand::Transform(TranslationMatrix(delta)));
+  commands.insert(commands.end(), chunk.commands.begin(), chunk.commands.end());
+  commands.push_back(DrawCommand::Restore());
+  return commands;
+}
+
+RetainedPaintChunk ChunkForPresentation(const RetainedPaintChunk& chunk,
+                                        Point current_scroll_offset) {
+  const Point delta =
+      PresentationScrollOffsetDelta(chunk, current_scroll_offset);
+  if (IsZero(delta)) {
+    return chunk;
+  }
+  RetainedPaintChunk presented = chunk;
+  presented.bounds = Translate(presented.bounds, delta);
+  presented.placement_bounds = Translate(presented.placement_bounds, delta);
+  presented.property_state =
+      TranslatePropertyStateForPresentation(presented.property_state, delta);
+  presented.commands = CommandsForPresentation(chunk, current_scroll_offset);
+  return presented;
+}
+
 bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
   const PaintPropertyStateSnapshot& state = chunk.property_state;
   return state.transform_is_2d && !state.transform_has_perspective &&
@@ -322,6 +412,10 @@ void RecordChange(RetainedSceneDiff& diff, RetainedChunkDiff chunk_diff) {
 }
 
 }  // namespace
+
+std::vector<Rect> ComputeScrollExposedRects(Rect viewport, Point delta);
+const RetainedPaintChunk* FindChunkByKey(const RetainedScene& scene,
+                                         const std::string& key);
 
 RetainedPaintChunk MakeRetainedPaintChunk(std::string key,
                                           RetainedChunkKind kind,
@@ -453,6 +547,7 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
                                               Point current_scroll_offset,
                                               Point previous_scroll_offset) {
   PresentationUpdatePlan plan;
+  plan.current_scroll_offset = current_scroll_offset;
   plan.viewport_bounds = Rect{0.0f, 0.0f, viewport.width, viewport.height};
   plan.scroll_translation_delta =
       Point{previous_scroll_offset.x - current_scroll_offset.x,
@@ -461,6 +556,10 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
       previous != nullptr &&
       (plan.scroll_translation_delta.x != 0.0f ||
        plan.scroll_translation_delta.y != 0.0f);
+  if (plan.allows_scroll_translation_reuse) {
+    plan.scroll_exposed_rects = ComputeScrollExposedRects(
+        plan.viewport_bounds, plan.scroll_translation_delta);
+  }
 
   const RetainedSceneDiff diff = DiffRetainedScenes(current, previous);
   // Stable retained chunks can carry content and property-state damage as
@@ -473,8 +572,18 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
     PresentationChunkUpdate update;
     update.key = chunk_diff.key;
     update.change_kind = chunk_diff.kind;
-    update.previous_bounds = chunk_diff.previous_bounds;
-    update.current_bounds = chunk_diff.current_bounds;
+    const RetainedPaintChunk* previous_chunk =
+        previous ? FindChunkByKey(*previous, chunk_diff.key) : nullptr;
+    const RetainedPaintChunk* current_chunk =
+        FindChunkByKey(current, chunk_diff.key);
+    update.previous_bounds =
+        previous_chunk ? PlacementBoundsForPresentation(*previous_chunk,
+                                                        previous_scroll_offset)
+                       : chunk_diff.previous_bounds;
+    update.current_bounds =
+        current_chunk ? PlacementBoundsForPresentation(*current_chunk,
+                                                       current_scroll_offset)
+                      : chunk_diff.current_bounds;
     update.requires_placement_update =
         chunk_diff.kind == RetainedChunkChangeKind::kMoved ||
         chunk_diff.kind == RetainedChunkChangeKind::kAdded ||
@@ -484,49 +593,45 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
         chunk_diff.kind == RetainedChunkChangeKind::kRemoved ||
         chunk_diff.kind == RetainedChunkChangeKind::kContentChanged ||
         chunk_diff.kind == RetainedChunkChangeKind::kPresentationChanged;
-
-    if (plan.allows_scroll_translation_reuse &&
+    const bool scroll_reuse_candidate =
+        plan.allows_scroll_translation_reuse &&
         chunk_diff.kind == RetainedChunkChangeKind::kRetained &&
-        chunk_diff.current_bounds &&
-        Intersects(*chunk_diff.current_bounds, plan.viewport_bounds)) {
-      const Rect translated =
-          Translate(*chunk_diff.current_bounds, plan.scroll_translation_delta);
-      update.requires_redraw = !Intersects(translated, plan.viewport_bounds);
+        update.current_bounds &&
+        Intersects(*update.current_bounds, plan.viewport_bounds) &&
+        current_chunk != nullptr;
+    if (scroll_reuse_candidate) {
+      if (current_chunk->kind == RetainedChunkKind::kDocument) {
+        update.requires_redraw = false;
+      } else if (current_chunk->property_state.scroll_node_id == 0) {
+        update.requires_redraw = true;
+      } else {
+        update.requires_redraw = false;
+      }
     }
 
     if (update.requires_redraw) {
-      const RetainedPaintChunk* previous_chunk = nullptr;
-      const RetainedPaintChunk* current_chunk = nullptr;
-      if (previous) {
-        for (const RetainedPaintChunk& candidate : previous->chunks) {
-          if (candidate.key == chunk_diff.key) {
-            previous_chunk = &candidate;
-            break;
-          }
-        }
-      }
-      for (const RetainedPaintChunk& candidate : current.chunks) {
-        if (candidate.key == chunk_diff.key) {
-          current_chunk = &candidate;
-          break;
-        }
-      }
-      if (chunk_diff.previous_bounds) {
+      if (!scroll_reuse_candidate && update.previous_bounds) {
         plan.dirty_rects.push_back(MapRectConservatively(
-            *chunk_diff.previous_bounds,
-            previous_chunk ? previous_chunk->property_state
+            *update.previous_bounds,
+            previous_chunk ? PropertyStateForPresentation(*previous_chunk,
+                                                          previous_scroll_offset)
                            : PaintPropertyStateSnapshot{},
             plan.viewport_bounds));
       }
-      if (chunk_diff.current_bounds) {
+      if (update.current_bounds) {
         plan.dirty_rects.push_back(MapRectConservatively(
-            *chunk_diff.current_bounds,
-            current_chunk ? current_chunk->property_state
+            *update.current_bounds,
+            current_chunk ? PropertyStateForPresentation(*current_chunk,
+                                                         current_scroll_offset)
                           : PaintPropertyStateSnapshot{},
             plan.viewport_bounds));
       }
     }
     plan.chunk_updates.push_back(std::move(update));
+  }
+
+  for (const Rect& rect : plan.scroll_exposed_rects) {
+    plan.dirty_rects.push_back(rect);
   }
 
   if (plan.dirty_rects.empty() && !plan.requires_full_redraw) {
@@ -555,6 +660,9 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
   RenderFrame frame;
   frame.damage_rects = plan.dirty_rects;
   frame.requires_full_redraw = plan.requires_full_redraw;
+  frame.allows_scroll_translation_reuse =
+      plan.allows_scroll_translation_reuse;
+  frame.scroll_translation_delta = plan.scroll_translation_delta;
   for (const Rect dirty : frame.damage_rects) {
     frame.damage_bounds = UnionRectBounds(frame.damage_bounds, dirty);
   }
@@ -570,7 +678,10 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
   float active_opacity = 1.0f;
   for (size_t chunk_index = 0; chunk_index < scene.chunks.size();
        ++chunk_index) {
-    const RetainedPaintChunk& retained_chunk = scene.chunks[chunk_index];
+    const RetainedPaintChunk presented_chunk =
+        ChunkForPresentation(scene.chunks[chunk_index],
+                             plan.current_scroll_offset);
+    const RetainedPaintChunk& retained_chunk = presented_chunk;
     const bool needs_opacity_layer =
         NeedsGroupedOpacityLayer(retained_chunk.property_state);
     if (opacity_layer_open &&
@@ -678,6 +789,45 @@ Rect UnionRectBounds(Rect a, Rect b) {
   const float right = std::max(a.x + a.width, b.x + b.width);
   const float bottom = std::max(a.y + a.height, b.y + b.height);
   return Rect{left, top, right - left, bottom - top};
+}
+
+std::vector<Rect> ComputeScrollExposedRects(Rect viewport, Point delta) {
+  std::vector<Rect> rects;
+  if (delta.x == 0.0f && delta.y == 0.0f) {
+    return rects;
+  }
+  if (std::abs(delta.x) >= viewport.width ||
+      std::abs(delta.y) >= viewport.height) {
+    rects.push_back(viewport);
+    return rects;
+  }
+  if (delta.x > 0.0f) {
+    rects.push_back(Rect{viewport.x, viewport.y,
+                         std::min(delta.x, viewport.width), viewport.height});
+  } else if (delta.x < 0.0f) {
+    const float width = std::min(-delta.x, viewport.width);
+    rects.push_back(Rect{viewport.x + viewport.width - width, viewport.y,
+                         width, viewport.height});
+  }
+  if (delta.y > 0.0f) {
+    rects.push_back(Rect{viewport.x, viewport.y, viewport.width,
+                         std::min(delta.y, viewport.height)});
+  } else if (delta.y < 0.0f) {
+    const float height = std::min(-delta.y, viewport.height);
+    rects.push_back(Rect{viewport.x, viewport.y + viewport.height - height,
+                         viewport.width, height});
+  }
+  return rects;
+}
+
+const RetainedPaintChunk* FindChunkByKey(const RetainedScene& scene,
+                                         const std::string& key) {
+  for (const RetainedPaintChunk& chunk : scene.chunks) {
+    if (chunk.key == key) {
+      return &chunk;
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace html_css_renderer

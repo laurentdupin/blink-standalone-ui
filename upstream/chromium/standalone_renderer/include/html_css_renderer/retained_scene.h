@@ -79,9 +79,11 @@ struct PresentationChunkUpdate {
 struct PresentationUpdatePlan {
   bool requires_full_redraw = true;
   bool allows_scroll_translation_reuse = false;
+  Point current_scroll_offset;
   Point scroll_translation_delta;
   Rect viewport_bounds;
   std::vector<Rect> dirty_rects;
+  std::vector<Rect> scroll_exposed_rects;
   std::vector<PresentationChunkUpdate> chunk_updates;
 };
 

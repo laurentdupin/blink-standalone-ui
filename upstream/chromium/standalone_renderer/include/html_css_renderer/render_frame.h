@@ -144,6 +144,8 @@ struct RenderFrame {
   std::vector<Rect> damage_rects;
   Rect damage_bounds;
   bool requires_full_redraw = true;
+  bool allows_scroll_translation_reuse = false;
+  Point scroll_translation_delta;
 };
 
 const char* ToString(ResourceCommandType type);

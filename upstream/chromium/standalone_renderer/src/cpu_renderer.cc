@@ -104,6 +104,33 @@ bool IsEmpty(PixelRect rect) {
   return rect.right <= rect.left || rect.bottom <= rect.top;
 }
 
+void BlitTranslated(const CpuImage& source, CpuImage& destination, Point delta) {
+  const int dx = static_cast<int>(std::lround(delta.x));
+  const int dy = static_cast<int>(std::lround(delta.y));
+  const int src_left = std::max(0, -dx);
+  const int src_top = std::max(0, -dy);
+  const int dst_left = std::max(0, dx);
+  const int dst_top = std::max(0, dy);
+  const int copy_width = std::min(source.width - src_left,
+                                  destination.width - dst_left);
+  const int copy_height = std::min(source.height - src_top,
+                                   destination.height - dst_top);
+  if (copy_width <= 0 || copy_height <= 0) {
+    return;
+  }
+  for (int row = 0; row < copy_height; ++row) {
+    const size_t src_offset =
+        static_cast<size_t>(src_top + row) * source.width + src_left;
+    const size_t dst_offset =
+        static_cast<size_t>(dst_top + row) * destination.width + dst_left;
+    std::copy_n(
+        source.pixels_rgba.begin() + static_cast<std::ptrdiff_t>(src_offset),
+        copy_width,
+        destination.pixels_rgba.begin() +
+            static_cast<std::ptrdiff_t>(dst_offset));
+  }
+}
+
 void FillRect(CpuImage& image, Rect rect, Color color, PixelRect clip) {
   const PixelRect clipped = Intersect(ClipRectToImage(rect, image), clip);
   for (int y = clipped.top; y < clipped.bottom; ++y) {
@@ -360,7 +387,13 @@ CpuImage RasterizeRenderResultIncremental(const RenderResult& result,
     return RasterizeRenderResult(result, options);
   }
 
-  CpuImage image = *previous;
+  CpuImage image = result.frame.allows_scroll_translation_reuse
+                       ? CreateClearedImage(result.successor_snapshot.viewport,
+                                            options)
+                       : *previous;
+  if (result.frame.allows_scroll_translation_reuse) {
+    BlitTranslated(*previous, image, result.frame.scroll_translation_delta);
+  }
   const CpuGlyphAtlas atlas = BuildGlyphAtlas(result.frame.resource_commands);
   const DrawCommandList draw_commands =
       FlattenSceneDrawCommands(result.frame.scene_commands);

@@ -215,6 +215,38 @@ void StoreCommandCoverage(CommandCoverageRecord record) {
   CommandCoverageRecords().push_back(std::move(record));
 }
 
+void BlitPreviousPixelsTranslated(const CpuImage& previous,
+                                  std::vector<uint8_t>& pixels,
+                                  int width,
+                                  int height,
+                                  Point delta) {
+  const int dx = static_cast<int>(std::lround(delta.x));
+  const int dy = static_cast<int>(std::lround(delta.y));
+  const int src_left = std::max(0, -dx);
+  const int src_top = std::max(0, -dy);
+  const int dst_left = std::max(0, dx);
+  const int dst_top = std::max(0, dy);
+  const int copy_width = std::min(width - src_left, width - dst_left);
+  const int copy_height = std::min(height - src_top, height - dst_top);
+  if (copy_width <= 0 || copy_height <= 0) {
+    return;
+  }
+  for (int row = 0; row < copy_height; ++row) {
+    for (int col = 0; col < copy_width; ++col) {
+      const size_t src_index =
+          static_cast<size_t>(src_top + row) * width + (src_left + col);
+      const uint32_t packed = previous.pixels_rgba[src_index];
+      const size_t dst_index =
+          static_cast<size_t>(dst_top + row) * width + (dst_left + col);
+      const size_t offset = dst_index * 4u;
+      pixels[offset + 0] = static_cast<uint8_t>((packed >> 24) & 0xff);
+      pixels[offset + 1] = static_cast<uint8_t>((packed >> 16) & 0xff);
+      pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
+      pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
+    }
+  }
+}
+
 template <typename DrawProc>
 void DrawWithLooperLayers(SkCanvas& canvas,
                           const DrawCommand& command,
@@ -689,6 +721,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
                                                   const ImageAtlas& images,
                                                   const GlyphAtlas& glyphs,
                                                   const CpuImage* previous,
+                                                  const Point* scroll_translation_delta,
                                                   bool clear_before_render,
                                                   const std::vector<Rect>* damage_rects) {
   CpuImage image;
@@ -723,13 +756,18 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   if (previous && previous->width == image.width &&
       previous->height == image.height &&
       previous->pixels_rgba.size() == image.pixels_rgba.size()) {
-    for (size_t i = 0; i < previous->pixels_rgba.size(); ++i) {
-      const uint32_t packed = previous->pixels_rgba[i];
-      const size_t offset = i * 4u;
-      pixels[offset + 0] = static_cast<uint8_t>((packed >> 24) & 0xff);
-      pixels[offset + 1] = static_cast<uint8_t>((packed >> 16) & 0xff);
-      pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
-      pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
+    if (scroll_translation_delta) {
+      BlitPreviousPixelsTranslated(*previous, pixels, image.width, image.height,
+                                   *scroll_translation_delta);
+    } else {
+      for (size_t i = 0; i < previous->pixels_rgba.size(); ++i) {
+        const uint32_t packed = previous->pixels_rgba[i];
+        const size_t offset = i * 4u;
+        pixels[offset + 0] = static_cast<uint8_t>((packed >> 24) & 0xff);
+        pixels[offset + 1] = static_cast<uint8_t>((packed >> 16) & 0xff);
+        pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
+        pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
+      }
     }
   }
   if (clear_before_render) {
@@ -846,7 +884,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpu(const DrawCommandList& commands,
   const ImageAtlas images;
   const GlyphAtlas glyphs;
   return RasterizeDrawCommandsWithSkiaCpuInternal(commands, viewport, options,
-                                                 images, glyphs, nullptr, true,
+                                                 images, glyphs, nullptr,
+                                                 nullptr, true,
                                                  nullptr);
 }
 
@@ -858,7 +897,7 @@ CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
   const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
   CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
       commands, result.successor_snapshot.viewport, options, images, glyphs,
-      nullptr, true, nullptr);
+      nullptr, nullptr, true, nullptr);
   return image;
 }
 
@@ -885,7 +924,11 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
   const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
   CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
       commands, result.successor_snapshot.viewport, options, images, glyphs,
-      previous, false, &result.frame.damage_rects);
+      previous,
+      result.frame.allows_scroll_translation_reuse
+          ? &result.frame.scroll_translation_delta
+          : nullptr,
+      false, &result.frame.damage_rects);
   return image;
 }
 
