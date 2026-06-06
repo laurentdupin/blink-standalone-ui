@@ -359,6 +359,14 @@ struct LiveExportedDrawOp {
   std::string debug_label;
 };
 
+struct LiveHitTestEntry {
+  std::string element_id;
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   LiveFramePaintProbeResult result;
@@ -370,6 +378,7 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
   std::vector<std::string> chunk_id_strings;
+  std::vector<LiveHitTestEntry> hit_test_entries;
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
   int viewport_width = 320;
@@ -2174,6 +2183,34 @@ std::string PhysicalOffsetJsonForStandaloneRenderer(const PhysicalOffset& offset
 std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 uint64_t NodeIdForStandaloneRenderer(const void* node);
+
+void CollectLiveHitTestEntriesForStandaloneRenderer(
+    Node* node,
+    std::vector<LiveHitTestEntry>& entries) {
+  if (!node || entries.size() >= 4096) {
+    return;
+  }
+  if (auto* element = DynamicTo<Element>(node)) {
+    const AtomicString& id = element->GetIdAttribute();
+    if (!id.empty() && element->GetLayoutObject()) {
+      const gfx::RectF rect = element->GetBoundingClientRectNoLifecycleUpdate();
+      if (rect.width() > 0.0f && rect.height() > 0.0f) {
+        LiveHitTestEntry entry;
+        entry.element_id =
+            BlinkStringToStdStringForStandaloneRenderer(String(id));
+        entry.x = rect.x();
+        entry.y = rect.y();
+        entry.width = rect.width();
+        entry.height = rect.height();
+        entries.push_back(std::move(entry));
+      }
+    }
+  }
+  for (Node* child = node->firstChild(); child && entries.size() < 4096;
+       child = child->nextSibling()) {
+    CollectLiveHitTestEntriesForStandaloneRenderer(child, entries);
+  }
+}
 
 namespace {
 
@@ -7296,6 +7333,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.timing_paint_artifact_audit_ms = 0.0;
   cache.timing_paint_artifact_extraction_ms = 0.0;
   cache.timing_cache_hit = false;
+  cache.hit_test_entries.clear();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
@@ -7502,6 +7540,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
                                StandaloneProbeClock::now());
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
+  cache.hit_test_entries.clear();
+  CollectLiveHitTestEntriesForStandaloneRenderer(&document,
+                                                 cache.hit_test_entries);
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
@@ -7833,6 +7874,49 @@ int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
 int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html) {
   return RunLiveFramePaintProbe(body_html).lifecycle_reached_paint_clean;
+}
+
+int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().hit_test_entries.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    char* element_id,
+    int element_id_capacity,
+    float* x,
+    float* y,
+    float* width,
+    float* height) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& entries = ProbeCache().hit_test_entries;
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return 0;
+  }
+  const LiveHitTestEntry& entry = entries[static_cast<size_t>(index)];
+  if (element_id && element_id_capacity > 0) {
+    const size_t copied =
+        std::min(entry.element_id.size(),
+                 static_cast<size_t>(element_id_capacity - 1));
+    std::memcpy(element_id, entry.element_id.data(), copied);
+    element_id[copied] = '\0';
+  }
+  if (x) {
+    *x = entry.x;
+  }
+  if (y) {
+    *y = entry.y;
+  }
+  if (width) {
+    *width = entry.width;
+  }
+  if (height) {
+    *height = entry.height;
+  }
+  return 1;
 }
 
 int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(

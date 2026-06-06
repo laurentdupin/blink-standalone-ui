@@ -48,6 +48,17 @@ int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html);
+int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    char* element_id,
+    int element_id_capacity,
+    float* x,
+    float* y,
+    float* width,
+    float* height);
 int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(
     const char* body_html,
     int chunk_index,
@@ -436,6 +447,34 @@ std::string SerializeElementAttributesForStandaloneRenderer(
     out << key << "=" << value << "\n";
   }
   return out.str();
+}
+
+void ImportLiveHitTestEntriesForStandaloneRenderer(
+    const std::string& probe_html,
+    RenderResult& result) {
+  namespace live_probe = ::blink::standalone_renderer_probe;
+  result.hit_test_entries.clear();
+  const int entry_count =
+      live_probe::StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
+          probe_html.c_str());
+  for (int i = 0; i < entry_count && i < 4096; ++i) {
+    std::array<char, 256> element_id{};
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    if (!live_probe::StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
+            probe_html.c_str(), i, element_id.data(),
+            static_cast<int>(element_id.size()), &x, &y, &width, &height)) {
+      continue;
+    }
+    const size_t id_length = std::char_traits<char>::length(element_id.data());
+    if (id_length == 0 || width <= 0.0f || height <= 0.0f) {
+      continue;
+    }
+    result.hit_test_entries.push_back(
+        {std::string(element_id.data(), id_length), Rect{x, y, width, height}});
+  }
 }
 
 void ApplyRetainedScenePlan(RenderResult& result,
@@ -2132,6 +2171,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "real Blink PaintArtifact bridge did not reach PaintClean");
       return;
     }
+    ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
 
     const int chunk_count =
         live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
