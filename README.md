@@ -32,6 +32,33 @@ a ClangCL environment/toolset.
 All build products and fetched SDL sources live under `build/`, which is
 generated-only and ignored by Git.
 
+## SDL demo
+
+When SDL3 is available, build the optional viewer target:
+
+```powershell
+cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_sdl_viewer_skia --parallel 8
+```
+
+Run the attribute-toggle demo:
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43f_incremental_attr_property_basic.html --viewport 240x200 --skia-cpu --incremental --toggle-attr card:data-state=off,on
+```
+
+Run the scroll demo:
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43g_incremental_scroll_basic.html --viewport 240x200 --skia-cpu --incremental --scroll-step 80
+```
+
+Controls:
+
+- `Space` or `T` toggles configured `--toggle-attr` values.
+- Mouse wheel updates document scroll by `--scroll-step`.
+- `Esc` or window close exits.
+- `--quit-after-ms` exits after a fixed delay for explicit smoke runs.
+
 Current pipeline:
 
 `HTML/CSS input -> live Blink DummyPageHolder/Document/style/layout/paint lifecycle -> PaintArtifact metadata -> retained draw commands -> SDL demo`
