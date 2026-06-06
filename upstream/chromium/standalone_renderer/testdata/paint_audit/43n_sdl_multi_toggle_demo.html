@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    .stage {
+      position: relative;
+      width: 360px;
+      height: 180px;
+      padding: 24px;
+      box-sizing: border-box;
+      background: white;
+    }
+
+    .toggle-card {
+      position: absolute;
+      top: 24px;
+      width: 80px;
+      height: 96px;
+      border: 4px solid rgb(35, 35, 35);
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+
+    #card-a {
+      left: 24px;
+    }
+
+    #card-b {
+      left: 128px;
+    }
+
+    #card-c {
+      left: 232px;
+    }
+
+    #card-a[data-state="off"] {
+      background: rgb(225, 70, 70);
+    }
+
+    #card-a[data-state="on"] {
+      background: rgb(40, 165, 105);
+      border-color: rgb(15, 95, 65);
+    }
+
+    #card-b[data-state="off"] {
+      background: rgb(230, 180, 45);
+    }
+
+    #card-b[data-state="on"] {
+      background: rgb(45, 105, 220);
+      border-color: rgb(20, 60, 150);
+    }
+
+    #card-c[data-state="off"] {
+      background: rgb(155, 95, 220);
+    }
+
+    #card-c[data-state="on"] {
+      background: rgb(45, 175, 190);
+      border-color: rgb(20, 105, 120);
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="toggle-card" id="card-a" data-state="off"></div>
+    <div class="toggle-card" id="card-b" data-state="off"></div>
+    <div class="toggle-card" id="card-c" data-state="off"></div>
+  </div>
+</body>
+</html>
