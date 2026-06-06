@@ -464,6 +464,16 @@ void SetDocumentScroll(html_css_renderer::FrameInput* input,
   scroll.y = std::max(0.0f, y);
 }
 
+const std::vector<html_css_renderer::Rect>& ViewerDamageRects(
+    const html_css_renderer::RenderResult& result) {
+  return result.frame.damage_rects.empty() ? result.damage_rects
+                                           : result.frame.damage_rects;
+}
+
+bool ViewerRequiresFullRedraw(const html_css_renderer::RenderResult& result) {
+  return result.frame.requires_full_redraw || result.requires_full_redraw;
+}
+
 void PrintViewerStatus(
     const char* reason,
     uint64_t frame_count,
@@ -472,10 +482,8 @@ void PrintViewerStatus(
     const std::vector<AttributeToggle>& attribute_toggles,
     bool incremental_update) {
   const std::vector<html_css_renderer::Rect>& damage_rects =
-      result.frame.damage_rects.empty() ? result.damage_rects
-                                        : result.frame.damage_rects;
-  const bool requires_full_redraw =
-      result.frame.requires_full_redraw || result.requires_full_redraw;
+      ViewerDamageRects(result);
+  const bool requires_full_redraw = ViewerRequiresFullRedraw(result);
   std::fprintf(stderr,
                "viewer status: frame=%llu event=%s incremental=%d "
                "scroll=(%.1f,%.1f) full_redraw=%d damage_rects=%zu",
@@ -504,6 +512,31 @@ void PrintViewerStatus(
                  toggle.is_on ? "on" : "off");
   }
   std::fprintf(stderr, "\n");
+}
+
+void SetViewerWindowTitle(
+    SDL_Window* window,
+    const char* reason,
+    uint64_t frame_count,
+    const html_css_renderer::FrameInput& input,
+    const html_css_renderer::RenderResult& result,
+    const std::vector<AttributeToggle>& attribute_toggles,
+    bool incremental_update) {
+  const char* render_mode =
+      ViewerRequiresFullRedraw(result) ? "full"
+                                       : (incremental_update ? "inc" : "render");
+  char buffer[192];
+  std::snprintf(buffer, sizeof(buffer),
+                "HTML/CSS SDL | f%llu %s | s=%.0f,%.0f | %s dmg=%zu",
+                static_cast<unsigned long long>(frame_count), reason,
+                CurrentDocumentScrollX(input), CurrentDocumentScrollY(input),
+                render_mode, ViewerDamageRects(result).size());
+  std::string title(buffer);
+  if (!attribute_toggles.empty()) {
+    title += " | attr=";
+    title += attribute_toggles.front().is_on ? "on" : "off";
+  }
+  SDL_SetWindowTitle(window, title.c_str());
 }
 
 std::vector<uint32_t> ConvertRgbaToAbgr(
@@ -1219,6 +1252,8 @@ int main(int argc, char** argv) {
   uint64_t rendered_frame_count = 1;
   PrintViewerStatus("initial", rendered_frame_count, input, result,
                     attribute_toggles, false);
+  SetViewerWindowTitle(window, "initial", rendered_frame_count, input, result,
+                       attribute_toggles, false);
 
   auto render_updated_input =
       [&](const char* reason, html_css_renderer::FrameInput next_input)
@@ -1254,6 +1289,8 @@ int main(int argc, char** argv) {
     ++rendered_frame_count;
     PrintViewerStatus(reason, rendered_frame_count, next_input, next_result,
                       attribute_toggles, use_incremental);
+    SetViewerWindowTitle(window, reason, rendered_frame_count, next_input,
+                         next_result, attribute_toggles, use_incremental);
     result = std::move(next_result);
     input = std::move(next_input);
     return true;
