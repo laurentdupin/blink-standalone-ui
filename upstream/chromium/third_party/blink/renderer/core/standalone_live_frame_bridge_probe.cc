@@ -1813,12 +1813,13 @@ bool AppendPaintRecordExtractedOps(
             translate_y, static_cast<const cc::DrawRRectOp&>(op).flags,
             exported_draw_ops);
         break;
-      case cc::PaintOpType::kDrawOval:
-        AppendSkRectOpWithFlags(static_cast<const cc::DrawOvalOp&>(op).oval,
-                                translate_x, translate_y,
-                                static_cast<const cc::DrawOvalOp&>(op).flags,
+      case cc::PaintOpType::kDrawOval: {
+        const auto& oval_op = static_cast<const cc::DrawOvalOp&>(op);
+        SkPath path = SkPathBuilder().addOval(oval_op.oval).detach();
+        AppendSkPathOpWithFlags(path, translate_x, translate_y, oval_op.flags,
                                 exported_draw_ops);
         break;
+      }
       case cc::PaintOpType::kDrawPath:
         AppendSkPathOpWithFlags(static_cast<const cc::DrawPathOp&>(op).path,
                                 translate_x, translate_y,
