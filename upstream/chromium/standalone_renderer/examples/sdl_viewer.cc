@@ -464,6 +464,48 @@ void SetDocumentScroll(html_css_renderer::FrameInput* input,
   scroll.y = std::max(0.0f, y);
 }
 
+void PrintViewerStatus(
+    const char* reason,
+    uint64_t frame_count,
+    const html_css_renderer::FrameInput& input,
+    const html_css_renderer::RenderResult& result,
+    const std::vector<AttributeToggle>& attribute_toggles,
+    bool incremental_update) {
+  const std::vector<html_css_renderer::Rect>& damage_rects =
+      result.frame.damage_rects.empty() ? result.damage_rects
+                                        : result.frame.damage_rects;
+  const bool requires_full_redraw =
+      result.frame.requires_full_redraw || result.requires_full_redraw;
+  std::fprintf(stderr,
+               "viewer status: frame=%llu event=%s incremental=%d "
+               "scroll=(%.1f,%.1f) full_redraw=%d damage_rects=%zu",
+               static_cast<unsigned long long>(frame_count), reason,
+               incremental_update ? 1 : 0, CurrentDocumentScrollX(input),
+               CurrentDocumentScrollY(input), requires_full_redraw ? 1 : 0,
+               damage_rects.size());
+  for (size_t i = 0; i < damage_rects.size(); ++i) {
+    const html_css_renderer::Rect& rect = damage_rects[i];
+    std::fprintf(stderr, " rect%zu=(%.1f,%.1f %.1fx%.1f)", i, rect.x, rect.y,
+                 rect.width, rect.height);
+  }
+  std::fprintf(stderr,
+               " chunks=%zu commands=%zu resources=%zu missing_resources=%zu",
+               result.frame.scene_chunks.size(),
+               result.frame.scene_commands.size(),
+               result.frame.resource_commands.size(),
+               result.missing_resources.size());
+  for (const AttributeToggle& toggle : attribute_toggles) {
+    const auto found = input.element_attributes_by_id_and_name.find(toggle.key);
+    const char* value =
+        found == input.element_attributes_by_id_and_name.end()
+            ? ""
+            : found->second.c_str();
+    std::fprintf(stderr, " attr[%s]=%s(%s)", toggle.key.c_str(), value,
+                 toggle.is_on ? "on" : "off");
+  }
+  std::fprintf(stderr, "\n");
+}
+
 std::vector<uint32_t> ConvertRgbaToAbgr(
     const html_css_renderer::CpuImage& image) {
   std::vector<uint32_t> pixels;
@@ -1174,9 +1216,13 @@ int main(int argc, char** argv) {
   std::fprintf(stderr,
                "viewer controls: mouse wheel scrolls document by %.1f px\n",
                scroll_step);
+  uint64_t rendered_frame_count = 1;
+  PrintViewerStatus("initial", rendered_frame_count, input, result,
+                    attribute_toggles, false);
 
   auto render_updated_input =
-      [&](html_css_renderer::FrameInput next_input) -> bool {
+      [&](const char* reason, html_css_renderer::FrameInput next_input)
+      -> bool {
     const bool use_incremental = incremental && use_cpu;
     html_css_renderer::RenderResult next_result =
         use_incremental ? blink_embedder->AdvanceAndRenderIncremental(next_input)
@@ -1205,6 +1251,9 @@ int main(int argc, char** argv) {
         return false;
       }
     }
+    ++rendered_frame_count;
+    PrintViewerStatus(reason, rendered_frame_count, next_input, next_result,
+                      attribute_toggles, use_incremental);
     result = std::move(next_result);
     input = std::move(next_input);
     return true;
@@ -1228,7 +1277,7 @@ int main(int argc, char** argv) {
         SetDocumentScroll(&next_input, next_x, next_y);
         if (CurrentDocumentScrollX(next_input) != CurrentDocumentScrollX(input) ||
             CurrentDocumentScrollY(next_input) != CurrentDocumentScrollY(input)) {
-          if (!render_updated_input(std::move(next_input))) {
+          if (!render_updated_input("scroll", std::move(next_input))) {
             running = false;
             break;
           }
@@ -1244,7 +1293,7 @@ int main(int argc, char** argv) {
             next_input.element_attributes_by_id_and_name[toggle.key] =
                 toggle.is_on ? toggle.on_value : toggle.off_value;
           }
-          if (!render_updated_input(std::move(next_input))) {
+          if (!render_updated_input("toggle", std::move(next_input))) {
             running = false;
             break;
           }
@@ -1264,7 +1313,7 @@ int main(int argc, char** argv) {
         if (hovered != input.hovered_element_id) {
           html_css_renderer::FrameInput next_input = input;
           next_input.hovered_element_id = hovered;
-          if (!render_updated_input(std::move(next_input))) {
+          if (!render_updated_input("hover", std::move(next_input))) {
             running = false;
             break;
           }
