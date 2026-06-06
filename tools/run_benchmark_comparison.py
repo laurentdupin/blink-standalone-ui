@@ -110,6 +110,35 @@ def load_manifest(path: Path) -> tuple[dict[str, dict], dict[str, list[str]]]:
     return cases, payload.get("sets", {})
 
 
+def build_report(selected_names: list[str], rows: list[dict], *, case_set: str,
+                 has_playwright: bool, playwright_detail: str,
+                 has_pillow: bool, pillow_detail: str) -> dict:
+    classification_counts: dict[str, int] = {}
+    benchmark_ok = 0
+    playwright_ok = 0
+    for row in rows:
+        if row.get("benchmark_exit") == 0:
+            benchmark_ok += 1
+        if row.get("playwright_exit") == 0:
+            playwright_ok += 1
+        classification = str(row.get("diff_classification") or "unclassified")
+        classification_counts[classification] = classification_counts.get(classification, 0) + 1
+    return {
+        "case_set": case_set,
+        "case_count": len(selected_names),
+        "benchmark_success_count": benchmark_ok,
+        "playwright_success_count": playwright_ok,
+        "classification_counts": classification_counts,
+        "dependencies": {
+            "playwright_available": has_playwright,
+            "playwright_detail": playwright_detail,
+            "pillow_available": has_pillow,
+            "pillow_detail": pillow_detail,
+        },
+        "cases": rows,
+    }
+
+
 def playwright_available() -> tuple[bool, str]:
     code, _, output = run(
         ["node", str(PLAYWRIGHT_SCRIPT), "--check-only"],
@@ -152,13 +181,15 @@ def resolve_case(case: dict, hcsr_root: Path | None) -> tuple[Path, Path]:
     raise ValueError(f"Unsupported case source '{source}'")
 
 
-def write_html_summary(out_dir: Path, rows: list[dict]) -> Path:
+def write_html_summary(out_dir: Path, report: dict) -> Path:
     generated = time.strftime("%Y-%m-%d %H:%M:%S")
+    rows = report["cases"]
     html_rows = []
     for row in rows:
         name = html.escape(row["name"])
         item_dir = out_dir / row["name"]
         status_class = "ok" if row["benchmark_exit"] == 0 else "bad"
+        note = html.escape(str(row.get("note", "")))
         html_rows.append(
             "<tr>"
             f'<td class="{status_class}"><a href="{name}/">{name}</a></td>'
@@ -170,6 +201,7 @@ def write_html_summary(out_dir: Path, rows: list[dict]) -> Path:
             f"<td>{html.escape(str(row.get('retained_vs_oracle_exact', '')))}</td>"
             f"<td>{html.escape(str(row.get('oracle_vs_playwright_exact', '')))}</td>"
             f"<td>{html.escape(str(row.get('diff_classification', '')))}</td>"
+            f"<td>{note}</td>"
             f"<td>{html.escape(str(row.get('standalone_advance_and_render_ms', '')))}</td>"
             f"<td>{html.escape(str(row.get('playwright_elapsed_seconds', '')))}</td>"
             + image_cell(item_dir / f"{row['name']}-retained.bmp", out_dir, "retained")
@@ -180,6 +212,17 @@ def write_html_summary(out_dir: Path, rows: list[dict]) -> Path:
             f'<a href="{name}/{name}-status.json">status</a></td>'
             "</tr>"
         )
+    classification_items = "".join(
+        f"<li><strong>{html.escape(name)}</strong>: {count}</li>"
+        for name, count in sorted(report["classification_counts"].items())
+    )
+    dependencies = report["dependencies"]
+    dep_html = (
+        f"<li><strong>Playwright</strong>: {'available' if dependencies['playwright_available'] else 'missing'}"
+        f" <span class=\"meta-inline\">{html.escape(str(dependencies['playwright_detail']))}</span></li>"
+        f"<li><strong>Pillow</strong>: {'available' if dependencies['pillow_available'] else 'missing'}"
+        f" <span class=\"meta-inline\">{html.escape(str(dependencies['pillow_detail']))}</span></li>"
+    )
     page = f"""<!doctype html>
 <meta charset="utf-8">
 <title>Blink Standalone Benchmark Comparison</title>
@@ -187,6 +230,11 @@ def write_html_summary(out_dir: Path, rows: list[dict]) -> Path:
   body {{ font-family: system-ui, Segoe UI, sans-serif; margin: 24px; background: #f7f7f8; color: #1f2328; }}
   h1 {{ margin: 0 0 4px; font-size: 24px; }}
   .meta {{ margin: 0 0 20px; color: #59636e; }}
+  .summary {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0 0 20px; }}
+  .summary-card {{ background: white; border: 1px solid #d0d7de; padding: 12px 14px; }}
+  .summary-card h2 {{ margin: 0 0 8px; font-size: 14px; }}
+  .summary-card ul {{ margin: 0; padding-left: 18px; font-size: 12px; }}
+  .meta-inline {{ color: #59636e; }}
   table {{ border-collapse: collapse; width: 100%; background: white; }}
   th, td {{ border: 1px solid #d0d7de; padding: 6px 8px; vertical-align: top; font-size: 12px; }}
   th {{ position: sticky; top: 0; background: #eef2f6; z-index: 1; }}
@@ -197,10 +245,28 @@ def write_html_summary(out_dir: Path, rows: list[dict]) -> Path:
   a {{ color: #0969da; text-decoration: none; }}
 </style>
 <h1>Blink Standalone Benchmark Comparison</h1>
-<p class="meta">Generated {html.escape(generated)}. This runner compares retained replay, paint-record oracle replay, and optional Playwright Chromium screenshots for manifest-selected cases.</p>
+<p class="meta">Generated {html.escape(generated)} for case set <strong>{html.escape(str(report['case_set']))}</strong>. This runner compares retained replay, paint-record oracle replay, and optional Playwright Chromium screenshots for manifest-selected cases.</p>
+<section class="summary">
+  <div class="summary-card">
+    <h2>Run</h2>
+    <ul>
+      <li><strong>Cases</strong>: {report['case_count']}</li>
+      <li><strong>Benchmark OK</strong>: {report['benchmark_success_count']}</li>
+      <li><strong>Playwright OK</strong>: {report['playwright_success_count']}</li>
+    </ul>
+  </div>
+  <div class="summary-card">
+    <h2>Classification Counts</h2>
+    <ul>{classification_items}</ul>
+  </div>
+  <div class="summary-card">
+    <h2>Dependencies</h2>
+    <ul>{dep_html}</ul>
+  </div>
+</section>
 <table>
   <thead><tr>
-    <th>Case</th><th>Bench</th><th>PW</th><th>Non-white</th><th>Unique</th><th>Missing res</th><th>R/O exact</th><th>O/P exact</th><th>Class</th><th>Standalone render ms</th><th>PW elapsed s</th>
+    <th>Case</th><th>Bench</th><th>PW</th><th>Non-white</th><th>Unique</th><th>Missing res</th><th>R/O exact</th><th>O/P exact</th><th>Class</th><th>Note</th><th>Standalone render ms</th><th>PW elapsed s</th>
     <th>Retained</th><th>Oracle</th><th>Playwright</th><th>Artifacts</th>
   </tr></thead>
   <tbody>{''.join(html_rows)}</tbody>
@@ -209,6 +275,7 @@ def write_html_summary(out_dir: Path, rows: list[dict]) -> Path:
     index = out_dir / "index.html"
     index.write_text(page, encoding="utf-8")
     (out_dir / "summary.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
+    (out_dir / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return index
 
 
@@ -390,10 +457,20 @@ def main() -> int:
                     oracle_pw, "exact_pixel_difference_count"
                 ),
                 "diff_classification": metric_value(oracle_pw, "diff_classification"),
+                "note": case.get("note", ""),
             }
         )
 
-    index = write_html_summary(args.out_dir, rows)
+    report = build_report(
+        selected_names,
+        rows,
+        case_set=args.case_set,
+        has_playwright=has_playwright,
+        playwright_detail=playwright_detail,
+        has_pillow=has_pillow,
+        pillow_detail=pillow_detail,
+    )
+    index = write_html_summary(args.out_dir, report)
     print(f"Wrote comparison summary to {index}")
     if not has_playwright:
         print(

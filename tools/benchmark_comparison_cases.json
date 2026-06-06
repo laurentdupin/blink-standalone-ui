@@ -41,13 +41,15 @@
       "name": "hcsr_feature_showcase",
       "source": "hcsr",
       "catalog_name": "FeatureShowcase",
-      "viewport": "1024x768"
+      "viewport": "1024x768",
+      "note": "Image-free HCSR layout smoke for renderer/comparison progress."
     },
     {
       "name": "hcsr_image_showcase",
       "source": "hcsr",
       "catalog_name": "ImageShowcase",
-      "viewport": "1024x768"
+      "viewport": "1024x768",
+      "note": "Known gap: BMP <img> content is out of current PNG/SVG scope."
     }
   ]
 }
