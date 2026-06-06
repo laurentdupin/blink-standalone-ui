@@ -369,6 +369,11 @@ struct LiveHitTestEntry {
   float height = 0.0f;
 };
 
+struct EmptyClipChunkForStandaloneRenderer {
+  gfx::Rect chunk_bounds;
+  gfx::RectF clip_rect;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   LiveFramePaintProbeResult result;
@@ -433,6 +438,11 @@ struct LiveFramePaintProbeCache {
   ImageReachabilityDiagnostics image_reachability;
   bool initialized = false;
 };
+
+bool RectsMatchForStandaloneRenderer(const gfx::Rect& a, const gfx::Rect& b) {
+  return a.x() == b.x() && a.y() == b.y() && a.width() == b.width() &&
+         a.height() == b.height();
+}
 
 LiveFramePaintProbeCache& ProbeCache() {
   static LiveFramePaintProbeCache* cache = new LiveFramePaintProbeCache();
@@ -1871,6 +1881,7 @@ bool AppendPaintArtifactExtractedOps(
   const DisplayItemList& display_items = artifact.GetDisplayItemList();
   const PaintChunks& chunks = artifact.GetPaintChunks();
   bool complete = true;
+  std::optional<EmptyClipChunkForStandaloneRenderer> empty_clip_chunk;
   for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
        ++chunk_index) {
     const PaintChunk& chunk = chunks[chunk_index];
@@ -1883,17 +1894,25 @@ bool AppendPaintArtifactExtractedOps(
           "paint_op_extraction unsupported chunk transform at index=" +
           std::to_string(chunk_index));
       complete = false;
+      empty_clip_chunk.reset();
       continue;
+    }
+    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
+        chunk_state, PropertyTreeState::Root());
+    FloatClipRect effective_clip = clip;
+    const bool has_display_items = chunk.begin_index != chunk.end_index;
+    if (has_display_items && clip.IsInfinite() && empty_clip_chunk &&
+        RectsMatchForStandaloneRenderer(empty_clip_chunk->chunk_bounds,
+                                        chunk.bounds)) {
+      effective_clip = FloatClipRect(empty_clip_chunk->clip_rect);
     }
     AppendBeginChunkOp(chunk_index, chunk.bounds, exported_draw_ops);
     AppendSaveOp(exported_draw_ops);
-    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
-        chunk_state, PropertyTreeState::Root());
     AppendChunkPropertyStateForStandaloneRenderer(chunk_index, chunk_state,
-                                                  projection, clip,
+                                                  projection, effective_clip,
                                                   property_states);
-    if (!clip.IsInfinite()) {
-      AppendClipRectOp(clip.Rect(), exported_draw_ops);
+    if (!effective_clip.IsInfinite()) {
+      AppendClipRectOp(effective_clip.Rect(), exported_draw_ops);
     }
     AppendMatrix2dOp(projection, exported_draw_ops);
     for (wtf_size_t item_index = chunk.begin_index;
@@ -1913,6 +1932,12 @@ bool AppendPaintArtifactExtractedOps(
     }
     AppendRestoreOp(exported_draw_ops);
     AppendEndChunkOp(exported_draw_ops);
+    if (!has_display_items && !clip.IsInfinite() && !chunk.bounds.IsEmpty()) {
+      empty_clip_chunk =
+          EmptyClipChunkForStandaloneRenderer{chunk.bounds, clip.Rect()};
+    } else {
+      empty_clip_chunk.reset();
+    }
   }
   return complete && !exported_draw_ops.empty();
 }

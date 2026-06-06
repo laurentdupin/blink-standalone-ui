@@ -17,6 +17,7 @@
     "image-layout": [
       "05e_object_fit_contain_cover",
       "16b_css_bg_data_png_size_cover",
+      "14g_image_inside_overflow_clip",
       "23_image_intrinsic_width_percent",
       "24_image_max_width_auto",
       "24d_image_local_svg_object_fit_contain"
@@ -83,6 +84,13 @@
       "source": "paint_audit",
       "html": "16b_css_bg_data_png_size_cover.html",
       "note": "CSS background PNG background-size cover."
+    },
+    {
+      "name": "14g_image_inside_overflow_clip",
+      "source": "paint_audit",
+      "html": "14g_image_inside_overflow_clip.html",
+      "viewport": "320x200",
+      "note": "PNG image clipped by overflow:hidden parent."
     },
     {
       "name": "23_image_intrinsic_width_percent",
