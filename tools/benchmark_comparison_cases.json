@@ -7,6 +7,9 @@
       "43f_incremental_attr_property_basic_on"
     ],
     "hcsr-smoke": [
+      "hcsr_feature_showcase"
+    ],
+    "hcsr-known-gaps": [
       "hcsr_image_showcase"
     ]
   },
@@ -33,6 +36,12 @@
       "attrs": [
         "card:data-state=on"
       ]
+    },
+    {
+      "name": "hcsr_feature_showcase",
+      "source": "hcsr",
+      "catalog_name": "FeatureShowcase",
+      "viewport": "1024x768"
     },
     {
       "name": "hcsr_image_showcase",
