@@ -463,10 +463,11 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
        plan.scroll_translation_delta.y != 0.0f);
 
   const RetainedSceneDiff diff = DiffRetainedScenes(current, previous);
-  plan.requires_full_redraw = previous == nullptr || diff.added_count > 0 ||
-                              diff.removed_count > 0 ||
-                              diff.content_changed_count > 0 ||
-                              diff.presentation_changed_count > 0;
+  // Stable retained chunks can carry content and property-state damage as
+  // local old/new bounds without forcing a full-frame redraw. Keep structural
+  // scene changes conservative for now.
+  plan.requires_full_redraw =
+      previous == nullptr || diff.added_count > 0 || diff.removed_count > 0;
 
   for (const RetainedChunkDiff& chunk_diff : diff.chunks) {
     PresentationChunkUpdate update;
