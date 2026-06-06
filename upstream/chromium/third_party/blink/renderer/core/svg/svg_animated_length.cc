@@ -52,14 +52,14 @@ SVGParsingError SVGAnimatedLength::AttributeChanged(const String& value) {
   // TODO: Use correct validator when we can set proper initial
   // values on error (for example 'auto' for 'rx' and 'ry').
 
+  auto& document = ContextElement()->GetDocument();
+  auto& element_sheet = document.ElementSheet();
+  auto* contents = element_sheet.Contents();
+  auto* parser_context = contents ? contents->ParserContext() : nullptr;
   SVGParsingError parse_status = UpdateBaseValueFromAttribute(
       *BaseValue(), value,
       [](const SVGLength&) { return SVGParseStatus::kNoError; },
-      ContextElement()
-          ->GetDocument()
-          .ElementSheet()
-          .Contents()
-          ->ParserContext());
+      parser_context);
 
   if (SVGLength::NegativeValuesForbiddenForAnimatedLengthAttribute(
           AttributeName())) {

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2010 Google, Inc. All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,10 +25,8 @@
 
 #include "third_party/blink/renderer/core/dom/decoded_data_document_parser.h"
 
-#include <memory>
-#if defined(HTML_CSS_RENDERER_STANDALONE)
 #include <cstdio>
-#endif
+#include <memory>
 
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -160,7 +158,8 @@ void DecodedDataDocumentParser::MaybeEmitMetaCharsetTraceEvent() {
 }
 
 void DecodedDataDocumentParser::UpdateDocument(const String& decoded_data) {
-  AppendDecodedData(decoded_data, DocumentEncodingData(*decoder_.get()));
+  DocumentEncodingData encoding_data(*decoder_.get());
+  AppendDecodedData(decoded_data, encoding_data);
   MaybeEmitMetaCharsetTraceEvent();
 }
 

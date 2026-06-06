@@ -236,13 +236,7 @@ namespace {
 
 void TraceStandaloneLocalFrameViewStage(const char* stage) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (!standalone_renderer_probe::
-          StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer()) {
-    return;
-  }
-  std::fprintf(stderr, "local_frame_view.stage=%s\n",
-               stage ? stage : "(null)");
-  std::fflush(stderr);
+  (void)stage;
 #endif
 }
 
@@ -3864,7 +3858,7 @@ bool LocalFrameView::UpdateStyleAndLayoutInternal() {
       TraceStandaloneLocalFrameViewStage(
           "UpdateStyleAndLayoutInternal before document tree update");
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-      if (Document* document = GetStandaloneDocumentForStandaloneRenderer()) {
+      if (Document* document = frame_->GetDocument()) {
         document->UpdateStyleAndLayoutTreeForThisDocument();
       }
 #else

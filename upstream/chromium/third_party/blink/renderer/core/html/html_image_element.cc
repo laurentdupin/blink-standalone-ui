@@ -121,9 +121,6 @@ HTMLImageElement::HTMLImageElement(Document& document, bool created_by_parser)
       is_auto_sized_(false),
       is_predicted_lcp_element_(false) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=html_image_element_ctor\n");
-  std::fflush(stderr);
 #endif
   if (blink::LcppScriptObserverEnabled()) {
     if (LocalFrame* frame = document.GetFrame()) {
@@ -334,10 +331,6 @@ void HTMLImageElement::ParseAttribute(
   if (name == html_names::kSrcAttr || name == html_names::kSrcsetAttr ||
       name == html_names::kSizesAttr) {
     std::string value = params.new_value.GetString().Utf8();
-    std::fprintf(stderr,
-                 "image_reachability.stage=html_image_parse_attribute name=%s value=%s\n",
-                 name.LocalName().Ascii().c_str(), value.c_str());
-    std::fflush(stderr);
   }
 #endif
   if (name == html_names::kAltAttr || name == html_names::kTitleAttr) {
@@ -533,9 +526,6 @@ ImageCandidate HTMLImageElement::FindBestFitImageFromPictureParent() {
 
 LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=html_image_create_layout_object\n");
-  std::fflush(stderr);
 #endif
   if (auto* content_image =
           DynamicTo<ImageContentData>(style.GetContentData())) {
@@ -555,9 +545,6 @@ LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
       image->SetImageResource(MakeGarbageCollected<LayoutImageResource>());
       image->SetImageDevicePixelRatio(image_device_pixel_ratio_);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-      std::fprintf(stderr,
-                   "image_reachability.stage=html_image_create_layout_object_done\n");
-      std::fflush(stderr);
 #endif
       if (base::FeatureList::IsEnabled(features::kSpeculativeImageDecodes)) {
         GetDocument().View()->RegisterForLifecycleNotifications(this);
@@ -572,29 +559,18 @@ LayoutObject* HTMLImageElement::CreateLayoutObject(const ComputedStyle& style) {
 
 void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=html_image_attach_layout_tree\n");
-  std::fflush(stderr);
 #endif
   HTMLElement::AttachLayoutTree(context);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=html_image_attach_after_base\n");
-  std::fflush(stderr);
 #endif
   if (auto* layout_image = DynamicTo<LayoutImage>(GetLayoutObject())) {
     if (is_fallback_image_) {
       layout_image->ImageResource()->UseBrokenImage();
     }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=html_image_before_loader_on_attach\n");
-    std::fflush(stderr);
 #endif
     GetImageLoader().OnAttachLayoutTree();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=html_image_after_loader_on_attach\n");
-    std::fflush(stderr);
 #endif
   }
 }
@@ -602,8 +578,6 @@ void HTMLImageElement::AttachLayoutTree(AttachContext& context) {
 Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
     ContainerNode& insertion_point) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=html_image_inserted_into\n");
-  std::fflush(stderr);
 #endif
   if (!form_was_set_by_parser_ ||
       NodeTraversal::HighestAncestorOrSelf(insertion_point) !=
@@ -658,8 +632,6 @@ Node::InsertionNotificationRequest HTMLImageElement::InsertedInto(
   Node::InsertionNotificationRequest result =
       HTMLElement::InsertedInto(insertion_point);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=html_image_inserted_into_done\n");
-  std::fflush(stderr);
 #endif
   return result;
 }
@@ -1054,8 +1026,6 @@ void HTMLImageElement::ForceReload() const {
 void HTMLImageElement::SelectSourceURL(
     ImageLoader::UpdateFromElementBehavior behavior) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=html_image_select_source\n");
-  std::fflush(stderr);
 #endif
   if (!GetDocument().IsActive())
     return;
@@ -1072,10 +1042,6 @@ void HTMLImageElement::SelectSourceURL(
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   std::string candidate_url = candidate.Url().GetString().Utf8();
-  std::fprintf(stderr,
-               "image_reachability.stage=html_image_selected_candidate empty=%d url=%s\n",
-               candidate.IsEmpty() ? 1 : 0, candidate_url.c_str());
-  std::fflush(stderr);
 #endif
   if (old_source != source_)
     InvalidateAttributeMapping();

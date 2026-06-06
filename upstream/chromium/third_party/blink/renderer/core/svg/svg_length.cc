@@ -226,8 +226,21 @@ SVGParsingError SVGLength::SetValueAsString(
     return SVGParseStatus::kNoError;
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const CSSParserContext* svg_parser_context = GetSVGAttributeParserContext();
+  const CSSParserContext* effective_parser_context =
+      parser_context ? parser_context : svg_parser_context;
+#endif
   const CSSValue* parsed = CSSParser::ParseSingleValue(
-      CSSPropertyID::kX, string, GetSVGAttributeParserContext());
+      CSSPropertyID::kX, string,
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      effective_parser_context
+#else
+      GetSVGAttributeParserContext()
+#endif
+  );
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   const auto* new_value = DynamicTo<CSSPrimitiveValue>(parsed);
   if (!new_value) {
     if (RuntimeEnabledFeatures::SvgLengthResolveUnparsedValueEnabled()) {

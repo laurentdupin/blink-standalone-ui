@@ -434,8 +434,6 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
                                       UpdateType update_type,
                                       bool force_blocking) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=image_loader_do_update\n");
-  std::fflush(stderr);
 #endif
   // FIXME: According to
   // http://www.whatwg.org/specs/web-apps/current-work/multipage/embedded-content.html#the-img-element:the-img-element-55
@@ -471,9 +469,6 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   std::string url_utf8 = url.GetString().Utf8();
-  std::fprintf(stderr, "image_reachability.stage=image_loader_url url=%s\n",
-               url_utf8.c_str());
-  std::fflush(stderr);
 #endif
   ImageResourceContent* new_image_content = nullptr;
   if (!url.IsNull() && !url.IsEmpty()) {
@@ -659,14 +654,9 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
 void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
                                     bool force_blocking) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=image_loader_update_from_element\n");
-  std::fflush(stderr);
 #endif
   if (!element_->GetDocument().IsActive()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_loader_update_document_inactive\n");
-    std::fflush(stderr);
 #endif
     return;
   }
@@ -710,9 +700,6 @@ void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
     SoftNavigationHeuristics::ModifiedNode(element_.Get());
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=image_loader_after_soft_navigation\n");
-  std::fflush(stderr);
 #endif
 
   const KURL image_source_kurl = ImageSourceToKURL(image_source_url);
@@ -720,11 +707,6 @@ void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
   std::string image_source_utf8 = image_source_kurl.GetString().Utf8();
   const bool standalone_should_load_immediately =
       ShouldLoadImmediately(image_source_kurl);
-  std::fprintf(stderr,
-               "image_reachability.stage=image_loader_should_load immediate=%d url=%s\n",
-               standalone_should_load_immediately ? 1 : 0,
-               image_source_utf8.c_str());
-  std::fflush(stderr);
 #endif
   if (ShouldLoadImmediately(image_source_kurl) &&
       update_behavior != kUpdateFromMicrotask) {
@@ -926,15 +908,10 @@ LayoutImageResource* ImageLoader::GetLayoutImageResource() const {
 
 void ImageLoader::OnAttachLayoutTree() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=image_loader_on_attach\n");
-  std::fflush(stderr);
 #endif
   LayoutImageResource* image_resource = GetLayoutImageResource();
   if (!image_resource) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_loader_on_attach_no_resource\n");
-    std::fflush(stderr);
 #endif
     return;
   }
@@ -944,22 +921,13 @@ void ImageLoader::OnAttachLayoutTree() {
   // anything respectively.
   if (image_resource->HasImage()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_loader_on_attach_resource_has_image\n");
-    std::fflush(stderr);
 #endif
     return;
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=image_loader_on_attach_set_resource\n");
-  std::fflush(stderr);
 #endif
   image_resource->SetImageResource(image_content_);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=image_loader_on_attach_done\n");
-  std::fflush(stderr);
 #endif
 }
 

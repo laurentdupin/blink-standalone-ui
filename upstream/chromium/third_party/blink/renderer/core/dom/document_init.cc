@@ -38,10 +38,10 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
+#include "third_party/blink/renderer/core/dom/xml_document.h"
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
 #include "third_party/blink/renderer/core/dom/sink_document.h"
-#include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_view_source_document.h"
 #include "third_party/blink/renderer/core/html/image_document.h"
@@ -55,7 +55,6 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/plugin_data.h"
 #include "third_party/blink/renderer/platform/network/mime/content_type.h"
-#include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
 #endif
 
@@ -158,6 +157,9 @@ DocumentInit::Type DocumentInit::ComputeDocumentType(
     const String& mime_type,
     bool* is_for_external_handler) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (mime_type == "image/svg+xml") {
+    return Type::kSVG;
+  }
   return Type::kHTML;
 #else
   if (frame && frame->InViewSourceMode()) {
@@ -326,7 +328,16 @@ Document* DocumentInit::CreateDocument() const {
   DCHECK(agent_);
 #endif
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  return MakeGarbageCollected<HTMLDocument>(*this);
+  switch (type_) {
+    case Type::kSVG:
+      return XMLDocument::CreateSVG(*this);
+    case Type::kXML:
+      return MakeGarbageCollected<XMLDocument>(*this);
+    case Type::kHTML:
+    case Type::kUnspecified:
+    default:
+      return MakeGarbageCollected<HTMLDocument>(*this);
+  }
 #else
   switch (type_) {
     case Type::kHTML:

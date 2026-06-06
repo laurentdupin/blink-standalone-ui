@@ -173,6 +173,7 @@ void XMLErrors::InsertErrorMessageBlock() {
   Element* report_element =
       CreateXHTMLParserErrorHeader(document_, error_messages);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (DocumentXSLT::HasTransformSourceDocument(*document_)) {
     Vector<Attribute, kAttributePrealloc> attributes;
     attributes.push_back(
@@ -184,6 +185,7 @@ void XMLErrors::InsertErrorMessageBlock() {
         "line and column numbers given are from the transformed result."));
     report_element->ParserAppendChild(paragraph);
   }
+#endif
 
   Node* first_child = document_element->firstChild();
   if (first_child)

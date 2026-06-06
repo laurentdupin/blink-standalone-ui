@@ -30,6 +30,8 @@
 
 #include "third_party/blink/renderer/core/dom/document_encoding_data.h"
 
+#include <cstdio>
+
 #include "third_party/blink/public/platform/web_encoding_data.h"
 #include "third_party/blink/renderer/core/html/parser/text_resource_decoder.h"
 
@@ -41,9 +43,12 @@ DocumentEncodingData::DocumentEncodingData()
       saw_decoding_error_(false) {}
 
 DocumentEncodingData::DocumentEncodingData(const TextResourceDecoder& decoder) {
+  const bool saw_error = decoder.SawError();
   encoding_ = decoder.Encoding();
   was_detected_heuristically_ = decoder.EncodingWasDetectedHeuristically();
-  saw_decoding_error_ = decoder.SawError();
+  saw_decoding_error_ = saw_error;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 }
 
 DocumentEncodingData::DocumentEncodingData(const WebEncodingData& data)

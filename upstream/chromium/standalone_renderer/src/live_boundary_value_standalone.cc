@@ -1014,7 +1014,6 @@ void FrameLoader::DispatchDidClearDocumentOfWindowObject() {}
 void EventHandler::StopAutoscroll() {}
 void ResourceFetcher::StopFetching() {}
 void ScriptController::UpdateDocument() {}
-void DocumentEncodingData::SetEncoding(const TextEncoding&) {}
 DOMWindow* DOMWindow::parent() const {
   return const_cast<DOMWindow*>(this);
 }

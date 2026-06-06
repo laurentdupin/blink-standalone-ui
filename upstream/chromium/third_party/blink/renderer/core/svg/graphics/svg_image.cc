@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 
 #include "base/memory/scoped_refptr.h"
+#include <cstdio>
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
@@ -463,7 +464,14 @@ std::optional<PaintRecord> SVGImage::PaintRecordForCurrentFrame(
 
   view->UpdateAllLifecyclePhases(DocumentUpdateReason::kSVGImage);
 
-  return view->GetPaintRecord(cull_rect);
+  const gfx::Rect* record_cull_rect = cull_rect;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  record_cull_rect = nullptr;
+#endif
+  PaintRecord record = view->GetPaintRecord(record_cull_rect);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  return record;
 }
 
 static bool DrawNeedsLayer(const cc::PaintFlags& flags) {
@@ -610,8 +618,9 @@ void SVGImage::ServiceAnimations(
   // but to preserve correct coherence of the cache of the output with
   // the needsRepaint bits of the PaintLayers in the image.
   LocalFrameView* frame_view = frame->View();
-  frame_view->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kSVGImage);
+  bool lifecycle_updated =
+      frame_view->UpdateAllLifecyclePhasesExceptPaint(
+          DocumentUpdateReason::kSVGImage);
 
   // We run UpdateAnimations after the paint phase, but per the above comment,
   // we don't want to run lifecycle through to paint for SVG images. Since we

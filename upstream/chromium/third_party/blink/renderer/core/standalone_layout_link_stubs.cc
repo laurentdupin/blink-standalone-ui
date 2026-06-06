@@ -2762,7 +2762,9 @@ StyleResolver& Document::GetStyleResolver() const {
 }
 
 CSSStyleSheet& Document::ElementSheet() {
-  return *static_cast<CSSStyleSheet*>(nullptr);
+  if (!elem_sheet_)
+    elem_sheet_ = CSSStyleSheet::CreateInline(*this, base_url_);
+  return *elem_sheet_;
 }
 
 Settings* Document::GetSettings() const {

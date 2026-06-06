@@ -35,7 +35,9 @@
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
+#endif
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
 namespace blink {
@@ -95,8 +97,17 @@ TextResourceDecoderOptions::ContentType DetermineContentType(
   if (EqualIgnoringAsciiCase(mime_type, "text/html")) {
     return TextResourceDecoderOptions::kHTMLContent;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (EqualIgnoringAsciiCase(mime_type, "image/svg+xml") ||
+      EqualIgnoringAsciiCase(mime_type, "text/xml") ||
+      EqualIgnoringAsciiCase(mime_type, "application/xml") ||
+      mime_type.EndsWithIgnoringAsciiCase("+xml")) {
+    return TextResourceDecoderOptions::kXMLContent;
+  }
+#else
   if (MIMETypeRegistry::IsXMLMIMEType(mime_type))
     return TextResourceDecoderOptions::kXMLContent;
+#endif
   return TextResourceDecoderOptions::kPlainTextContent;
 }
 
@@ -132,6 +143,25 @@ std::unique_ptr<TextResourceDecoder> BuildTextResourceDecoder(
             : TextEncoding(frame->GetSettings()->GetDefaultTextEncodingName());
     // Disable autodetection for XML/JSON to honor the default encoding (UTF-8)
     // for unlabelled documents.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (DetermineContentType(mime_type) ==
+        TextResourceDecoderOptions::kXMLContent) {
+      decoder =
+          std::make_unique<TextResourceDecoder>(TextResourceDecoderOptions(
+              TextResourceDecoderOptions::kXMLContent, default_encoding));
+      use_hint_encoding = false;
+    } else {
+      TextEncoding hint_encoding;
+      if (use_hint_encoding &&
+          parent_frame->GetDocument()->EncodingWasDetectedHeuristically()) {
+        hint_encoding = parent_frame->GetDocument()->Encoding();
+      }
+      decoder = std::make_unique<TextResourceDecoder>(
+          TextResourceDecoderOptions::CreateWithAutoDetection(
+              DetermineContentType(mime_type), default_encoding, hint_encoding,
+              url));
+    }
+#else
     if (MIMETypeRegistry::IsXMLMIMEType(mime_type)) {
       decoder =
           std::make_unique<TextResourceDecoder>(TextResourceDecoderOptions(
@@ -152,6 +182,7 @@ std::unique_ptr<TextResourceDecoder> BuildTextResourceDecoder(
               DetermineContentType(mime_type), default_encoding, hint_encoding,
               url));
     }
+#endif
   } else {
     decoder = std::make_unique<TextResourceDecoder>(TextResourceDecoderOptions(
         DetermineContentType(mime_type), encoding_from_domain));

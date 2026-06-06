@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
@@ -483,7 +483,7 @@ void ContainerNode::InsertBefore(const VectorOf<Node>& new_children,
     Node* new_child = new_children[0];
 
     // 2. Let reference child be child.
-    // 3. If reference child is node, set it to node窶冱 next sibling.
+    // 3. If reference child is node, set it to node’s next sibling.
     if (ref_child == new_child) {
       if (!new_child->HasNextSibling()) {
         return AppendChildren(new_children, exception_state);
@@ -503,7 +503,7 @@ void ContainerNode::InsertBefore(const VectorOf<Node>& new_children,
     }
   }
 
-  // 4. Adopt node into parent窶冱 node document.
+  // 4. Adopt node into parent’s node document.
   // 5. Insert node into parent before reference child.
   NodeVector post_insertion_notification_targets;
   {
@@ -534,7 +534,7 @@ Node* ContainerNode::InsertBefore(Node* new_child,
   }
 
   // 2. Let reference child be child.
-  // 3. If reference child is node, set it to node窶冱 next sibling.
+  // 3. If reference child is node, set it to node’s next sibling.
   if (ref_child == new_child) {
     if (!new_child->HasNextSibling()) {
       return AppendChild(new_child, exception_state);
@@ -542,7 +542,7 @@ Node* ContainerNode::InsertBefore(Node* new_child,
     ref_child = new_child->nextSibling();
   }
 
-  // 4. Adopt node into parent窶冱 node document.
+  // 4. Adopt node into parent’s node document.
   NodeVector targets;
   DOMTreeMutationDetector detector(*new_child, *this);
   if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
@@ -691,7 +691,7 @@ void ContainerNode::ReplaceChild(const VectorOf<Node>& new_children,
     return;
   }
 
-  // 7. Let reference child be child窶冱 next sibling.
+  // 7. Let reference child be child’s next sibling.
   Node* next = old_child->nextSibling();
 
   bool needs_recheck = false;
@@ -700,7 +700,7 @@ void ContainerNode::ReplaceChild(const VectorOf<Node>& new_children,
     // didn't remove it from the old parent.
     Node* new_child = new_children[0];
 
-    // 8. If reference child is node, set it to node窶冱 next sibling.
+    // 8. If reference child is node, set it to node’s next sibling.
     if (next == new_child) {
       next = new_child->nextSibling();
     }
@@ -720,14 +720,14 @@ void ContainerNode::ReplaceChild(const VectorOf<Node>& new_children,
 
   NodeVector post_insertion_notification_targets;
   {
-    // 9. Let previousSibling be child窶冱 previous sibling.
+    // 9. Let previousSibling be child’s previous sibling.
     // 11. Let removedNodes be the empty list.
     // 15. Queue a mutation record of "childList" for target parent with
     // addedNodes nodes, removedNodes removedNodes, nextSibling reference child,
     // and previousSibling previousSibling.
     ChildListMutationScope mutation(*this);
 
-    // 12. If child窶冱 parent is not null, run these substeps:
+    // 12. If child’s parent is not null, run these substeps:
     //    1. Set removedNodes to a list solely containing child.
     //    2. Remove child from its parent with the suppress observers flag set.
     if (ContainerNode* old_child_parent = old_child->parentNode()) {
@@ -748,7 +748,7 @@ void ContainerNode::ReplaceChild(const VectorOf<Node>& new_children,
 
     SlotAssignmentRecalcForbiddenScope forbid_slot_recalc(GetDocument());
 
-    // 10. Adopt node into parent窶冱 node document.
+    // 10. Adopt node into parent’s node document.
     // 14. Insert node into parent before reference child with the suppress
     // observers flag set.
     if (next) {
@@ -781,14 +781,14 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
     return old_child;
   }
 
-  // 7. Let reference child be child窶冱 next sibling.
+  // 7. Let reference child be child’s next sibling.
   Node* next = old_child->nextSibling();
-  // 8. If reference child is node, set it to node窶冱 next sibling.
+  // 8. If reference child is node, set it to node’s next sibling.
   if (next == new_child)
     next = new_child->nextSibling();
 
   bool needs_recheck = false;
-  // 10. Adopt node into parent窶冱 node document.
+  // 10. Adopt node into parent’s node document.
   // TODO(tkent): Actually we do only RemoveChild() as a part of 'adopt'
   // operation.
   //
@@ -807,14 +807,14 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
   NodeVector targets;
   NodeVector post_insertion_notification_targets;
   {
-    // 9. Let previousSibling be child窶冱 previous sibling.
+    // 9. Let previousSibling be child’s previous sibling.
     // 11. Let removedNodes be the empty list.
     // 15. Queue a mutation record of "childList" for target parent with
     // addedNodes nodes, removedNodes removedNodes, nextSibling reference child,
     // and previousSibling previousSibling.
     ChildListMutationScope mutation(*this);
 
-    // 12. If child窶冱 parent is not null, run these substeps:
+    // 12. If child’s parent is not null, run these substeps:
     //    1. Set removedNodes to a list solely containing child.
     //    2. Remove child from its parent with the suppress observers flag set.
     if (ContainerNode* old_child_parent = old_child->parentNode()) {
@@ -828,7 +828,7 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
 
     SlotAssignmentRecalcForbiddenScope forbid_slot_recalc(GetDocument());
 
-    // 13. Let nodes be node窶冱 children if node is a DocumentFragment node, and
+    // 13. Let nodes be node’s children if node is a DocumentFragment node, and
     // a list containing solely node otherwise.
     DOMTreeMutationDetector detector(*new_child, *this);
     if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
@@ -839,7 +839,7 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
         return old_child;
     }
 
-    // 10. Adopt node into parent窶冱 node document.
+    // 10. Adopt node into parent’s node document.
     // 14. Insert node into parent before reference child with the suppress
     // observers flag set.
     if (next) {
@@ -1506,9 +1506,6 @@ void ContainerNode::AttachLayoutTree(AttachContext& context) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
     if (auto* element = DynamicTo<Element>(child)) {
       if (element->localName() == html_names::kImgTag.LocalName()) {
-        std::fprintf(stderr,
-                     "image_reachability.stage=container_before_attach_img\n");
-        std::fflush(stderr);
       }
     }
 #endif
@@ -1516,9 +1513,6 @@ void ContainerNode::AttachLayoutTree(AttachContext& context) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
     if (auto* element = DynamicTo<Element>(child)) {
       if (element->localName() == html_names::kImgTag.LocalName()) {
-        std::fprintf(stderr,
-                     "image_reachability.stage=container_after_attach_img\n");
-        std::fflush(stderr);
       }
     }
 #endif

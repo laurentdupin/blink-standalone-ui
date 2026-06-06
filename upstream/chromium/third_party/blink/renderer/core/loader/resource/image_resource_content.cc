@@ -481,12 +481,6 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
     bool all_data_received,
     bool is_multipart) {
   TRACE_EVENT0("blink", "ImageResourceContent::updateImage");
-  std::fprintf(stderr,
-               "image_reachability.stage=image_resource_content_update_enter data=%d status=%d option=%d all=%d multipart=%d\n",
-               data ? 1 : 0, static_cast<int>(status),
-               static_cast<int>(update_image_option),
-               all_data_received ? 1 : 0, is_multipart ? 1 : 0);
-  std::fflush(stderr);
 
 #if DCHECK_IS_ON()
   DCHECK(!is_update_image_being_called_);
@@ -516,24 +510,10 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
       // or specific image frames).
       if (data) {
         if (!image_) {
-          std::fprintf(stderr,
-                       "image_reachability.stage=image_resource_content_before_create_image\n");
-          std::fflush(stderr);
           image_ = CreateImage(is_multipart);
-          std::fprintf(stderr,
-                       "image_reachability.stage=image_resource_content_after_create_image image=%p\n",
-                       image_.get());
-          std::fflush(stderr);
         }
         DCHECK(image_);
-        std::fprintf(stderr,
-                     "image_reachability.stage=image_resource_content_before_set_data\n");
-        std::fflush(stderr);
         size_available_ = image_->SetData(std::move(data), all_data_received);
-        std::fprintf(stderr,
-                     "image_reachability.stage=image_resource_content_after_set_data size_available=%d\n",
-                     static_cast<int>(size_available_));
-        std::fflush(stderr);
         DCHECK(all_data_received ||
                size_available_ !=
                    Image::kSizeAvailableAndLoadingAsynchronously);
@@ -546,9 +526,6 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
         return UpdateImageResult::kNoDecodeError;
 
       if (image_) {
-        std::fprintf(stderr,
-                     "image_reachability.stage=image_resource_content_before_mime_check\n");
-        std::fflush(stderr);
         // The MIME type can be null if no decoder was found.
         const AtomicString& mime_type = image_->MimeType();
         const HashSet<String>* unsupported_mime_types =
@@ -558,26 +535,14 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
           // Drop the Image, simulating a missing decoder.
           image_ = nullptr;
         }
-        std::fprintf(stderr,
-                     "image_reachability.stage=image_resource_content_after_mime_check image=%p\n",
-                     image_.get());
-        std::fflush(stderr);
       }
 
       // As per spec, zero intrinsic size SVG is a valid image so do not
       // consider such an image as DecodeError.
       // https://www.w3.org/TR/SVG/struct.html#SVGElementWidthAttribute
-      std::fprintf(stderr,
-                   "image_reachability.stage=image_resource_content_before_size_check image=%p\n",
-                   image_.get());
-      std::fflush(stderr);
       if (!image_ || (image_->Size().IsEmpty() &&
                       (!IsA<SVGImage>(image_.get()) ||
                        size_available_ == Image::kSizeUnavailable))) {
-        std::fprintf(stderr,
-                     "image_reachability.stage=image_resource_content_decode_error image=%p size_available=%d\n",
-                     image_.get(), static_cast<int>(size_available_));
-        std::fflush(stderr);
         ClearImage();
         return UpdateImageResult::kShouldDecodeError;
       }
@@ -600,30 +565,12 @@ ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
   // to the compositor have the same data.
   if (all_data_received &&
       size_available_ != Image::kSizeAvailableAndLoadingAsynchronously) {
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_before_loaded_status\n");
-    std::fflush(stderr);
     UpdateToLoadedContentStatus(status);
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_before_notify_finish\n");
-    std::fflush(stderr);
     NotifyObservers(kShouldNotifyFinish, CanDeferInvalidation::kNo);
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_after_notify_finish\n");
-    std::fflush(stderr);
   } else {
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_before_notify_no_finish\n");
-    std::fflush(stderr);
     NotifyObservers(kDoNotNotifyFinish, CanDeferInvalidation::kNo);
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_after_notify_no_finish\n");
-    std::fflush(stderr);
   }
 
-  std::fprintf(stderr,
-               "image_reachability.stage=image_resource_content_update_exit\n");
-  std::fflush(stderr);
   return UpdateImageResult::kNoDecodeError;
 }
 

@@ -295,6 +295,10 @@ bool TextResourceDecoder::CheckForXMLCharset(base::span<const char> data) {
 }
 
 void TextResourceDecoder::CheckForMetaCharset(base::span<const char> data) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  checked_for_meta_charset_ = true;
+  return;
+#endif
   if (source_ == kEncodingFromHTTPHeader || source_ == kAutoDetectedEncoding) {
     checked_for_meta_charset_ = true;
     return;
@@ -331,6 +335,10 @@ void TextResourceDecoder::FinalizeMetaCharsetCheck() {
 void TextResourceDecoder::AutoDetectEncodingIfAllowed(
     base::span<const char> data,
     String* auto_detected_charset) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  detection_completed_ = true;
+  return;
+#endif
   if (options_.GetEncodingDetectionOption() !=
           TextResourceDecoderOptions::kUseAllAutoDetection ||
       detection_completed_)
@@ -451,8 +459,12 @@ String TextResourceDecoder::Flush() {
 
   if (options_.GetContentType() == TextResourceDecoderOptions::kHTMLContent &&
       !checked_for_meta_charset_ && charset_parser_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    checked_for_meta_charset_ = true;
+#else
     charset_parser_->Finish();
     FinalizeMetaCharsetCheck();
+#endif
   }
 
   if (!codec_) {

@@ -673,6 +673,10 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/svg_element_factory.h"
+#include "third_party/blink/renderer/core/svg_names.h"
+#include "third_party/blink/renderer/core/svg/svg_circle_element.h"
+#include "third_party/blink/renderer/core/svg/svg_rect_element.h"
+#include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/mathml_element_factory.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
@@ -909,6 +913,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/script/html_parser_script_runner.h"
 #include "third_party/blink/renderer/core/script/html_parser_script_runner_host.h"
+#include "third_party/blink/renderer/core/script/xml_parser_script_runner.h"
 #include "third_party/blink/renderer/platform/scheduler/public/non_main_thread.h"
 #include "mojo/public/cpp/bindings/lib/interface_ptr_state.h"
 #include "mojo/public/cpp/base/big_buffer.h"
@@ -3060,6 +3065,8 @@ void DatasetDOMStringMap::Trace(Visitor* visitor) const {
 
 bool RuntimeEnabledFeaturesBase::is_css_resource_integrity_enforcement_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_at_rule_counter_style_image_symbols_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_svg_ignore_negative_ellipse_radii_enabled_ =
+    true;
 bool RuntimeEnabledFeaturesBase::
     is_table_border_color_no_implicit_border_enabled_ = true;
 bool RuntimeEnabledFeaturesBase::
@@ -3322,6 +3329,8 @@ const WrapperTypeInfo& SVGGeometryElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGeometryElement");
 const WrapperTypeInfo& SVGGraphicsElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGGraphicsElement");
+const WrapperTypeInfo& SVGCircleElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGCircleElement");
 const WrapperTypeInfo& SVGFilterElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGFilterElement");
 const WrapperTypeInfo& SVGFEImageElement::wrapper_type_info_ =
@@ -3344,6 +3353,8 @@ const WrapperTypeInfo& SVGPreserveAspectRatioTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGPreserveAspectRatio");
 const WrapperTypeInfo& SVGRectTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGRect");
+const WrapperTypeInfo& SVGRectElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGRectElement");
 const WrapperTypeInfo& SVGSVGElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGSVGElement");
 const WrapperTypeInfo& SVGStringListTearOff::wrapper_type_info_ =
@@ -3578,8 +3589,6 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
     return MakeGarbageCollected<HTMLBodyElement>(document);
   }
   if (local_name == html_names::kImgTag.LocalName()) {
-    std::fprintf(stderr, "image_reachability.stage=create_html_image_element\n");
-    std::fflush(stderr);
     return MakeGarbageCollected<HTMLImageElement>(document);
   }
   if (local_name == html_names::kFormTag.LocalName()) {
@@ -3664,9 +3673,15 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
   return MakeGarbageCollected<HTMLElement>(tag_name, document);
 }
 
-SVGElement* SVGElementFactory::Create(const AtomicString&,
-                                      Document&,
+SVGElement* SVGElementFactory::Create(const AtomicString& local_name,
+                                      Document& document,
                                       const CreateElementFlags) {
+  if (local_name == svg_names::kSVGTag.LocalName())
+    return MakeGarbageCollected<SVGSVGElement>(document);
+  if (local_name == svg_names::kRectTag.LocalName())
+    return MakeGarbageCollected<SVGRectElement>(document);
+  if (local_name == svg_names::kCircleTag.LocalName())
+    return MakeGarbageCollected<SVGCircleElement>(document);
   return nullptr;
 }
 
@@ -4546,15 +4561,6 @@ scoped_refptr<Image> LoadStandaloneDecodedImage(
     return nullptr;
   }
   if (result.mime_type == "image/svg+xml" && !result.encoded_bytes.empty()) {
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_fetch_encoded_svg_available "
-                 "mime=%s bytes=%zu\n",
-                 result.mime_type.c_str(), result.encoded_bytes.size());
-    std::fprintf(stderr,
-                 "image_reachability.stage=mime_bearing_image_resource_info_not_linked\n");
-    std::fprintf(stderr,
-                 "image_reachability.stage=real_encoded_image_resource_content_not_linked\n");
-    std::fflush(stderr);
     return nullptr;
   }
   if (!result.decoded_image) {
@@ -4593,39 +4599,18 @@ Resource* CreateStandaloneProviderBackedResource(
     const ResourceFactory& factory,
     base::SingleThreadTaskRunner* task_runner) {
   if (factory.GetType() != ResourceType::kImage) {
-    std::fprintf(stderr,
-                 "resource_reachability.stage=provider_backed_fetcher_non_image_blocked\n");
-    std::fflush(stderr);
     return nullptr;
   }
 
   html_css_renderer::StandaloneResourceResult result =
       LoadStandaloneEncodedImageResource(params.Url(),
                                          StandaloneInitiatorForFetch(params));
-  std::fprintf(stderr,
-               "resource_reachability.stage=provider_backed_fetcher_attempt "
-               "url=%s status=%s mime=%s bytes=%zu\n",
-               params.Url().GetString().Utf8().c_str(),
-               html_css_renderer::ToString(result.status),
-               result.mime_type.c_str(), result.encoded_bytes.size());
-  std::fflush(stderr);
-
-  auto emit_stage = [](const char* stage) {
-    std::fprintf(stderr, "resource_reachability.stage=%s\n", stage);
-    std::fflush(stderr);
-  };
-
-  emit_stage("provider_backed_before_factory_create");
   Resource* resource = factory.Create(params.GetResourceRequest(),
                                       params.Options(),
                                       params.DecoderOptions());
-  emit_stage("provider_backed_after_factory_create");
 
   if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess ||
       result.encoded_bytes.empty()) {
-    std::fprintf(stderr,
-                 "resource_reachability.stage=provider_backed_fetcher_failed\n");
-    std::fflush(stderr);
     resource->FinishAsError(ResourceError::CancelledError(params.Url()),
                             task_runner);
     return resource;
@@ -4645,34 +4630,14 @@ Resource* CreateStandaloneProviderBackedResource(
       base::span<const uint8_t>(result.encoded_bytes.data(),
                                 result.encoded_bytes.size()));
 
-  emit_stage("provider_backed_before_notify_start");
   resource->NotifyStartLoad();
-  emit_stage("provider_backed_after_notify_start");
-  emit_stage("provider_backed_before_response_received");
   resource->ResponseReceived(response);
-  emit_stage("provider_backed_after_response_received");
   resource->SetDataBufferingPolicy(kBufferData);
-  emit_stage("provider_backed_before_set_resource_buffer");
   resource->SetResourceBuffer(data);
-  emit_stage("provider_backed_after_set_resource_buffer");
   resource->SetCacheIdentifier(result.cache_key.empty()
                                    ? params.Url().GetString()
                                    : String(result.cache_key.c_str()));
-  emit_stage("provider_backed_before_finish");
   resource->Finish(base::TimeTicks(), task_runner);
-  emit_stage("provider_backed_after_finish");
-
-  std::fprintf(stderr,
-               "resource_reachability.stage=provider_backed_fetcher_finished "
-               "mime=%s bytes=%zu\n",
-               result.mime_type.c_str(), result.encoded_bytes.size());
-  if (result.mime_type == "image/svg+xml") {
-    std::fprintf(stderr,
-                 "image_reachability.stage=provider_backed_resource_response_mime_available\n");
-    std::fprintf(stderr,
-                 "image_reachability.stage=image_resource_content_not_wired_to_provider_backed_fetcher\n");
-  }
-  std::fflush(stderr);
   return resource;
 }
 }  // namespace
@@ -4739,12 +4704,6 @@ Resource* ResourceFetcher::CreateResourceForStaticData(
 Resource* ResourceFetcher::RequestResource(FetchParameters& params,
                                            const ResourceFactory& factory,
                                            ResourceClient* client) {
-  std::fprintf(stderr,
-               "resource_reachability.stage=provider_backed_request_resource "
-               "url=%s type=%d\n",
-               params.Url().GetString().Utf8().c_str(),
-               static_cast<int>(factory.GetType()));
-  std::fflush(stderr);
   Resource* resource = CreateStandaloneProviderBackedResource(
       params, factory, freezable_task_runner_.get());
   if (resource) {
@@ -4754,9 +4713,6 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
     return resource;
   }
 
-  std::fprintf(stderr,
-               "resource_reachability.stage=provider_backed_external_network_blocked\n");
-  std::fflush(stderr);
   resource = factory.Create(params.GetResourceRequest(), params.Options(),
                             params.DecoderOptions());
   if (client) {
@@ -4779,11 +4735,6 @@ bool ResourceFetcher::StartLoad(Resource* resource,
   if (!resource) {
     return false;
   }
-  std::fprintf(stderr,
-               "resource_reachability.stage=provider_backed_start_load_blocked "
-               "url=%s\n",
-               resource->Url().GetString().Utf8().c_str());
-  std::fflush(stderr);
   resource->FinishAsError(ResourceError::CancelledError(resource->Url()),
                           freezable_task_runner_.get());
   return false;
@@ -7538,9 +7489,7 @@ Element* CustomElement::CreateUncustomizedOrUndefinedElement(
     const AtomicString&,
     CustomElementRegistry*,
     const bool) {
-  if (tag_name.NamespaceURI() == html_names::xhtmlNamespaceURI)
-    return HTMLElementFactory::Create(tag_name.LocalName(), document, flags);
-  return MakeGarbageCollected<HTMLUnknownElement>(tag_name, document);
+  return document.CreateRawElement(tag_name, flags);
 }
 CustomElementDefinition* CustomElementRegistry::DefinitionFor(
     const CustomElementDescriptor&) const {
@@ -8385,14 +8334,6 @@ void SanitizerAPI::SanitizeInternal(Sanitizer::Mode,
                                     ContainerNode*,
                                     FragmentParserOptions,
                                     ExceptionState&) {}
-bool XMLDocumentParser::ParseDocumentFragment(const String&,
-                                              DocumentFragment*,
-                                              Element*,
-                                              ParserContentPolicy,
-                                              ExceptionState&) {
-  return false;
-}
-
 InvalidateNodeListCachesScope::InvalidateNodeListCachesScope(Document& document)
     : document_(document), invalidate_for_null_attr_name_(false) {}
 InvalidateNodeListCachesScope::~InvalidateNodeListCachesScope() = default;
@@ -10526,8 +10467,6 @@ void DisplayLockUtilities::ScopedForcedUpdate::Impl::EnsureMinimumForcedPhase(
   phase_ = phase;
 }
 void DisplayLockUtilities::ScopedForcedUpdate::Impl::Destroy() {}
-DocumentEncodingData::DocumentEncodingData(const TextResourceDecoder&)
-    : DocumentEncodingData() {}
 HTMLParserMetrics::HTMLParserMetrics(int64_t source_id, ukm::UkmRecorder* recorder)
     : source_id_(source_id), recorder_(recorder) {}
 void HTMLParserMetrics::AddChunk(base::TimeDelta, unsigned tokens_parsed) {
@@ -10663,13 +10602,6 @@ DocumentParserTiming::DocumentParserTiming(Document& document)
     : Supplement<Document>(document) {}
 void DocumentParserTiming::MarkParserDetached() {}
 void DocumentParserTiming::MarkParserStart() {}
-std::unique_ptr<TextResourceDecoder> BuildTextResourceDecoder(
-    LocalFrame*,
-    const KURL&,
-    const AtomicString&,
-    const AtomicString&) {
-  return nullptr;
-}
 String ExceptionMessages::ArgumentNullOrIncorrectType(int,
                                                       const String&) {
   return String();
@@ -11155,7 +11087,6 @@ ScriptRunnerDelayer::ScriptRunnerDelayer(ScriptRunner* script_runner,
                                          ScriptRunner::DelayReason reason)
     : script_runner_(script_runner), delay_reason_(reason) {}
 void ScriptRunnerDelayer::Activate() {}
-DocumentEncodingData::DocumentEncodingData() = default;
 DocumentTiming::DocumentTiming(Document&)
     : document_timing_values_(MakeGarbageCollected<DocumentTimingValues>()) {}
 void DocumentTiming::MarkDomLoading() {}
@@ -11717,41 +11648,6 @@ CustomCountHistogram::CustomCountHistogram(const char*, int, int, int)
     : histogram_(nullptr) {}
 void CustomCountHistogram::CountMicroseconds(base::TimeDelta) {}
 void ProgressTracker::Trace(Visitor*) const {}
-bool XMLDocumentParser::SupportsXMLVersion(const String&) {
-  return true;
-}
-XMLDocumentParser::XMLDocumentParser(Document& document, LocalFrameView*)
-    : ScriptableDocumentParser(document),
-      xml_errors_(&document),
-      script_start_position_(TextPosition::MinimumPosition()) {}
-XMLDocumentParser::~XMLDocumentParser() = default;
-void XMLDocumentParser::Trace(Visitor* visitor) const {
-  ScriptableDocumentParser::Trace(visitor);
-  visitor->Trace(current_node_);
-  visitor->Trace(ancestor_resetting_namespace_);
-  visitor->Trace(current_node_stack_);
-  visitor->Trace(leaf_text_node_);
-  xml_errors_.Trace(visitor);
-  visitor->Trace(document_);
-  visitor->Trace(script_runner_);
-}
-void XMLDocumentParser::Append(const String&) {}
-void XMLDocumentParser::Finish() {}
-void XMLDocumentParser::StopParsing() {}
-void XMLDocumentParser::Detach() {}
-void XMLDocumentParser::ExecuteScriptsWaitingForResources() {}
-bool XMLDocumentParser::IsWaitingForScripts() const {
-  return false;
-}
-void XMLDocumentParser::DidAddPendingParserBlockingStylesheet() {}
-void XMLDocumentParser::DidLoadAllPendingParserBlockingStylesheets() {}
-OrdinalNumber XMLDocumentParser::LineNumber() const {
-  return OrdinalNumber::First();
-}
-TextPosition XMLDocumentParser::GetTextPosition() const {
-  return TextPosition::MinimumPosition();
-}
-void XMLDocumentParser::NotifyScriptExecuted() {}
 bool HttpRefreshScheduler::IsScheduledWithin(base::TimeDelta) const {
   return false;
 }
@@ -11798,7 +11694,14 @@ bool Frame::IsFencedFrameRoot() const {
 bool Frame::IsInFencedFrameTree() const {
   return false;
 }
-void Frame::Initialize() {}
+void Frame::Initialize() {
+  DCHECK_NE(IsLocalFrame(), IsRemoteFrame());
+
+  if (owner_)
+    owner_->SetContentFrame(*this);
+  else
+    page_->SetMainFrame(this);
+}
 void Frame::UpdateVisibleToHitTesting() {}
 void Frame::UpdateInheritedEffectiveTouchActionIfPossible() {}
 void Frame::UpdateInertIfPossible() {}
@@ -12869,6 +12772,9 @@ bool PaintArtifactCompositor::ShouldForceMainThreadRepaint(
 }
 ExceptionState::ExceptionState(DummyExceptionStateForTesting&)
     : context_(kEmptyContext), isolate_(nullptr) {}
+void ExceptionState::RethrowV8Exception(v8::TryCatch&) {
+  had_exception_ = true;
+}
 String LogicalOffset::ToString() const {
   return String();
 }
@@ -13345,21 +13251,27 @@ ScrollbarThemeOverlayMobile& ScrollbarThemeOverlayMobile::GetInstance() {
   return *static_cast<ScrollbarThemeOverlayMobile*>(nullptr);
 }
 void ActiveScriptWrappableBase::RegisterActiveScriptWrappable() {}
-XMLErrors::XMLErrors(Document* document)
-    : document_(document),
-      error_count_(0),
-      last_error_position_(TextPosition::MinimumPosition()) {}
-void XMLErrors::Trace(Visitor* visitor) const {
-  visitor->Trace(document_);
-}
-XMLParserContext::~XMLParserContext() = default;
-void XMLParserScriptRunner::Trace(Visitor*) const {}
 WorkletAnimationController::~WorkletAnimationController() = default;
 void WorkletAnimationController::SynchronizeAnimatorName(const String&) {}
 void WorkletAnimationController::SetMutationUpdate(
     std::unique_ptr<AnimationWorkletOutput>) {}
 CookieJar::~CookieJar() = default;
 void ScriptRunner::PendingScriptFinished(PendingScript*) {}
+XMLParserScriptRunner::XMLParserScriptRunner(XMLParserScriptRunnerHost* host)
+    : host_(host) {}
+XMLParserScriptRunner::~XMLParserScriptRunner() = default;
+void XMLParserScriptRunner::Detach() {
+  parser_blocking_script_ = nullptr;
+}
+void XMLParserScriptRunner::ProcessScriptElement(Document&,
+                                                 Element*,
+                                                 TextPosition) {}
+void XMLParserScriptRunner::PendingScriptFinished(PendingScript*) {}
+void XMLParserScriptRunner::Trace(Visitor* visitor) const {
+  visitor->Trace(parser_blocking_script_);
+  visitor->Trace(host_);
+  PendingScriptClient::Trace(visitor);
+}
 void ScriptedAnimationController::Trace(Visitor*) const {}
 void ScriptedAnimationController::ContextLifecycleStateChanged(
     mojom::blink::FrameLifecycleState) {}
@@ -13938,8 +13850,11 @@ void* ThreadLocalStorage::Slot::Get() const {
   return nullptr;
 }
 void ThreadLocalStorage::Slot::Set(void*) {}
-size_t TokenHash::operator()(const Token&) {
-  return 0;
+size_t TokenHash::operator()(const Token& token) {
+  const uint64_t high = token.high();
+  const uint64_t low = token.low();
+  return static_cast<size_t>(high ^ (low + 0x9e3779b97f4a7c15ULL +
+                                     (high << 6) + (high >> 2)));
 }
 const UnguessableToken& UnguessableToken::Null() {
   static const UnguessableToken* token = new UnguessableToken();
@@ -14175,10 +14090,14 @@ const CPU& CPU::GetInstanceNoAllocation() {
   return *cpu;
 }
 std::string Token::ToString() const {
-  return std::string();
+  char buffer[33];
+  std::snprintf(buffer, sizeof(buffer), "%016llX%016llX",
+                static_cast<unsigned long long>(high()),
+                static_cast<unsigned long long>(low()));
+  return std::string(buffer);
 }
-bool operator==(const UnguessableToken&, const UnguessableToken&) {
-  return true;
+bool operator==(const UnguessableToken& lhs, const UnguessableToken& rhs) {
+  return lhs.token_ == rhs.token_;
 }
 const void* GetProgramCounter() {
   return nullptr;
@@ -14293,8 +14212,18 @@ TickClock::~TickClock() = default;
 void TaskRunnerTraits::Destruct(const TaskRunner* task_runner) {
   task_runner->OnDestruct();
 }
+Token Token::CreateRandom() {
+  static std::atomic<uint64_t> counter{1};
+  const uint64_t seq = counter.fetch_add(1, std::memory_order_relaxed);
+  const uint64_t salt =
+      reinterpret_cast<uintptr_t>(&counter) ^
+      reinterpret_cast<uintptr_t>(&Token::CreateRandom);
+  return Token(0xA5A5A5A5A5A5A5A5ULL ^ salt ^ (seq << 1),
+               0x5A5A5A5A5A5A5A5AULL ^ (salt << 1) ^ seq);
+}
+UnguessableToken::UnguessableToken(const Token& token) : token_(token) {}
 UnguessableToken UnguessableToken::Create() {
-  return UnguessableToken();
+  return UnguessableToken(Token::CreateRandom());
 }
 std::ostream& operator<<(std::ostream& out, const UnguessableToken& token) {
   return out << token.ToString();
@@ -17310,9 +17239,16 @@ Image* Image::NullImage() {
   return nullptr;
 }
 Image::SizeAvailability Image::SetData(scoped_refptr<SharedBuffer> data,
-                                       bool) {
+                                       bool all_data_received) {
   encoded_image_data_ = std::move(data);
-  return encoded_image_data_ ? kSizeAvailable : kSizeUnavailable;
+  if (!encoded_image_data_.get())
+    return kSizeAvailable;
+
+  size_t length = encoded_image_data_->size();
+  if (!length)
+    return kSizeAvailable;
+
+  return DataChanged(all_data_received);
 }
 String Image::FilenameExtension() const {
   return String();

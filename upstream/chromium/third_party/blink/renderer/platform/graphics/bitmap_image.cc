@@ -224,51 +224,26 @@ bool BitmapImage::ShouldReportByteSizeUMAs(bool data_now_completely_received) {
 
 Image::SizeAvailability BitmapImage::SetData(scoped_refptr<SharedBuffer> data,
                                              bool all_data_received) {
-  std::fprintf(stderr,
-               "image_reachability.stage=bitmap_image_set_data_enter data=%d all=%d\n",
-               data ? 1 : 0, all_data_received ? 1 : 0);
-  std::fflush(stderr);
   if (!data)
     return kSizeAvailable;
 
   size_t length = data->size();
-  std::fprintf(stderr,
-               "image_reachability.stage=bitmap_image_set_data_length length=%zu decoder=%d\n",
-               length, decoder_ ? 1 : 0);
-  std::fflush(stderr);
   if (!length)
     return kSizeAvailable;
 
   if (decoder_) {
-    std::fprintf(stderr,
-                 "image_reachability.stage=bitmap_image_before_existing_decoder_set_data\n");
-    std::fflush(stderr);
     decoder_->SetData(std::move(data), all_data_received);
-    std::fprintf(stderr,
-                 "image_reachability.stage=bitmap_image_after_existing_decoder_set_data\n");
-    std::fflush(stderr);
     return DataChanged(all_data_received);
   }
 
   bool has_enough_data = ImageDecoder::HasSufficientDataToSniffMimeType(*data);
-  std::fprintf(stderr,
-               "image_reachability.stage=bitmap_image_before_deferred_decoder_create has_enough=%d\n",
-               has_enough_data ? 1 : 0);
-  std::fflush(stderr);
   decoder_ = DeferredImageDecoder::Create(std::move(data), all_data_received,
                                           ImageDecoder::kAlphaPremultiplied,
                                           ColorBehavior::kTag);
-  std::fprintf(stderr,
-               "image_reachability.stage=bitmap_image_after_deferred_decoder_create decoder=%d\n",
-               decoder_ ? 1 : 0);
-  std::fflush(stderr);
   // If we had enough data but couldn't create a decoder, it implies a decode
   // failure.
   if (has_enough_data && !decoder_)
     return kSizeAvailable;
-  std::fprintf(stderr,
-               "image_reachability.stage=bitmap_image_before_data_changed\n");
-  std::fflush(stderr);
   return DataChanged(all_data_received);
 }
 

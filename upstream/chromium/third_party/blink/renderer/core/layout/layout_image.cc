@@ -87,8 +87,6 @@ void LayoutImage::WillBeDestroyed() {
 
 void LayoutImage::InsertedIntoTree() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=layout_image_inserted_into_tree\n");
-  std::fflush(stderr);
 #endif
   NOT_DESTROYED();
   ImageResourceContent* image_content = image_resource_->CachedImage();
@@ -100,21 +98,13 @@ void LayoutImage::InsertedIntoTree() {
   // its parent.
   if (!GetNode() && window && image_content && image_content->IsLoaded()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=layout_image_before_timing_notify\n");
-    std::fflush(stderr);
 #endif
     ImageElementTiming::From(*window).NotifyImageFinished(*this, image_content);
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_before_replaced_inserted_into_tree\n");
-  std::fflush(stderr);
 #endif
   LayoutReplaced::InsertedIntoTree();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr, "image_reachability.stage=layout_image_inserted_into_tree_done\n");
-  std::fflush(stderr);
 #endif
 }
 
@@ -155,23 +145,11 @@ void LayoutImage::StyleDidChange(
 }
 
 void LayoutImage::SetImageResource(LayoutImageResource* image_resource) {
-  std::fprintf(stderr, "image_reachability.stage=layout_image_set_resource resource=%p\n",
-               image_resource);
-  std::fflush(stderr);
   StandaloneRendererNoteLayoutImageSetResource();
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_set_resource_after_note\n");
-  std::fflush(stderr);
   NOT_DESTROYED();
   DCHECK(!image_resource_);
   image_resource_ = image_resource;
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_before_resource_initialize\n");
-  std::fflush(stderr);
   image_resource_->Initialize(this);
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_after_resource_initialize\n");
-  std::fflush(stderr);
 }
 
 void LayoutImage::ImageChanged(WrappedImagePtr new_image,
@@ -259,9 +237,6 @@ bool CanQueryNaturalSize(const LayoutImageResource& image_resource) {
 
 bool LayoutImage::UpdateNaturalSizeIfNeeded() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_update_natural_size\n");
-  std::fflush(stderr);
 #endif
   NOT_DESTROYED();
   PhysicalNaturalSizingInfo new_natural_dimensions;
@@ -269,16 +244,10 @@ bool LayoutImage::UpdateNaturalSizeIfNeeded() {
   // dimensions of 0x0 ("represents nothing" per HTML spec).
   if (CanQueryNaturalSize(*image_resource_)) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=layout_image_before_get_natural_dimensions\n");
-    std::fflush(stderr);
 #endif
     new_natural_dimensions = PhysicalNaturalSizingInfo::FromSizingInfo(
         image_resource_->GetNaturalDimensions(StyleRef().EffectiveZoom()));
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::fprintf(stderr,
-                 "image_reachability.stage=layout_image_after_get_natural_dimensions\n");
-    std::fflush(stderr);
 #endif
   }
   const bool dimensions_changed = natural_dimensions_ != new_natural_dimensions;

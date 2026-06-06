@@ -27,6 +27,10 @@
 
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_shape.h"
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include <cstdio>
+#endif
+
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/pointer_events_hit_rules.h"
@@ -38,6 +42,7 @@
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
 #include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
+#include "third_party/blink/renderer/core/paint/paint_info.h"
 #include "third_party/blink/renderer/core/paint/svg_shape_painter.h"
 #include "third_party/blink/renderer/core/svg/svg_geometry_element.h"
 #include "third_party/blink/renderer/core/svg/svg_length_functions.h"
@@ -497,6 +502,9 @@ void LayoutSVGShape::UpdateNonScalingStrokeData() {
 
 void LayoutSVGShape::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const gfx::RectF bbox = ObjectBoundingBox();
+#endif
   SVGShapePainter(*this).Paint(paint_info);
 }
 

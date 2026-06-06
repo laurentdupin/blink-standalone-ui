@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Peter Kelly (pmk@post.com)
@@ -841,7 +841,7 @@ int Element::tabIndex() const {
   // attribute. The default value is 0 if the element is an a, area, button,
   // frame, iframe, input, object, select, textarea, or SVG a element, or is a
   // summary element that is a summary for its parent details. The default value
-  // is 竏・ otherwise.
+  // is ∁E otherwise.
   return GetIntegralAttribute(html_names::kTabindexAttr, DefaultTabIndex());
 }
 
@@ -1129,7 +1129,7 @@ Node* Element::Clone(Document& factory,
     copy = &CloneWithChildren(data, &factory, append_to, registry,
                               fallback_registry, append_exception_state);
   }
-  // 6. If node is a shadow host whose shadow root窶冱 clonable is true:
+  // 6. If node is a shadow host whose shadow root’s clonable is true:
   auto* shadow_root = GetShadowRoot();
   if (!shadow_root) {
     return copy;
@@ -1150,7 +1150,7 @@ Node* Element::Clone(Document& factory,
         }
       }
       // 6.4 Run attach a shadow root with copy, node's shadow root's mode,
-      // true, node窶冱 shadow root窶冱 delegates focus, and node窶冱 shadow root窶冱
+      // true, node’s shadow root’s delegates focus, and node’s shadow root’s
       // slot assignment.
       // TODO(crbug.com/1523816): it seems like the `registry` parameter should
       // not always be nullptr.
@@ -1162,7 +1162,7 @@ Node* Element::Clone(Document& factory,
           shadow_root->serializable(),
           /*clonable=*/true, shadow_root->referenceTarget());
 
-      // 6.5 Set copy窶冱 shadow root窶冱 declarative to node窶冱 shadow root窶冱
+      // 6.5 Set copy’s shadow root’s declarative to node’s shadow root’s
       // declarative.
       cloned_shadow_root.SetIsDeclarativeShadowRoot(
           shadow_root->IsDeclarativeShadowRoot());
@@ -1177,8 +1177,8 @@ Node* Element::Clone(Document& factory,
           shadow_root->ShouldKeepCustomElementRegistryNull());
 
       // 6.6 If the clone children flag is set, then for each child child of
-      // node窶冱 shadow root, in tree order: append the result of cloning child
-      // with document and the clone children flag set, to copy窶冱 shadow root.
+      // node’s shadow root, in tree order: append the result of cloning child
+      // with document and the clone children flag set, to copy’s shadow root.
       NodeCloningData shadow_data{CloneOption::kIncludeDescendants};
       cloned_shadow_root.CloneChildNodesFrom(*shadow_root, shadow_data,
                                              /*fallback_registry=*/nullptr);
@@ -3570,7 +3570,7 @@ bool Element::toggleAttribute(const AtomicString& qualified_name,
   // lowercase.
   AtomicString lowercase_name = LowercaseIfNecessary(qualified_name);
   AtomicStringTable::WeakResult hint(lowercase_name.Impl());
-  // 3. Let attribute be the first attribute in the context object窶冱 attribute
+  // 3. Let attribute be the first attribute in the context object’s attribute
   // list whose qualified name is qualifiedName, and null otherwise.
   SynchronizeAttributeHinted(lowercase_name, hint);
   auto [index, q_name] =
@@ -3579,7 +3579,7 @@ bool Element::toggleAttribute(const AtomicString& qualified_name,
   if (index == kNotFound) {
     // 4. 1. If force is not given or is true, create an attribute whose local
     // name is qualified_name, value is the empty string, and node document is
-    // the context object窶冱 node document, then append this attribute to the
+    // the context object’s node document, then append this attribute to the
     // context object, and then return true.
     SetAttributeInternal(index, q_name, g_empty_atom,
                          AttributeModificationReason::kDirectly);
@@ -3610,7 +3610,7 @@ bool Element::toggleAttribute(const AtomicString& qualified_name,
   // lowercase.
   AtomicString lowercase_name = LowercaseIfNecessary(qualified_name);
   AtomicStringTable::WeakResult hint(lowercase_name.Impl());
-  // 3. Let attribute be the first attribute in the context object窶冱 attribute
+  // 3. Let attribute be the first attribute in the context object’s attribute
   // list whose qualified name is qualifiedName, and null otherwise.
   SynchronizeAttributeHinted(lowercase_name, hint);
   auto [index, q_name] =
@@ -3619,7 +3619,7 @@ bool Element::toggleAttribute(const AtomicString& qualified_name,
   if (index == kNotFound) {
     // 4. 1. If force is not given or is true, create an attribute whose local
     // name is qualified_name, value is the empty string, and node document is
-    // the context object窶冱 node document, then append this attribute to the
+    // the context object’s node document, then append this attribute to the
     // context object, and then return true.
     if (force) {
       SetAttributeInternal(index, q_name, g_empty_atom,
@@ -4109,18 +4109,24 @@ void Element::ParserSetAttributes(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
     for (const Attribute& attribute : attribute_vector) {
     }
-#endif
+    // Standalone does not currently support the variable-sized
+    // ShareableElementData allocation path reliably. Use the real Blink
+    // UniqueElementData storage instead of dropping parser-set attributes.
+    element_data_ = MakeGarbageCollected<UniqueElementData>();
+    for (const Attribute& attribute : attribute_vector) {
+      To<UniqueElementData>(element_data_.Get())
+          ->Attributes()
+          .Append(attribute.GetName(), attribute.Value());
+    }
+#else
     if (ElementDataCache* cache = GetDocument().GetElementDataCache()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
       element_data_ = cache->CachedShareableElementDataWithAttributes(
           localName().Impl(), attribute_vector);
     } else {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
       element_data_ =
           ShareableElementData::CreateWithAttributes(attribute_vector);
     }
+#endif
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
 
@@ -4142,6 +4148,8 @@ void Element::ParserSetAttributes(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
   ParserDidSetAttributes();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   // Use attribute_vector instead of element_data_ because AttributeChanged
   // might modify element_data_.
@@ -5548,9 +5556,9 @@ void Element::NotifyAXOfAttachedSubtree() {
 //
 // #1 can happen in one out of two ways. The normal way is that ask the
 // style resolver to compute the style from scratch (modulo some caching).
-// The other one is an optimization for 窶彿ndependent inherited properties窶・
+// The other one is an optimization for “independent inherited properties E
 // if this recalc is because the parent has changed only properties marked
-// as 窶彿ndependent窶・(i.e., they do not affect other properties; 窶忻isibility窶・// is an example of such a property), we can reuse our existing style and just
+// as “independent E(i.e., they do not affect other properties; “visibility E// is an example of such a property), we can reuse our existing style and just
 // re-propagate those properties.
 //
 // #2 happens by diffing the old and new styles. In the extreme example,
@@ -7049,7 +7057,7 @@ Element::HighlightRecalc Element::CalculateHighlightRecalc(
   // * there neither are nor were any non-UA highlight rules (regardless of
   //   whether or not they are non-universal), because then no inherited
   //   highlight properties have changed.
-  // * the root窶冱 effective zoom (窶・oom窶・ﾃ・page zoom ﾃ・device scale factor) did
+  // * the root’s effective zoom ( Eoom EÁEpage zoom ÁEdevice scale factor) did
   //   not change, because then no units have changed size.
   // * the InitialData for custom properties has not changed, because then
   //   custom properties will still have the same initial values.
@@ -7072,7 +7080,7 @@ Element::HighlightRecalc Element::CalculateHighlightRecalc(
         return HighlightRecalc::kFull;
       }
       // Neither the new style nor the old style has any non-UA highlight rules,
-      // so they will be equal. Let窶冱 reuse the old styles for all highlights.
+      // so they will be equal. Let’s reuse the old styles for all highlights.
       return HighlightRecalc::kReuse;
     }
     return HighlightRecalc::kFull;
@@ -7607,9 +7615,9 @@ const char* Element::ErrorMessageForAttachShadow(
     bool for_declarative,
     ShadowRootMode& mode_out) const {
   // https://dom.spec.whatwg.org/#concept-attach-a-shadow-root
-  // 1. If shadow host窶冱 namespace is not the HTML namespace, then throw a
+  // 1. If shadow host’s namespace is not the HTML namespace, then throw a
   // "NotSupportedError" DOMException.
-  // 2. If shadow host窶冱 local name is not a valid custom element name,
+  // 2. If shadow host’s local name is not a valid custom element name,
   // "article", "aside", "blockquote", "body", "div", "footer", "h1", "h2",
   // "h3", "h4", "h5", "h6", "header", "main", "nav", "p", "section", or "span",
   // then throw a "NotSupportedError" DOMException.
@@ -7617,12 +7625,12 @@ const char* Element::ErrorMessageForAttachShadow(
     return "This element does not support attachShadow";
   }
 
-  // 3. If shadow host窶冱 local name is a valid custom element name, or shadow
-  // host窶冱 is value is not null, then:
+  // 3. If shadow host’s local name is a valid custom element name, or shadow
+  // host’s is value is not null, then:
   // 3.1 Let definition be the result of looking up a custom element
-  // definition given shadow host窶冱 node document, its namespace, its local
+  // definition given shadow host’s node document, its namespace, its local
   // name, and its is value.
-  // 3.2 If definition is not null and definition窶冱
+  // 3.2 If definition is not null and definition’s
   // disable shadow is true, then throw a "NotSupportedError" DOMException.
   // Note: Checking IsCustomElement() is just an optimization because
   // IsValidName() is not cheap.
@@ -7842,42 +7850,42 @@ ShadowRoot& Element::AttachShadowRootInternal(
 
   if (auto* shadow_root = GetShadowRoot()) {
     // NEW. If shadow host has a non-null shadow root whose "is declarative
-    // shadow root property is true, then remove all of shadow root窶冱 children,
-    // in tree order. Return shadow host窶冱 shadow root.
+    // shadow root property is true, then remove all of shadow root’s children,
+    // in tree order. Return shadow host’s shadow root.
     DCHECK(shadow_root->IsDeclarativeShadowRoot());
     shadow_root->RemoveChildren();
     return *shadow_root;
   }
 
-  // 5. Let shadow be a new shadow root whose node document is this窶冱 node
-  // document, host is this, and mode is init窶冱 mode.
+  // 5. Let shadow be a new shadow root whose node document is this’s node
+  // document, host is this, and mode is init’s mode.
   ShadowRoot& shadow_root =
       CreateAndAttachShadowRoot(type, slot_assignment_mode);
-  // 6. Set shadow窶冱 delegates focus to init窶冱 delegatesFocus.
+  // 6. Set shadow’s delegates focus to init’s delegatesFocus.
   shadow_root.SetDelegatesFocus(focus_delegation ==
                                 FocusDelegation::kDelegateFocus);
-  // 9. Set shadow窶冱 declarative to false.
+  // 9. Set shadow’s declarative to false.
   shadow_root.SetIsDeclarativeShadowRoot(false);
 
   // 12. Set shadow's custom element registry to registry
   if (RuntimeEnabledFeatures::ScopedCustomElementRegistryEnabled()) {
     shadow_root.SetCustomElementRegistry(registry);
   }
-  // 11. Set shadow窶冱 serializable to serializable.
+  // 11. Set shadow’s serializable to serializable.
   shadow_root.setSerializable(serializable);
-  // 10. Set shadow窶冱 clonable to clonable.
+  // 10. Set shadow’s clonable to clonable.
   shadow_root.setClonable(clonable);
   // NEW. Set reference target.
   shadow_root.setReferenceTarget(reference_target);
 
-  // 7. If this窶冱 custom element state is "precustomized" or "custom", then set
-  // shadow窶冱 available to element internals to true.
+  // 7. If this’s custom element state is "precustomized" or "custom", then set
+  // shadow’s available to element internals to true.
   shadow_root.SetAvailableToElementInternals(
       !(IsCustomElement() &&
         GetCustomElementState() != CustomElementState::kCustom &&
         GetCustomElementState() != CustomElementState::kPreCustomized));
 
-  // 8. Set this窶冱 shadow root to shadow.
+  // 8. Set this’s shadow root to shadow.
   return shadow_root;
 }
 
@@ -8201,7 +8209,7 @@ void Element::RemoveAttributeInternal(wtf_size_t index,
 
   // TODO(sesse): Consider recalculating attribute_or_class_bloom_ filter here,
   // so that it reflects the removal (but beware of pathological cases
-  // where removing all attributes send us into O(nﾂｲ)).
+  // where removing all attributes send us into O(n²)).
 }
 
 void Element::AppendAttributeInternal(const QualifiedName& name,
@@ -12213,6 +12221,13 @@ void Element::CloneAttributesFrom(const Element& other) {
 }
 
 void Element::CreateUniqueElementData() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const bool trace_svg_geometry =
+      GetElementType() == ElementType::kSVGRectElement ||
+      GetElementType() == ElementType::kSVGCircleElement;
+  if (trace_svg_geometry) {
+  }
+#endif
   if (!element_data_) {
     element_data_ = MakeGarbageCollected<UniqueElementData>();
   } else {
@@ -12220,6 +12235,10 @@ void Element::CreateUniqueElementData() {
     element_data_ =
         To<ShareableElementData>(element_data_.Get())->MakeUniqueCopy();
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (trace_svg_geometry) {
+  }
+#endif
 }
 
 void Element::SynchronizeStyleAttributeInternal() const {
@@ -12514,6 +12533,17 @@ void Element::AddPropertyToPresentationAttributeStyle(
     CSSPropertyID property_id,
     const String& value) {
   DCHECK(IsStyledElement());
+  if (IsSVGElement()) {
+    const CSSProperty& property = CSSProperty::Get(property_id);
+    if (property.IsProperty() && !property.IsShorthand()) {
+      if (const CSSValue* parsed_value = CSSParser::ParseSingleValue(
+              property_id, value,
+              GetDocument().ElementSheet().Contents()->ParserContext())) {
+        values.emplace_back(CSSPropertyName(property_id), *parsed_value);
+        return;
+      }
+    }
+  }
   CSSParser::ParseForPresentationStyle(
       values, property_id, value,
       IsSVGElement() ? kSVGAttributeMode : kHTMLStandardMode,
@@ -13468,7 +13498,7 @@ void Element::SetAttributeWithValidation(Attr* attribute,
       return;
     }
 
-    // Step 2.3: If attribute窶冱 element is null, then set attribute窶冱 value to
+    // Step 2.3: If attribute’s element is null, then set attribute’s value to
     // value, and return.
     // Note: Step 2.2 might have changed element_.
     // Note: Without an owner element, attribute should accept the value without
@@ -13478,7 +13508,7 @@ void Element::SetAttributeWithValidation(Attr* attribute,
       return;
     }
 
-    // Step 2.4: If attribute窶冱 element is not originalElement, then return.
+    // Step 2.4: If attribute’s element is not originalElement, then return.
     if (attribute->ownerElement() != this) {
       return;
     }

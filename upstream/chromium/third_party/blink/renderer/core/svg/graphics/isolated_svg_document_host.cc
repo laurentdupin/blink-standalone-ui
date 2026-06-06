@@ -29,6 +29,7 @@
 
 #include "base/notreached.h"
 #include "base/trace_event/trace_event.h"
+#include <cstdio>
 #include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
@@ -138,6 +139,8 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
                 /*policy_container=*/nullptr, StorageKey(),
                 /*document_ukm_source_id=*/ukm::kInvalidSourceId,
                 /*creator_base_url=*/NullUrl());
+    frame->View()->SetParentVisible(true);
+    frame->View()->SetSelfVisible(true);
   }
 
   // SVG Images will always synthesize a viewBox, if it's not available, and
@@ -166,10 +169,18 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     case kPending:
       load_state_ = kWaitingForAsyncLoadCompletion;
       break;
+    case kWaitingForAsyncLoadCompletion:
+      break;
     case kCompleted:
+      if (!frame->GetDocument()->LoadEventFinished()) {
+        load_state_ = kWaitingForAsyncLoadCompletion;
+        async_load_task_handle_ = PostCancellableTask(
+            *frame->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
+            BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
+                     WrapPersistent(this)));
+      }
       break;
     case kNotStarted:
-    case kWaitingForAsyncLoadCompletion:
       NOTREACHED();
   }
 }
@@ -201,17 +212,28 @@ void IsolatedSVGDocumentHost::CopySettingsFrom(
 }
 
 LocalFrame* IsolatedSVGDocumentHost::GetFrame() {
-  return To<LocalFrame>(page_->MainFrame());
+  return page_ ? To<LocalFrame>(page_->MainFrame()) : nullptr;
 }
 
 SVGSVGElement* IsolatedSVGDocumentHost::RootElement() {
-  return DynamicTo<SVGSVGElement>(GetFrame()->GetDocument()->documentElement());
+  LocalFrame* frame = GetFrame();
+  Node* document_element =
+      frame ? frame->GetDocument()->documentElement() : nullptr;
+  return DynamicTo<SVGSVGElement>(document_element);
 }
 
 void IsolatedSVGDocumentHost::LoadCompleted() {
   switch (load_state_) {
     case kPending:
-      load_state_ = kCompleted;
+      if (GetFrame()->GetDocument()->LoadEventFinished()) {
+        load_state_ = kCompleted;
+      } else {
+        load_state_ = kWaitingForAsyncLoadCompletion;
+        async_load_task_handle_ = PostCancellableTask(
+            *GetFrame()->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
+            BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
+                     WrapPersistent(this)));
+      }
       break;
 
     case kWaitingForAsyncLoadCompletion:
@@ -233,6 +255,14 @@ void IsolatedSVGDocumentHost::LoadCompleted() {
 }
 
 void IsolatedSVGDocumentHost::AsyncLoadCompleted() {
+  if (!GetFrame()->GetDocument()->LoadEventFinished()) {
+    async_load_task_handle_ = PostCancellableTask(
+        *GetFrame()->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
+        BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
+                 WrapPersistent(this)));
+    return;
+  }
+
   load_state_ = kCompleted;
   std::move(async_load_callback_).Run();
 }

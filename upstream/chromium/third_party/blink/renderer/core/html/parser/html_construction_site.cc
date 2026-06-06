@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2010 Google, Inc. All Rights Reserved.
  * Copyright (C) 2011 Apple Inc. All rights reserved.
  *
@@ -1359,9 +1359,6 @@ Element* HTMLConstructionSite::CreateElement(
            : QualifiedName(g_null_atom, token->GetName(), namespace_uri));
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   if (tag_name == html_names::kImgTag) {
-    std::fprintf(stderr,
-                 "image_reachability.stage=construction_site_create_img\n");
-    std::fflush(stderr);
   }
 #endif
   // "5. Let is be the value of the "is" attribute in the given token ..." etc.

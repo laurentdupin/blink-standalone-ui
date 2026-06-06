@@ -55,6 +55,25 @@ set(HB_BUILD_VECTOR OFF CACHE BOOL "" FORCE)
 set(HB_BUILD_GPU OFF CACHE BOOL "" FORCE)
 add_subdirectory(${BLINK_STANDALONE_HARFBUZZ_SOURCE} third_party/harfbuzz EXCLUDE_FROM_ALL)
 
+find_package(Iconv REQUIRED)
+find_package(Threads REQUIRED)
+find_package(ZLIB CONFIG QUIET)
+if(NOT ZLIB_FOUND)
+  find_package(ZLIB REQUIRED)
+endif()
+if(TARGET ZLIB::ZLIBSTATIC AND NOT TARGET ZLIB::ZLIB)
+  add_library(ZLIB::ZLIB INTERFACE IMPORTED)
+  target_link_libraries(ZLIB::ZLIB INTERFACE ZLIB::ZLIBSTATIC)
+endif()
+
+find_package(libxml2 CONFIG QUIET)
+if(TARGET LibXml2::LibXml2)
+  set(LibXml2_FOUND ON)
+endif()
+if(NOT LibXml2_FOUND)
+  find_package(LibXml2 REQUIRED)
+endif()
+
 if(BLINK_STANDALONE_BUILD_SDL_VIEWER)
   find_package(SDL3 CONFIG QUIET)
   if(NOT SDL3_FOUND AND BLINK_STANDALONE_FETCH_SDL3)
@@ -241,11 +260,15 @@ add_executable(blink_standalone_render_benchmark_skia
       /wd4800
       /wd4996
     )
+    target_link_options(blink_standalone_render_benchmark_skia PRIVATE
+      /MAP:${CMAKE_BINARY_DIR}/blink_standalone_render_benchmark_skia.map
+    )
   endif()
 
   target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
     freetype
     harfbuzz
+    LibXml2::LibXml2
   )
 
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
@@ -350,6 +373,7 @@ add_executable(blink_standalone_render_benchmark_skia
     target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
       freetype
       harfbuzz
+      LibXml2::LibXml2
       ${BLINK_STANDALONE_SDL3_TARGET}
       kernel32.lib user32.lib gdi32.lib winmm.lib imm32.lib ole32.lib
       oleaut32.lib version.lib uuid.lib advapi32.lib setupapi.lib shell32.lib

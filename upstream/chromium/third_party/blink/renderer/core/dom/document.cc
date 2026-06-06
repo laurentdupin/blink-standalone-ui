@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 1999 Lars Knoll (knoll@kde.org)
  *           (C) 1999 Antti Koivisto (koivisto@kde.org)
  *           (C) 2001 Dirk Mueller (mueller@kde.org)
@@ -1356,13 +1356,6 @@ Element* Document::CreateRawElement(const QualifiedName& qname,
                                     CreateElementFlags flags) {
   Element* element = nullptr;
   if (qname.NamespaceURI() == html_names::xhtmlNamespaceURI) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    if (qname == html_names::kImgTag) {
-      std::fprintf(stderr,
-                   "image_reachability.stage=document_create_raw_img\n");
-      std::fflush(stderr);
-    }
-#endif
     // https://html.spec.whatwg.org/C/#elements-in-the-dom:element-interface
     element = HTMLElementFactory::Create(qname.LocalName(), *this, flags);
     if (!element) {
@@ -1376,13 +1369,9 @@ Element* Document::CreateRawElement(const QualifiedName& qname,
     }
     saw_elements_in_known_namespaces_ = true;
   } else if (qname.NamespaceURI() == svg_names::kNamespaceURI) {
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
     element = SVGElementFactory::Create(qname.LocalName(), *this, flags);
     if (!element)
       element = MakeGarbageCollected<SVGUnknownElement>(qname, *this);
-#else
-    element = MakeGarbageCollected<Element>(qname, this);
-#endif
     saw_elements_in_known_namespaces_ = true;
   } else if (qname.NamespaceURI() == mathml_names::kNamespaceURI) {
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -2546,15 +2535,7 @@ bool Document::HasPendingForcedStyleRecalc() const {
 void Document::UpdateStyleInvalidationIfNeeded() {
   DCHECK(IsActive());
   ScriptForbiddenScope forbid_script;
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  StyleEngine* style_engine_ptr = g_standalone_style_engine_raw;
-  if (!style_engine_ptr) {
-    return;
-  }
-  StyleEngine& style_engine = *style_engine_ptr;
-#else
   StyleEngine& style_engine = GetStyleEngine();
-#endif
   if (!style_engine.NeedsStyleInvalidation()) {
     return;
   }
@@ -2649,40 +2630,77 @@ void Document::AssertLayoutTreeUpdatedAfterLayout() {
 #endif
 
 void Document::UpdateStyleAndLayoutTree() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   DocumentLayoutUpgrade upgrade(*this);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   UpdateStyleAndLayoutTree(upgrade);
 }
 
 void Document::UpdateStyleAndLayoutTree(LayoutUpgrade& upgrade) {
   DCHECK(IsMainThread());
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   DCHECK(ThreadState::Current()->IsAllocationAllowed());
-  if (!IsActive() || !View() || View()->ShouldThrottleRendering() ||
-      Lifecycle().LifecyclePostponed()) {
+#endif
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  const bool is_active = IsActive();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  LocalFrameView* view = View();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  const bool should_throttle = view && view->ShouldThrottleRendering();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  const bool lifecycle_postponed = Lifecycle().LifecyclePostponed();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  if (!is_active || !view || should_throttle || lifecycle_postponed) {
     return;
   }
 
   HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   ScriptForbiddenScope forbid_script;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   if (HTMLFrameOwnerElement* owner = LocalOwner()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
     ParentLayoutUpgrade parent_upgrade(*this, *owner);
     owner->GetDocument().UpdateStyleAndLayoutTree(parent_upgrade);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   }
 
   PostStyleUpdateScope post_style_update_scope(*this);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   do {
     // This call has to happen even if UpdateStyleAndLayout below will be
     // called. This is because the subsequent call to ShouldUpgrade may depend
     // on the results produced by UpdateStyleAndLayoutTreeForThisDocument.
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
     UpdateStyleAndLayoutTreeForThisDocument();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
     if (upgrade.ShouldUpgrade()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
       GetDisplayLockDocumentState().EnsureMinimumForcedPhase(
           DisplayLockContext::ForcedPhase::kLayout);
 
       // TODO(crbug.com/1145970): Provide a better reason.
       UpdateStyleAndLayout(DocumentUpdateReason::kUnknown);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
     }
 
   } while (post_style_update_scope.Apply());
@@ -2829,15 +2847,7 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
                      });
 #endif
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  StyleEngine* style_engine_ptr = g_standalone_style_engine_raw;
-  if (!style_engine_ptr) {
-    return;
-  }
-  StyleEngine& style_engine = *style_engine_ptr;
-#else
   StyleEngine& style_engine = GetStyleEngine();
-#endif
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   unsigned start_element_count = 0;
 #else
@@ -2916,18 +2926,13 @@ void Document::UpdateStyle() {
   TRACE_EVENT_BEGIN0("blink,blink_style", "Document::updateStyle");
   RUNTIME_CALL_TIMER_SCOPE(GetAgent().isolate(),
                            RuntimeCallStats::CounterId::kUpdateStyle);
+#endif
 
   StyleEngine& style_engine = GetStyleEngine();
-  unsigned initial_element_count = style_engine.StyleForElementCount();
-#else
-  StyleEngine* style_engine_ptr = g_standalone_style_engine_raw;
-  if (!style_engine_ptr) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
-    return;
-  }
-  StyleEngine& style_engine = *style_engine_ptr;
   unsigned initial_element_count = 0;
+#else
+  unsigned initial_element_count = style_engine.StyleForElementCount();
 #endif
 
   lifecycle_.AdvanceTo(DocumentLifecycle::kInStyleRecalc);
@@ -3234,6 +3239,8 @@ void Document::MarkHasFindInPageBeforematchExpandedHiddenMatchable() {
 
 void Document::UpdateStyleAndLayout(DocumentUpdateReason reason) {
   DCHECK(IsMainThread());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   // TODO(paint-dev): LifecyclePostponed() and
   // LocalFrameView::IsUpdatingLifecycle() overlap in functionality, but with
   // slight differences. We should combine them.
@@ -3245,9 +3252,15 @@ void Document::UpdateStyleAndLayout(DocumentUpdateReason reason) {
 
   if (reason != DocumentUpdateReason::kBeginMainFrame && frame_view)
     frame_view->WillStartForcedLayout(reason);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   ScriptForbiddenScope forbid_script;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   DCHECK(!frame_view || !frame_view->IsInPerformLayout())
       << "View layout should not be re-entrant";
@@ -3255,6 +3268,8 @@ void Document::UpdateStyleAndLayout(DocumentUpdateReason reason) {
   if (HTMLFrameOwnerElement* owner = LocalOwner()) {
     owner->GetDocument().UpdateStyleAndLayout(reason);
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   if (!IsActive()) {
     if (reason != DocumentUpdateReason::kBeginMainFrame && frame_view)
@@ -3264,6 +3279,8 @@ void Document::UpdateStyleAndLayout(DocumentUpdateReason reason) {
 
   if (frame_view)
     frame_view->UpdateStyleAndLayout();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   if (Lifecycle().GetState() < DocumentLifecycle::kLayoutClean)
     Lifecycle().AdvanceTo(DocumentLifecycle::kLayoutClean);
@@ -3785,16 +3802,13 @@ CanvasFontCache* Document::GetCanvasFontCache() {
 }
 
 DocumentParser* Document::CreateParser() {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  return MakeGarbageCollected<HTMLDocumentParser>(
-      static_cast<HTMLDocument&>(*this), parser_sync_policy_, nullptr,
-      sanitizer_.Get());
-#endif
   if (auto* html_document = DynamicTo<HTMLDocument>(this)) {
     CustomElementRegistry* registry = nullptr;
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (RuntimeEnabledFeatures::ScopedCustomElementRegistryEnabled()) {
       registry = CustomElementRegistry::DefaultRegistry(*this);
     }
+#endif
     return MakeGarbageCollected<HTMLDocumentParser>(
         *html_document, parser_sync_policy_, registry, sanitizer_.Get());
   }
@@ -7792,6 +7806,8 @@ bool Document::ParseQualifiedName(const AtomicString& qualified_name,
 }
 
 void Document::SetEncodingData(const DocumentEncodingData& new_data) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   // It's possible for the encoding of the document to change while we're
   // decoding data. That can only occur while we're processing the <head>
   // portion of the document. There isn't much user-visible content in the
@@ -8278,13 +8294,14 @@ void Document::FinishedParsing() {
     // the window load event too early.  To avoid this we force the styles to be
     // up to date before calling FrameLoader::finishedParsing().  See
     // https://bugs.webkit.org/show_bug.cgi?id=36864 starting around comment 35.
-    if (!is_initial_empty_document_ && HaveRenderBlockingStylesheetsLoaded()) {
+    const bool stylesheets_loaded = HaveRenderBlockingStylesheetsLoaded();
+    const bool is_main_frame = GetFrame()->IsMainFrame();
+    if (!is_initial_empty_document_ && stylesheets_loaded) {
       // The is_initial_empty_document_ flag is only true when the document is
       // initialized, but then it is synchronously loaded and the flag goes out
       // of sync. Loader()->HasLoadedNonInitialEmptyDocument() is more correct.
       // Keeping both for now behind a flag so that it's finch-testable.
-      if (GetFrame()->IsMainFrame() ||
-          Loader()->HasLoadedNonInitialEmptyDocument()) {
+      if (is_main_frame || Loader()->HasLoadedNonInitialEmptyDocument()) {
         UpdateStyleAndLayoutTree();
         if (base::FeatureList::IsEnabled(
                 features::kPrerender2EarlyDocumentLifecycleUpdate) &&
@@ -10178,7 +10195,7 @@ void Document::ActivateForPrerendering(
   // Step 8.3.4 "Fire an event named prerenderingchange at doc."
   DispatchEvent(*Event::Create(event_type_names::kPrerenderingchange));
 
-  // Step 8.3.5 "For each steps in doc窶冱 post-prerendering activation steps
+  // Step 8.3.5 "For each steps in doc’s post-prerendering activation steps
   // list:"
   RunPostPrerenderingActivationSteps();
 }

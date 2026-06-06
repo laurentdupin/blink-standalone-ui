@@ -69,18 +69,10 @@ std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::Create(
     bool data_complete,
     ImageDecoder::AlphaOption alpha_option,
     ColorBehavior color_behavior) {
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_create_enter data=%d complete=%d size=%zu\n",
-               data ? 1 : 0, data_complete ? 1 : 0, data ? data->size() : 0);
-  std::fflush(stderr);
   std::unique_ptr<ImageDecoder> metadata_decoder = ImageDecoder::Create(
       data, data_complete, alpha_option, ImageDecoder::kDefaultBitDepth,
       color_behavior, cc::AuxImage::kDefault,
       Platform::GetMaxDecodedImageBytes());
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_after_image_decoder_create decoder=%d\n",
-               metadata_decoder ? 1 : 0);
-  std::fflush(stderr);
   if (!metadata_decoder)
     return nullptr;
 
@@ -89,13 +81,7 @@ std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::Create(
 
   // Since we've just instantiated a fresh decoder, there's no need to reset its
   // data.
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_before_set_data_internal\n");
-  std::fflush(stderr);
   decoder->SetDataInternal(std::move(data), data_complete, false);
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_after_set_data_internal\n");
-  std::fflush(stderr);
 
   return decoder;
 }
@@ -226,24 +212,13 @@ void DeferredImageDecoder::SetData(scoped_refptr<SharedBuffer> data,
 void DeferredImageDecoder::SetDataInternal(scoped_refptr<SharedBuffer> data,
                                            bool all_data_received,
                                            bool push_data_to_decoder) {
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_set_data_internal_enter data=%d all=%d push=%d\n",
-               data ? 1 : 0, all_data_received ? 1 : 0,
-               push_data_to_decoder ? 1 : 0);
-  std::fflush(stderr);
   // Once all the data has been received, the image should not change.
   DCHECK(!all_data_received_);
   if (metadata_decoder_) {
     all_data_received_ = all_data_received;
     if (push_data_to_decoder)
       metadata_decoder_->SetData(data, all_data_received);
-    std::fprintf(stderr,
-                 "image_reachability.stage=deferred_image_decoder_before_prepare_lazy_frames\n");
-    std::fflush(stderr);
     PrepareLazyDecodedFrames();
-    std::fprintf(stderr,
-                 "image_reachability.stage=deferred_image_decoder_after_prepare_lazy_frames\n");
-    std::fflush(stderr);
   }
 
   if (frame_generator_) {
@@ -356,19 +331,10 @@ size_t DeferredImageDecoder::ByteSize() const {
 }
 
 void DeferredImageDecoder::ActivateLazyDecoding() {
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_enter\n");
-  std::fflush(stderr);
   ActivateLazyGainmapDecoding();
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_after_gainmap\n");
-  std::fflush(stderr);
   if (frame_generator_)
     return;
 
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_before_metadata\n");
-  std::fflush(stderr);
   size_ = metadata_decoder_->Size();
   image_is_high_bit_depth_ = metadata_decoder_->ImageIsHighBitDepth();
   has_c2pa_manifest_ = metadata_decoder_->HasC2PAManifest();
@@ -377,33 +343,15 @@ void DeferredImageDecoder::ActivateLazyDecoding() {
   mime_type_ = metadata_decoder_->MimeType();
   has_embedded_color_profile_ = metadata_decoder_->HasEmbeddedColorProfile();
   color_space_for_sk_images_ = metadata_decoder_->ColorSpaceForSkImages();
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_after_metadata\n");
-  std::fflush(stderr);
 
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_before_repetition\n");
-  std::fflush(stderr);
   const bool is_single_frame =
       metadata_decoder_->RepetitionCount() == kAnimationNone ||
       (all_data_received_ && metadata_decoder_->FrameCount() == 1u);
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_after_repetition single=%d\n",
-               is_single_frame ? 1 : 0);
-  std::fflush(stderr);
   const SkISize decoded_size =
       gfx::SizeToSkISize(metadata_decoder_->DecodedSize());
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_before_frame_generator width=%d height=%d\n",
-               decoded_size.width(), decoded_size.height());
-  std::fflush(stderr);
   frame_generator_ = ImageFrameGenerator::Create(
       decoded_size, !is_single_frame, metadata_decoder_->GetColorBehavior(),
       cc::AuxImage::kDefault, metadata_decoder_->GetSupportedDecodeSizes());
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_activate_after_frame_generator generator=%d\n",
-               frame_generator_ ? 1 : 0);
-  std::fflush(stderr);
 }
 
 void DeferredImageDecoder::ActivateLazyGainmapDecoding() {
@@ -460,28 +408,14 @@ void DeferredImageDecoder::ActivateLazyGainmapDecoding() {
 }
 
 void DeferredImageDecoder::PrepareLazyDecodedFrames() {
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_enter metadata=%d size_available=%d invalid=%d\n",
-               metadata_decoder_ ? 1 : 0,
-               metadata_decoder_ && metadata_decoder_->IsSizeAvailable() ? 1 : 0,
-               invalid_image_ ? 1 : 0);
-  std::fflush(stderr);
   if (!metadata_decoder_ || !metadata_decoder_->IsSizeAvailable())
     return;
 
   if (invalid_image_)
     return;
 
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_metadata_accel existing=%d\n",
-               image_metadata_ ? 1 : 0);
-  std::fflush(stderr);
   if (!image_metadata_)
     image_metadata_ = metadata_decoder_->MakeMetadataForDecodeAcceleration();
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_after_metadata_accel metadata=%d\n",
-               image_metadata_ ? 1 : 0);
-  std::fflush(stderr);
 
   // If the image contains a coded size with zero in either or both size
   // dimensions, the image is invalid.
@@ -491,30 +425,12 @@ void DeferredImageDecoder::PrepareLazyDecodedFrames() {
     return;
   }
 
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_activate\n");
-  std::fflush(stderr);
   ActivateLazyDecoding();
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_after_activate generator=%d\n",
-               frame_generator_ ? 1 : 0);
-  std::fflush(stderr);
 
   const wtf_size_t previous_size = frame_data_.size();
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_frame_count previous=%u\n",
-               static_cast<unsigned>(previous_size));
-  std::fflush(stderr);
   frame_data_.resize(metadata_decoder_->FrameCount());
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_after_frame_count size=%u\n",
-               static_cast<unsigned>(frame_data_.size()));
-  std::fflush(stderr);
 
   // The decoder may be invalidated during a FrameCount(). Simply bail if so.
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_failed_check\n");
-  std::fflush(stderr);
   if (metadata_decoder_->Failed()) {
     invalid_image_ = true;
     return;
@@ -526,56 +442,28 @@ void DeferredImageDecoder::PrepareLazyDecodedFrames() {
     return;
   }
 
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_frame_loop\n");
-  std::fflush(stderr);
   for (wtf_size_t i = previous_size; i < frame_data_.size(); ++i) {
     frame_data_[i].duration_ = metadata_decoder_->FrameDurationAtIndex(i);
     frame_data_[i].orientation_ = metadata_decoder_->Orientation();
     frame_data_[i].density_corrected_size_ =
         metadata_decoder_->DensityCorrectedSize();
   }
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_after_frame_loop\n");
-  std::fflush(stderr);
 
   // Update the is_received_ state of incomplete frames.
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_received_loop received=%u size=%u\n",
-               static_cast<unsigned>(received_frame_count_),
-               static_cast<unsigned>(frame_data_.size()));
-  std::fflush(stderr);
   while (received_frame_count_ < frame_data_.size() &&
          metadata_decoder_->FrameIsReceivedAtIndex(received_frame_count_)) {
     frame_data_[received_frame_count_++].is_received_ = true;
   }
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_after_received_loop received=%u\n",
-               static_cast<unsigned>(received_frame_count_));
-  std::fflush(stderr);
 
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_before_yuv\n");
-  std::fflush(stderr);
   can_yuv_decode_ =
       metadata_decoder_->CanDecodeToYUV() && all_data_received_ &&
       !frame_generator_->IsMultiFrame();
-  std::fprintf(stderr,
-               "image_reachability.stage=deferred_image_decoder_prepare_after_yuv can=%d\n",
-               can_yuv_decode_ ? 1 : 0);
-  std::fflush(stderr);
 
   // If we've received all of the data, then we can reset the metadata decoder,
   // since everything we care about should now be stored in |frame_data_|.
   if (all_data_received_) {
-    std::fprintf(stderr,
-                 "image_reachability.stage=deferred_image_decoder_prepare_before_repetition_reset\n");
-    std::fflush(stderr);
     repetition_count_ = metadata_decoder_->RepetitionCount();
     metadata_decoder_.reset();
-    std::fprintf(stderr,
-                 "image_reachability.stage=deferred_image_decoder_prepare_after_repetition_reset\n");
-    std::fflush(stderr);
     // Hold on to m_rwBuffer, which is still needed by createFrameAtIndex.
   }
 }

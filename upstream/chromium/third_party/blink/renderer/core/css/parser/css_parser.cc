@@ -322,14 +322,24 @@ MutableCSSPropertyValueSet::SetResult CSSParser::ParseValue(
 const CSSValue* CSSParser::ParseSingleValue(CSSPropertyID unresolved_property,
                                             const String& string,
                                             const CSSParserContext* context) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   DCHECK(ThreadState::Current()->IsAllocationAllowed());
+#endif
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   if (string.empty()) {
     return nullptr;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   if (CSSValue* value = CSSParserFastPaths::MaybeParseValue(unresolved_property,
                                                             string, context)) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
     return value;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   CSSParserTokenStream stream(string);
   return CSSPropertyParser::ParseSingleValue(unresolved_property, stream,
                                              context);

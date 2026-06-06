@@ -1,4 +1,4 @@
-﻿// Copyright 2016 The Chromium Authors
+// Copyright 2016 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -197,12 +197,6 @@ inline const LayoutResult* LayoutWithAlgorithm(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   if (const LayoutBox* box = params.node.GetLayoutBox()) {
     if (box->IsLayoutImage() || box->IsLayoutReplaced()) {
-      std::fprintf(stderr,
-                   "image_reachability.stage=layout_with_algorithm_before "
-                   "box=%p is_image=%d is_replaced=%d\n",
-                   static_cast<const void*>(box), box->IsLayoutImage(),
-                   box->IsLayoutReplaced());
-      std::fflush(stderr);
     }
   }
 #endif
@@ -213,12 +207,6 @@ inline const LayoutResult* LayoutWithAlgorithm(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   if (const LayoutBox* box = params.node.GetLayoutBox()) {
     if (box->IsLayoutImage() || box->IsLayoutReplaced()) {
-      std::fprintf(stderr,
-                   "image_reachability.stage=layout_with_algorithm_after "
-                   "box=%p is_image=%d is_replaced=%d result=%p\n",
-                   static_cast<const void*>(box), box->IsLayoutImage(),
-                   box->IsLayoutReplaced(), static_cast<const void*>(result));
-      std::fflush(stderr);
     }
   }
 #endif

@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
 
+#include <cstdio>
+
 #include "third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk_subset.h"
 #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
@@ -23,8 +25,12 @@ size_t PaintArtifact::ApproximateUnsharedMemoryUsage() const {
 
 PaintRecord PaintArtifact::GetPaintRecord(const PropertyTreeState& replay_state,
                                           const gfx::Rect* cull_rect) const {
-  return PaintChunksToCcLayer::Convert(PaintChunkSubset(*this), replay_state,
-                                       cull_rect);
+  PaintRecord record =
+      PaintChunksToCcLayer::Convert(PaintChunkSubset(*this), replay_state,
+                                    cull_rect);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
+  return record;
 }
 
 void PaintArtifact::RecordDebugInfo(DisplayItemClientId client_id,

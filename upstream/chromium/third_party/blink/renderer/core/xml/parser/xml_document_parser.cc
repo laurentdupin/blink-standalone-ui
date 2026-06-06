@@ -29,7 +29,9 @@
 #include <libxml/parser.h>
 #include <libxml/parserInternals.h>
 #include <libxml/xmlversion.h>
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include <libxslt/xslt.h>
+#endif
 
 #include <algorithm>
 #include <memory>
@@ -72,7 +74,6 @@
 #include "third_party/blink/renderer/core/xml/parser/xhtml_subset.h"
 #include "third_party/blink/renderer/core/xml/parser/xml_document_parser_scope.h"
 #include "third_party/blink/renderer/core/xml/parser/xml_parser_input.h"
-#include "third_party/blink/renderer/core/xml/xslt_processor.h"
 #include "third_party/blink/renderer/core/xmlns_names.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
@@ -120,9 +121,13 @@ static inline AtomicString ToAtomicString(const xmlChar* string) {
 }
 
 static inline bool HasNoStyleInformation(Document* document) {
-  if (document->SawElementsInKnownNamespaces() ||
-      DocumentXSLT::HasTransformSourceDocument(*document))
+  if (document->SawElementsInKnownNamespaces())
     return false;
+
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+  if (DocumentXSLT::HasTransformSourceDocument(*document))
+    return false;
+#endif
 
   if (!document->GetFrame() || !document->GetFrame()->GetPage())
     return false;
@@ -408,8 +413,9 @@ void XMLDocumentParser::HandleError(XMLErrors::ErrorType type,
   xml_errors_.HandleError(type, formatted_message, position);
   if (type != XMLErrors::kErrorTypeWarning)
     saw_error_ = true;
-  if (type == XMLErrors::kErrorTypeFatal)
+  if (type == XMLErrors::kErrorTypeFatal) {
     StopParsing();
+  }
 }
 
 void XMLDocumentParser::CreateLeafTextNodeIfNeeded() {
@@ -478,8 +484,9 @@ void XMLDocumentParser::end() {
     UpdateLeafTextNode();
   }
 
-  if (IsParsing())
+  if (IsParsing()) {
     PrepareToStopParsing();
+  }
   GetDocument()->SetReadyState(Document::kInteractive);
   ClearCurrentNodeStack();
   GetDocument()->FinishedParsing();
@@ -672,6 +679,9 @@ static bool ShouldAllowExternalLoad(const KURL& url) {
 }
 
 static void* OpenFunc(const char* uri) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return &g_global_descriptor;
+#else
   Document* document = XMLDocumentParserScope::current_document_;
   DCHECK(document);
   CHECK(IsMainThread());
@@ -721,9 +731,13 @@ static void* OpenFunc(const char* uri) {
                     WebFeature::kXMLExternalResourceLoad);
 
   return new SharedBufferReader(data);
+#endif
 }
 
 static int ReadFunc(void* context, char* buffer, int len) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return 0;
+#else
   // Do 0-byte reads in case of a null descriptor
   if (context == &g_global_descriptor)
     return 0;
@@ -733,6 +747,7 @@ static int ReadFunc(void* context, char* buffer, int len) {
   auto buffer_span =
       UNSAFE_BUFFERS(base::span(buffer, base::checked_cast<size_t>(len)));
   return base::checked_cast<int>(data->ReadData(buffer_span));
+#endif
 }
 
 static int WriteFunc(void*, const char*, int) {
@@ -741,11 +756,15 @@ static int WriteFunc(void*, const char*, int) {
 }
 
 static int CloseFunc(void* context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return 0;
+#else
   if (context != &g_global_descriptor) {
     SharedBufferReader* data = static_cast<SharedBufferReader*>(context);
     delete data;
   }
   return 0;
+#endif
 }
 
 static void ErrorFunc(void*, const char*, ...) {
@@ -776,7 +795,13 @@ scoped_refptr<XMLParserContext> XMLParserContext::CreateStringParser(
   // external entities and DTDs here, but not in xmlReadMemory of
   // XmlDocPtrForString and in XSLTStyleSheet::Parse in order not to overlap
   // with XSLT deprecation.
-  if (RuntimeEnabledFeatures::XMLNoExternalEntitiesEnabled()) {
+  if (
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      true
+#else
+      RuntimeEnabledFeatures::XMLNoExternalEntitiesEnabled()
+#endif
+  ) {
     options |= XML_PARSE_NO_XXE;
   }
 
@@ -812,7 +837,13 @@ scoped_refptr<XMLParserContext> XMLParserContext::CreateMemoryParser(
   // external entities and DTDs here, but not in xmlReadMemory of
   // XmlDocPtrForString and in XSLTStyleSheet::Parse in order not to overlap
   // with XSLT deprecation.
-  if (RuntimeEnabledFeatures::XMLNoExternalEntitiesEnabled()) {
+  if (
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      true
+#else
+      RuntimeEnabledFeatures::XMLNoExternalEntitiesEnabled()
+#endif
+  ) {
     options |= XML_PARSE_NO_XXE;
   }
 
@@ -845,13 +876,19 @@ XMLDocumentParser::XMLDocumentParser(Document& document,
       finish_called_(false),
       xml_errors_(&document),
       document_(&document),
-      script_runner_(frame_view
-                         ? MakeGarbageCollected<XMLParserScriptRunner>(this)
-                         : nullptr),  // Don't execute scripts for
-                                      // documents without frames.
+      script_runner_(
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+          nullptr
+#else
+          frame_view ? MakeGarbageCollected<XMLParserScriptRunner>(this)
+                     : nullptr
+#endif
+      ),  // Don't execute scripts for documents without frames.
       script_start_position_(TextPosition::BelowRangePosition()),
       parsing_fragment_(false) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   CHECK(!RuntimeEnabledFeatures::XMLParsingRustEnabled());
+#endif
   // This is XML being used as a document resource.
   if (frame_view && IsA<XMLDocument>(document))
     UseCounter::Count(document, WebFeature::kXMLDocument);
@@ -1347,7 +1384,9 @@ void XMLDocumentParser::GetProcessingInstruction(const String& target,
   CheckIfBlockingStyleSheetAdded();
 
   saw_xsl_transform_ = !saw_first_element_ && pi->IsXSL();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   CHECK(!saw_xsl_transform_ || RuntimeEnabledFeatures::XSLTEnabled());
+#endif
   if (saw_xsl_transform_ &&
       !DocumentXSLT::HasTransformSourceDocument(*GetDocument())) {
     // This behavior is very tricky. We call stopParsing() here because we
@@ -1733,15 +1772,22 @@ void XMLDocumentParser::DoEnd() {
 
   bool xml_viewer_mode = !saw_error_ && !saw_css_ && !saw_xsl_transform_ &&
                          HasNoStyleInformation(GetDocument());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  xml_viewer_mode = false;
+#endif
   if (xml_viewer_mode) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     GetDocument()->SetIsViewSource(true);
     TransformDocumentToXMLTreeView(*GetDocument());
+#endif
   } else if (saw_xsl_transform_) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     xmlDocPtr doc = XmlDocPtrForString(
         GetDocument(), original_source_for_transform_.ToString(),
         GetDocument()->Url().GetString());
     GetDocument()->SetTransformSource(std::make_unique<TransformSource>(doc));
     DocumentParser::StopParsing();
+#endif
   }
 }
 
@@ -1760,8 +1806,12 @@ xmlDocPtr XmlDocPtrForString(Document* document,
   // document results in good error messages.
   XMLDocumentParserScope scope(document, ErrorFunc, nullptr);
   XMLParserInput input(source);
+  int options = XML_PARSE_HUGE;
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+  options |= XSLT_PARSE_OPTIONS;
+#endif
   return xmlReadMemory(input.Data(), input.size(), url.Latin1().c_str(),
-                       input.Encoding(), XSLT_PARSE_OPTIONS | XML_PARSE_HUGE);
+                       input.Encoding(), options);
 }
 
 OrdinalNumber XMLDocumentParser::LineNumber() const {
@@ -1782,6 +1832,7 @@ TextPosition XMLDocumentParser::GetTextPosition() const {
 
 void XMLDocumentParser::StopParsing() {
   // See comment before InsertErrorMessageBlock() in XMLDocumentParser::end.
+  if (saw_error_)
   if (saw_error_)
     InsertErrorMessageBlock();
   DocumentParser::StopParsing();
@@ -1916,7 +1967,9 @@ static void AttributesStartElementNsHandler(void* closure,
 }
 
 HashMap<String, String> ParseAttributes(const String& string, bool& attrs_ok) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   CHECK(!RuntimeEnabledFeatures::XMLParsingRustEnabled());
+#endif
   AttributeParseState state;
   state.got_attributes = false;
 

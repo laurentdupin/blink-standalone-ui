@@ -1,19 +1,6 @@
-// Copyright 2026 The Chromium Authors
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+#ifndef STANDALONE_STUB_THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_
+#define STANDALONE_STUB_THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_
 
-#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_
-#define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_
+#include "C:/Repos/blink-standalone-ui/upstream/chromium/third_party/blink/renderer/core/svg/svg_foreign_object_element.h"
 
-#include "third_party/blink/renderer/core/svg/svg_element.h"
-
-namespace blink {
-
-class SVGForeignObjectElement final : public SVGElement {
- public:
-  using SVGElement::SVGElement;
-};
-
-}  // namespace blink
-
-#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_
+#endif  // STANDALONE_STUB_THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_FOREIGN_OBJECT_ELEMENT_H_

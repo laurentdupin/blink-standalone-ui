@@ -26,13 +26,6 @@ ReplacedLayoutAlgorithm::ReplacedLayoutAlgorithm(
 const LayoutResult* ReplacedLayoutAlgorithm::Layout() {
   DCHECK(!GetBreakToken() || GetBreakToken()->IsBreakBefore());
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=replaced_layout_algorithm_enter "
-               "box=%p is_image=%d is_media=%d is_image_replacement=%d\n",
-               static_cast<const void*>(Node().GetLayoutBox()),
-               Node().GetLayoutBox() && Node().GetLayoutBox()->IsLayoutImage(),
-               Node().IsMedia(), Node().IsImageReplacement());
-  std::fflush(stderr);
 #endif
 
   if (Node().IsMedia()) {
@@ -47,12 +40,6 @@ const LayoutResult* ReplacedLayoutAlgorithm::Layout() {
 
   const LayoutResult* result = container_builder_.ToBoxFragment();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::fprintf(stderr,
-               "image_reachability.stage=replaced_layout_algorithm_exit "
-               "box=%p result=%p\n",
-               static_cast<const void*>(Node().GetLayoutBox()),
-               static_cast<const void*>(result));
-  std::fflush(stderr);
 #endif
   return result;
 }

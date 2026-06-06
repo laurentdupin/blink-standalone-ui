@@ -74,19 +74,10 @@ void LayoutImageResource::Trace(Visitor* visitor) const {
 }
 
 void LayoutImageResource::Initialize(LayoutObject* layout_object) {
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_resource_initialize\n");
-  std::fflush(stderr);
   StandaloneRendererNoteLayoutImageResourceInitialize();
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_resource_initialize_after_note\n");
-  std::fflush(stderr);
   DCHECK(!layout_object_);
   DCHECK(layout_object);
   layout_object_ = layout_object;
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_resource_initialize_done\n");
-  std::fflush(stderr);
 }
 
 void LayoutImageResource::Shutdown() {
@@ -155,9 +146,6 @@ RespectImageOrientationEnum LayoutImageResource::ImageOrientation() const {
 
 NaturalSizingInfo LayoutImageResource::GetNaturalDimensions(
     float multiplier) const {
-  std::fprintf(stderr,
-               "image_reachability.stage=layout_image_resource_get_natural_dimensions\n");
-  std::fflush(stderr);
   StandaloneRendererNoteLayoutImageResourceNaturalDimensions();
   if (!cached_image_ || !cached_image_->IsSizeAvailable() ||
       !cached_image_->HasImage()) {
@@ -233,15 +221,8 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
 bool LayoutImageResource::MaybeAnimated() const {
   Image* image = cached_image_ ? cached_image_->GetImage() : Image::NullImage();
   StandaloneRendererNoteLayoutImageResourceMaybeAnimated(!image);
-  if (!image) {
-    std::fprintf(
-        stderr,
-        "image_reachability.stage=layout_image_resource_maybe_animated_null "
-        "resource=%p cached_image=%p\n",
-        this, cached_image_.Get());
-    std::fflush(stderr);
+  if (!image)
     return false;
-  }
   return image->MaybeAnimated();
 }
 
