@@ -3,6 +3,7 @@
     "smoke": [
       "05b_image_data_svg",
       "05k_image_local_svg_route_map",
+      "18e_css_bg_local_svg_route_map",
       "05g_image_data_png_red_2x2",
       "17_image_local_png",
       "16_css_bg_data_png_simple",
@@ -28,6 +29,13 @@
       "source": "paint_audit",
       "html": "05k_image_local_svg_route_map.html",
       "note": "External non-text SVG route-map smoke; Chromium comparison may show minor edge AA drift."
+    },
+    {
+      "name": "18e_css_bg_local_svg_route_map",
+      "source": "paint_audit",
+      "html": "18e_css_bg_local_svg_route_map.html",
+      "viewport": "360x220",
+      "note": "CSS background-image external non-text SVG route-map smoke; Chromium comparison may show minor edge AA drift."
     },
     {
       "name": "05g_image_data_png_red_2x2",
