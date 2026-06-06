@@ -58,6 +58,13 @@ int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(
     int* begin_display_item_index,
     int* end_display_item_index,
     int* has_text);
+int StandaloneBlinkLiveFrameBridgePaintChunkDrawableBoundsAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int* x,
+    int* y,
+    int* width,
+    int* height);
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeArtifactAuditLineCountForStandaloneRenderer(
@@ -2155,6 +2162,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     std::string active_chunk_key;
     std::string active_chunk_id_string;
     Rect active_chunk_bounds;
+    Rect active_chunk_drawable_bounds;
     PaintPropertyStateSnapshot active_chunk_property_state;
     int active_chunk_debug_index = -1;
     bool inside_chunk = false;
@@ -2265,6 +2273,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               active_chunk_bounds, active_chunk_property_state,
               std::move(chunk_commands)));
           current_scene.chunks.back().debug_index = active_chunk_debug_index;
+          if (active_chunk_drawable_bounds.width > 0.0f &&
+              active_chunk_drawable_bounds.height > 0.0f) {
+            current_scene.chunks.back().placement_bounds =
+                active_chunk_drawable_bounds;
+          }
           current_scene.chunks.back().stable_key = active_chunk_key;
           current_scene.chunks.back().chunk_id_string =
               active_chunk_id_string.empty() ? active_chunk_key
@@ -2275,6 +2288,21 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         const int chunk_index = static_cast<int>(font_size);
         active_chunk_debug_index = chunk_index;
         active_chunk_bounds = Rect{x, y, width, height};
+        active_chunk_drawable_bounds = Rect{};
+        int drawable_x = 0;
+        int drawable_y = 0;
+        int drawable_width = 0;
+        int drawable_height = 0;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgePaintChunkDrawableBoundsAtForStandaloneRenderer(
+                    probe_html.c_str(), chunk_index, &drawable_x, &drawable_y,
+                    &drawable_width, &drawable_height)) {
+          active_chunk_drawable_bounds =
+              Rect{static_cast<float>(drawable_x),
+                   static_cast<float>(drawable_y),
+                   static_cast<float>(drawable_width),
+                   static_cast<float>(drawable_height)};
+        }
         active_chunk_property_state = PaintPropertyStateSnapshot{};
         std::array<char, 1024> chunk_key_buffer{};
         std::array<char, 512> chunk_id_buffer{};
@@ -2422,6 +2450,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               active_chunk_bounds, active_chunk_property_state,
               std::move(chunk_commands)));
           current_scene.chunks.back().debug_index = active_chunk_debug_index;
+          if (active_chunk_drawable_bounds.width > 0.0f &&
+              active_chunk_drawable_bounds.height > 0.0f) {
+            current_scene.chunks.back().placement_bounds =
+                active_chunk_drawable_bounds;
+          }
           current_scene.chunks.back().stable_key = active_chunk_key;
           current_scene.chunks.back().chunk_id_string =
               active_chunk_id_string.empty() ? active_chunk_key
@@ -2432,6 +2465,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_chunk_key.clear();
         active_chunk_id_string.clear();
         active_chunk_bounds = Rect{};
+        active_chunk_drawable_bounds = Rect{};
         active_chunk_property_state = PaintPropertyStateSnapshot{};
         active_chunk_debug_index = -1;
         active_commands = &commands;
@@ -2791,6 +2825,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           active_chunk_key, RetainedChunkKind::kDocument, active_chunk_bounds,
           active_chunk_property_state, std::move(chunk_commands)));
       current_scene.chunks.back().debug_index = active_chunk_debug_index;
+      if (active_chunk_drawable_bounds.width > 0.0f &&
+          active_chunk_drawable_bounds.height > 0.0f) {
+        current_scene.chunks.back().placement_bounds =
+            active_chunk_drawable_bounds;
+      }
       current_scene.chunks.back().stable_key = active_chunk_key;
       current_scene.chunks.back().chunk_id_string =
           active_chunk_id_string.empty() ? active_chunk_key

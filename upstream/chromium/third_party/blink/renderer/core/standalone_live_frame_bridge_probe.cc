@@ -7882,6 +7882,42 @@ int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(
   return 1;
 }
 
+int StandaloneBlinkLiveFrameBridgePaintChunkDrawableBoundsAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int* x,
+    int* y,
+    int* width,
+    int* height) {
+  EnsureWtfInitializedForStandaloneRenderer();
+  RunLiveFramePaintProbe(body_html);
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.initialized || !cache.holder) {
+    return 0;
+  }
+  LocalFrameView& frame_view = cache.holder->GetFrameView();
+  const PaintArtifact& artifact = frame_view.GetPaintArtifact();
+  const PaintChunks& chunks = artifact.GetPaintChunks();
+  if (chunk_index < 0 ||
+      static_cast<wtf_size_t>(chunk_index) >= chunks.size()) {
+    return 0;
+  }
+  const PaintChunk& chunk = chunks[static_cast<wtf_size_t>(chunk_index)];
+  if (x) {
+    *x = chunk.drawable_bounds.x();
+  }
+  if (y) {
+    *y = chunk.drawable_bounds.y();
+  }
+  if (width) {
+    *width = chunk.drawable_bounds.width();
+  }
+  if (height) {
+    *height = chunk.drawable_bounds.height();
+  }
+  return 1;
+}
+
 int StandaloneBlinkLiveFrameBridgePaintChunkPropertyStateAtForStandaloneRenderer(
     const char* body_html,
     int chunk_index,
