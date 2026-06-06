@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    .stage {
+      position: relative;
+      width: 240px;
+      height: 200px;
+      padding: 24px;
+      box-sizing: border-box;
+      background: white;
+    }
+
+    .card {
+      position: absolute;
+      width: 96px;
+      height: 96px;
+      border-radius: 12px;
+    }
+
+    #blue {
+      left: 24px;
+      top: 24px;
+      background: rgb(40, 80, 220);
+    }
+
+    #gold {
+      left: 72px;
+      top: 72px;
+      background: rgb(230, 180, 40);
+    }
+
+    .stage[data-order="a"] #blue {
+      z-index: 2;
+    }
+
+    .stage[data-order="a"] #gold {
+      z-index: 1;
+    }
+
+    .stage[data-order="b"] #blue {
+      z-index: 1;
+    }
+
+    .stage[data-order="b"] #gold {
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stack" data-order="a">
+    <div class="card" id="blue"></div>
+    <div class="card" id="gold"></div>
+  </div>
+</body>
+</html>
