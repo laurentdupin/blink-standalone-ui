@@ -63,6 +63,10 @@ CpuImage RasterizeDrawCommandsWithSkiaCpu(
 CpuImage RasterizeRenderResultWithSkiaCpu(
     const RenderResult& result,
     CpuRenderOptions options = {});
+CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
+    const RenderResult& result,
+    const CpuImage* previous,
+    CpuRenderOptions options = {});
 
 }  // namespace html_css_renderer
 

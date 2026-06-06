@@ -672,7 +672,9 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
                                                   Size viewport,
                                                   CpuRenderOptions options,
                                                   const ImageAtlas& images,
-                                                  const GlyphAtlas& glyphs) {
+                                                  const GlyphAtlas& glyphs,
+                                                  const CpuImage* previous,
+                                                  bool clear_before_render) {
   CpuImage image;
   image.width = std::max(1, static_cast<int>(viewport.width));
   image.height = std::max(1, static_cast<int>(viewport.height));
@@ -702,7 +704,21 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   }
 
   SkCanvas* canvas = surface->getCanvas();
-  canvas->clear(ToSkColor(options.clear_color));
+  if (previous && previous->width == image.width &&
+      previous->height == image.height &&
+      previous->pixels_rgba.size() == image.pixels_rgba.size()) {
+    for (size_t i = 0; i < previous->pixels_rgba.size(); ++i) {
+      const uint32_t packed = previous->pixels_rgba[i];
+      const size_t offset = i * 4u;
+      pixels[offset + 0] = static_cast<uint8_t>((packed >> 24) & 0xff);
+      pixels[offset + 1] = static_cast<uint8_t>((packed >> 16) & 0xff);
+      pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
+      pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
+    }
+  }
+  if (clear_before_render) {
+    canvas->clear(ToSkColor(options.clear_color));
+  }
   int save_depth = 0;
   if (options.debug_command_coverage) {
     ResetCommandCoverageDiagnostics();
@@ -776,7 +792,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpu(const DrawCommandList& commands,
   const ImageAtlas images;
   const GlyphAtlas glyphs;
   return RasterizeDrawCommandsWithSkiaCpuInternal(commands, viewport, options,
-                                                 images, glyphs);
+                                                 images, glyphs, nullptr, true);
 }
 
 CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
@@ -786,7 +802,32 @@ CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
   const ImageAtlas images = BuildImageAtlas(result.frame.resource_commands);
   const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
   CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
-      commands, result.successor_snapshot.viewport, options, images, glyphs);
+      commands, result.successor_snapshot.viewport, options, images, glyphs,
+      nullptr, true);
+  return image;
+}
+
+CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
+    const RenderResult& result,
+    const CpuImage* previous,
+    CpuRenderOptions options) {
+  const int width =
+      std::max(1, static_cast<int>(result.successor_snapshot.viewport.width));
+  const int height =
+      std::max(1, static_cast<int>(result.successor_snapshot.viewport.height));
+  if (result.frame.requires_full_redraw || !previous || previous->width != width ||
+      previous->height != height ||
+      previous->pixels_rgba.size() != static_cast<size_t>(width * height)) {
+    return RasterizeRenderResultWithSkiaCpu(result, options);
+  }
+
+  const DrawCommandList commands =
+      FlattenSceneDrawCommands(result.frame.scene_commands);
+  const ImageAtlas images = BuildImageAtlas(result.frame.resource_commands);
+  const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
+  CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
+      commands, result.successor_snapshot.viewport, options, images, glyphs,
+      previous, false);
   return image;
 }
 

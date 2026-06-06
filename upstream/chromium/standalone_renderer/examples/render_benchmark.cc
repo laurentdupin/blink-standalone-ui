@@ -824,7 +824,8 @@ void PrintUsage() {
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--scroll-x px] [--scroll-y px] "
-               "[--time-ms ms] --out <out.bmp> "
+               "[--time-ms ms] [--incremental] [--previous-time-ms ms] "
+               "--out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
                "[--dump-page-setup <setup.json>] "
@@ -909,6 +910,7 @@ int main(int argc, char** argv) {
   create_info.asset_provider = &assets;
   create_info.viewport = {800.0f, 600.0f};
   html_css_renderer::FrameInput input;
+  html_css_renderer::FrameInput previous_input;
   std::string out_path;
   std::string json_path;
   std::string paint_artifact_dump_path;
@@ -933,6 +935,7 @@ int main(int argc, char** argv) {
   bool debug_command_coverage = false;
   bool strict_text_blob_typefaces = true;
   bool use_blink = true;
+  bool incremental = false;
   BenchmarkTimingDiagnostics timing;
 
   const auto input_setup_start = BenchmarkClock::now();
@@ -1024,6 +1027,16 @@ int main(int argc, char** argv) {
         return 2;
       }
       input.timeline_time_seconds = std::max(0.0f, time_ms) / 1000.0;
+    } else if (arg == "--previous-time-ms") {
+      const char* value = next_value();
+      float time_ms = 0.0f;
+      if (!value || !ParseFloat(value, &time_ms)) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.timeline_time_seconds = std::max(0.0f, time_ms) / 1000.0;
+    } else if (arg == "--incremental") {
+      incremental = true;
     } else if (arg == "--out") {
       const char* value = next_value();
       if (!value) {
@@ -1185,6 +1198,8 @@ int main(int argc, char** argv) {
       create_info;
 
   html_css_renderer::RenderResult result;
+  html_css_renderer::RenderResult previous_result;
+  bool have_previous_result = false;
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
@@ -1208,7 +1223,13 @@ int main(int argc, char** argv) {
     timing.blink_initialize_ms =
         ElapsedMs(initialize_start, BenchmarkClock::now());
     const auto render_start = BenchmarkClock::now();
-    result = blink_embedder->AdvanceAndRender(input);
+    if (incremental) {
+      previous_result = blink_embedder->AdvanceAndRender(previous_input);
+      have_previous_result = true;
+      result = blink_embedder->AdvanceAndRenderIncremental(input);
+    } else {
+      result = blink_embedder->AdvanceAndRender(input);
+    }
     timing.advance_and_render_ms =
         ElapsedMs(render_start, BenchmarkClock::now());
     result.diagnostics.insert(result.diagnostics.begin(),
@@ -1304,15 +1325,38 @@ int main(int argc, char** argv) {
   html_css_renderer::CpuRenderOptions cpu_options;
   cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
   cpu_options.debug_command_coverage = debug_command_coverage;
+  std::optional<html_css_renderer::CpuImage> previous_image;
+  if (incremental && have_previous_result) {
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+    if (use_skia_cpu) {
+      previous_image =
+          html_css_renderer::RasterizeRenderResultWithSkiaCpu(previous_result,
+                                                              cpu_options);
+    } else {
+#endif
+      previous_image =
+          html_css_renderer::RasterizeRenderResult(previous_result,
+                                                   cpu_options);
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+    }
+#endif
+  }
   const auto raster_start = BenchmarkClock::now();
   html_css_renderer::CpuImage image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-      use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                         result, cpu_options)
+      use_skia_cpu ? (incremental && have_previous_result
+                          ? html_css_renderer::
+                                RasterizeRenderResultIncrementalWithSkiaCpu(
+                                    result, &*previous_image, cpu_options)
+                          : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                                result, cpu_options))
                    :
 #endif
-                   html_css_renderer::RasterizeRenderResult(result,
-                                                            cpu_options);
+                   (incremental && have_previous_result
+                        ? html_css_renderer::RasterizeRenderResultIncremental(
+                              result, &*previous_image, cpu_options)
+                        : html_css_renderer::RasterizeRenderResult(
+                              result, cpu_options));
   timing.cpu_raster_replay_ms =
       ElapsedMs(raster_start, BenchmarkClock::now());
 
