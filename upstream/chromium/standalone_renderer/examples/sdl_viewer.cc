@@ -273,7 +273,9 @@ void PrintUsage() {
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
                " [--dump-paint-artifact path]"
                " [--blink]"
-               "\n");
+               "\nControls: Space/T toggle configured attrs, left click toggles "
+               "matching targets, mouse wheel or arrow/Page/Home keys scroll, "
+               "Esc quits.\n");
 }
 
 bool ParseArgs(int argc,
@@ -447,6 +449,37 @@ bool ParseArgs(int argc,
     }
   }
   return !create_info->html.empty();
+}
+
+struct ScrollDelta {
+  float x = 0.0f;
+  float y = 0.0f;
+  bool home = false;
+};
+
+std::optional<ScrollDelta> KeyboardScrollDelta(SDL_Keycode key,
+                                               float scroll_step,
+                                               int frame_height) {
+  const float page_step =
+      std::max(scroll_step, std::max(1.0f, frame_height * 0.8f));
+  switch (key) {
+    case SDLK_LEFT:
+      return ScrollDelta{-scroll_step, 0.0f, false};
+    case SDLK_RIGHT:
+      return ScrollDelta{scroll_step, 0.0f, false};
+    case SDLK_UP:
+      return ScrollDelta{0.0f, -scroll_step, false};
+    case SDLK_DOWN:
+      return ScrollDelta{0.0f, scroll_step, false};
+    case SDLK_PAGEUP:
+      return ScrollDelta{0.0f, -page_step, false};
+    case SDLK_PAGEDOWN:
+      return ScrollDelta{0.0f, page_step, false};
+    case SDLK_HOME:
+      return ScrollDelta{0.0f, 0.0f, true};
+    default:
+      return std::nullopt;
+  }
 }
 
 float CurrentDocumentScrollX(const html_css_renderer::FrameInput& input) {
@@ -1255,6 +1288,10 @@ int main(int argc, char** argv) {
   std::fprintf(stderr,
                "viewer controls: mouse wheel scrolls document by %.1f px\n",
                scroll_step);
+  std::fprintf(stderr,
+               "viewer controls: arrow keys scroll by %.1f px; PageUp/"
+               "PageDown scroll by viewport; Home returns to top\n",
+               scroll_step);
   uint64_t rendered_frame_count = 1;
   PrintViewerStatus("initial", rendered_frame_count, input, result,
                     attribute_toggles, false);
@@ -1341,6 +1378,31 @@ int main(int argc, char** argv) {
             break;
           }
           texture_dirty = true;
+        }
+      } else if (event.type == SDL_EVENT_KEY_DOWN) {
+        const std::optional<ScrollDelta> scroll_delta =
+            KeyboardScrollDelta(event.key.key, scroll_step, frame_height);
+        if (scroll_delta) {
+          html_css_renderer::FrameInput next_input = input;
+          if (scroll_delta->home) {
+            SetDocumentScroll(&next_input, 0.0f, 0.0f);
+          } else {
+            SetDocumentScroll(&next_input,
+                              CurrentDocumentScrollX(next_input) +
+                                  scroll_delta->x,
+                              CurrentDocumentScrollY(next_input) +
+                                  scroll_delta->y);
+          }
+          if (CurrentDocumentScrollX(next_input) !=
+                  CurrentDocumentScrollX(input) ||
+              CurrentDocumentScrollY(next_input) !=
+                  CurrentDocumentScrollY(input)) {
+            if (!render_updated_input("key-scroll", std::move(next_input))) {
+              running = false;
+              break;
+            }
+            texture_dirty = true;
+          }
         }
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                  event.button.button == SDL_BUTTON_LEFT &&
