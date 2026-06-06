@@ -57,6 +57,10 @@ bool SameOpacityGroup(const PaintPropertyStateSnapshot& a,
          NearlyEqual(a.effect_opacity, b.effect_opacity);
 }
 
+bool HasVisualCommands(const RetainedPaintChunk* chunk) {
+  return chunk && !chunk->commands.empty();
+}
+
 Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
   Rect bounds = chunk.placement_bounds;
   if (chunk.property_state.has_clip_rect) {
@@ -562,11 +566,10 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
   }
 
   const RetainedSceneDiff diff = DiffRetainedScenes(current, previous);
-  // Stable retained chunks can carry content and property-state damage as
-  // local old/new bounds without forcing a full-frame redraw. Keep structural
-  // scene changes conservative for now.
-  plan.requires_full_redraw =
-      previous == nullptr || diff.added_count > 0 || diff.removed_count > 0;
+  // Post-first-frame changes can be represented as local damage because
+  // incremental replay now clears and redraws only the dirty region against
+  // the current full scene command list.
+  plan.requires_full_redraw = previous == nullptr;
 
   for (const RetainedChunkDiff& chunk_diff : diff.chunks) {
     PresentationChunkUpdate update;
@@ -610,7 +613,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
     }
 
     if (update.requires_redraw) {
-      if (!scroll_reuse_candidate && update.previous_bounds) {
+      if (!scroll_reuse_candidate && update.previous_bounds &&
+          HasVisualCommands(previous_chunk)) {
         plan.dirty_rects.push_back(MapRectConservatively(
             *update.previous_bounds,
             previous_chunk ? PropertyStateForPresentation(*previous_chunk,
@@ -618,7 +622,7 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
                            : PaintPropertyStateSnapshot{},
             plan.viewport_bounds));
       }
-      if (update.current_bounds) {
+      if (update.current_bounds && HasVisualCommands(current_chunk)) {
         plan.dirty_rects.push_back(MapRectConservatively(
             *update.current_bounds,
             current_chunk ? PropertyStateForPresentation(*current_chunk,

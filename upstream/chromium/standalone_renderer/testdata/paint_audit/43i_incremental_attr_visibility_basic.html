@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    .frame {
+      width: 200px;
+      padding: 24px;
+    }
+
+    .card {
+      width: 120px;
+      height: 120px;
+      border-radius: 8px;
+      background: rgb(40, 80, 220);
+    }
+
+    #card[data-visible="off"] {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div id="card" class="card" data-visible="on"></div>
+  </div>
+</body>
+</html>
