@@ -19,6 +19,7 @@
 #include <sstream>
 #include <utility>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "cc/paint/paint_op.h"
@@ -362,6 +363,9 @@ struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   LiveFramePaintProbeResult result;
   std::string body_html;
+  std::string requested_element_attributes_serialized;
+  std::unordered_map<std::string, std::string>
+      requested_element_attributes_by_id_and_name;
   std::vector<LiveExportedDrawOp> exported_draw_ops;
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
@@ -5783,6 +5787,54 @@ std::string ExtractHtmlAttributeForStandaloneRenderer(
   return tag.substr(value_start, value_end - value_start);
 }
 
+std::unordered_map<std::string, std::string>
+ParseElementAttributesForStandaloneRenderer(const std::string& serialized) {
+  std::unordered_map<std::string, std::string> output;
+  size_t line_start = 0;
+  while (line_start < serialized.size()) {
+    size_t line_end = serialized.find('\n', line_start);
+    if (line_end == std::string::npos) {
+      line_end = serialized.size();
+    }
+    const std::string line = serialized.substr(line_start, line_end - line_start);
+    if (!line.empty()) {
+      const size_t equals = line.find('=');
+      if (equals != std::string::npos) {
+        output[line.substr(0, equals)] = line.substr(equals + 1);
+      } else {
+        output[line] = std::string();
+      }
+    }
+    line_start = line_end + 1;
+  }
+  return output;
+}
+
+void ApplyElementAttributesForStandaloneRenderer(
+    Document& document,
+    const std::unordered_map<std::string, std::string>& attributes) {
+  for (const auto& [key, value] : attributes) {
+    const size_t separator = key.find(':');
+    if (separator == std::string::npos || separator == 0 ||
+        separator + 1 >= key.size()) {
+      continue;
+    }
+    Element* element =
+        document.getElementById(AtomicString(String::FromUtf8(
+            key.substr(0, separator))));
+    if (!element) {
+      continue;
+    }
+    const AtomicString attribute_name(
+        String::FromUtf8(key.substr(separator + 1)));
+    if (value.empty()) {
+      element->removeAttribute(attribute_name);
+    } else {
+      element->setAttribute(attribute_name, AtomicString(String::FromUtf8(value)));
+    }
+  }
+}
+
 std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
     const std::string& body_html,
     const LiveFramePaintProbeCache& cache) {
@@ -7327,6 +7379,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     document.body()->SetInnerHTMLWithoutTrustedTypes(
         String::FromUtf8(body_fragment));
   }
+  ApplyElementAttributesForStandaloneRenderer(
+      document, cache.requested_element_attributes_by_id_and_name);
   TraceLiveFrameProbeStage("after SetInnerHTML");
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
@@ -7674,6 +7728,26 @@ void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
   cache.animation_time_status =
       requested ? "unsupported_missing_real_blink_animation_time_input"
                 : "not_requested";
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
+    const char* serialized_attributes) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const std::string value = serialized_attributes ? serialized_attributes : "";
+  if (cache.requested_element_attributes_serialized == value) {
+    return;
+  }
+  cache.requested_element_attributes_serialized = value;
+  cache.requested_element_attributes_by_id_and_name =
+      ParseElementAttributesForStandaloneRenderer(value);
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

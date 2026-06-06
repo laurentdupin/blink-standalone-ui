@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    #card {
+      width: 120px;
+      height: 120px;
+      margin: 24px;
+      border-radius: 8px;
+    }
+
+    #card[data-state="off"] {
+      background: rgb(220, 40, 40);
+    }
+
+    #card[data-state="on"] {
+      background: rgb(40, 80, 220);
+    }
+  </style>
+</head>
+<body>
+  <div id="card" data-state="off"></div>
+</body>
+</html>

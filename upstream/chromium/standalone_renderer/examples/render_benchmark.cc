@@ -254,6 +254,21 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* output) {
   return true;
 }
 
+bool ParseElementAttributeOverride(const std::string& value,
+                                   std::string* key,
+                                   std::string* attribute_value) {
+  const size_t colon = value.find(':');
+  const size_t equals =
+      value.find('=', colon == std::string::npos ? 0 : colon + 1);
+  if (colon == std::string::npos || equals == std::string::npos || colon == 0 ||
+      equals <= colon + 1) {
+    return false;
+  }
+  *key = value.substr(0, equals);
+  *attribute_value = value.substr(equals + 1);
+  return true;
+}
+
 bool SameStylesheetList(
     const std::vector<html_css_renderer::Stylesheet>& a,
     const std::vector<html_css_renderer::Stylesheet>& b) {
@@ -876,6 +891,7 @@ void PrintUsage() {
                "Usage: blink_standalone_render_benchmark_skia --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
                "[--previous-css-file <path>] "
+               "[--attr id:name=value] [--previous-attr id:name=value] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--scroll-x px] [--scroll-y px] "
                "[--time-ms ms] [--incremental] [--previous-time-ms ms] "
@@ -1068,6 +1084,26 @@ int main(int argc, char** argv) {
       }
       previous_css_file = value;
       previous_stylesheets_override.push_back({value, std::move(*css)});
+    } else if (arg == "--attr") {
+      const char* value = next_value();
+      std::string key;
+      std::string attribute_value;
+      if (!value ||
+          !ParseElementAttributeOverride(value, &key, &attribute_value)) {
+        PrintUsage();
+        return 2;
+      }
+      input.element_attributes_by_id_and_name[key] = attribute_value;
+    } else if (arg == "--previous-attr") {
+      const char* value = next_value();
+      std::string key;
+      std::string attribute_value;
+      if (!value ||
+          !ParseElementAttributeOverride(value, &key, &attribute_value)) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.element_attributes_by_id_and_name[key] = attribute_value;
     } else if (arg == "--viewport") {
       const char* value = next_value();
       if (!value || !ParseViewport(value, &create_info.viewport)) {
@@ -1308,6 +1344,9 @@ int main(int argc, char** argv) {
           SameOptionalViewport(previous_input.viewport, input.viewport);
       const bool same_html =
           previous_input.html_override == input.html_override;
+      const bool same_element_attributes =
+          SameStringMap(previous_input.element_attributes_by_id_and_name,
+                        input.element_attributes_by_id_and_name);
       const std::vector<html_css_renderer::Stylesheet>& previous_stylesheets =
           previous_input.stylesheets_override ? *previous_input.stylesheets_override
                                              : create_info.stylesheets;
@@ -1331,6 +1370,7 @@ int main(int argc, char** argv) {
                         input.form_values_by_element_id);
       identical_incremental_requested =
           same_delta && same_timeline && same_viewport && same_html &&
+          same_element_attributes &&
           (same_stylesheets || same_requested_css_file) && same_scroll &&
           same_focus && same_hover && same_active && same_form;
       previous_result = blink_embedder->AdvanceAndRender(previous_input);

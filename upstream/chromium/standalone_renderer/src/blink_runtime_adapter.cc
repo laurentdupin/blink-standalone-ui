@@ -8,6 +8,7 @@
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +28,8 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
     float y);
 void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
     double time_ms);
+void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
+    const char* serialized_attributes);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
@@ -415,6 +418,19 @@ Point SnapshotDocumentScrollOffset(const RendererSnapshot& snapshot) {
   return Point{};
 }
 
+std::string SerializeElementAttributesForStandaloneRenderer(
+    const std::unordered_map<std::string, std::string>& attributes) {
+  std::vector<std::pair<std::string, std::string>> ordered(attributes.begin(),
+                                                            attributes.end());
+  std::sort(ordered.begin(), ordered.end(),
+            [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+  std::ostringstream out;
+  for (const auto& [key, value] : ordered) {
+    out << key << "=" << value << "\n";
+  }
+  return out.str();
+}
+
 void ApplyRetainedScenePlan(RenderResult& result,
                             const RetainedScene& current_scene,
                             const LoadCommandList& load_commands,
@@ -437,6 +453,11 @@ void ApplyRetainedScenePlan(RenderResult& result,
         "reduced Blink retained presentation allows scroll translation reuse");
   }
   if (!plan.requires_full_redraw && plan.dirty_rects.empty() &&
+      !SameStringMap(previous_snapshot.element_attributes_by_id_and_name,
+                     result.successor_snapshot.element_attributes_by_id_and_name)) {
+    ApplyIncrementalDamage(previous_snapshot, result,
+                           "reduced Blink retained attribute incremental render");
+  } else if (!plan.requires_full_redraw && plan.dirty_rects.empty() &&
       (previous_snapshot.focused_element_id !=
            result.successor_snapshot.focused_element_id ||
        previous_snapshot.hovered_element_id !=
@@ -1898,6 +1919,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                snapshot_.viewport,
                                SnapshotDocumentScrollOffset(snapshot_),
                                snapshot_.timeline_time_seconds,
+                               snapshot_.element_attributes_by_id_and_name,
                                report.diagnostics);
     return report;
   }
@@ -1912,6 +1934,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                result.successor_snapshot.viewport,
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
                                result.successor_snapshot.timeline_time_seconds,
+                               result.successor_snapshot.element_attributes_by_id_and_name,
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, false,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -1928,6 +1951,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                result.successor_snapshot.viewport,
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
                                result.successor_snapshot.timeline_time_seconds,
+                               result.successor_snapshot.element_attributes_by_id_and_name,
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, true,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -1951,6 +1975,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     if (input.stylesheets_override) {
       snapshot_.stylesheets = *input.stylesheets_override;
     }
+    snapshot_.element_attributes_by_id_and_name =
+        input.element_attributes_by_id_and_name;
     snapshot_.scroll_offsets_by_element_id = input.scroll_offsets_by_element_id;
     snapshot_.focused_element_id = input.focused_element_id;
     snapshot_.hovered_element_id = input.hovered_element_id;
@@ -1964,6 +1990,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       Size viewport,
       Point document_scroll_offset,
       double timeline_time_seconds,
+      const std::unordered_map<std::string, std::string>& element_attributes,
       std::vector<std::string>& diagnostics) {
     namespace live_probe = ::blink::standalone_renderer_probe;
     const std::string probe_html = BuildLiveBlinkProbeHtml(html, stylesheets);
@@ -1973,6 +2000,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         document_scroll_offset.x, document_scroll_offset.y);
     live_probe::StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
         timeline_time_seconds * 1000.0);
+    const std::string serialized_attributes =
+        SerializeElementAttributesForStandaloneRenderer(element_attributes);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
+        serialized_attributes.c_str());
     if (timeline_time_seconds > 0.0) {
       diagnostics.push_back(
           "live Blink animation time requested_ms=" +
