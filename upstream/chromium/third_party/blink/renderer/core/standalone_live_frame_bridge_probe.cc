@@ -2184,6 +2184,31 @@ std::string GfxRectJsonForStandaloneRenderer(const gfx::Rect& rect);
 std::string GfxRectFJsonForStandaloneRenderer(const gfx::RectF& rect);
 uint64_t NodeIdForStandaloneRenderer(const void* node);
 
+gfx::RectF HitTestRectForStandaloneRenderer(Element& element,
+                                            LayoutObject& layout_object) {
+  const gfx::RectF client_rect =
+      element.GetBoundingClientRectNoLifecycleUpdate();
+  const auto* box = DynamicTo<LayoutBox>(&layout_object);
+  if (!box || !layout_object.View()) {
+    return client_rect;
+  }
+
+  PhysicalRect mapped_border_box = box->PhysicalBorderBoxRect();
+  if (!layout_object.MapToVisualRectInAncestorSpace(layout_object.View(),
+                                                    mapped_border_box)) {
+    return client_rect;
+  }
+
+  const gfx::RectF clipped_rect(mapped_border_box.X().ToFloat(),
+                                mapped_border_box.Y().ToFloat(),
+                                mapped_border_box.Width().ToFloat(),
+                                mapped_border_box.Height().ToFloat());
+  if (clipped_rect.width() <= 0.0f || clipped_rect.height() <= 0.0f) {
+    return gfx::RectF();
+  }
+  return clipped_rect;
+}
+
 void CollectLiveHitTestEntriesForStandaloneRenderer(
     Node* node,
     std::vector<LiveHitTestEntry>& entries) {
@@ -2193,7 +2218,8 @@ void CollectLiveHitTestEntriesForStandaloneRenderer(
   if (auto* element = DynamicTo<Element>(node)) {
     const AtomicString& id = element->GetIdAttribute();
     if (!id.empty() && element->GetLayoutObject()) {
-      const gfx::RectF rect = element->GetBoundingClientRectNoLifecycleUpdate();
+      const gfx::RectF rect = HitTestRectForStandaloneRenderer(
+          *element, *element->GetLayoutObject());
       if (rect.width() > 0.0f && rect.height() > 0.0f) {
         LiveHitTestEntry entry;
         entry.element_id =
