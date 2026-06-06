@@ -215,11 +215,53 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* output) {
   return true;
 }
 
+bool ParseElementAttributeOverride(const std::string& value,
+                                   std::string* key,
+                                   std::string* attribute_value) {
+  const size_t colon = value.find(':');
+  const size_t equals =
+      value.find('=', colon == std::string::npos ? 0 : colon + 1);
+  if (colon == std::string::npos || equals == std::string::npos || colon == 0 ||
+      equals <= colon + 1) {
+    return false;
+  }
+  *key = value.substr(0, equals);
+  *attribute_value = value.substr(equals + 1);
+  return true;
+}
+
+struct AttributeToggle {
+  std::string key;
+  std::string off_value;
+  std::string on_value;
+  bool is_on = false;
+};
+
+bool ParseAttributeToggle(const std::string& value,
+                          AttributeToggle* toggle) {
+  std::string key;
+  std::string values;
+  if (!ParseElementAttributeOverride(value, &key, &values)) {
+    return false;
+  }
+  const size_t comma = values.find(',');
+  if (comma == std::string::npos || comma == 0 || comma + 1 >= values.size()) {
+    return false;
+  }
+  toggle->key = key;
+  toggle->off_value = values.substr(0, comma);
+  toggle->on_value = values.substr(comma + 1);
+  return true;
+}
+
 void PrintUsage() {
   std::fprintf(stderr,
                "Usage: html_css_renderer_sdl_viewer --html <html> "
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
+               "[--attr id:name=value] "
+               "[--toggle-attr id:name=off,on] "
                "[--resource-root <path>] "
+               "[--scroll-x px] [--scroll-y px] [--scroll-step px] "
                "[--viewport WxH] [--delta seconds] "
                "[--font-file path] [--window-scale factor] "
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
@@ -241,6 +283,8 @@ bool ParseArgs(int argc,
                std::string* paint_artifact_dump_path,
                std::string* resource_root,
                std::string* resource_base_path,
+               std::vector<AttributeToggle>* attribute_toggles,
+               float* scroll_step,
                bool* use_blink) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -300,6 +344,49 @@ bool ParseArgs(int argc,
       if (!value || !ParseViewport(value, &create_info->viewport)) {
         return false;
       }
+    } else if (arg == "--attr") {
+      const char* value = next_value();
+      std::string key;
+      std::string attribute_value;
+      if (!value ||
+          !ParseElementAttributeOverride(value, &key, &attribute_value)) {
+        return false;
+      }
+      input->element_attributes_by_id_and_name[key] = attribute_value;
+    } else if (arg == "--toggle-attr") {
+      const char* value = next_value();
+      AttributeToggle toggle;
+      if (!value || !ParseAttributeToggle(value, &toggle)) {
+        return false;
+      }
+      if (input->element_attributes_by_id_and_name.find(toggle.key) ==
+          input->element_attributes_by_id_and_name.end()) {
+        input->element_attributes_by_id_and_name[toggle.key] =
+            toggle.off_value;
+      }
+      attribute_toggles->push_back(std::move(toggle));
+    } else if (arg == "--scroll-x") {
+      const char* value = next_value();
+      float scroll_x = 0.0f;
+      if (!value || !ParseFloat(value, &scroll_x)) {
+        return false;
+      }
+      input->scroll_offsets_by_element_id["document"].x = scroll_x;
+    } else if (arg == "--scroll-y") {
+      const char* value = next_value();
+      float scroll_y = 0.0f;
+      if (!value || !ParseFloat(value, &scroll_y)) {
+        return false;
+      }
+      input->scroll_offsets_by_element_id["document"].y = scroll_y;
+    } else if (arg == "--scroll-step") {
+      const char* value = next_value();
+      float parsed = 0.0f;
+      if (!value || !ParseFloat(value, &parsed) || parsed <= 0.0f ||
+          parsed > 10000.0f) {
+        return false;
+      }
+      *scroll_step = parsed;
     } else if (arg == "--delta") {
       const char* value = next_value();
       if (!value || !ParseDouble(value, &input->delta_time_seconds)) {
@@ -354,6 +441,27 @@ bool ParseArgs(int argc,
     }
   }
   return !create_info->html.empty();
+}
+
+float CurrentDocumentScrollX(const html_css_renderer::FrameInput& input) {
+  const auto found = input.scroll_offsets_by_element_id.find("document");
+  return found == input.scroll_offsets_by_element_id.end() ? 0.0f
+                                                          : found->second.x;
+}
+
+float CurrentDocumentScrollY(const html_css_renderer::FrameInput& input) {
+  const auto found = input.scroll_offsets_by_element_id.find("document");
+  return found == input.scroll_offsets_by_element_id.end() ? 0.0f
+                                                          : found->second.y;
+}
+
+void SetDocumentScroll(html_css_renderer::FrameInput* input,
+                       float x,
+                       float y) {
+  html_css_renderer::Point& scroll =
+      input->scroll_offsets_by_element_id["document"];
+  scroll.x = std::max(0.0f, x);
+  scroll.y = std::max(0.0f, y);
 }
 
 std::vector<uint32_t> ConvertRgbaToAbgr(
@@ -908,6 +1016,8 @@ int main(int argc, char** argv) {
   std::string paint_artifact_dump_path;
   std::string resource_root;
   std::string resource_base_path;
+  std::vector<AttributeToggle> attribute_toggles;
+  float scroll_step = 80.0f;
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
@@ -918,9 +1028,17 @@ int main(int argc, char** argv) {
                              &incremental, &use_cpu, &use_skia_cpu,
                              &paint_artifact_dump_path, &resource_root,
                              &resource_base_path,
+                             &attribute_toggles, &scroll_step,
                              &use_blink)) {
     PrintUsage();
     return 2;
+  }
+
+  for (AttributeToggle& toggle : attribute_toggles) {
+    const auto found = input.element_attributes_by_id_and_name.find(toggle.key);
+    toggle.is_on =
+        found != input.element_attributes_by_id_and_name.end() &&
+        found->second == toggle.on_value;
   }
 
   if (!font_file.empty()) {
@@ -1048,6 +1166,50 @@ int main(int argc, char** argv) {
     }
   }
 
+  if (!attribute_toggles.empty()) {
+    std::fprintf(stderr,
+                 "viewer controls: Space/T toggles %zu attribute target(s)\n",
+                 attribute_toggles.size());
+  }
+  std::fprintf(stderr,
+               "viewer controls: mouse wheel scrolls document by %.1f px\n",
+               scroll_step);
+
+  auto render_updated_input =
+      [&](html_css_renderer::FrameInput next_input) -> bool {
+    const bool use_incremental = incremental && use_cpu;
+    html_css_renderer::RenderResult next_result =
+        use_incremental ? blink_embedder->AdvanceAndRenderIncremental(next_input)
+                        : blink_embedder->AdvanceAndRender(next_input);
+    if (use_cpu) {
+      image =
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+          use_skia_cpu
+              ? (use_incremental
+                     ? html_css_renderer::
+                           RasterizeRenderResultIncrementalWithSkiaCpu(
+                               next_result, &image)
+                     : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                           next_result))
+              :
+#endif
+              (use_incremental
+                   ? html_css_renderer::RasterizeRenderResultIncremental(
+                         next_result, &image)
+                   : html_css_renderer::RasterizeRenderResult(next_result));
+      pixels = ConvertRgbaToAbgr(image);
+      SDL_UpdateTexture(texture, nullptr, pixels.data(),
+                        frame_width * static_cast<int>(sizeof(uint32_t)));
+    } else if (direct_renderer) {
+      if (!direct_renderer->Render(next_result, texture)) {
+        return false;
+      }
+    }
+    result = std::move(next_result);
+    input = std::move(next_input);
+    return true;
+  };
+
   bool running = true;
   const uint64_t start_ms = SDL_GetTicks();
   while (running) {
@@ -1057,6 +1219,37 @@ int main(int argc, char** argv) {
       if (event.type == SDL_EVENT_QUIT ||
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
+      } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        html_css_renderer::FrameInput next_input = input;
+        const float next_x =
+            CurrentDocumentScrollX(next_input) + event.wheel.x * scroll_step;
+        const float next_y =
+            CurrentDocumentScrollY(next_input) - event.wheel.y * scroll_step;
+        SetDocumentScroll(&next_input, next_x, next_y);
+        if (CurrentDocumentScrollX(next_input) != CurrentDocumentScrollX(input) ||
+            CurrentDocumentScrollY(next_input) != CurrentDocumentScrollY(input)) {
+          if (!render_updated_input(std::move(next_input))) {
+            running = false;
+            break;
+          }
+          texture_dirty = true;
+        }
+      } else if (event.type == SDL_EVENT_KEY_DOWN &&
+                 (event.key.key == ' ' || event.key.key == 't' ||
+                  event.key.key == 'T')) {
+        if (!attribute_toggles.empty()) {
+          html_css_renderer::FrameInput next_input = input;
+          for (AttributeToggle& toggle : attribute_toggles) {
+            toggle.is_on = !toggle.is_on;
+            next_input.element_attributes_by_id_and_name[toggle.key] =
+                toggle.is_on ? toggle.on_value : toggle.off_value;
+          }
+          if (!render_updated_input(std::move(next_input))) {
+            running = false;
+            break;
+          }
+          texture_dirty = true;
+        }
       } else if (incremental && event.type == SDL_EVENT_MOUSE_MOTION) {
         int window_width_for_hit = 0;
         int window_height_for_hit = 0;
@@ -1069,30 +1262,12 @@ int main(int argc, char** argv) {
             HitTest(result.hit_test_entries, document_point.x,
                     document_point.y);
         if (hovered != input.hovered_element_id) {
-          html_css_renderer::FrameInput next_input;
+          html_css_renderer::FrameInput next_input = input;
           next_input.hovered_element_id = hovered;
-          next_input.delta_time_seconds = input.delta_time_seconds;
-          const html_css_renderer::RenderResult next_result =
-              blink_embedder->AdvanceAndRenderIncremental(next_input);
-          if (use_cpu) {
-            image =
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-                use_skia_cpu
-                    ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                          next_result)
-                    :
-#endif
-                    html_css_renderer::RasterizeRenderResultIncremental(
-                        next_result, &image);
-            pixels = ConvertRgbaToAbgr(image);
-            SDL_UpdateTexture(texture, nullptr, pixels.data(),
-                              frame_width *
-                                  static_cast<int>(sizeof(uint32_t)));
-          } else if (direct_renderer) {
-            direct_renderer->Render(next_result, texture);
+          if (!render_updated_input(std::move(next_input))) {
+            running = false;
+            break;
           }
-          result = next_result;
-          input = std::move(next_input);
           texture_dirty = true;
         }
       }
