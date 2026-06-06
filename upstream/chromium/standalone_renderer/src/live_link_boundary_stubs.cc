@@ -86,6 +86,8 @@
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_line_element.h"
 #include "third_party/blink/renderer/core/svg/svg_marker_element.h"
+#include "third_party/blink/renderer/core/svg/svg_mpath_element.h"
+#include "third_party/blink/renderer/core/svg/svg_path_element.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_document_content.h"
 #include "third_party/blink/renderer/core/svg/svg_string_list_tear_off.h"
 #include "third_party/blink/renderer/core/html/loading_attribute.h"
@@ -3341,6 +3343,8 @@ const WrapperTypeInfo& SVGLineElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLineElement");
 const WrapperTypeInfo& SVGMarkerElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGMarkerElement");
+const WrapperTypeInfo& SVGPathElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGPathElement");
 const WrapperTypeInfo& SVGLengthTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLength");
 const WrapperTypeInfo& SVGMatrixTearOff::wrapper_type_info_ =
@@ -3682,8 +3686,14 @@ SVGElement* SVGElementFactory::Create(const AtomicString& local_name,
     return MakeGarbageCollected<SVGRectElement>(document);
   if (local_name == svg_names::kCircleTag.LocalName())
     return MakeGarbageCollected<SVGCircleElement>(document);
+  if (local_name == svg_names::kLineTag.LocalName())
+    return MakeGarbageCollected<SVGLineElement>(document);
+  if (local_name == svg_names::kPathTag.LocalName())
+    return MakeGarbageCollected<SVGPathElement>(document);
   return nullptr;
 }
+
+void SVGMPathElement::TargetPathChanged() {}
 
 bool LcppScriptObserverEnabled() {
   return false;
@@ -6437,11 +6447,6 @@ StyleInvalidator::StyleInvalidator(PendingInvalidationMap& map)
     : pending_invalidation_map_(map) {}
 StyleInvalidator::~StyleInvalidator() = default;
 void StyleInvalidator::Invalidate(Document&, Element*) {}
-
-const Path& StylePath::GetPath() const {
-  static const Path* empty_path = new Path();
-  return *empty_path;
-}
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 gfx::SizeF SVGViewportResolver::ResolveViewport() const {
@@ -16042,16 +16047,6 @@ StyleImageSet::StyleImageSet(StyleImage* image, CSSImageSetValue* value)
 void ReferenceFilterOperation::AddClient(SVGResourceClient&) {}
 void ReferenceFilterOperation::RemoveClient(SVGResourceClient&) {}
 #endif
-
-Path StylePath::GetPath(const gfx::RectF&, float, float) const {
-  return Path();
-}
-CSSValue* StylePath::ComputedCSSValue() const {
-  return nullptr;
-}
-bool StylePath::IsEqualAssumingSameType(const BasicShape&) const {
-  return false;
-}
 
 bool IsSupportedImageMimeType(std::string_view) {
   return false;

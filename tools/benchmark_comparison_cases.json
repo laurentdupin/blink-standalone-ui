@@ -2,6 +2,7 @@
   "sets": {
     "smoke": [
       "05b_image_data_svg",
+      "05k_image_local_svg_route_map",
       "05g_image_data_png_red_2x2",
       "17_image_local_png",
       "43f_incremental_attr_property_basic_on"
@@ -11,9 +12,6 @@
     ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
-    ],
-    "svg-known-gaps": [
-      "05k_image_local_svg_route_map"
     ]
   },
   "cases": [
@@ -26,7 +24,7 @@
       "name": "05k_image_local_svg_route_map",
       "source": "paint_audit",
       "html": "05k_image_local_svg_route_map.html",
-      "note": "Known gap: file-backed non-text SVG decodes, but nested stroke/path/oval vector ops are partially lost at the standalone RecordPaintCanvas boundary."
+      "note": "External non-text SVG route-map smoke; Chromium comparison may show minor edge AA drift."
     },
     {
       "name": "05g_image_data_png_red_2x2",

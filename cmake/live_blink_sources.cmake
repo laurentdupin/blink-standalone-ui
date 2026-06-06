@@ -792,6 +792,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/shadow_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/shadow_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/style_base_data.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/style_path.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/style_ray.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/style/style_shape.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_enumeration.cc
@@ -818,6 +819,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_filter_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_filter_primitive_standard_attributes.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_fit_to_view_box.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_animated_path.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_geometry_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_graphics_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_image_element.cc
@@ -831,10 +833,14 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_matrix_tear_off.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_number.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_number_tear_off.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_blender.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_byte_stream_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_byte_stream_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_parser.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_query.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_string_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_string_source.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/svg_path_utilities.cc
@@ -2061,5 +2067,4 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/xml/parser/xml_document_parser_scope.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/xml/parser/xml_errors.cc
 )
-
 

@@ -119,6 +119,14 @@ struct DowncastTraits<SVGMarkerElement> {
   }
   static bool AllowFrom(const Node&) { return false; }
 };
+class SVGMPathElement;
+template <>
+struct DowncastTraits<SVGMPathElement> {
+  static bool AllowFrom(const Element& element) {
+    return element.GetElementType() == ElementType::kSVGMPathElement;
+  }
+  static bool AllowFrom(const Node&) { return false; }
+};
 class SVGFEDiffuseLightingElement;
 template <>
 struct DowncastTraits<SVGFEDiffuseLightingElement> {
