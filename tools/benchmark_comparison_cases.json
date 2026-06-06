@@ -14,6 +14,13 @@
     "hcsr-smoke": [
       "hcsr_feature_showcase"
     ],
+    "image-layout": [
+      "05e_object_fit_contain_cover",
+      "16b_css_bg_data_png_size_cover",
+      "23_image_intrinsic_width_percent",
+      "24_image_max_width_auto",
+      "24d_image_local_svg_object_fit_contain"
+    ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
     ]
@@ -64,6 +71,37 @@
       "source": "paint_audit",
       "html": "18b_css_bg_relative_png.html",
       "note": "CSS background-image relative PNG resource URL smoke."
+    },
+    {
+      "name": "05e_object_fit_contain_cover",
+      "source": "paint_audit",
+      "html": "05e_object_fit_contain_cover.html",
+      "note": "PNG object-fit contain sizing."
+    },
+    {
+      "name": "16b_css_bg_data_png_size_cover",
+      "source": "paint_audit",
+      "html": "16b_css_bg_data_png_size_cover.html",
+      "note": "CSS background PNG background-size cover."
+    },
+    {
+      "name": "23_image_intrinsic_width_percent",
+      "source": "paint_audit",
+      "html": "23_image_intrinsic_width_percent.html",
+      "note": "Local PNG intrinsic sizing with percent width."
+    },
+    {
+      "name": "24_image_max_width_auto",
+      "source": "paint_audit",
+      "html": "24_image_max_width_auto.html",
+      "note": "PNG max-width auto sizing."
+    },
+    {
+      "name": "24d_image_local_svg_object_fit_contain",
+      "source": "paint_audit",
+      "html": "24d_image_local_svg_object_fit_contain.html",
+      "viewport": "240x180",
+      "note": "External non-text SVG object-fit contain sizing."
     },
     {
       "name": "43f_incremental_attr_property_basic_on",
