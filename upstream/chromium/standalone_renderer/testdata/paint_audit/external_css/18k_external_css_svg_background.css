@@ -1,0 +1,13 @@
+body {
+  margin: 8px;
+  background: white;
+}
+
+.fixture-target {
+  width: 160px;
+  height: 120px;
+  background-color: #f8fafc;
+  background-image: url("../31_simple_blocks.svg");
+  background-repeat: no-repeat;
+  background-size: 160px 120px;
+}

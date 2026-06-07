@@ -21,6 +21,8 @@
       "16b_css_bg_data_png_size_cover",
       "18f_css_bg_data_png_repeat_position",
       "18g_css_bg_local_svg_position",
+      "18j_external_css_png_background",
+      "18k_external_css_svg_background",
       "14g_image_inside_overflow_clip",
       "14i_image_inside_rounded_overflow_clip",
       "05l_image_local_svg_rounded_overflow_clip",
@@ -109,6 +111,20 @@
       "html": "18g_css_bg_local_svg_position.html",
       "viewport": "320x200",
       "note": "CSS background-image external non-text SVG with non-zero background-position; Chromium comparison may show minor edge AA drift."
+    },
+    {
+      "name": "18j_external_css_png_background",
+      "source": "paint_audit",
+      "html": "18j_external_css_png_background.html",
+      "viewport": "180x130",
+      "note": "Linked external CSS file with PNG background-image URL resolved relative to the CSS file."
+    },
+    {
+      "name": "18k_external_css_svg_background",
+      "source": "paint_audit",
+      "html": "18k_external_css_svg_background.html",
+      "viewport": "220x170",
+      "note": "Linked external CSS file with non-text SVG background-image URL resolved relative to the CSS file; Chromium comparison may show minor edge AA drift."
     },
     {
       "name": "05e_object_fit_contain_cover",

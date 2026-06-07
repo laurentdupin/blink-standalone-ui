@@ -1,0 +1,14 @@
+body {
+  margin: 8px;
+  background: white;
+}
+
+.fixture-target {
+  width: 120px;
+  height: 80px;
+  background-color: #f1f5f9;
+  background-image: url("../17_assets/red_2x2.png");
+  background-repeat: no-repeat;
+  background-size: 120px 80px;
+  image-rendering: pixelated;
+}
