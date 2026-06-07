@@ -86,6 +86,21 @@
       "47g_mask_svg_image_basic",
       "47h_mask_svg_background_basic"
     ],
+    "ui-controls": [
+      "28_form_controls_basic",
+      "37d_checkable_with_labels",
+      "48a_ui_resource_control_surfaces_off",
+      "48a_ui_resource_control_surfaces_on"
+    ],
+    "ui-layouts": [
+      "48b_ui_dashboard_resource_layout",
+      "48c_ui_toolbar_panel_resource_layout"
+    ],
+    "ui-control-known-gaps": [
+      "28b_select_basic",
+      "36_textarea_basic",
+      "35_backoffice_mixed_controls"
+    ],
     "resource-loading": [
       "18j_external_css_png_background",
       "18k_external_css_svg_background",
@@ -581,6 +596,74 @@
       "html": "47h_mask_svg_background_basic.html",
       "viewport": "340x220",
       "note": "CSS mask-image linear gradient masks an external non-text SVG background image."
+    },
+    {
+      "name": "28_form_controls_basic",
+      "source": "paint_audit",
+      "html": "28_form_controls_basic.html",
+      "viewport": "360x140",
+      "note": "Static styled search input; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "37d_checkable_with_labels",
+      "source": "paint_audit",
+      "html": "37d_checkable_with_labels.html",
+      "viewport": "420x160",
+      "note": "Static native checkbox and radio controls; Chromium comparison may show edge/text AA drift."
+    },
+    {
+      "name": "48a_ui_resource_control_surfaces_off",
+      "source": "paint_audit",
+      "html": "48a_ui_resource_control_surfaces.html",
+      "viewport": "460x220",
+      "note": "Styled UI control surfaces with PNG, external non-text SVG, mask, and select-like affordance in the default state."
+    },
+    {
+      "name": "48a_ui_resource_control_surfaces_on",
+      "source": "paint_audit",
+      "html": "48a_ui_resource_control_surfaces.html",
+      "viewport": "460x220",
+      "attrs": [
+        "icon-button:data-state=on",
+        "select-surface:data-state=on",
+        "masked-toggle:data-state=on"
+      ],
+      "note": "Styled UI control surfaces with host-provided attr state updates applied before render."
+    },
+    {
+      "name": "48b_ui_dashboard_resource_layout",
+      "source": "paint_audit",
+      "html": "48b_ui_dashboard_resource_layout.html",
+      "viewport": "720x360",
+      "note": "UI dashboard layout combining grid, flex toolbar, table rows, PNG resources, external non-text SVG, clipping, masking, and transform primitives."
+    },
+    {
+      "name": "48c_ui_toolbar_panel_resource_layout",
+      "source": "paint_audit",
+      "html": "48c_ui_toolbar_panel_resource_layout.html",
+      "viewport": "680x320",
+      "note": "UI toolbar and panel layout combining flex wrap, grid cards, PNG backgrounds, external non-text SVG, clip-path, masks, and transforms."
+    },
+    {
+      "name": "28b_select_basic",
+      "source": "paint_audit",
+      "html": "28b_select_basic.html",
+      "viewport": "320x110",
+      "note": "Known gap: native closed select rendering has large-region differences from Chromium in the standalone subset."
+    },
+    {
+      "name": "36_textarea_basic",
+      "source": "paint_audit",
+      "html": "36_textarea_basic.html",
+      "viewport": "360x180",
+      "note": "Known gap: native textarea static rendering differs structurally from Chromium; text editing remains out of current scope."
+    },
+    {
+      "name": "35_backoffice_mixed_controls",
+      "source": "paint_audit",
+      "html": "35_backoffice_mixed_controls.html",
+      "viewport": "760x420",
+      "note": "Known gap: mixed native controls include select/date/textarea paths that rely on broader platform/theme/control plumbing."
     },
     {
       "name": "hcsr_feature_showcase",
