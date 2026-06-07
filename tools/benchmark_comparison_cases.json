@@ -64,6 +64,12 @@
       "32b_calc_flex_gap_cards",
       "32c_calc_percent_padding_gap"
     ],
+    "visual-effects": [
+      "45e_transform_png_image_basic",
+      "45f_transform_png_background_basic",
+      "45g_transform_svg_image_basic",
+      "45h_transform_svg_background_basic"
+    ],
     "resource-loading": [
       "18j_external_css_png_background",
       "18k_external_css_svg_background",
@@ -447,6 +453,34 @@
       "attrs": [
         "card:data-state=on"
       ]
+    },
+    {
+      "name": "45e_transform_png_image_basic",
+      "source": "paint_audit",
+      "html": "45e_transform_png_image_basic.html",
+      "viewport": "260x180",
+      "note": "CSS transform applied to a local PNG <img>; Chromium comparison may show transform edge AA drift."
+    },
+    {
+      "name": "45f_transform_png_background_basic",
+      "source": "paint_audit",
+      "html": "45f_transform_png_background_basic.html",
+      "viewport": "260x180",
+      "note": "CSS transform applied to a local PNG background container; Chromium comparison may show transform edge AA drift."
+    },
+    {
+      "name": "45g_transform_svg_image_basic",
+      "source": "paint_audit",
+      "html": "45g_transform_svg_image_basic.html",
+      "viewport": "320x220",
+      "note": "CSS transform applied to an external non-text SVG <img>; Chromium comparison may show transform edge AA drift."
+    },
+    {
+      "name": "45h_transform_svg_background_basic",
+      "source": "paint_audit",
+      "html": "45h_transform_svg_background_basic.html",
+      "viewport": "320x220",
+      "note": "CSS transform applied to an external non-text SVG background container; Chromium comparison may show transform edge AA drift."
     },
     {
       "name": "hcsr_feature_showcase",
