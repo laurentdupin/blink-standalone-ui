@@ -637,6 +637,14 @@ Rect Translate(Rect rect, Point delta) {
   return rect;
 }
 
+Rect OutsetRect(Rect rect, float amount) {
+  rect.x -= amount;
+  rect.y -= amount;
+  rect.width += amount * 2.0f;
+  rect.height += amount * 2.0f;
+  return rect;
+}
+
 bool IsZero(Point point) {
   return NearlyEqual(point.x, 0.0f) && NearlyEqual(point.y, 0.0f);
 }
@@ -654,6 +662,14 @@ Point PresentationScrollOffsetDelta(const RetainedPaintChunk& chunk,
     return Point{};
   }
   return Point{-current_scroll_offset.x, -current_scroll_offset.y};
+}
+
+bool IsRootDocumentScrollReuseChunk(const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  return chunk.kind == RetainedChunkKind::kDocument &&
+         state.scroll_node_id == 0 &&
+         state.transform_chain_depth <= 1 &&
+         !state.transform_has_non_translation;
 }
 
 PaintPropertyStateSnapshot TranslatePropertyStateForPresentation(
@@ -1079,7 +1095,7 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
         Intersects(*update.current_bounds, plan.viewport_bounds) &&
         current_chunk != nullptr;
     if (scroll_reuse_candidate) {
-      if (current_chunk->kind == RetainedChunkKind::kDocument) {
+      if (IsRootDocumentScrollReuseChunk(*current_chunk)) {
         update.requires_redraw = false;
       } else if (current_chunk->property_state.scroll_node_id == 0) {
         update.requires_redraw = true;
@@ -1137,8 +1153,14 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
                 plan.viewport_bounds));
           }
         } else {
+          Rect current_bounds = *update.current_bounds;
+          if (scroll_reuse_candidate && current_chunk &&
+              current_chunk->property_state.scroll_node_id == 0 &&
+              !IsRootDocumentScrollReuseChunk(*current_chunk)) {
+            current_bounds = OutsetRect(current_bounds, 1.0f);
+          }
           plan.dirty_rects.push_back(MapRectConservatively(
-              *update.current_bounds,
+              current_bounds,
               current_chunk ? PropertyStateForPresentation(*current_chunk,
                                                            current_scroll_offset)
                             : PaintPropertyStateSnapshot{},

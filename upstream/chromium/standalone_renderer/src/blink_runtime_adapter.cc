@@ -1814,20 +1814,246 @@ std::string LowerAscii(std::string value) {
   return value;
 }
 
-bool SourceMayNeedScrollLifecycle(const std::string& html,
-                                  const std::vector<Stylesheet>& stylesheets) {
-  std::string combined = LowerAscii(html);
-  for (const Stylesheet& stylesheet : stylesheets) {
-    combined += '\n';
-    combined += LowerAscii(stylesheet.css);
+std::string TrimAscii(std::string value) {
+  const auto first = std::find_if_not(value.begin(), value.end(),
+                                      [](unsigned char c) {
+                                        return std::isspace(c) != 0;
+                                      });
+  const auto last = std::find_if_not(value.rbegin(), value.rend(),
+                                     [](unsigned char c) {
+                                       return std::isspace(c) != 0;
+                                     }).base();
+  if (first >= last) {
+    return {};
   }
-  return combined.find("position:fixed") != std::string::npos ||
-         combined.find("position: fixed") != std::string::npos ||
-         combined.find("position:sticky") != std::string::npos ||
-         combined.find("position: sticky") != std::string::npos ||
-         (combined.find("position") != std::string::npos &&
-          (combined.find("fixed") != std::string::npos ||
-           combined.find("sticky") != std::string::npos));
+  return std::string(first, last);
+}
+
+std::vector<std::string> SplitSelectors(std::string selector_text) {
+  std::vector<std::string> selectors;
+  size_t start = 0;
+  while (start < selector_text.size()) {
+    const size_t comma = selector_text.find(',', start);
+    selectors.push_back(TrimAscii(selector_text.substr(
+        start, comma == std::string::npos ? std::string::npos : comma - start)));
+    if (comma == std::string::npos) {
+      break;
+    }
+    start = comma + 1;
+  }
+  return selectors;
+}
+
+bool HtmlContainsClassToken(const std::string& html, const std::string& token) {
+  size_t class_pos = 0;
+  while ((class_pos = html.find("class", class_pos)) != std::string::npos) {
+    const size_t equals = html.find('=', class_pos + 5);
+    if (equals == std::string::npos) {
+      break;
+    }
+    const size_t value_start = html.find_first_not_of(" \t\r\n", equals + 1);
+    if (value_start == std::string::npos) {
+      break;
+    }
+    const char quote = html[value_start];
+    size_t value_end = std::string::npos;
+    size_t content_start = value_start;
+    if (quote == '"' || quote == '\'') {
+      content_start = value_start + 1;
+      value_end = html.find(quote, content_start);
+    } else {
+      value_end = html.find_first_of(" \t\r\n>", content_start);
+    }
+    if (value_end == std::string::npos) {
+      value_end = html.size();
+    }
+    const std::string classes = html.substr(content_start,
+                                           value_end - content_start);
+    size_t token_pos = 0;
+    while ((token_pos = classes.find(token, token_pos)) != std::string::npos) {
+      const bool left_ok =
+          token_pos == 0 ||
+          std::isspace(static_cast<unsigned char>(classes[token_pos - 1]));
+      const size_t token_end = token_pos + token.size();
+      const bool right_ok =
+          token_end >= classes.size() ||
+          std::isspace(static_cast<unsigned char>(classes[token_end]));
+      if (left_ok && right_ok) {
+        return true;
+      }
+      token_pos = token_end;
+    }
+    class_pos = value_end;
+  }
+  return false;
+}
+
+bool HtmlContainsIdToken(const std::string& html, const std::string& token) {
+  return html.find("id=\"" + token + "\"") != std::string::npos ||
+         html.find("id='" + token + "'") != std::string::npos ||
+         html.find("id=" + token) != std::string::npos;
+}
+
+bool SelectorMayMatchHtml(const std::string& selector,
+                          const std::string& html) {
+  if (selector.empty() || selector.find('@') != std::string::npos) {
+    return true;
+  }
+  bool saw_specific_token = false;
+  for (size_t i = 0; i + 1 < selector.size(); ++i) {
+    if (selector[i] != '.' && selector[i] != '#') {
+      continue;
+    }
+    const char prefix = selector[i];
+    size_t end = i + 1;
+    while (end < selector.size() &&
+           (std::isalnum(static_cast<unsigned char>(selector[end])) ||
+            selector[end] == '_' || selector[end] == '-')) {
+      ++end;
+    }
+    if (end == i + 1) {
+      continue;
+    }
+    saw_specific_token = true;
+    const std::string token = selector.substr(i + 1, end - i - 1);
+    if (prefix == '#' && HtmlContainsIdToken(html, token)) {
+      return true;
+    }
+    if (prefix == '.' && HtmlContainsClassToken(html, token)) {
+      return true;
+    }
+    i = end - 1;
+  }
+  if (saw_specific_token) {
+    return false;
+  }
+  size_t start = 0;
+  while (start < selector.size() &&
+         !std::isalpha(static_cast<unsigned char>(selector[start]))) {
+    ++start;
+  }
+  size_t end = start;
+  while (end < selector.size() &&
+         (std::isalnum(static_cast<unsigned char>(selector[end])) ||
+          selector[end] == '-')) {
+    ++end;
+  }
+  if (end == start) {
+    return true;
+  }
+  const std::string tag = selector.substr(start, end - start);
+  return tag == "html" || tag == "body" ||
+         html.find("<" + tag) != std::string::npos;
+}
+
+struct ScrollLifecycleSourceSummary {
+  int fixed_rule_count = 0;
+  int sticky_rule_count = 0;
+  int active_sticky_rule_count = 0;
+  int filter_rule_count = 0;
+  int clip_or_mask_rule_count = 0;
+  int overflow_scroll_rule_count = 0;
+  std::vector<std::string> active_sticky_selectors;
+};
+
+bool DeclarationHasPropertyValue(const std::string& declarations,
+                                 const std::string& property,
+                                 const std::string& value) {
+  const size_t property_pos = declarations.find(property);
+  if (property_pos == std::string::npos) {
+    return false;
+  }
+  const size_t value_pos = declarations.find(value, property_pos);
+  if (value_pos == std::string::npos) {
+    return false;
+  }
+  const size_t semicolon = declarations.find(';', property_pos);
+  return semicolon == std::string::npos || value_pos < semicolon;
+}
+
+ScrollLifecycleSourceSummary SummarizeScrollLifecycleSource(
+    const std::string& html,
+    const std::vector<Stylesheet>& stylesheets) {
+  const std::string lower_html = LowerAscii(html);
+  ScrollLifecycleSourceSummary summary;
+  if (lower_html.find("position: sticky") != std::string::npos ||
+      lower_html.find("position:sticky") != std::string::npos) {
+    summary.active_sticky_rule_count++;
+    summary.active_sticky_selectors.push_back("inline-style");
+  }
+  auto inspect_css = [&](const std::string& css_input) {
+    const std::string css = LowerAscii(css_input);
+    size_t block_start = 0;
+    while ((block_start = css.find('{', block_start)) != std::string::npos) {
+      const size_t block_end = css.find('}', block_start + 1);
+      if (block_end == std::string::npos) {
+        break;
+      }
+      const size_t selector_start =
+          css.rfind('}', block_start) == std::string::npos
+              ? 0
+              : css.rfind('}', block_start) + 1;
+      const std::string selector_text =
+          css.substr(selector_start, block_start - selector_start);
+      const std::string declarations =
+          css.substr(block_start + 1, block_end - block_start - 1);
+      if (DeclarationHasPropertyValue(declarations, "position", "fixed")) {
+        summary.fixed_rule_count++;
+      }
+      if (DeclarationHasPropertyValue(declarations, "position", "sticky")) {
+        summary.sticky_rule_count++;
+        for (const std::string& selector : SplitSelectors(selector_text)) {
+          if (SelectorMayMatchHtml(selector, lower_html)) {
+            summary.active_sticky_rule_count++;
+            if (summary.active_sticky_selectors.size() < 4) {
+              summary.active_sticky_selectors.push_back(selector);
+            }
+            break;
+          }
+        }
+      }
+      if (declarations.find("filter") != std::string::npos) {
+        summary.filter_rule_count++;
+      }
+      if (declarations.find("clip-path") != std::string::npos ||
+          declarations.find("mask") != std::string::npos) {
+        summary.clip_or_mask_rule_count++;
+      }
+      if ((declarations.find("overflow") != std::string::npos) &&
+          (declarations.find("auto") != std::string::npos ||
+           declarations.find("scroll") != std::string::npos)) {
+        summary.overflow_scroll_rule_count++;
+      }
+      block_start = block_end + 1;
+    }
+  };
+  inspect_css(html);
+  for (const Stylesheet& stylesheet : stylesheets) {
+    inspect_css(stylesheet.css);
+  }
+  return summary;
+}
+
+std::string ScrollLifecycleSummaryDiagnostic(
+    const ScrollLifecycleSourceSummary& summary) {
+  std::ostringstream out;
+  out << "document scroll fast path source summary: fixed_rules="
+      << summary.fixed_rule_count << " sticky_rules="
+      << summary.sticky_rule_count << " active_sticky_rules="
+      << summary.active_sticky_rule_count << " filter_rules="
+      << summary.filter_rule_count << " clip_or_mask_rules="
+      << summary.clip_or_mask_rule_count << " overflow_scroll_rules="
+      << summary.overflow_scroll_rule_count;
+  if (!summary.active_sticky_selectors.empty()) {
+    out << " active_sticky_selectors=";
+    for (size_t i = 0; i < summary.active_sticky_selectors.size(); ++i) {
+      if (i > 0) {
+        out << "|";
+      }
+      out << summary.active_sticky_selectors[i];
+    }
+  }
+  return out.str();
 }
 
 bool SameSize(Size left, Size right) {
@@ -2483,42 +2709,99 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   }
 
   bool CanUseDocumentScrollOnlyFastPath(
-      const RendererSnapshot& previous_snapshot) const {
+      const RendererSnapshot& previous_snapshot,
+      std::vector<std::string>* diagnostics) const {
+    const auto push_diagnostic = [&](const std::string& diagnostic) {
+      if (diagnostics) {
+        diagnostics->push_back(diagnostic);
+      }
+    };
     if (!previous_retained_scene_) {
+      push_diagnostic(
+          "document scroll fast path ineligible: no retained scene");
       return false;
     }
-    if (SourceMayNeedScrollLifecycle(snapshot_.html, snapshot_.stylesheets)) {
+    const ScrollLifecycleSourceSummary source_summary =
+        SummarizeScrollLifecycleSource(snapshot_.html, snapshot_.stylesheets);
+    push_diagnostic(ScrollLifecycleSummaryDiagnostic(source_summary));
+    if (source_summary.active_sticky_rule_count > 0) {
+      push_diagnostic(
+          "document scroll fast path ineligible: active sticky position "
+          "requires Blink lifecycle");
       return false;
     }
-    if (snapshot_.html != previous_snapshot.html ||
-        !SameStylesheets(snapshot_.stylesheets, previous_snapshot.stylesheets) ||
-        !SameSize(snapshot_.viewport, previous_snapshot.viewport) ||
-        std::abs(snapshot_.device_scale_factor -
-                 previous_snapshot.device_scale_factor) > 0.001f ||
-        snapshot_.asset_namespace != previous_snapshot.asset_namespace ||
-        !SameFeatures(snapshot_.features, previous_snapshot.features) ||
-        snapshot_.timeline_time_seconds !=
-            previous_snapshot.timeline_time_seconds ||
-        !SameStringMap(snapshot_.element_attributes_by_id_and_name,
-                       previous_snapshot.element_attributes_by_id_and_name) ||
-        snapshot_.focused_element_id != previous_snapshot.focused_element_id ||
+    if (snapshot_.html != previous_snapshot.html) {
+      push_diagnostic("document scroll fast path ineligible: html changed");
+      return false;
+    }
+    if (!SameStylesheets(snapshot_.stylesheets, previous_snapshot.stylesheets)) {
+      push_diagnostic(
+          "document scroll fast path ineligible: stylesheets changed");
+      return false;
+    }
+    if (!SameSize(snapshot_.viewport, previous_snapshot.viewport)) {
+      push_diagnostic("document scroll fast path ineligible: viewport changed");
+      return false;
+    }
+    if (std::abs(snapshot_.device_scale_factor -
+                 previous_snapshot.device_scale_factor) > 0.001f) {
+      push_diagnostic(
+          "document scroll fast path ineligible: device scale changed");
+      return false;
+    }
+    if (snapshot_.asset_namespace != previous_snapshot.asset_namespace) {
+      push_diagnostic(
+          "document scroll fast path ineligible: asset namespace changed");
+      return false;
+    }
+    if (!SameFeatures(snapshot_.features, previous_snapshot.features)) {
+      push_diagnostic("document scroll fast path ineligible: features changed");
+      return false;
+    }
+    if (snapshot_.timeline_time_seconds !=
+        previous_snapshot.timeline_time_seconds) {
+      push_diagnostic("document scroll fast path ineligible: time changed");
+      return false;
+    }
+    if (!SameStringMap(snapshot_.element_attributes_by_id_and_name,
+                       previous_snapshot.element_attributes_by_id_and_name)) {
+      push_diagnostic("document scroll fast path ineligible: attrs changed");
+      return false;
+    }
+    if (snapshot_.focused_element_id != previous_snapshot.focused_element_id ||
         snapshot_.hovered_element_id != previous_snapshot.hovered_element_id ||
-        snapshot_.active_element_id != previous_snapshot.active_element_id ||
-        !SameStringMap(snapshot_.form_values_by_element_id,
-                       previous_snapshot.form_values_by_element_id) ||
-        !SameNonDocumentScrollOffsets(
+        snapshot_.active_element_id != previous_snapshot.active_element_id) {
+      push_diagnostic(
+          "document scroll fast path ineligible: interaction state changed");
+      return false;
+    }
+    if (!SameStringMap(snapshot_.form_values_by_element_id,
+                       previous_snapshot.form_values_by_element_id)) {
+      push_diagnostic(
+          "document scroll fast path ineligible: form state changed");
+      return false;
+    }
+    if (!SameNonDocumentScrollOffsets(
             snapshot_.scroll_offsets_by_element_id,
             previous_snapshot.scroll_offsets_by_element_id)) {
+      push_diagnostic(
+          "document scroll fast path ineligible: element scroll changed");
       return false;
     }
-    return !SamePoint(SnapshotDocumentScrollOffset(snapshot_),
-                      SnapshotDocumentScrollOffset(previous_snapshot));
+    if (SamePoint(SnapshotDocumentScrollOffset(snapshot_),
+                  SnapshotDocumentScrollOffset(previous_snapshot))) {
+      push_diagnostic(
+          "document scroll fast path ineligible: document scroll unchanged");
+      return false;
+    }
+    return true;
   }
 
   bool TryRenderDocumentScrollOnlyFromRetainedScene(
       RenderResult& result,
       const RendererSnapshot& previous_snapshot) {
-    if (!CanUseDocumentScrollOnlyFastPath(previous_snapshot)) {
+    if (!CanUseDocumentScrollOnlyFastPath(previous_snapshot,
+                                         &result.diagnostics)) {
       return false;
     }
     const Point current_scroll_offset = SnapshotDocumentScrollOffset(snapshot_);
