@@ -1346,9 +1346,19 @@ int main(int argc, char** argv) {
             texture_dirty = true;
           }
         }
+      } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+                 event.button.button == SDL_BUTTON_LEFT) {
+        if (!input.active_element_id.empty()) {
+          html_css_renderer::FrameInput next_input = input;
+          next_input.active_element_id.clear();
+          if (!render_updated_input("active-up", std::move(next_input))) {
+            running = false;
+            break;
+          }
+          texture_dirty = true;
+        }
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-                 event.button.button == SDL_BUTTON_LEFT &&
-                 !attribute_toggles.empty()) {
+                 event.button.button == SDL_BUTTON_LEFT) {
         int window_width_for_hit = 0;
         int window_height_for_hit = 0;
         SDL_GetWindowSize(window, &window_width_for_hit,
@@ -1361,7 +1371,12 @@ int main(int argc, char** argv) {
                     document_point.y);
         if (!clicked.empty()) {
           html_css_renderer::FrameInput next_input = input;
-          bool changed = false;
+          next_input.active_element_id = clicked;
+          next_input.hovered_element_id = clicked;
+          bool active_changed =
+              input.active_element_id != next_input.active_element_id ||
+              input.hovered_element_id != next_input.hovered_element_id;
+          bool toggle_changed = false;
           for (AttributeToggle& toggle : attribute_toggles) {
             if (AttributeToggleElementId(toggle) != clicked) {
               continue;
@@ -1369,10 +1384,11 @@ int main(int argc, char** argv) {
             toggle.is_on = !toggle.is_on;
             next_input.element_attributes_by_id_and_name[toggle.key] =
                 toggle.is_on ? toggle.on_value : toggle.off_value;
-            changed = true;
+            toggle_changed = true;
           }
-          if (changed) {
-            if (!render_updated_input("click", std::move(next_input))) {
+          if (active_changed || toggle_changed) {
+            if (!render_updated_input(toggle_changed ? "click" : "active",
+                                      std::move(next_input))) {
               running = false;
               break;
             }

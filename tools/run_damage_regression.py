@@ -127,6 +127,11 @@ def add_scroll(cmd: list[str], x_flag: str, y_flag: str, scroll: dict[str, int] 
     cmd.extend([y_flag, str(int(scroll.get("y", 0)))])
 
 
+def add_optional_value(cmd: list[str], flag: str, value: str | None) -> None:
+    if value:
+        cmd.extend([flag, value])
+
+
 def benchmark_command(
     benchmark: Path,
     html_path: Path,
@@ -136,8 +141,12 @@ def benchmark_command(
     *,
     attrs: list[str] | None = None,
     scroll: dict[str, int] | None = None,
+    hover: str | None = None,
+    active: str | None = None,
     previous_attrs: list[str] | None = None,
     previous_scroll: dict[str, int] | None = None,
+    previous_hover: str | None = None,
+    previous_active: str | None = None,
     incremental: bool = False,
 ) -> list[str]:
     cmd = [
@@ -158,9 +167,13 @@ def benchmark_command(
     ]
     add_attrs(cmd, "--attr", attrs)
     add_scroll(cmd, "--scroll-x", "--scroll-y", scroll)
+    add_optional_value(cmd, "--hover", hover)
+    add_optional_value(cmd, "--active", active)
     if incremental:
         add_attrs(cmd, "--previous-attr", previous_attrs)
         add_scroll(cmd, "--previous-scroll-x", "--previous-scroll-y", previous_scroll)
+        add_optional_value(cmd, "--previous-hover", previous_hover)
+        add_optional_value(cmd, "--previous-active", previous_active)
         cmd.append("--incremental")
     return cmd
 
@@ -354,6 +367,10 @@ def run_case(
     previous_attrs = case.get("previous_attrs")
     current_scroll = case.get("current_scroll")
     previous_scroll = case.get("previous_scroll")
+    current_hover = case.get("current_hover")
+    previous_hover = case.get("previous_hover")
+    current_active = case.get("current_active")
+    previous_active = case.get("previous_active")
 
     full_cmd = benchmark_command(
         benchmark,
@@ -363,6 +380,8 @@ def run_case(
         full_json,
         attrs=current_attrs,
         scroll=current_scroll,
+        hover=current_hover,
+        active=current_active,
     )
     full_exit, full_elapsed = run(full_cmd, item_dir / "full-current.log", timeout)
 
@@ -374,8 +393,12 @@ def run_case(
         incremental_json,
         attrs=current_attrs,
         scroll=current_scroll,
+        hover=current_hover,
+        active=current_active,
         previous_attrs=previous_attrs,
         previous_scroll=previous_scroll,
+        previous_hover=previous_hover,
+        previous_active=previous_active,
         incremental=True,
     )
     incremental_exit, incremental_elapsed = run(incremental_cmd, item_dir / "incremental.log", timeout)

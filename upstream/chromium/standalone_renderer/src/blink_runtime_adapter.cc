@@ -30,6 +30,9 @@ void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
     double time_ms);
 void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
     const char* serialized_attributes);
+void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+    const char* hovered_element_id,
+    const char* active_element_id);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
@@ -1972,6 +1975,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                SnapshotDocumentScrollOffset(snapshot_),
                                snapshot_.timeline_time_seconds,
                                snapshot_.element_attributes_by_id_and_name,
+                               snapshot_.hovered_element_id,
+                               snapshot_.active_element_id,
                                report.diagnostics);
     return report;
   }
@@ -1987,6 +1992,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
                                result.successor_snapshot.timeline_time_seconds,
                                result.successor_snapshot.element_attributes_by_id_and_name,
+                               result.successor_snapshot.hovered_element_id,
+                               result.successor_snapshot.active_element_id,
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, false,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -2004,6 +2011,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
                                result.successor_snapshot.timeline_time_seconds,
                                result.successor_snapshot.element_attributes_by_id_and_name,
+                               result.successor_snapshot.hovered_element_id,
+                               result.successor_snapshot.active_element_id,
                                result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, true,
                                          snapshot_.html, snapshot_.stylesheets);
@@ -2043,6 +2052,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       Point document_scroll_offset,
       double timeline_time_seconds,
       const std::unordered_map<std::string, std::string>& element_attributes,
+      const std::string& hovered_element_id,
+      const std::string& active_element_id,
       std::vector<std::string>& diagnostics) {
     namespace live_probe = ::blink::standalone_renderer_probe;
     const std::string probe_html = BuildLiveBlinkProbeHtml(html, stylesheets);
@@ -2056,6 +2067,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         SerializeElementAttributesForStandaloneRenderer(element_attributes);
     live_probe::StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
         serialized_attributes.c_str());
+    live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+        hovered_element_id.c_str(), active_element_id.c_str());
     if (timeline_time_seconds > 0.0) {
       diagnostics.push_back(
           "live Blink animation time requested_ms=" +
@@ -2137,6 +2150,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         SnapshotDocumentScrollOffset(result.successor_snapshot).y);
     live_probe::StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
         result.successor_snapshot.timeline_time_seconds * 1000.0);
+    const std::string serialized_attributes =
+        SerializeElementAttributesForStandaloneRenderer(
+            result.successor_snapshot.element_attributes_by_id_and_name);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
+        serialized_attributes.c_str());
+    live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+        result.successor_snapshot.hovered_element_id.c_str(),
+        result.successor_snapshot.active_element_id.c_str());
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);

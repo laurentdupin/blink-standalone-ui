@@ -384,6 +384,8 @@ struct LiveFramePaintProbeCache {
   std::string requested_element_attributes_serialized;
   std::unordered_map<std::string, std::string>
       requested_element_attributes_by_id_and_name;
+  std::string requested_hovered_element_id;
+  std::string requested_active_element_id;
   std::vector<LiveExportedDrawOp> exported_draw_ops;
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
@@ -6025,6 +6027,46 @@ void ApplyElementAttributesForStandaloneRenderer(
   }
 }
 
+Element* ElementByIdForStandaloneRenderer(Document& document,
+                                          const std::string& element_id) {
+  if (element_id.empty()) {
+    return nullptr;
+  }
+  return document.getElementById(
+      AtomicString(String::FromUtf8(element_id)));
+}
+
+void ApplyInteractionStateForStandaloneRenderer(
+    Document& document,
+    const std::string& hovered_element_id,
+    const std::string& active_element_id) {
+  document.UpdateHoverActiveState(/*is_active=*/false,
+                                  /*update_active_chain=*/true, nullptr);
+
+  Element* active_element =
+      ElementByIdForStandaloneRenderer(document, active_element_id);
+  Element* hovered_element =
+      ElementByIdForStandaloneRenderer(document, hovered_element_id);
+
+  if (active_element) {
+    document.UpdateHoverActiveState(/*is_active=*/true,
+                                    /*update_active_chain=*/true,
+                                    active_element);
+    if (hovered_element && hovered_element != active_element) {
+      document.UpdateHoverActiveState(/*is_active=*/true,
+                                      /*update_active_chain=*/false,
+                                      hovered_element);
+    }
+    return;
+  }
+
+  if (hovered_element) {
+    document.UpdateHoverActiveState(/*is_active=*/false,
+                                    /*update_active_chain=*/false,
+                                    hovered_element);
+  }
+}
+
 std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
     const std::string& body_html,
     const LiveFramePaintProbeCache& cache) {
@@ -7631,6 +7673,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   const auto layout_lifecycle_start = StandaloneProbeClock::now();
   frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest);
   TraceLiveFrameProbeStage("after required layout lifecycle update");
+  ApplyInteractionStateForStandaloneRenderer(
+      document, cache.requested_hovered_element_id,
+      cache.requested_active_element_id);
   frame_view.SetNeedsUpdateGeometries();
   frame_view.UpdateGeometry();
   TraceLiveFrameProbeStage("before document scroll offset apply");
@@ -7944,6 +7989,28 @@ void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
   cache.requested_element_attributes_serialized = value;
   cache.requested_element_attributes_by_id_and_name =
       ParseElementAttributesForStandaloneRenderer(value);
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+    const char* hovered_element_id,
+    const char* active_element_id) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const std::string hovered = hovered_element_id ? hovered_element_id : "";
+  const std::string active = active_element_id ? active_element_id : "";
+  if (cache.requested_hovered_element_id == hovered &&
+      cache.requested_active_element_id == active) {
+    return;
+  }
+  cache.requested_hovered_element_id = hovered;
+  cache.requested_active_element_id = active;
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

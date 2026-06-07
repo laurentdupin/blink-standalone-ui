@@ -21,7 +21,9 @@
       "43u_sdl_mask_card_off_to_on",
       "43u_sdl_all_cards_off_to_on",
       "43v_sdl_resource_scroll_0_to_160",
-      "43v_sdl_resource_scroll_160_to_160"
+      "43v_sdl_resource_scroll_160_to_160",
+      "43w_hover_none_to_card",
+      "43w_active_none_to_card"
     ]
   },
   "cases": [
@@ -290,6 +292,30 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "none"
+      }
+    },
+    {
+      "name": "43w_hover_none_to_card",
+      "html": "43w_incremental_hover_active_basic.html",
+      "viewport": "220x180",
+      "current_hover": "card",
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 132, "height": 132}
+      }
+    },
+    {
+      "name": "43w_active_none_to_card",
+      "html": "43w_incremental_hover_active_basic.html",
+      "viewport": "220x180",
+      "current_active": "card",
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 132, "height": 132}
       }
     }
   ]

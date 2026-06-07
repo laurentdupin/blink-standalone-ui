@@ -812,6 +812,8 @@ void PrintUsage() {
                "[--html-file <path>] [--css <css>] [--css-file <path>] "
                "[--previous-css-file <path>] "
                "[--attr id:name=value] [--previous-attr id:name=value] "
+               "[--hover id] [--previous-hover id] "
+               "[--active id] [--previous-active id] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--previous-scroll-x px] [--previous-scroll-y px] "
                "[--scroll-x px] [--scroll-y px] "
@@ -1044,6 +1046,34 @@ int main(int argc, char** argv) {
         return 2;
       }
       previous_input.element_attributes_by_id_and_name[key] = attribute_value;
+    } else if (arg == "--hover") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      input.hovered_element_id = value;
+    } else if (arg == "--previous-hover") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.hovered_element_id = value;
+    } else if (arg == "--active") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      input.active_element_id = value;
+    } else if (arg == "--previous-active") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.active_element_id = value;
     } else if (arg == "--viewport") {
       const char* value = next_value();
       if (!value || !ParseViewport(value, &create_info.viewport)) {
