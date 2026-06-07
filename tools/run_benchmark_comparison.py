@@ -93,6 +93,18 @@ def fallback_scalar_from_text(text: str, key: str) -> str:
     return value[:-2] if value.endswith(".0") else value
 
 
+def unsupported_css_diagnostics(metrics_json: dict) -> tuple[int, str]:
+    diagnostics = metrics_json.get("diagnostics", [])
+    if not isinstance(diagnostics, list):
+        return 0, ""
+    matches = [
+        str(diagnostic)
+        for diagnostic in diagnostics
+        if "unsupported CSS" in str(diagnostic)
+    ]
+    return len(matches), matches[0] if matches else ""
+
+
 def image_cell(path: Path, out_dir: Path, label: str) -> str:
     if not path.exists():
         return '<td class="missing">missing</td>'
@@ -190,6 +202,9 @@ def write_html_summary(out_dir: Path, report: dict) -> Path:
         item_dir = out_dir / row["name"]
         status_class = "ok" if row["benchmark_exit"] == 0 else "bad"
         note = html.escape(str(row.get("note", "")))
+        unsupported_css = html.escape(
+            str(row.get("first_unsupported_css_diagnostic", ""))
+        )
         html_rows.append(
             "<tr>"
             f'<td class="{status_class}"><a href="{name}/">{name}</a></td>'
@@ -198,6 +213,9 @@ def write_html_summary(out_dir: Path, report: dict) -> Path:
             f"<td>{html.escape(str(row.get('non_white_pixels', '')))}</td>"
             f"<td>{html.escape(str(row.get('unique_color_sample', '')))}</td>"
             f"<td>{html.escape(str(row.get('missing_resource_count', '')))}</td>"
+            f"<td>{html.escape(str(row.get('diagnostic_count', '')))}</td>"
+            f"<td>{html.escape(str(row.get('unsupported_css_diagnostic_count', '')))}"
+            f"{('<br>' + unsupported_css) if unsupported_css else ''}</td>"
             f"<td>{html.escape(str(row.get('retained_vs_oracle_exact', '')))}</td>"
             f"<td>{html.escape(str(row.get('oracle_vs_playwright_exact', '')))}</td>"
             f"<td>{html.escape(str(row.get('diff_classification', '')))}</td>"
@@ -266,7 +284,7 @@ def write_html_summary(out_dir: Path, report: dict) -> Path:
 </section>
 <table>
   <thead><tr>
-    <th>Case</th><th>Bench</th><th>PW</th><th>Non-white</th><th>Unique</th><th>Missing res</th><th>R/O exact</th><th>O/P exact</th><th>Class</th><th>Note</th><th>Standalone render ms</th><th>PW elapsed s</th>
+    <th>Case</th><th>Bench</th><th>PW</th><th>Non-white</th><th>Unique</th><th>Missing res</th><th>Diag</th><th>Unsupported CSS</th><th>R/O exact</th><th>O/P exact</th><th>Class</th><th>Note</th><th>Standalone render ms</th><th>PW elapsed s</th>
     <th>Retained</th><th>Oracle</th><th>Playwright</th><th>Artifacts</th>
   </tr></thead>
   <tbody>{''.join(html_rows)}</tbody>
@@ -431,6 +449,9 @@ def main() -> int:
 
         metrics_json = read_json(metrics)
         metrics_text = read_text(metrics)
+        unsupported_css_count, first_unsupported_css = unsupported_css_diagnostics(
+            metrics_json
+        )
         retained_oracle = read_json(item_dir / f"{case_name}-retained-vs-oracle.json")
         oracle_pw = read_json(item_dir / f"{case_name}-oracle-vs-playwright.json")
         rows.append(
@@ -446,6 +467,9 @@ def main() -> int:
                 or fallback_scalar_from_text(metrics_text, "unique_color_sample"),
                 "missing_resource_count": metrics_json.get("missing_resource_count", "")
                 or fallback_scalar_from_text(metrics_text, "missing_resource_count"),
+                "diagnostic_count": metrics_json.get("diagnostic_count", ""),
+                "unsupported_css_diagnostic_count": unsupported_css_count,
+                "first_unsupported_css_diagnostic": first_unsupported_css,
                 "standalone_advance_and_render_ms": metric_value(
                     metrics_json, "render_timing_diagnostics", "advance_and_render_ms"
                 )

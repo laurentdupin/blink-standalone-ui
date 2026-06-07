@@ -69,6 +69,9 @@
       "18k_external_css_svg_background",
       "18l_external_css_multi_resource_order"
     ],
+    "resource-known-gaps": [
+      "18m_external_css_import_unsupported"
+    ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
     ]
@@ -166,6 +169,13 @@
       "html": "18l_external_css_multi_resource_order.html",
       "viewport": "440x160",
       "note": "Two linked CSS files from different directories, each resolving PNG/SVG resources relative to its own path; cascade order is visible in the final swatch."
+    },
+    {
+      "name": "18m_external_css_import_unsupported",
+      "source": "paint_audit",
+      "html": "18m_external_css_import_unsupported.html",
+      "viewport": "220x120",
+      "note": "Known gap: local CSS @import is currently unsupported; comparison report should surface the unsupported CSS diagnostic."
     },
     {
       "name": "05e_object_fit_contain_cover",

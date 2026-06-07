@@ -101,6 +101,69 @@ bool HasUrlScheme(const std::string& value) {
   return true;
 }
 
+bool CssContainsImportRule(const std::string& css) {
+  const std::string lower = ToLowerAscii(css);
+  bool in_single_quote = false;
+  bool in_double_quote = false;
+  bool in_comment = false;
+  for (size_t i = 0; i < lower.size(); ++i) {
+    if (in_comment) {
+      if (i + 1 < lower.size() && lower[i] == '*' && lower[i + 1] == '/') {
+        in_comment = false;
+        ++i;
+      }
+      continue;
+    }
+    if (in_single_quote) {
+      if (lower[i] == '\\') {
+        ++i;
+      } else if (lower[i] == '\'') {
+        in_single_quote = false;
+      }
+      continue;
+    }
+    if (in_double_quote) {
+      if (lower[i] == '\\') {
+        ++i;
+      } else if (lower[i] == '"') {
+        in_double_quote = false;
+      }
+      continue;
+    }
+    if (i + 1 < lower.size() && lower[i] == '/' && lower[i + 1] == '*') {
+      in_comment = true;
+      ++i;
+      continue;
+    }
+    if (lower[i] == '\'') {
+      in_single_quote = true;
+      continue;
+    }
+    if (lower[i] == '"') {
+      in_double_quote = true;
+      continue;
+    }
+    if (lower.compare(i, 7, "@import") == 0) {
+      const size_t after = i + 7;
+      if (after >= lower.size() ||
+          !std::isalnum(static_cast<unsigned char>(lower[after]))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+void AppendUnsupportedCssImportDiagnostic(
+    const std::string& css,
+    const std::string& stylesheet_label,
+    std::vector<std::string>* diagnostics) {
+  if (diagnostics && CssContainsImportRule(css)) {
+    diagnostics->push_back("unsupported CSS @import rule in stylesheet: " +
+                           stylesheet_label);
+  }
+}
+
 std::string RebaseCssUrlValue(const std::string& raw_value,
                               const fs::path& stylesheet_dir,
                               const fs::path& document_base_dir) {
@@ -222,7 +285,8 @@ std::vector<std::string> ExtractLinkedStylesheetHrefs(const std::string& html) {
 void AddLocalLinkedStylesheets(const std::string& html_path,
                                const std::string& html,
                                html_css_renderer::RendererCreateInfo*
-                                   create_info) {
+                                   create_info,
+                               std::vector<std::string>* diagnostics) {
   const fs::path base_dir = fs::absolute(fs::path(html_path)).parent_path();
   for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
     if (href.find("://") != std::string::npos || href.rfind("//", 0) == 0 ||
@@ -235,6 +299,8 @@ void AddLocalLinkedStylesheets(const std::string& html_path,
     }
     std::optional<std::string> css = ReadTextFile(css_path.string());
     if (css) {
+      AppendUnsupportedCssImportDiagnostic(*css, css_path.string(),
+                                           diagnostics);
       create_info->stylesheets.push_back(
           {css_path.string(),
            RebaseCssUrlsToDocumentBase(*css, fs::absolute(css_path), base_dir)});
@@ -386,7 +452,8 @@ bool ParseArgs(int argc,
                std::string* resource_base_path,
                std::vector<AttributeToggle>* attribute_toggles,
                float* scroll_step,
-               bool* use_blink) {
+               bool* use_blink,
+               std::vector<std::string>* stylesheet_loader_diagnostics) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     auto next_value = [&]() -> const char* {
@@ -416,7 +483,8 @@ bool ParseArgs(int argc,
       create_info->html = InjectBaseHrefForHtmlFile(value, std::move(*html));
       *resource_base_path = fs::absolute(value).parent_path().string();
       *resource_root = *resource_base_path;
-      AddLocalLinkedStylesheets(value, create_info->html, create_info);
+      AddLocalLinkedStylesheets(value, create_info->html, create_info,
+                                stylesheet_loader_diagnostics);
     } else if (arg == "--resource-root") {
       const char* value = next_value();
       if (!value) {
@@ -429,6 +497,8 @@ bool ParseArgs(int argc,
         return false;
       }
       create_info->stylesheets.push_back({"viewer", value});
+      AppendUnsupportedCssImportDiagnostic(
+          value, "viewer", stylesheet_loader_diagnostics);
     } else if (arg == "--css-file") {
       const char* value = next_value();
       if (!value) {
@@ -443,6 +513,8 @@ bool ParseArgs(int argc,
       const fs::path document_base =
           resource_base_path->empty() ? css_path.parent_path()
                                       : fs::path(*resource_base_path);
+      AppendUnsupportedCssImportDiagnostic(
+          *css, value, stylesheet_loader_diagnostics);
       create_info->stylesheets.push_back(
           {value, RebaseCssUrlsToDocumentBase(*css, css_path, document_base)});
     } else if (arg == "--viewport") {
@@ -1229,6 +1301,7 @@ int main(int argc, char** argv) {
   std::string resource_root;
   std::string resource_base_path;
   std::vector<AttributeToggle> attribute_toggles;
+  std::vector<std::string> stylesheet_loader_diagnostics;
   float scroll_step = 80.0f;
   bool incremental = false;
   bool use_cpu = false;
@@ -1241,7 +1314,8 @@ int main(int argc, char** argv) {
                              &paint_artifact_dump_path, &resource_root,
                              &resource_base_path,
                              &attribute_toggles, &scroll_step,
-                             &use_blink)) {
+                             &use_blink,
+                             &stylesheet_loader_diagnostics)) {
     PrintUsage();
     return 2;
   }
@@ -1286,6 +1360,9 @@ int main(int argc, char** argv) {
     result = blink_embedder->AdvanceAndRender(input);
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
+    result.diagnostics.insert(result.diagnostics.begin(),
+                              stylesheet_loader_diagnostics.begin(),
+                              stylesheet_loader_diagnostics.end());
     if (!paint_artifact_dump_path.empty()) {
       std::ofstream audit_file(paint_artifact_dump_path);
       if (!audit_file) {
