@@ -793,7 +793,11 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                 cc::PaintFilter::GetSkFilter(paint_filter.get()));
           }
         }
-        canvas.saveLayer(ToSkRect(command.rect), &layer_paint);
+        if (command.save_layer_bounds_unset) {
+          canvas.saveLayer(nullptr, &layer_paint);
+        } else {
+          canvas.saveLayer(ToSkRect(command.rect), &layer_paint);
+        }
       }
       ++*save_depth;
       break;

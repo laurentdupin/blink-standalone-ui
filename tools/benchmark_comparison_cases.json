@@ -83,7 +83,8 @@
       "45h_transform_svg_background_basic",
       "49a_ui_visual_effects_resource_cards",
       "49b_filter_resource_cards",
-      "49c_ui_opacity_resource_cards"
+      "49c_ui_opacity_resource_cards",
+      "49d_rounded_shadow_document_scroll"
     ],
     "positioning": [
       "43ab_fixed_document_scroll_resource_120"
@@ -622,6 +623,14 @@
       "html": "49c_ui_opacity_resource_cards.html",
       "viewport": "460x220",
       "note": "UI-like PNG and external non-text SVG cards combining opacity, border-radius, and overflow clipping; Chromium comparison may show opacity edge AA drift."
+    },
+    {
+      "name": "49d_rounded_shadow_document_scroll",
+      "source": "paint_audit",
+      "html": "49d_rounded_shadow_document_scroll.html",
+      "viewport": "720x360",
+      "scroll": {"x": 0, "y": 260},
+      "note": "Rounded shadow UI panels under document scroll preserve unbounded SaveLayerAlpha bounds instead of clipping at the scrolled viewport band."
     },
     {
       "name": "45i_svg_image_preserve_aspect_ratio",

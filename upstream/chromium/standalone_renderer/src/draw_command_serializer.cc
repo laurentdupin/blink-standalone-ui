@@ -605,7 +605,9 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
     case DrawCommandType::kSaveLayer:
       out << ",\"bounds\":";
       WriteRect(out, command.rect);
-      out << ",\"opacity\":" << command.opacity
+      out << ",\"bounds_unset\":"
+          << (command.save_layer_bounds_unset ? "true" : "false")
+          << ",\"opacity\":" << command.opacity
           << ",\"blend_mode\":\"" << EscapeJson(command.blend_mode)
           << "\",\"filter_operations\":";
       WriteFilterOperations(out, command.filter_operations);

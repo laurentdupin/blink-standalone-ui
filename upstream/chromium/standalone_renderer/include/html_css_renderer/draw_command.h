@@ -115,6 +115,7 @@ struct DrawCommand {
   float radius_y = 0.0f;
   std::array<Point, 4> corner_radii = {};
   bool clip_difference = false;
+  bool save_layer_bounds_unset = false;
   float opacity = 1.0f;
   std::string text;
   std::string path_data;

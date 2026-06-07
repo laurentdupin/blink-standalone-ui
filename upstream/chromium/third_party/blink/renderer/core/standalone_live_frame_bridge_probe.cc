@@ -389,6 +389,7 @@ struct LiveExportedDrawOp {
   std::string sampling_options = "filter=nearest,mipmap=none";
   std::vector<LiveExportedDrawLooperLayer> draw_looper_layers;
   std::string debug_label;
+  bool save_layer_bounds_unset = false;
 };
 
 struct LiveHitTestEntry {
@@ -892,6 +893,7 @@ void AppendSaveLayerAlphaOp(const SkRect& bounds,
   LiveExportedDrawOp exported;
   exported.type = 16;
   if (bounds.fLeft == SK_ScalarInfinity) {
+    exported.save_layer_bounds_unset = true;
     exported.x = 0.0f;
     exported.y = 0.0f;
     exported.width = static_cast<float>(fallback_width);
@@ -9258,6 +9260,18 @@ int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     *glyph_count = static_cast<int>(op.glyphs.size());
   }
   return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedSaveLayerBoundsUnsetAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  return op.save_layer_bounds_unset ? 1 : 0;
 }
 
 int StandaloneBlinkLiveFrameBridgeExportedGlyphAtForStandaloneRenderer(

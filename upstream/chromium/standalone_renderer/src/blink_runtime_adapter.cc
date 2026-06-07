@@ -269,6 +269,9 @@ int StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
     int op_index,
     char* buffer,
     int buffer_size);
+int StandaloneBlinkLiveFrameBridgeExportedSaveLayerBoundsUnsetAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index);
 int StandaloneBlinkLiveFrameBridgeExportedShaderInfoAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -3405,8 +3408,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                    font_size > 0.5f));
         ++translated_command_count;
       } else if (type == 16) {
-        active_commands->push_back(
-            DrawCommand::SaveLayer(Rect{x, y, width, height}, font_size));
+        DrawCommand save_layer =
+            DrawCommand::SaveLayer(Rect{x, y, width, height}, font_size);
+        save_layer.save_layer_bounds_unset =
+            live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedSaveLayerBoundsUnsetAtForStandaloneRenderer(
+                    probe_html.c_str(), i) != 0;
+        active_commands->push_back(std::move(save_layer));
         ++translated_command_count;
       } else if (type == 17) {
         int byte_count = 0;
