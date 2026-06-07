@@ -19,6 +19,8 @@
       "05i_image_data_png_alpha",
       "05j_repeated_same_image",
       "16b_css_bg_data_png_size_cover",
+      "18f_css_bg_data_png_repeat_position",
+      "18g_css_bg_local_svg_position",
       "14g_image_inside_overflow_clip",
       "14e_nested_overflow_hidden",
       "14f_transform_inside_overflow_clip",
@@ -89,6 +91,20 @@
       "source": "paint_audit",
       "html": "18b_css_bg_relative_png.html",
       "note": "CSS background-image relative PNG resource URL smoke."
+    },
+    {
+      "name": "18f_css_bg_data_png_repeat_position",
+      "source": "paint_audit",
+      "html": "18f_css_bg_data_png_repeat_position.html",
+      "viewport": "160x120",
+      "note": "CSS background-image PNG repeat with non-zero background-position."
+    },
+    {
+      "name": "18g_css_bg_local_svg_position",
+      "source": "paint_audit",
+      "html": "18g_css_bg_local_svg_position.html",
+      "viewport": "320x200",
+      "note": "CSS background-image external non-text SVG with non-zero background-position; Chromium comparison may show minor edge AA drift."
     },
     {
       "name": "05e_object_fit_contain_cover",

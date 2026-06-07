@@ -4539,7 +4539,6 @@ class StandaloneDataUrlPngImage final : public Image {
                           draw_options.sampling_options, &flags,
                           ToSkiaRectConstraint(draw_options.clamping_mode));
   }
-
  private:
   explicit StandaloneDataUrlPngImage(sk_sp<SkImage> image)
       : Image(nullptr, false),
@@ -17267,11 +17266,64 @@ bool Image::ApplyShader(cc::PaintFlags&,
                         const ImageDrawOptions&) {
   return false;
 }
-void Image::DrawPattern(GraphicsContext&,
-                        const cc::PaintFlags&,
-                        const gfx::RectF&,
-                        const ImageTilingInfo&,
-                        const ImageDrawOptions&) {}
+void Image::DrawPattern(GraphicsContext& context,
+                        const cc::PaintFlags& flags,
+                        const gfx::RectF& dest_rect,
+                        const ImageTilingInfo& tiling_info,
+                        const ImageDrawOptions& draw_options) {
+  cc::PaintCanvas* canvas = context.Canvas();
+  if (!canvas || dest_rect.IsEmpty() || tiling_info.image_rect.IsEmpty() ||
+      tiling_info.scale.x() <= 0.0f || tiling_info.scale.y() <= 0.0f) {
+    return;
+  }
+
+  Image::SizeConfig size_config;
+  size_config.apply_orientation = draw_options.respect_orientation;
+  const gfx::SizeF image_size = SizeWithConfigAsFloat(size_config);
+  gfx::RectF source_rect = tiling_info.image_rect;
+  source_rect.Intersect(gfx::RectF(0.0f, 0.0f, image_size.width(),
+                                   image_size.height()));
+  if (source_rect.IsEmpty()) {
+    return;
+  }
+
+  const float draw_width = source_rect.width() * tiling_info.scale.x();
+  const float draw_height = source_rect.height() * tiling_info.scale.y();
+  const float advance_x = draw_width + tiling_info.spacing.width();
+  const float advance_y = draw_height + tiling_info.spacing.height();
+  if (draw_width <= 0.0f || draw_height <= 0.0f || advance_x <= 0.0f ||
+      advance_y <= 0.0f) {
+    return;
+  }
+
+  float start_x = tiling_info.phase.x() + source_rect.x() * tiling_info.scale.x();
+  float start_y = tiling_info.phase.y() + source_rect.y() * tiling_info.scale.y();
+  while (start_x > dest_rect.x()) {
+    start_x -= advance_x;
+  }
+  while (start_y > dest_rect.y()) {
+    start_y -= advance_y;
+  }
+  while (start_x + draw_width <= dest_rect.x()) {
+    start_x += advance_x;
+  }
+  while (start_y + draw_height <= dest_rect.y()) {
+    start_y += advance_y;
+  }
+
+  canvas->save();
+  canvas->clipRect(gfx::RectFToSkRect(dest_rect));
+  for (float y = start_y; y < dest_rect.bottom(); y += advance_y) {
+    for (float x = start_x; x < dest_rect.right(); x += advance_x) {
+      const gfx::RectF tile_dest(x, y, draw_width, draw_height);
+      if (!tile_dest.Intersects(dest_rect)) {
+        continue;
+      }
+      Draw(canvas, flags, tile_dest, source_rect, draw_options);
+    }
+  }
+  canvas->restore();
+}
 PaintImageBuilder Image::CreatePaintImageBuilder(
     std::optional<PaintImage::Id> paint_id) {
   auto builder = PaintImageBuilder::WithDefault();
