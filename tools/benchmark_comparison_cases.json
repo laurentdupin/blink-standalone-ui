@@ -49,6 +49,20 @@
       "40_table_inline_block_cell_offset",
       "40b_table_padding_inline_block_cell"
     ],
+    "layout-flex-grid": [
+      "10f_flex_basic",
+      "10g_grid_basic",
+      "25_flex_align_self_basic",
+      "25b_flex_png_image_resource_basic",
+      "29b_static_grid_sidebar",
+      "29d_static_grid_item_display_grid",
+      "29e_grid_svg_image_resource_basic",
+      "30_dashboard_local_svg_card",
+      "31b_dashed_border_flex",
+      "31d_alignself_container_decoration",
+      "32b_calc_flex_gap_cards",
+      "32c_calc_percent_padding_gap"
+    ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
     ]
@@ -310,6 +324,90 @@
       "html": "40b_table_padding_inline_block_cell.html",
       "viewport": "760x420",
       "note": "Table padding with inline-block cell content; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "10f_flex_basic",
+      "source": "paint_audit",
+      "html": "10f_flex_basic.html",
+      "viewport": "240x130",
+      "note": "Basic flex layout with gap and centered alignment."
+    },
+    {
+      "name": "10g_grid_basic",
+      "source": "paint_audit",
+      "html": "10g_grid_basic.html",
+      "viewport": "240x130",
+      "note": "Basic grid layout with fixed columns and gap."
+    },
+    {
+      "name": "25_flex_align_self_basic",
+      "source": "paint_audit",
+      "html": "25_flex_align_self_basic.html",
+      "viewport": "460x220",
+      "note": "Flex align-self variants; Chromium comparison may show edge AA drift."
+    },
+    {
+      "name": "25b_flex_png_image_resource_basic",
+      "source": "paint_audit",
+      "html": "25b_flex_png_image_resource_basic.html",
+      "viewport": "300x150",
+      "note": "Local PNG image resource inside flex layout."
+    },
+    {
+      "name": "29b_static_grid_sidebar",
+      "source": "paint_audit",
+      "html": "29b_static_grid_sidebar.html",
+      "viewport": "640x260",
+      "note": "Three-column grid sidebar layout; Chromium comparison may show edge/text AA drift."
+    },
+    {
+      "name": "29d_static_grid_item_display_grid",
+      "source": "paint_audit",
+      "html": "29d_static_grid_item_display_grid.html",
+      "viewport": "820x300",
+      "note": "Grid shell with nested grid items; Chromium comparison may show edge/text AA drift."
+    },
+    {
+      "name": "29e_grid_svg_image_resource_basic",
+      "source": "paint_audit",
+      "html": "29e_grid_svg_image_resource_basic.html",
+      "viewport": "360x180",
+      "note": "External non-text SVG image resource inside grid layout; Chromium comparison may show edge AA drift."
+    },
+    {
+      "name": "30_dashboard_local_svg_card",
+      "source": "paint_audit",
+      "html": "30_dashboard_local_svg_card.html",
+      "viewport": "460x360",
+      "note": "Grid card containing external non-text SVG image; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "31b_dashed_border_flex",
+      "source": "paint_audit",
+      "html": "31b_dashed_border_flex.html",
+      "viewport": "520x220",
+      "note": "Flex layout with dashed rounded border decoration; Chromium comparison may show edge AA drift."
+    },
+    {
+      "name": "31d_alignself_container_decoration",
+      "source": "paint_audit",
+      "html": "31d_alignself_container_decoration.html",
+      "viewport": "1000x240",
+      "note": "Flex align-self variants inside decorated container; Chromium comparison may show edge AA drift."
+    },
+    {
+      "name": "32b_calc_flex_gap_cards",
+      "source": "paint_audit",
+      "html": "32b_calc_flex_gap_cards.html",
+      "viewport": "1120x220",
+      "note": "Flex wrap with calc() gap and card sizing."
+    },
+    {
+      "name": "32c_calc_percent_padding_gap",
+      "source": "paint_audit",
+      "html": "32c_calc_percent_padding_gap.html",
+      "viewport": "760x360",
+      "note": "Flex layout with percentage calc() padding and gap."
     },
     {
       "name": "43f_incremental_attr_property_basic_on",
