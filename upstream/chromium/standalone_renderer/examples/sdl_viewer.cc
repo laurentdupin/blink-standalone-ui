@@ -201,6 +201,8 @@ void PrintUsage() {
                " [--profile] [--profile-summary-frames count]"
                " [--profile-auto-scroll-frames count]"
                " [--profile-auto-scroll-step px]"
+               " [--profile-resize-to WxH]"
+               " [--profile-resize-after-frame count]"
                " [--blink]"
                "\nControls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls hit scrollable elements "
@@ -227,6 +229,8 @@ bool ParseArgs(int argc,
                uint64_t* profile_summary_frames,
                uint64_t* profile_auto_scroll_frames,
                std::optional<float>* profile_auto_scroll_step,
+               std::optional<html_css_renderer::Size>* profile_resize_to,
+               uint64_t* profile_resize_after_frame,
                bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
   for (int i = 1; i < argc; ++i) {
@@ -407,6 +411,21 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_auto_scroll_step = parsed;
+    } else if (arg == "--profile-resize-to") {
+      const char* value = next_value();
+      html_css_renderer::Size parsed;
+      if (!value || !ParseViewport(value, &parsed)) {
+        return false;
+      }
+      *profile_resize_to = parsed;
+      *profile_enabled = true;
+    } else if (arg == "--profile-resize-after-frame") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 1.0) {
+        return false;
+      }
+      *profile_resize_after_frame = static_cast<uint64_t>(parsed);
     } else if (arg == "--blink") {
       *use_blink = true;
     } else if (arg == "--manual") {
@@ -771,6 +790,45 @@ bool ViewerRequiresFullRedraw(const html_css_renderer::RenderResult& result) {
   return result.frame.requires_full_redraw || result.requires_full_redraw;
 }
 
+bool SameViewerSize(html_css_renderer::Size left,
+                    html_css_renderer::Size right) {
+  return std::abs(left.width - right.width) < 0.5f &&
+         std::abs(left.height - right.height) < 0.5f;
+}
+
+html_css_renderer::Size RendererOutputViewportSize(SDL_Renderer* renderer,
+                                                   SDL_Window* window) {
+  int width = 0;
+  int height = 0;
+  if (!SDL_GetRenderOutputSize(renderer, &width, &height) || width <= 0 ||
+      height <= 0) {
+    SDL_GetWindowSize(window, &width, &height);
+  }
+  return html_css_renderer::Size{
+      static_cast<float>(std::max(1, width)),
+      static_cast<float>(std::max(1, height)),
+  };
+}
+
+bool RecreateFrameTexture(SDL_Renderer* renderer,
+                          SDL_TextureAccess texture_access,
+                          int width,
+                          int height,
+                          SDL_Texture** texture) {
+  SDL_Texture* next_texture =
+      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, texture_access,
+                        std::max(1, width), std::max(1, height));
+  if (!next_texture) {
+    std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
+    return false;
+  }
+  if (*texture) {
+    SDL_DestroyTexture(*texture);
+  }
+  *texture = next_texture;
+  return true;
+}
+
 void PrintViewerStatus(
     const char* reason,
     uint64_t frame_count,
@@ -781,11 +839,14 @@ void PrintViewerStatus(
   const std::vector<html_css_renderer::Rect>& damage_rects =
       ViewerDamageRects(result);
   const bool requires_full_redraw = ViewerRequiresFullRedraw(result);
+  const html_css_renderer::Size viewport = result.successor_snapshot.viewport;
   std::fprintf(stderr,
                "viewer status: frame=%llu event=%s incremental=%d "
-               "scroll=(%.1f,%.1f) full_redraw=%d damage_rects=%zu",
+               "viewport=(%.0fx%.0f) scroll=(%.1f,%.1f) "
+               "full_redraw=%d damage_rects=%zu",
                static_cast<unsigned long long>(frame_count), reason,
-               incremental_update ? 1 : 0, CurrentDocumentScrollX(input),
+               incremental_update ? 1 : 0, viewport.width, viewport.height,
+               CurrentDocumentScrollX(input),
                CurrentDocumentScrollY(input), requires_full_redraw ? 1 : 0,
                damage_rects.size());
   for (size_t i = 0; i < damage_rects.size(); ++i) {
@@ -831,11 +892,13 @@ void SetViewerWindowTitle(
   const char* render_mode =
       ViewerRequiresFullRedraw(result) ? "full"
                                        : (incremental_update ? "inc" : "render");
+  const html_css_renderer::Size viewport = result.successor_snapshot.viewport;
   char buffer[192];
   std::snprintf(buffer, sizeof(buffer),
-                "HTML/CSS SDL | f%llu %s | s=%.0f,%.0f | %s dmg=%zu",
+                "HTML/CSS SDL | f%llu %s | %.0fx%.0f | s=%.0f,%.0f | %s dmg=%zu",
                 static_cast<unsigned long long>(frame_count), reason,
-                CurrentDocumentScrollX(input), CurrentDocumentScrollY(input),
+                viewport.width, viewport.height, CurrentDocumentScrollX(input),
+                CurrentDocumentScrollY(input),
                 render_mode, ViewerDamageRects(result).size());
   std::string title(buffer);
   if (!attribute_toggles.empty()) {
@@ -1451,6 +1514,26 @@ html_css_renderer::Point WindowToDocumentPoint(int window_width,
   return {(window_x - target_x) / scale, (window_y - target_y) / scale};
 }
 
+html_css_renderer::Point WindowEventToDocumentPoint(SDL_Renderer* renderer,
+                                                    int image_width,
+                                                    int image_height,
+                                                    float window_x,
+                                                    float window_y) {
+  float render_x = window_x;
+  float render_y = window_y;
+  SDL_RenderCoordinatesFromWindow(renderer, window_x, window_y, &render_x,
+                                  &render_y);
+  int output_width = 0;
+  int output_height = 0;
+  if (!SDL_GetRenderOutputSize(renderer, &output_width, &output_height) ||
+      output_width <= 0 || output_height <= 0) {
+    output_width = image_width;
+    output_height = image_height;
+  }
+  return WindowToDocumentPoint(output_width, output_height, image_width,
+                               image_height, render_x, render_y);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1465,7 +1548,7 @@ int main(int argc, char** argv) {
   }
   html_css_renderer::FrameInput input;
   uint64_t quit_after_ms = 0;
-  float window_scale = 2.0f;
+  float window_scale = 1.0f;
   std::string font_file;
   std::string paint_artifact_dump_path;
   std::string resource_root;
@@ -1477,6 +1560,8 @@ int main(int argc, char** argv) {
   uint64_t profile_summary_frames = 0;
   uint64_t profile_auto_scroll_frames = 0;
   std::optional<float> profile_auto_scroll_step;
+  std::optional<html_css_renderer::Size> profile_resize_to;
+  uint64_t profile_resize_after_frame = 1;
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
@@ -1491,6 +1576,8 @@ int main(int argc, char** argv) {
                              &profile_enabled, &profile_summary_frames,
                              &profile_auto_scroll_frames,
                              &profile_auto_scroll_step,
+                             &profile_resize_to,
+                             &profile_resize_after_frame,
                              &use_blink,
                              &stylesheet_loader_diagnostics)) {
     PrintUsage();
@@ -1515,6 +1602,7 @@ int main(int argc, char** argv) {
                  font_file.c_str());
   }
   const html_css_renderer::Size initial_viewport = create_info.viewport;
+  input.viewport = initial_viewport;
   html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
   html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
       resource_base_path);
@@ -1616,9 +1704,9 @@ int main(int argc, char** argv) {
   }
 
   const int window_width =
-      std::max(640, static_cast<int>(frame_width * window_scale));
+      std::max(320, static_cast<int>(frame_width * window_scale));
   const int window_height =
-      std::max(480, static_cast<int>(frame_height * window_scale));
+      std::max(240, static_cast<int>(frame_height * window_scale));
 
   SDL_Window* window = SDL_CreateWindow(
       "HTML/CSS Renderer CPU SDL Viewer", window_width, window_height,
@@ -1713,8 +1801,9 @@ int main(int argc, char** argv) {
       [&](const char* reason,
           html_css_renderer::FrameInput next_input,
           double input_update_ms,
-          ProfileClock::time_point frame_start) -> bool {
-    const bool use_incremental = incremental && use_cpu;
+          ProfileClock::time_point frame_start,
+          bool force_full_render = false) -> bool {
+    const bool use_incremental = incremental && use_cpu && !force_full_render;
     const bool profile = profiler.enabled();
     SdlProfileFrame profile_frame;
     ProfileClock::time_point blink_render_start;
@@ -1757,12 +1846,23 @@ int main(int argc, char** argv) {
         profile_frame.cpu_replay_ms =
             ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
       }
+      const bool texture_size_changed =
+          image.width != frame_width || image.height != frame_height;
+      if (texture_size_changed) {
+        if (!RecreateFrameTexture(renderer, texture_access, image.width,
+                                  image.height, &texture)) {
+          return false;
+        }
+        frame_width = image.width;
+        frame_height = image.height;
+      }
       ProfileClock::time_point pixel_convert_start;
       if (profile) {
         pixel_convert_start = ProfileClock::now();
       }
       std::vector<SDL_Rect> texture_update_rects =
-          TextureUpdateRectsForFrame(next_result, image, use_incremental);
+          TextureUpdateRectsForFrame(next_result, image,
+                                     use_incremental && !texture_size_changed);
       ConvertRgbaRectsToAbgr(image, texture_update_rects, &pixels);
       if (profile) {
         profile_frame.pixel_convert_ms =
@@ -1783,6 +1883,21 @@ int main(int argc, char** argv) {
       ProfileClock::time_point direct_render_start;
       if (profile) {
         direct_render_start = ProfileClock::now();
+      }
+      const int next_frame_width = std::max(
+          1, static_cast<int>(std::floor(
+                 next_result.successor_snapshot.viewport.width)));
+      const int next_frame_height = std::max(
+          1, static_cast<int>(std::floor(
+                 next_result.successor_snapshot.viewport.height)));
+      if (next_frame_width != frame_width ||
+          next_frame_height != frame_height) {
+        if (!RecreateFrameTexture(renderer, texture_access, next_frame_width,
+                                  next_frame_height, &texture)) {
+          return false;
+        }
+        frame_width = next_frame_width;
+        frame_height = next_frame_height;
       }
       if (!direct_renderer->Render(next_result, texture)) {
         return false;
@@ -1815,6 +1930,8 @@ int main(int argc, char** argv) {
   uint64_t profile_auto_scroll_remaining = profile_auto_scroll_frames;
   const float profile_auto_scroll_delta =
       profile_auto_scroll_step.value_or(scroll_step);
+  const bool profile_resize_requested = profile_resize_to.has_value();
+  bool profile_resize_done = false;
   bool first_present_complete = false;
   while (running) {
     bool texture_dirty = false;
@@ -1823,6 +1940,28 @@ int main(int argc, char** argv) {
       if (event.type == SDL_EVENT_QUIT ||
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
+      } else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
+                 event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
+        const html_css_renderer::Size next_viewport =
+            RendererOutputViewportSize(renderer, window);
+        if (!SameViewerSize(next_viewport, result.successor_snapshot.viewport)) {
+          html_css_renderer::FrameInput next_input = input;
+          next_input.viewport = next_viewport;
+          const double input_update_ms =
+              profiler.enabled()
+                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                  : 0.0;
+          if (!render_updated_input("resize", std::move(next_input),
+                                    input_update_ms, input_update_start,
+                                    true)) {
+            running = false;
+            break;
+          }
+          texture_dirty = true;
+        }
       } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
@@ -1830,13 +1969,10 @@ int main(int argc, char** argv) {
         html_css_renderer::FrameInput next_input = input;
         const ScrollDelta wheel_delta{event.wheel.x * scroll_step,
                                       -event.wheel.y * scroll_step, false};
-        int window_width_for_hit = 0;
-        int window_height_for_hit = 0;
-        SDL_GetWindowSize(window, &window_width_for_hit,
-                          &window_height_for_hit);
-        const html_css_renderer::Point document_point = WindowToDocumentPoint(
-            window_width_for_hit, window_height_for_hit, frame_width,
-            frame_height, event.wheel.mouse_x, event.wheel.mouse_y);
+        const html_css_renderer::Point document_point =
+            WindowEventToDocumentPoint(renderer, frame_width, frame_height,
+                                       event.wheel.mouse_x,
+                                       event.wheel.mouse_y);
         const html_css_renderer::ScrollableElementEntry* scrollable =
             HitScrollableElementForDelta(result.scrollable_element_entries,
                                          document_point.x, document_point.y,
@@ -1951,13 +2087,9 @@ int main(int argc, char** argv) {
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
                                : ProfileClock::time_point{};
-        int window_width_for_hit = 0;
-        int window_height_for_hit = 0;
-        SDL_GetWindowSize(window, &window_width_for_hit,
-                          &window_height_for_hit);
-        const html_css_renderer::Point document_point = WindowToDocumentPoint(
-            window_width_for_hit, window_height_for_hit, frame_width,
-            frame_height, event.button.x, event.button.y);
+        const html_css_renderer::Point document_point =
+            WindowEventToDocumentPoint(renderer, frame_width, frame_height,
+                                       event.button.x, event.button.y);
         const std::string clicked =
             HitTest(result.hit_test_entries, document_point.x,
                     document_point.y);
@@ -1996,13 +2128,9 @@ int main(int argc, char** argv) {
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
                                : ProfileClock::time_point{};
-        int window_width_for_hit = 0;
-        int window_height_for_hit = 0;
-        SDL_GetWindowSize(window, &window_width_for_hit,
-                          &window_height_for_hit);
-        const html_css_renderer::Point document_point = WindowToDocumentPoint(
-            window_width_for_hit, window_height_for_hit, frame_width,
-            frame_height, event.motion.x, event.motion.y);
+        const html_css_renderer::Point document_point =
+            WindowEventToDocumentPoint(renderer, frame_width, frame_height,
+                                       event.motion.x, event.motion.y);
         const std::string hovered =
             HitTest(result.hit_test_entries, document_point.x,
                     document_point.y);
@@ -2037,6 +2165,23 @@ int main(int argc, char** argv) {
       --profile_auto_scroll_remaining;
       texture_dirty = true;
     }
+    if (first_present_complete && profile_resize_requested &&
+        !profile_resize_done &&
+        rendered_frame_count >= profile_resize_after_frame) {
+      const ProfileClock::time_point input_update_start = ProfileClock::now();
+      html_css_renderer::FrameInput next_input = input;
+      SDL_SetWindowSize(window, static_cast<int>(profile_resize_to->width),
+                        static_cast<int>(profile_resize_to->height));
+      next_input.viewport = RendererOutputViewportSize(renderer, window);
+      const double input_update_ms =
+          ElapsedProfileMs(input_update_start, ProfileClock::now());
+      if (!render_updated_input("profile-resize", std::move(next_input),
+                                input_update_ms, input_update_start, true)) {
+        running = false;
+      }
+      profile_resize_done = true;
+      texture_dirty = true;
+    }
     (void)texture_dirty;
     ProfileClock::time_point draw_present_start;
     if (pending_profile_frame) {
@@ -2044,7 +2189,10 @@ int main(int argc, char** argv) {
     }
     int drawable_width = 0;
     int drawable_height = 0;
-    SDL_GetWindowSize(window, &drawable_width, &drawable_height);
+    if (!SDL_GetRenderOutputSize(renderer, &drawable_width, &drawable_height) ||
+        drawable_width <= 0 || drawable_height <= 0) {
+      SDL_GetWindowSize(window, &drawable_width, &drawable_height);
+    }
     SDL_SetRenderDrawColor(renderer, 245, 247, 251, 255);
     SDL_RenderClear(renderer);
     const float scale_x =
@@ -2078,6 +2226,11 @@ int main(int argc, char** argv) {
     }
     if (profile_auto_scroll_requested && first_present_complete &&
         profile_auto_scroll_remaining == 0 && quit_after_ms == 0) {
+      running = false;
+    }
+    if (profile_resize_requested && first_present_complete &&
+        profile_resize_done && profile_auto_scroll_remaining == 0 &&
+        quit_after_ms == 0) {
       running = false;
     }
     first_present_complete = true;

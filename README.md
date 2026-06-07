@@ -91,6 +91,9 @@ least `1280x720` for representative timing runs. The viewer prints a per-frame
 line and an exit summary with min/avg/p95/max timings. Use
 `--profile-summary-frames` to also print interval summaries. For scroll
 profiling without a live manual run, add `--profile-auto-scroll-frames`.
+The SDL window starts at the requested `--viewport` size by default; resizing
+the window updates the real Blink viewport and recreates the render surface
+instead of stretching the old texture.
 
 ```powershell
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43u_sdl_resource_toggle_demo.html --viewport 1280x720 --skia-cpu --incremental --toggle-attr png-card:data-state=off,on --toggle-attr svg-card:data-state=off,on --toggle-attr mask-card:data-state=off,on --profile --profile-summary-frames 60
@@ -98,6 +101,8 @@ build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --htm
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43aa_incremental_element_scroll_panel_basic.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 1280x720 --skia-cpu --incremental --scroll-step 80 --profile --profile-summary-frames 60 --profile-auto-scroll-frames 120
 
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\49a_ui_visual_effects_resource_cards.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 1280x720 --skia-cpu --incremental --scroll-step 80 --profile --profile-summary-frames 60 --profile-auto-scroll-frames 120
+
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43u_sdl_resource_toggle_demo.html --viewport 1280x720 --skia-cpu --incremental --profile --profile-summary-frames 2 --profile-resize-to 1440x810
 ```
 
 Controls:
@@ -108,6 +113,8 @@ Controls:
   wheel direction; otherwise it updates document scroll by `--scroll-step`.
 - Arrow keys update document scroll by `--scroll-step`.
 - `PageUp` and `PageDown` scroll by the viewport; `Home` returns to the top.
+- Resizing the SDL window updates the rendered HTML/CSS viewport at the new
+  window size.
 - `Esc` or window close exits.
 - `--quit-after-ms` exits after a fixed delay for explicit smoke runs.
 
