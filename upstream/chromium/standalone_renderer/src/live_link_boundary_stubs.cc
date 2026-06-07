@@ -4515,13 +4515,13 @@ bool MemoryCache::Contains(const Resource*) const {
 void MemoryCache::Update(Resource*, size_t, size_t) {}
 
 namespace {
-class StandaloneDataUrlPngImage final : public Image {
+class StandaloneDecodedImage final : public Image {
  public:
-  static scoped_refptr<StandaloneDataUrlPngImage> Create(sk_sp<SkImage> image) {
+  static scoped_refptr<StandaloneDecodedImage> Create(sk_sp<SkImage> image) {
     if (!image) {
       return nullptr;
     }
-    return base::AdoptRef(new StandaloneDataUrlPngImage(std::move(image)));
+    return base::AdoptRef(new StandaloneDecodedImage(std::move(image)));
   }
 
   bool IsOpaque() override { return paint_image_.IsOpaque(); }
@@ -4542,7 +4542,7 @@ class StandaloneDataUrlPngImage final : public Image {
                           ToSkiaRectConstraint(draw_options.clamping_mode));
   }
  private:
-  explicit StandaloneDataUrlPngImage(sk_sp<SkImage> image)
+  explicit StandaloneDecodedImage(sk_sp<SkImage> image)
       : Image(nullptr, false),
         size_(image->width(), image->height()),
         paint_image_(CreatePaintImageBuilder()
@@ -4577,7 +4577,7 @@ scoped_refptr<Image> LoadStandaloneDecodedImage(
   if (!result.decoded_image) {
     return nullptr;
   }
-  return StandaloneDataUrlPngImage::Create(std::move(result.decoded_image));
+  return StandaloneDecodedImage::Create(std::move(result.decoded_image));
 }
 
 html_css_renderer::StandaloneResourceInitiator StandaloneInitiatorForFetch(
@@ -4605,6 +4605,48 @@ html_css_renderer::StandaloneResourceResult LoadStandaloneEncodedImageResource(
       request);
 }
 
+bool ShouldUseStandaloneDecodedImageResource(
+    const html_css_renderer::StandaloneResourceResult& result) {
+  return result.mime_type == "image/jpeg" && result.decoded_image;
+}
+
+Resource* CreateStandaloneDecodedImageResource(
+    const FetchParameters& params,
+    html_css_renderer::StandaloneResourceResult result) {
+  scoped_refptr<Image> image =
+      StandaloneDecodedImage::Create(std::move(result.decoded_image));
+  if (!image) {
+    return nullptr;
+  }
+
+  auto* image_resource = MakeGarbageCollected<ImageResource>(
+      params.GetResourceRequest(), params.Options(),
+      ImageResourceContent::CreateLoaded(std::move(image)));
+
+  ResourceResponse response;
+  response.SetHttpStatusCode(200);
+  response.SetHttpStatusText(AtomicString("OK"));
+  response.SetCurrentRequestUrl(params.Url());
+  response.SetExpectedContentLength(
+      static_cast<int64_t>(result.encoded_bytes.size()));
+  response.SetTextEncodingName(g_empty_atom);
+  response.SetMimeType(AtomicString(result.mime_type.c_str()));
+  response.AddHttpHeaderField(http_names::kContentType, response.MimeType());
+
+  scoped_refptr<SharedBuffer> data = SharedBuffer::Create(
+      base::span<const uint8_t>(result.encoded_bytes.data(),
+                                result.encoded_bytes.size()));
+
+  image_resource->ResponseReceived(response);
+  image_resource->SetDataBufferingPolicy(kBufferData);
+  image_resource->SetResourceBuffer(data);
+  image_resource->SetCacheIdentifier(result.cache_key.empty()
+                                         ? params.Url().GetString()
+                                         : String(result.cache_key.c_str()));
+  image_resource->SetStatus(ResourceStatus::kCached);
+  return image_resource;
+}
+
 Resource* CreateStandaloneProviderBackedResource(
     const FetchParameters& params,
     const ResourceFactory& factory,
@@ -4616,6 +4658,14 @@ Resource* CreateStandaloneProviderBackedResource(
   html_css_renderer::StandaloneResourceResult result =
       LoadStandaloneEncodedImageResource(params.Url(),
                                          StandaloneInitiatorForFetch(params));
+  if (result.status == html_css_renderer::StandaloneResourceStatus::kSuccess &&
+      ShouldUseStandaloneDecodedImageResource(result)) {
+    if (Resource* resource =
+            CreateStandaloneDecodedImageResource(params, std::move(result))) {
+      return resource;
+    }
+  }
+
   Resource* resource = factory.Create(params.GetResourceRequest(),
                                       params.Options(),
                                       params.DecoderOptions());

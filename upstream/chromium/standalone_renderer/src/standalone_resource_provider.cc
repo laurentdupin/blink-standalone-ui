@@ -179,7 +179,7 @@ StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
   if (stride64 > std::numeric_limits<UINT>::max() ||
       byte_count64 > std::numeric_limits<size_t>::max()) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "decoded PNG is too large", "image/png");
+                       "decoded image is too large", result.mime_type);
   }
 
   std::vector<uint8_t> pixels(static_cast<size_t>(byte_count64));
@@ -187,7 +187,7 @@ StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
                              static_cast<UINT>(byte_count64), pixels.data());
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "WIC PNG pixel copy failed", "image/png");
+                       "WIC image pixel copy failed", result.mime_type);
   }
 
   SkImageInfo image_info =

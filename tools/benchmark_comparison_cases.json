@@ -5,6 +5,7 @@
       "05k_image_local_svg_route_map",
       "18e_css_bg_local_svg_route_map",
       "05g_image_data_png_red_2x2",
+      "19b_image_local_jpeg",
       "17_image_local_png",
       "16_css_bg_data_png_simple",
       "18_css_bg_local_png",
@@ -14,9 +15,17 @@
     "hcsr-smoke": [
       "hcsr_feature_showcase"
     ],
+    "jpeg-resources": [
+      "19_image_data_jpeg",
+      "19b_image_local_jpeg",
+      "19g_css_bg_local_jpeg"
+    ],
     "image-layout": [
       "05e_object_fit_contain_cover",
       "05i_image_data_png_alpha",
+      "19_image_data_jpeg",
+      "19b_image_local_jpeg",
+      "19g_css_bg_local_jpeg",
       "05j_repeated_same_image",
       "16b_css_bg_data_png_size_cover",
       "18f_css_bg_data_png_repeat_position",
@@ -115,7 +124,9 @@
       "18j_external_css_png_background",
       "18k_external_css_svg_background",
       "18l_external_css_multi_resource_order",
-      "18m_external_css_import_local"
+      "18m_external_css_import_local",
+      "19b_image_local_jpeg",
+      "19g_css_bg_local_jpeg"
     ],
     "resource-known-gaps": [
       "18n_external_css_import_media_unsupported"
@@ -153,6 +164,27 @@
       "source": "paint_audit",
       "html": "05i_image_data_png_alpha.html",
       "note": "Alpha PNG resource smoke."
+    },
+    {
+      "name": "19_image_data_jpeg",
+      "source": "paint_audit",
+      "html": "19_image_data_jpeg.html",
+      "viewport": "120x80",
+      "note": "Data URL JPEG image resource smoke."
+    },
+    {
+      "name": "19b_image_local_jpeg",
+      "source": "paint_audit",
+      "html": "19b_image_local_jpeg.html",
+      "viewport": "120x80",
+      "note": "Local JPEG image resource smoke."
+    },
+    {
+      "name": "19g_css_bg_local_jpeg",
+      "source": "paint_audit",
+      "html": "19g_css_bg_local_jpeg.html",
+      "viewport": "120x80",
+      "note": "CSS background-image local JPEG resource smoke."
     },
     {
       "name": "05j_repeated_same_image",
