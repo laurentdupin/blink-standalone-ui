@@ -35,6 +35,20 @@
       "18i_css_bg_local_svg_rounded_clip",
       "24d_image_local_svg_object_fit_contain"
     ],
+    "layout-tables": [
+      "26_table_auto_layout_basic",
+      "26b_table_explicit_columns",
+      "26c_table_percentage_width",
+      "26d_table_border_collapse",
+      "26e_display_table_css",
+      "26f_table_with_images",
+      "27_table_colgroup_basic",
+      "27b_table_col_width_hint",
+      "27d_table_colspan_with_colgroup",
+      "27e_display_table_column_css",
+      "40_table_inline_block_cell_offset",
+      "40b_table_padding_inline_block_cell"
+    ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
     ]
@@ -212,6 +226,90 @@
       "html": "24d_image_local_svg_object_fit_contain.html",
       "viewport": "240x180",
       "note": "External non-text SVG object-fit contain sizing."
+    },
+    {
+      "name": "26_table_auto_layout_basic",
+      "source": "paint_audit",
+      "html": "26_table_auto_layout_basic.html",
+      "viewport": "460x180",
+      "note": "HTML table auto layout; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "26b_table_explicit_columns",
+      "source": "paint_audit",
+      "html": "26b_table_explicit_columns.html",
+      "viewport": "460x180",
+      "note": "HTML table explicit column widths; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "26c_table_percentage_width",
+      "source": "paint_audit",
+      "html": "26c_table_percentage_width.html",
+      "viewport": "460x180",
+      "note": "Percentage-width table inside constrained wrapper; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "26d_table_border_collapse",
+      "source": "paint_audit",
+      "html": "26d_table_border_collapse.html",
+      "viewport": "420x180",
+      "note": "Collapsed table borders; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "26e_display_table_css",
+      "source": "paint_audit",
+      "html": "26e_display_table_css.html",
+      "viewport": "460x180",
+      "note": "CSS display:table/table-row/table-cell layout; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "26f_table_with_images",
+      "source": "paint_audit",
+      "html": "26f_table_with_images.html",
+      "viewport": "440x180",
+      "note": "PNG image inside table cell; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "27_table_colgroup_basic",
+      "source": "paint_audit",
+      "html": "27_table_colgroup_basic.html",
+      "viewport": "460x180",
+      "note": "Basic colgroup table layout; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "27b_table_col_width_hint",
+      "source": "paint_audit",
+      "html": "27b_table_col_width_hint.html",
+      "viewport": "460x180",
+      "note": "Table col width hints; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "27d_table_colspan_with_colgroup",
+      "source": "paint_audit",
+      "html": "27d_table_colspan_with_colgroup.html",
+      "viewport": "500x180",
+      "note": "Colspan with colgroup widths; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "27e_display_table_column_css",
+      "source": "paint_audit",
+      "html": "27e_display_table_column_css.html",
+      "viewport": "460x180",
+      "note": "CSS display:table-column/table-column-group layout; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "40_table_inline_block_cell_offset",
+      "source": "paint_audit",
+      "html": "40_table_inline_block_cell_offset.html",
+      "viewport": "760x420",
+      "note": "Inline-block content inside table cells; Chromium comparison may show text/font AA drift."
+    },
+    {
+      "name": "40b_table_padding_inline_block_cell",
+      "source": "paint_audit",
+      "html": "40b_table_padding_inline_block_cell.html",
+      "viewport": "760x420",
+      "note": "Table padding with inline-block cell content; Chromium comparison may show text/font AA drift."
     },
     {
       "name": "43f_incremental_attr_property_basic_on",
