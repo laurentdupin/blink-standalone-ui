@@ -23,7 +23,11 @@
       "43v_sdl_resource_scroll_0_to_160",
       "43v_sdl_resource_scroll_160_to_160",
       "43w_hover_none_to_card",
-      "43w_active_none_to_card"
+      "43w_active_none_to_card",
+      "43x_png_hover_none_to_card",
+      "43x_mask_hover_none_to_card",
+      "43y_svg_hover_none_to_card",
+      "43y_svg_active_none_to_card"
     ]
   },
   "cases": [
@@ -316,6 +320,53 @@
         "requires_full_redraw": false,
         "damage_class": "local",
         "damage_bounds": {"x": 24, "y": 24, "width": 132, "height": 132}
+      }
+    },
+    {
+      "name": "43x_png_hover_none_to_card",
+      "html": "43x_incremental_hover_active_resource_basic.html",
+      "viewport": "520x260",
+      "current_hover": "png-card",
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "broad"
+      }
+    },
+    {
+      "name": "43x_mask_hover_none_to_card",
+      "html": "43x_incremental_hover_active_resource_basic.html",
+      "viewport": "520x260",
+      "current_hover": "mask-card",
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 188, "y": 24, "width": 308, "height": 180}
+      }
+    },
+    {
+      "name": "43y_svg_hover_none_to_card",
+      "html": "43y_incremental_hover_active_svg_resource_basic.html",
+      "viewport": "220x180",
+      "current_hover": "svg-card",
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 144, "height": 132}
+      }
+    },
+    {
+      "name": "43y_svg_active_none_to_card",
+      "html": "43y_incremental_hover_active_svg_resource_basic.html",
+      "viewport": "220x180",
+      "current_active": "svg-card",
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 24, "y": 24, "width": 144, "height": 132}
       }
     }
   ]

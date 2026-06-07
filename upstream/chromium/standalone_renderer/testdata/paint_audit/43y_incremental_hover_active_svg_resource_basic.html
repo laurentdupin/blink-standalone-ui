@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #ffffff;
+}
+
+.stage {
+  width: 220px;
+  height: 180px;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #f6f8fc;
+}
+
+#svg-card {
+  width: 144px;
+  height: 132px;
+  border: 4px solid #253142;
+  border-radius: 14px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: #ffffff url("30_route_map.svg") center / 190px 110px no-repeat;
+  clip-path: inset(0);
+}
+
+#svg-card:hover {
+  background-position: 18px 22px;
+  background-size: 160px 94px;
+  border-color: #2563eb;
+}
+
+#svg-card:active {
+  background-position: 42px 44px;
+  background-size: 220px 128px;
+  clip-path: inset(20px 18px);
+  border-color: #1d4ed8;
+}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div id="svg-card"></div>
+</main>
+</body>
+</html>

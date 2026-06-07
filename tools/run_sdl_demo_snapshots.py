@@ -101,6 +101,55 @@ CASES: list[dict[str, Any]] = [
         "scroll": {"x": 0, "y": 320},
         "note": "Equivalent to four 80px SDL wheel/key scroll steps.",
     },
+    {
+        "name": "43x-initial",
+        "title": "43x resource hover/active initial",
+        "html": "43x_incremental_hover_active_resource_basic.html",
+        "viewport": "520x260",
+        "attrs": [],
+        "scroll": None,
+        "note": "Initial resource-backed SDL hover/active page.",
+    },
+    {
+        "name": "43x-png-hover",
+        "title": "43x PNG card hover",
+        "html": "43x_incremental_hover_active_resource_basic.html",
+        "viewport": "520x260",
+        "attrs": [],
+        "hover": "png-card",
+        "scroll": None,
+        "note": "Equivalent to moving the SDL mouse over the PNG card.",
+    },
+    {
+        "name": "43x-mask-hover",
+        "title": "43x masked PNG card hover",
+        "html": "43x_incremental_hover_active_resource_basic.html",
+        "viewport": "520x260",
+        "attrs": [],
+        "hover": "mask-card",
+        "scroll": None,
+        "note": "Equivalent to moving the SDL mouse over the masked PNG card.",
+    },
+    {
+        "name": "43y-svg-hover",
+        "title": "43y SVG card hover",
+        "html": "43y_incremental_hover_active_svg_resource_basic.html",
+        "viewport": "220x180",
+        "attrs": [],
+        "hover": "svg-card",
+        "scroll": None,
+        "note": "Equivalent to moving the SDL mouse over the non-text SVG card.",
+    },
+    {
+        "name": "43y-svg-active",
+        "title": "43y SVG card active",
+        "html": "43y_incremental_hover_active_svg_resource_basic.html",
+        "viewport": "220x180",
+        "attrs": [],
+        "active": "svg-card",
+        "scroll": None,
+        "note": "Equivalent to holding left mouse down on the non-text SVG card.",
+    },
 ]
 
 
@@ -166,6 +215,10 @@ def render_case(
     ]
     for attr in case.get("attrs", []):
         cmd.extend(["--attr", attr])
+    if case.get("hover"):
+        cmd.extend(["--hover", case["hover"]])
+    if case.get("active"):
+        cmd.extend(["--active", case["active"]])
     scroll = case.get("scroll")
     if scroll:
         cmd.extend(["--scroll-x", str(int(scroll.get("x", 0)))])
@@ -180,6 +233,8 @@ def render_case(
         "fixture": str(html_path),
         "viewport": case["viewport"],
         "attrs": case.get("attrs", []),
+        "hover": case.get("hover", ""),
+        "active": case.get("active", ""),
         "scroll": scroll or {"x": 0, "y": 0},
         "exit": exit_code,
         "elapsed_seconds": round(elapsed, 3),
