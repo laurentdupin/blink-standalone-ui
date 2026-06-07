@@ -101,6 +101,15 @@ struct HitTestEntry {
   Rect bounds;
 };
 
+struct ScrollableElementEntry {
+  std::string element_id;
+  Rect bounds;
+  Point scroll_offset;
+  Point max_scroll_offset;
+  bool can_scroll_x = false;
+  bool can_scroll_y = false;
+};
+
 struct SkippedTransformDiagnostic {
   std::string reason;
   Matrix4 matrix;
@@ -121,6 +130,7 @@ struct RenderResult {
   bool requires_full_redraw = true;
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
+  std::vector<ScrollableElementEntry> scrollable_element_entries;
   std::vector<SkippedTransformDiagnostic> skipped_transform_diagnostics;
   std::vector<std::string> diagnostics;
   std::vector<std::string> missing_resources;

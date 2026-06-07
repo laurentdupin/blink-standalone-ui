@@ -56,7 +56,10 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "exposed_band",
-        "damage_bounds": {"x": 0, "y": 120, "width": 240, "height": 80}
+        "damage_bounds": {"x": 0, "y": 120, "width": 240, "height": 80},
+        "document_scroll": {
+          "applied": {"x": 0, "y": 80}
+        }
       }
     },
     {
@@ -68,7 +71,10 @@
       "expected": {
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
-        "damage_class": "none"
+        "damage_class": "none",
+        "document_scroll": {
+          "applied": {"x": 0, "y": 80}
+        }
       }
     },
     {
@@ -309,7 +315,23 @@
       "expected": {
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
-        "damage_class": "local"
+        "damage_class": "local",
+        "scrollable_elements": {
+          "present": ["scroll-panel"],
+          "absent": ["png-card", "svg-card", "masked-card"],
+          "bounds": {
+            "scroll-panel": {"x": 24, "y": 24, "width": 300, "height": 180}
+          },
+          "scroll_offsets": {
+            "scroll-panel": {"x": 0, "y": 140}
+          },
+          "max_scroll_offsets": {
+            "scroll-panel": {"x": 0, "y": 250}
+          },
+          "can_scroll": {
+            "scroll-panel": {"x": false, "y": true}
+          }
+        }
       }
     },
     {
@@ -321,7 +343,23 @@
       "expected": {
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
-        "damage_class": "none"
+        "damage_class": "none",
+        "scrollable_elements": {
+          "present": ["scroll-panel"],
+          "absent": ["png-card", "svg-card", "masked-card"],
+          "bounds": {
+            "scroll-panel": {"x": 24, "y": 24, "width": 300, "height": 180}
+          },
+          "scroll_offsets": {
+            "scroll-panel": {"x": 0, "y": 140}
+          },
+          "max_scroll_offsets": {
+            "scroll-panel": {"x": 0, "y": 250}
+          },
+          "can_scroll": {
+            "scroll-panel": {"x": false, "y": true}
+          }
+        }
       }
     },
     {

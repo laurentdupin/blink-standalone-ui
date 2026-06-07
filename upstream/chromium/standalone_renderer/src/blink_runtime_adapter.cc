@@ -64,6 +64,23 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
     float* y,
     float* width,
     float* height);
+int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    char* element_id,
+    int element_id_capacity,
+    float* x,
+    float* y,
+    float* width,
+    float* height,
+    float* scroll_x,
+    float* scroll_y,
+    float* max_scroll_x,
+    float* max_scroll_y,
+    int* can_scroll_x,
+    int* can_scroll_y);
 int StandaloneBlinkLiveFrameBridgePaintChunkMetadataAtForStandaloneRenderer(
     const char* body_html,
     int chunk_index,
@@ -506,6 +523,50 @@ void ImportLiveHitTestEntriesForStandaloneRenderer(
     }
     result.hit_test_entries.push_back(
         {std::string(element_id.data(), id_length), Rect{x, y, width, height}});
+  }
+}
+
+void ImportLiveScrollableElementEntriesForStandaloneRenderer(
+    const std::string& probe_html,
+    RenderResult& result) {
+  namespace live_probe = ::blink::standalone_renderer_probe;
+  result.scrollable_element_entries.clear();
+  const int entry_count =
+      live_probe::
+          StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
+              probe_html.c_str());
+  for (int i = 0; i < entry_count && i < 512; ++i) {
+    std::array<char, 256> element_id{};
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float scroll_x = 0.0f;
+    float scroll_y = 0.0f;
+    float max_scroll_x = 0.0f;
+    float max_scroll_y = 0.0f;
+    int can_scroll_x = 0;
+    int can_scroll_y = 0;
+    if (!live_probe::
+            StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
+                probe_html.c_str(), i, element_id.data(),
+                static_cast<int>(element_id.size()), &x, &y, &width, &height,
+                &scroll_x, &scroll_y, &max_scroll_x, &max_scroll_y,
+                &can_scroll_x, &can_scroll_y)) {
+      continue;
+    }
+    const size_t id_length = std::char_traits<char>::length(element_id.data());
+    if (id_length == 0 || width <= 0.0f || height <= 0.0f ||
+        (!can_scroll_x && !can_scroll_y)) {
+      continue;
+    }
+    result.scrollable_element_entries.push_back(
+        {std::string(element_id.data(), id_length),
+         Rect{x, y, width, height},
+         Point{scroll_x, scroll_y},
+         Point{max_scroll_x, max_scroll_y},
+         can_scroll_x != 0,
+         can_scroll_y != 0});
   }
 }
 
@@ -2235,6 +2296,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       return;
     }
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
+    ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
 
     const int chunk_count =
         live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(

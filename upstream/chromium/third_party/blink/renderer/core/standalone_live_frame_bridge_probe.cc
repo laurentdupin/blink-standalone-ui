@@ -372,6 +372,22 @@ struct LiveHitTestEntry {
   float height = 0.0f;
 };
 
+struct LiveScrollableElementEntry {
+  std::string element_id;
+  DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
+  int paint_order = -1;
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+  float scroll_x = 0.0f;
+  float scroll_y = 0.0f;
+  float max_scroll_x = 0.0f;
+  float max_scroll_y = 0.0f;
+  bool can_scroll_x = false;
+  bool can_scroll_y = false;
+};
+
 struct LiveElementScrollOffset {
   float x = 0.0f;
   float y = 0.0f;
@@ -416,6 +432,7 @@ struct LiveFramePaintProbeCache {
   std::vector<std::string> chunk_stable_keys;
   std::vector<std::string> chunk_id_strings;
   std::vector<LiveHitTestEntry> hit_test_entries;
+  std::vector<LiveScrollableElementEntry> scrollable_element_entries;
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
   std::string requested_element_scroll_offsets_serialized;
@@ -2358,6 +2375,53 @@ void CollectLiveHitTestEntriesForStandaloneRenderer(
   }
 }
 
+void CollectLiveScrollableElementEntriesForStandaloneRenderer(
+    Node* node,
+    std::vector<LiveScrollableElementEntry>& entries) {
+  if (!node || entries.size() >= 512) {
+    return;
+  }
+  if (auto* element = DynamicTo<Element>(node)) {
+    const AtomicString& id = element->GetIdAttribute();
+    LayoutObject* layout_object = element->GetLayoutObject();
+    auto* box = DynamicTo<LayoutBox>(layout_object);
+    if (!id.empty() && box && box->IsScrollContainer()) {
+      PaintLayerScrollableArea* scrollable_area = box->GetScrollableArea();
+      if (scrollable_area) {
+        scrollable_area->UpdateAfterOverflowRecalc();
+        const ScrollOffset maximum = scrollable_area->MaximumScrollOffset();
+        const bool can_scroll_x = maximum.x() > 0.001f;
+        const bool can_scroll_y = maximum.y() > 0.001f;
+        const gfx::RectF rect =
+            HitTestRectForStandaloneRenderer(*element, *layout_object);
+        if ((can_scroll_x || can_scroll_y) && rect.width() > 0.0f &&
+            rect.height() > 0.0f) {
+          const gfx::PointF scroll_position = scrollable_area->ScrollPosition();
+          LiveScrollableElementEntry entry;
+          entry.element_id =
+              BlinkStringToStdStringForStandaloneRenderer(String(id));
+          entry.paint_client_id = layout_object->Id();
+          entry.x = rect.x();
+          entry.y = rect.y();
+          entry.width = rect.width();
+          entry.height = rect.height();
+          entry.scroll_x = scroll_position.x();
+          entry.scroll_y = scroll_position.y();
+          entry.max_scroll_x = maximum.x();
+          entry.max_scroll_y = maximum.y();
+          entry.can_scroll_x = can_scroll_x;
+          entry.can_scroll_y = can_scroll_y;
+          entries.push_back(std::move(entry));
+        }
+      }
+    }
+  }
+  for (Node* child = node->firstChild(); child && entries.size() < 512;
+       child = child->nextSibling()) {
+    CollectLiveScrollableElementEntriesForStandaloneRenderer(child, entries);
+  }
+}
+
 void SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
     const PaintArtifact& artifact,
     std::vector<LiveHitTestEntry>& entries) {
@@ -2390,6 +2454,42 @@ void SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
   std::stable_sort(entries.begin(), entries.end(),
                    [](const LiveHitTestEntry& a,
                       const LiveHitTestEntry& b) {
+                     return a.paint_order < b.paint_order;
+                   });
+}
+
+void SortLiveScrollableElementEntriesByPaintOrderForStandaloneRenderer(
+    const PaintArtifact& artifact,
+    std::vector<LiveScrollableElementEntry>& entries) {
+  if (entries.empty()) {
+    return;
+  }
+
+  std::unordered_map<DisplayItemClientId, int> last_paint_order_by_client;
+  const DisplayItemList& display_items = artifact.GetDisplayItemList();
+  for (wtf_size_t item_index = 0; item_index < display_items.size();
+       ++item_index) {
+    const DisplayItem& item = display_items[item_index];
+    if (!item.IsDrawing()) {
+      continue;
+    }
+    const DisplayItemClientId paint_client_id = item.ClientId();
+    if (paint_client_id == kInvalidDisplayItemClientId) {
+      continue;
+    }
+    last_paint_order_by_client[paint_client_id] = static_cast<int>(item_index);
+  }
+
+  for (LiveScrollableElementEntry& entry : entries) {
+    const auto order = last_paint_order_by_client.find(entry.paint_client_id);
+    if (order != last_paint_order_by_client.end()) {
+      entry.paint_order = order->second;
+    }
+  }
+
+  std::stable_sort(entries.begin(), entries.end(),
+                   [](const LiveScrollableElementEntry& a,
+                      const LiveScrollableElementEntry& b) {
                      return a.paint_order < b.paint_order;
                    });
 }
@@ -6241,6 +6341,34 @@ std::string ElementScrollDiagnosticsJsonForStandaloneRenderer(
   return json.str();
 }
 
+std::string ScrollableElementEntriesJsonForStandaloneRenderer(
+    const LiveFramePaintProbeCache& cache) {
+  std::ostringstream json;
+  json << "[";
+  for (size_t i = 0; i < cache.scrollable_element_entries.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    const LiveScrollableElementEntry& entry =
+        cache.scrollable_element_entries[i];
+    json << "{\"element_id\":"
+         << JsonStringForStandaloneRenderer(entry.element_id)
+         << ",\"bounds\":{\"x\":" << entry.x << ",\"y\":" << entry.y
+         << ",\"width\":" << entry.width << ",\"height\":" << entry.height
+         << "},\"scroll_offset\":{\"x\":" << entry.scroll_x
+         << ",\"y\":" << entry.scroll_y
+         << "},\"max_scroll_offset\":{\"x\":" << entry.max_scroll_x
+         << ",\"y\":" << entry.max_scroll_y
+         << "},\"can_scroll_x\":"
+         << (entry.can_scroll_x ? "true" : "false")
+         << ",\"can_scroll_y\":"
+         << (entry.can_scroll_y ? "true" : "false")
+         << ",\"paint_order\":" << entry.paint_order << "}";
+  }
+  json << "]";
+  return json.str();
+}
+
 void ApplyInteractionStateForStandaloneRenderer(
     Document& document,
     const std::string& hovered_element_id,
@@ -7028,6 +7156,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << JsonStringForStandaloneRenderer(cache.scroll_offset_status) << "}"
        << ",\"element_scroll_diagnostics\":"
        << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
+       << ",\"scrollable_element_entries\":"
+       << ScrollableElementEntriesJsonForStandaloneRenderer(cache)
        << ",\"animation_time_diagnostics\":{\"requested_ms\":"
        << cache.requested_animation_time_ms << ",\"applied_ms\":"
        << cache.applied_animation_time_ms << ",\"requested_non_zero\":"
@@ -7735,6 +7865,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.timing_paint_artifact_extraction_ms = 0.0;
   cache.timing_cache_hit = false;
   cache.hit_test_entries.clear();
+  cache.scrollable_element_entries.clear();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
@@ -7953,6 +8084,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.hit_test_entries.clear();
   CollectLiveHitTestEntriesForStandaloneRenderer(&document,
                                                  cache.hit_test_entries);
+  cache.scrollable_element_entries.clear();
+  CollectLiveScrollableElementEntriesForStandaloneRenderer(
+      &document, cache.scrollable_element_entries);
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
@@ -7979,6 +8113,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("after display item count");
   SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
       artifact, cache.hit_test_entries);
+  SortLiveScrollableElementEntriesByPaintOrderForStandaloneRenderer(
+      artifact, cache.scrollable_element_entries);
   cache.timing_paint_artifact_generation_ms =
       StandaloneProbeElapsedMs(paint_artifact_start,
                                StandaloneProbeClock::now());
@@ -8374,6 +8510,74 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
   }
   if (height) {
     *height = entry.height;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().scrollable_element_entries.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    char* element_id,
+    int element_id_capacity,
+    float* x,
+    float* y,
+    float* width,
+    float* height,
+    float* scroll_x,
+    float* scroll_y,
+    float* max_scroll_x,
+    float* max_scroll_y,
+    int* can_scroll_x,
+    int* can_scroll_y) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& entries = ProbeCache().scrollable_element_entries;
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return 0;
+  }
+  const LiveScrollableElementEntry& entry =
+      entries[static_cast<size_t>(index)];
+  if (element_id && element_id_capacity > 0) {
+    const size_t copied =
+        std::min(entry.element_id.size(),
+                 static_cast<size_t>(element_id_capacity - 1));
+    std::memcpy(element_id, entry.element_id.data(), copied);
+    element_id[copied] = '\0';
+  }
+  if (x) {
+    *x = entry.x;
+  }
+  if (y) {
+    *y = entry.y;
+  }
+  if (width) {
+    *width = entry.width;
+  }
+  if (height) {
+    *height = entry.height;
+  }
+  if (scroll_x) {
+    *scroll_x = entry.scroll_x;
+  }
+  if (scroll_y) {
+    *scroll_y = entry.scroll_y;
+  }
+  if (max_scroll_x) {
+    *max_scroll_x = entry.max_scroll_x;
+  }
+  if (max_scroll_y) {
+    *max_scroll_y = entry.max_scroll_y;
+  }
+  if (can_scroll_x) {
+    *can_scroll_x = entry.can_scroll_x ? 1 : 0;
+  }
+  if (can_scroll_y) {
+    *can_scroll_y = entry.can_scroll_y ? 1 : 0;
   }
   return 1;
 }

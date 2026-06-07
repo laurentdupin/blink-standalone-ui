@@ -294,6 +294,29 @@ void WriteHitTestEntries(std::ostringstream& out,
   out << "]";
 }
 
+void WriteScrollableElementEntries(
+    std::ostringstream& out,
+    const std::vector<ScrollableElementEntry>& entries) {
+  out << "[";
+  for (size_t i = 0; i < entries.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    out << "{\"element_id\":\"" << EscapeJson(entries[i].element_id)
+        << "\",\"bounds\":";
+    WriteRect(out, entries[i].bounds);
+    out << ",\"scroll_offset\":";
+    WritePoint(out, entries[i].scroll_offset);
+    out << ",\"max_scroll_offset\":";
+    WritePoint(out, entries[i].max_scroll_offset);
+    out << ",\"can_scroll_x\":"
+        << (entries[i].can_scroll_x ? "true" : "false")
+        << ",\"can_scroll_y\":"
+        << (entries[i].can_scroll_y ? "true" : "false") << "}";
+  }
+  out << "]";
+}
+
 void WriteResourceCommands(std::ostringstream& out,
                            const std::vector<ResourceCommand>& commands) {
   out << "[";
@@ -675,6 +698,8 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
   WriteRenderPasses(out, result.frame.render_passes);
   out << ",\"hit_test_entries\":";
   WriteHitTestEntries(out, result.hit_test_entries);
+  out << ",\"scrollable_element_entries\":";
+  WriteScrollableElementEntries(out, result.scrollable_element_entries);
   out << ",\"diagnostics\":";
   WriteStringArray(out, result.diagnostics);
   if (!result.raw_paint_artifact_audit_json.empty()) {

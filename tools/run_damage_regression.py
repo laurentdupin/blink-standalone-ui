@@ -109,6 +109,27 @@ def rect_is_full_viewport(rect: Rect, width: int, height: int) -> bool:
     return rect["x"] == 0 and rect["y"] == 0 and rect["width"] == width and rect["height"] == height
 
 
+def point_near(actual: dict[str, Any] | None, expected: dict[str, Any], tolerance: float = 0.5) -> bool:
+    if actual is None:
+        return False
+    return (
+        abs(float(actual.get("x", 0)) - float(expected.get("x", 0))) <= tolerance
+        and abs(float(actual.get("y", 0)) - float(expected.get("y", 0))) <= tolerance
+    )
+
+
+def raw_audit(metrics: dict[str, Any]) -> dict[str, Any]:
+    payload = metrics.get("render_result", {}).get("raw_paint_artifact_audit_json", {})
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str) and payload:
+        try:
+            return json.loads(payload)
+        except Exception:
+            return {}
+    return {}
+
+
 def load_manifest(path: Path) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
     payload = read_json(path)
     cases = {case["name"]: case for case in payload.get("cases", [])}
@@ -215,6 +236,13 @@ def evaluate_damage(
     damage_bounds = normalize_rect(render_result.get("damage_bounds", {}))
     requires_full_redraw = bool(render_result.get("requires_full_redraw", False))
     exact = bool(compare.get("exact_pixel_identical", False))
+    scrollable_entries = render_result.get("scrollable_element_entries", [])
+    scrollable_by_id = {
+        str(entry.get("element_id", "")): entry
+        for entry in scrollable_entries
+        if entry.get("element_id")
+    }
+    audit = raw_audit(metrics)
 
     if exact != bool(expected.get("exact_pixel_identical", True)):
         failures.append(f"exact_pixel_identical={exact}")
@@ -246,6 +274,43 @@ def evaluate_damage(
             if not (horizontal_band or vertical_band):
                 failures.append(f"expected exposed band damage, got {damage_rects}")
 
+    expected_document_scroll = expected.get("document_scroll")
+    if expected_document_scroll:
+        document_scroll = audit.get("document_scroll_diagnostics", {})
+        if not point_near(document_scroll.get("applied"), expected_document_scroll.get("applied", {})):
+            failures.append(f"document_scroll.applied={document_scroll.get('applied')}")
+        if not document_scroll.get("applied_to_blink", False):
+            failures.append("document_scroll.applied_to_blink=false")
+
+    expected_scrollables = expected.get("scrollable_elements", {})
+    for element_id in expected_scrollables.get("present", []):
+        if element_id not in scrollable_by_id:
+            failures.append(f"missing scrollable_element_entry={element_id}")
+    for element_id in expected_scrollables.get("absent", []):
+        if element_id in scrollable_by_id:
+            failures.append(f"unexpected scrollable_element_entry={element_id}")
+    for element_id, expected_offset in expected_scrollables.get("scroll_offsets", {}).items():
+        entry = scrollable_by_id.get(element_id)
+        if not entry or not point_near(entry.get("scroll_offset"), expected_offset):
+            failures.append(f"scrollable[{element_id}].scroll_offset={entry.get('scroll_offset') if entry else None}")
+    for element_id, expected_max in expected_scrollables.get("max_scroll_offsets", {}).items():
+        entry = scrollable_by_id.get(element_id)
+        if not entry or not point_near(entry.get("max_scroll_offset"), expected_max):
+            failures.append(f"scrollable[{element_id}].max_scroll_offset={entry.get('max_scroll_offset') if entry else None}")
+    for element_id, expected_bounds in expected_scrollables.get("bounds", {}).items():
+        entry = scrollable_by_id.get(element_id)
+        if not entry or not rects_equal(entry.get("bounds"), expected_bounds):
+            failures.append(f"scrollable[{element_id}].bounds={entry.get('bounds') if entry else None}")
+    for element_id, expected_can_scroll in expected_scrollables.get("can_scroll", {}).items():
+        entry = scrollable_by_id.get(element_id)
+        if not entry:
+            failures.append(f"scrollable[{element_id}].can_scroll=missing")
+            continue
+        if bool(entry.get("can_scroll_x", False)) != bool(expected_can_scroll.get("x", False)):
+            failures.append(f"scrollable[{element_id}].can_scroll_x={entry.get('can_scroll_x')}")
+        if bool(entry.get("can_scroll_y", False)) != bool(expected_can_scroll.get("y", False)):
+            failures.append(f"scrollable[{element_id}].can_scroll_y={entry.get('can_scroll_y')}")
+
     details = {
         "exact_pixel_identical": exact,
         "exact_pixel_difference_count": compare.get("exact_pixel_difference_count"),
@@ -253,6 +318,7 @@ def evaluate_damage(
         "damage_class": damage_class,
         "damage_bounds": damage_bounds,
         "damage_rects": damage_rects,
+        "scrollable_element_entries": scrollable_entries,
     }
     return not failures, failures, details
 
