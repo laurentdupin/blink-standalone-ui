@@ -72,6 +72,11 @@
       "45g_transform_svg_image_basic",
       "45h_transform_svg_background_basic"
     ],
+    "visual-effects-known-gaps": [
+      "49a_ui_visual_effects_resource_cards",
+      "49b_filter_resource_cards",
+      "49c_ui_opacity_resource_cards"
+    ],
     "positioning": [
       "43ab_fixed_document_scroll_resource_120"
     ],
@@ -557,6 +562,27 @@
       "html": "45h_transform_svg_background_basic.html",
       "viewport": "320x220",
       "note": "CSS transform applied to an external non-text SVG background container; Chromium comparison may show transform edge AA drift."
+    },
+    {
+      "name": "49a_ui_visual_effects_resource_cards",
+      "source": "paint_audit",
+      "html": "49a_ui_visual_effects_resource_cards.html",
+      "viewport": "560x260",
+      "note": "Known gap: UI-like PNG and external non-text SVG cards with box-shadow are structurally clipped in standalone replay."
+    },
+    {
+      "name": "49b_filter_resource_cards",
+      "source": "paint_audit",
+      "html": "49b_filter_resource_cards.html",
+      "viewport": "460x220",
+      "note": "Known gap: CSS filter paints PNG and external non-text SVG resource cards, but standalone replay does not yet match Chromium's filtered color output."
+    },
+    {
+      "name": "49c_ui_opacity_resource_cards",
+      "source": "paint_audit",
+      "html": "49c_ui_opacity_resource_cards.html",
+      "viewport": "460x220",
+      "note": "Known gap: opacity/effect grouping around PNG and external non-text SVG resource cards clips or drops resource content in standalone replay."
     },
     {
       "name": "45i_svg_image_preserve_aspect_ratio",

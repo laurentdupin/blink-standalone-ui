@@ -10,6 +10,7 @@
       "43j_geometry_a_to_b",
       "43k_clipped_overflow_a_to_b",
       "43l_opacity_low_to_high",
+      "43ae_visual_effects_flat_to_raised",
       "43m_stacking_a_to_b",
       "43o_clip_path_png_wide_to_narrow",
       "43p_mask_png_wide_to_narrow",
@@ -152,6 +153,18 @@
         "requires_full_redraw": false,
         "damage_class": "tight",
         "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+      }
+    },
+    {
+      "name": "43ae_visual_effects_flat_to_raised",
+      "html": "43ae_incremental_attr_visual_effects_basic.html",
+      "viewport": "320x220",
+      "previous_attrs": ["card:data-effect=flat"],
+      "current_attrs": ["card:data-effect=raised"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
       }
     },
     {
