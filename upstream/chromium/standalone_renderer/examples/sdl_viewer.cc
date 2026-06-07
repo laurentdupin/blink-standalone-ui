@@ -6,6 +6,7 @@
 #include <cctype>
 #include <array>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -197,6 +198,7 @@ void PrintUsage() {
                "[--font-file path] [--window-scale factor] "
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
                " [--dump-paint-artifact path]"
+               " [--profile] [--profile-summary-frames count]"
                " [--blink]"
                "\nControls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls hit scrollable elements "
@@ -219,6 +221,8 @@ bool ParseArgs(int argc,
                std::string* resource_base_path,
                std::vector<AttributeToggle>* attribute_toggles,
                float* scroll_step,
+               bool* profile_enabled,
+               uint64_t* profile_summary_frames,
                bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
   for (int i = 1; i < argc; ++i) {
@@ -374,6 +378,15 @@ bool ParseArgs(int argc,
       *paint_artifact_dump_path = value;
     } else if (arg.rfind("--dump-paint-artifact=", 0) == 0) {
       *paint_artifact_dump_path = arg.substr(22);
+    } else if (arg == "--profile") {
+      *profile_enabled = true;
+    } else if (arg == "--profile-summary-frames") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 0.0) {
+        return false;
+      }
+      *profile_summary_frames = static_cast<uint64_t>(parsed);
     } else if (arg == "--blink") {
       *use_blink = true;
     } else if (arg == "--manual") {
@@ -498,6 +511,144 @@ bool ApplyScrollableElementScroll(
   input->scroll_offsets_by_element_id[entry.element_id] = next_offset;
   return true;
 }
+
+using ProfileClock = std::chrono::steady_clock;
+
+double ElapsedProfileMs(ProfileClock::time_point start,
+                        ProfileClock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+struct SdlProfileFrame {
+  uint64_t frame = 0;
+  std::string reason;
+  bool incremental = false;
+  double input_update_ms = 0.0;
+  double blink_initialize_ms = 0.0;
+  double blink_export_retained_ms = 0.0;
+  double cpu_replay_ms = 0.0;
+  double pixel_convert_ms = 0.0;
+  double texture_upload_ms = 0.0;
+  double direct_render_ms = 0.0;
+  double sdl_draw_present_ms = 0.0;
+  double total_ms = 0.0;
+};
+
+double SdlProfileMeasuredSubtotal(const SdlProfileFrame& frame) {
+  return frame.input_update_ms + frame.blink_initialize_ms +
+         frame.blink_export_retained_ms + frame.cpu_replay_ms +
+         frame.pixel_convert_ms + frame.texture_upload_ms +
+         frame.direct_render_ms + frame.sdl_draw_present_ms;
+}
+
+struct PendingSdlProfileFrame {
+  SdlProfileFrame frame;
+  std::optional<ProfileClock::time_point> total_start;
+};
+
+class SdlFrameProfiler {
+ public:
+  SdlFrameProfiler(bool enabled, uint64_t summary_interval)
+      : enabled_(enabled), summary_interval_(summary_interval) {}
+
+  bool enabled() const { return enabled_; }
+
+  void Record(SdlProfileFrame frame) {
+    if (!enabled_) {
+      return;
+    }
+    if (frame.total_ms <= 0.0) {
+      frame.total_ms = SdlProfileMeasuredSubtotal(frame);
+    }
+    PrintFrame(frame);
+    frames_.push_back(std::move(frame));
+    if (summary_interval_ > 0 &&
+        frames_.size() % static_cast<size_t>(summary_interval_) == 0) {
+      PrintSummary("interval");
+    }
+  }
+
+  void PrintSummary(const char* label) const {
+    if (!enabled_ || frames_.empty()) {
+      return;
+    }
+    std::fprintf(stderr, "viewer profile summary: %s frames=%zu\n", label,
+                 frames_.size());
+    PrintMetric("input_update", [](const SdlProfileFrame& frame) {
+      return frame.input_update_ms;
+    });
+    PrintMetric("blink_init", [](const SdlProfileFrame& frame) {
+      return frame.blink_initialize_ms;
+    });
+    PrintMetric("blink_export_retained", [](const SdlProfileFrame& frame) {
+      return frame.blink_export_retained_ms;
+    });
+    PrintMetric("cpu_replay", [](const SdlProfileFrame& frame) {
+      return frame.cpu_replay_ms;
+    });
+    PrintMetric("pixel_convert", [](const SdlProfileFrame& frame) {
+      return frame.pixel_convert_ms;
+    });
+    PrintMetric("texture_upload", [](const SdlProfileFrame& frame) {
+      return frame.texture_upload_ms;
+    });
+    PrintMetric("direct_render", [](const SdlProfileFrame& frame) {
+      return frame.direct_render_ms;
+    });
+    PrintMetric("sdl_draw_present", [](const SdlProfileFrame& frame) {
+      return frame.sdl_draw_present_ms;
+    });
+    PrintMetric("total", [](const SdlProfileFrame& frame) {
+      return frame.total_ms;
+    });
+  }
+
+ private:
+  using MetricSelector = double (*)(const SdlProfileFrame&);
+
+  void PrintFrame(const SdlProfileFrame& frame) const {
+    std::fprintf(
+        stderr,
+        "viewer profile: frame=%llu event=%s incremental=%d "
+        "input=%.3fms blink_init=%.3fms blink_export_retained=%.3fms "
+        "cpu_replay=%.3fms pixel_convert=%.3fms texture_upload=%.3fms "
+        "direct_render=%.3fms sdl_draw_present=%.3fms total=%.3fms\n",
+        static_cast<unsigned long long>(frame.frame), frame.reason.c_str(),
+        frame.incremental ? 1 : 0, frame.input_update_ms,
+        frame.blink_initialize_ms, frame.blink_export_retained_ms,
+        frame.cpu_replay_ms, frame.pixel_convert_ms, frame.texture_upload_ms,
+        frame.direct_render_ms, frame.sdl_draw_present_ms, frame.total_ms);
+  }
+
+  void PrintMetric(const char* name, MetricSelector selector) const {
+    std::vector<double> values;
+    values.reserve(frames_.size());
+    double total = 0.0;
+    for (const SdlProfileFrame& frame : frames_) {
+      const double value = selector(frame);
+      values.push_back(value);
+      total += value;
+    }
+    std::sort(values.begin(), values.end());
+    const size_t p95_index =
+        values.empty()
+            ? 0
+            : std::min(values.size() - 1,
+                       static_cast<size_t>(std::ceil(values.size() * 0.95)) -
+                           1);
+    const double average =
+        values.empty() ? 0.0 : total / static_cast<double>(values.size());
+    std::fprintf(stderr,
+                 "  %s min=%.3fms avg=%.3fms p95=%.3fms max=%.3fms\n",
+                 name, values.empty() ? 0.0 : values.front(), average,
+                 values.empty() ? 0.0 : values[p95_index],
+                 values.empty() ? 0.0 : values.back());
+  }
+
+  bool enabled_ = false;
+  uint64_t summary_interval_ = 0;
+  std::vector<SdlProfileFrame> frames_;
+};
 
 const std::vector<html_css_renderer::Rect>& ViewerDamageRects(
     const html_css_renderer::RenderResult& result) {
@@ -1138,6 +1289,8 @@ int main(int argc, char** argv) {
   std::vector<AttributeToggle> attribute_toggles;
   std::vector<std::string> stylesheet_loader_diagnostics;
   float scroll_step = 80.0f;
+  bool profile_enabled = false;
+  uint64_t profile_summary_frames = 0;
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
@@ -1149,6 +1302,7 @@ int main(int argc, char** argv) {
                              &paint_artifact_dump_path, &resource_root,
                              &resource_base_path,
                              &attribute_toggles, &scroll_step,
+                             &profile_enabled, &profile_summary_frames,
                              &use_blink,
                              &stylesheet_loader_diagnostics)) {
     PrintUsage();
@@ -1180,6 +1334,10 @@ int main(int argc, char** argv) {
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
   std::unique_ptr<html_css_renderer::RendererState> state;
   html_css_renderer::RenderResult result;
+  SdlFrameProfiler profiler(profile_enabled, profile_summary_frames);
+  SdlProfileFrame initial_profile;
+  initial_profile.frame = 1;
+  initial_profile.reason = "initial";
 
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
@@ -1190,9 +1348,25 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "failed to create Blink adapter\n");
       return 1;
     }
+    ProfileClock::time_point blink_init_start;
+    if (profiler.enabled()) {
+      blink_init_start = ProfileClock::now();
+    }
     const html_css_renderer::BlinkLifecycleReport init =
         blink_embedder->Initialize();
+    if (profiler.enabled()) {
+      initial_profile.blink_initialize_ms =
+          ElapsedProfileMs(blink_init_start, ProfileClock::now());
+    }
+    ProfileClock::time_point blink_render_start;
+    if (profiler.enabled()) {
+      blink_render_start = ProfileClock::now();
+    }
     result = blink_embedder->AdvanceAndRender(input);
+    if (profiler.enabled()) {
+      initial_profile.blink_export_retained_ms =
+          ElapsedProfileMs(blink_render_start, ProfileClock::now());
+    }
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
     result.diagnostics.insert(result.diagnostics.begin(),
@@ -1220,15 +1394,31 @@ int main(int argc, char** argv) {
   html_css_renderer::CpuImage image;
   std::vector<uint32_t> pixels;
   if (use_cpu) {
+    ProfileClock::time_point cpu_replay_start;
+    if (profiler.enabled()) {
+      cpu_replay_start = ProfileClock::now();
+    }
     image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
         use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(result)
                      :
 #endif
                      html_css_renderer::RasterizeRenderResult(result);
+    if (profiler.enabled()) {
+      initial_profile.cpu_replay_ms =
+          ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+    }
     frame_width = image.width;
     frame_height = image.height;
+    ProfileClock::time_point pixel_convert_start;
+    if (profiler.enabled()) {
+      pixel_convert_start = ProfileClock::now();
+    }
     pixels = ConvertRgbaToAbgr(image);
+    if (profiler.enabled()) {
+      initial_profile.pixel_convert_ms =
+          ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
+    }
   }
 
   SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
@@ -1276,11 +1466,24 @@ int main(int argc, char** argv) {
   }
 
   std::unique_ptr<SdlFrameRenderer> direct_renderer;
+  std::optional<PendingSdlProfileFrame> pending_profile_frame;
   if (use_cpu) {
+    ProfileClock::time_point texture_upload_start;
+    if (profiler.enabled()) {
+      texture_upload_start = ProfileClock::now();
+    }
     SDL_UpdateTexture(texture, nullptr, pixels.data(),
                       image.width * static_cast<int>(sizeof(uint32_t)));
+    if (profiler.enabled()) {
+      initial_profile.texture_upload_ms =
+          ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+    }
   } else {
     direct_renderer = std::make_unique<SdlFrameRenderer>(renderer);
+    ProfileClock::time_point direct_render_start;
+    if (profiler.enabled()) {
+      direct_render_start = ProfileClock::now();
+    }
     if (!direct_renderer->Render(result, texture)) {
       SDL_DestroyTexture(texture);
       SDL_DestroyRenderer(renderer);
@@ -1288,6 +1491,13 @@ int main(int argc, char** argv) {
       SDL_Quit();
       return 1;
     }
+    if (profiler.enabled()) {
+      initial_profile.direct_render_ms =
+          ElapsedProfileMs(direct_render_start, ProfileClock::now());
+    }
+  }
+  if (profiler.enabled()) {
+    pending_profile_frame = PendingSdlProfileFrame{initial_profile, std::nullopt};
   }
 
   if (!attribute_toggles.empty()) {
@@ -1310,13 +1520,33 @@ int main(int argc, char** argv) {
                        attribute_toggles, false);
 
   auto render_updated_input =
-      [&](const char* reason, html_css_renderer::FrameInput next_input)
-      -> bool {
+      [&](const char* reason,
+          html_css_renderer::FrameInput next_input,
+          double input_update_ms,
+          ProfileClock::time_point frame_start) -> bool {
     const bool use_incremental = incremental && use_cpu;
+    const bool profile = profiler.enabled();
+    SdlProfileFrame profile_frame;
+    ProfileClock::time_point blink_render_start;
+    if (profile) {
+      profile_frame.frame = rendered_frame_count + 1;
+      profile_frame.reason = reason;
+      profile_frame.incremental = use_incremental;
+      profile_frame.input_update_ms = input_update_ms;
+      blink_render_start = ProfileClock::now();
+    }
     html_css_renderer::RenderResult next_result =
         use_incremental ? blink_embedder->AdvanceAndRenderIncremental(next_input)
                         : blink_embedder->AdvanceAndRender(next_input);
+    if (profile) {
+      profile_frame.blink_export_retained_ms =
+          ElapsedProfileMs(blink_render_start, ProfileClock::now());
+    }
     if (use_cpu) {
+      ProfileClock::time_point cpu_replay_start;
+      if (profile) {
+        cpu_replay_start = ProfileClock::now();
+      }
       image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
           use_skia_cpu
@@ -1332,12 +1562,40 @@ int main(int argc, char** argv) {
                    ? html_css_renderer::RasterizeRenderResultIncremental(
                          next_result, &image)
                    : html_css_renderer::RasterizeRenderResult(next_result));
+      if (profile) {
+        profile_frame.cpu_replay_ms =
+            ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+      }
+      ProfileClock::time_point pixel_convert_start;
+      if (profile) {
+        pixel_convert_start = ProfileClock::now();
+      }
       pixels = ConvertRgbaToAbgr(image);
+      if (profile) {
+        profile_frame.pixel_convert_ms =
+            ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
+      }
+      ProfileClock::time_point texture_upload_start;
+      if (profile) {
+        texture_upload_start = ProfileClock::now();
+      }
       SDL_UpdateTexture(texture, nullptr, pixels.data(),
                         frame_width * static_cast<int>(sizeof(uint32_t)));
+      if (profile) {
+        profile_frame.texture_upload_ms =
+            ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+      }
     } else if (direct_renderer) {
+      ProfileClock::time_point direct_render_start;
+      if (profile) {
+        direct_render_start = ProfileClock::now();
+      }
       if (!direct_renderer->Render(next_result, texture)) {
         return false;
+      }
+      if (profile) {
+        profile_frame.direct_render_ms =
+            ElapsedProfileMs(direct_render_start, ProfileClock::now());
       }
     }
     ++rendered_frame_count;
@@ -1347,6 +1605,13 @@ int main(int argc, char** argv) {
                          next_result, attribute_toggles, use_incremental);
     result = std::move(next_result);
     input = std::move(next_input);
+    if (profile) {
+      if (pending_profile_frame) {
+        profiler.Record(std::move(pending_profile_frame->frame));
+      }
+      pending_profile_frame =
+          PendingSdlProfileFrame{std::move(profile_frame), frame_start};
+    }
     return true;
   };
 
@@ -1360,6 +1625,9 @@ int main(int argc, char** argv) {
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
       } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
         html_css_renderer::FrameInput next_input = input;
         const ScrollDelta wheel_delta{event.wheel.x * scroll_step,
                                       -event.wheel.y * scroll_step, false};
@@ -1392,7 +1660,12 @@ int main(int argc, char** argv) {
               CurrentDocumentScrollY(next_input) != CurrentDocumentScrollY(input);
         }
         if (scroll_changed) {
-          if (!render_updated_input(scroll_reason, std::move(next_input))) {
+          const double input_update_ms =
+              profiler.enabled()
+                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                  : 0.0;
+          if (!render_updated_input(scroll_reason, std::move(next_input),
+                                    input_update_ms, input_update_start)) {
             running = false;
             break;
           }
@@ -1402,19 +1675,30 @@ int main(int argc, char** argv) {
                  (event.key.key == ' ' || event.key.key == 't' ||
                   event.key.key == 'T')) {
         if (!attribute_toggles.empty()) {
+          const ProfileClock::time_point input_update_start =
+              profiler.enabled() ? ProfileClock::now()
+                                 : ProfileClock::time_point{};
           html_css_renderer::FrameInput next_input = input;
           for (AttributeToggle& toggle : attribute_toggles) {
             toggle.is_on = !toggle.is_on;
             next_input.element_attributes_by_id_and_name[toggle.key] =
                 toggle.is_on ? toggle.on_value : toggle.off_value;
           }
-          if (!render_updated_input("toggle", std::move(next_input))) {
+          const double input_update_ms =
+              profiler.enabled()
+                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                  : 0.0;
+          if (!render_updated_input("toggle", std::move(next_input),
+                                    input_update_ms, input_update_start)) {
             running = false;
             break;
           }
           texture_dirty = true;
         }
       } else if (event.type == SDL_EVENT_KEY_DOWN) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
         const std::optional<ScrollDelta> scroll_delta =
             KeyboardScrollDelta(event.key.key, scroll_step, frame_height);
         if (scroll_delta) {
@@ -1432,7 +1716,12 @@ int main(int argc, char** argv) {
                   CurrentDocumentScrollX(input) ||
               CurrentDocumentScrollY(next_input) !=
                   CurrentDocumentScrollY(input)) {
-            if (!render_updated_input("key-scroll", std::move(next_input))) {
+            const double input_update_ms =
+                profiler.enabled()
+                    ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                    : 0.0;
+            if (!render_updated_input("key-scroll", std::move(next_input),
+                                      input_update_ms, input_update_start)) {
               running = false;
               break;
             }
@@ -1442,9 +1731,17 @@ int main(int argc, char** argv) {
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
                  event.button.button == SDL_BUTTON_LEFT) {
         if (!input.active_element_id.empty()) {
+          const ProfileClock::time_point input_update_start =
+              profiler.enabled() ? ProfileClock::now()
+                                 : ProfileClock::time_point{};
           html_css_renderer::FrameInput next_input = input;
           next_input.active_element_id.clear();
-          if (!render_updated_input("active-up", std::move(next_input))) {
+          const double input_update_ms =
+              profiler.enabled()
+                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                  : 0.0;
+          if (!render_updated_input("active-up", std::move(next_input),
+                                    input_update_ms, input_update_start)) {
             running = false;
             break;
           }
@@ -1452,6 +1749,9 @@ int main(int argc, char** argv) {
         }
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                  event.button.button == SDL_BUTTON_LEFT) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
         int window_width_for_hit = 0;
         int window_height_for_hit = 0;
         SDL_GetWindowSize(window, &window_width_for_hit,
@@ -1480,8 +1780,13 @@ int main(int argc, char** argv) {
             toggle_changed = true;
           }
           if (active_changed || toggle_changed) {
+            const double input_update_ms =
+                profiler.enabled()
+                    ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                    : 0.0;
             if (!render_updated_input(toggle_changed ? "click" : "active",
-                                      std::move(next_input))) {
+                                      std::move(next_input), input_update_ms,
+                                      input_update_start)) {
               running = false;
               break;
             }
@@ -1489,6 +1794,9 @@ int main(int argc, char** argv) {
           }
         }
       } else if (incremental && event.type == SDL_EVENT_MOUSE_MOTION) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
         int window_width_for_hit = 0;
         int window_height_for_hit = 0;
         SDL_GetWindowSize(window, &window_width_for_hit,
@@ -1502,7 +1810,12 @@ int main(int argc, char** argv) {
         if (hovered != input.hovered_element_id) {
           html_css_renderer::FrameInput next_input = input;
           next_input.hovered_element_id = hovered;
-          if (!render_updated_input("hover", std::move(next_input))) {
+          const double input_update_ms =
+              profiler.enabled()
+                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                  : 0.0;
+          if (!render_updated_input("hover", std::move(next_input),
+                                    input_update_ms, input_update_start)) {
             running = false;
             break;
           }
@@ -1511,6 +1824,10 @@ int main(int argc, char** argv) {
       }
     }
     (void)texture_dirty;
+    ProfileClock::time_point draw_present_start;
+    if (pending_profile_frame) {
+      draw_present_start = ProfileClock::now();
+    }
     int drawable_width = 0;
     int drawable_height = 0;
     SDL_GetWindowSize(window, &drawable_width, &drawable_height);
@@ -1533,11 +1850,29 @@ int main(int argc, char** argv) {
     };
     SDL_RenderTexture(renderer, texture, nullptr, &target);
     SDL_RenderPresent(renderer);
+    if (pending_profile_frame) {
+      const ProfileClock::time_point draw_present_end = ProfileClock::now();
+      pending_profile_frame->frame.sdl_draw_present_ms =
+          ElapsedProfileMs(draw_present_start, draw_present_end);
+      pending_profile_frame->frame.total_ms =
+          pending_profile_frame->total_start
+              ? ElapsedProfileMs(*pending_profile_frame->total_start,
+                                 draw_present_end)
+              : SdlProfileMeasuredSubtotal(pending_profile_frame->frame);
+      profiler.Record(std::move(pending_profile_frame->frame));
+      pending_profile_frame.reset();
+    }
     if (quit_after_ms > 0 && SDL_GetTicks() - start_ms >= quit_after_ms) {
       running = false;
     }
     SDL_Delay(16);
   }
+
+  if (pending_profile_frame) {
+    profiler.Record(std::move(pending_profile_frame->frame));
+    pending_profile_frame.reset();
+  }
+  profiler.PrintSummary("exit");
 
   SDL_DestroyTexture(texture);
   SDL_DestroyRenderer(renderer);

@@ -86,6 +86,19 @@ Open `build\sdl-demo-snapshots\index.html` to compare the initial, toggled,
 and scrolled states produced by the same standalone render path that the SDL
 viewer drives.
 
+Profile the SDL viewer render path by adding `--profile`. Use a viewport of at
+least `1280x720` for representative timing runs. The viewer prints a per-frame
+line and an exit summary with min/avg/p95/max timings. Use
+`--profile-summary-frames` to also print interval summaries.
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43u_sdl_resource_toggle_demo.html --viewport 1280x720 --skia-cpu --incremental --toggle-attr png-card:data-state=off,on --toggle-attr svg-card:data-state=off,on --toggle-attr mask-card:data-state=off,on --profile --profile-summary-frames 60
+
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43aa_incremental_element_scroll_panel_basic.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 1280x720 --skia-cpu --incremental --scroll-step 80 --profile --profile-summary-frames 60
+
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\49a_ui_visual_effects_resource_cards.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 1280x720 --skia-cpu --incremental --profile --profile-summary-frames 60
+```
+
 Controls:
 
 - `Space` or `T` toggles configured `--toggle-attr` values.
