@@ -17187,6 +17187,7 @@ LayoutUnit TableNode::ComputeCaptionBlockSize(const ConstraintSpace&) const {
 }
 void FinalizeTableCellLayout(LayoutUnit, BoxFragmentBuilder*) {}
 #endif
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 void MeasureCache::LayoutObjectWillBeDestroyed() {}
 void MeasureCache::Clear() {}
 void MeasureCache::Add(const LayoutResult*) {}
@@ -17201,6 +17202,7 @@ const LayoutResult* MeasureCache::Find(
 const LayoutResult* MeasureCache::GetLastForTesting() const {
   return nullptr;
 }
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutTableCell::InvalidateLayoutResultCacheAfterMeasure() const {}
 #endif
