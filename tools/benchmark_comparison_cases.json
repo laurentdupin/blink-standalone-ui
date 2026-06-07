@@ -72,6 +72,10 @@
       "45g_transform_svg_image_basic",
       "45h_transform_svg_background_basic"
     ],
+    "sdl-demos": [
+      "43u_sdl_resource_toggle_demo",
+      "43v_sdl_resource_scroll_demo"
+    ],
     "clip-masks": [
       "47a_clip_path_png_image_basic",
       "47b_clip_path_png_background_basic",
@@ -465,6 +469,20 @@
       "attrs": [
         "card:data-state=on"
       ]
+    },
+    {
+      "name": "43u_sdl_resource_toggle_demo",
+      "source": "paint_audit",
+      "html": "43u_sdl_resource_toggle_demo.html",
+      "viewport": "480x260",
+      "note": "SDL-oriented multi-target click toggle page with PNG, external non-text SVG, clip-path, and CSS mask resources."
+    },
+    {
+      "name": "43v_sdl_resource_scroll_demo",
+      "source": "paint_audit",
+      "html": "43v_sdl_resource_scroll_demo.html",
+      "viewport": "360x260",
+      "note": "SDL-oriented resource-backed scroll page with PNG tiling, external non-text SVG, rounded clipping, and CSS mask resources."
     },
     {
       "name": "45e_transform_png_image_basic",

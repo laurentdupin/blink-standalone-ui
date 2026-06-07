@@ -52,10 +52,22 @@ Run the multi-target click/toggle demo:
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43n_sdl_multi_toggle_demo.html --viewport 360x180 --skia-cpu --incremental --toggle-attr card-a:data-state=off,on --toggle-attr card-b:data-state=off,on --toggle-attr card-c:data-state=off,on
 ```
 
+Run the resource-backed click/toggle demo:
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43u_sdl_resource_toggle_demo.html --viewport 480x260 --skia-cpu --incremental --toggle-attr png-card:data-state=off,on --toggle-attr svg-card:data-state=off,on --toggle-attr mask-card:data-state=off,on
+```
+
 Run the scroll demo:
 
 ```powershell
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43g_incremental_scroll_basic.html --viewport 240x200 --skia-cpu --incremental --scroll-step 80
+```
+
+Run the resource-backed scroll demo:
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43v_sdl_resource_scroll_demo.html --viewport 360x260 --skia-cpu --incremental --scroll-step 80
 ```
 
 Controls:
