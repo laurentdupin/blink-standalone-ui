@@ -173,6 +173,7 @@
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -15672,6 +15673,21 @@ void StandaloneRecordFontResolutionDiagnostic(
   diagnostics.push_back(std::move(diagnostic));
 }
 
+std::string StandaloneLowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  return value;
+}
+
+bool StandaloneTypefaceMatchesRequestedFamily(const SkTypeface& typeface,
+                                              const std::string& family) {
+  SkString resolved_family;
+  typeface.getFamilyName(&resolved_family);
+  return StandaloneLowerAscii(resolved_family.c_str()) ==
+         StandaloneLowerAscii(family);
+}
+
 }  // namespace
 
 extern "C" int StandaloneRendererFontResolutionDiagnosticCount() {
@@ -16406,32 +16422,61 @@ const SimpleFontData* FontFallbackList::DeterminePrimarySimpleFontData(
     const FontDescription& font_description,
     int,
     bool) {
-  AtomicString family_name = font_description.Family().FamilyName();
-  if (family_name.empty() || font_description.Family().FamilyIsGeneric()) {
-    switch (font_description.GenericFamily()) {
-      case FontDescription::kStandardFamily:
-      case FontDescription::kWebkitBodyFamily:
-      case FontDescription::kNoFamily:
-      case FontDescription::kSerifFamily:
-        family_name = AtomicString("Times New Roman");
-        break;
-      case FontDescription::kMonospaceFamily:
+  for (const FontFamily* family = &font_description.Family(); family;
+       family = family->Next()) {
+    AtomicString family_name = family->FamilyName();
+    if (family_name.empty()) {
+      continue;
+    }
+    if (family->FamilyIsGeneric()) {
+      const std::string generic_name = family_name.GetString().Utf8();
+      const std::string lower_generic = StandaloneLowerAscii(generic_name);
+      if (lower_generic == "monospace" ||
+          lower_generic == "ui-monospace") {
         family_name = AtomicString("Consolas");
-        break;
-      case FontDescription::kSansSerifFamily:
-      case FontDescription::kCursiveFamily:
-      case FontDescription::kFantasyFamily:
+      } else if (lower_generic == "system-ui" ||
+                 lower_generic == "ui-sans-serif") {
+        family_name = AtomicString("Segoe UI");
+      } else if (lower_generic == "sans-serif" ||
+                 lower_generic == "cursive" ||
+                 lower_generic == "fantasy") {
         family_name = AtomicString("Arial");
-        break;
+      } else {
+        family_name = AtomicString("Times New Roman");
+      }
+    }
+    if (const SimpleFontData* data =
+            FontCache::Get().GetFontData(font_description, family_name)) {
+      return data;
     }
   }
-  return FontCache::Get().GetFontData(font_description, family_name);
+
+  switch (font_description.GenericFamily()) {
+    case FontDescription::kMonospaceFamily:
+      return FontCache::Get().GetFontData(font_description,
+                                          AtomicString("Consolas"),
+                                          AlternateFontName::kLastResort);
+    case FontDescription::kSansSerifFamily:
+    case FontDescription::kCursiveFamily:
+    case FontDescription::kFantasyFamily:
+      return FontCache::Get().GetFontData(font_description,
+                                          AtomicString("Arial"),
+                                          AlternateFontName::kLastResort);
+    case FontDescription::kStandardFamily:
+    case FontDescription::kWebkitBodyFamily:
+    case FontDescription::kNoFamily:
+    case FontDescription::kSerifFamily:
+      return FontCache::Get().GetFontData(font_description,
+                                          AtomicString("Times New Roman"),
+                                          AlternateFontName::kLastResort);
+  }
+  return nullptr;
 }
 
 const SimpleFontData* FontCache::GetFontData(
     const FontDescription& font_description,
     const AtomicString& family_name,
-    AlternateFontName) {
+    AlternateFontName alternate_font_name) {
   static std::map<std::string, Persistent<FontPlatformData>*>
       platform_data_by_key;
   static std::map<std::string, Persistent<SimpleFontData>*>
@@ -16459,17 +16504,28 @@ const SimpleFontData* FontCache::GetFontData(
     typeface =
         font_manager->matchFamilyStyle(requested_family.c_str(),
                                        requested_style);
-    if (typeface) {
+    if (typeface &&
+        (alternate_font_name == AlternateFontName::kLastResort ||
+         StandaloneTypefaceMatchesRequestedFamily(*typeface,
+                                                  requested_family))) {
       fallback_reason = "match_family_style";
+    } else {
+      typeface = nullptr;
     }
     if (!typeface) {
       typeface = font_manager->legacyMakeTypeface(requested_family.c_str(),
                                                   requested_style);
-      if (typeface) {
+      if (typeface &&
+          (alternate_font_name == AlternateFontName::kLastResort ||
+           StandaloneTypefaceMatchesRequestedFamily(*typeface,
+                                                    requested_family))) {
         fallback_reason = "legacy_make_typeface";
+      } else {
+        typeface = nullptr;
       }
     }
-    if (!typeface && font_manager->countFamilies() > 0) {
+    if (!typeface && alternate_font_name == AlternateFontName::kLastResort &&
+        font_manager->countFamilies() > 0) {
       SkString family_name;
       font_manager->getFamilyName(0, &family_name);
       typeface =
@@ -16481,6 +16537,9 @@ const SimpleFontData* FontCache::GetFontData(
     }
   }
   if (!typeface) {
+    if (alternate_font_name != AlternateFontName::kLastResort) {
+      return nullptr;
+    }
     typeface = SkTypeface::MakeEmpty();
     fallback_reason = "empty_typeface";
   }
