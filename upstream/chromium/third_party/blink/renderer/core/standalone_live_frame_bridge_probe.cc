@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <cstdint>
 #include <array>
@@ -371,6 +372,30 @@ struct LiveHitTestEntry {
   float height = 0.0f;
 };
 
+struct LiveElementScrollOffset {
+  float x = 0.0f;
+  float y = 0.0f;
+};
+
+struct LiveElementScrollDiagnostic {
+  std::string element_id;
+  float requested_x = 0.0f;
+  float requested_y = 0.0f;
+  float applied_x = 0.0f;
+  float applied_y = 0.0f;
+  float max_x = 0.0f;
+  float max_y = 0.0f;
+  int contents_width = 0;
+  int contents_height = 0;
+  int visible_width = 0;
+  int visible_height = 0;
+  bool element_present = false;
+  bool layout_box_present = false;
+  bool scrollable_area_present = false;
+  bool changed = false;
+  std::string status = "not_requested";
+};
+
 struct EmptyClipChunkForStandaloneRenderer {
   gfx::Rect chunk_bounds;
   gfx::RectF clip_rect;
@@ -393,6 +418,10 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveHitTestEntry> hit_test_entries;
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
+  std::string requested_element_scroll_offsets_serialized;
+  std::unordered_map<std::string, LiveElementScrollOffset>
+      requested_element_scroll_offsets_by_id;
+  std::vector<LiveElementScrollDiagnostic> element_scroll_diagnostics;
   int viewport_width = 320;
   int viewport_height = 200;
   float requested_scroll_x = 0.0f;
@@ -421,6 +450,9 @@ struct LiveFramePaintProbeCache {
   bool scroll_offset_applied = false;
   bool scroll_offset_changed = false;
   std::string scroll_offset_status = "not_requested";
+  bool element_scroll_offset_requested = false;
+  bool element_scroll_offset_applied = false;
+  bool element_scroll_offset_changed = false;
   double requested_animation_time_ms = 0.0;
   double applied_animation_time_ms = 0.0;
   bool animation_time_requested = false;
@@ -6036,6 +6068,179 @@ Element* ElementByIdForStandaloneRenderer(Document& document,
       AtomicString(String::FromUtf8(element_id)));
 }
 
+bool ParseStandaloneFloat(const std::string& value, float* output) {
+  char* end = nullptr;
+  const float parsed = std::strtof(value.c_str(), &end);
+  if (end == value.c_str() || *end != '\0') {
+    return false;
+  }
+  *output = parsed;
+  return true;
+}
+
+std::unordered_map<std::string, LiveElementScrollOffset>
+ParseElementScrollOffsetsForStandaloneRenderer(
+    const std::string& serialized) {
+  std::unordered_map<std::string, LiveElementScrollOffset> output;
+  size_t line_start = 0;
+  while (line_start < serialized.size()) {
+    size_t line_end = serialized.find('\n', line_start);
+    if (line_end == std::string::npos) {
+      line_end = serialized.size();
+    }
+    const std::string line =
+        serialized.substr(line_start, line_end - line_start);
+    if (!line.empty()) {
+      const size_t equals = line.find('=');
+      const size_t comma =
+          equals == std::string::npos ? std::string::npos
+                                      : line.find(',', equals + 1);
+      float x = 0.0f;
+      float y = 0.0f;
+      if (equals != std::string::npos && comma != std::string::npos &&
+          equals > 0 &&
+          ParseStandaloneFloat(line.substr(equals + 1, comma - equals - 1),
+                               &x) &&
+          ParseStandaloneFloat(line.substr(comma + 1), &y)) {
+        output[line.substr(0, equals)] = LiveElementScrollOffset{x, y};
+      }
+    }
+    line_start = line_end + 1;
+  }
+  return output;
+}
+
+void ApplyElementScrollOffsetsForStandaloneRenderer(Document& document) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.element_scroll_diagnostics.clear();
+  cache.element_scroll_offset_applied = false;
+  cache.element_scroll_offset_changed = false;
+  cache.element_scroll_offset_requested =
+      !cache.requested_element_scroll_offsets_by_id.empty();
+  if (!cache.element_scroll_offset_requested) {
+    return;
+  }
+
+  std::vector<std::pair<std::string, LiveElementScrollOffset>> ordered(
+      cache.requested_element_scroll_offsets_by_id.begin(),
+      cache.requested_element_scroll_offsets_by_id.end());
+  std::sort(ordered.begin(), ordered.end(),
+            [](const auto& lhs, const auto& rhs) {
+              return lhs.first < rhs.first;
+            });
+
+  for (const auto& [element_id, requested] : ordered) {
+    LiveElementScrollDiagnostic diagnostic;
+    diagnostic.element_id = element_id;
+    diagnostic.requested_x = requested.x;
+    diagnostic.requested_y = requested.y;
+    diagnostic.status = "requested";
+
+    Element* element = ElementByIdForStandaloneRenderer(document, element_id);
+    if (!element) {
+      diagnostic.status = "element_not_found";
+      cache.element_scroll_diagnostics.push_back(std::move(diagnostic));
+      continue;
+    }
+    diagnostic.element_present = true;
+
+    auto* box = DynamicTo<LayoutBox>(element->GetLayoutObject());
+    if (!box) {
+      diagnostic.status = "layout_box_missing";
+      cache.element_scroll_diagnostics.push_back(std::move(diagnostic));
+      continue;
+    }
+    diagnostic.layout_box_present = true;
+
+    PaintLayer* layer = box->EnclosingLayer();
+    PaintLayerScrollableArea* scrollable_area =
+        box->GetScrollableArea()
+            ? box->GetScrollableArea()
+            : (layer ? layer->GetScrollableArea() : nullptr);
+    if (!scrollable_area) {
+      diagnostic.status = "scrollable_area_missing";
+      cache.element_scroll_diagnostics.push_back(std::move(diagnostic));
+      continue;
+    }
+    diagnostic.scrollable_area_present = true;
+    scrollable_area->UpdateAfterOverflowRecalc();
+
+    const ScrollOffset maximum = scrollable_area->MaximumScrollOffset();
+    diagnostic.max_x = maximum.x();
+    diagnostic.max_y = maximum.y();
+    const gfx::Size contents_size = scrollable_area->ContentsSize();
+    diagnostic.contents_width = contents_size.width();
+    diagnostic.contents_height = contents_size.height();
+    const gfx::Rect visible_rect =
+        scrollable_area->VisibleContentRect(kExcludeScrollbars);
+    diagnostic.visible_width = visible_rect.width();
+    diagnostic.visible_height = visible_rect.height();
+
+    const ScrollOffset requested_offset =
+        scrollable_area->ScrollPositionToOffset(
+            gfx::PointF(requested.x, requested.y));
+    const ScrollOffset clamped_offset =
+        scrollable_area->ClampScrollOffset(requested_offset);
+    diagnostic.changed = scrollable_area->SetScrollOffset(
+        clamped_offset, mojom::blink::ScrollType::kProgrammatic,
+        cc::ScrollSourceType::kAbsoluteScroll,
+        mojom::blink::ScrollBehavior::kInstant);
+    const gfx::PointF applied_position = scrollable_area->ScrollPosition();
+    diagnostic.applied_x = applied_position.x();
+    diagnostic.applied_y = applied_position.y();
+    diagnostic.status = "applied_to_element_scrollable_area";
+    cache.element_scroll_offset_applied = true;
+    cache.element_scroll_offset_changed =
+        cache.element_scroll_offset_changed || diagnostic.changed;
+    cache.element_scroll_diagnostics.push_back(std::move(diagnostic));
+  }
+}
+
+std::string ElementScrollDiagnosticsJsonForStandaloneRenderer(
+    const LiveFramePaintProbeCache& cache) {
+  std::ostringstream json;
+  json << "{\"requested_count\":"
+       << cache.requested_element_scroll_offsets_by_id.size()
+       << ",\"requested_non_empty\":"
+       << (cache.element_scroll_offset_requested ? "true" : "false")
+       << ",\"applied_to_blink\":"
+       << (cache.element_scroll_offset_applied ? "true" : "false")
+       << ",\"changed\":"
+       << (cache.element_scroll_offset_changed ? "true" : "false")
+       << ",\"entries\":[";
+  for (size_t i = 0; i < cache.element_scroll_diagnostics.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    const LiveElementScrollDiagnostic& diagnostic =
+        cache.element_scroll_diagnostics[i];
+    json << "{\"element_id\":"
+         << JsonStringForStandaloneRenderer(diagnostic.element_id)
+         << ",\"requested\":{\"x\":" << diagnostic.requested_x
+         << ",\"y\":" << diagnostic.requested_y << "}"
+         << ",\"applied\":{\"x\":" << diagnostic.applied_x
+         << ",\"y\":" << diagnostic.applied_y << "}"
+         << ",\"maximum\":{\"x\":" << diagnostic.max_x
+         << ",\"y\":" << diagnostic.max_y << "}"
+         << ",\"contents_size\":{\"width\":" << diagnostic.contents_width
+         << ",\"height\":" << diagnostic.contents_height << "}"
+         << ",\"visible_size\":{\"width\":" << diagnostic.visible_width
+         << ",\"height\":" << diagnostic.visible_height << "}"
+         << ",\"element_present\":"
+         << (diagnostic.element_present ? "true" : "false")
+         << ",\"layout_box_present\":"
+         << (diagnostic.layout_box_present ? "true" : "false")
+         << ",\"scrollable_area_present\":"
+         << (diagnostic.scrollable_area_present ? "true" : "false")
+         << ",\"changed\":"
+         << (diagnostic.changed ? "true" : "false")
+         << ",\"status\":"
+         << JsonStringForStandaloneRenderer(diagnostic.status) << "}";
+  }
+  json << "]}";
+  return json.str();
+}
+
 void ApplyInteractionStateForStandaloneRenderer(
     Document& document,
     const std::string& hovered_element_id,
@@ -6821,6 +7026,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.scroll_offset_changed ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.scroll_offset_status) << "}"
+       << ",\"element_scroll_diagnostics\":"
+       << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
        << ",\"animation_time_diagnostics\":{\"requested_ms\":"
        << cache.requested_animation_time_ms << ",\"applied_ms\":"
        << cache.applied_animation_time_ms << ",\"requested_non_zero\":"
@@ -7681,6 +7888,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before document scroll offset apply");
   ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
   TraceLiveFrameProbeStage("after document scroll offset apply");
+  TraceLiveFrameProbeStage("before element scroll offset apply");
+  ApplyElementScrollOffsetsForStandaloneRenderer(document);
+  TraceLiveFrameProbeStage("after element scroll offset apply");
   cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
       layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
@@ -7726,7 +7936,10 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before post-lifecycle document scroll offset apply");
   ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
   TraceLiveFrameProbeStage("after post-lifecycle document scroll offset apply");
-  if (cache.scroll_offset_changed) {
+  TraceLiveFrameProbeStage("before post-lifecycle element scroll offset apply");
+  ApplyElementScrollOffsetsForStandaloneRenderer(document);
+  TraceLiveFrameProbeStage("after post-lifecycle element scroll offset apply");
+  if (cache.scroll_offset_changed || cache.element_scroll_offset_changed) {
     TraceLiveFrameProbeStage("before post-scroll lifecycle update");
     result.lifecycle_reached_paint_clean =
         frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
@@ -7943,6 +8156,31 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
   cache.scroll_offset_applied = false;
   cache.scroll_offset_changed = false;
   cache.scroll_offset_status = requested ? "requested" : "not_requested";
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
+    const char* serialized_offsets) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const std::string value = serialized_offsets ? serialized_offsets : "";
+  if (cache.requested_element_scroll_offsets_serialized == value) {
+    return;
+  }
+  cache.requested_element_scroll_offsets_serialized = value;
+  cache.requested_element_scroll_offsets_by_id =
+      ParseElementScrollOffsetsForStandaloneRenderer(value);
+  cache.element_scroll_diagnostics.clear();
+  cache.element_scroll_offset_requested =
+      !cache.requested_element_scroll_offsets_by_id.empty();
+  cache.element_scroll_offset_applied = false;
+  cache.element_scroll_offset_changed = false;
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

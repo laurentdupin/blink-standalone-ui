@@ -22,6 +22,8 @@
       "43u_sdl_all_cards_off_to_on",
       "43v_sdl_resource_scroll_0_to_160",
       "43v_sdl_resource_scroll_160_to_160",
+      "43aa_element_scroll_0_to_140",
+      "43aa_element_scroll_140_to_140",
       "43w_hover_none_to_card",
       "43w_active_none_to_card",
       "43x_png_hover_none_to_card",
@@ -292,6 +294,30 @@
       "viewport": "360x260",
       "previous_scroll": {"x": 0, "y": 160},
       "current_scroll": {"x": 0, "y": 160},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "none"
+      }
+    },
+    {
+      "name": "43aa_element_scroll_0_to_140",
+      "html": "43aa_incremental_element_scroll_panel_basic.html",
+      "viewport": "360x240",
+      "previous_element_scroll": {"scroll-panel": {"x": 0, "y": 0}},
+      "current_element_scroll": {"scroll-panel": {"x": 0, "y": 140}},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43aa_element_scroll_140_to_140",
+      "html": "43aa_incremental_element_scroll_panel_basic.html",
+      "viewport": "360x240",
+      "previous_element_scroll": {"scroll-panel": {"x": 0, "y": 140}},
+      "current_element_scroll": {"scroll-panel": {"x": 0, "y": 140}},
       "expected": {
         "exact_pixel_identical": true,
         "requires_full_redraw": false,

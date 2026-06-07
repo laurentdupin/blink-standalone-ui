@@ -189,6 +189,28 @@ bool ParseElementAttributeOverride(const std::string& value,
   return true;
 }
 
+bool ParseElementScrollOffset(const std::string& value,
+                              std::string* element_id,
+                              html_css_renderer::Point* scroll_offset) {
+  const size_t colon = value.find(':');
+  const size_t comma =
+      colon == std::string::npos ? std::string::npos
+                                 : value.find(',', colon + 1);
+  if (colon == std::string::npos || comma == std::string::npos ||
+      colon == 0) {
+    return false;
+  }
+  float x = 0.0f;
+  float y = 0.0f;
+  if (!ParseFloat(value.substr(colon + 1, comma - colon - 1), &x) ||
+      !ParseFloat(value.substr(comma + 1), &y)) {
+    return false;
+  }
+  *element_id = value.substr(0, colon);
+  *scroll_offset = html_css_renderer::Point{x, y};
+  return true;
+}
+
 bool SameStylesheetList(
     const std::vector<html_css_renderer::Stylesheet>& a,
     const std::vector<html_css_renderer::Stylesheet>& b) {
@@ -817,6 +839,8 @@ void PrintUsage() {
                "[--resource-root <path>] "
                "[--viewport WxH] [--previous-scroll-x px] [--previous-scroll-y px] "
                "[--scroll-x px] [--scroll-y px] "
+               "[--previous-scroll-element id:x,y] "
+               "[--scroll-element id:x,y] "
                "[--time-ms ms] [--incremental] [--previous-time-ms ms] "
                "--out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
@@ -1112,6 +1136,26 @@ int main(int argc, char** argv) {
         return 2;
       }
       input.scroll_offsets_by_element_id["document"].y = scroll_y;
+    } else if (arg == "--previous-scroll-element") {
+      const char* value = next_value();
+      std::string element_id;
+      html_css_renderer::Point scroll_offset;
+      if (!value ||
+          !ParseElementScrollOffset(value, &element_id, &scroll_offset)) {
+        PrintUsage();
+        return 2;
+      }
+      previous_input.scroll_offsets_by_element_id[element_id] = scroll_offset;
+    } else if (arg == "--scroll-element") {
+      const char* value = next_value();
+      std::string element_id;
+      html_css_renderer::Point scroll_offset;
+      if (!value ||
+          !ParseElementScrollOffset(value, &element_id, &scroll_offset)) {
+        PrintUsage();
+        return 2;
+      }
+      input.scroll_offsets_by_element_id[element_id] = scroll_offset;
     } else if (arg == "--time-ms") {
       const char* value = next_value();
       float time_ms = 0.0f;

@@ -127,6 +127,11 @@ def add_scroll(cmd: list[str], x_flag: str, y_flag: str, scroll: dict[str, int] 
     cmd.extend([y_flag, str(int(scroll.get("y", 0)))])
 
 
+def add_element_scroll(cmd: list[str], flag: str, scrolls: dict[str, dict[str, int]] | None) -> None:
+    for element_id, scroll in sorted((scrolls or {}).items()):
+        cmd.extend([flag, f"{element_id}:{int(scroll.get('x', 0))},{int(scroll.get('y', 0))}"])
+
+
 def add_optional_value(cmd: list[str], flag: str, value: str | None) -> None:
     if value:
         cmd.extend([flag, value])
@@ -141,10 +146,12 @@ def benchmark_command(
     *,
     attrs: list[str] | None = None,
     scroll: dict[str, int] | None = None,
+    element_scroll: dict[str, dict[str, int]] | None = None,
     hover: str | None = None,
     active: str | None = None,
     previous_attrs: list[str] | None = None,
     previous_scroll: dict[str, int] | None = None,
+    previous_element_scroll: dict[str, dict[str, int]] | None = None,
     previous_hover: str | None = None,
     previous_active: str | None = None,
     incremental: bool = False,
@@ -167,11 +174,13 @@ def benchmark_command(
     ]
     add_attrs(cmd, "--attr", attrs)
     add_scroll(cmd, "--scroll-x", "--scroll-y", scroll)
+    add_element_scroll(cmd, "--scroll-element", element_scroll)
     add_optional_value(cmd, "--hover", hover)
     add_optional_value(cmd, "--active", active)
     if incremental:
         add_attrs(cmd, "--previous-attr", previous_attrs)
         add_scroll(cmd, "--previous-scroll-x", "--previous-scroll-y", previous_scroll)
+        add_element_scroll(cmd, "--previous-scroll-element", previous_element_scroll)
         add_optional_value(cmd, "--previous-hover", previous_hover)
         add_optional_value(cmd, "--previous-active", previous_active)
         cmd.append("--incremental")
@@ -367,6 +376,8 @@ def run_case(
     previous_attrs = case.get("previous_attrs")
     current_scroll = case.get("current_scroll")
     previous_scroll = case.get("previous_scroll")
+    current_element_scroll = case.get("current_element_scroll")
+    previous_element_scroll = case.get("previous_element_scroll")
     current_hover = case.get("current_hover")
     previous_hover = case.get("previous_hover")
     current_active = case.get("current_active")
@@ -380,6 +391,7 @@ def run_case(
         full_json,
         attrs=current_attrs,
         scroll=current_scroll,
+        element_scroll=current_element_scroll,
         hover=current_hover,
         active=current_active,
     )
@@ -393,10 +405,12 @@ def run_case(
         incremental_json,
         attrs=current_attrs,
         scroll=current_scroll,
+        element_scroll=current_element_scroll,
         hover=current_hover,
         active=current_active,
         previous_attrs=previous_attrs,
         previous_scroll=previous_scroll,
+        previous_element_scroll=previous_element_scroll,
         previous_hover=previous_hover,
         previous_active=previous_active,
         incremental=True,

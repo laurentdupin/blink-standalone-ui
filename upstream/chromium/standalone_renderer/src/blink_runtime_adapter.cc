@@ -26,6 +26,8 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
 void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
     float x,
     float y);
+void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
+    const char* serialized_offsets);
 void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
     double time_ms);
 void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
@@ -443,6 +445,27 @@ Point SnapshotDocumentScrollOffset(const RendererSnapshot& snapshot) {
     return body_scroll->second;
   }
   return Point{};
+}
+
+std::string SerializeElementScrollOffsetsForStandaloneRenderer(
+    const std::unordered_map<std::string, Point>& scroll_offsets) {
+  std::vector<std::pair<std::string, Point>> ordered;
+  ordered.reserve(scroll_offsets.size());
+  for (const auto& [key, value] : scroll_offsets) {
+    if (key == "document" || key == "body") {
+      continue;
+    }
+    ordered.push_back({key, value});
+  }
+  std::sort(ordered.begin(), ordered.end(),
+            [](const auto& lhs, const auto& rhs) {
+              return lhs.first < rhs.first;
+            });
+  std::ostringstream out;
+  for (const auto& [key, value] : ordered) {
+    out << key << "=" << value.x << "," << value.y << "\n";
+  }
+  return out.str();
 }
 
 std::string SerializeElementAttributesForStandaloneRenderer(
@@ -1973,6 +1996,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     AppendLivePaintDiagnostics(snapshot_.html, snapshot_.stylesheets,
                                snapshot_.viewport,
                                SnapshotDocumentScrollOffset(snapshot_),
+                               snapshot_.scroll_offsets_by_element_id,
                                snapshot_.timeline_time_seconds,
                                snapshot_.element_attributes_by_id_and_name,
                                snapshot_.hovered_element_id,
@@ -1990,6 +2014,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                result.successor_snapshot.stylesheets,
                                result.successor_snapshot.viewport,
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
+                               result.successor_snapshot.scroll_offsets_by_element_id,
                                result.successor_snapshot.timeline_time_seconds,
                                result.successor_snapshot.element_attributes_by_id_and_name,
                                result.successor_snapshot.hovered_element_id,
@@ -2009,6 +2034,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                result.successor_snapshot.stylesheets,
                                result.successor_snapshot.viewport,
                                SnapshotDocumentScrollOffset(result.successor_snapshot),
+                               result.successor_snapshot.scroll_offsets_by_element_id,
                                result.successor_snapshot.timeline_time_seconds,
                                result.successor_snapshot.element_attributes_by_id_and_name,
                                result.successor_snapshot.hovered_element_id,
@@ -2050,6 +2076,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const std::vector<Stylesheet>& stylesheets,
       Size viewport,
       Point document_scroll_offset,
+      const std::unordered_map<std::string, Point>& scroll_offsets,
       double timeline_time_seconds,
       const std::unordered_map<std::string, std::string>& element_attributes,
       const std::string& hovered_element_id,
@@ -2061,6 +2088,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         static_cast<int>(viewport.width), static_cast<int>(viewport.height));
     live_probe::StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
         document_scroll_offset.x, document_scroll_offset.y);
+    const std::string serialized_scroll_offsets =
+        SerializeElementScrollOffsetsForStandaloneRenderer(scroll_offsets);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
+        serialized_scroll_offsets.c_str());
     live_probe::StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
         timeline_time_seconds * 1000.0);
     const std::string serialized_attributes =
@@ -2148,6 +2179,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
         SnapshotDocumentScrollOffset(result.successor_snapshot).x,
         SnapshotDocumentScrollOffset(result.successor_snapshot).y);
+    const std::string serialized_scroll_offsets =
+        SerializeElementScrollOffsetsForStandaloneRenderer(
+            result.successor_snapshot.scroll_offsets_by_element_id);
+    live_probe::StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
+        serialized_scroll_offsets.c_str());
     live_probe::StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
         result.successor_snapshot.timeline_time_seconds * 1000.0);
     const std::string serialized_attributes =
