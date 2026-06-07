@@ -2555,15 +2555,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     report.used_blink_runtime = true;
     report.diagnostics.push_back(
         "live Blink runtime adapter is linked");
-    AppendLivePaintDiagnostics(snapshot_.html, snapshot_.stylesheets,
-                               snapshot_.viewport,
-                               SnapshotDocumentScrollOffset(snapshot_),
-                               snapshot_.scroll_offsets_by_element_id,
-                               snapshot_.timeline_time_seconds,
-                               snapshot_.element_attributes_by_id_and_name,
-                               snapshot_.hovered_element_id,
-                               snapshot_.active_element_id,
-                               report.diagnostics);
+    report.diagnostics.push_back(
+        "live Blink paint diagnostics are emitted during frame render");
     return report;
   }
 
