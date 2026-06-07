@@ -13093,17 +13093,6 @@ String FontCache::FirstAvailableOrFirst(const String& families) {
   return families;
 }
 #endif
-FilterOperations FilterOperationResolver::CreateFilterOperations(
-    StyleResolverState&,
-    const CSSValue&,
-    CSSPropertyID) {
-  return FilterOperations();
-}
-FilterOperations FilterOperationResolver::CreateOffscreenFilterOperations(
-    const CSSValue&,
-    const Font*) {
-  return FilterOperations();
-}
 CSSStyleValue* StyleValueFactory::CssValueToStyleValue(
     const CSSPropertyName&,
     const CSSValue&) {
@@ -18733,8 +18722,96 @@ FilterEffect* FilterEffectBuilder::BuildFilterEffect(
   return nullptr;
 }
 CompositorFilterOperations FilterEffectBuilder::BuildFilterOperations(
-    const FilterOperations&) const {
-  return CompositorFilterOperations();
+    const FilterOperations& operations) const {
+  CompositorFilterOperations filters;
+  for (FilterOperation* op : operations.Operations()) {
+    switch (op->GetType()) {
+      case FilterOperation::OperationType::kReference:
+        // Reference SVG filters still require the broader SVG filter graph
+        // stack. Keep them fail-soft while restoring basic CSS filter metadata.
+        break;
+      case FilterOperation::OperationType::kGrayscale:
+      case FilterOperation::OperationType::kSepia:
+      case FilterOperation::OperationType::kSaturate:
+      case FilterOperation::OperationType::kHueRotate: {
+        float amount = To<BasicColorMatrixFilterOperation>(*op).Amount();
+        switch (op->GetType()) {
+          case FilterOperation::OperationType::kGrayscale:
+            filters.AppendGrayscaleFilter(amount);
+            break;
+          case FilterOperation::OperationType::kSepia:
+            filters.AppendSepiaFilter(amount);
+            break;
+          case FilterOperation::OperationType::kSaturate:
+            filters.AppendSaturateFilter(amount);
+            break;
+          case FilterOperation::OperationType::kHueRotate:
+            filters.AppendHueRotateFilter(amount);
+            break;
+          default:
+            break;
+        }
+        break;
+      }
+      case FilterOperation::OperationType::kLuminanceToAlpha:
+      case FilterOperation::OperationType::kConvolveMatrix:
+      case FilterOperation::OperationType::kComponentTransfer:
+      case FilterOperation::OperationType::kTurbulence:
+        break;
+      case FilterOperation::OperationType::kColorMatrix: {
+        Vector<float> matrix_values =
+            To<ColorMatrixFilterOperation>(*op).Values();
+        filters.AppendColorMatrixFilter(std::move(matrix_values));
+        break;
+      }
+      case FilterOperation::OperationType::kInvert:
+      case FilterOperation::OperationType::kOpacity:
+      case FilterOperation::OperationType::kBrightness:
+      case FilterOperation::OperationType::kContrast: {
+        float amount = To<BasicComponentTransferFilterOperation>(*op).Amount();
+        switch (op->GetType()) {
+          case FilterOperation::OperationType::kInvert:
+            filters.AppendInvertFilter(amount);
+            break;
+          case FilterOperation::OperationType::kOpacity:
+            filters.AppendOpacityFilter(amount);
+            break;
+          case FilterOperation::OperationType::kBrightness:
+            filters.AppendBrightnessFilter(amount);
+            break;
+          case FilterOperation::OperationType::kContrast:
+            filters.AppendContrastFilter(amount);
+            break;
+          default:
+            break;
+        }
+        break;
+      }
+      case FilterOperation::OperationType::kBlur: {
+        float pixel_radius =
+            To<BlurFilterOperation>(*op).StdDeviation().Pixels();
+        pixel_radius *= shorthand_scale_;
+        filters.AppendBlurFilter(pixel_radius);
+        break;
+      }
+      case FilterOperation::OperationType::kDropShadow: {
+        const ShadowData& shadow = To<DropShadowFilterOperation>(*op).Shadow();
+        const gfx::Vector2d floored_offset = gfx::ToFlooredVector2d(
+            gfx::ScaleVector2d(shadow.Offset(), shorthand_scale_));
+        float radius = shadow.BlurValue() * shorthand_scale_;
+        filters.AppendDropShadowFilter(
+            floored_offset, radius,
+            shadow.GetColor().Resolve(current_color_, color_scheme_));
+        break;
+      }
+      case FilterOperation::OperationType::kBoxReflect:
+        break;
+    }
+  }
+  if (!filters.IsEmpty()) {
+    filters.SetReferenceBox(reference_box_);
+  }
+  return filters;
 }
 gfx::RectF FEGaussianBlur::MapEffect(const gfx::SizeF&,
                                      const gfx::RectF& rect) {

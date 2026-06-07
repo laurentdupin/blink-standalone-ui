@@ -363,7 +363,7 @@ void LayoutBoxModelObject::EnsureLayerAfterAttachForStandalone() {
   const bool scrolls_overflow = StyleRef().ScrollsOverflow();
   if (!Layer() &&
       (StyleRef().HasOpacity() || HasTransformRelatedProperty() ||
-       IsStacked() || scrolls_overflow) &&
+       HasFilterInducingProperty() || IsStacked() || scrolls_overflow) &&
       LayerTypeRequired() != kNoPaintLayer) {
     CreateLayerAfterStyleChange();
   }
