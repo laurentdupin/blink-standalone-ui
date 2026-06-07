@@ -112,17 +112,24 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_for_container.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_length.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_length_list.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_number.h"
+#include "third_party/blink/renderer/core/svg/svg_animated_number_list.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_rect.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_transform_list.h"
 #include "third_party/blink/renderer/core/svg/svg_angle_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_desc_element.h"
+#include "third_party/blink/renderer/core/svg/svg_length_list_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_length_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_matrix_tear_off.h"
+#include "third_party/blink/renderer/core/svg/svg_number_list_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_number_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_point_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
+#include "third_party/blink/renderer/core/svg/svg_text_element.h"
+#include "third_party/blink/renderer/core/svg/svg_title_element.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_list_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_tear_off.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
@@ -852,6 +859,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/layout/table/table_section_layout_algorithm.h"
 #include "third_party/blink/renderer/core/layout/list/layout_list_marker_image.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_viewport_container.h"
+#include "third_party/blink/renderer/core/layout/svg/layout_svg_text_path.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_text_layout_algorithm.h"
 #include "third_party/blink/renderer/core/style/fit_text.h"
 #include "third_party/blink/renderer/core/editing/bidi_adjustment.h"
@@ -3317,8 +3325,12 @@ const WrapperTypeInfo& SVGAnimatedAngle::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedAngle");
 const WrapperTypeInfo& SVGAnimatedEnumerationBase::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedEnumerationBase");
+const WrapperTypeInfo& SVGAnimatedLengthList::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedLengthList");
 const WrapperTypeInfo& SVGAnimatedNumber::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedNumber");
+const WrapperTypeInfo& SVGAnimatedNumberList::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGAnimatedNumberList");
 const WrapperTypeInfo& SVGAnimatedPreserveAspectRatio::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGAnimatedPreserveAspectRatio");
 const WrapperTypeInfo& SVGAnimatedRect::wrapper_type_info_ =
@@ -3341,16 +3353,22 @@ const WrapperTypeInfo& SVGFEImageElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGFEImageElement");
 const WrapperTypeInfo& SVGImageElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGImageElement");
+const WrapperTypeInfo& SVGDescElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGDescElement");
 const WrapperTypeInfo& SVGLineElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLineElement");
 const WrapperTypeInfo& SVGMarkerElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGMarkerElement");
 const WrapperTypeInfo& SVGPathElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGPathElement");
+const WrapperTypeInfo& SVGLengthListTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGLengthList");
 const WrapperTypeInfo& SVGLengthTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGLength");
 const WrapperTypeInfo& SVGMatrixTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGMatrix");
+const WrapperTypeInfo& SVGNumberListTearOff::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGNumberList");
 const WrapperTypeInfo& SVGNumberTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGNumber");
 const WrapperTypeInfo& SVGPointTearOff::wrapper_type_info_ =
@@ -3363,6 +3381,14 @@ const WrapperTypeInfo& SVGRectElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGRectElement");
 const WrapperTypeInfo& SVGSVGElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGSVGElement");
+const WrapperTypeInfo& SVGTextContentElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGTextContentElement");
+const WrapperTypeInfo& SVGTextPositioningElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGTextPositioningElement");
+const WrapperTypeInfo& SVGTextElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGTextElement");
+const WrapperTypeInfo& SVGTitleElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("SVGTitleElement");
 const WrapperTypeInfo& SVGStringListTearOff::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("SVGStringList");
 const WrapperTypeInfo& SVGTransformListTearOff::wrapper_type_info_ =
@@ -3692,6 +3718,12 @@ SVGElement* SVGElementFactory::Create(const AtomicString& local_name,
     return MakeGarbageCollected<SVGLineElement>(document);
   if (local_name == svg_names::kPathTag.LocalName())
     return MakeGarbageCollected<SVGPathElement>(document);
+  if (local_name == svg_names::kTextTag.LocalName())
+    return MakeGarbageCollected<SVGTextElement>(document);
+  if (local_name == svg_names::kTitleTag.LocalName())
+    return MakeGarbageCollected<SVGTitleElement>(document);
+  if (local_name == svg_names::kDescTag.LocalName())
+    return MakeGarbageCollected<SVGDescElement>(document);
   return nullptr;
 }
 
@@ -4442,8 +4474,113 @@ size_t ThreadStackSize() {
 void InitializeMainThreadStackEstimate() {}
 }  // namespace internal
 ThreadStateStorage ThreadStateStorage::main_thread_state_storage_;
+constinit thread_local ThreadStateStorage* g_thread_specific_
+    __attribute__((tls_model(BLINK_HEAP_THREAD_LOCAL_MODEL))) = nullptr;
+
+namespace {
+cppgc::AllocationHandle& StandaloneAllocationHandle() {
+  alignas(std::max_align_t) static unsigned char allocation_handle[64] = {};
+  return *reinterpret_cast<cppgc::AllocationHandle*>(allocation_handle);
+}
+
+cppgc::HeapHandle& StandaloneHeapHandle() {
+  alignas(std::max_align_t) static unsigned char heap_handle[64] = {};
+  return *reinterpret_cast<cppgc::HeapHandle*>(heap_handle);
+}
+}  // namespace
+
+ThreadStateStorage::ThreadStateStorage(
+    ThreadState& thread_state,
+    cppgc::AllocationHandle& allocation_handle,
+    cppgc::HeapHandle& heap_handle)
+    : allocation_handle_(&allocation_handle),
+      heap_handle_(&heap_handle),
+      thread_state_(&thread_state) {}
+
+void ThreadStateStorage::AttachMainThread(
+    ThreadState& thread_state,
+    cppgc::AllocationHandle& allocation_handle,
+    cppgc::HeapHandle& heap_handle) {
+  g_thread_specific_ = new (&main_thread_state_storage_)
+      ThreadStateStorage(thread_state, allocation_handle, heap_handle);
+}
+
+void ThreadStateStorage::AttachNonMainThread(
+    ThreadState& thread_state,
+    cppgc::AllocationHandle& allocation_handle,
+    cppgc::HeapHandle& heap_handle) {
+  g_thread_specific_ =
+      new ThreadStateStorage(thread_state, allocation_handle, heap_handle);
+}
+
+void ThreadStateStorage::DetachNonMainThread(
+    ThreadStateStorage& thread_state_storage) {
+  if (g_thread_specific_ == &thread_state_storage) {
+    g_thread_specific_ = nullptr;
+  }
+  if (&thread_state_storage != &main_thread_state_storage_) {
+    delete &thread_state_storage;
+  }
+}
+
 ThreadStateStorage* ThreadStateStorage::Current() {
-  return &main_thread_state_storage_;
+  if (!g_thread_specific_) {
+    ThreadState::AttachMainThread();
+  }
+  return g_thread_specific_;
+}
+
+ThreadState* ThreadState::AttachMainThread(
+    std::optional<cppgc::StackStartMarker>) {
+  auto* thread_state = new ThreadState(nullptr);
+  ThreadStateStorage::AttachMainThread(*thread_state,
+                                       StandaloneAllocationHandle(),
+                                       StandaloneHeapHandle());
+  return thread_state;
+}
+
+ThreadState* ThreadState::AttachCurrentThread() {
+  auto* thread_state = new ThreadState(nullptr);
+  ThreadStateStorage::AttachNonMainThread(*thread_state,
+                                          StandaloneAllocationHandle(),
+                                          StandaloneHeapHandle());
+  return thread_state;
+}
+
+void ThreadState::DetachCurrentThread() {}
+
+ThreadState::ThreadState(
+    v8::Platform*,
+    std::optional<cppgc::StackStartMarker>)
+    : owning_cpp_heap_(v8::CppHeap::Create(nullptr, v8::CppHeapCreateParams({}))),
+      cpp_heap_(owning_cpp_heap_.get()),
+      heap_handle_(StandaloneHeapHandle()),
+      thread_id_(CurrentThread()) {}
+
+ThreadState::~ThreadState() = default;
+
+void ThreadState::AttachToIsolate(v8::Isolate*,
+                                  DevToolsCountersCallback) {}
+
+void ThreadState::DetachFromIsolate() {}
+
+std::unique_ptr<v8::CppHeap> ThreadState::ReleaseCppHeap() {
+  return std::move(owning_cpp_heap_);
+}
+
+void ThreadState::RecoverCppHeap(std::unique_ptr<v8::CppHeap> cpp_heap) {
+  owning_cpp_heap_ = std::move(cpp_heap);
+  cpp_heap_ = owning_cpp_heap_.get();
+}
+
+void ThreadState::RecoverCppHeapAfterIsolateTearDownForTesting() {}
+
+ThreadState* ThreadState::AttachMainThreadForTesting(v8::Platform*) {
+  return AttachMainThread();
+}
+
+ThreadState* ThreadState::AttachCurrentThreadForTesting(v8::Platform*) {
+  return AttachCurrentThread();
 }
 std::ostream& operator<<(std::ostream& stream, WritingMode) {
   return stream;
@@ -9070,6 +9207,7 @@ String FrameSelection::SelectedText(const TextIteratorBehavior&) const {
 String FrameSelection::SelectedTextForClipboard() const {
   return String();
 }
+void FrameSelection::SelectSubString(const Element&, int, int) {}
 Editor::Editor(LocalFrame& frame)
     : frame_(&frame),
       undo_stack_(nullptr),
@@ -15259,9 +15397,39 @@ struct ScriptStreamingData {};
 }  // namespace v8::internal
 
 namespace v8 {
-cppgc::HeapHandle& CppHeap::GetHeapHandle() {
-  return *static_cast<cppgc::HeapHandle*>(nullptr);
+std::unique_ptr<CppHeap> CppHeap::Create(v8::Platform*,
+                                         const CppHeapCreateParams&) {
+  return std::unique_ptr<CppHeap>(new CppHeap());
 }
+
+cppgc::AllocationHandle& CppHeap::GetAllocationHandle() {
+  return blink::StandaloneAllocationHandle();
+}
+
+cppgc::HeapHandle& CppHeap::GetHeapHandle() {
+  return blink::StandaloneHeapHandle();
+}
+
+void CppHeap::Terminate() {}
+
+cppgc::HeapStatistics CppHeap::CollectStatistics(
+    cppgc::HeapStatistics::DetailLevel detail_level) {
+  cppgc::HeapStatistics statistics;
+  statistics.detail_level = detail_level;
+  return statistics;
+}
+
+void CppHeap::CollectCustomSpaceStatisticsAtLastGC(
+    std::vector<cppgc::CustomSpaceIndex>,
+    std::unique_ptr<CustomSpaceStatisticsReceiver>) {}
+
+void CppHeap::EnableDetachedGarbageCollectionsForTesting() {}
+
+void CppHeap::CollectGarbageForTesting(cppgc::EmbedderStackState) {}
+
+void CppHeap::CollectGarbageInYoungGenerationForTesting(
+    cppgc::EmbedderStackState) {}
+
 ScriptCompiler::StreamedSource::~StreamedSource() = default;
 ExternalMemoryAccounter::~ExternalMemoryAccounter() = default;
 void ExternalMemoryAccounter::Increase(Isolate*, size_t) {}
@@ -15739,6 +15907,10 @@ bool RuntimeEnabledFeaturesBase::is_first_line_text_metrics_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_bidi_caret_affinity_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_svg_length_resolve_unparsed_value_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::
+    is_svg_length_list_clear_on_parsing_failure_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::
+    is_svg_number_list_clear_on_parsing_failure_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_line_clamp_lines_and_height_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_layout_table_cell_alignment_safe_enabled_ =
@@ -19454,18 +19626,16 @@ InlineCaretPosition BidiAdjustment::AdjustForInlineCaretPositionResolution(
     const InlineCaretPosition& position) {
   return position;
 }
-SvgTextLayoutAlgorithm::SvgTextLayoutAlgorithm(InlineNode node,
-                                               WritingMode writing_mode)
-    : inline_node_(node),
-      addressable_count_(0),
-      horizontal_(IsHorizontalWritingMode(writing_mode)),
-      inline_direction_(
-          WritingDirectionMode(writing_mode, TextDirection::kLtr).InlineEnd()) {}
-PhysicalSize SvgTextLayoutAlgorithm::Layout(
-    const String&,
-    FragmentItemsBuilder::ItemWithOffsetList&) {
-  return PhysicalSize();
+std::unique_ptr<PathPositionMapper> LayoutSVGTextPath::LayoutPath() const {
+  return nullptr;
 }
+
+PathPositionMapper::PositionType PathPositionMapper::PointAndNormalAtLength(
+    float,
+    PointAndTangent&) {
+  return kBeforePath;
+}
+
 bool LayoutProgress::IsDeterminate() const {
   return false;
 }
