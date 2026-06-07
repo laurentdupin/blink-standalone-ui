@@ -406,8 +406,8 @@ bool ParseArgs(int argc,
     } else if (arg == "--profile-auto-scroll-step") {
       const char* value = next_value();
       float parsed = 0.0f;
-      if (!value || !ParseFloat(value, &parsed) || parsed <= 0.0f ||
-          parsed > 10000.0f) {
+      if (!value || !ParseFloat(value, &parsed) ||
+          std::abs(parsed) < 0.5f || std::abs(parsed) > 10000.0f) {
         return false;
       }
       *profile_auto_scroll_step = parsed;
@@ -790,6 +790,13 @@ bool ViewerRequiresFullRedraw(const html_css_renderer::RenderResult& result) {
   return result.frame.requires_full_redraw || result.requires_full_redraw;
 }
 
+bool ViewerUsesScrollTranslationReuse(
+    const html_css_renderer::RenderResult& result) {
+  return result.frame.allows_scroll_translation_reuse ||
+         std::abs(result.frame.scroll_translation_delta.x) > 0.5f ||
+         std::abs(result.frame.scroll_translation_delta.y) > 0.5f;
+}
+
 bool SameViewerSize(html_css_renderer::Size left,
                     html_css_renderer::Size right) {
   return std::abs(left.width - right.width) < 0.5f &&
@@ -839,15 +846,20 @@ void PrintViewerStatus(
   const std::vector<html_css_renderer::Rect>& damage_rects =
       ViewerDamageRects(result);
   const bool requires_full_redraw = ViewerRequiresFullRedraw(result);
+  const bool scroll_reuse = ViewerUsesScrollTranslationReuse(result);
   const html_css_renderer::Size viewport = result.successor_snapshot.viewport;
   std::fprintf(stderr,
                "viewer status: frame=%llu event=%s incremental=%d "
                "viewport=(%.0fx%.0f) scroll=(%.1f,%.1f) "
-               "full_redraw=%d damage_rects=%zu",
+               "full_redraw=%d scroll_reuse=%d scroll_delta=(%.1f,%.1f) "
+               "damage_rects=%zu",
                static_cast<unsigned long long>(frame_count), reason,
                incremental_update ? 1 : 0, viewport.width, viewport.height,
                CurrentDocumentScrollX(input),
                CurrentDocumentScrollY(input), requires_full_redraw ? 1 : 0,
+               scroll_reuse ? 1 : 0,
+               result.frame.scroll_translation_delta.x,
+               result.frame.scroll_translation_delta.y,
                damage_rects.size());
   for (size_t i = 0; i < damage_rects.size(); ++i) {
     const html_css_renderer::Rect& rect = damage_rects[i];
@@ -950,7 +962,8 @@ std::vector<SDL_Rect> TextureUpdateRectsForFrame(
     const html_css_renderer::RenderResult& result,
     const html_css_renderer::CpuImage& image,
     bool incremental_update) {
-  if (!incremental_update || ViewerRequiresFullRedraw(result)) {
+  if (!incremental_update || ViewerRequiresFullRedraw(result) ||
+      ViewerUsesScrollTranslationReuse(result)) {
     return {SDL_Rect{0, 0, image.width, image.height}};
   }
   std::vector<SDL_Rect> rects;
