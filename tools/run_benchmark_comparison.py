@@ -105,6 +105,23 @@ def unsupported_css_diagnostics(metrics_json: dict) -> tuple[int, str]:
     return len(matches), matches[0] if matches else ""
 
 
+def add_scroll_args(cmd: list[str], scroll: dict | None) -> None:
+    if not scroll:
+        return
+    cmd.extend(["--scroll-x", str(int(scroll.get("x", 0)))])
+    cmd.extend(["--scroll-y", str(int(scroll.get("y", 0)))])
+
+
+def add_element_scroll_args(cmd: list[str], scrolls: dict | None) -> None:
+    for element_id, offset in sorted((scrolls or {}).items()):
+        cmd.extend(
+            [
+                "--scroll-element",
+                f"{element_id}:{int(offset.get('x', 0))},{int(offset.get('y', 0))}",
+            ]
+        )
+
+
 def image_cell(path: Path, out_dir: Path, label: str) -> str:
     if not path.exists():
         return '<td class="missing">missing</td>'
@@ -375,6 +392,8 @@ def main() -> int:
         ]
         for attr in case.get("attrs", []):
             bench_cmd.extend(["--attr", attr])
+        add_scroll_args(bench_cmd, case.get("scroll"))
+        add_element_scroll_args(bench_cmd, case.get("element_scroll"))
         status["benchmark_exit"], status["benchmark_elapsed_seconds"], _ = run(
             bench_cmd, item_dir / f"{case_name}-benchmark.log", args.timeout
         )
@@ -392,6 +411,8 @@ def main() -> int:
             ]
             for attr in case.get("attrs", []):
                 pw_cmd.extend(["--attr", attr])
+            add_scroll_args(pw_cmd, case.get("scroll"))
+            add_element_scroll_args(pw_cmd, case.get("element_scroll"))
             status["playwright_exit"], status["playwright_elapsed_seconds"], _ = run(
                 pw_cmd, item_dir / f"{case_name}-playwright.log", args.timeout
             )

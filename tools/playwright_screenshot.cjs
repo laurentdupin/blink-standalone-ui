@@ -94,6 +94,24 @@ function parseAttrOverride(value) {
   };
 }
 
+function parseElementScroll(value) {
+  const colon = value.indexOf(":");
+  const comma = value.indexOf(",", colon + 1);
+  if (colon <= 0 || comma <= colon + 1) {
+    throw new Error(`Invalid --scroll-element '${value}', expected id:x,y`);
+  }
+  const x = Number(value.slice(colon + 1, comma));
+  const y = Number(value.slice(comma + 1));
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    throw new Error(`Invalid --scroll-element '${value}', expected numeric x,y`);
+  }
+  return {
+    id: value.slice(0, colon),
+    x,
+    y,
+  };
+}
+
 async function main() {
   if (process.argv.includes("--check-only")) {
     requirePlaywright();
@@ -109,8 +127,9 @@ async function main() {
   const timeMs = Number(argValue("--time-ms") || "0");
   const outJson = argValue("--out-json");
   const attrOverrides = argValues("--attr").map(parseAttrOverride);
+  const elementScrolls = argValues("--scroll-element").map(parseElementScroll);
   if (!html || !out) {
-    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--time-ms ms] [--attr id:name=value] [--out-json path]");
+    console.error("Usage: node tools/playwright_screenshot.cjs --html-file <path> --out <path> [--viewport WxH] [--scroll-x px] [--scroll-y px] [--scroll-element id:x,y] [--time-ms ms] [--attr id:name=value] [--out-json path]");
     process.exit(2);
   }
   const [width, height] = viewportArg.split("x").map((v) => Number(v));
@@ -139,6 +158,18 @@ async function main() {
       });
       await page.waitForTimeout(50);
     }
+    if (elementScrolls.length > 0) {
+      await page.evaluate((scrolls) => {
+        for (const scroll of scrolls) {
+          const element = document.getElementById(scroll.id);
+          if (!element) {
+            continue;
+          }
+          element.scrollTo(scroll.x, scroll.y);
+        }
+      }, elementScrolls);
+      await page.waitForTimeout(50);
+    }
     const playwrightTimeMode = timeMs > 0 ? "wall_clock_wait" : "not_requested";
     if (timeMs > 0) {
       await page.waitForTimeout(timeMs);
@@ -157,6 +188,15 @@ async function main() {
           document.documentElement.scrollHeight,
           document.body ? document.body.scrollHeight : 0),
       }));
+      state.elementScrolls = {};
+      for (const scroll of elementScrolls) {
+        state.elementScrolls[scroll.id] = await page.evaluate((id) => {
+          const element = document.getElementById(id);
+          return element
+            ? { scrollLeft: element.scrollLeft, scrollTop: element.scrollTop }
+            : null;
+        }, scroll.id);
+      }
       state.requestedTimeMs = timeMs;
       state.appliedTimeMs = timeMs > 0 ? timeMs : 0;
       state.playwrightTimeMode = playwrightTimeMode;

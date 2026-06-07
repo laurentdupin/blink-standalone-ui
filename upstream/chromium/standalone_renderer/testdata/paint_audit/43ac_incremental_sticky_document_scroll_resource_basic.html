@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      min-height: 760px;
+      background: rgb(247, 250, 252);
+    }
+
+    .spacer {
+      height: 96px;
+      background: rgb(226, 232, 240);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 172px 1fr;
+      gap: 18px;
+      padding: 0 24px 260px;
+    }
+
+    #sticky-card {
+      position: sticky;
+      top: 18px;
+      width: 160px;
+      height: 112px;
+      border: 4px solid rgb(15, 23, 42);
+      border-radius: 12px;
+      overflow: hidden;
+      background-image: url("43aa_panel_blocks.svg");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: cover;
+    }
+
+    .content {
+      display: grid;
+      gap: 18px;
+    }
+
+    .block {
+      height: 92px;
+      border: 2px solid rgb(148, 163, 184);
+      background: rgb(219, 234, 254);
+    }
+
+    .block:nth-child(2n) {
+      background: rgb(254, 249, 195);
+    }
+  </style>
+</head>
+<body>
+  <div class="spacer"></div>
+  <main class="layout">
+    <aside id="sticky-card" data-debug-id="sticky-card"></aside>
+    <section class="content">
+      <div class="block"></div>
+      <div class="block"></div>
+      <div class="block"></div>
+      <div class="block"></div>
+      <div class="block"></div>
+    </section>
+  </main>
+</body>
+</html>

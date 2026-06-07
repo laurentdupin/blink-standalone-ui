@@ -24,6 +24,7 @@
       "43v_sdl_resource_scroll_160_to_160",
       "43aa_element_scroll_0_to_140",
       "43aa_element_scroll_140_to_140",
+      "43ab_fixed_document_scroll_0_to_120",
       "43w_hover_none_to_card",
       "43w_active_none_to_card",
       "43x_png_hover_none_to_card",
@@ -359,6 +360,22 @@
           "can_scroll": {
             "scroll-panel": {"x": false, "y": true}
           }
+        }
+      }
+    },
+    {
+      "name": "43ab_fixed_document_scroll_0_to_120",
+      "html": "43ab_incremental_fixed_document_scroll_resource_basic.html",
+      "viewport": "360x240",
+      "previous_scroll": {"x": 0, "y": 0},
+      "current_scroll": {"x": 0, "y": 120},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "broad",
+        "damage_bounds": {"x": 0, "y": 0, "width": 360, "height": 240},
+        "document_scroll": {
+          "applied": {"x": 0, "y": 120}
         }
       }
     },

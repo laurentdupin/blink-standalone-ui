@@ -2925,7 +2925,25 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             nearly_equal_root_space_origin(width, active_chunk_bounds.x) &&
             nearly_equal_root_space_origin(g, active_chunk_bounds.y) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
-        if (duplicates_chunk_root_space_origin) {
+        const bool duplicates_scroll_chunk_transform =
+            pure_translation &&
+            active_chunk_property_state.scroll_node_id != 0 &&
+            !active_chunk_property_state.transform_has_non_translation &&
+            nearly_equal(x,
+                         active_chunk_property_state.transform_to_root.values[0]) &&
+            nearly_equal(y,
+                         active_chunk_property_state.transform_to_root.values[4]) &&
+            nearly_equal(width,
+                         active_chunk_property_state.transform_to_root.values[12]) &&
+            nearly_equal(height,
+                         active_chunk_property_state.transform_to_root.values[1]) &&
+            nearly_equal(r,
+                         active_chunk_property_state.transform_to_root.values[5]) &&
+            nearly_equal(g,
+                         active_chunk_property_state.transform_to_root.values[13]) &&
+            (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
+        if (duplicates_chunk_root_space_origin ||
+            duplicates_scroll_chunk_transform) {
           Matrix4 skipped_matrix;
           skipped_matrix.values[0] = x;
           skipped_matrix.values[4] = y;
@@ -2934,7 +2952,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           skipped_matrix.values[5] = r;
           skipped_matrix.values[13] = g;
           SkippedTransformDiagnostic skipped;
-          skipped.reason = "duplicate_root_space_pure_translation";
           skipped.matrix = skipped_matrix;
           skipped.chunk_bounds = active_chunk_bounds;
           skipped.transform_node_id =
@@ -2949,11 +2966,17 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           skipped.effect_chain_depth =
               active_chunk_property_state.effect_chain_depth;
           skipped.source_chunk_key = active_chunk_key;
+          skipped.reason = duplicates_scroll_chunk_transform
+                               ? "duplicate_scroll_chunk_transform"
+                               : "duplicate_root_space_pure_translation";
           result.skipped_transform_diagnostics.push_back(std::move(skipped));
           result.diagnostics.push_back(
-              "real Blink PaintArtifact skipped duplicate root-space chunk "
+              "real Blink PaintArtifact skipped duplicate chunk "
               "translation transform for chunk " + active_chunk_key +
-              " reason=record_geometry_already_root_space"
+              " reason=" +
+              (duplicates_scroll_chunk_transform
+                   ? std::string("record_repeated_scroll_chunk_transform")
+                   : std::string("record_geometry_already_root_space")) +
               " transform_node_id=" +
               std::to_string(active_chunk_property_state.transform_node_id) +
               " transform_parent_id=" +
