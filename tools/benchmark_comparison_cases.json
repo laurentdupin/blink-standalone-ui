@@ -23,12 +23,14 @@
       "18g_css_bg_local_svg_position",
       "14g_image_inside_overflow_clip",
       "14i_image_inside_rounded_overflow_clip",
+      "05l_image_local_svg_rounded_overflow_clip",
       "14e_nested_overflow_hidden",
       "14f_transform_inside_overflow_clip",
       "14h_absolute_inside_overflow_clip",
       "23_image_intrinsic_width_percent",
       "24_image_max_width_auto",
       "18h_css_bg_data_png_rounded_clip",
+      "18i_css_bg_local_svg_rounded_clip",
       "24d_image_local_svg_object_fit_contain"
     ],
     "hcsr-known-gaps": [
@@ -135,6 +137,13 @@
       "note": "PNG image clipped by overflow:hidden parent with border-radius."
     },
     {
+      "name": "05l_image_local_svg_rounded_overflow_clip",
+      "source": "paint_audit",
+      "html": "05l_image_local_svg_rounded_overflow_clip.html",
+      "viewport": "300x200",
+      "note": "External non-text SVG image clipped by overflow:hidden parent with border-radius; Chromium comparison may show minor edge AA drift."
+    },
+    {
       "name": "14e_nested_overflow_hidden",
       "source": "paint_audit",
       "html": "14e_nested_overflow_hidden.html",
@@ -173,6 +182,13 @@
       "html": "18h_css_bg_data_png_rounded_clip.html",
       "viewport": "180x130",
       "note": "CSS background PNG clipped by border-radius."
+    },
+    {
+      "name": "18i_css_bg_local_svg_rounded_clip",
+      "source": "paint_audit",
+      "html": "18i_css_bg_local_svg_rounded_clip.html",
+      "viewport": "300x200",
+      "note": "CSS background external non-text SVG clipped by border-radius; Chromium comparison may show minor edge AA drift."
     },
     {
       "name": "24d_image_local_svg_object_fit_contain",
