@@ -215,7 +215,21 @@ scoped_refptr<Image> LayoutImageResource::GetImage(
 
   Image* image = cached_image_->GetImage();
 
-  return image;
+  auto* svg_image = DynamicTo<SVGImage>(image);
+  if (!svg_image) {
+    return image;
+  }
+
+  const ComputedStyle& style = layout_object_->StyleRef();
+  auto preferred_color_scheme =
+      layout_object_->GetDocument()
+          .GetStyleEngine()
+          .ResolveColorSchemeForEmbedding(&style);
+  const SVGImageViewInfo* view_info = SVGImageForContainer::CreateViewInfo(
+      *svg_image, layout_object_->GetNode());
+  return SVGImageForContainer::Create(*svg_image, container_size,
+                                      style.EffectiveZoom(), view_info,
+                                      preferred_color_scheme);
 }
 
 bool LayoutImageResource::MaybeAnimated() const {

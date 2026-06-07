@@ -16619,6 +16619,15 @@ StyleFetchedImage::StyleFetchedImage(ImageResourceContent* image,
 }
 StyleFetchedImage::~StyleFetchedImage() = default;
 WrappedImagePtr StyleFetchedImage::Data() const { return image_.Get(); }
+float StyleFetchedImage::ApplyImageResolution(float multiplier) const {
+  const Image& image = *image_->GetImage();
+  if (image.IsBitmapImage() && override_image_resolution_ > 0.0f) {
+    multiplier /= override_image_resolution_;
+  } else if (image_->HasDevicePixelRatioHeaderValue()) {
+    multiplier /= image_->DevicePixelRatioHeaderValue();
+  }
+  return multiplier;
+}
 float StyleFetchedImage::ImageScaleFactor() const {
   if (override_image_resolution_ > 0.0f) {
     return override_image_resolution_;
@@ -16653,36 +16662,57 @@ NaturalSizingInfo StyleFetchedImage::GetNaturalSizingInfo(
   if (!image_ || !image_->HasImage() || image_->ErrorOccurred()) {
     return NaturalSizingInfo::None();
   }
-  Image* image = image_->GetImage();
-  gfx::SizeF size(image->Size(respect_orientation));
-  if (override_image_resolution_ > 0.0f) {
-    size.Scale(1.0f / override_image_resolution_);
-  } else if (image_->HasDevicePixelRatioHeaderValue()) {
-    size.Scale(1.0f / image_->DevicePixelRatioHeaderValue());
+  Image& image = *image_->GetImage();
+  NaturalSizingInfo sizing_info;
+  if (auto* svg_image = DynamicTo<SVGImage>(image)) {
+    const SVGImageViewInfo* view_info =
+        SVGImageForContainer::CreateViewInfo(*svg_image, url_);
+    sizing_info =
+        SVGImageForContainer::GetNaturalDimensions(*svg_image, view_info)
+            .value_or(NaturalSizingInfo::None());
+  } else {
+    gfx::SizeF size(image.Size(ForceOrientationIfNecessary(respect_orientation)));
+    sizing_info = NaturalSizingInfo::MakeFixed(size);
   }
-  size.Scale(multiplier);
-  return NaturalSizingInfo::MakeFixed(size);
+
+  multiplier = ApplyImageResolution(multiplier);
+  sizing_info.size = ApplyZoom(sizing_info.size, multiplier);
+  return sizing_info;
 }
-gfx::SizeF StyleFetchedImage::ImageSize(float,
+gfx::SizeF StyleFetchedImage::ImageSize(float multiplier,
                                         const gfx::SizeF& default_object_size,
                                         RespectImageOrientationEnum respect_orientation) const {
   if (!image_ || !image_->HasImage() || image_->ErrorOccurred()) {
     return default_object_size;
   }
-  Image* image = image_->GetImage();
-  gfx::SizeF size(image->Size(respect_orientation));
-  if (override_image_resolution_ > 0.0f) {
-    size.Scale(1.0f / override_image_resolution_);
-  } else if (image_->HasDevicePixelRatioHeaderValue()) {
-    size.Scale(1.0f / image_->DevicePixelRatioHeaderValue());
+  multiplier = ApplyImageResolution(multiplier);
+  Image& image = *image_->GetImage();
+  gfx::SizeF size;
+  if (auto* svg_image = DynamicTo<SVGImage>(image)) {
+    const SVGImageViewInfo* view_info =
+        SVGImageForContainer::CreateViewInfo(*svg_image, url_);
+    const gfx::SizeF unzoomed_default_object_size =
+        gfx::ScaleSize(default_object_size, 1 / multiplier);
+    size = SVGImageForContainer::ConcreteObjectSize(
+        *svg_image, view_info, unzoomed_default_object_size);
+  } else {
+    size = gfx::SizeF(image.Size(ForceOrientationIfNecessary(respect_orientation)));
   }
-  return size;
+  return ApplyZoom(size, multiplier);
 }
 bool StyleFetchedImage::HasIntrinsicSize() const {
   if (!image_ || !image_->HasImage() || image_->ErrorOccurred()) {
     return false;
   }
-  return image_->GetImage()->HasIntrinsicSize();
+  Image& image = *image_->GetImage();
+  if (auto* svg_image = DynamicTo<SVGImage>(image)) {
+    const SVGImageViewInfo* view_info =
+        SVGImageForContainer::CreateViewInfo(*svg_image, url_);
+    std::optional<NaturalSizingInfo> natural_sizing_info =
+        SVGImageForContainer::GetNaturalDimensions(*svg_image, view_info);
+    return natural_sizing_info && !natural_sizing_info->IsNone();
+  }
+  return image.HasIntrinsicSize();
 }
 void StyleFetchedImage::AddClient(ImageResourceObserver* observer) {
   if (image_ && observer) {
@@ -16694,14 +16724,27 @@ void StyleFetchedImage::RemoveClient(ImageResourceObserver* observer) {
     image_->RemoveObserver(observer);
   }
 }
-scoped_refptr<Image> StyleFetchedImage::GetImage(const ImageResourceObserver&,
-                                                 const Node&,
-                                                 const ComputedStyle&,
-                                                 const gfx::SizeF&) const {
+scoped_refptr<Image> StyleFetchedImage::GetImage(
+    const ImageResourceObserver&,
+    const Node& node,
+    const ComputedStyle& style,
+    const gfx::SizeF& target_size) const {
   if (!image_ || image_->ErrorOccurred()) {
     return Image::NullImage();
   }
-  return image_->GetImage();
+  Image* image = image_->GetImage();
+  auto* svg_image = DynamicTo<SVGImage>(image);
+  if (!svg_image) {
+    return image;
+  }
+  const SVGImageViewInfo* view_info =
+      SVGImageForContainer::CreateViewInfo(*svg_image, url_);
+  return SVGImageForContainer::Create(*svg_image, target_size,
+                                      style.EffectiveZoom(), view_info,
+                                      node.GetDocument()
+                                          .GetStyleEngine()
+                                          .ResolveColorSchemeForEmbedding(
+                                              &style));
 }
 bool StyleFetchedImage::KnownToBeOpaque(const Document&,
                                         const ComputedStyle&) const {
@@ -18719,6 +18762,20 @@ bool StyleImage::IsCorsSameOrigin() const {
 RespectImageOrientationEnum StyleImage::ForceOrientationIfNecessary(
     RespectImageOrientationEnum orientation) const {
   return orientation;
+}
+gfx::SizeF StyleImage::ApplyZoom(const gfx::SizeF& size, float multiplier) {
+  if (multiplier == 1.0f) {
+    return size;
+  }
+
+  gfx::SizeF scaled_size = gfx::ScaleSize(size, multiplier);
+  if (size.width() > 0) {
+    scaled_size.set_width(std::max(1.0f, scaled_size.width()));
+  }
+  if (size.height() > 0) {
+    scaled_size.set_height(std::max(1.0f, scaled_size.height()));
+  }
+  return scaled_size;
 }
 scoped_refptr<Image> Image::LoadPlatformResource(int,
                                                  ui::ResourceScaleFactor) {

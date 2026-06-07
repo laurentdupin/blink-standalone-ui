@@ -34,7 +34,9 @@
       "24_image_max_width_auto",
       "18h_css_bg_data_png_rounded_clip",
       "18i_css_bg_local_svg_rounded_clip",
-      "24d_image_local_svg_object_fit_contain"
+      "24d_image_local_svg_object_fit_contain",
+      "45i_svg_image_preserve_aspect_ratio",
+      "45j_svg_background_preserve_aspect_ratio"
     ],
     "layout-tables": [
       "26_table_auto_layout_basic",
@@ -481,6 +483,20 @@
       "html": "45h_transform_svg_background_basic.html",
       "viewport": "320x220",
       "note": "CSS transform applied to an external non-text SVG background container; Chromium comparison may show transform edge AA drift."
+    },
+    {
+      "name": "45i_svg_image_preserve_aspect_ratio",
+      "source": "paint_audit",
+      "html": "45i_svg_image_preserve_aspect_ratio.html",
+      "viewport": "320x220",
+      "note": "External non-text SVG <img> preserves intrinsic viewBox aspect ratio inside a mismatched CSS box."
+    },
+    {
+      "name": "45j_svg_background_preserve_aspect_ratio",
+      "source": "paint_audit",
+      "html": "45j_svg_background_preserve_aspect_ratio.html",
+      "viewport": "320x220",
+      "note": "CSS background external non-text SVG preserves intrinsic viewBox aspect ratio inside a mismatched background image box."
     },
     {
       "name": "hcsr_feature_showcase",
