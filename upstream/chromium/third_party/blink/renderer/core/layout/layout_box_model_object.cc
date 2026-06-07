@@ -360,11 +360,16 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutBoxModelObject::EnsureLayerAfterAttachForStandalone() {
   NOT_DESTROYED();
+  const bool scrolls_overflow = StyleRef().ScrollsOverflow();
   if (!Layer() &&
       (StyleRef().HasOpacity() || HasTransformRelatedProperty() ||
-       IsStacked()) &&
+       IsStacked() || scrolls_overflow) &&
       LayerTypeRequired() != kNoPaintLayer) {
     CreateLayerAfterStyleChange();
+  }
+  if (Layer() && scrolls_overflow && IsScrollContainer() &&
+      !GetScrollableArea()) {
+    Layer()->ScrollContainerStatusChanged();
   }
 }
 #endif
