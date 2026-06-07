@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    #card {
+      display: block;
+      width: 96px;
+      height: 72px;
+      margin: 24px;
+      image-rendering: pixelated;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+    }
+
+    #card[data-mask="wide"] {
+      -webkit-mask-image: linear-gradient(90deg, #000 0 100%);
+      mask-image: linear-gradient(90deg, #000 0 100%);
+    }
+
+    #card[data-mask="narrow"] {
+      -webkit-mask-image: linear-gradient(90deg, transparent 0 24px, #000 24px 72px, transparent 72px 100%);
+      mask-image: linear-gradient(90deg, transparent 0 24px, #000 24px 72px, transparent 72px 100%);
+    }
+  </style>
+</head>
+<body>
+  <img id="card" data-mask="wide" alt="masked png" src="17_assets/red_2x2.png">
+</body>
+</html>

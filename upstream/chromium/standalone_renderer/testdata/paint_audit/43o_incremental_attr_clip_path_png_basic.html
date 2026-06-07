@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    #card {
+      display: block;
+      width: 96px;
+      height: 72px;
+      margin: 24px;
+      image-rendering: pixelated;
+    }
+
+    #card[data-clip="wide"] {
+      clip-path: inset(0);
+    }
+
+    #card[data-clip="narrow"] {
+      clip-path: inset(0 28px);
+    }
+  </style>
+</head>
+<body>
+  <img id="card" data-clip="wide" alt="clip path png" src="17_assets/red_2x2.png">
+</body>
+</html>

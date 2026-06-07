@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    #card {
+      width: 160px;
+      height: 96px;
+      margin: 24px;
+      overflow: hidden;
+      background: white;
+    }
+
+    #card[data-round="square"] {
+      border-radius: 0;
+    }
+
+    #card[data-round="round"] {
+      border-radius: 28px;
+    }
+
+    #card img {
+      display: block;
+      width: 160px;
+      height: 96px;
+    }
+  </style>
+</head>
+<body>
+  <div id="card" data-round="square">
+    <img alt="rounded svg" src="30_route_map.svg">
+  </div>
+</body>
+</html>

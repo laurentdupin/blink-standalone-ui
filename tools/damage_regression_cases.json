@@ -10,7 +10,13 @@
       "43j_geometry_a_to_b",
       "43k_clipped_overflow_a_to_b",
       "43l_opacity_low_to_high",
-      "43m_stacking_a_to_b"
+      "43m_stacking_a_to_b",
+      "43o_clip_path_png_wide_to_narrow",
+      "43p_mask_png_wide_to_narrow",
+      "43q_clip_path_svg_background_wide_to_narrow",
+      "43r_mask_svg_background_wide_to_narrow",
+      "43s_rounded_svg_image_square_to_round",
+      "43t_background_position_png_a_to_b"
     ]
   },
   "cases": [
@@ -139,6 +145,78 @@
         "requires_full_redraw": false,
         "damage_class": "local",
         "damage_bounds": {"x": 24, "y": 24, "width": 144, "height": 144}
+      }
+    },
+    {
+      "name": "43o_clip_path_png_wide_to_narrow",
+      "html": "43o_incremental_attr_clip_path_png_basic.html",
+      "viewport": "180x140",
+      "previous_attrs": ["card:data-clip=wide"],
+      "current_attrs": ["card:data-clip=narrow"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43p_mask_png_wide_to_narrow",
+      "html": "43p_incremental_attr_mask_png_basic.html",
+      "viewport": "180x140",
+      "previous_attrs": ["card:data-mask=wide"],
+      "current_attrs": ["card:data-mask=narrow"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43q_clip_path_svg_background_wide_to_narrow",
+      "html": "43q_incremental_attr_clip_path_svg_background_basic.html",
+      "viewport": "220x150",
+      "previous_attrs": ["card:data-clip=wide"],
+      "current_attrs": ["card:data-clip=narrow"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43r_mask_svg_background_wide_to_narrow",
+      "html": "43r_incremental_attr_mask_svg_background_basic.html",
+      "viewport": "220x150",
+      "previous_attrs": ["card:data-mask=wide"],
+      "current_attrs": ["card:data-mask=narrow"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43s_rounded_svg_image_square_to_round",
+      "html": "43s_incremental_attr_rounded_svg_image_basic.html",
+      "viewport": "220x150",
+      "previous_attrs": ["card:data-round=square"],
+      "current_attrs": ["card:data-round=round"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
+      }
+    },
+    {
+      "name": "43t_background_position_png_a_to_b",
+      "html": "43t_incremental_attr_background_position_png_basic.html",
+      "viewport": "180x140",
+      "previous_attrs": ["card:data-pos=a"],
+      "current_attrs": ["card:data-pos=b"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local"
       }
     }
   ]

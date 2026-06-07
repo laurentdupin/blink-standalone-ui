@@ -5478,8 +5478,12 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
                                 RawPaintRecordAudit& audit,
                                 std::ostringstream* paint_ops_json,
                                 bool top_level,
-                                int depth = 0) {
-  bool first = true;
+                                int depth = 0,
+                                bool* first_paint_op = nullptr) {
+  bool local_first_paint_op = true;
+  if (!first_paint_op) {
+    first_paint_op = &local_first_paint_op;
+  }
   for (const cc::PaintOp& op : record) {
     const std::string op_name = cc::PaintOpTypeToString(op.GetType());
     if (top_level) {
@@ -5556,10 +5560,10 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
     }
 
     if (paint_ops_json) {
-      if (!first) {
+      if (!*first_paint_op) {
         *paint_ops_json << ",";
       }
-      first = false;
+      *first_paint_op = false;
       *paint_ops_json << "{\"type\":" << JsonStringForStandaloneRenderer(op_name)
                       << ",\"depth\":" << depth
                       << ",\"accounting\":\""
@@ -5588,7 +5592,7 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
     if (op.GetType() == cc::PaintOpType::kDrawRecord) {
       AppendPaintRecordAuditJson(
           static_cast<const cc::DrawRecordOp&>(op).record, audit,
-          paint_ops_json, false, depth + 1);
+          paint_ops_json, false, depth + 1, first_paint_op);
     }
   }
 }

@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    #card {
+      width: 160px;
+      height: 96px;
+      margin: 24px;
+      background: white url("30_route_map.svg") center / 160px 96px no-repeat;
+    }
+
+    #card[data-clip="wide"] {
+      clip-path: inset(0);
+    }
+
+    #card[data-clip="narrow"] {
+      clip-path: inset(12px 24px);
+    }
+  </style>
+</head>
+<body>
+  <div id="card" data-clip="wide"></div>
+</body>
+</html>

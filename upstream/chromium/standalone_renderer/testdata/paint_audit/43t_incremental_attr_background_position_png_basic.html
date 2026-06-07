@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      margin: 0;
+      background: white;
+    }
+
+    #card {
+      width: 120px;
+      height: 96px;
+      margin: 24px;
+      background-color: white;
+      background-image: url("17_assets/red_2x2.png");
+      background-repeat: no-repeat;
+      background-size: 48px 48px;
+      image-rendering: pixelated;
+    }
+
+    #card[data-pos="a"] {
+      background-position: 0 0;
+    }
+
+    #card[data-pos="b"] {
+      background-position: 72px 48px;
+    }
+  </style>
+</head>
+<body>
+  <div id="card" data-pos="a"></div>
+</body>
+</html>
