@@ -245,7 +245,7 @@
       "expected": {
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
-        "damage_class": "broad"
+        "damage_class": "local"
       }
     },
     {
