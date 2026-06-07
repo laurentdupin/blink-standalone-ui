@@ -22,11 +22,13 @@
       "18f_css_bg_data_png_repeat_position",
       "18g_css_bg_local_svg_position",
       "14g_image_inside_overflow_clip",
+      "14i_image_inside_rounded_overflow_clip",
       "14e_nested_overflow_hidden",
       "14f_transform_inside_overflow_clip",
       "14h_absolute_inside_overflow_clip",
       "23_image_intrinsic_width_percent",
       "24_image_max_width_auto",
+      "18h_css_bg_data_png_rounded_clip",
       "24d_image_local_svg_object_fit_contain"
     ],
     "hcsr-known-gaps": [
@@ -126,6 +128,13 @@
       "note": "PNG image clipped by overflow:hidden parent."
     },
     {
+      "name": "14i_image_inside_rounded_overflow_clip",
+      "source": "paint_audit",
+      "html": "14i_image_inside_rounded_overflow_clip.html",
+      "viewport": "180x130",
+      "note": "PNG image clipped by overflow:hidden parent with border-radius."
+    },
+    {
       "name": "14e_nested_overflow_hidden",
       "source": "paint_audit",
       "html": "14e_nested_overflow_hidden.html",
@@ -157,6 +166,13 @@
       "source": "paint_audit",
       "html": "24_image_max_width_auto.html",
       "note": "PNG max-width auto sizing."
+    },
+    {
+      "name": "18h_css_bg_data_png_rounded_clip",
+      "source": "paint_audit",
+      "html": "18h_css_bg_data_png_rounded_clip.html",
+      "viewport": "180x130",
+      "note": "CSS background PNG clipped by border-radius."
     },
     {
       "name": "24d_image_local_svg_object_fit_contain",

@@ -373,6 +373,7 @@ struct LiveHitTestEntry {
 struct EmptyClipChunkForStandaloneRenderer {
   gfx::Rect chunk_bounds;
   gfx::RectF clip_rect;
+  std::optional<SkRRect> clip_rrect;
 };
 
 struct LiveFramePaintProbeCache {
@@ -972,6 +973,32 @@ const FloatRoundedRect* RoundedClipInChainForStandaloneRenderer(
     ++depth;
   }
   return nullptr;
+}
+
+std::optional<SkRRect> RoundedClipRRectForStandaloneRenderer(
+    const ClipPaintPropertyNode& clip,
+    const gfx::RectF& clip_rect) {
+  const FloatRoundedRect* rounded_clip =
+      RoundedClipInChainForStandaloneRenderer(clip);
+  if (!rounded_clip) {
+    return std::nullopt;
+  }
+  const FloatRoundedRect::Radii& radii = rounded_clip->GetRadii();
+  SkVector sk_radii[4] = {
+      SkVector::Make(radii.TopLeft().width(), radii.TopLeft().height()),
+      SkVector::Make(radii.TopRight().width(), radii.TopRight().height()),
+      SkVector::Make(radii.BottomRight().width(),
+                     radii.BottomRight().height()),
+      SkVector::Make(radii.BottomLeft().width(), radii.BottomLeft().height()),
+  };
+  SkRRect rrect;
+  rrect.setRectRadii(SkRect::MakeXYWH(clip_rect.x(), clip_rect.y(),
+                                      clip_rect.width(), clip_rect.height()),
+                     sk_radii);
+  if (rrect.isEmpty()) {
+    return std::nullopt;
+  }
+  return rrect;
 }
 
 void AppendChunkPropertyStateForStandaloneRenderer(
@@ -1920,17 +1947,23 @@ bool AppendPaintArtifactExtractedOps(
     const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
         chunk_state, PropertyTreeState::Root());
     FloatClipRect effective_clip = clip;
+    std::optional<SkRRect> effective_clip_rrect;
     const bool has_display_items = chunk.begin_index != chunk.end_index;
     if (has_display_items && clip.IsInfinite() && empty_clip_chunk &&
         RectsMatchForStandaloneRenderer(empty_clip_chunk->chunk_bounds,
                                         chunk.bounds)) {
       effective_clip = FloatClipRect(empty_clip_chunk->clip_rect);
+      effective_clip_rrect = empty_clip_chunk->clip_rrect;
     }
     AppendBeginChunkOp(chunk_index, chunk.bounds, exported_draw_ops);
     AppendSaveOp(exported_draw_ops);
     AppendChunkPropertyStateForStandaloneRenderer(chunk_index, chunk_state,
                                                   projection, effective_clip,
                                                   property_states);
+    if (effective_clip_rrect) {
+      AppendClipRRectOp(*effective_clip_rrect, 0.0f, 0.0f,
+                        SkClipOp::kIntersect, exported_draw_ops);
+    }
     if (!effective_clip.IsInfinite()) {
       AppendClipRectOp(effective_clip.Rect(), exported_draw_ops);
     }
@@ -1954,7 +1987,10 @@ bool AppendPaintArtifactExtractedOps(
     AppendEndChunkOp(exported_draw_ops);
     if (!has_display_items && !clip.IsInfinite() && !chunk.bounds.IsEmpty()) {
       empty_clip_chunk =
-          EmptyClipChunkForStandaloneRenderer{chunk.bounds, clip.Rect()};
+          EmptyClipChunkForStandaloneRenderer{
+              chunk.bounds, clip.Rect(),
+              RoundedClipRRectForStandaloneRenderer(chunk_state.Clip(),
+                                                    clip.Rect())};
     } else {
       empty_clip_chunk.reset();
     }
