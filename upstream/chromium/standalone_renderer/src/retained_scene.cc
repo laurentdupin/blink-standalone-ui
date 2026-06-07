@@ -464,6 +464,35 @@ Rect IntersectRects(Rect a, Rect b) {
               std::max(0.0f, bottom - top)};
 }
 
+std::vector<Rect> NormalizeDirtyRects(std::vector<Rect> rects,
+                                      Rect viewport) {
+  std::vector<Rect> normalized;
+  for (Rect rect : rects) {
+    rect = IntersectRects(rect, viewport);
+    if (!IsEmpty(rect)) {
+      normalized.push_back(rect);
+    }
+  }
+
+  bool merged = true;
+  while (merged) {
+    merged = false;
+    for (size_t i = 0; i < normalized.size() && !merged; ++i) {
+      for (size_t j = i + 1; j < normalized.size(); ++j) {
+        if (!Intersects(normalized[i], normalized[j]) &&
+            !SameRect(normalized[i], normalized[j])) {
+          continue;
+        }
+        normalized[i] = UnionRects(normalized[i], normalized[j]);
+        normalized.erase(normalized.begin() + static_cast<std::ptrdiff_t>(j));
+        merged = true;
+        break;
+      }
+    }
+  }
+  return normalized;
+}
+
 Rect MapRectConservatively(Rect rect,
                            const PaintPropertyStateSnapshot& property_state,
                            Rect viewport) {
@@ -1012,6 +1041,9 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
   for (const Rect& rect : plan.scroll_exposed_rects) {
     plan.dirty_rects.push_back(rect);
   }
+
+  plan.dirty_rects =
+      NormalizeDirtyRects(std::move(plan.dirty_rects), plan.viewport_bounds);
 
   if (plan.dirty_rects.empty() && !plan.requires_full_redraw) {
     return plan;

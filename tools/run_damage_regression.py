@@ -214,7 +214,9 @@ def evaluate_damage(
             failures.append("expected non-empty damage_rects")
         if not rects_within_viewport(damage_rects, width, height):
             failures.append(f"damage_rects outside viewport: {damage_rects}")
-        if any(rect_is_full_viewport(rect, width, height) for rect in damage_rects):
+        if damage_class != "broad" and any(
+            rect_is_full_viewport(rect, width, height) for rect in damage_rects
+        ):
             failures.append(f"damage_rects include full viewport: {damage_rects}")
         if damage_class == "exposed_band":
             horizontal_band = any(rect["width"] == width and rect["height"] < height for rect in damage_rects)

@@ -16,7 +16,12 @@
       "43q_clip_path_svg_background_wide_to_narrow",
       "43r_mask_svg_background_wide_to_narrow",
       "43s_rounded_svg_image_square_to_round",
-      "43t_background_position_png_a_to_b"
+      "43t_background_position_png_a_to_b",
+      "43u_sdl_png_card_off_to_on",
+      "43u_sdl_mask_card_off_to_on",
+      "43u_sdl_all_cards_off_to_on",
+      "43v_sdl_resource_scroll_0_to_160",
+      "43v_sdl_resource_scroll_160_to_160"
     ]
   },
   "cases": [
@@ -217,6 +222,74 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "local"
+      }
+    },
+    {
+      "name": "43u_sdl_png_card_off_to_on",
+      "html": "43u_sdl_resource_toggle_demo.html",
+      "viewport": "480x260",
+      "previous_attrs": ["png-card:data-state=off"],
+      "current_attrs": ["png-card:data-state=on"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "broad"
+      }
+    },
+    {
+      "name": "43u_sdl_mask_card_off_to_on",
+      "html": "43u_sdl_resource_toggle_demo.html",
+      "viewport": "480x260",
+      "previous_attrs": ["mask-card:data-state=off"],
+      "current_attrs": ["mask-card:data-state=on"],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "broad"
+      }
+    },
+    {
+      "name": "43u_sdl_all_cards_off_to_on",
+      "html": "43u_sdl_resource_toggle_demo.html",
+      "viewport": "480x260",
+      "previous_attrs": [
+        "png-card:data-state=off",
+        "svg-card:data-state=off",
+        "mask-card:data-state=off"
+      ],
+      "current_attrs": [
+        "png-card:data-state=on",
+        "svg-card:data-state=on",
+        "mask-card:data-state=on"
+      ],
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "broad"
+      }
+    },
+    {
+      "name": "43v_sdl_resource_scroll_0_to_160",
+      "html": "43v_sdl_resource_scroll_demo.html",
+      "viewport": "360x260",
+      "previous_scroll": {"x": 0, "y": 0},
+      "current_scroll": {"x": 0, "y": 160},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "broad"
+      }
+    },
+    {
+      "name": "43v_sdl_resource_scroll_160_to_160",
+      "html": "43v_sdl_resource_scroll_demo.html",
+      "viewport": "360x260",
+      "previous_scroll": {"x": 0, "y": 160},
+      "current_scroll": {"x": 0, "y": 160},
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "none"
       }
     }
   ]
