@@ -176,8 +176,39 @@ ExactChunkMatchSignature BuildExactChunkMatchSignature(
   };
 }
 
-Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
+Rect MapRectToRootConservatively(Rect rect,
+                                 const PaintPropertyStateSnapshot& state);
+
+Rect InflateForDrawLooperLayers(Rect rect, const DrawCommand& command) {
+  Rect bounds = rect;
+  for (const DrawLooperLayer& layer : command.draw_looper_layers) {
+    const float blur_outset = std::max(0.0f, layer.blur_sigma * 3.0f);
+    Rect layer_bounds{rect.x + layer.offset_x - blur_outset,
+                      rect.y + layer.offset_y - blur_outset,
+                      rect.width + blur_outset * 2.0f,
+                      rect.height + blur_outset * 2.0f};
+    bounds = UnionRectBounds(bounds, layer_bounds);
+  }
+  return bounds;
+}
+
+Rect LocalOpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
   Rect bounds = chunk.placement_bounds;
+  for (const DrawCommand& command : chunk.commands) {
+    if (!IsVisualCommandType(command.type) || command.rect.width <= 0.0f ||
+        command.rect.height <= 0.0f || command.draw_looper_layers.empty()) {
+      continue;
+    }
+    bounds = UnionRectBounds(bounds,
+                             InflateForDrawLooperLayers(command.rect, command));
+  }
+  return bounds;
+}
+
+Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
+  Rect bounds =
+      MapRectToRootConservatively(LocalOpacityLayerContributionBounds(chunk),
+                                  chunk.property_state);
   if (chunk.property_state.has_clip_rect) {
     bounds = UnionRectBounds(bounds, chunk.property_state.clip_rect);
   }
@@ -451,6 +482,26 @@ Rect UnionRects(Rect a, Rect b) {
   const float top = std::min(a.y, b.y);
   const float right = std::max(a.x + a.width, b.x + b.width);
   const float bottom = std::max(a.y + a.height, b.y + b.height);
+  return Rect{left, top, std::max(0.0f, right - left),
+              std::max(0.0f, bottom - top)};
+}
+
+Rect MapRectToRootConservatively(Rect rect,
+                                 const PaintPropertyStateSnapshot& state) {
+  if (!state.transform_is_2d || state.transform_has_perspective) {
+    return rect;
+  }
+  const Point p0 = MapPoint(state.transform_to_root, Point{rect.x, rect.y});
+  const Point p1 = MapPoint(state.transform_to_root,
+                            Point{rect.x + rect.width, rect.y});
+  const Point p2 = MapPoint(state.transform_to_root,
+                            Point{rect.x + rect.width, rect.y + rect.height});
+  const Point p3 = MapPoint(state.transform_to_root,
+                            Point{rect.x, rect.y + rect.height});
+  const float left = std::min(std::min(p0.x, p1.x), std::min(p2.x, p3.x));
+  const float top = std::min(std::min(p0.y, p1.y), std::min(p2.y, p3.y));
+  const float right = std::max(std::max(p0.x, p1.x), std::max(p2.x, p3.x));
+  const float bottom = std::max(std::max(p0.y, p1.y), std::max(p2.y, p3.y));
   return Rect{left, top, std::max(0.0f, right - left),
               std::max(0.0f, bottom - top)};
 }
