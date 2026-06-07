@@ -72,11 +72,14 @@ DrawCommand DrawCommand::ClipPath(std::vector<uint8_t> path_bytes,
   return command;
 }
 
-DrawCommand DrawCommand::SaveLayer(Rect bounds, float opacity) {
+DrawCommand DrawCommand::SaveLayer(Rect bounds,
+                                   float opacity,
+                                   std::string blend_mode) {
   DrawCommand command;
   command.type = DrawCommandType::kSaveLayer;
   command.rect = bounds;
   command.opacity = opacity;
+  command.blend_mode = std::move(blend_mode);
   return command;
 }
 

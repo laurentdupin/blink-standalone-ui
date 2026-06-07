@@ -58,6 +58,37 @@ bool SameOpacityGroup(const PaintPropertyStateSnapshot& a,
          NearlyEqual(a.effect_opacity, b.effect_opacity);
 }
 
+constexpr int kSkBlendModeSrcOver = 3;
+constexpr int kSkBlendModeDstIn = 6;
+
+const char* BlendModeNameForSaveLayer(int blend_mode) {
+  switch (blend_mode) {
+    case kSkBlendModeDstIn:
+      return "dst_in";
+    case kSkBlendModeSrcOver:
+    default:
+      return "src_over";
+  }
+}
+
+bool IsStandaloneMaskBlendChunk(const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  return state.effect_has_blend_mode &&
+         state.effect_blend_mode == kSkBlendModeDstIn &&
+         !state.effect_has_non_default_opacity && !state.effect_has_filter &&
+         !state.effect_has_backdrop_filter && state.effect_parent_id != 0;
+}
+
+bool CanStartStandaloneMaskGroup(const RetainedPaintChunk& content,
+                                 const RetainedPaintChunk& mask) {
+  const PaintPropertyStateSnapshot& content_state = content.property_state;
+  return IsStandaloneMaskBlendChunk(mask) &&
+         content_state.effect_node_id == mask.property_state.effect_parent_id &&
+         !content_state.effect_has_blend_mode &&
+         !content_state.effect_has_filter &&
+         !content_state.effect_has_backdrop_filter;
+}
+
 bool IsVisualCommandType(DrawCommandType type) {
   switch (type) {
     case DrawCommandType::kFillRect:
@@ -156,6 +187,42 @@ Rect OpacityLayerContributionBounds(const RetainedPaintChunk& chunk) {
   return bounds;
 }
 
+std::optional<size_t> FindFollowingStandaloneMaskChunk(
+    const std::vector<RetainedPaintChunk>& chunks,
+    size_t content_index) {
+  if (content_index >= chunks.size() || !HasVisualCommands(&chunks[content_index])) {
+    return std::nullopt;
+  }
+  const uint64_t content_effect_node_id =
+      chunks[content_index].property_state.effect_node_id;
+  for (size_t next_index = content_index + 1; next_index < chunks.size();
+       ++next_index) {
+    if (CanStartStandaloneMaskGroup(chunks[content_index],
+                                    chunks[next_index])) {
+      return next_index;
+    }
+    if (IsStandaloneMaskBlendChunk(chunks[next_index])) {
+      return std::nullopt;
+    }
+    if (HasVisualCommands(&chunks[next_index]) &&
+        chunks[next_index].property_state.effect_node_id !=
+            content_effect_node_id) {
+      return std::nullopt;
+    }
+  }
+  return std::nullopt;
+}
+
+Rect StandaloneMaskGroupBounds(const std::vector<RetainedPaintChunk>& chunks,
+                               size_t first_content_index,
+                               size_t mask_index) {
+  Rect bounds = OpacityLayerContributionBounds(chunks[first_content_index]);
+  for (size_t index = first_content_index + 1; index <= mask_index; ++index) {
+    bounds = UnionRectBounds(bounds, OpacityLayerContributionBounds(chunks[index]));
+  }
+  return bounds;
+}
+
 uint64_t HashMatrix(Matrix4 matrix) {
   uint64_t hash = 0;
   for (const float value : matrix.values) {
@@ -199,6 +266,7 @@ uint64_t HashPropertyState(PaintPropertyStateSnapshot state) {
   hash = HashCombine(hash, state.effect_has_filter ? 1u : 0u);
   hash = HashCombine(hash, state.effect_has_backdrop_filter ? 1u : 0u);
   hash = HashCombine(hash, state.effect_has_blend_mode ? 1u : 0u);
+  hash = HashCombine(hash, static_cast<uint64_t>(state.effect_blend_mode));
   hash = HashCombine(hash, state.effect_output_clip_id);
   hash = HashCombine(hash, state.scroll_node_id);
   hash = HashCombine(hash, state.scroll_parent_id);
@@ -987,6 +1055,8 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
   bool opacity_layer_open = false;
   uint64_t active_opacity_effect_node_id = 0;
   float active_opacity = 1.0f;
+  bool mask_group_open = false;
+  std::optional<size_t> active_mask_chunk_index;
   for (size_t chunk_index = 0; chunk_index < scene.chunks.size();
        ++chunk_index) {
     const RetainedPaintChunk presented_chunk =
@@ -1022,6 +1092,27 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
       active_opacity_effect_node_id =
           retained_chunk.property_state.effect_node_id;
       active_opacity = retained_chunk.property_state.effect_opacity;
+    }
+
+    if (!mask_group_open && !opacity_layer_open) {
+      if (std::optional<size_t> mask_index =
+              FindFollowingStandaloneMaskChunk(scene.chunks, chunk_index)) {
+        const Rect mask_group_bounds =
+            StandaloneMaskGroupBounds(scene.chunks, chunk_index, *mask_index);
+        frame.scene_commands.push_back(SceneCommand::Draw(
+            DrawCommand::SaveLayer(mask_group_bounds, 1.0f)));
+        mask_group_open = true;
+        active_mask_chunk_index = mask_index;
+      }
+    }
+    const bool is_active_mask_chunk =
+        mask_group_open && active_mask_chunk_index &&
+        *active_mask_chunk_index == chunk_index;
+    if (is_active_mask_chunk) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::SaveLayer(
+          retained_chunk.placement_bounds, 1.0f,
+          BlendModeNameForSaveLayer(retained_chunk.property_state
+                                        .effect_blend_mode))));
     }
 
     SceneChunk chunk;
@@ -1072,7 +1163,16 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
     }
     frame.scene_commands.push_back(SceneCommand::EndChunk(chunk.chunk_id));
+    if (is_active_mask_chunk) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
+      mask_group_open = false;
+      active_mask_chunk_index.reset();
+    }
     frame.scene_chunks.push_back(std::move(chunk));
+  }
+  if (mask_group_open) {
+    frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
   }
   if (opacity_layer_open) {
     frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));

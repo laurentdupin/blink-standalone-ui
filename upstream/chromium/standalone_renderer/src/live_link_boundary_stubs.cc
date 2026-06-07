@@ -103,6 +103,8 @@
 #include "third_party/blink/renderer/core/image_replacement/document_image_replacements.h"
 #include "third_party/blink/renderer/core/image_replacement/image_replacement.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
+#include "third_party/blink/renderer/core/layout/layout_block.h"
+#include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_image_replacement.h"
 #include "third_party/blink/renderer/core/layout/length_utils.h"
 #include "third_party/blink/renderer/core/layout/layout_media.h"
@@ -18937,9 +18939,6 @@ NinePieceImageGrid::NinePieceDrawInfo NinePieceImageGrid::GetNinePieceDrawInfo(
   info.is_corner_piece = false;
   return info;
 }
-SkBlendMode ToSkBlendMode(CompositeOperator, BlendMode) {
-  return SkBlendMode::kSrcOver;
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 gfx::Rect LayoutTextCombine::VisualRectForPaint(
     const PhysicalOffset&) const {
@@ -20184,12 +20183,40 @@ bool CompositorAnimations::CanStartTransformAnimationOnCompositorForSVG(
   return false;
 }
 std::optional<gfx::RectF> CSSMaskPainter::MaskBoundingBox(
-    const LayoutObject&,
-    const PhysicalOffset&) {
-  return std::nullopt;
-}
-SkBlendMode ToSkBlendMode(BlendMode) {
-  return SkBlendMode::kSrcOver;
+    const LayoutObject& object,
+    const PhysicalOffset& paint_offset) {
+  if (!object.IsBoxModelObject() || object.IsSVGChild())
+    return std::nullopt;
+
+  const ComputedStyle& style = object.StyleRef();
+  if (!style.HasMask())
+    return std::nullopt;
+
+  PhysicalRect maximum_mask_region;
+  EFillBox maximum_mask_clip = style.MaskLayers().LayersClipMax();
+  if (object.IsBox()) {
+    if (maximum_mask_clip == EFillBox::kNoClip) {
+      maximum_mask_region =
+          To<LayoutBox>(object)
+              .Layer()
+              ->LocalBoundingBoxIncludingSelfPaintingDescendants();
+    } else {
+      maximum_mask_region = To<LayoutBox>(object).PhysicalBorderBoxRect();
+    }
+  } else {
+    if (maximum_mask_clip == EFillBox::kNoClip) {
+      maximum_mask_region =
+          To<LayoutInline>(object)
+              .Layer()
+              ->LocalBoundingBoxIncludingSelfPaintingDescendants();
+    } else {
+      maximum_mask_region = To<LayoutInline>(object).PhysicalLinesBoundingBox();
+    }
+  }
+  if (style.HasMaskBoxImageOutsets())
+    maximum_mask_region.Expand(style.MaskBoxImageOutsets());
+  maximum_mask_region.offset += paint_offset;
+  return gfx::RectF(maximum_mask_region);
 }
 bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
   return false;

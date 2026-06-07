@@ -72,6 +72,16 @@
       "45g_transform_svg_image_basic",
       "45h_transform_svg_background_basic"
     ],
+    "clip-masks": [
+      "47a_clip_path_png_image_basic",
+      "47b_clip_path_png_background_basic",
+      "47c_clip_path_svg_image_basic",
+      "47d_clip_path_svg_background_basic",
+      "47e_mask_png_image_basic",
+      "47f_mask_png_background_basic",
+      "47g_mask_svg_image_basic",
+      "47h_mask_svg_background_basic"
+    ],
     "resource-loading": [
       "18j_external_css_png_background",
       "18k_external_css_svg_background",
@@ -497,6 +507,62 @@
       "html": "45j_svg_background_preserve_aspect_ratio.html",
       "viewport": "320x220",
       "note": "CSS background external non-text SVG preserves intrinsic viewBox aspect ratio inside a mismatched background image box."
+    },
+    {
+      "name": "47a_clip_path_png_image_basic",
+      "source": "paint_audit",
+      "html": "47a_clip_path_png_image_basic.html",
+      "viewport": "180x140",
+      "note": "CSS clip-path inset clips a local PNG <img>."
+    },
+    {
+      "name": "47b_clip_path_png_background_basic",
+      "source": "paint_audit",
+      "html": "47b_clip_path_png_background_basic.html",
+      "viewport": "180x140",
+      "note": "CSS clip-path inset clips a local PNG background image."
+    },
+    {
+      "name": "47c_clip_path_svg_image_basic",
+      "source": "paint_audit",
+      "html": "47c_clip_path_svg_image_basic.html",
+      "viewport": "340x220",
+      "note": "CSS clip-path inset clips an external non-text SVG <img>."
+    },
+    {
+      "name": "47d_clip_path_svg_background_basic",
+      "source": "paint_audit",
+      "html": "47d_clip_path_svg_background_basic.html",
+      "viewport": "340x220",
+      "note": "CSS clip-path inset clips an external non-text SVG background image."
+    },
+    {
+      "name": "47e_mask_png_image_basic",
+      "source": "paint_audit",
+      "html": "47e_mask_png_image_basic.html",
+      "viewport": "180x140",
+      "note": "CSS mask-image linear gradient masks a local PNG <img>."
+    },
+    {
+      "name": "47f_mask_png_background_basic",
+      "source": "paint_audit",
+      "html": "47f_mask_png_background_basic.html",
+      "viewport": "180x140",
+      "note": "CSS mask-image linear gradient masks a local PNG background image."
+    },
+    {
+      "name": "47g_mask_svg_image_basic",
+      "source": "paint_audit",
+      "html": "47g_mask_svg_image_basic.html",
+      "viewport": "340x220",
+      "note": "CSS mask-image linear gradient masks an external non-text SVG <img>."
+    },
+    {
+      "name": "47h_mask_svg_background_basic",
+      "source": "paint_audit",
+      "html": "47h_mask_svg_background_basic.html",
+      "viewport": "340x220",
+      "note": "CSS mask-image linear gradient masks an external non-text SVG background image."
     },
     {
       "name": "hcsr_feature_showcase",

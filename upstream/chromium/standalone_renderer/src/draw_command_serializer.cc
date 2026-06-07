@@ -204,6 +204,7 @@ void WritePropertyState(std::ostringstream& out,
       << (state.effect_has_backdrop_filter ? "true" : "false")
       << ",\"effect_has_blend_mode\":"
       << (state.effect_has_blend_mode ? "true" : "false")
+      << ",\"effect_blend_mode\":" << state.effect_blend_mode
       << ",\"effect_output_clip_id\":" << state.effect_output_clip_id
       << ",\"scroll_node_id\":" << state.scroll_node_id
       << ",\"scroll_parent_id\":" << state.scroll_parent_id
@@ -518,7 +519,8 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
     case DrawCommandType::kSaveLayer:
       out << ",\"bounds\":";
       WriteRect(out, command.rect);
-      out << ",\"opacity\":" << command.opacity;
+      out << ",\"opacity\":" << command.opacity
+          << ",\"blend_mode\":\"" << EscapeJson(command.blend_mode) << "\"";
       break;
     case DrawCommandType::kFillRect:
     case DrawCommandType::kStrokeRect:

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "html_css_renderer/render_frame.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -126,6 +127,64 @@ SkSamplingOptions ParseSamplingOptions(const std::string& options) {
     mipmap = SkMipmapMode::kNearest;
   }
   return SkSamplingOptions(filter, mipmap);
+}
+
+SkBlendMode ParseBlendMode(const std::string& blend_mode) {
+  if (blend_mode == "clear")
+    return SkBlendMode::kClear;
+  if (blend_mode == "src")
+    return SkBlendMode::kSrc;
+  if (blend_mode == "dst")
+    return SkBlendMode::kDst;
+  if (blend_mode == "dst_over")
+    return SkBlendMode::kDstOver;
+  if (blend_mode == "src_in")
+    return SkBlendMode::kSrcIn;
+  if (blend_mode == "dst_in")
+    return SkBlendMode::kDstIn;
+  if (blend_mode == "src_out")
+    return SkBlendMode::kSrcOut;
+  if (blend_mode == "dst_out")
+    return SkBlendMode::kDstOut;
+  if (blend_mode == "src_atop")
+    return SkBlendMode::kSrcATop;
+  if (blend_mode == "dst_atop")
+    return SkBlendMode::kDstATop;
+  if (blend_mode == "xor")
+    return SkBlendMode::kXor;
+  if (blend_mode == "plus")
+    return SkBlendMode::kPlus;
+  if (blend_mode == "multiply")
+    return SkBlendMode::kMultiply;
+  if (blend_mode == "screen")
+    return SkBlendMode::kScreen;
+  if (blend_mode == "overlay")
+    return SkBlendMode::kOverlay;
+  if (blend_mode == "darken")
+    return SkBlendMode::kDarken;
+  if (blend_mode == "lighten")
+    return SkBlendMode::kLighten;
+  if (blend_mode == "color_dodge")
+    return SkBlendMode::kColorDodge;
+  if (blend_mode == "color_burn")
+    return SkBlendMode::kColorBurn;
+  if (blend_mode == "hard_light")
+    return SkBlendMode::kHardLight;
+  if (blend_mode == "soft_light")
+    return SkBlendMode::kSoftLight;
+  if (blend_mode == "difference")
+    return SkBlendMode::kDifference;
+  if (blend_mode == "exclusion")
+    return SkBlendMode::kExclusion;
+  if (blend_mode == "hue")
+    return SkBlendMode::kHue;
+  if (blend_mode == "saturation")
+    return SkBlendMode::kSaturation;
+  if (blend_mode == "color")
+    return SkBlendMode::kColor;
+  if (blend_mode == "luminosity")
+    return SkBlendMode::kLuminosity;
+  return SkBlendMode::kSrcOver;
 }
 
 Rect FromSkIRect(const SkIRect& rect) {
@@ -605,12 +664,12 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       }
       break;
     case DrawCommandType::kSaveLayer:
-      if (command.opacity < 1.0f) {
+      {
         SkPaint layer_paint;
-        layer_paint.setAlphaf(std::max(0.0f, std::min(1.0f, command.opacity)));
+        layer_paint.setAlphaf(
+            std::max(0.0f, std::min(1.0f, command.opacity)));
+        layer_paint.setBlendMode(ParseBlendMode(command.blend_mode));
         canvas.saveLayer(ToSkRect(command.rect), &layer_paint);
-      } else {
-        canvas.saveLayer(ToSkRect(command.rect), nullptr);
       }
       ++*save_depth;
       break;
@@ -655,7 +714,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
           SkPaint image_paint;
           image_paint.setAlphaf(
               std::max(0.0f, std::min(1.0f, command.image_alpha)));
-          image_paint.setBlendMode(SkBlendMode::kSrcOver);
+          image_paint.setBlendMode(ParseBlendMode(command.blend_mode));
           const SkCanvas::SrcRectConstraint constraint =
               command.src_rect_constraint == "fast"
                   ? SkCanvas::kFast_SrcRectConstraint

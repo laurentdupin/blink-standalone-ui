@@ -117,6 +117,7 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
     int* effect_has_filter,
     int* effect_has_backdrop_filter,
     int* effect_has_blend_mode,
+    int* effect_blend_mode,
     uint64_t* effect_output_clip_id);
 int StandaloneBlinkLiveFrameBridgePaintChunkRoundedClipAtForStandaloneRenderer(
     const char* body_html,
@@ -2410,6 +2411,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           int effect_has_filter = 0;
           int effect_has_backdrop_filter = 0;
           int effect_has_blend_mode = 0;
+          int effect_blend_mode = 3;
           uint64_t effect_output_clip_id = 0;
           if (live_probe::
                   StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRenderer(
@@ -2419,7 +2421,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                       &effect_node_id, &effect_parent_id, &effect_opacity,
                       &effect_has_non_default_opacity, &effect_has_filter,
                       &effect_has_backdrop_filter, &effect_has_blend_mode,
-                      &effect_output_clip_id)) {
+                      &effect_blend_mode, &effect_output_clip_id)) {
             active_chunk_property_state.transform_node_id = transform_node_id;
             active_chunk_property_state.transform_parent_id =
                 transform_parent_id;
@@ -2439,6 +2441,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 effect_has_backdrop_filter != 0;
             active_chunk_property_state.effect_has_blend_mode =
                 effect_has_blend_mode != 0;
+            active_chunk_property_state.effect_blend_mode = effect_blend_mode;
             active_chunk_property_state.effect_output_clip_id =
                 effect_output_clip_id;
           }

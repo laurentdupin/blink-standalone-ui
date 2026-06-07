@@ -312,6 +312,7 @@ struct LiveExportedChunkPropertyState {
   bool effect_has_filter = false;
   bool effect_has_backdrop_filter = false;
   bool effect_has_blend_mode = false;
+  int effect_blend_mode = static_cast<int>(SkBlendMode::kSrcOver);
   uint64_t effect_output_clip_id = 0;
   uint64_t scroll_node_id = 0;
   uint64_t scroll_parent_id = 0;
@@ -1049,6 +1050,7 @@ void AppendChunkPropertyStateForStandaloneRenderer(
       chunk_state.Effect().BackdropFilter() != nullptr;
   state.effect_has_blend_mode =
       chunk_state.Effect().BlendMode() != SkBlendMode::kSrcOver;
+  state.effect_blend_mode = static_cast<int>(chunk_state.Effect().BlendMode());
   state.effect_output_clip_id =
       chunk_state.Effect().OutputClip()
           ? reinterpret_cast<uintptr_t>(&chunk_state.Effect().OutputClip()->Unalias())
@@ -8209,6 +8211,7 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
     int* effect_has_filter,
     int* effect_has_backdrop_filter,
     int* effect_has_blend_mode,
+    int* effect_blend_mode,
     uint64_t* effect_output_clip_id) {
   RunLiveFramePaintProbe(body_html);
   const auto& states = ProbeCache().chunk_property_states;
@@ -8256,6 +8259,9 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
   }
   if (effect_has_blend_mode) {
     *effect_has_blend_mode = state.effect_has_blend_mode ? 1 : 0;
+  }
+  if (effect_blend_mode) {
+    *effect_blend_mode = state.effect_blend_mode;
   }
   if (effect_output_clip_id) {
     *effect_output_clip_id = state.effect_output_clip_id;

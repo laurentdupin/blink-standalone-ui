@@ -120,7 +120,9 @@ struct DrawCommand {
                                bool difference = false);
   static DrawCommand ClipPath(std::vector<uint8_t> path_bytes,
                               bool difference = false);
-  static DrawCommand SaveLayer(Rect bounds, float opacity);
+  static DrawCommand SaveLayer(Rect bounds,
+                               float opacity,
+                               std::string blend_mode = "src_over");
   static DrawCommand FillRect(Rect bounds, Color fill);
   static DrawCommand StrokeRect(Rect bounds, Color stroke, float width);
   static DrawCommand FillRectShader(Rect bounds,

@@ -557,13 +557,13 @@ PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
   if (const auto* properties = object.FirstFragment().PaintProperties()) {
     if (should_paint_content && !selection_drag_image_only) {
       if (properties->Mask()) {
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
         if (object.IsSVGForeignObject()) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
           SVGMaskPainter::Paint(context, object, object);
+#endif
         } else {
           PaintWithPhase(PaintPhase::kMask, context, paint_flags);
         }
-#endif
       }
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
       if (properties->ClipPathMask())
