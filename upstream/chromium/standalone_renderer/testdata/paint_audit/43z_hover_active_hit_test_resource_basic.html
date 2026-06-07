@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #ffffff;
+}
+
+.stage {
+  position: relative;
+  width: 640px;
+  height: 340px;
+  background: #f6f8fc;
+}
+
+.target {
+  box-sizing: border-box;
+  border: 4px solid #253142;
+  border-radius: 12px;
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.target:hover {
+  border-color: #2563eb;
+}
+
+.target:active {
+  border-color: #b91c1c;
+}
+
+#overlap-back {
+  position: absolute;
+  left: 24px;
+  top: 24px;
+  width: 156px;
+  height: 118px;
+  z-index: 1;
+  background-image: url("17_assets/red_2x2.png");
+  background-repeat: no-repeat;
+  background-size: 72px 72px;
+  background-position: 18px 18px;
+  image-rendering: pixelated;
+}
+
+#overlap-front {
+  position: absolute;
+  left: 78px;
+  top: 62px;
+  width: 156px;
+  height: 118px;
+  z-index: 2;
+  background: #ffffff url("30_route_map.svg") center / 170px 98px no-repeat;
+}
+
+#overlap-front:hover {
+  background-position: 18px 16px;
+  background-size: 138px 82px;
+}
+
+#overlap-front:active {
+  background-position: 34px 30px;
+  background-size: 190px 110px;
+}
+
+#nested-parent {
+  position: absolute;
+  left: 270px;
+  top: 24px;
+  width: 180px;
+  height: 140px;
+  background-image: url("17_assets/red_2x2.png");
+  background-repeat: no-repeat;
+  background-size: 96px 96px;
+  background-position: 18px 18px;
+  image-rendering: pixelated;
+}
+
+#nested-child {
+  position: absolute;
+  left: 52px;
+  top: 46px;
+  width: 92px;
+  height: 70px;
+  border: 4px solid #0f766e;
+  border-radius: 10px;
+  box-sizing: border-box;
+  background: #ffffff url("30_route_map.svg") center / 124px 70px no-repeat;
+}
+
+#nested-child:hover {
+  border-color: #14b8a6;
+  background-position: 10px 8px;
+}
+
+#nested-child:active {
+  border-color: #0f172a;
+  background-position: 22px 16px;
+}
+
+.clip-host {
+  position: relative;
+  left: 24px;
+  top: 220px;
+  width: 150px;
+  height: 86px;
+  overflow: hidden;
+  border: 4px solid #253142;
+  border-radius: 12px;
+  box-sizing: border-box;
+  background: #ffffff;
+}
+
+#clipped-card {
+  display: block;
+  margin-left: -52px;
+  margin-top: 16px;
+  width: 120px;
+  height: 70px;
+  box-sizing: border-box;
+  border: 4px solid #7c3aed;
+  border-radius: 10px;
+  object-fit: fill;
+  image-rendering: pixelated;
+}
+
+#clipped-card:hover {
+  border-color: #a855f7;
+  padding: 8px;
+}
+
+#masked-card {
+  position: absolute;
+  left: 230px;
+  top: 220px;
+  width: 140px;
+  height: 86px;
+  background-image: url("17_assets/red_2x2.png");
+  background-repeat: no-repeat;
+  background-size: 108px 74px;
+  background-position: center;
+  image-rendering: pixelated;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0 28px, #000 28px 112px, transparent 112px 100%);
+  -webkit-mask-repeat: no-repeat;
+  mask-image: linear-gradient(90deg, transparent 0 28px, #000 28px 112px, transparent 112px 100%);
+  mask-repeat: no-repeat;
+}
+
+#masked-card:hover {
+  background-position: 46px 12px;
+}
+
+#masked-card:active {
+  background-size: 96px 96px;
+}
+
+#svg-image {
+  position: absolute;
+  left: 416px;
+  top: 220px;
+  width: 154px;
+  height: 86px;
+  object-fit: contain;
+  padding: 8px;
+  background: #ffffff;
+}
+
+#svg-image:hover {
+  border-color: #1d4ed8;
+}
+
+#svg-image:active {
+  border-color: #7f1d1d;
+}
+</style>
+</head>
+<body>
+<main class="stage">
+  <div class="target" id="overlap-back"></div>
+  <div class="target" id="overlap-front"></div>
+  <div class="target" id="nested-parent">
+    <div id="nested-child"></div>
+  </div>
+  <div class="clip-host">
+    <img id="clipped-card" src="17_assets/red_2x2.png" alt="">
+  </div>
+  <div class="target" id="masked-card"></div>
+  <img class="target" id="svg-image" src="30_route_map.svg" alt="">
+</main>
+</body>
+</html>
