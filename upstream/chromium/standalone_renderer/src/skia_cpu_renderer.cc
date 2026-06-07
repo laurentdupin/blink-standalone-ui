@@ -902,7 +902,13 @@ void DrawCommandWithSkia(SkCanvas& canvas,
           coverage->text_blob_deserialize_success = true;
         }
         paint.setColor(ToSkColor(command.color));
-        canvas.drawTextBlob(blob, command.rect.x, command.rect.y, paint);
+        DrawWithLooperLayers(canvas, command, paint,
+                             [&](SkCanvas& layer_canvas,
+                                 const SkPaint& layer_paint) {
+                               layer_canvas.drawTextBlob(
+                                   blob, command.rect.x, command.rect.y,
+                                   layer_paint);
+                             });
       } else {
         RecordTextBlobDeserializeFailure();
         if (coverage) {

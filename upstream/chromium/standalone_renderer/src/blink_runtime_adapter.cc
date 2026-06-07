@@ -3454,8 +3454,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             explicit_resource_commands.push_back(ResourceCommand::LoadTextBlob(
                 text_blob_resource_id, blob_bytes, typeface_ids,
                 Rect{x, y, width, height}, "same_process_only"));
-            active_commands->push_back(DrawCommand::DrawTextBlob(
-                std::move(blob_bytes), Point{x, y}, color));
+            DrawCommand command =
+                DrawCommand::DrawTextBlob(std::move(blob_bytes), Point{x, y},
+                                          color);
+            append_draw_looper_layers(command);
+            active_commands->push_back(std::move(command));
             ++translated_command_count;
           }
         }

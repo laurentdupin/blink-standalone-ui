@@ -76,6 +76,18 @@
       "32b_calc_flex_gap_cards",
       "32c_calc_percent_padding_gap"
     ],
+    "text-font": [
+      "00_text_only",
+      "00c_text_large",
+      "00d_text_bold_italic",
+      "00e_text_decoration",
+      "00f_text_unicode_basic",
+      "11f_text_shadow",
+      "11g_font_weight_style",
+      "34b_georgia_paragraph_wrap",
+      "34c_calc_card_text_wrap",
+      "34d_georgia_vs_times_width"
+    ],
     "visual-effects": [
       "45e_transform_png_image_basic",
       "45f_transform_png_background_basic",
@@ -160,6 +172,55 @@
       "name": "05g_image_data_png_red_2x2",
       "source": "paint_audit",
       "html": "05g_image_data_png_red_2x2.html"
+    },
+    {
+      "name": "00_text_only",
+      "source": "paint_audit",
+      "html": "00_text_only.html",
+      "viewport": "220x80",
+      "note": "Basic Arial text metrics and raster comparison; AA drift is non-blocking."
+    },
+    {
+      "name": "00c_text_large",
+      "source": "paint_audit",
+      "html": "00c_text_large.html",
+      "viewport": "320x110",
+      "note": "Large Arial text metrics and raster comparison; AA drift is non-blocking."
+    },
+    {
+      "name": "00d_text_bold_italic",
+      "source": "paint_audit",
+      "html": "00d_text_bold_italic.html",
+      "viewport": "360x110",
+      "note": "Bold italic Arial text style comparison; AA drift is non-blocking."
+    },
+    {
+      "name": "00e_text_decoration",
+      "source": "paint_audit",
+      "html": "00e_text_decoration.html",
+      "viewport": "320x110",
+      "note": "Text decoration placement and metrics comparison."
+    },
+    {
+      "name": "00f_text_unicode_basic",
+      "source": "paint_audit",
+      "html": "00f_text_unicode_basic.html",
+      "viewport": "360x110",
+      "note": "Basic Unicode text shaping and fallback comparison."
+    },
+    {
+      "name": "11f_text_shadow",
+      "source": "paint_audit",
+      "html": "11f_text_shadow.html",
+      "viewport": "320x110",
+      "note": "Text shadow paint comparison; AA drift is non-blocking."
+    },
+    {
+      "name": "11g_font_weight_style",
+      "source": "paint_audit",
+      "html": "11g_font_weight_style.html",
+      "viewport": "360x110",
+      "note": "Font weight/style comparison for styled text."
     },
     {
       "name": "05i_image_data_png_alpha",
@@ -701,6 +762,27 @@
       "html": "47h_mask_svg_background_basic.html",
       "viewport": "340x220",
       "note": "CSS mask-image linear gradient masks an external non-text SVG background image."
+    },
+    {
+      "name": "34b_georgia_paragraph_wrap",
+      "source": "paint_audit",
+      "html": "34b_georgia_paragraph_wrap.html",
+      "viewport": "520x220",
+      "note": "Georgia paragraph wrapping and line metrics comparison."
+    },
+    {
+      "name": "34c_calc_card_text_wrap",
+      "source": "paint_audit",
+      "html": "34c_calc_card_text_wrap.html",
+      "viewport": "620x280",
+      "note": "Card text wrapping with calc sizing and Georgia metrics."
+    },
+    {
+      "name": "34d_georgia_vs_times_width",
+      "source": "paint_audit",
+      "html": "34d_georgia_vs_times_width.html",
+      "viewport": "560x180",
+      "note": "Georgia and Times New Roman family resolution and width comparison."
     },
     {
       "name": "28_form_controls_basic",

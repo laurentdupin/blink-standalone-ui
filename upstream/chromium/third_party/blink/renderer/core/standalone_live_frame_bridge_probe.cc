@@ -1554,6 +1554,7 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
     exported.x = text_op.x;
     exported.y = text_op.y;
     AppendSkColor(exported, text_op.flags.getColor4f());
+    AppendDrawLooperLayers(text_op.flags, exported);
     const uint8_t* bytes =
         static_cast<const uint8_t*>(serialized_blob->data());
     exported.text_blob_bytes.assign(bytes, bytes + serialized_blob->size());
