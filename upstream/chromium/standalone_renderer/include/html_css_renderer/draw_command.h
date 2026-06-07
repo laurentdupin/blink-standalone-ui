@@ -44,6 +44,28 @@ struct Matrix4 {
   };
 };
 
+enum class FilterOperationKind {
+  kGrayscale,
+  kSepia,
+  kSaturate,
+  kHueRotate,
+  kInvert,
+  kBrightness,
+  kContrast,
+  kOpacity,
+  kBlur,
+  kDropShadow,
+  kColorMatrix,
+};
+
+struct FilterOperationSnapshot {
+  FilterOperationKind kind = FilterOperationKind::kGrayscale;
+  float amount = 0.0f;
+  Point offset;
+  Color color;
+  std::array<float, 20> matrix = {};
+};
+
 enum class DrawCommandType {
   kSave,
   kRestore,
@@ -109,6 +131,7 @@ struct DrawCommand {
   float image_alpha = 1.0f;
   std::string paint_flags_summary;
   std::vector<DrawLooperLayer> draw_looper_layers;
+  std::vector<FilterOperationSnapshot> filter_operations;
 
   static DrawCommand Save();
   static DrawCommand Restore();
@@ -122,7 +145,9 @@ struct DrawCommand {
                               bool difference = false);
   static DrawCommand SaveLayer(Rect bounds,
                                float opacity,
-                               std::string blend_mode = "src_over");
+                               std::string blend_mode = "src_over",
+                               std::vector<FilterOperationSnapshot>
+                                   filter_operations = {});
   static DrawCommand FillRect(Rect bounds, Color fill);
   static DrawCommand StrokeRect(Rect bounds, Color stroke, float width);
   static DrawCommand FillRectShader(Rect bounds,

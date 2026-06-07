@@ -141,6 +141,26 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
     int* effect_has_blend_mode,
     int* effect_blend_mode,
     uint64_t* effect_output_clip_id);
+int StandaloneBlinkLiveFrameBridgePaintChunkFilterOperationCountForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index);
+int StandaloneBlinkLiveFrameBridgePaintChunkHasUnsupportedFilterForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int* has_unsupported_filter);
+int StandaloneBlinkLiveFrameBridgePaintChunkFilterOperationAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int operation_index,
+    int* type,
+    float* amount,
+    float* offset_x,
+    float* offset_y,
+    float* color_r,
+    float* color_g,
+    float* color_b,
+    float* color_a,
+    float* matrix20);
 int StandaloneBlinkLiveFrameBridgePaintChunkRoundedClipAtForStandaloneRenderer(
     const char* body_html,
     int chunk_index,
@@ -375,6 +395,88 @@ namespace fs = std::filesystem;
 namespace blink_core_probe = ::blink::standalone_renderer_probe;
 #endif
 namespace blink_tree_probe = ::blink::standalone_renderer_probe;
+
+std::optional<FilterOperationKind> FilterOperationKindFromBridgeType(int type) {
+  switch (type) {
+    case 0:
+      return FilterOperationKind::kGrayscale;
+    case 1:
+      return FilterOperationKind::kSepia;
+    case 2:
+      return FilterOperationKind::kSaturate;
+    case 3:
+      return FilterOperationKind::kHueRotate;
+    case 4:
+      return FilterOperationKind::kInvert;
+    case 5:
+      return FilterOperationKind::kBrightness;
+    case 6:
+      return FilterOperationKind::kContrast;
+    case 7:
+      return FilterOperationKind::kOpacity;
+    case 8:
+      return FilterOperationKind::kBlur;
+    case 9:
+      return FilterOperationKind::kDropShadow;
+    case 10:
+      return FilterOperationKind::kColorMatrix;
+    default:
+      return std::nullopt;
+  }
+}
+
+void PopulateFilterOperationsFromLiveProbe(
+    const std::string& probe_html,
+    int chunk_index,
+    PaintPropertyStateSnapshot& property_state) {
+  int has_unsupported_filter = 0;
+  if (::blink::standalone_renderer_probe::
+          StandaloneBlinkLiveFrameBridgePaintChunkHasUnsupportedFilterForStandaloneRenderer(
+              probe_html.c_str(), chunk_index, &has_unsupported_filter)) {
+    property_state.effect_has_unsupported_filter =
+        has_unsupported_filter != 0;
+  }
+
+  const int operation_count = ::blink::standalone_renderer_probe::
+      StandaloneBlinkLiveFrameBridgePaintChunkFilterOperationCountForStandaloneRenderer(
+          probe_html.c_str(), chunk_index);
+  property_state.effect_filter_operations.clear();
+  property_state.effect_filter_operations.reserve(
+      static_cast<size_t>(std::max(0, operation_count)));
+  for (int operation_index = 0; operation_index < operation_count;
+       ++operation_index) {
+    int bridge_type = 0;
+    float amount = 0.0f;
+    float offset_x = 0.0f;
+    float offset_y = 0.0f;
+    float color_r = 0.0f;
+    float color_g = 0.0f;
+    float color_b = 0.0f;
+    float color_a = 1.0f;
+    std::array<float, 20> matrix{};
+    if (!::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgePaintChunkFilterOperationAtForStandaloneRenderer(
+                probe_html.c_str(), chunk_index, operation_index, &bridge_type,
+                &amount, &offset_x, &offset_y, &color_r, &color_g, &color_b,
+                &color_a, matrix.data())) {
+      property_state.effect_has_unsupported_filter = true;
+      continue;
+    }
+    std::optional<FilterOperationKind> kind =
+        FilterOperationKindFromBridgeType(bridge_type);
+    if (!kind) {
+      property_state.effect_has_unsupported_filter = true;
+      continue;
+    }
+    FilterOperationSnapshot operation;
+    operation.kind = *kind;
+    operation.amount = amount;
+    operation.offset = Point{offset_x, offset_y};
+    operation.color = Color::Rgba(color_r, color_g, color_b, color_a);
+    operation.matrix = matrix;
+    property_state.effect_filter_operations.push_back(operation);
+  }
+}
 
 constexpr const char* kRuntimeSeedFiles[] = {
     "third_party/blink/renderer/core/testing/dummy_page_holder.h",
@@ -2564,6 +2666,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             active_chunk_property_state.effect_output_clip_id =
                 effect_output_clip_id;
           }
+          PopulateFilterOperationsFromLiveProbe(
+              probe_html, chunk_index, active_chunk_property_state);
           int has_rounded_clip = 0;
           float rounded_clip_x = 0.0f;
           float rounded_clip_y = 0.0f;

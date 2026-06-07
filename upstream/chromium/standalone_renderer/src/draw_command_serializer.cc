@@ -72,6 +72,64 @@ void WritePoint(std::ostringstream& out, const Point& point) {
   out << "{\"x\":" << point.x << ",\"y\":" << point.y << "}";
 }
 
+const char* FilterOperationKindName(FilterOperationKind kind) {
+  switch (kind) {
+    case FilterOperationKind::kGrayscale:
+      return "grayscale";
+    case FilterOperationKind::kSepia:
+      return "sepia";
+    case FilterOperationKind::kSaturate:
+      return "saturate";
+    case FilterOperationKind::kHueRotate:
+      return "hue_rotate";
+    case FilterOperationKind::kInvert:
+      return "invert";
+    case FilterOperationKind::kBrightness:
+      return "brightness";
+    case FilterOperationKind::kContrast:
+      return "contrast";
+    case FilterOperationKind::kOpacity:
+      return "opacity";
+    case FilterOperationKind::kBlur:
+      return "blur";
+    case FilterOperationKind::kDropShadow:
+      return "drop_shadow";
+    case FilterOperationKind::kColorMatrix:
+      return "color_matrix";
+  }
+  return "unknown";
+}
+
+void WriteFilterOperations(
+    std::ostringstream& out,
+    const std::vector<FilterOperationSnapshot>& operations) {
+  out << "[";
+  for (size_t i = 0; i < operations.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const FilterOperationSnapshot& operation = operations[i];
+    out << "{\"type\":\"" << FilterOperationKindName(operation.kind)
+        << "\",\"amount\":" << operation.amount << ",\"offset\":";
+    WritePoint(out, operation.offset);
+    out << ",\"color\":";
+    WriteColor(out, operation.color);
+    if (operation.kind == FilterOperationKind::kColorMatrix) {
+      out << ",\"matrix\":[";
+      for (size_t value_index = 0; value_index < operation.matrix.size();
+           ++value_index) {
+        if (value_index > 0) {
+          out << ",";
+        }
+        out << operation.matrix[value_index];
+      }
+      out << "]";
+    }
+    out << "}";
+  }
+  out << "]";
+}
+
 void WriteRect(std::ostringstream& out, const Rect& rect) {
   out << "{\"x\":" << rect.x << ",\"y\":" << rect.y
       << ",\"width\":" << rect.width << ",\"height\":" << rect.height
@@ -200,6 +258,11 @@ void WritePropertyState(std::ostringstream& out,
       << (state.effect_has_non_default_opacity ? "true" : "false")
       << ",\"effect_has_filter\":"
       << (state.effect_has_filter ? "true" : "false")
+      << ",\"effect_has_unsupported_filter\":"
+      << (state.effect_has_unsupported_filter ? "true" : "false")
+      << ",\"effect_filter_operations\":";
+  WriteFilterOperations(out, state.effect_filter_operations);
+  out
       << ",\"effect_has_backdrop_filter\":"
       << (state.effect_has_backdrop_filter ? "true" : "false")
       << ",\"effect_has_blend_mode\":"
@@ -543,7 +606,9 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
       out << ",\"bounds\":";
       WriteRect(out, command.rect);
       out << ",\"opacity\":" << command.opacity
-          << ",\"blend_mode\":\"" << EscapeJson(command.blend_mode) << "\"";
+          << ",\"blend_mode\":\"" << EscapeJson(command.blend_mode)
+          << "\",\"filter_operations\":";
+      WriteFilterOperations(out, command.filter_operations);
       break;
     case DrawCommandType::kFillRect:
     case DrawCommandType::kStrokeRect:

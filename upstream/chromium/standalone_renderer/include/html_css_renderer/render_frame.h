@@ -90,10 +90,12 @@ struct PaintPropertyStateSnapshot {
   float effect_opacity = 1.0f;
   bool effect_has_non_default_opacity = false;
   bool effect_has_filter = false;
+  bool effect_has_unsupported_filter = false;
   bool effect_has_backdrop_filter = false;
   bool effect_has_blend_mode = false;
   int effect_blend_mode = 3;
   uint64_t effect_output_clip_id = 0;
+  std::vector<FilterOperationSnapshot> effect_filter_operations;
   uint64_t scroll_node_id = 0;
   uint64_t scroll_parent_id = 0;
   bool has_scroll_offset = false;

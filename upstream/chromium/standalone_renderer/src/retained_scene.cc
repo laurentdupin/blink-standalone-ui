@@ -42,8 +42,49 @@ uint64_t HashRect(Rect rect) {
   return hash;
 }
 
+uint64_t HashColor(Color color);
+
+uint64_t HashFilterOperation(const FilterOperationSnapshot& operation) {
+  uint64_t hash = static_cast<uint64_t>(operation.kind);
+  hash = HashCombine(hash, HashFloat(operation.amount));
+  hash = HashCombine(hash, HashFloat(operation.offset.x));
+  hash = HashCombine(hash, HashFloat(operation.offset.y));
+  hash = HashCombine(hash, HashColor(operation.color));
+  for (float value : operation.matrix) {
+    hash = HashCombine(hash, HashFloat(value));
+  }
+  return hash;
+}
+
 bool NearlyEqual(float a, float b) {
   return std::fabs(a - b) <= 0.01f;
+}
+
+bool SameFilterOperations(
+    const std::vector<FilterOperationSnapshot>& a,
+    const std::vector<FilterOperationSnapshot>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i].kind != b[i].kind ||
+        !NearlyEqual(a[i].amount, b[i].amount) ||
+        !NearlyEqual(a[i].offset.x, b[i].offset.x) ||
+        !NearlyEqual(a[i].offset.y, b[i].offset.y) ||
+        !NearlyEqual(a[i].color.r, b[i].color.r) ||
+        !NearlyEqual(a[i].color.g, b[i].color.g) ||
+        !NearlyEqual(a[i].color.b, b[i].color.b) ||
+        !NearlyEqual(a[i].color.a, b[i].color.a)) {
+      return false;
+    }
+    for (size_t value_index = 0; value_index < a[i].matrix.size();
+         ++value_index) {
+      if (!NearlyEqual(a[i].matrix[value_index], b[i].matrix[value_index])) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 bool NeedsGroupedOpacityLayer(const PaintPropertyStateSnapshot& state) {
@@ -51,11 +92,22 @@ bool NeedsGroupedOpacityLayer(const PaintPropertyStateSnapshot& state) {
          state.effect_opacity < 1.0f;
 }
 
-bool SameOpacityGroup(const PaintPropertyStateSnapshot& a,
-                      const PaintPropertyStateSnapshot& b) {
-  return NeedsGroupedOpacityLayer(a) && NeedsGroupedOpacityLayer(b) &&
+bool HasSupportedEffectFilter(const PaintPropertyStateSnapshot& state) {
+  return state.effect_has_filter && !state.effect_has_unsupported_filter &&
+         !state.effect_filter_operations.empty();
+}
+
+bool NeedsGroupedEffectLayer(const PaintPropertyStateSnapshot& state) {
+  return NeedsGroupedOpacityLayer(state) || HasSupportedEffectFilter(state);
+}
+
+bool SameEffectGroup(const PaintPropertyStateSnapshot& a,
+                     const PaintPropertyStateSnapshot& b) {
+  return NeedsGroupedEffectLayer(a) && NeedsGroupedEffectLayer(b) &&
          a.effect_node_id == b.effect_node_id &&
-         NearlyEqual(a.effect_opacity, b.effect_opacity);
+         NearlyEqual(a.effect_opacity, b.effect_opacity) &&
+         SameFilterOperations(a.effect_filter_operations,
+                              b.effect_filter_operations);
 }
 
 constexpr int kSkBlendModeSrcOver = 3;
@@ -295,6 +347,11 @@ uint64_t HashPropertyState(PaintPropertyStateSnapshot state) {
   hash = HashCombine(hash, HashFloat(state.effect_opacity));
   hash = HashCombine(hash, state.effect_has_non_default_opacity ? 1u : 0u);
   hash = HashCombine(hash, state.effect_has_filter ? 1u : 0u);
+  hash = HashCombine(hash, state.effect_has_unsupported_filter ? 1u : 0u);
+  for (const FilterOperationSnapshot& operation :
+       state.effect_filter_operations) {
+    hash = HashCombine(hash, HashFilterOperation(operation));
+  }
   hash = HashCombine(hash, state.effect_has_backdrop_filter ? 1u : 0u);
   hash = HashCombine(hash, state.effect_has_blend_mode ? 1u : 0u);
   hash = HashCombine(hash, static_cast<uint64_t>(state.effect_blend_mode));
@@ -324,6 +381,9 @@ uint64_t HashCommandContent(const DrawCommand& command) {
   hash = HashCombine(hash, HashColor(command.color));
   hash = HashCombine(hash, HashFloat(command.stroke_width));
   hash = HashCombine(hash, HashFloat(command.opacity));
+  for (const FilterOperationSnapshot& operation : command.filter_operations) {
+    hash = HashCombine(hash, HashFilterOperation(operation));
+  }
   hash = HashCombine(hash, HashString(command.text));
   hash = HashCombine(hash, HashString(command.path_data));
   hash = HashCombine(hash, HashString(command.resource_id));
@@ -1135,9 +1195,10 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
         ResourceCommand::FromLoadCommand(command));
   }
 
-  bool opacity_layer_open = false;
-  uint64_t active_opacity_effect_node_id = 0;
-  float active_opacity = 1.0f;
+  bool effect_layer_open = false;
+  uint64_t active_effect_node_id = 0;
+  float active_effect_opacity = 1.0f;
+  std::vector<FilterOperationSnapshot> active_filter_operations;
   bool mask_group_open = false;
   std::optional<size_t> active_mask_chunk_index;
   for (size_t chunk_index = 0; chunk_index < scene.chunks.size();
@@ -1146,38 +1207,44 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
         ChunkForPresentation(scene.chunks[chunk_index],
                              plan.current_scroll_offset);
     const RetainedPaintChunk& retained_chunk = presented_chunk;
-    const bool needs_opacity_layer =
-        NeedsGroupedOpacityLayer(retained_chunk.property_state);
-    if (opacity_layer_open &&
-        (!needs_opacity_layer ||
+    const bool needs_effect_layer =
+        NeedsGroupedEffectLayer(retained_chunk.property_state);
+    if (effect_layer_open &&
+        (!needs_effect_layer ||
          retained_chunk.property_state.effect_node_id !=
-             active_opacity_effect_node_id ||
+             active_effect_node_id ||
          !NearlyEqual(retained_chunk.property_state.effect_opacity,
-                      active_opacity))) {
+                      active_effect_opacity) ||
+         !SameFilterOperations(retained_chunk.property_state
+                                   .effect_filter_operations,
+                               active_filter_operations))) {
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
-      opacity_layer_open = false;
+      effect_layer_open = false;
     }
-    if (needs_opacity_layer && !opacity_layer_open) {
-      Rect opacity_bounds = OpacityLayerContributionBounds(retained_chunk);
+    if (needs_effect_layer && !effect_layer_open) {
+      Rect effect_bounds = OpacityLayerContributionBounds(retained_chunk);
       for (size_t next_index = chunk_index + 1; next_index < scene.chunks.size();
            ++next_index) {
-        if (!SameOpacityGroup(retained_chunk.property_state,
-                              scene.chunks[next_index].property_state)) {
+        if (!SameEffectGroup(retained_chunk.property_state,
+                             scene.chunks[next_index].property_state)) {
           break;
         }
-        opacity_bounds = UnionRectBounds(
-            opacity_bounds,
+        effect_bounds = UnionRectBounds(
+            effect_bounds,
             OpacityLayerContributionBounds(scene.chunks[next_index]));
       }
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::SaveLayer(
-          opacity_bounds, retained_chunk.property_state.effect_opacity)));
-      opacity_layer_open = true;
-      active_opacity_effect_node_id =
-          retained_chunk.property_state.effect_node_id;
-      active_opacity = retained_chunk.property_state.effect_opacity;
+          effect_bounds, retained_chunk.property_state.effect_opacity,
+          "src_over",
+          retained_chunk.property_state.effect_filter_operations)));
+      effect_layer_open = true;
+      active_effect_node_id = retained_chunk.property_state.effect_node_id;
+      active_effect_opacity = retained_chunk.property_state.effect_opacity;
+      active_filter_operations =
+          retained_chunk.property_state.effect_filter_operations;
     }
 
-    if (!mask_group_open && !opacity_layer_open) {
+    if (!mask_group_open && !effect_layer_open) {
       if (std::optional<size_t> mask_index =
               FindFollowingStandaloneMaskChunk(scene.chunks, chunk_index)) {
         const Rect mask_group_bounds =
@@ -1257,7 +1324,7 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
   if (mask_group_open) {
     frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
   }
-  if (opacity_layer_open) {
+  if (effect_layer_open) {
     frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
   }
 

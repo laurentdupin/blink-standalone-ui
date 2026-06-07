@@ -11,6 +11,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cc/paint/filter_operations.h"
+#include "cc/paint/paint_filter.h"
+#include "cc/paint/render_surface_filters.h"
 #include "html_css_renderer/render_frame.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -39,6 +42,8 @@
 #include "third_party/skia/include/core/SkMaskFilter.h"
 #include "third_party/skia/include/core/SkPathEffect.h"
 #include "html_css_renderer/typeface_resource_registry.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace html_css_renderer {
 namespace {
@@ -185,6 +190,71 @@ SkBlendMode ParseBlendMode(const std::string& blend_mode) {
   if (blend_mode == "luminosity")
     return SkBlendMode::kLuminosity;
   return SkBlendMode::kSrcOver;
+}
+
+gfx::Rect ToGfxRectEnclosing(Rect rect) {
+  const int left = static_cast<int>(std::floor(rect.x));
+  const int top = static_cast<int>(std::floor(rect.y));
+  const int right = static_cast<int>(std::ceil(rect.x + rect.width));
+  const int bottom = static_cast<int>(std::ceil(rect.y + rect.height));
+  return gfx::Rect(left, top, std::max(0, right - left),
+                   std::max(0, bottom - top));
+}
+
+cc::FilterOperations ToCcFilterOperations(
+    const std::vector<FilterOperationSnapshot>& operations) {
+  cc::FilterOperations filters;
+  for (const FilterOperationSnapshot& operation : operations) {
+    switch (operation.kind) {
+      case FilterOperationKind::kGrayscale:
+        filters.Append(
+            cc::FilterOperation::CreateGrayscaleFilter(operation.amount));
+        break;
+      case FilterOperationKind::kSepia:
+        filters.Append(cc::FilterOperation::CreateSepiaFilter(operation.amount));
+        break;
+      case FilterOperationKind::kSaturate:
+        filters.Append(
+            cc::FilterOperation::CreateSaturateFilter(operation.amount));
+        break;
+      case FilterOperationKind::kHueRotate:
+        filters.Append(
+            cc::FilterOperation::CreateHueRotateFilter(operation.amount));
+        break;
+      case FilterOperationKind::kInvert:
+        filters.Append(
+            cc::FilterOperation::CreateInvertFilter(operation.amount));
+        break;
+      case FilterOperationKind::kBrightness:
+        filters.Append(
+            cc::FilterOperation::CreateBrightnessFilter(operation.amount));
+        break;
+      case FilterOperationKind::kContrast:
+        filters.Append(
+            cc::FilterOperation::CreateContrastFilter(operation.amount));
+        break;
+      case FilterOperationKind::kOpacity:
+        filters.Append(
+            cc::FilterOperation::CreateOpacityFilter(operation.amount));
+        break;
+      case FilterOperationKind::kBlur:
+        filters.Append(cc::FilterOperation::CreateBlurFilter(operation.amount));
+        break;
+      case FilterOperationKind::kDropShadow:
+        filters.Append(cc::FilterOperation::CreateDropShadowFilter(
+            gfx::Point(static_cast<int>(std::lround(operation.offset.x)),
+                       static_cast<int>(std::lround(operation.offset.y))),
+            operation.amount,
+            SkColor4f{operation.color.r, operation.color.g, operation.color.b,
+                      operation.color.a}));
+        break;
+      case FilterOperationKind::kColorMatrix:
+        filters.Append(
+            cc::FilterOperation::CreateColorMatrixFilter(operation.matrix));
+        break;
+    }
+  }
+  return filters;
 }
 
 Rect FromSkIRect(const SkIRect& rect) {
@@ -669,6 +739,17 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         layer_paint.setAlphaf(
             std::max(0.0f, std::min(1.0f, command.opacity)));
         layer_paint.setBlendMode(ParseBlendMode(command.blend_mode));
+        if (!command.filter_operations.empty()) {
+          cc::FilterOperations filter_operations =
+              ToCcFilterOperations(command.filter_operations);
+          sk_sp<cc::PaintFilter> paint_filter =
+              cc::RenderSurfaceFilters::BuildImageFilter(
+                  filter_operations, ToGfxRectEnclosing(command.rect));
+          if (paint_filter) {
+            layer_paint.setImageFilter(
+                cc::PaintFilter::GetSkFilter(paint_filter.get()));
+          }
+        }
         canvas.saveLayer(ToSkRect(command.rect), &layer_paint);
       }
       ++*save_depth;

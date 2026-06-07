@@ -84,6 +84,7 @@
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
+#include "third_party/blink/renderer/platform/graphics/compositor_filter_operations.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_display_item.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
@@ -99,6 +100,20 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 
 namespace blink::standalone_renderer_probe {
+
+enum StandaloneFilterOperationType {
+  kStandaloneFilterGrayscale = 0,
+  kStandaloneFilterSepia = 1,
+  kStandaloneFilterSaturate = 2,
+  kStandaloneFilterHueRotate = 3,
+  kStandaloneFilterInvert = 4,
+  kStandaloneFilterBrightness = 5,
+  kStandaloneFilterContrast = 6,
+  kStandaloneFilterOpacity = 7,
+  kStandaloneFilterBlur = 8,
+  kStandaloneFilterDropShadow = 9,
+  kStandaloneFilterColorMatrix = 10,
+};
 
 extern "C" bool g_standalone_blink_saw_font_draw_text;
 extern "C" int g_standalone_blink_viewport_width;
@@ -267,6 +282,18 @@ struct LiveExportedDrawLooperLayer {
   uint32_t flags = 0;
 };
 
+struct LiveExportedFilterOperation {
+  int type = kStandaloneFilterGrayscale;
+  float amount = 0.0f;
+  float offset_x = 0.0f;
+  float offset_y = 0.0f;
+  float color_r = 0.0f;
+  float color_g = 0.0f;
+  float color_b = 0.0f;
+  float color_a = 1.0f;
+  std::array<float, 20> matrix = {};
+};
+
 struct LiveExportedChunkPropertyState {
   uint64_t state_hash = 0;
   std::array<float, 16> transform_to_root = {
@@ -311,10 +338,12 @@ struct LiveExportedChunkPropertyState {
   float effect_opacity = 1.0f;
   bool effect_has_non_default_opacity = false;
   bool effect_has_filter = false;
+  bool effect_has_unsupported_filter = false;
   bool effect_has_backdrop_filter = false;
   bool effect_has_blend_mode = false;
   int effect_blend_mode = static_cast<int>(SkBlendMode::kSrcOver);
   uint64_t effect_output_clip_id = 0;
+  std::vector<LiveExportedFilterOperation> effect_filter_operations;
   uint64_t scroll_node_id = 0;
   uint64_t scroll_parent_id = 0;
   bool has_scroll_offset = false;
@@ -921,6 +950,52 @@ uint64_t HashFloatForStandaloneRenderer(float value) {
   return bits;
 }
 
+std::vector<LiveExportedFilterOperation> ExportFilterOperationsForStandaloneRenderer(
+    const CompositorFilterOperations* filters,
+    bool* has_unsupported_operation) {
+  std::vector<LiveExportedFilterOperation> exported;
+  if (has_unsupported_operation) {
+    *has_unsupported_operation = false;
+  }
+  if (!filters) {
+    return exported;
+  }
+  for (const cc::FilterOperation& operation :
+       filters->AsCcFilterOperations().operations()) {
+    LiveExportedFilterOperation out;
+    switch (operation.type()) {
+      case cc::FilterOperation::SATURATE:
+        out.type = kStandaloneFilterSaturate;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::BRIGHTNESS:
+        out.type = kStandaloneFilterBrightness;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::GRAYSCALE:
+      case cc::FilterOperation::SEPIA:
+      case cc::FilterOperation::HUE_ROTATE:
+      case cc::FilterOperation::INVERT:
+      case cc::FilterOperation::CONTRAST:
+      case cc::FilterOperation::OPACITY:
+      case cc::FilterOperation::BLUR:
+      case cc::FilterOperation::DROP_SHADOW:
+      case cc::FilterOperation::COLOR_MATRIX:
+      case cc::FilterOperation::ZOOM:
+      case cc::FilterOperation::REFERENCE:
+      case cc::FilterOperation::SATURATING_BRIGHTNESS:
+      case cc::FilterOperation::ALPHA_THRESHOLD:
+      case cc::FilterOperation::OFFSET:
+        if (has_unsupported_operation) {
+          *has_unsupported_operation = true;
+        }
+        continue;
+    }
+    exported.push_back(out);
+  }
+  return exported;
+}
+
 uint64_t HashChunkPropertyStateForStandaloneRenderer(
     const LiveExportedChunkPropertyState& state) {
   uint64_t hash = 0;
@@ -988,6 +1063,31 @@ uint64_t HashChunkPropertyStateForStandaloneRenderer(
   hash = HashCombineForStandaloneRenderer(
       hash, state.effect_has_non_default_opacity ? 1u : 0u);
   hash = HashCombineForStandaloneRenderer(hash, state.effect_has_filter ? 1u : 0u);
+  hash = HashCombineForStandaloneRenderer(
+      hash, state.effect_has_unsupported_filter ? 1u : 0u);
+  for (const LiveExportedFilterOperation& operation :
+       state.effect_filter_operations) {
+    hash = HashCombineForStandaloneRenderer(hash,
+                                            static_cast<uint64_t>(operation.type));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.amount));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.offset_x));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.offset_y));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.color_r));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.color_g));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.color_b));
+    hash = HashCombineForStandaloneRenderer(
+        hash, HashFloatForStandaloneRenderer(operation.color_a));
+    for (float value : operation.matrix) {
+      hash = HashCombineForStandaloneRenderer(
+          hash, HashFloatForStandaloneRenderer(value));
+    }
+  }
   hash = HashCombineForStandaloneRenderer(
       hash, state.effect_has_backdrop_filter ? 1u : 0u);
   hash = HashCombineForStandaloneRenderer(hash, state.effect_has_blend_mode ? 1u : 0u);
@@ -1097,6 +1197,8 @@ void AppendChunkPropertyStateForStandaloneRenderer(
   state.effect_opacity = chunk_state.Effect().Opacity();
   state.effect_has_non_default_opacity = state.effect_opacity != 1.0f;
   state.effect_has_filter = chunk_state.Effect().Filter() != nullptr;
+  state.effect_filter_operations = ExportFilterOperationsForStandaloneRenderer(
+      chunk_state.Effect().Filter(), &state.effect_has_unsupported_filter);
   state.effect_has_backdrop_filter =
       chunk_state.Effect().BackdropFilter() != nullptr;
   state.effect_has_blend_mode =
@@ -5368,6 +5470,74 @@ std::string ClipChainJsonForStandaloneRenderer(
   return out.str();
 }
 
+const char* FilterOperationNameForStandaloneRenderer(int type) {
+  switch (type) {
+    case kStandaloneFilterGrayscale:
+      return "grayscale";
+    case kStandaloneFilterSepia:
+      return "sepia";
+    case kStandaloneFilterSaturate:
+      return "saturate";
+    case kStandaloneFilterHueRotate:
+      return "hue_rotate";
+    case kStandaloneFilterInvert:
+      return "invert";
+    case kStandaloneFilterBrightness:
+      return "brightness";
+    case kStandaloneFilterContrast:
+      return "contrast";
+    case kStandaloneFilterOpacity:
+      return "opacity";
+    case kStandaloneFilterBlur:
+      return "blur";
+    case kStandaloneFilterDropShadow:
+      return "drop_shadow";
+    case kStandaloneFilterColorMatrix:
+      return "color_matrix";
+    default:
+      return "unknown";
+  }
+}
+
+std::string FilterOperationsJsonForStandaloneRenderer(
+    const CompositorFilterOperations* filters) {
+  bool has_unsupported_operation = false;
+  std::vector<LiveExportedFilterOperation> operations =
+      ExportFilterOperationsForStandaloneRenderer(filters,
+                                                  &has_unsupported_operation);
+  std::ostringstream out;
+  out << "{\"supported\":[";
+  for (size_t i = 0; i < operations.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const LiveExportedFilterOperation& operation = operations[i];
+    out << "{\"type\":\""
+        << FilterOperationNameForStandaloneRenderer(operation.type)
+        << "\",\"amount\":" << operation.amount
+        << ",\"offset\":[" << operation.offset_x << ","
+        << operation.offset_y << "]"
+        << ",\"color\":[" << operation.color_r << ","
+        << operation.color_g << "," << operation.color_b << ","
+        << operation.color_a << "]";
+    if (operation.type == kStandaloneFilterColorMatrix) {
+      out << ",\"matrix\":[";
+      for (size_t value_index = 0; value_index < operation.matrix.size();
+           ++value_index) {
+        if (value_index > 0) {
+          out << ",";
+        }
+        out << operation.matrix[value_index];
+      }
+      out << "]";
+    }
+    out << "}";
+  }
+  out << "],\"unsupported\":" << (has_unsupported_operation ? "true" : "false")
+      << "}";
+  return out.str();
+}
+
 std::string EffectChainJsonForStandaloneRenderer(
     const EffectPaintPropertyNode& effect) {
   std::ostringstream out;
@@ -5397,6 +5567,8 @@ std::string EffectChainJsonForStandaloneRenderer(
         << ",\"has_non_default_opacity\":"
         << (node->Opacity() != 1.0f ? "true" : "false")
         << ",\"has_filter\":" << (node->Filter() ? "true" : "false")
+        << ",\"filter_operations\":"
+        << FilterOperationsJsonForStandaloneRenderer(node->Filter())
         << ",\"has_backdrop_filter\":"
         << (node->BackdropFilter() ? "true" : "false")
         << ",\"may_have_opacity\":"
@@ -8778,6 +8950,93 @@ int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRende
   }
   if (effect_output_clip_id) {
     *effect_output_clip_id = state.effect_output_clip_id;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgePaintChunkFilterOperationCountForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& states = ProbeCache().chunk_property_states;
+  if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
+    return 0;
+  }
+  return static_cast<int>(
+      states[static_cast<size_t>(chunk_index)].effect_filter_operations.size());
+}
+
+int StandaloneBlinkLiveFrameBridgePaintChunkHasUnsupportedFilterForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int* has_unsupported_filter) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& states = ProbeCache().chunk_property_states;
+  if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
+    return 0;
+  }
+  if (has_unsupported_filter) {
+    *has_unsupported_filter =
+        states[static_cast<size_t>(chunk_index)].effect_has_unsupported_filter
+            ? 1
+            : 0;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgePaintChunkFilterOperationAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int operation_index,
+    int* type,
+    float* amount,
+    float* offset_x,
+    float* offset_y,
+    float* color_r,
+    float* color_g,
+    float* color_b,
+    float* color_a,
+    float* matrix20) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& states = ProbeCache().chunk_property_states;
+  if (chunk_index < 0 || static_cast<size_t>(chunk_index) >= states.size()) {
+    return 0;
+  }
+  const std::vector<LiveExportedFilterOperation>& operations =
+      states[static_cast<size_t>(chunk_index)].effect_filter_operations;
+  if (operation_index < 0 ||
+      static_cast<size_t>(operation_index) >= operations.size()) {
+    return 0;
+  }
+  const LiveExportedFilterOperation& operation =
+      operations[static_cast<size_t>(operation_index)];
+  if (type) {
+    *type = operation.type;
+  }
+  if (amount) {
+    *amount = operation.amount;
+  }
+  if (offset_x) {
+    *offset_x = operation.offset_x;
+  }
+  if (offset_y) {
+    *offset_y = operation.offset_y;
+  }
+  if (color_r) {
+    *color_r = operation.color_r;
+  }
+  if (color_g) {
+    *color_g = operation.color_g;
+  }
+  if (color_b) {
+    *color_b = operation.color_b;
+  }
+  if (color_a) {
+    *color_a = operation.color_a;
+  }
+  if (matrix20) {
+    std::memcpy(matrix20, operation.matrix.data(),
+                operation.matrix.size() * sizeof(float));
   }
   return 1;
 }
