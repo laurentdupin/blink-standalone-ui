@@ -67,10 +67,11 @@
     "resource-loading": [
       "18j_external_css_png_background",
       "18k_external_css_svg_background",
-      "18l_external_css_multi_resource_order"
+      "18l_external_css_multi_resource_order",
+      "18m_external_css_import_local"
     ],
     "resource-known-gaps": [
-      "18m_external_css_import_unsupported"
+      "18n_external_css_import_media_unsupported"
     ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
@@ -171,11 +172,18 @@
       "note": "Two linked CSS files from different directories, each resolving PNG/SVG resources relative to its own path; cascade order is visible in the final swatch."
     },
     {
-      "name": "18m_external_css_import_unsupported",
+      "name": "18m_external_css_import_local",
       "source": "paint_audit",
-      "html": "18m_external_css_import_unsupported.html",
+      "html": "18m_external_css_import_local.html",
       "viewport": "220x120",
-      "note": "Known gap: local CSS @import is currently unsupported; comparison report should surface the unsupported CSS diagnostic."
+      "note": "Linked external CSS with local @import expansion and imported PNG URL rebasing relative to the imported stylesheet."
+    },
+    {
+      "name": "18n_external_css_import_media_unsupported",
+      "source": "paint_audit",
+      "html": "18n_external_css_import_media_unsupported.html",
+      "viewport": "220x120",
+      "note": "Known gap: media-qualified CSS @import is diagnosed and left unsupported rather than expanded."
     },
     {
       "name": "05e_object_fit_contain_cover",

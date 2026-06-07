@@ -4,6 +4,7 @@
 #include <cctype>
 #include <fstream>
 #include <iterator>
+#include <system_error>
 
 namespace html_css_renderer {
 namespace {
@@ -53,6 +54,360 @@ bool HasUrlScheme(const std::string& value) {
     }
   }
   return true;
+}
+
+bool IsPathWithinRoot(const fs::path& path, const fs::path& root) {
+  const fs::path relative = path.lexically_relative(root);
+  if (relative.empty()) {
+    return path == root;
+  }
+  if (relative.is_absolute()) {
+    return false;
+  }
+  for (const fs::path& part : relative) {
+    if (part == "..") {
+      return false;
+    }
+  }
+  return true;
+}
+
+fs::path NormalizePathForPolicy(const fs::path& path) {
+  std::error_code error;
+  fs::path normalized = fs::weakly_canonical(path, error);
+  if (!error) {
+    return normalized;
+  }
+  return fs::absolute(path).lexically_normal();
+}
+
+bool IsImportBoundary(char c) {
+  const unsigned char value = static_cast<unsigned char>(c);
+  return !std::isalnum(value) && c != '_' && c != '-';
+}
+
+void AppendUnsupportedCssImportRuleDiagnostic(
+    const std::string& stylesheet_label,
+    const std::string& reason,
+    std::vector<std::string>* diagnostics) {
+  if (!diagnostics) {
+    return;
+  }
+  std::string message =
+      "unsupported CSS @import rule in stylesheet: " + stylesheet_label;
+  if (!reason.empty()) {
+    message += " (" + reason + ")";
+  }
+  diagnostics->push_back(message);
+}
+
+struct ParsedImportRule {
+  bool supported = false;
+  std::string href;
+  std::string reason;
+};
+
+size_t FindCssRuleEnd(const std::string& css, size_t rule_start) {
+  bool in_single_quote = false;
+  bool in_double_quote = false;
+  bool in_comment = false;
+  int paren_depth = 0;
+  for (size_t i = rule_start; i < css.size(); ++i) {
+    if (in_comment) {
+      if (i + 1 < css.size() && css[i] == '*' && css[i + 1] == '/') {
+        in_comment = false;
+        ++i;
+      }
+      continue;
+    }
+    if (in_single_quote) {
+      if (css[i] == '\\') {
+        ++i;
+      } else if (css[i] == '\'') {
+        in_single_quote = false;
+      }
+      continue;
+    }
+    if (in_double_quote) {
+      if (css[i] == '\\') {
+        ++i;
+      } else if (css[i] == '"') {
+        in_double_quote = false;
+      }
+      continue;
+    }
+    if (i + 1 < css.size() && css[i] == '/' && css[i + 1] == '*') {
+      in_comment = true;
+      ++i;
+      continue;
+    }
+    if (css[i] == '\'') {
+      in_single_quote = true;
+      continue;
+    }
+    if (css[i] == '"') {
+      in_double_quote = true;
+      continue;
+    }
+    if (css[i] == '(') {
+      ++paren_depth;
+      continue;
+    }
+    if (css[i] == ')' && paren_depth > 0) {
+      --paren_depth;
+      continue;
+    }
+    if (css[i] == ';' && paren_depth == 0) {
+      return i + 1;
+    }
+  }
+  return css.size();
+}
+
+ParsedImportRule ParseImportRule(const std::string& rule) {
+  ParsedImportRule parsed;
+  const std::string lower = ToLowerAscii(rule);
+  size_t cursor = 7;
+  auto skip_space = [&]() {
+    while (cursor < rule.size() &&
+           std::isspace(static_cast<unsigned char>(rule[cursor]))) {
+      ++cursor;
+    }
+  };
+  skip_space();
+  size_t value_end = cursor;
+  if (lower.compare(cursor, 3, "url") == 0) {
+    cursor += 3;
+    skip_space();
+    if (cursor >= rule.size() || rule[cursor] != '(') {
+      parsed.reason = "invalid url() import";
+      return parsed;
+    }
+    ++cursor;
+    skip_space();
+    if (cursor < rule.size() && (rule[cursor] == '"' || rule[cursor] == '\'')) {
+      const char quote = rule[cursor++];
+      const size_t href_start = cursor;
+      while (cursor < rule.size() && rule[cursor] != quote) {
+        if (rule[cursor] == '\\' && cursor + 1 < rule.size()) {
+          cursor += 2;
+        } else {
+          ++cursor;
+        }
+      }
+      if (cursor >= rule.size()) {
+        parsed.reason = "unterminated quoted import";
+        return parsed;
+      }
+      parsed.href = rule.substr(href_start, cursor - href_start);
+      ++cursor;
+      skip_space();
+      if (cursor >= rule.size() || rule[cursor] != ')') {
+        parsed.reason = "invalid url() import";
+        return parsed;
+      }
+      value_end = ++cursor;
+    } else {
+      const size_t href_start = cursor;
+      while (cursor < rule.size() && rule[cursor] != ')') {
+        ++cursor;
+      }
+      if (cursor >= rule.size()) {
+        parsed.reason = "unterminated url() import";
+        return parsed;
+      }
+      parsed.href = TrimAscii(rule.substr(href_start, cursor - href_start));
+      value_end = ++cursor;
+    }
+  } else if (cursor < rule.size() &&
+             (rule[cursor] == '"' || rule[cursor] == '\'')) {
+    const char quote = rule[cursor++];
+    const size_t href_start = cursor;
+    while (cursor < rule.size() && rule[cursor] != quote) {
+      if (rule[cursor] == '\\' && cursor + 1 < rule.size()) {
+        cursor += 2;
+      } else {
+        ++cursor;
+      }
+    }
+    if (cursor >= rule.size()) {
+      parsed.reason = "unterminated quoted import";
+      return parsed;
+    }
+    parsed.href = rule.substr(href_start, cursor - href_start);
+    value_end = ++cursor;
+  } else {
+    parsed.reason = "missing import URL";
+    return parsed;
+  }
+
+  std::string tail = TrimAscii(rule.substr(value_end));
+  if (!tail.empty() && tail.back() == ';') {
+    tail.pop_back();
+    tail = TrimAscii(tail);
+  }
+  if (!tail.empty()) {
+    parsed.reason = "media-qualified imports are not expanded";
+    parsed.href.clear();
+    return parsed;
+  }
+  parsed.href = TrimAscii(parsed.href);
+  if (parsed.href.empty()) {
+    parsed.reason = "empty import URL";
+    return parsed;
+  }
+  parsed.supported = true;
+  return parsed;
+}
+
+std::optional<std::string> ExpandAndRebaseStylesheetFile(
+    const fs::path& stylesheet_path,
+    const fs::path& document_base_dir,
+    std::vector<std::string>* diagnostics,
+    std::vector<fs::path>* import_stack,
+    size_t depth);
+
+std::string ExpandImportsAndRebaseCssSegments(
+    const std::string& css,
+    const fs::path& stylesheet_path,
+    const fs::path& document_base_dir,
+    std::vector<std::string>* diagnostics,
+    std::vector<fs::path>* import_stack,
+    size_t depth) {
+  std::string output;
+  output.reserve(css.size());
+  const std::string lower = ToLowerAscii(css);
+  bool in_single_quote = false;
+  bool in_double_quote = false;
+  bool in_comment = false;
+  size_t segment_start = 0;
+  for (size_t i = 0; i < lower.size(); ++i) {
+    if (in_comment) {
+      if (i + 1 < lower.size() && lower[i] == '*' && lower[i + 1] == '/') {
+        in_comment = false;
+        ++i;
+      }
+      continue;
+    }
+    if (in_single_quote) {
+      if (lower[i] == '\\') {
+        ++i;
+      } else if (lower[i] == '\'') {
+        in_single_quote = false;
+      }
+      continue;
+    }
+    if (in_double_quote) {
+      if (lower[i] == '\\') {
+        ++i;
+      } else if (lower[i] == '"') {
+        in_double_quote = false;
+      }
+      continue;
+    }
+    if (i + 1 < lower.size() && lower[i] == '/' && lower[i + 1] == '*') {
+      in_comment = true;
+      ++i;
+      continue;
+    }
+    if (lower[i] == '\'') {
+      in_single_quote = true;
+      continue;
+    }
+    if (lower[i] == '"') {
+      in_double_quote = true;
+      continue;
+    }
+    if (lower.compare(i, 7, "@import") != 0) {
+      continue;
+    }
+    const size_t after_import = i + 7;
+    if (after_import < lower.size() &&
+        !IsImportBoundary(lower[after_import])) {
+      continue;
+    }
+    output += RebaseCssUrlsToDocumentBase(
+        css.substr(segment_start, i - segment_start), stylesheet_path,
+        document_base_dir);
+    const size_t rule_end = FindCssRuleEnd(css, i);
+    const ParsedImportRule parsed =
+        ParseImportRule(css.substr(i, rule_end - i));
+    if (!parsed.supported) {
+      AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
+                                              parsed.reason, diagnostics);
+    } else {
+      const std::string lower_href = ToLowerAscii(parsed.href);
+      const fs::path import_ref = fs::path(parsed.href);
+      if (lower_href.rfind("//", 0) == 0 || HasUrlScheme(parsed.href) ||
+          import_ref.is_absolute()) {
+        AppendUnsupportedCssImportRuleDiagnostic(
+            stylesheet_path.string(), "non-local import URL", diagnostics);
+      } else {
+        const fs::path import_path =
+            NormalizePathForPolicy(stylesheet_path.parent_path() / import_ref);
+        const fs::path root = NormalizePathForPolicy(document_base_dir);
+        if (!IsPathWithinRoot(import_path, root)) {
+          AppendUnsupportedCssImportRuleDiagnostic(
+              stylesheet_path.string(), "import path escapes document base",
+              diagnostics);
+        } else if (std::find(import_stack->begin(), import_stack->end(),
+                             import_path) != import_stack->end()) {
+          AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
+                                                  "cyclic import", diagnostics);
+        } else {
+          std::optional<std::string> imported =
+              ExpandAndRebaseStylesheetFile(import_path, document_base_dir,
+                                            diagnostics, import_stack,
+                                            depth + 1);
+          if (imported) {
+            if (!output.empty() && output.back() != '\n') {
+              output.push_back('\n');
+            }
+            output += *imported;
+            if (!output.empty() && output.back() != '\n') {
+              output.push_back('\n');
+            }
+          } else {
+            AppendUnsupportedCssImportRuleDiagnostic(
+                stylesheet_path.string(), "import file not found",
+                diagnostics);
+          }
+        }
+      }
+    }
+    i = rule_end == 0 ? 0 : rule_end - 1;
+    segment_start = rule_end;
+  }
+  output += RebaseCssUrlsToDocumentBase(css.substr(segment_start),
+                                        stylesheet_path, document_base_dir);
+  return output;
+}
+
+std::optional<std::string> ExpandAndRebaseStylesheetFile(
+    const fs::path& stylesheet_path,
+    const fs::path& document_base_dir,
+    std::vector<std::string>* diagnostics,
+    std::vector<fs::path>* import_stack,
+    size_t depth) {
+  constexpr size_t kMaxImportDepth = 16;
+  if (depth > kMaxImportDepth) {
+    AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
+                                            "import depth limit exceeded",
+                                            diagnostics);
+    return std::string();
+  }
+  const fs::path normalized_stylesheet =
+      NormalizePathForPolicy(stylesheet_path);
+  const std::optional<std::string> css = ReadTextFile(normalized_stylesheet);
+  if (!css) {
+    return std::nullopt;
+  }
+  import_stack->push_back(normalized_stylesheet);
+  std::string expanded = ExpandImportsAndRebaseCssSegments(
+      *css, normalized_stylesheet, NormalizePathForPolicy(document_base_dir),
+      diagnostics, import_stack, depth);
+  import_stack->pop_back();
+  return expanded;
 }
 
 std::string RebaseCssUrlValue(const std::string& raw_value,
@@ -247,16 +602,13 @@ std::optional<Stylesheet> LoadStylesheetFileForDocument(
     const fs::path& stylesheet_path,
     const fs::path& document_base_dir,
     std::vector<std::string>* diagnostics) {
-  const std::optional<std::string> css = ReadTextFile(stylesheet_path);
+  std::vector<fs::path> import_stack;
+  const std::optional<std::string> css = ExpandAndRebaseStylesheetFile(
+      stylesheet_path, document_base_dir, diagnostics, &import_stack, 0);
   if (!css) {
     return std::nullopt;
   }
-  AppendUnsupportedCssImportDiagnostic(*css, stylesheet_path.string(),
-                                       diagnostics);
-  const fs::path absolute_stylesheet_path = fs::absolute(stylesheet_path);
-  return Stylesheet{stylesheet_path.string(),
-                    RebaseCssUrlsToDocumentBase(*css, absolute_stylesheet_path,
-                                                document_base_dir)};
+  return Stylesheet{stylesheet_path.string(), *css};
 }
 
 void AddLocalLinkedStylesheetsForDocument(

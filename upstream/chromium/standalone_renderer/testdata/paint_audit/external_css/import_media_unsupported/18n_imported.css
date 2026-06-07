@@ -1,0 +1,9 @@
+.imported {
+  width: 72px;
+  height: 72px;
+  background-color: #fee2e2;
+  background-image: url("../../17_assets/red_2x2.png");
+  background-repeat: no-repeat;
+  background-size: 72px 72px;
+  image-rendering: pixelated;
+}
