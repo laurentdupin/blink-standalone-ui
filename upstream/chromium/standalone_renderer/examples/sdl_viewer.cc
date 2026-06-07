@@ -199,6 +199,8 @@ void PrintUsage() {
                "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
                " [--dump-paint-artifact path]"
                " [--profile] [--profile-summary-frames count]"
+               " [--profile-auto-scroll-frames count]"
+               " [--profile-auto-scroll-step px]"
                " [--blink]"
                "\nControls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls hit scrollable elements "
@@ -223,6 +225,8 @@ bool ParseArgs(int argc,
                float* scroll_step,
                bool* profile_enabled,
                uint64_t* profile_summary_frames,
+               uint64_t* profile_auto_scroll_frames,
+               std::optional<float>* profile_auto_scroll_step,
                bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
   for (int i = 1; i < argc; ++i) {
@@ -387,6 +391,22 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_summary_frames = static_cast<uint64_t>(parsed);
+    } else if (arg == "--profile-auto-scroll-frames") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 0.0) {
+        return false;
+      }
+      *profile_auto_scroll_frames = static_cast<uint64_t>(parsed);
+      *profile_enabled = true;
+    } else if (arg == "--profile-auto-scroll-step") {
+      const char* value = next_value();
+      float parsed = 0.0f;
+      if (!value || !ParseFloat(value, &parsed) || parsed <= 0.0f ||
+          parsed > 10000.0f) {
+        return false;
+      }
+      *profile_auto_scroll_step = parsed;
     } else if (arg == "--blink") {
       *use_blink = true;
     } else if (arg == "--manual") {
@@ -746,6 +766,79 @@ std::vector<uint32_t> ConvertRgbaToAbgr(
     pixels.push_back((a << 24) | (b << 16) | (g << 8) | r);
   }
   return pixels;
+}
+
+uint32_t ConvertRgbaPixelToAbgr(uint32_t rgba) {
+  const uint32_t r = (rgba >> 24) & 0xff;
+  const uint32_t g = (rgba >> 16) & 0xff;
+  const uint32_t b = (rgba >> 8) & 0xff;
+  const uint32_t a = rgba & 0xff;
+  return (a << 24) | (b << 16) | (g << 8) | r;
+}
+
+std::optional<SDL_Rect> DamageRectToTextureRect(
+    const html_css_renderer::Rect& rect,
+    int width,
+    int height) {
+  const int left = std::max(0, static_cast<int>(std::floor(rect.x)));
+  const int top = std::max(0, static_cast<int>(std::floor(rect.y)));
+  const int right =
+      std::min(width, static_cast<int>(std::ceil(rect.x + rect.width)));
+  const int bottom =
+      std::min(height, static_cast<int>(std::ceil(rect.y + rect.height)));
+  if (right <= left || bottom <= top) {
+    return std::nullopt;
+  }
+  return SDL_Rect{left, top, right - left, bottom - top};
+}
+
+std::vector<SDL_Rect> TextureUpdateRectsForFrame(
+    const html_css_renderer::RenderResult& result,
+    const html_css_renderer::CpuImage& image,
+    bool incremental_update) {
+  if (!incremental_update || ViewerRequiresFullRedraw(result)) {
+    return {SDL_Rect{0, 0, image.width, image.height}};
+  }
+  std::vector<SDL_Rect> rects;
+  for (const html_css_renderer::Rect& damage : ViewerDamageRects(result)) {
+    std::optional<SDL_Rect> texture_rect =
+        DamageRectToTextureRect(damage, image.width, image.height);
+    if (texture_rect) {
+      rects.push_back(*texture_rect);
+    }
+  }
+  return rects;
+}
+
+void ConvertRgbaRectsToAbgr(const html_css_renderer::CpuImage& image,
+                            const std::vector<SDL_Rect>& rects,
+                            std::vector<uint32_t>* pixels) {
+  pixels->resize(image.pixels_rgba.size());
+  for (const SDL_Rect& rect : rects) {
+    for (int y = rect.y; y < rect.y + rect.h; ++y) {
+      const size_t row_offset = static_cast<size_t>(y) * image.width;
+      for (int x = rect.x; x < rect.x + rect.w; ++x) {
+        const size_t index = row_offset + static_cast<size_t>(x);
+        (*pixels)[index] = ConvertRgbaPixelToAbgr(image.pixels_rgba[index]);
+      }
+    }
+  }
+}
+
+bool UploadTextureRects(SDL_Texture* texture,
+                        const html_css_renderer::CpuImage& image,
+                        const std::vector<uint32_t>& pixels,
+                        const std::vector<SDL_Rect>& rects) {
+  const int pitch = image.width * static_cast<int>(sizeof(uint32_t));
+  for (const SDL_Rect& rect : rects) {
+    const uint32_t* data =
+        pixels.data() + static_cast<size_t>(rect.y) * image.width + rect.x;
+    if (!SDL_UpdateTexture(texture, &rect, data, pitch)) {
+      std::fprintf(stderr, "SDL_UpdateTexture failed: %s\n", SDL_GetError());
+      return false;
+    }
+  }
+  return true;
 }
 
 uint8_t ClampByte(float value) {
@@ -1291,6 +1384,8 @@ int main(int argc, char** argv) {
   float scroll_step = 80.0f;
   bool profile_enabled = false;
   uint64_t profile_summary_frames = 0;
+  uint64_t profile_auto_scroll_frames = 0;
+  std::optional<float> profile_auto_scroll_step;
   bool incremental = false;
   bool use_cpu = false;
   bool use_skia_cpu = false;
@@ -1303,6 +1398,8 @@ int main(int argc, char** argv) {
                              &resource_base_path,
                              &attribute_toggles, &scroll_step,
                              &profile_enabled, &profile_summary_frames,
+                             &profile_auto_scroll_frames,
+                             &profile_auto_scroll_step,
                              &use_blink,
                              &stylesheet_loader_diagnostics)) {
     PrintUsage();
@@ -1421,8 +1518,6 @@ int main(int argc, char** argv) {
     }
   }
 
-  SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
-
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
     return 1;
@@ -1451,6 +1546,9 @@ int main(int argc, char** argv) {
     SDL_Quit();
     return 1;
   }
+  const char* renderer_name = SDL_GetRendererName(renderer);
+  std::fprintf(stderr, "viewer renderer: %s\n",
+               renderer_name ? renderer_name : "unknown");
 
   const SDL_TextureAccess texture_access =
       use_cpu ? SDL_TEXTUREACCESS_STATIC : SDL_TEXTUREACCESS_TARGET;
@@ -1570,7 +1668,9 @@ int main(int argc, char** argv) {
       if (profile) {
         pixel_convert_start = ProfileClock::now();
       }
-      pixels = ConvertRgbaToAbgr(image);
+      std::vector<SDL_Rect> texture_update_rects =
+          TextureUpdateRectsForFrame(next_result, image, use_incremental);
+      ConvertRgbaRectsToAbgr(image, texture_update_rects, &pixels);
       if (profile) {
         profile_frame.pixel_convert_ms =
             ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
@@ -1579,8 +1679,9 @@ int main(int argc, char** argv) {
       if (profile) {
         texture_upload_start = ProfileClock::now();
       }
-      SDL_UpdateTexture(texture, nullptr, pixels.data(),
-                        frame_width * static_cast<int>(sizeof(uint32_t)));
+      if (!UploadTextureRects(texture, image, pixels, texture_update_rects)) {
+        return false;
+      }
       if (profile) {
         profile_frame.texture_upload_ms =
             ElapsedProfileMs(texture_upload_start, ProfileClock::now());
@@ -1617,6 +1718,11 @@ int main(int argc, char** argv) {
 
   bool running = true;
   const uint64_t start_ms = SDL_GetTicks();
+  const bool profile_auto_scroll_requested = profile_auto_scroll_frames > 0;
+  uint64_t profile_auto_scroll_remaining = profile_auto_scroll_frames;
+  const float profile_auto_scroll_delta =
+      profile_auto_scroll_step.value_or(scroll_step);
+  bool first_present_complete = false;
   while (running) {
     bool texture_dirty = false;
     SDL_Event event;
@@ -1823,6 +1929,21 @@ int main(int argc, char** argv) {
         }
       }
     }
+    if (first_present_complete && profile_auto_scroll_remaining > 0) {
+      const ProfileClock::time_point input_update_start = ProfileClock::now();
+      html_css_renderer::FrameInput next_input = input;
+      SetDocumentScroll(&next_input, CurrentDocumentScrollX(next_input),
+                        CurrentDocumentScrollY(next_input) +
+                            profile_auto_scroll_delta);
+      const double input_update_ms =
+          ElapsedProfileMs(input_update_start, ProfileClock::now());
+      if (!render_updated_input("profile-auto-scroll", std::move(next_input),
+                                input_update_ms, input_update_start)) {
+        running = false;
+      }
+      --profile_auto_scroll_remaining;
+      texture_dirty = true;
+    }
     (void)texture_dirty;
     ProfileClock::time_point draw_present_start;
     if (pending_profile_frame) {
@@ -1862,6 +1983,11 @@ int main(int argc, char** argv) {
       profiler.Record(std::move(pending_profile_frame->frame));
       pending_profile_frame.reset();
     }
+    if (profile_auto_scroll_requested && first_present_complete &&
+        profile_auto_scroll_remaining == 0 && quit_after_ms == 0) {
+      running = false;
+    }
+    first_present_complete = true;
     if (quit_after_ms > 0 && SDL_GetTicks() - start_ms >= quit_after_ms) {
       running = false;
     }

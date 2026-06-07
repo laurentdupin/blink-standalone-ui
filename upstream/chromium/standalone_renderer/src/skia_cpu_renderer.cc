@@ -476,6 +476,49 @@ uint32_t PackRgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
          (static_cast<uint32_t>(b) << 8) | static_cast<uint32_t>(a);
 }
 
+void BlitPreviousImageTranslated(const CpuImage& previous,
+                                 CpuImage& destination,
+                                 Point delta) {
+  const int dx = static_cast<int>(std::lround(delta.x));
+  const int dy = static_cast<int>(std::lround(delta.y));
+  const int src_left = std::max(0, -dx);
+  const int src_top = std::max(0, -dy);
+  const int dst_left = std::max(0, dx);
+  const int dst_top = std::max(0, dy);
+  const int copy_width = std::min(previous.width - src_left,
+                                  destination.width - dst_left);
+  const int copy_height = std::min(previous.height - src_top,
+                                   destination.height - dst_top);
+  if (copy_width <= 0 || copy_height <= 0) {
+    return;
+  }
+  for (int row = 0; row < copy_height; ++row) {
+    const size_t src_offset =
+        static_cast<size_t>(src_top + row) * previous.width + src_left;
+    const size_t dst_offset =
+        static_cast<size_t>(dst_top + row) * destination.width + dst_left;
+    std::copy_n(
+        previous.pixels_rgba.begin() + static_cast<std::ptrdiff_t>(src_offset),
+        copy_width,
+        destination.pixels_rgba.begin() +
+            static_cast<std::ptrdiff_t>(dst_offset));
+  }
+}
+
+void CopySkiaPixelsToCpuImageRect(const std::vector<uint8_t>& pixels,
+                                  const SkIRect& rect,
+                                  CpuImage& image) {
+  for (int y = rect.top(); y < rect.bottom(); ++y) {
+    for (int x = rect.left(); x < rect.right(); ++x) {
+      const size_t index = static_cast<size_t>(y) * image.width + x;
+      const size_t offset = index * 4u;
+      image.pixels_rgba[index] =
+          PackRgba(pixels[offset + 0], pixels[offset + 1],
+                   pixels[offset + 2], pixels[offset + 3]);
+    }
+  }
+}
+
 int FloorToInt(float value) {
   return static_cast<int>(std::floor(value));
 }
@@ -921,7 +964,26 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   CpuImage image;
   image.width = std::max(1, static_cast<int>(viewport.width));
   image.height = std::max(1, static_cast<int>(viewport.height));
-  image.pixels_rgba.resize(static_cast<size_t>(image.width) * image.height);
+  const bool incremental_base =
+      !clear_before_render && previous && previous->width == image.width &&
+      previous->height == image.height &&
+      previous->pixels_rgba.size() ==
+          static_cast<size_t>(image.width) * image.height;
+  if (incremental_base) {
+    if (scroll_translation_delta) {
+      image.pixels_rgba.assign(
+          static_cast<size_t>(image.width) * image.height,
+          PackRgba(ClampByte(options.clear_color.r),
+                   ClampByte(options.clear_color.g),
+                   ClampByte(options.clear_color.b),
+                   ClampByte(options.clear_color.a)));
+      BlitPreviousImageTranslated(*previous, image, *scroll_translation_delta);
+    } else {
+      image.pixels_rgba = previous->pixels_rgba;
+    }
+  } else {
+    image.pixels_rgba.resize(static_cast<size_t>(image.width) * image.height);
+  }
 
   SkImageInfo info =
       SkImageInfo::Make(image.width, image.height, kRGBA_8888_SkColorType,
@@ -1043,12 +1105,22 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
     --save_depth;
   }
 
-  for (int y = 0; y < image.height; ++y) {
-    for (int x = 0; x < image.width; ++x) {
-      const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4u;
-      image.pixels_rgba[static_cast<size_t>(y) * image.width + x] =
-          PackRgba(pixels[offset + 0], pixels[offset + 1], pixels[offset + 2],
-                   pixels[offset + 3]);
+  if (incremental_base && damage_rects) {
+    for (const Rect& damage_rect : *damage_rects) {
+      const SkIRect clip =
+          ToSkIRectClamped(damage_rect, image.width, image.height);
+      if (!IsEmpty(clip)) {
+        CopySkiaPixelsToCpuImageRect(pixels, clip, image);
+      }
+    }
+  } else {
+    for (int y = 0; y < image.height; ++y) {
+      for (int x = 0; x < image.width; ++x) {
+        const size_t offset = (static_cast<size_t>(y) * image.width + x) * 4u;
+        image.pixels_rgba[static_cast<size_t>(y) * image.width + x] =
+            PackRgba(pixels[offset + 0], pixels[offset + 1],
+                     pixels[offset + 2], pixels[offset + 3]);
+      }
     }
   }
 

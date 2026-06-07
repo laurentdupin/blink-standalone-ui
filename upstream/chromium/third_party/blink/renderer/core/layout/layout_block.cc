@@ -242,13 +242,6 @@ void LayoutBlock::AddChild(LayoutObject* new_child,
 
 void LayoutBlock::Paint(const PaintInfo& paint_info) const {
   NOT_DESTROYED();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::printf("layout-block: Paint begin phase=%d fragments=%u needs=%d\n",
-              static_cast<int>(paint_info.phase),
-              static_cast<unsigned>(PhysicalFragmentCount()),
-              NeedsLayout() ? 1 : 0);
-  std::fflush(stdout);
-#endif
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
   // When |this| is NG block fragmented, the painter should traverse fragments
@@ -265,44 +258,23 @@ void LayoutBlock::Paint(const PaintInfo& paint_info) const {
 
   // Avoid painting dirty objects because descendants maybe already destroyed.
   if (NeedsLayout() && !ChildLayoutBlockedByDisplayLock()) [[unlikely]] {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::printf("layout-block: Paint dirty skip\n");
-    std::fflush(stdout);
-#endif
     DUMP_WILL_BE_NOTREACHED();
     return;
   }
 
   if (PhysicalFragmentCount()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::printf("layout-block: Paint before fragment\n");
-    std::fflush(stdout);
-#endif
     const PhysicalBoxFragment* fragment = GetPhysicalFragment(0);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::printf("layout-block: Paint after fragment ptr=%p\n",
-                static_cast<const void*>(fragment));
-    std::fflush(stdout);
-#endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
     if (!fragment) {
-      std::printf("layout-block: Paint null fragment skip\n");
-      std::fflush(stdout);
       return;
     }
 #endif
     DCHECK(fragment);
     BoxFragmentPainter(*fragment).Paint(paint_info);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::printf("layout-block: Paint after box fragment painter\n");
-    std::fflush(stdout);
-#endif
     return;
   }
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::printf("layout-block: Paint no fragments\n");
-  std::fflush(stdout);
   return;
 #endif
   NOTREACHED();
