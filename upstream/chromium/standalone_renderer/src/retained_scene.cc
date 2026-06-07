@@ -672,17 +672,104 @@ bool IsRootDocumentScrollReuseChunk(const RetainedPaintChunk& chunk) {
          !state.transform_has_non_translation;
 }
 
+bool TransformAlreadyIncludesPresentationScroll(
+    const PaintPropertyStateSnapshot& property_state,
+    Point delta) {
+  if (!property_state.transform_is_2d ||
+      property_state.transform_has_perspective ||
+      property_state.transform_has_non_translation ||
+      property_state.scroll_node_id == 0) {
+    return false;
+  }
+  return NearlyEqual(property_state.transform_to_root.values[12], delta.x) &&
+         NearlyEqual(property_state.transform_to_root.values[13], delta.y);
+}
+
+bool CanTranslateImageClipCommandsForPresentation(
+    const DrawCommandList& commands) {
+  bool has_image = false;
+  for (const DrawCommand& command : commands) {
+    switch (command.type) {
+      case DrawCommandType::kSave:
+      case DrawCommandType::kRestore:
+      case DrawCommandType::kClipRect:
+      case DrawCommandType::kClipRRect:
+        break;
+      case DrawCommandType::kDrawImage:
+      case DrawCommandType::kDrawImageRect:
+        has_image = true;
+        break;
+      case DrawCommandType::kTransform:
+      case DrawCommandType::kClipPath:
+      case DrawCommandType::kSaveLayer:
+      case DrawCommandType::kFillRect:
+      case DrawCommandType::kStrokeRect:
+      case DrawCommandType::kFillRectShader:
+      case DrawCommandType::kFillRRect:
+      case DrawCommandType::kStrokeRRect:
+      case DrawCommandType::kFillRRectShader:
+      case DrawCommandType::kFillPath:
+      case DrawCommandType::kDrawGlyphRun:
+      case DrawCommandType::kDrawTextBlob:
+      case DrawCommandType::kDrawText:
+      case DrawCommandType::kDiagnostic:
+        return false;
+    }
+  }
+  return has_image;
+}
+
+DrawCommandList TranslateImageClipCommandsForPresentation(
+    const DrawCommandList& source,
+    Point delta) {
+  DrawCommandList commands;
+  commands.reserve(source.size());
+  for (DrawCommand command : source) {
+    switch (command.type) {
+      case DrawCommandType::kDrawImage:
+      case DrawCommandType::kDrawImageRect:
+        command.rect = Translate(command.rect, delta);
+        break;
+      case DrawCommandType::kSave:
+      case DrawCommandType::kRestore:
+      case DrawCommandType::kClipRect:
+      case DrawCommandType::kClipRRect:
+      case DrawCommandType::kTransform:
+      case DrawCommandType::kClipPath:
+      case DrawCommandType::kSaveLayer:
+      case DrawCommandType::kFillRect:
+      case DrawCommandType::kStrokeRect:
+      case DrawCommandType::kFillRectShader:
+      case DrawCommandType::kFillRRect:
+      case DrawCommandType::kStrokeRRect:
+      case DrawCommandType::kFillRRectShader:
+      case DrawCommandType::kFillPath:
+      case DrawCommandType::kDrawGlyphRun:
+      case DrawCommandType::kDrawTextBlob:
+      case DrawCommandType::kDrawText:
+      case DrawCommandType::kDiagnostic:
+        break;
+    }
+    commands.push_back(std::move(command));
+  }
+  return commands;
+}
+
 PaintPropertyStateSnapshot TranslatePropertyStateForPresentation(
     PaintPropertyStateSnapshot property_state,
     Point delta) {
   if (IsZero(delta)) {
     return property_state;
   }
-  if (property_state.has_clip_rect) {
-    property_state.clip_rect = Translate(property_state.clip_rect, delta);
-  }
-  if (property_state.has_clip_rrect) {
-    property_state.clip_rrect = Translate(property_state.clip_rrect, delta);
+  const bool clip_already_in_presented_space =
+      TransformAlreadyIncludesPresentationScroll(property_state, delta);
+  if (!clip_already_in_presented_space) {
+    if (property_state.has_clip_rect) {
+      property_state.clip_rect = Translate(property_state.clip_rect, delta);
+    }
+    if (property_state.has_clip_rrect) {
+      property_state.clip_rrect = Translate(property_state.clip_rrect, delta);
+    }
   }
   if (property_state.scroll_container_rect.width > 0.0f ||
       property_state.scroll_container_rect.height > 0.0f) {
@@ -717,6 +804,10 @@ DrawCommandList CommandsForPresentation(const RetainedPaintChunk& chunk,
       PresentationScrollOffsetDelta(chunk, current_scroll_offset);
   if (IsZero(delta)) {
     return chunk.commands;
+  }
+  if (TransformAlreadyIncludesPresentationScroll(chunk.property_state, delta) &&
+      CanTranslateImageClipCommandsForPresentation(chunk.commands)) {
+    return TranslateImageClipCommandsForPresentation(chunk.commands, delta);
   }
   DrawCommandList commands;
   commands.reserve(chunk.commands.size() + 3);

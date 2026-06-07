@@ -35,6 +35,7 @@
       "18l_external_css_multi_resource_order",
       "14g_image_inside_overflow_clip",
       "14i_image_inside_rounded_overflow_clip",
+      "14j_image_rounded_overflow_document_scroll",
       "05l_image_local_svg_rounded_overflow_clip",
       "14e_nested_overflow_hidden",
       "14f_transform_inside_overflow_clip",
@@ -289,6 +290,14 @@
       "html": "14i_image_inside_rounded_overflow_clip.html",
       "viewport": "180x130",
       "note": "PNG image clipped by overflow:hidden parent with border-radius."
+    },
+    {
+      "name": "14j_image_rounded_overflow_document_scroll",
+      "source": "paint_audit",
+      "html": "14j_image_rounded_overflow_document_scroll.html",
+      "viewport": "360x220",
+      "scroll": {"x": 0, "y": 220},
+      "note": "PNG and JPEG image elements clipped by rounded overflow while the document is scrolled."
     },
     {
       "name": "05l_image_local_svg_rounded_overflow_clip",

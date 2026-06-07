@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  html,
+  body {
+    margin: 0;
+    background: rgb(244, 248, 252);
+  }
+
+  .spacer {
+    height: 220px;
+    background: linear-gradient(180deg, rgb(226, 232, 240), rgb(244, 248, 252));
+  }
+
+  .cards {
+    display: flex;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .card {
+    width: 172px;
+    padding: 12px;
+    border: 1px solid rgb(203, 213, 225);
+    border-radius: 18px;
+    background: rgb(226, 232, 240);
+  }
+
+  .frame {
+    width: 148px;
+    height: 96px;
+    overflow: hidden;
+    border-radius: 14px;
+    background: rgb(241, 245, 249);
+  }
+
+  img {
+    border: 0;
+    display: block;
+    max-width: 100%;
+    height: 96px;
+    image-rendering: pixelated;
+  }
+
+  .tail {
+    height: 320px;
+  }
+</style>
+<div class="spacer"></div>
+<div class="cards">
+  <figure class="card">
+    <div class="frame">
+      <img data-debug-id="png-target" alt="local png" src="17_assets/red_2x2.png" width="1152" height="768">
+    </div>
+  </figure>
+  <figure class="card">
+    <div class="frame">
+      <img data-debug-id="jpeg-target" alt="local jpeg" src="19_assets/red_2x2.jpg" width="1152" height="768">
+    </div>
+  </figure>
+</div>
+<div class="tail"></div>
