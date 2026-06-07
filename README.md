@@ -70,6 +70,16 @@ Run the resource-backed scroll demo:
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43v_sdl_resource_scroll_demo.html --viewport 360x260 --skia-cpu --incremental --scroll-step 80
 ```
 
+Render deterministic snapshots for the SDL resource demos:
+
+```powershell
+python tools\run_sdl_demo_snapshots.py --out-dir build\sdl-demo-snapshots
+```
+
+Open `build\sdl-demo-snapshots\index.html` to compare the initial, toggled,
+and scrolled states produced by the same standalone render path that the SDL
+viewer drives.
+
 Controls:
 
 - `Space` or `T` toggles configured `--toggle-attr` values.
