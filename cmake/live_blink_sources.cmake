@@ -118,6 +118,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_embedded_ua_resources.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/content_security_policy_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/cpu_renderer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/css_file_loader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/document_loader_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/draw_command.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/draw_command_serializer.cc
@@ -2067,4 +2068,3 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/xml/parser/xml_document_parser_scope.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/xml/parser/xml_errors.cc
 )
-
