@@ -102,6 +102,24 @@ CASES: list[dict[str, Any]] = [
         "note": "Equivalent to four 80px SDL wheel/key scroll steps.",
     },
     {
+        "name": "43aa-panel-scroll-0",
+        "title": "43aa panel scroll 0",
+        "html": "43aa_incremental_element_scroll_panel_basic.html",
+        "viewport": "360x240",
+        "attrs": [],
+        "element_scroll": {"scroll-panel": {"x": 0, "y": 0}},
+        "note": "Initial resource-backed overflow panel before wheel-over-panel scrolling.",
+    },
+    {
+        "name": "43aa-panel-scroll-140",
+        "title": "43aa panel scroll 140",
+        "html": "43aa_incremental_element_scroll_panel_basic.html",
+        "viewport": "360x240",
+        "attrs": [],
+        "element_scroll": {"scroll-panel": {"x": 0, "y": 140}},
+        "note": "Equivalent to scrolling the exported #scroll-panel element by wheel input.",
+    },
+    {
         "name": "43x-initial",
         "title": "43x resource hover/active initial",
         "html": "43x_incremental_hover_active_resource_basic.html",
@@ -223,6 +241,14 @@ def render_case(
     if scroll:
         cmd.extend(["--scroll-x", str(int(scroll.get("x", 0)))])
         cmd.extend(["--scroll-y", str(int(scroll.get("y", 0)))])
+    element_scroll = case.get("element_scroll") or {}
+    for element_id, offset in element_scroll.items():
+        cmd.extend(
+            [
+                "--scroll-element",
+                f"{element_id}:{int(offset.get('x', 0))},{int(offset.get('y', 0))}",
+            ]
+        )
 
     exit_code, elapsed = run(cmd, item_dir / f"{case['name']}.log", timeout)
     metrics = read_json(out_json)
@@ -236,6 +262,7 @@ def render_case(
         "hover": case.get("hover", ""),
         "active": case.get("active", ""),
         "scroll": scroll or {"x": 0, "y": 0},
+        "element_scroll": element_scroll,
         "exit": exit_code,
         "elapsed_seconds": round(elapsed, 3),
         "output": str(out_bmp),

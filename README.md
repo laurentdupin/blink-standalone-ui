@@ -70,6 +70,12 @@ Run the resource-backed scroll demo:
 build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43v_sdl_resource_scroll_demo.html --viewport 360x260 --skia-cpu --incremental --scroll-step 80
 ```
 
+Run the resource-backed element-scroll panel demo:
+
+```powershell
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43aa_incremental_element_scroll_panel_basic.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 360x240 --skia-cpu --incremental --scroll-step 80
+```
+
 Render deterministic snapshots for the SDL resource demos:
 
 ```powershell
@@ -84,7 +90,9 @@ Controls:
 
 - `Space` or `T` toggles configured `--toggle-attr` values.
 - Left click toggles the configured target matching the hit element id.
-- Mouse wheel and arrow keys update document scroll by `--scroll-step`.
+- Mouse wheel scrolls the topmost hit scrollable element that can move in the
+  wheel direction; otherwise it updates document scroll by `--scroll-step`.
+- Arrow keys update document scroll by `--scroll-step`.
 - `PageUp` and `PageDown` scroll by the viewport; `Home` returns to the top.
 - `Esc` or window close exits.
 - `--quit-after-ms` exits after a fixed delay for explicit smoke runs.
