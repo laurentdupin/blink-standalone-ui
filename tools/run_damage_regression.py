@@ -130,6 +130,12 @@ def raw_audit(metrics: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def has_diagnostic(metrics: dict[str, Any], needle: str) -> bool:
+    diagnostics = metrics.get("diagnostics", [])
+    render_diagnostics = metrics.get("render_result", {}).get("diagnostics", [])
+    return any(needle in str(entry) for entry in diagnostics + render_diagnostics)
+
+
 def load_manifest(path: Path) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
     payload = read_json(path)
     cases = {case["name"]: case for case in payload.get("cases", [])}
@@ -277,10 +283,19 @@ def evaluate_damage(
     expected_document_scroll = expected.get("document_scroll")
     if expected_document_scroll:
         document_scroll = audit.get("document_scroll_diagnostics", {})
-        if not point_near(document_scroll.get("applied"), expected_document_scroll.get("applied", {})):
-            failures.append(f"document_scroll.applied={document_scroll.get('applied')}")
-        if not document_scroll.get("applied_to_blink", False):
-            failures.append("document_scroll.applied_to_blink=false")
+        expected_applied = expected_document_scroll.get("applied", {})
+        fast_path_scroll = (
+            has_diagnostic(metrics, "document scroll-only fast path reused retained scene")
+            and point_near(
+                metrics.get("render_timing_diagnostics", {}).get("scroll_input"),
+                expected_applied,
+            )
+        )
+        if not fast_path_scroll:
+            if not point_near(document_scroll.get("applied"), expected_applied):
+                failures.append(f"document_scroll.applied={document_scroll.get('applied')}")
+            if not document_scroll.get("applied_to_blink", False):
+                failures.append("document_scroll.applied_to_blink=false")
 
     expected_scrollables = expected.get("scrollable_elements", {})
     for element_id in expected_scrollables.get("present", []):

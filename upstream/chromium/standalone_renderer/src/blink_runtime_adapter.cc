@@ -553,6 +553,74 @@ Rect DrawCommandListBounds(const DrawCommandList& commands,
   return bounds;
 }
 
+float ScrollClipEdgeDamageThickness(const RetainedScene& scene) {
+  float thickness = 0.0f;
+  for (const RetainedPaintChunk& chunk : scene.chunks) {
+    if (chunk.property_state.clip_has_rounded_clip ||
+        chunk.property_state.clip_has_path_clip) {
+      thickness = std::max(thickness, 4.0f);
+    }
+    for (const DrawCommand& command : chunk.commands) {
+      switch (command.type) {
+        case DrawCommandType::kClipRRect:
+        case DrawCommandType::kClipPath:
+        case DrawCommandType::kFillRRect:
+        case DrawCommandType::kFillRRectShader:
+          thickness = std::max(thickness, 2.0f);
+          break;
+        case DrawCommandType::kStrokeRRect:
+          thickness = std::max(thickness, command.stroke_width);
+          break;
+        case DrawCommandType::kFillPath:
+          thickness = std::max(thickness, std::max(command.stroke_width, 2.0f));
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  return std::min(std::ceil(thickness), 32.0f);
+}
+
+void AppendDamageRect(RenderResult& result, Rect damage) {
+  if (damage.width <= 0.0f || damage.height <= 0.0f) {
+    return;
+  }
+  result.damage_rects.push_back(damage);
+  result.damage_bounds = UnionRectBounds(result.damage_bounds, damage);
+  result.frame.damage_rects = result.damage_rects;
+  result.frame.damage_bounds = result.damage_bounds;
+}
+
+void AddScrollClipEdgeDamage(RenderResult& result,
+                             const RetainedScene& scene,
+                             Point current_scroll_offset,
+                             Point previous_scroll_offset) {
+  const float thickness = ScrollClipEdgeDamageThickness(scene);
+  if (thickness <= 0.0f) {
+    return;
+  }
+  const Size viewport = result.successor_snapshot.viewport;
+  const float delta_x = current_scroll_offset.x - previous_scroll_offset.x;
+  const float delta_y = current_scroll_offset.y - previous_scroll_offset.y;
+  if (std::abs(delta_y) > 0.0f) {
+    const float height = std::min(thickness, viewport.height);
+    AppendDamageRect(result,
+                     delta_y > 0.0f
+                         ? Rect{0.0f, 0.0f, viewport.width, height}
+                         : Rect{0.0f, viewport.height - height,
+                                viewport.width, height});
+  }
+  if (std::abs(delta_x) > 0.0f) {
+    const float width = std::min(thickness, viewport.width);
+    AppendDamageRect(result,
+                     delta_x > 0.0f
+                         ? Rect{0.0f, 0.0f, width, viewport.height}
+                         : Rect{viewport.width - width, 0.0f,
+                                width, viewport.height});
+  }
+}
+
 Point SnapshotDocumentScrollOffset(const RendererSnapshot& snapshot) {
   const auto document_scroll =
       snapshot.scroll_offsets_by_element_id.find("document");
@@ -1738,6 +1806,111 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
          "</head><body>" + remove_style_blocks(html) + "</body>";
 }
 
+std::string LowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return value;
+}
+
+bool SourceMayNeedScrollLifecycle(const std::string& html,
+                                  const std::vector<Stylesheet>& stylesheets) {
+  std::string combined = LowerAscii(html);
+  for (const Stylesheet& stylesheet : stylesheets) {
+    combined += '\n';
+    combined += LowerAscii(stylesheet.css);
+  }
+  return combined.find("position:fixed") != std::string::npos ||
+         combined.find("position: fixed") != std::string::npos ||
+         combined.find("position:sticky") != std::string::npos ||
+         combined.find("position: sticky") != std::string::npos ||
+         (combined.find("position") != std::string::npos &&
+          (combined.find("fixed") != std::string::npos ||
+           combined.find("sticky") != std::string::npos));
+}
+
+bool SameSize(Size left, Size right) {
+  return std::abs(left.width - right.width) <= 0.001f &&
+         std::abs(left.height - right.height) <= 0.001f;
+}
+
+bool SamePoint(Point left, Point right) {
+  return std::abs(left.x - right.x) <= 0.001f &&
+         std::abs(left.y - right.y) <= 0.001f;
+}
+
+bool SameStylesheets(const std::vector<Stylesheet>& left,
+                     const std::vector<Stylesheet>& right) {
+  if (left.size() != right.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < left.size(); ++i) {
+    if (left[i].id != right[i].id || left[i].css != right[i].css) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SameFeatures(const RendererFeatureFlags& left,
+                  const RendererFeatureFlags& right) {
+  return left.enable_css_animations == right.enable_css_animations &&
+         left.enable_css_transitions == right.enable_css_transitions &&
+         left.enable_forms_visual_state == right.enable_forms_visual_state &&
+         left.enable_svg == right.enable_svg &&
+         left.enable_mathml == right.enable_mathml;
+}
+
+bool IsDocumentScrollKey(const std::string& key) {
+  return key == "document" || key == "body";
+}
+
+bool SameNonDocumentScrollOffsets(
+    const std::unordered_map<std::string, Point>& left,
+    const std::unordered_map<std::string, Point>& right) {
+  for (const auto& [key, value] : left) {
+    if (IsDocumentScrollKey(key)) {
+      continue;
+    }
+    const auto found = right.find(key);
+    if (found == right.end() || !SamePoint(value, found->second)) {
+      return false;
+    }
+  }
+  for (const auto& [key, value] : right) {
+    if (IsDocumentScrollKey(key)) {
+      continue;
+    }
+    const auto found = left.find(key);
+    if (found == left.end() || !SamePoint(value, found->second)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void TranslateHitTestEntries(std::vector<HitTestEntry>& entries, Point delta) {
+  if (SamePoint(delta, Point{})) {
+    return;
+  }
+  for (HitTestEntry& entry : entries) {
+    entry.bounds.x += delta.x;
+    entry.bounds.y += delta.y;
+  }
+}
+
+void TranslateScrollableElementEntries(std::vector<ScrollableElementEntry>& entries,
+                                       Point delta) {
+  if (SamePoint(delta, Point{})) {
+    return;
+  }
+  for (ScrollableElementEntry& entry : entries) {
+    entry.bounds.x += delta.x;
+    entry.bounds.y += delta.y;
+  }
+}
+
 std::string NormalizeBlinkTextNodeValue(const std::string& value) {
   std::string normalized;
   normalized.reserve(value.size());
@@ -2173,16 +2346,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ApplyInput(input);
     RenderResult result;
     result.successor_snapshot = snapshot_;
-    AppendLivePaintDiagnostics(result.successor_snapshot.html,
-                               result.successor_snapshot.stylesheets,
-                               result.successor_snapshot.viewport,
-                               SnapshotDocumentScrollOffset(result.successor_snapshot),
-                               result.successor_snapshot.scroll_offsets_by_element_id,
-                               result.successor_snapshot.timeline_time_seconds,
-                               result.successor_snapshot.element_attributes_by_id_and_name,
-                               result.successor_snapshot.hovered_element_id,
-                               result.successor_snapshot.active_element_id,
-                               result.diagnostics);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, false,
                                          snapshot_.html, snapshot_.stylesheets);
     return result;
@@ -2193,16 +2356,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ApplyInput(input);
     RenderResult result;
     result.successor_snapshot = snapshot_;
-    AppendLivePaintDiagnostics(result.successor_snapshot.html,
-                               result.successor_snapshot.stylesheets,
-                               result.successor_snapshot.viewport,
-                               SnapshotDocumentScrollOffset(result.successor_snapshot),
-                               result.successor_snapshot.scroll_offsets_by_element_id,
-                               result.successor_snapshot.timeline_time_seconds,
-                               result.successor_snapshot.element_attributes_by_id_and_name,
-                               result.successor_snapshot.hovered_element_id,
-                               result.successor_snapshot.active_element_id,
-                               result.diagnostics);
+    if (TryRenderDocumentScrollOnlyFromRetainedScene(result,
+                                                     previous_snapshot)) {
+      return result;
+    }
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, true,
                                          snapshot_.html, snapshot_.stylesheets);
     return result;
@@ -2323,6 +2480,73 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             std::to_string(has_text));
       }
     }
+  }
+
+  bool CanUseDocumentScrollOnlyFastPath(
+      const RendererSnapshot& previous_snapshot) const {
+    if (!previous_retained_scene_) {
+      return false;
+    }
+    if (SourceMayNeedScrollLifecycle(snapshot_.html, snapshot_.stylesheets)) {
+      return false;
+    }
+    if (snapshot_.html != previous_snapshot.html ||
+        !SameStylesheets(snapshot_.stylesheets, previous_snapshot.stylesheets) ||
+        !SameSize(snapshot_.viewport, previous_snapshot.viewport) ||
+        std::abs(snapshot_.device_scale_factor -
+                 previous_snapshot.device_scale_factor) > 0.001f ||
+        snapshot_.asset_namespace != previous_snapshot.asset_namespace ||
+        !SameFeatures(snapshot_.features, previous_snapshot.features) ||
+        snapshot_.timeline_time_seconds !=
+            previous_snapshot.timeline_time_seconds ||
+        !SameStringMap(snapshot_.element_attributes_by_id_and_name,
+                       previous_snapshot.element_attributes_by_id_and_name) ||
+        snapshot_.focused_element_id != previous_snapshot.focused_element_id ||
+        snapshot_.hovered_element_id != previous_snapshot.hovered_element_id ||
+        snapshot_.active_element_id != previous_snapshot.active_element_id ||
+        !SameStringMap(snapshot_.form_values_by_element_id,
+                       previous_snapshot.form_values_by_element_id) ||
+        !SameNonDocumentScrollOffsets(
+            snapshot_.scroll_offsets_by_element_id,
+            previous_snapshot.scroll_offsets_by_element_id)) {
+      return false;
+    }
+    return !SamePoint(SnapshotDocumentScrollOffset(snapshot_),
+                      SnapshotDocumentScrollOffset(previous_snapshot));
+  }
+
+  bool TryRenderDocumentScrollOnlyFromRetainedScene(
+      RenderResult& result,
+      const RendererSnapshot& previous_snapshot) {
+    if (!CanUseDocumentScrollOnlyFastPath(previous_snapshot)) {
+      return false;
+    }
+    const Point current_scroll_offset = SnapshotDocumentScrollOffset(snapshot_);
+    const Point previous_scroll_offset =
+        SnapshotDocumentScrollOffset(previous_snapshot);
+    ApplyRetainedScenePlan(result, *previous_retained_scene_,
+                           LoadCommandList{}, &*previous_retained_scene_,
+                           previous_snapshot, current_scroll_offset,
+                           previous_scroll_offset);
+    AddScrollClipEdgeDamage(result, *previous_retained_scene_,
+                            current_scroll_offset, previous_scroll_offset);
+    result.frame.resource_commands = previous_resource_commands_;
+    result.hit_test_entries = previous_hit_test_entries_;
+    result.scrollable_element_entries = previous_scrollable_element_entries_;
+    const Point scroll_delta{previous_scroll_offset.x - current_scroll_offset.x,
+                             previous_scroll_offset.y - current_scroll_offset.y};
+    TranslateHitTestEntries(result.hit_test_entries, scroll_delta);
+    TranslateScrollableElementEntries(result.scrollable_element_entries,
+                                      scroll_delta);
+    result.diagnostics.push_back(
+        "live Blink document scroll-only fast path reused retained scene");
+    result.diagnostics.push_back(
+        "paint artifact source: real Blink PaintArtifact; "
+        "extractor=real_blink_paint_artifact_extractor; "
+        "reuse=document_scroll_only_retained_scene");
+    result.diagnostics.push_back(
+        "real Blink PaintArtifact exported through retained PaintOp commands");
+    return true;
   }
 
   void TryReplaceWithLivePaintArtifactScene(
@@ -3186,6 +3410,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                           explicit_resource_commands.begin(),
                                           explicit_resource_commands.end());
     FreezeTypefaceResourcesForReplay();
+    previous_resource_commands_ = result.frame.resource_commands;
+    previous_hit_test_entries_ = result.hit_test_entries;
+    previous_scrollable_element_entries_ = result.scrollable_element_entries;
   }
 
   RendererSnapshot snapshot_;
@@ -3195,6 +3422,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   bool force_paint_oracle_bitmap_ = false;
   std::string lifecycle_stop_;
   std::optional<RetainedScene> previous_retained_scene_;
+  std::vector<ResourceCommand> previous_resource_commands_;
+  std::vector<HitTestEntry> previous_hit_test_entries_;
+  std::vector<ScrollableElementEntry> previous_scrollable_element_entries_;
 };
 
 }  // namespace

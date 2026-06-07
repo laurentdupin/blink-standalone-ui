@@ -546,6 +546,14 @@ struct SdlProfileFrame {
   double input_update_ms = 0.0;
   double blink_initialize_ms = 0.0;
   double blink_export_retained_ms = 0.0;
+  double probe_html_document_setup_ms = 0.0;
+  double probe_style_update_ms = 0.0;
+  double probe_layout_lifecycle_ms = 0.0;
+  double probe_prepaint_paint_lifecycle_ms = 0.0;
+  double probe_paint_artifact_generation_ms = 0.0;
+  double probe_paint_artifact_audit_json_ms = 0.0;
+  double probe_paint_artifact_extraction_ms = 0.0;
+  double probe_total_ms = 0.0;
   double cpu_replay_ms = 0.0;
   double pixel_convert_ms = 0.0;
   double texture_upload_ms = 0.0;
@@ -565,6 +573,52 @@ struct PendingSdlProfileFrame {
   SdlProfileFrame frame;
   std::optional<ProfileClock::time_point> total_start;
 };
+
+std::optional<double> ExtractJsonNumberField(const std::string& json,
+                                             const char* field_name) {
+  const std::string needle = std::string("\"") + field_name + "\":";
+  const size_t field = json.find(needle);
+  if (field == std::string::npos) {
+    return std::nullopt;
+  }
+  const char* begin = json.c_str() + field + needle.size();
+  while (*begin == ' ' || *begin == '\t' || *begin == '\r' || *begin == '\n') {
+    ++begin;
+  }
+  char* end = nullptr;
+  const double value = std::strtod(begin, &end);
+  if (end == begin) {
+    return std::nullopt;
+  }
+  return value;
+}
+
+void PopulateProbeProfileTimings(
+    const html_css_renderer::RenderResult& result,
+    SdlProfileFrame* frame) {
+  if (!frame || result.raw_paint_artifact_audit_json.empty()) {
+    return;
+  }
+  const std::string& json = result.raw_paint_artifact_audit_json;
+  auto set_if_present = [&](const char* name, double* target) {
+    if (std::optional<double> value = ExtractJsonNumberField(json, name)) {
+      *target = *value;
+    }
+  };
+  set_if_present("html_parse_document_setup_ms",
+                 &frame->probe_html_document_setup_ms);
+  set_if_present("style_update_ms", &frame->probe_style_update_ms);
+  set_if_present("layout_lifecycle_ms", &frame->probe_layout_lifecycle_ms);
+  set_if_present("prepaint_paint_lifecycle_ms",
+                 &frame->probe_prepaint_paint_lifecycle_ms);
+  set_if_present("paint_artifact_generation_ms",
+                 &frame->probe_paint_artifact_generation_ms);
+  set_if_present("paint_artifact_audit_json_ms",
+                 &frame->probe_paint_artifact_audit_json_ms);
+  set_if_present("paint_artifact_extraction_ms",
+                 &frame->probe_paint_artifact_extraction_ms);
+  set_if_present("total_probe_ms", &frame->probe_total_ms);
+}
 
 class SdlFrameProfiler {
  public:
@@ -603,6 +657,34 @@ class SdlFrameProfiler {
     PrintMetric("blink_export_retained", [](const SdlProfileFrame& frame) {
       return frame.blink_export_retained_ms;
     });
+    PrintMetric("probe_html_document_setup", [](const SdlProfileFrame& frame) {
+      return frame.probe_html_document_setup_ms;
+    });
+    PrintMetric("probe_style_update", [](const SdlProfileFrame& frame) {
+      return frame.probe_style_update_ms;
+    });
+    PrintMetric("probe_layout_lifecycle", [](const SdlProfileFrame& frame) {
+      return frame.probe_layout_lifecycle_ms;
+    });
+    PrintMetric("probe_prepaint_paint_lifecycle",
+                [](const SdlProfileFrame& frame) {
+                  return frame.probe_prepaint_paint_lifecycle_ms;
+                });
+    PrintMetric("probe_paint_artifact_generation",
+                [](const SdlProfileFrame& frame) {
+                  return frame.probe_paint_artifact_generation_ms;
+                });
+    PrintMetric("probe_paint_artifact_audit_json",
+                [](const SdlProfileFrame& frame) {
+                  return frame.probe_paint_artifact_audit_json_ms;
+                });
+    PrintMetric("probe_paint_artifact_extraction",
+                [](const SdlProfileFrame& frame) {
+                  return frame.probe_paint_artifact_extraction_ms;
+                });
+    PrintMetric("probe_total", [](const SdlProfileFrame& frame) {
+      return frame.probe_total_ms;
+    });
     PrintMetric("cpu_replay", [](const SdlProfileFrame& frame) {
       return frame.cpu_replay_ms;
     });
@@ -631,11 +713,20 @@ class SdlFrameProfiler {
         stderr,
         "viewer profile: frame=%llu event=%s incremental=%d "
         "input=%.3fms blink_init=%.3fms blink_export_retained=%.3fms "
+        "probe_html=%.3fms probe_style=%.3fms probe_layout=%.3fms "
+        "probe_prepaint_paint=%.3fms probe_artifact=%.3fms "
+        "probe_audit=%.3fms probe_extraction=%.3fms probe_total=%.3fms "
         "cpu_replay=%.3fms pixel_convert=%.3fms texture_upload=%.3fms "
         "direct_render=%.3fms sdl_draw_present=%.3fms total=%.3fms\n",
         static_cast<unsigned long long>(frame.frame), frame.reason.c_str(),
         frame.incremental ? 1 : 0, frame.input_update_ms,
         frame.blink_initialize_ms, frame.blink_export_retained_ms,
+        frame.probe_html_document_setup_ms, frame.probe_style_update_ms,
+        frame.probe_layout_lifecycle_ms,
+        frame.probe_prepaint_paint_lifecycle_ms,
+        frame.probe_paint_artifact_generation_ms,
+        frame.probe_paint_artifact_audit_json_ms,
+        frame.probe_paint_artifact_extraction_ms, frame.probe_total_ms,
         frame.cpu_replay_ms, frame.pixel_convert_ms, frame.texture_upload_ms,
         frame.direct_render_ms, frame.sdl_draw_present_ms, frame.total_ms);
   }
@@ -1463,6 +1554,7 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       initial_profile.blink_export_retained_ms =
           ElapsedProfileMs(blink_render_start, ProfileClock::now());
+      PopulateProbeProfileTimings(result, &initial_profile);
     }
     result.diagnostics.insert(result.diagnostics.begin(),
                               init.diagnostics.begin(), init.diagnostics.end());
@@ -1639,6 +1731,7 @@ int main(int argc, char** argv) {
     if (profile) {
       profile_frame.blink_export_retained_ms =
           ElapsedProfileMs(blink_render_start, ProfileClock::now());
+      PopulateProbeProfileTimings(next_result, &profile_frame);
     }
     if (use_cpu) {
       ProfileClock::time_point cpu_replay_start;
