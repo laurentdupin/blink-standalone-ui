@@ -1,0 +1,41 @@
+body {
+  margin: 8px;
+  background: white;
+}
+
+.stage {
+  width: 392px;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.tile {
+  background-color: #e2e8f0;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.tile-png {
+  width: 80px;
+  height: 80px;
+  background-image: url("../../17_assets/red_2x2.png");
+  background-size: 80px 80px;
+  image-rendering: pixelated;
+}
+
+.tile-svg {
+  width: 160px;
+  height: 120px;
+}
+
+.order-check {
+  width: 72px;
+  height: 72px;
+  box-sizing: border-box;
+  border: 8px solid #7f1d1d;
+  background: #ef4444;
+}

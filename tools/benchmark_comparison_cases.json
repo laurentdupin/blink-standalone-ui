@@ -23,6 +23,7 @@
       "18g_css_bg_local_svg_position",
       "18j_external_css_png_background",
       "18k_external_css_svg_background",
+      "18l_external_css_multi_resource_order",
       "14g_image_inside_overflow_clip",
       "14i_image_inside_rounded_overflow_clip",
       "05l_image_local_svg_rounded_overflow_clip",
@@ -62,6 +63,11 @@
       "31d_alignself_container_decoration",
       "32b_calc_flex_gap_cards",
       "32c_calc_percent_padding_gap"
+    ],
+    "resource-loading": [
+      "18j_external_css_png_background",
+      "18k_external_css_svg_background",
+      "18l_external_css_multi_resource_order"
     ],
     "hcsr-known-gaps": [
       "hcsr_image_showcase"
@@ -153,6 +159,13 @@
       "html": "18k_external_css_svg_background.html",
       "viewport": "220x170",
       "note": "Linked external CSS file with non-text SVG background-image URL resolved relative to the CSS file; Chromium comparison may show minor edge AA drift."
+    },
+    {
+      "name": "18l_external_css_multi_resource_order",
+      "source": "paint_audit",
+      "html": "18l_external_css_multi_resource_order.html",
+      "viewport": "440x160",
+      "note": "Two linked CSS files from different directories, each resolving PNG/SVG resources relative to its own path; cascade order is visible in the final swatch."
     },
     {
       "name": "05e_object_fit_contain_cover",

@@ -1,0 +1,12 @@
+.tile-svg {
+  background-color: #f8fafc;
+  background-image: url("../../31_simple_blocks.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 160px 120px;
+}
+
+.order-check {
+  border-color: #14532d;
+  background: #22c55e;
+}
