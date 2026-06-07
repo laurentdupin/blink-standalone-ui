@@ -199,7 +199,8 @@ void PrintUsage() {
                " [--dump-paint-artifact path]"
                " [--blink]"
                "\nControls: Space/T toggle configured attrs, left click toggles "
-               "matching targets, mouse wheel or arrow/Page/Home keys scroll, "
+               "matching targets, mouse wheel scrolls hit scrollable elements "
+               "or the document, arrow/Page/Home keys scroll the document, "
                "Esc quits.\n");
 }
 
@@ -440,6 +441,64 @@ void SetDocumentScroll(html_css_renderer::FrameInput* input,
   scroll.y = std::max(0.0f, y);
 }
 
+bool Contains(html_css_renderer::Rect rect, float x, float y);
+
+bool CanScrollAxis(float delta,
+                   float current_offset,
+                   float max_offset,
+                   bool can_scroll_axis) {
+  if (std::abs(delta) < 0.001f || !can_scroll_axis) {
+    return false;
+  }
+  if (delta < 0.0f) {
+    return current_offset > 0.001f;
+  }
+  return current_offset + 0.001f < max_offset;
+}
+
+bool CanScrollEntryForDelta(
+    const html_css_renderer::ScrollableElementEntry& entry,
+    const ScrollDelta& delta) {
+  return CanScrollAxis(delta.x, entry.scroll_offset.x, entry.max_scroll_offset.x,
+                       entry.can_scroll_x) ||
+         CanScrollAxis(delta.y, entry.scroll_offset.y, entry.max_scroll_offset.y,
+                       entry.can_scroll_y);
+}
+
+const html_css_renderer::ScrollableElementEntry* HitScrollableElementForDelta(
+    const std::vector<html_css_renderer::ScrollableElementEntry>& entries,
+    float x,
+    float y,
+    const ScrollDelta& delta) {
+  for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+    if (Contains(it->bounds, x, y) && CanScrollEntryForDelta(*it, delta)) {
+      return &*it;
+    }
+  }
+  return nullptr;
+}
+
+bool ApplyScrollableElementScroll(
+    html_css_renderer::FrameInput* input,
+    const html_css_renderer::ScrollableElementEntry& entry,
+    const ScrollDelta& delta) {
+  html_css_renderer::Point next_offset = entry.scroll_offset;
+  if (entry.can_scroll_x) {
+    next_offset.x =
+        std::clamp(next_offset.x + delta.x, 0.0f, entry.max_scroll_offset.x);
+  }
+  if (entry.can_scroll_y) {
+    next_offset.y =
+        std::clamp(next_offset.y + delta.y, 0.0f, entry.max_scroll_offset.y);
+  }
+  if (std::abs(next_offset.x - entry.scroll_offset.x) < 0.001f &&
+      std::abs(next_offset.y - entry.scroll_offset.y) < 0.001f) {
+    return false;
+  }
+  input->scroll_offsets_by_element_id[entry.element_id] = next_offset;
+  return true;
+}
+
 const std::vector<html_css_renderer::Rect>& ViewerDamageRects(
     const html_css_renderer::RenderResult& result) {
   return result.frame.damage_rects.empty() ? result.damage_rects
@@ -478,6 +537,15 @@ void PrintViewerStatus(
                result.frame.scene_commands.size(),
                result.frame.resource_commands.size(),
                result.missing_resources.size());
+  for (const html_css_renderer::ScrollableElementEntry& entry :
+       result.scrollable_element_entries) {
+    std::fprintf(stderr,
+                 " scrollable[%s]=(%.1f,%.1f max=%.1f,%.1f axes=%c%c)",
+                 entry.element_id.c_str(), entry.scroll_offset.x,
+                 entry.scroll_offset.y, entry.max_scroll_offset.x,
+                 entry.max_scroll_offset.y, entry.can_scroll_x ? 'x' : '-',
+                 entry.can_scroll_y ? 'y' : '-');
+  }
   for (const AttributeToggle& toggle : attribute_toggles) {
     const auto found = input.element_attributes_by_id_and_name.find(toggle.key);
     const char* value =
@@ -1228,7 +1296,8 @@ int main(int argc, char** argv) {
                  attribute_toggles.size());
   }
   std::fprintf(stderr,
-               "viewer controls: mouse wheel scrolls document by %.1f px\n",
+               "viewer controls: mouse wheel scrolls hit scrollable elements "
+               "or document by %.1f px\n",
                scroll_step);
   std::fprintf(stderr,
                "viewer controls: arrow keys scroll by %.1f px; PageUp/"
@@ -1292,14 +1361,38 @@ int main(int argc, char** argv) {
         running = false;
       } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         html_css_renderer::FrameInput next_input = input;
-        const float next_x =
-            CurrentDocumentScrollX(next_input) + event.wheel.x * scroll_step;
-        const float next_y =
-            CurrentDocumentScrollY(next_input) - event.wheel.y * scroll_step;
-        SetDocumentScroll(&next_input, next_x, next_y);
-        if (CurrentDocumentScrollX(next_input) != CurrentDocumentScrollX(input) ||
-            CurrentDocumentScrollY(next_input) != CurrentDocumentScrollY(input)) {
-          if (!render_updated_input("scroll", std::move(next_input))) {
+        const ScrollDelta wheel_delta{event.wheel.x * scroll_step,
+                                      -event.wheel.y * scroll_step, false};
+        int window_width_for_hit = 0;
+        int window_height_for_hit = 0;
+        SDL_GetWindowSize(window, &window_width_for_hit,
+                          &window_height_for_hit);
+        const html_css_renderer::Point document_point = WindowToDocumentPoint(
+            window_width_for_hit, window_height_for_hit, frame_width,
+            frame_height, event.wheel.mouse_x, event.wheel.mouse_y);
+        const html_css_renderer::ScrollableElementEntry* scrollable =
+            HitScrollableElementForDelta(result.scrollable_element_entries,
+                                         document_point.x, document_point.y,
+                                         wheel_delta);
+        bool scroll_changed = false;
+        const char* scroll_reason = "scroll";
+        if (scrollable) {
+          scroll_changed =
+              ApplyScrollableElementScroll(&next_input, *scrollable,
+                                           wheel_delta);
+          scroll_reason = "element-scroll";
+        } else {
+          const float next_x =
+              CurrentDocumentScrollX(next_input) + wheel_delta.x;
+          const float next_y =
+              CurrentDocumentScrollY(next_input) + wheel_delta.y;
+          SetDocumentScroll(&next_input, next_x, next_y);
+          scroll_changed =
+              CurrentDocumentScrollX(next_input) != CurrentDocumentScrollX(input) ||
+              CurrentDocumentScrollY(next_input) != CurrentDocumentScrollY(input);
+        }
+        if (scroll_changed) {
+          if (!render_updated_input(scroll_reason, std::move(next_input))) {
             running = false;
             break;
           }
