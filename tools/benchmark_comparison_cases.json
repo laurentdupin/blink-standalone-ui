@@ -91,7 +91,9 @@
       "11g_font_weight_style",
       "34b_georgia_paragraph_wrap",
       "34c_calc_card_text_wrap",
-      "34d_georgia_vs_times_width"
+      "34d_georgia_vs_times_width",
+      "50_inline_monospace_paragraph",
+      "50b_text_transform_uppercase_labels"
     ],
     "visual-effects": [
       "45e_transform_png_image_basic",
@@ -233,6 +235,20 @@
       "html": "11g_font_weight_style.html",
       "viewport": "360x110",
       "note": "Font weight/style comparison for styled text."
+    },
+    {
+      "name": "50_inline_monospace_paragraph",
+      "source": "paint_audit",
+      "html": "50_inline_monospace_paragraph.html",
+      "viewport": "1280x720",
+      "note": "Georgia paragraph with embedded generic monospace text; validates Chromium fixed-font sizing in inline text runs."
+    },
+    {
+      "name": "50b_text_transform_uppercase_labels",
+      "source": "paint_audit",
+      "html": "50b_text_transform_uppercase_labels.html",
+      "viewport": "720x180",
+      "note": "Uppercase text-transform label comparison; validates real CaseMap casing."
     },
     {
       "name": "05i_image_data_png_alpha",

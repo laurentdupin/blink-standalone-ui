@@ -4624,21 +4624,6 @@ String Capitalize(const String& string, UChar) {
   return string;
 }
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-String CaseMap::ToLower(const String& source, TextOffsetMap*) const {
-  return source.DeprecatedLower();
-}
-
-String CaseMap::ToUpper(const String& source, TextOffsetMap*) const {
-  return source;
-}
-
-String CaseMap::ToTitle(const String& source, TextOffsetMap*, UChar) const {
-  return source;
-}
-CaseMap::Locale::Locale(const AtomicString&) : case_map_locale_(nullptr) {}
-#endif
-
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 int FontMetrics::IntAscentInternal(FontBaseline, ApplyBaselineTable) const {
   return int_ascent_;
@@ -16993,38 +16978,6 @@ CSSValueID ColorChannelKeywordToCSSValueID(ColorChannelKeyword) {
   return CSSValueID::kInvalid;
 }
 
-float FontSizeFunctions::GetComputedSizeFromSpecifiedSize(
-    const Document*,
-    float zoom_factor,
-    bool,
-    float specified_size,
-    ApplyMinimumFontSize) {
-  return specified_size * zoom_factor;
-}
-float FontSizeFunctions::FontSizeForKeyword(const Document*,
-                                            unsigned keyword,
-                                            bool) {
-  static constexpr float kKeywordSizes[] = {9, 10, 13, 16, 18, 24, 32, 48};
-  if (keyword == 0 ||
-      keyword > sizeof(kKeywordSizes) / sizeof(kKeywordSizes[0])) {
-    return 16.0f;
-  }
-  return kKeywordSizes[keyword - 1];
-}
-std::optional<float> FontSizeFunctions::FontAspectValue(
-    const SimpleFontData*,
-    FontSizeAdjust::Metric) {
-  return std::nullopt;
-}
-std::optional<float> FontSizeFunctions::MetricsMultiplierAdjustedFontSize(
-    const SimpleFontData*,
-    const FontDescription&) {
-  return std::nullopt;
-}
-double FontSizeFunctions::SnapToClosestFontScaleBucket(double value) {
-  return value;
-}
-
 namespace {
 
 FontDescription StandaloneDefaultFontDescription() {
@@ -18209,11 +18162,6 @@ const String& ParkableStringImpl::ToString() {
   static const String* empty = new String();
   return *empty;
 }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-scoped_refptr<StringImpl> CaseMap::FastToLowerInvariant(StringImpl* impl) {
-  return scoped_refptr<StringImpl>(impl);
-}
-#endif
 void TextCodecCjk::RegisterEncodingNames(EncodingNameRegistrar) {}
 void TextCodecCjk::RegisterCodecs(TextCodecRegistrar) {}
 void TextCodecIcu::RegisterEncodingNames(EncodingNameRegistrar) {}
