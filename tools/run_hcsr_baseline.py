@@ -252,18 +252,70 @@ def classify_row(row: dict[str, Any]) -> str:
     if any(view.get("playwright_exit") not in (0, None) for view in views):
         return "playwright_fail"
     features = row.get("features", {})
-    if features.get("uses_webp"):
-        return "known_gap_image_format"
-    if features.get("uses_svg_text"):
-        return "known_gap_svg_text"
-    if features.get("uses_native_controls"):
-        return "native_control_or_text_gap"
+    if int(row.get("max_missing_resource_count") or 0) > 0:
+        return "missing_resources"
     classifications = [view.get("diff_classification", "") for view in views]
     if all(item in {"exact_or_threshold_match", "mostly_edge_aa", ""} for item in classifications):
         return "pass_or_aa"
-    if any(item == "missing_resource_or_large_region" for item in classifications):
+    aa_or_text_only = all(
+        item in {"exact_or_threshold_match", "mostly_edge_aa", "mostly_text_aa", ""}
+        for item in classifications
+    )
+    if features.get("uses_webp") and not aa_or_text_only:
+        return "known_gap_image_format"
+    if features.get("uses_native_controls") and not aa_or_text_only:
+        return "native_control_or_text_gap"
+    large_region_views = [
+        view
+        for view in views
+        if view.get("diff_classification") == "missing_resource_or_large_region"
+    ]
+    if features.get("uses_sticky") and any(
+        view.get("label") != "top" for view in large_region_views
+    ):
+        return "sticky_or_scroll_gap"
+    if large_region_views:
         return "large_region_mismatch"
+    if any(item == "structural_layout_or_paint" for item in classifications):
+        return "structural_layout_or_paint"
+    if any(item == "mostly_text_aa" for item in classifications):
+        return "text_font_or_decorative_gap"
     return "needs_review"
+
+
+def infer_blockers(row: dict[str, Any]) -> list[str]:
+    features = row.get("features", {})
+    views = row.get("views", [])
+    classifications = [view.get("diff_classification", "") for view in views]
+    blockers: list[str] = []
+    if any(view.get("benchmark_exit") not in (0, None) for view in views):
+        blockers.append("benchmark_fail")
+    if any(view.get("playwright_exit") not in (0, None) for view in views):
+        blockers.append("playwright_fail")
+    if int(row.get("max_missing_resource_count") or 0) > 0:
+        blockers.append("missing_resources")
+    if features.get("uses_webp"):
+        blockers.append("unsupported_webp")
+    if features.get("uses_native_controls") and any(
+        item not in {"exact_or_threshold_match", "mostly_edge_aa", ""}
+        for item in classifications
+    ):
+        blockers.append("native_controls")
+    if features.get("uses_sticky") and any(
+        view.get("label") != "top"
+        and view.get("diff_classification") == "missing_resource_or_large_region"
+        for view in views
+    ):
+        blockers.append("sticky_or_scroll")
+    if any(item == "mostly_text_aa" for item in classifications):
+        blockers.append("text_font_or_decorative")
+    if any(item == "structural_layout_or_paint" for item in classifications):
+        blockers.append("structural_layout_or_paint")
+    if any(item == "missing_resource_or_large_region" for item in classifications):
+        blockers.append("large_region_mismatch")
+    if features.get("uses_svg_text"):
+        blockers.append("svg_text_feature")
+    return blockers or ["none"]
 
 
 def write_html(out_dir: Path, rows: list[dict[str, Any]], report: dict[str, Any]) -> Path:
@@ -297,6 +349,7 @@ def write_html(out_dir: Path, rows: list[dict[str, Any]], report: dict[str, Any]
             "<tr>"
             f"<td>{html.escape(row['name'])}</td>"
             f"<td>{html.escape(row.get('classification', ''))}</td>"
+            f"<td>{html.escape(', '.join(row.get('dominant_blockers', [])))}</td>"
             f"<td>{html.escape(', '.join(feature_bits))}</td>"
             f"<td>{html.escape(str(row.get('scroll_positions', '')))}</td>"
             f"<td>{html.escape(format_metric(worst_view.get('diff_exact')))}</td>"
@@ -334,7 +387,7 @@ Each tall page is compared at top/mid/bottom scroll positions based on Playwrigh
 <h2>Examples</h2>
 <table>
 <thead><tr>
-  <th>Example</th><th>Class</th><th>Page Signals</th><th>Scroll Positions</th>
+  <th>Example</th><th>Class</th><th>Blockers</th><th>Page Signals</th><th>Scroll Positions</th>
   <th>Worst O/P Exact</th><th>Worst O/P Class</th>
   <th>Process ms</th><th>Blink init ms</th><th>Render ms</th><th>Missing Res</th>
   <th>Top Standalone</th><th>Top Playwright</th><th>Artifacts</th>
@@ -378,6 +431,7 @@ def write_case_index(item_dir: Path, row: dict[str, Any], out_dir: Path) -> None
 </style>
 <h1>{html.escape(row['name'])}</h1>
 <p>Classification: {html.escape(row.get('classification', ''))}</p>
+<p>Blockers: {html.escape(', '.join(row.get('dominant_blockers', [])))}</p>
 <table><thead><tr>
 <th>View</th><th>Scroll Y</th><th>Bench</th><th>PW</th><th>R/O exact</th><th>O/P exact</th><th>Class</th>
 <th>Standalone</th><th>Oracle</th><th>Playwright</th>
@@ -640,6 +694,7 @@ def run_case(
         "max_missing_resource_count": max_missing,
     }
     row["classification"] = classify_row(row)
+    row["dominant_blockers"] = infer_blockers(row)
     write_case_index(item_dir, row, out_dir)
     (item_dir / f"{safe_name(example['name'])}-summary.json").write_text(
         json.dumps(row, indent=2), encoding="utf-8"
