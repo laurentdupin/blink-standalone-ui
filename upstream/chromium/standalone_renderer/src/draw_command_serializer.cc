@@ -630,7 +630,10 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
       }
       if (command.type == DrawCommandType::kStrokeRect ||
           command.type == DrawCommandType::kStrokeRRect) {
-        out << ",\"stroke_width\":" << command.stroke_width;
+        out << ",\"stroke_width\":" << command.stroke_width
+            << ",\"stroke_cap\":" << command.stroke_cap
+            << ",\"stroke_join\":" << command.stroke_join
+            << ",\"stroke_miter\":" << command.stroke_miter;
       }
       if (command.type == DrawCommandType::kFillRectShader ||
           command.type == DrawCommandType::kFillRRectShader) {
@@ -647,6 +650,9 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
           << ",\"path_effect_byte_count\":"
           << command.path_effect_bytes.size()
           << ",\"stroke_width\":" << command.stroke_width
+          << ",\"stroke_cap\":" << command.stroke_cap
+          << ",\"stroke_join\":" << command.stroke_join
+          << ",\"stroke_miter\":" << command.stroke_miter
           << ",\"color\":";
       WriteColor(out, command.color);
       break;

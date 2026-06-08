@@ -378,6 +378,12 @@ void ApplyPathEffect(const DrawCommand& command,
   paint.setPathEffect(std::move(path_effect));
 }
 
+void ApplyStrokeStyle(const DrawCommand& command, SkPaint& paint) {
+  paint.setStrokeCap(static_cast<SkPaint::Cap>(command.stroke_cap));
+  paint.setStrokeJoin(static_cast<SkPaint::Join>(command.stroke_join));
+  paint.setStrokeMiter(command.stroke_miter);
+}
+
 uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
                             const std::vector<uint8_t>& after) {
   const size_t byte_count = std::min(before.size(), after.size());
@@ -669,6 +675,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
     case DrawCommandType::kStrokeRect:
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
+      ApplyStrokeStyle(command, paint);
       ApplyPathEffect(command, paint, coverage);
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
@@ -709,6 +716,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
     case DrawCommandType::kStrokeRRect:
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
+      ApplyStrokeStyle(command, paint);
       ApplyPathEffect(command, paint, coverage);
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
@@ -927,6 +935,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                                                    : SkPaint::kFill_Style);
         paint.setStrokeWidth(command.stroke_width > 0.0f ? command.stroke_width
                                                          : 1.0f);
+        if (command.stroke_width > 0.0f) {
+          ApplyStrokeStyle(command, paint);
+        }
         ApplyPathEffect(command, paint, coverage);
         if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
           paint.setShader(std::move(shader));

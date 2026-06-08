@@ -41,6 +41,7 @@
       "14i_image_inside_rounded_overflow_clip",
       "14j_image_rounded_overflow_document_scroll",
       "05l_image_local_svg_rounded_overflow_clip",
+      "05m_image_local_svg_text_stroke_styles",
       "14e_nested_overflow_hidden",
       "14f_transform_inside_overflow_clip",
       "14h_absolute_inside_overflow_clip",
@@ -393,6 +394,13 @@
       "html": "05l_image_local_svg_rounded_overflow_clip.html",
       "viewport": "300x200",
       "note": "External non-text SVG image clipped by overflow:hidden parent with border-radius; Chromium comparison may show minor edge AA drift."
+    },
+    {
+      "name": "05m_image_local_svg_text_stroke_styles",
+      "source": "paint_audit",
+      "html": "05m_image_local_svg_text_stroke_styles.html",
+      "viewport": "300x170",
+      "note": "External SVG text and rounded stroke caps/joins in a scaled image resource; Chromium comparison may show text/edge AA drift."
     },
     {
       "name": "14e_nested_overflow_hidden",

@@ -111,6 +111,9 @@ struct DrawCommand {
   Matrix4 transform;
   Color color;
   float stroke_width = 1.0f;
+  int stroke_cap = 0;
+  int stroke_join = 0;
+  float stroke_miter = 4.0f;
   float radius_x = 0.0f;
   float radius_y = 0.0f;
   std::array<Point, 4> corner_radii = {};

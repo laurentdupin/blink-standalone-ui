@@ -380,6 +380,9 @@ uint64_t HashCommandContent(const DrawCommand& command) {
   hash = HashCombine(hash, HashRect(command.rect));
   hash = HashCombine(hash, HashColor(command.color));
   hash = HashCombine(hash, HashFloat(command.stroke_width));
+  hash = HashCombine(hash, static_cast<uint64_t>(command.stroke_cap));
+  hash = HashCombine(hash, static_cast<uint64_t>(command.stroke_join));
+  hash = HashCombine(hash, HashFloat(command.stroke_miter));
   hash = HashCombine(hash, HashFloat(command.opacity));
   for (const FilterOperationSnapshot& operation : command.filter_operations) {
     hash = HashCombine(hash, HashFilterOperation(operation));

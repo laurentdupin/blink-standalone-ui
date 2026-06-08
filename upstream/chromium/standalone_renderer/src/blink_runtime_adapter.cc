@@ -190,6 +190,9 @@ int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     float* b,
     float* a,
     float* font_size,
+    int* stroke_cap,
+    int* stroke_join,
+    float* stroke_miter,
     float* radius_x,
     float* radius_y,
     int* glyph_count);
@@ -2964,14 +2967,17 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       float b = 0.0f;
       float a = 1.0f;
       float font_size = 0.0f;
+      int stroke_cap = 0;
+      int stroke_join = 0;
+      float stroke_miter = 4.0f;
       float radius_x = 0.0f;
       float radius_y = 0.0f;
       int glyph_count = 0;
       if (!live_probe::
               StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
                   probe_html.c_str(), i, &type, &x, &y, &width, &height, &r,
-                  &g, &b, &a, &font_size, &radius_x, &radius_y,
-                  &glyph_count)) {
+                  &g, &b, &a, &font_size, &stroke_cap, &stroke_join,
+                  &stroke_miter, &radius_x, &radius_y, &glyph_count)) {
         continue;
       }
       auto normalize_component = [](float value) {
@@ -3247,6 +3253,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         DrawCommand command = DrawCommand::StrokeRect(
             Rect{x, y, width, height}, color,
             font_size > 0.0f ? font_size : 1.0f);
+        command.stroke_cap = stroke_cap;
+        command.stroke_join = stroke_join;
+        command.stroke_miter = stroke_miter;
         append_draw_looper_layers(command);
         append_path_effect_bytes(command);
         active_commands->push_back(std::move(command));
@@ -3261,6 +3270,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         DrawCommand command = DrawCommand::StrokeRRect(
             Rect{x, y, width, height}, radius_x, radius_y, color,
             font_size > 0.0f ? font_size : 1.0f);
+        command.stroke_cap = stroke_cap;
+        command.stroke_join = stroke_join;
+        command.stroke_miter = stroke_miter;
         append_draw_looper_layers(command);
         append_path_effect_bytes(command);
         active_commands->push_back(std::move(command));
@@ -3509,6 +3521,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 font_size > 0.0f ? font_size : 0.0f,
                 std::move(shader_bytes)));
             active_commands->back().rect = Rect{x, y, width, height};
+            active_commands->back().stroke_cap = stroke_cap;
+            active_commands->back().stroke_join = stroke_join;
+            active_commands->back().stroke_miter = stroke_miter;
             append_path_effect_bytes(active_commands->back());
             ++translated_command_count;
           }

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" viewBox="0 0 400 240">
+  <rect width="400" height="240" rx="26" fill="#ffffff"/>
+  <rect x="22" y="22" width="356" height="196" rx="20" fill="#eef4f8" stroke="#cbd5e1" stroke-width="4"/>
+  <path d="M72 82 H162 L214 134 H318" fill="none" stroke="#1d4ed8" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M76 176 H160 L220 116 H326" fill="none" stroke="#0f766e" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M142 52 V190" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="72" cy="82" r="18" fill="#1d4ed8"/>
+  <circle cx="214" cy="134" r="18" fill="#1d4ed8"/>
+  <circle cx="318" cy="82" r="18" fill="#1d4ed8"/>
+  <circle cx="76" cy="176" r="18" fill="#0f766e"/>
+  <circle cx="220" cy="116" r="18" fill="#0f766e"/>
+  <circle cx="326" cy="116" r="18" fill="#0f766e"/>
+  <rect x="50" y="40" width="114" height="40" rx="12" fill="#dbeafe"/>
+  <text x="70" y="67" fill="#173b68" font-family="Segoe UI, Tahoma, sans-serif" font-size="22" font-weight="700">North</text>
+  <rect x="230" y="154" width="116" height="40" rx="12" fill="#d1fae5"/>
+  <text x="250" y="181" fill="#134e4a" font-family="Segoe UI, Tahoma, sans-serif" font-size="22" font-weight="700">Depot</text>
+</svg>

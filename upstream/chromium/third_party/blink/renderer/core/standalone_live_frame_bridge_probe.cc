@@ -376,6 +376,9 @@ struct LiveExportedDrawOp {
   float b = 0.0f;
   float a = 1.0f;
   float font_size = 0.0f;
+  int stroke_cap = static_cast<int>(cc::PaintFlags::kButt_Cap);
+  int stroke_join = static_cast<int>(cc::PaintFlags::kMiter_Join);
+  float stroke_miter = 4.0f;
   float radius_x = 0.0f;
   float radius_y = 0.0f;
   std::array<SkVector, 4> corner_radii = {};
@@ -716,6 +719,13 @@ void AppendDrawLooperLayers(const cc::PaintFlags& flags,
   });
 }
 
+void AppendStrokeStyle(const cc::PaintFlags& flags,
+                       LiveExportedDrawOp& exported) {
+  exported.stroke_cap = static_cast<int>(flags.getStrokeCap());
+  exported.stroke_join = static_cast<int>(flags.getStrokeJoin());
+  exported.stroke_miter = flags.getStrokeMiter();
+}
+
 std::vector<uint8_t> SerializePathEffectBytes(const cc::PaintFlags& flags) {
   SkPaint paint = flags.ToSkPaint();
   sk_sp<SkPathEffect> path_effect = paint.refPathEffect();
@@ -800,6 +810,7 @@ void AppendStrokeRectOp(float x,
   exported.font_size = stroke_width > 0.0f ? stroke_width : 1.0f;
   AppendSkColor(exported, color);
   if (flags) {
+    AppendStrokeStyle(*flags, exported);
     exported.path_effect_bytes = SerializePathEffectBytes(*flags);
   }
   exported_draw_ops.push_back(exported);
@@ -832,6 +843,7 @@ void AppendRRectOp(float x,
   if (flags) {
     AppendDrawLooperLayers(*flags, exported);
     if (stroke) {
+      AppendStrokeStyle(*flags, exported);
       exported.path_effect_bytes = SerializePathEffectBytes(*flags);
     }
   }
@@ -1510,6 +1522,7 @@ void AppendSkPathOpWithFlags(
                            ? std::max<SkScalar>(1.0f, flags.getStrokeWidth())
                            : 0.0f;
   AppendSkColor(exported, flags.getColor4f());
+  AppendStrokeStyle(flags, exported);
   exported.path_bytes.resize(path_byte_count);
   path.writeToMemory(exported.path_bytes.data());
 
@@ -9309,6 +9322,9 @@ int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     float* b,
     float* a,
     float* font_size,
+    int* stroke_cap,
+    int* stroke_join,
+    float* stroke_miter,
     float* radius_x,
     float* radius_y,
     int* glyph_count) {
@@ -9347,6 +9363,15 @@ int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
   }
   if (font_size) {
     *font_size = op.font_size;
+  }
+  if (stroke_cap) {
+    *stroke_cap = op.stroke_cap;
+  }
+  if (stroke_join) {
+    *stroke_join = op.stroke_join;
+  }
+  if (stroke_miter) {
+    *stroke_miter = op.stroke_miter;
   }
   if (radius_x) {
     *radius_x = op.radius_x;
