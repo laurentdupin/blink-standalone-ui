@@ -4501,10 +4501,8 @@ void PaintPropertyTreeBuilder::UpdateForSelf() {
   TraceStandalonePaintTreeBuilderStage("UpdateForSelf after direct reasons");
   if (const auto* box = DynamicTo<LayoutBox>(object_)) {
     TraceStandalonePaintTreeBuilderStage("UpdateForSelf has LayoutBox");
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
     box->GetMutableForPainting().UpdateBackgroundPaintLocation(
         NeedsRootElementGroupForViewBackground(object_));
-#endif
     TraceStandalonePaintTreeBuilderStage("UpdateForSelf after background location");
     if (auto* scrollable_area = box->GetScrollableArea()) {
       TraceStandalonePaintTreeBuilderStage("UpdateForSelf has scrollable area");
