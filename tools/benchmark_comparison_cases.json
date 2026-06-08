@@ -112,7 +112,8 @@
       "49d_rounded_shadow_document_scroll",
       "50c_callback_background_document_scroll",
       "50e_asymmetric_rrect_stage",
-      "50d_opacity_overflow_clip_document_scroll"
+      "50d_opacity_overflow_clip_document_scroll",
+      "52_overflow_hidden_positioned_children"
     ],
     "animations": [
       "43_animation_opacity_basic_0ms",
@@ -773,6 +774,13 @@
       "html": "50e_asymmetric_rrect_stage.html",
       "viewport": "640x420",
       "note": "Asymmetric rounded stage preserves Blink per-corner RRect fill geometry against the matching border."
+    },
+    {
+      "name": "52_overflow_hidden_positioned_children",
+      "source": "paint_audit",
+      "html": "52_overflow_hidden_positioned_children.html",
+      "viewport": "760x260",
+      "note": "Absolutely positioned children are clipped by Blink overflow property clip metadata; Chromium comparison may show text AA drift."
     },
     {
       "name": "43_animation_opacity_basic_0ms",

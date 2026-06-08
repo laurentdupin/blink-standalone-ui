@@ -1482,8 +1482,17 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
 
     frame.scene_commands.push_back(
         SceneCommand::BeginChunk(chunk.chunk_id, chunk.bounds));
-    if (retained_chunk.property_state.has_clip_rrect) {
+    const bool has_chunk_property_clip =
+        retained_chunk.property_state.has_clip_rect ||
+        retained_chunk.property_state.has_clip_rrect;
+    if (has_chunk_property_clip) {
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Save()));
+    }
+    if (retained_chunk.property_state.has_clip_rect) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::ClipRect(
+          retained_chunk.property_state.clip_rect)));
+    }
+    if (retained_chunk.property_state.has_clip_rrect) {
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::ClipRRect(
           retained_chunk.property_state.clip_rrect,
           retained_chunk.property_state.clip_rrect_radii, false)));
@@ -1491,7 +1500,7 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
     for (const DrawCommand& command : chunk.commands) {
       frame.scene_commands.push_back(SceneCommand::Draw(command));
     }
-    if (retained_chunk.property_state.has_clip_rrect) {
+    if (has_chunk_property_clip) {
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
     }
     frame.scene_commands.push_back(SceneCommand::EndChunk(chunk.chunk_id));
