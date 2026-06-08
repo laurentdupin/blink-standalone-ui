@@ -6279,11 +6279,19 @@ static EDisplay StandaloneEquivalentBlockDisplay(EDisplay display) {
   return EDisplay::kBlock;
 }
 
-void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element*) {
+void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element* element) {
   ComputedStyleBuilder& builder = state.StyleBuilder();
   if (builder.Display() != EDisplay::kContents &&
       builder.HasOutOfFlowPosition()) {
     builder.SetDisplay(StandaloneEquivalentBlockDisplay(builder.Display()));
+  }
+  if (builder.Display() != EDisplay::kNone &&
+      builder.StyleType() != kPseudoIdScrollMarker) {
+    if (const ComputedStyle* layout_parent_style =
+            state.LayoutParentStyle()) {
+      AdjustStyleForDisplay(builder, *layout_parent_style, element,
+                            element ? &element->GetDocument() : nullptr);
+    }
   }
   builder.SetForcesStackingContext(false);
   if (builder.GetPosition() != EPosition::kStatic) {
@@ -9629,6 +9637,8 @@ void FrameLoader::Init(const DocumentToken& document_token,
         agent_group_scheduler, agent_cluster_key);
   }
   frame_->SetDOMWindow(MakeGarbageCollected<LocalDOMWindow>(*frame_, agent));
+  frame_->DomWindow()->SetContentSecurityPolicy(
+      MakeGarbageCollected<ContentSecurityPolicy>());
   DocumentInit init = DocumentInit::Create()
                           .WithWindow(frame_->DomWindow(), nullptr)
                           .WithToken(document_token)
@@ -10687,10 +10697,26 @@ void MouseEventManager::HandlePseudoElementRemoval(PseudoElement&) {}
 void PointerEventManager::HandlePseudoElementRemoval(PseudoElement&) {}
 void OverscrollAreaTracker::RemoveOverscroll(Element*) {}
 
-void StyleAdjuster::AdjustStyleForDisplay(ComputedStyleBuilder&,
-                                          const ComputedStyle&,
+void StyleAdjuster::AdjustStyleForDisplay(ComputedStyleBuilder& builder,
+                                          const ComputedStyle& layout_parent_style,
                                           const Element*,
-                                          Document*) {}
+                                          Document*) {
+  if (layout_parent_style.BlockifiesChildren()) {
+    builder.SetIsInBlockifyingDisplay();
+    if (builder.Display() != EDisplay::kContents) {
+      builder.SetDisplay(StandaloneEquivalentBlockDisplay(builder.Display()));
+      if (!builder.HasOutOfFlowPosition()) {
+        builder.SetIsFlexOrGridOrCustomItem();
+      }
+    }
+
+    if (layout_parent_style.IsDisplayFlexibleOrGridBox() ||
+        layout_parent_style.IsDisplayGridLanesBox() ||
+        layout_parent_style.IsDisplayMathType()) {
+      builder.SetIsInsideDisplayIgnoringFloatingChildren();
+    }
+  }
+}
 
 StyleRecalcContext StyleRecalcContext::FromParentContext(
     const StyleRecalcContext&,
@@ -12210,14 +12236,18 @@ bool ContentSecurityPolicy::ShouldBypassMainWorldDeprecated(
 bool ContentSecurityPolicy::IsNonceableElement(const Element*) {
   return false;
 }
-bool ContentSecurityPolicy::AllowInline(InlineType,
+bool ContentSecurityPolicy::AllowInline(InlineType inline_type,
                                         Element*,
                                         const String&,
                                         const String&,
                                         const String&,
                                         const OrdinalNumber&,
                                         ReportingDisposition) {
-  return false;
+  // Standalone documents do not install page CSP policies. Match Chromium's
+  // empty-policy behavior for CSS so parsed inline style attributes affect
+  // layout, while leaving script/event inline paths disabled.
+  return inline_type == InlineType::kStyle ||
+         inline_type == InlineType::kStyleAttribute;
 }
 String TrustedTypesCheckForJavascriptURLinNavigation(const String& value,
                                                      ExecutionContext*) {
