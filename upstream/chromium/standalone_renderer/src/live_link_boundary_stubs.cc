@@ -6267,7 +6267,7 @@ static EDisplay StandaloneEquivalentBlockDisplay(EDisplay display) {
 void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element* element) {
   ComputedStyleBuilder& builder = state.StyleBuilder();
   if (builder.Display() != EDisplay::kContents &&
-      builder.HasOutOfFlowPosition()) {
+      (builder.HasOutOfFlowPosition() || builder.IsFloating())) {
     builder.SetDisplay(StandaloneEquivalentBlockDisplay(builder.Display()));
   }
   if (builder.Display() != EDisplay::kNone &&

@@ -92,6 +92,7 @@
       "34b_georgia_paragraph_wrap",
       "34c_calc_card_text_wrap",
       "34d_georgia_vs_times_width",
+      "34e_float_dropcap_grid_layout",
       "50_inline_monospace_paragraph",
       "50b_text_transform_uppercase_labels"
     ],
@@ -911,6 +912,13 @@
       "html": "34d_georgia_vs_times_width.html",
       "viewport": "560x180",
       "note": "Georgia and Times New Roman family resolution and width comparison."
+    },
+    {
+      "name": "34e_float_dropcap_grid_layout",
+      "source": "paint_audit",
+      "html": "34e_float_dropcap_grid_layout.html",
+      "viewport": "1000x520",
+      "note": "Floated dropcap placement inside a grid editorial layout; Chromium comparison may show text AA drift."
     },
     {
       "name": "28_form_controls_basic",
