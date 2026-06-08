@@ -30,6 +30,7 @@ DEFAULT_BENCHMARK = (
 PLAYWRIGHT_SCRIPT = ROOT / "tools" / "playwright_screenshot.cjs"
 COMPARE_SCRIPT = ROOT / "tools" / "content_aware_compare.py"
 DEFAULT_HCSR_ROOT = Path(r"C:\Repos\UniversalGameEngine\HCSR")
+DETERMINISTIC_TIME_MS = 0
 
 
 IMAGE_EXTENSIONS = {
@@ -399,7 +400,8 @@ def write_html(out_dir: Path, rows: list[dict[str, Any]], report: dict[str, Any]
 </style>
 <h1>HCSR Baseline</h1>
 <p>Generated {html.escape(generated)} at viewport {html.escape(str(report['viewport']))}.
-Each tall page is compared at top/mid/bottom scroll positions based on Playwright document height.</p>
+Each tall page is compared at top/mid/bottom scroll positions based on Playwright document height.
+Animations are sampled deterministically at {html.escape(str(report['time_ms']))}ms.</p>
 <h2>Classification Counts</h2>
 <table><thead><tr><th>Classification</th><th>Count</th></tr></thead><tbody>
 {''.join(summary_rows)}
@@ -494,6 +496,8 @@ def run_view(
         viewport,
         "--scroll-y",
         str(scroll_y),
+        "--time-ms",
+        str(DETERMINISTIC_TIME_MS),
         "--out",
         str(standalone),
         "--json",
@@ -523,6 +527,8 @@ def run_view(
         viewport,
         "--scroll-y",
         str(scroll_y),
+        "--time-ms",
+        str(DETERMINISTIC_TIME_MS),
         "--out-json",
         str(playwright_state),
     ]
@@ -582,6 +588,7 @@ def run_view(
     return {
         "label": label,
         "scroll_y": scroll_y,
+        "time_ms": DETERMINISTIC_TIME_MS,
         "benchmark_exit": benchmark_exit,
         "benchmark_elapsed_seconds": benchmark_elapsed,
         "playwright_exit": playwright_exit,
@@ -656,6 +663,8 @@ def run_case(
             str(state_png),
             "--viewport",
             viewport,
+            "--time-ms",
+            str(DETERMINISTIC_TIME_MS),
             "--out-json",
             str(state_json),
         ],
@@ -777,6 +786,7 @@ def main() -> int:
     classification_counts = Counter(row["classification"] for row in rows)
     report = {
         "viewport": args.viewport,
+        "time_ms": DETERMINISTIC_TIME_MS,
         "hcsr_root": str(args.hcsr_root),
         "example_count": len(rows),
         "classification_counts": dict(sorted(classification_counts.items())),
