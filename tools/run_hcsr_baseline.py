@@ -270,7 +270,7 @@ def classify_row(row: dict[str, Any]) -> str:
         for view in views
         if view.get("diff_classification") == "missing_resource_or_large_region"
     ]
-    if features.get("uses_sticky") and any(
+    if has_sticky_or_scroll_evidence(row) and any(
         view.get("label") != "top" for view in large_region_views
     ):
         return "sticky_or_scroll_gap"
@@ -301,7 +301,7 @@ def infer_blockers(row: dict[str, Any]) -> list[str]:
         for item in classifications
     ):
         blockers.append("native_controls")
-    if features.get("uses_sticky") and any(
+    if has_sticky_or_scroll_evidence(row) and any(
         view.get("label") != "top"
         and view.get("diff_classification") == "missing_resource_or_large_region"
         for view in views
@@ -316,6 +316,26 @@ def infer_blockers(row: dict[str, Any]) -> list[str]:
     if features.get("uses_svg_text"):
         blockers.append("svg_text_feature")
     return blockers or ["none"]
+
+
+def int_field(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def has_sticky_or_scroll_evidence(row: dict[str, Any]) -> bool:
+    for view in row.get("views", []):
+        layout_sticky = int_field(view.get("sticky_layout_count"))
+        constrained_sticky = int_field(view.get("sticky_constrained_count"))
+        if layout_sticky > constrained_sticky:
+            return True
+        requested_scroll_y = int_field(view.get("scroll_y"))
+        applied_scroll_y = int_field(view.get("document_scroll_applied_y"))
+        if requested_scroll_y != applied_scroll_y:
+            return True
+    return False
 
 
 def write_html(out_dir: Path, rows: list[dict[str, Any]], report: dict[str, Any]) -> Path:
@@ -553,6 +573,12 @@ def run_view(
     retained_oracle_json = read_json(retained_oracle)
     oracle_playwright_json = read_json(oracle_playwright)
     timing = metrics_json.get("render_timing_diagnostics", {})
+    raw_audit = (
+        metrics_json.get("render_result", {}).get("raw_paint_artifact_audit_json", {})
+    )
+    sticky_diagnostics = raw_audit.get("sticky_position_diagnostics", {})
+    document_scroll_diagnostics = raw_audit.get("document_scroll_diagnostics", {})
+    document_scroll_applied = document_scroll_diagnostics.get("applied", {})
     return {
         "label": label,
         "scroll_y": scroll_y,
@@ -576,6 +602,12 @@ def run_view(
         "advance_and_render_ms": timing.get("advance_and_render_ms"),
         "cpu_raster_replay_ms": timing.get("cpu_raster_replay_ms"),
         "input_setup_ms": timing.get("input_setup_ms"),
+        "sticky_source_count": sticky_diagnostics.get("source_sticky_count"),
+        "sticky_layout_count": sticky_diagnostics.get("layout_sticky_count"),
+        "sticky_constrained_count": sticky_diagnostics.get(
+            "constrained_sticky_count"
+        ),
+        "document_scroll_applied_y": document_scroll_applied.get("y"),
         "retained_vs_oracle_exact": retained_oracle_json.get(
             "exact_pixel_difference_count"
         ),
