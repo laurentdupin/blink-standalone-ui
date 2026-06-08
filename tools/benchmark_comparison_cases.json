@@ -20,6 +20,10 @@
       "19b_image_local_jpeg",
       "19g_css_bg_local_jpeg"
     ],
+    "bmp-resources": [
+      "19c_image_data_bmp",
+      "19d_image_local_bmp"
+    ],
     "image-layout": [
       "05e_object_fit_contain_cover",
       "05i_image_data_png_alpha",
@@ -256,6 +260,20 @@
       "html": "19g_css_bg_local_jpeg.html",
       "viewport": "120x80",
       "note": "CSS background-image local JPEG resource smoke."
+    },
+    {
+      "name": "19c_image_data_bmp",
+      "source": "paint_audit",
+      "html": "19c_image_data_bmp.html",
+      "viewport": "120x80",
+      "note": "Data URL BMP image resource smoke."
+    },
+    {
+      "name": "19d_image_local_bmp",
+      "source": "paint_audit",
+      "html": "19d_image_local_bmp.html",
+      "viewport": "120x80",
+      "note": "Local BMP image resource smoke."
     },
     {
       "name": "05j_repeated_same_image",

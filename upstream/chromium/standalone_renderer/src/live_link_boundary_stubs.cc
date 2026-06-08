@@ -4765,7 +4765,8 @@ html_css_renderer::StandaloneResourceResult LoadStandaloneEncodedImageResource(
 
 bool ShouldUseStandaloneDecodedImageResource(
     const html_css_renderer::StandaloneResourceResult& result) {
-  return result.mime_type == "image/jpeg" && result.decoded_image;
+  return (result.mime_type == "image/jpeg" || result.mime_type == "image/bmp") &&
+         result.decoded_image;
 }
 
 Resource* CreateStandaloneDecodedImageResource(

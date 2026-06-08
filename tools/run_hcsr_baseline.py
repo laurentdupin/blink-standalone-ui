@@ -252,7 +252,7 @@ def classify_row(row: dict[str, Any]) -> str:
     if any(view.get("playwright_exit") not in (0, None) for view in views):
         return "playwright_fail"
     features = row.get("features", {})
-    if features.get("uses_bmp") or features.get("uses_webp"):
+    if features.get("uses_webp"):
         return "known_gap_image_format"
     if features.get("uses_svg_text"):
         return "known_gap_svg_text"
