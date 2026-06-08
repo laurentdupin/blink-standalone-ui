@@ -823,28 +823,37 @@ void AppendStrokeRectOp(float x,
   exported_draw_ops.push_back(exported);
 }
 
-void AppendRRectOp(float x,
-                   float y,
-                   float width,
-                   float height,
-                   float radius_x,
-                   float radius_y,
+void CopyRRectRadiiForStandaloneRenderer(const SkRRect& rrect,
+                                         LiveExportedDrawOp& exported) {
+  for (size_t i = 0; i < exported.corner_radii.size(); ++i) {
+    exported.corner_radii[i] =
+        rrect.radii(static_cast<SkRRect::Corner>(i));
+  }
+  exported.radius_x = exported.corner_radii[0].x();
+  exported.radius_y = exported.corner_radii[0].y();
+}
+
+void AppendRRectOp(const SkRRect& rrect,
+                   float translate_x,
+                   float translate_y,
                    SkScalar stroke_width,
                    const SkColor4f& color,
                    bool stroke,
                    std::vector<LiveExportedDrawOp>& exported_draw_ops,
                    const cc::PaintFlags* flags = nullptr) {
+  const SkRect& rect = rrect.getBounds();
+  const float width = rect.width();
+  const float height = rect.height();
   if (width <= 0.0f || height <= 0.0f) {
     return;
   }
   LiveExportedDrawOp exported;
   exported.type = stroke ? 6 : 5;
-  exported.x = x;
-  exported.y = y;
+  exported.x = translate_x + rect.x();
+  exported.y = translate_y + rect.y();
   exported.width = width;
   exported.height = height;
-  exported.radius_x = radius_x;
-  exported.radius_y = radius_y;
+  CopyRRectRadiiForStandaloneRenderer(rrect, exported);
   exported.font_size = stroke_width > 0.0f ? stroke_width : 1.0f;
   AppendSkColor(exported, color);
   if (flags) {
@@ -898,12 +907,7 @@ void AppendClipRRectOp(const SkRRect& rrect,
   exported.y = translate_y + rect.y();
   exported.width = rect.width();
   exported.height = rect.height();
-  for (size_t i = 0; i < exported.corner_radii.size(); ++i) {
-    exported.corner_radii[i] =
-        rrect.radii(static_cast<SkRRect::Corner>(i));
-  }
-  exported.radius_x = exported.corner_radii[0].x();
-  exported.radius_y = exported.corner_radii[0].y();
+  CopyRRectRadiiForStandaloneRenderer(rrect, exported);
   exported.font_size = clip_op == SkClipOp::kDifference ? 1.0f : 0.0f;
   exported_draw_ops.push_back(exported);
 }
@@ -1449,7 +1453,6 @@ void AppendSkRRectOpWithFlags(
   if (!rect.isFinite()) {
     return;
   }
-  const SkVector radii = rrect.getSimpleRadii();
   if (flags.HasShader() && flags.getStyle() != cc::PaintFlags::kStroke_Style) {
     std::vector<uint8_t> shader_bytes = SerializeShaderBytes(flags);
     if (!shader_bytes.empty()) {
@@ -1459,8 +1462,7 @@ void AppendSkRRectOpWithFlags(
       exported.y = translate_y + rect.y();
       exported.width = rect.width();
       exported.height = rect.height();
-      exported.radius_x = radii.x();
-      exported.radius_y = radii.y();
+      CopyRRectRadiiForStandaloneRenderer(rrect, exported);
       AppendSkColor(exported, flags.getColor4f());
       exported.shader_bytes = std::move(shader_bytes);
       exported_draw_ops.push_back(std::move(exported));
@@ -1496,8 +1498,7 @@ void AppendSkRRectOpWithFlags(
       }
     }
   }
-  AppendRRectOp(translate_x + rect.x(), translate_y + rect.y(), rect.width(),
-                rect.height(), radii.x(), radii.y(), flags.getStrokeWidth(),
+  AppendRRectOp(rrect, translate_x, translate_y, flags.getStrokeWidth(),
                 flags.getColor4f(),
                 flags.getStyle() == cc::PaintFlags::kStroke_Style,
                 exported_draw_ops, &flags);
@@ -9707,7 +9708,7 @@ int StandaloneBlinkLiveFrameBridgeExportedRRectRadiiAtForStandaloneRenderer(
     return 0;
   }
   const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
-  if (op.type != 15) {
+  if (op.type != 5 && op.type != 6 && op.type != 15 && op.type != 20) {
     return 0;
   }
   if (top_left_x) {

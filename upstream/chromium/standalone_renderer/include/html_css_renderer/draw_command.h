@@ -159,11 +159,22 @@ struct DrawCommand {
                                     Color modulation);
   static DrawCommand FillRRect(Rect bounds, float radius_x, float radius_y,
                                Color fill);
+  static DrawCommand FillRRect(Rect bounds,
+                               std::array<Point, 4> corner_radii,
+                               Color fill);
   static DrawCommand StrokeRRect(Rect bounds, float radius_x, float radius_y,
                                  Color stroke, float width);
+  static DrawCommand StrokeRRect(Rect bounds,
+                                 std::array<Point, 4> corner_radii,
+                                 Color stroke,
+                                 float width);
   static DrawCommand FillRRectShader(Rect bounds,
                                      float radius_x,
                                      float radius_y,
+                                     std::vector<uint8_t> shader_bytes,
+                                     Color modulation);
+  static DrawCommand FillRRectShader(Rect bounds,
+                                     std::array<Point, 4> corner_radii,
                                      std::vector<uint8_t> shader_bytes,
                                      Color modulation);
   static DrawCommand FillPath(std::vector<uint8_t> path_bytes,

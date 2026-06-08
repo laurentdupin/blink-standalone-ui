@@ -84,6 +84,16 @@ SkRect ToSkRect(Rect rect) {
   return SkRect::MakeXYWH(rect.x, rect.y, rect.width, rect.height);
 }
 
+SkRRect ToSkRRect(const DrawCommand& command) {
+  SkVector radii[4] = {
+      SkVector::Make(command.corner_radii[0].x, command.corner_radii[0].y),
+      SkVector::Make(command.corner_radii[1].x, command.corner_radii[1].y),
+      SkVector::Make(command.corner_radii[2].x, command.corner_radii[2].y),
+      SkVector::Make(command.corner_radii[3].x, command.corner_radii[3].y),
+  };
+  return SkRRect::MakeRectRadii(ToSkRect(command.rect), radii);
+}
+
 float ParseFloatAfter(const std::string& text,
                       const char* key,
                       float fallback) {
@@ -708,10 +718,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
                                const SkPaint& layer_paint) {
-                             layer_canvas.drawRoundRect(
-                                 ToSkRect(command.rect), command.radius_x,
-                                 command.radius_y, layer_paint);
-                           });
+                              layer_canvas.drawRRect(ToSkRRect(command),
+                                                     layer_paint);
+                            });
       break;
     case DrawCommandType::kStrokeRRect:
       paint.setStyle(SkPaint::kStroke_Style);
@@ -721,10 +730,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
                                const SkPaint& layer_paint) {
-                             layer_canvas.drawRoundRect(
-                                 ToSkRect(command.rect), command.radius_x,
-                                 command.radius_y, layer_paint);
-                           });
+                              layer_canvas.drawRRect(ToSkRRect(command),
+                                                     layer_paint);
+                            });
       break;
     case DrawCommandType::kFillRRectShader:
       if (coverage) {
@@ -739,8 +747,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
         paint.setShader(std::move(shader));
         paint.setColor(SkColorSetARGB(ClampByte(command.color.a), 255, 255,
                                       255));
-        canvas.drawRoundRect(ToSkRect(command.rect), command.radius_x,
-                             command.radius_y, paint);
+        canvas.drawRRect(ToSkRRect(command), paint);
       } else if (coverage) {
         coverage->skipped = true;
         coverage->skip_reason = "shader_deserialize_failed";
@@ -750,13 +757,7 @@ void DrawCommandWithSkia(SkCanvas& canvas,
      canvas.clipRect(ToSkRect(command.rect));
      break;
    case DrawCommandType::kClipRRect: {
-     SkVector radii[4] = {
-         SkVector::Make(command.corner_radii[0].x, command.corner_radii[0].y),
-         SkVector::Make(command.corner_radii[1].x, command.corner_radii[1].y),
-         SkVector::Make(command.corner_radii[2].x, command.corner_radii[2].y),
-         SkVector::Make(command.corner_radii[3].x, command.corner_radii[3].y),
-     };
-     canvas.clipRRect(SkRRect::MakeRectRadii(ToSkRect(command.rect), radii),
+     canvas.clipRRect(ToSkRRect(command),
                       command.clip_difference ? SkClipOp::kDifference
                                               : SkClipOp::kIntersect,
                       true);

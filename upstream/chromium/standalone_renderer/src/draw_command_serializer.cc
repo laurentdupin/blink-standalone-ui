@@ -626,7 +626,15 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
           command.type == DrawCommandType::kStrokeRRect ||
           command.type == DrawCommandType::kFillRRectShader) {
         out << ",\"radius_x\":" << command.radius_x
-            << ",\"radius_y\":" << command.radius_y;
+            << ",\"radius_y\":" << command.radius_y
+            << ",\"corner_radii\":[";
+        for (size_t i = 0; i < command.corner_radii.size(); ++i) {
+          if (i > 0) {
+            out << ",";
+          }
+          WritePoint(out, command.corner_radii[i]);
+        }
+        out << "]";
       }
       if (command.type == DrawCommandType::kStrokeRect ||
           command.type == DrawCommandType::kStrokeRRect) {

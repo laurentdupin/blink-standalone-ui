@@ -385,6 +385,12 @@ uint64_t HashCommandContent(const DrawCommand& command) {
   hash = HashCombine(hash, static_cast<uint64_t>(command.stroke_join));
   hash = HashCombine(hash, HashFloat(command.stroke_miter));
   hash = HashCombine(hash, HashFloat(command.opacity));
+  hash = HashCombine(hash, HashFloat(command.radius_x));
+  hash = HashCombine(hash, HashFloat(command.radius_y));
+  for (const Point radius : command.corner_radii) {
+    hash = HashCombine(hash, HashFloat(radius.x));
+    hash = HashCombine(hash, HashFloat(radius.y));
+  }
   for (const FilterOperationSnapshot& operation : command.filter_operations) {
     hash = HashCombine(hash, HashFilterOperation(operation));
   }

@@ -3031,6 +3031,35 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           command.draw_looper_layers.push_back(layer);
         }
       };
+      auto exported_rrect_radii = [&]() {
+        std::array<Point, 4> corner_radii = {
+            Point{radius_x, radius_y},
+            Point{radius_x, radius_y},
+            Point{radius_x, radius_y},
+            Point{radius_x, radius_y},
+        };
+        float top_left_x = 0.0f;
+        float top_left_y = 0.0f;
+        float top_right_x = 0.0f;
+        float top_right_y = 0.0f;
+        float bottom_right_x = 0.0f;
+        float bottom_right_y = 0.0f;
+        float bottom_left_x = 0.0f;
+        float bottom_left_y = 0.0f;
+        if (blink::standalone_renderer_probe::
+                StandaloneBlinkLiveFrameBridgeExportedRRectRadiiAtForStandaloneRenderer(
+                    probe_html.c_str(), static_cast<int>(i), &top_left_x,
+                    &top_left_y, &top_right_x, &top_right_y, &bottom_right_x,
+                    &bottom_right_y, &bottom_left_x, &bottom_left_y)) {
+          corner_radii = {
+              Point{top_left_x, top_left_y},
+              Point{top_right_x, top_right_y},
+              Point{bottom_right_x, bottom_right_y},
+              Point{bottom_left_x, bottom_left_y},
+          };
+        }
+        return corner_radii;
+      };
       auto append_path_effect_bytes = [&](DrawCommand& command) {
         int byte_count = 0;
         if (!live_probe::
@@ -3273,15 +3302,17 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 5) {
-        DrawCommand command = DrawCommand::FillRRect(
-            Rect{x, y, width, height}, radius_x, radius_y, color);
+        DrawCommand command =
+            DrawCommand::FillRRect(Rect{x, y, width, height},
+                                   exported_rrect_radii(), color);
         append_draw_looper_layers(command);
         active_commands->push_back(std::move(command));
         ++translated_command_count;
       } else if (type == 6) {
-        DrawCommand command = DrawCommand::StrokeRRect(
-            Rect{x, y, width, height}, radius_x, radius_y, color,
-            font_size > 0.0f ? font_size : 1.0f);
+        DrawCommand command =
+            DrawCommand::StrokeRRect(Rect{x, y, width, height},
+                                     exported_rrect_radii(), color,
+                                     font_size > 0.0f ? font_size : 1.0f);
         command.stroke_cap = stroke_cap;
         command.stroke_join = stroke_join;
         command.stroke_miter = stroke_miter;
@@ -3503,7 +3534,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                   Rect{x, y, width, height}, std::move(shader_bytes), color));
             } else {
               active_commands->push_back(DrawCommand::FillRRectShader(
-                  Rect{x, y, width, height}, radius_x, radius_y,
+                  Rect{x, y, width, height}, exported_rrect_radii(),
                   std::move(shader_bytes), color));
             }
             ++translated_command_count;

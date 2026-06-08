@@ -118,11 +118,25 @@ DrawCommand DrawCommand::FillRRect(Rect bounds,
                                    float radius_x,
                                    float radius_y,
                                    Color fill) {
+  return FillRRect(bounds,
+                   {
+                       Point{radius_x, radius_y},
+                       Point{radius_x, radius_y},
+                       Point{radius_x, radius_y},
+                       Point{radius_x, radius_y},
+                   },
+                   fill);
+}
+
+DrawCommand DrawCommand::FillRRect(Rect bounds,
+                                   std::array<Point, 4> corner_radii,
+                                   Color fill) {
   DrawCommand command;
   command.type = DrawCommandType::kFillRRect;
   command.rect = bounds;
-  command.radius_x = radius_x;
-  command.radius_y = radius_y;
+  command.corner_radii = corner_radii;
+  command.radius_x = corner_radii[0].x;
+  command.radius_y = corner_radii[0].y;
   command.color = fill;
   return command;
 }
@@ -132,11 +146,26 @@ DrawCommand DrawCommand::FillRRectShader(Rect bounds,
                                          float radius_y,
                                          std::vector<uint8_t> shader_bytes,
                                          Color modulation) {
+  return FillRRectShader(bounds,
+                         {
+                             Point{radius_x, radius_y},
+                             Point{radius_x, radius_y},
+                             Point{radius_x, radius_y},
+                             Point{radius_x, radius_y},
+                         },
+                         std::move(shader_bytes), modulation);
+}
+
+DrawCommand DrawCommand::FillRRectShader(Rect bounds,
+                                         std::array<Point, 4> corner_radii,
+                                         std::vector<uint8_t> shader_bytes,
+                                         Color modulation) {
   DrawCommand command;
   command.type = DrawCommandType::kFillRRectShader;
   command.rect = bounds;
-  command.radius_x = radius_x;
-  command.radius_y = radius_y;
+  command.corner_radii = corner_radii;
+  command.radius_x = corner_radii[0].x;
+  command.radius_y = corner_radii[0].y;
   command.shader_bytes = std::move(shader_bytes);
   command.color = modulation;
   return command;
@@ -147,11 +176,26 @@ DrawCommand DrawCommand::StrokeRRect(Rect bounds,
                                      float radius_y,
                                      Color stroke,
                                      float width) {
+  return StrokeRRect(bounds,
+                     {
+                         Point{radius_x, radius_y},
+                         Point{radius_x, radius_y},
+                         Point{radius_x, radius_y},
+                         Point{radius_x, radius_y},
+                     },
+                     stroke, width);
+}
+
+DrawCommand DrawCommand::StrokeRRect(Rect bounds,
+                                     std::array<Point, 4> corner_radii,
+                                     Color stroke,
+                                     float width) {
   DrawCommand command;
   command.type = DrawCommandType::kStrokeRRect;
   command.rect = bounds;
-  command.radius_x = radius_x;
-  command.radius_y = radius_y;
+  command.corner_radii = corner_radii;
+  command.radius_x = corner_radii[0].x;
+  command.radius_y = corner_radii[0].y;
   command.color = stroke;
   command.stroke_width = width;
   return command;
