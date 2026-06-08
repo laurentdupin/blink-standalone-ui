@@ -4954,13 +4954,7 @@ const ComputedStyle* Element::StyleForLayoutObject(
     element_animations->CssAnimations().ClearPendingUpdate();
   }
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
   new_style_recalc_context.old_style = PostStyleUpdateScope::GetOldStyle(*this);
-#endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
   const ComputedStyle* style =
       HasCustomStyleCallbacks()
           ? CustomStyleForLayoutObject(new_style_recalc_context)

@@ -2642,12 +2642,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         serialized_attributes.c_str());
     live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
         hovered_element_id.c_str(), active_element_id.c_str());
-    if (timeline_time_seconds > 0.0) {
-      diagnostics.push_back(
-          "live Blink animation time requested_ms=" +
-          std::to_string(timeline_time_seconds * 1000.0) +
-          " status=unsupported_missing_real_blink_animation_time_input");
-    }
     diagnostics.push_back(
         "live Blink bridge recipe version: " +
         std::to_string(live_probe::

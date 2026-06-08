@@ -235,6 +235,8 @@ def write_html_summary(out_dir: Path, report: dict) -> Path:
             f"{('<br>' + unsupported_css) if unsupported_css else ''}</td>"
             f"<td>{html.escape(str(row.get('retained_vs_oracle_exact', '')))}</td>"
             f"<td>{html.escape(str(row.get('oracle_vs_playwright_exact', '')))}</td>"
+            f"<td>{html.escape(str(row.get('retained_vs_playwright_exact', '')))}</td>"
+            f"<td>{html.escape(str(row.get('playwright_compare_source', 'oracle')))}</td>"
             f"<td>{html.escape(str(row.get('diff_classification', '')))}</td>"
             f"<td>{note}</td>"
             f"<td>{html.escape(str(row.get('standalone_advance_and_render_ms', '')))}</td>"
@@ -301,7 +303,7 @@ def write_html_summary(out_dir: Path, report: dict) -> Path:
 </section>
 <table>
   <thead><tr>
-    <th>Case</th><th>Bench</th><th>PW</th><th>Non-white</th><th>Unique</th><th>Missing res</th><th>Diag</th><th>Unsupported CSS</th><th>R/O exact</th><th>O/P exact</th><th>Class</th><th>Note</th><th>Standalone render ms</th><th>PW elapsed s</th>
+    <th>Case</th><th>Bench</th><th>PW</th><th>Non-white</th><th>Unique</th><th>Missing res</th><th>Diag</th><th>Unsupported CSS</th><th>R/O exact</th><th>O/P exact</th><th>R/P exact</th><th>PW source</th><th>Class</th><th>Note</th><th>Standalone render ms</th><th>PW elapsed s</th>
     <th>Retained</th><th>Oracle</th><th>Playwright</th><th>Artifacts</th>
   </tr></thead>
   <tbody>{''.join(html_rows)}</tbody>
@@ -390,6 +392,8 @@ def main() -> int:
             "--strict-text-blob-typefaces",
             "--skia-cpu",
         ]
+        if case.get("time_ms") is not None:
+            bench_cmd.extend(["--time-ms", str(case["time_ms"])])
         for attr in case.get("attrs", []):
             bench_cmd.extend(["--attr", attr])
         add_scroll_args(bench_cmd, case.get("scroll"))
@@ -409,6 +413,8 @@ def main() -> int:
                 "--viewport",
                 viewport,
             ]
+            if case.get("time_ms") is not None:
+                pw_cmd.extend(["--time-ms", str(case["time_ms"])])
             for attr in case.get("attrs", []):
                 pw_cmd.extend(["--attr", attr])
             add_scroll_args(pw_cmd, case.get("scroll"))
@@ -464,6 +470,26 @@ def main() -> int:
                 args.timeout,
             )
 
+        if case.get("time_ms") is not None and has_pillow and has_playwright and retained.exists() and pw.exists():
+            status["retained_vs_playwright_exit"], status["retained_vs_playwright_elapsed_seconds"], _ = run(
+                [
+                    sys.executable,
+                    str(COMPARE_SCRIPT),
+                    "--standalone",
+                    str(retained),
+                    "--playwright",
+                    str(pw),
+                    "--out-json",
+                    str(item_dir / f"{case_name}-retained-vs-playwright.json"),
+                    "--out-dir",
+                    str(item_dir / "retained-vs-playwright-crops"),
+                    "--compare-background",
+                    "auto-corners",
+                ],
+                item_dir / f"{case_name}-retained-vs-playwright.log",
+                args.timeout,
+            )
+
         status["finished"] = time.time()
         status_path = item_dir / f"{case_name}-status.json"
         status_path.write_text(json.dumps(status, indent=2), encoding="utf-8")
@@ -475,6 +501,9 @@ def main() -> int:
         )
         retained_oracle = read_json(item_dir / f"{case_name}-retained-vs-oracle.json")
         oracle_pw = read_json(item_dir / f"{case_name}-oracle-vs-playwright.json")
+        retained_pw = read_json(item_dir / f"{case_name}-retained-vs-playwright.json")
+        playwright_compare = retained_pw if case.get("time_ms") is not None else oracle_pw
+        playwright_compare_source = "retained" if case.get("time_ms") is not None else "oracle"
         rows.append(
             {
                 "name": case_name,
@@ -488,6 +517,7 @@ def main() -> int:
                 or fallback_scalar_from_text(metrics_text, "unique_color_sample"),
                 "missing_resource_count": metrics_json.get("missing_resource_count", "")
                 or fallback_scalar_from_text(metrics_text, "missing_resource_count"),
+                "time_ms": case.get("time_ms", ""),
                 "diagnostic_count": metrics_json.get("diagnostic_count", ""),
                 "unsupported_css_diagnostic_count": unsupported_css_count,
                 "first_unsupported_css_diagnostic": first_unsupported_css,
@@ -501,7 +531,11 @@ def main() -> int:
                 "oracle_vs_playwright_exact": metric_value(
                     oracle_pw, "exact_pixel_difference_count"
                 ),
-                "diff_classification": metric_value(oracle_pw, "diff_classification"),
+                "retained_vs_playwright_exact": metric_value(
+                    retained_pw, "exact_pixel_difference_count"
+                ),
+                "playwright_compare_source": playwright_compare_source,
+                "diff_classification": metric_value(playwright_compare, "diff_classification"),
                 "note": case.get("note", ""),
             }
         )

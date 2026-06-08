@@ -11,6 +11,9 @@
       "43k_clipped_overflow_a_to_b",
       "43l_opacity_low_to_high",
       "43ae_visual_effects_flat_to_raised",
+      "43_animation_opacity_0_to_500",
+      "43b_animation_transform_0_to_500",
+      "43c_animation_color_0_to_500",
       "43m_stacking_a_to_b",
       "43o_clip_path_png_wide_to_narrow",
       "43p_mask_png_wide_to_narrow",
@@ -165,6 +168,45 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "local"
+      }
+    },
+    {
+      "name": "43_animation_opacity_0_to_500",
+      "html": "43_animation_opacity_basic.html",
+      "viewport": "260x190",
+      "previous_time_ms": 0,
+      "current_time_ms": 500,
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "tight",
+        "damage_bounds": {"x": 32, "y": 32, "width": 160, "height": 120}
+      }
+    },
+    {
+      "name": "43b_animation_transform_0_to_500",
+      "html": "43b_animation_transform_basic.html",
+      "viewport": "300x200",
+      "previous_time_ms": 0,
+      "current_time_ms": 500,
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "local",
+        "damage_bounds": {"x": 40, "y": 40, "width": 180, "height": 120}
+      }
+    },
+    {
+      "name": "43c_animation_color_0_to_500",
+      "html": "43c_animation_color_basic.html",
+      "viewport": "300x200",
+      "previous_time_ms": 0,
+      "current_time_ms": 500,
+      "expected": {
+        "exact_pixel_identical": true,
+        "requires_full_redraw": false,
+        "damage_class": "tight",
+        "damage_bounds": {"x": 32, "y": 32, "width": 180, "height": 120}
       }
     },
     {

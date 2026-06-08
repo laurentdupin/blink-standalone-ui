@@ -181,6 +181,8 @@ def benchmark_command(
     previous_element_scroll: dict[str, dict[str, int]] | None = None,
     previous_hover: str | None = None,
     previous_active: str | None = None,
+    time_ms: int | float | None = None,
+    previous_time_ms: int | float | None = None,
     incremental: bool = False,
 ) -> list[str]:
     cmd = [
@@ -204,12 +206,16 @@ def benchmark_command(
     add_element_scroll(cmd, "--scroll-element", element_scroll)
     add_optional_value(cmd, "--hover", hover)
     add_optional_value(cmd, "--active", active)
+    if time_ms is not None:
+        cmd.extend(["--time-ms", str(time_ms)])
     if incremental:
         add_attrs(cmd, "--previous-attr", previous_attrs)
         add_scroll(cmd, "--previous-scroll-x", "--previous-scroll-y", previous_scroll)
         add_element_scroll(cmd, "--previous-scroll-element", previous_element_scroll)
         add_optional_value(cmd, "--previous-hover", previous_hover)
         add_optional_value(cmd, "--previous-active", previous_active)
+        if previous_time_ms is not None:
+            cmd.extend(["--previous-time-ms", str(previous_time_ms)])
         cmd.append("--incremental")
     return cmd
 
@@ -463,6 +469,8 @@ def run_case(
     previous_hover = case.get("previous_hover")
     current_active = case.get("current_active")
     previous_active = case.get("previous_active")
+    current_time_ms = case.get("current_time_ms")
+    previous_time_ms = case.get("previous_time_ms")
 
     full_cmd = benchmark_command(
         benchmark,
@@ -475,6 +483,7 @@ def run_case(
         element_scroll=current_element_scroll,
         hover=current_hover,
         active=current_active,
+        time_ms=current_time_ms,
     )
     full_exit, full_elapsed = run(full_cmd, item_dir / "full-current.log", timeout)
 
@@ -494,6 +503,8 @@ def run_case(
         previous_element_scroll=previous_element_scroll,
         previous_hover=previous_hover,
         previous_active=previous_active,
+        time_ms=current_time_ms,
+        previous_time_ms=previous_time_ms,
         incremental=True,
     )
     incremental_exit, incremental_elapsed = run(incremental_cmd, item_dir / "incremental.log", timeout)

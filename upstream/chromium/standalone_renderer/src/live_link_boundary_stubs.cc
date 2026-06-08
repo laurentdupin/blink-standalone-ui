@@ -39,6 +39,7 @@
 #include "base/win/scoped_handle.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
+#include "cc/animation/animation_id_provider.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkPngRustDecoder.h"
 #include "src/codec/SkPngCodec.h"
@@ -74,6 +75,7 @@
 #include "third_party/blink/renderer/core/html/html_table_element.h"
 #include "third_party/blink/renderer/core/html/html_table_row_element.h"
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
+#include "third_party/blink/renderer/core/events/animation_playback_event.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
@@ -92,6 +94,7 @@
 #include "third_party/blink/renderer/core/svg/svg_string_list_tear_off.h"
 #include "third_party/blink/renderer/core/html/loading_attribute.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
+#include "third_party/blink/renderer/core/css/cssom/css_unit_value.h"
 #include "third_party/blink/renderer/core/css/media_query_list_listener.h"
 #include "third_party/blink/renderer/core/css/parser/sizes_attribute_parser.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
@@ -132,6 +135,20 @@
 #include "third_party/blink/renderer/core/svg/svg_title_element.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_list_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_transform_tear_off.h"
+#include "third_party/blink/renderer/core/animation/timeline_trigger.h"
+#include "third_party/blink/renderer/core/animation/css_color_interpolation_type.h"
+#include "third_party/blink/renderer/core/animation/css_default_interpolation_type.h"
+#include "third_party/blink/renderer/core/animation/css_number_interpolation_type.h"
+#include "third_party/blink/renderer/core/animation/css_transform_interpolation_type.h"
+#include "third_party/blink/renderer/core/animation/css/css_transition.h"
+#include "third_party/blink/renderer/core/animation/effect_input.h"
+#include "third_party/blink/renderer/core/animation/interpolation_types_map.h"
+#include "third_party/blink/renderer/core/animation/timing_calculations.h"
+#include "third_party/blink/renderer/core/animation/timing_input.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
+#include "third_party/blink/renderer/core/css/properties/css_property.h"
+#include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
+#include "third_party/blink/renderer/platform/heap/persistent.h"
 #include "third_party/blink/renderer/core/paint/timing/image_element_timing.h"
 #include "third_party/blink/renderer/core/paint/timing/paint_timing_detector.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_error.h"
@@ -1352,6 +1369,7 @@ void SkPath::dump(SkWStream*, bool) const {}
 namespace v8 {
 namespace internal {
 class SharedObjectConveyorHandles {};
+void MoveTracedReference(Address**, Address**) {}
 }  // namespace internal
 
 bool Value::IsPromise() const {
@@ -1369,6 +1387,8 @@ MaybeLocal<Promise::Resolver> Promise::Resolver::New(Local<Context>) {
 Maybe<bool> Promise::Resolver::Reject(Local<Context>, Local<Value>) {
   return Just(false);
 }
+
+void Promise::MarkAsHandled() {}
 
 MaybeLocal<Array> Array::New(Local<Context>,
                              size_t,
@@ -6060,6 +6080,7 @@ CompositorKeyframeValue* CompositorKeyframeValueFactory::Create(
   return nullptr;
 }
 
+#if 0
 bool KeyframeEffect::HasPlayingAnimation() const {
   return false;
 }
@@ -6120,15 +6141,73 @@ AnimationTimeDelta KeyframeEffect::CalculateTimeToEffectChange(
 std::optional<AnimationTimeDelta> KeyframeEffect::TimelineDuration() const {
   return std::nullopt;
 }
+#endif
 InterpolationTypesMap::InterpolationTypesMap(const PropertyRegistry* registry,
                                              const Document& document)
     : document_(document), registry_(registry) {}
-uint64_t InterpolationTypesMap::Version() const {
+size_t InterpolationTypesMap::Version() const {
   return 0;
 }
 const InterpolationTypes* InterpolationTypesMap::Get(
-    const PropertyHandle&) const {
-  return nullptr;
+    const PropertyHandle& property) const {
+  using ApplicableTypesMap =
+      GCedHeapHashMap<PropertyHandle, Member<InterpolationTypes>>;
+  DEFINE_STATIC_LOCAL(Persistent<ApplicableTypesMap>, applicable_types_map,
+                      (MakeGarbageCollected<ApplicableTypesMap>()));
+
+  auto entry = applicable_types_map->find(property);
+  if (entry != applicable_types_map->end()) {
+    return entry->value;
+  }
+
+  auto* applicable_types = MakeGarbageCollected<InterpolationTypes>();
+  const CSSProperty& css_property = property.GetCSSProperty();
+  bool supported_by_standalone = false;
+  switch (css_property.PropertyID()) {
+    case CSSPropertyID::kOpacity:
+    case CSSPropertyID::kFillOpacity:
+    case CSSPropertyID::kFloodOpacity:
+    case CSSPropertyID::kStopOpacity:
+    case CSSPropertyID::kStrokeOpacity:
+      applicable_types->push_back(
+          MakeGarbageCollected<CSSNumberInterpolationType>(property));
+      supported_by_standalone = true;
+      break;
+    case CSSPropertyID::kAccentColor:
+    case CSSPropertyID::kBackgroundColor:
+    case CSSPropertyID::kBorderBottomColor:
+    case CSSPropertyID::kBorderLeftColor:
+    case CSSPropertyID::kBorderRightColor:
+    case CSSPropertyID::kBorderTopColor:
+    case CSSPropertyID::kCaretColor:
+    case CSSPropertyID::kColor:
+    case CSSPropertyID::kFloodColor:
+    case CSSPropertyID::kLightingColor:
+    case CSSPropertyID::kOutlineColor:
+    case CSSPropertyID::kStopColor:
+    case CSSPropertyID::kTextDecorationColor:
+    case CSSPropertyID::kTextEmphasisColor:
+    case CSSPropertyID::kWebkitTextFillColor:
+    case CSSPropertyID::kWebkitTextStrokeColor:
+      applicable_types->push_back(
+          MakeGarbageCollected<CSSColorInterpolationType>(property));
+      supported_by_standalone = true;
+      break;
+    case CSSPropertyID::kTransform:
+      applicable_types->push_back(
+          MakeGarbageCollected<CSSTransformInterpolationType>(property));
+      supported_by_standalone = true;
+      break;
+    default:
+      break;
+  }
+  if (supported_by_standalone) {
+    applicable_types->push_back(
+        MakeGarbageCollected<CSSDefaultInterpolationType>(property));
+  }
+
+  auto add_result = applicable_types_map->insert(property, applicable_types);
+  return add_result.stored_value->value;
 }
 InterpolationTypes* InterpolationTypesMap::CreateInterpolationTypesForCSSSyntax(
     const AtomicString&,
@@ -7763,9 +7842,11 @@ EInsideLink VisitedLinkState::DetermineLinkStateSlowCase(const Element&) {
   return EInsideLink::kNotInsideLink;
 }
 
+#if 0
 void DocumentTimeline::InvalidateKeyframeEffects(
     const TreeScope&,
     const StyleChangeReasonForTracing&) {}
+#endif
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 scoped_refptr<QuotesData> LayoutLocale::GetQuotesData() const {
@@ -7843,6 +7924,7 @@ void PseudoChange(perfetto::TracedValue,
                   CSSSelector::PseudoType) {}
 }  // namespace inspector_schedule_style_invalidation_tracking_event
 
+#if 0
 V8UnionCSSNumericValueOrDouble* Animation::currentTime() const {
   return nullptr;
 }
@@ -8023,9 +8105,334 @@ cc::AnimationTimeline* DocumentTimeline::EnsureCompositorTimeline() {
 AnimationTimeline::PhaseAndTime DocumentTimeline::CurrentPhaseAndTime() {
   return {TimelinePhase::kInactive, std::nullopt};
 }
+#endif
 bool TimelineTrigger::Update() {
   return false;
 }
+
+void AnimationTrigger::removeAnimation(Animation*) {}
+
+CSSUnitValue* CSSNumericValue::to(CSSPrimitiveValue::UnitType) const {
+  return nullptr;
+}
+
+CSSNumericValue* CSSNumericValue::FromCSSValue(const CSSPrimitiveValue&) {
+  return nullptr;
+}
+
+const char* const V8AnimationPlayState::string_table_[] = {
+    "idle", "pending", "running", "paused", "finished"};
+
+const char* const V8ReplaceState::string_table_[] = {
+    "active", "removed", "persisted"};
+const char* const V8IterationCompositeOperation::string_table_[] = {
+    "replace", "accumulate"};
+
+std::unique_ptr<CompositorAnimation> CompositorAnimation::Create(
+    std::optional<int>) {
+  return nullptr;
+}
+
+cc::Animation* CompositorAnimation::CcAnimation() const {
+  return nullptr;
+}
+
+int CompositorAnimation::CcAnimationId() const {
+  return 0;
+}
+
+void CompositorAnimation::SetAnimationDelegate(CompositorAnimationDelegate*) {}
+
+void CompositorAnimation::DetachElement() {}
+
+bool CompositorAnimation::IsElementAttached() const {
+  return false;
+}
+
+void CompositorAnimation::AttachPaintWorkletElement() {}
+
+CompositorAnimations::FailureReasons
+CompositorAnimations::CheckCanStartAnimationOnCompositor(
+    const Timing&,
+    const Timing::NormalizedTiming&,
+    const Element&,
+    const Animation*,
+    const EffectModel&,
+    const PaintArtifactCompositor*,
+    double,
+    PropertyHandleSet*) {
+  return CompositorAnimations::kInvalidAnimationOrEffect;
+}
+
+bool CompositorAnimations::CompositorPropertyAnimationsHaveNoEffect(
+    const Element&,
+    const Animation*,
+    const EffectModel&,
+    const PaintArtifactCompositor*) {
+  return false;
+}
+
+bool CompositorAnimations::CanStartScrollTimelineOnCompositor(Node*) {
+  return false;
+}
+
+void CompositorAnimations::StartAnimationOnCompositor(
+    const Element&,
+    int,
+    std::optional<double>,
+    std::optional<base::TimeDelta>,
+    const Timing&,
+    const Timing::NormalizedTiming&,
+    const Animation*,
+    CompositorAnimation&,
+    const EffectModel&,
+    Vector<int>&,
+    double,
+    bool,
+    bool) {}
+
+void CompositorAnimations::CancelAnimationOnCompositor(
+    const Element&,
+    CompositorAnimation*,
+    int,
+    const EffectModel&) {}
+
+void CompositorAnimations::CancelIncompatibleAnimationsOnCompositor(
+    const Element&,
+    const Animation&,
+    const EffectModel&) {}
+
+void CompositorAnimations::PauseAnimationForTestingOnCompositor(
+    const Element&,
+    const Animation&,
+    int,
+    base::TimeDelta,
+    const EffectModel&) {}
+
+void CompositorAnimations::AttachCompositedLayers(Element&,
+                                                  CompositorAnimation*) {}
+
+const WrapperTypeInfo& CSSAnimation::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("CSSAnimation");
+const WrapperTypeInfo& CSSTransition::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("CSSTransition");
+const WrapperTypeInfo& AnimationPlaybackEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("AnimationPlaybackEvent");
+const WrapperTypeInfo& TimelineTriggerRange::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("TimelineTriggerRange");
+const WrapperTypeInfo& TimelineTriggerRangeList::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("TimelineTriggerRangeList");
+
+V8UnionStringOrTimelineRangeOffset::V8UnionStringOrTimelineRangeOffset(
+    const String& value)
+    : content_type_(ContentType::kString), member_string_(value) {}
+
+V8UnionStringOrTimelineRangeOffset::V8UnionStringOrTimelineRangeOffset(
+    String&& value)
+    : content_type_(ContentType::kString), member_string_(std::move(value)) {}
+
+void V8UnionStringOrTimelineRangeOffset::Trace(Visitor* visitor) const {
+  visitor->Trace(member_timeline_range_offset_);
+}
+
+void V8UnionStringOrTimelineRangeOffset::Clear() {
+  member_string_ = String();
+  member_timeline_range_offset_ = nullptr;
+}
+
+AnimationPlaybackEvent::AnimationPlaybackEvent(
+    const AtomicString& type,
+    V8CSSNumberish* current_time,
+    V8CSSNumberish* timeline_time)
+    : Event(type, Bubbles::kNo, Cancelable::kNo),
+      current_time_(current_time),
+      timeline_time_(timeline_time) {}
+
+AnimationPlaybackEvent::AnimationPlaybackEvent(
+    const AtomicString& type,
+    const AnimationPlaybackEventInit*)
+    : Event(type, Bubbles::kNo, Cancelable::kNo) {}
+
+AnimationPlaybackEvent::~AnimationPlaybackEvent() = default;
+
+const AtomicString& AnimationPlaybackEvent::InterfaceName() const {
+  return event_interface_names::kEvent;
+}
+
+void AnimationPlaybackEvent::Trace(Visitor* visitor) const {
+  TraceIfNeeded<Member<V8CSSNumberish>>::Trace(visitor, current_time_);
+  TraceIfNeeded<Member<V8CSSNumberish>>::Trace(visitor, timeline_time_);
+  Event::Trace(visitor);
+}
+
+TimelineTriggerRange::TimelineTriggerRange(
+    AnimationTimeline* timeline,
+    Boundary* activation_range_start,
+    Boundary* activation_range_end,
+    Boundary* active_range_start,
+    Boundary* active_range_end)
+    : timeline_(timeline),
+      activation_range_start_(activation_range_start),
+      activation_range_end_(activation_range_end),
+      active_range_start_(active_range_start),
+      active_range_end_(active_range_end),
+      state_(State::kIdle) {}
+
+AnimationTimeline* TimelineTriggerRange::timeline() {
+  return timeline_.Get();
+}
+
+const TimelineTriggerRange::Boundary*
+TimelineTriggerRange::activationRangeStart(ExecutionContext*) {
+  return activation_range_start_.Get();
+}
+
+const TimelineTriggerRange::Boundary*
+TimelineTriggerRange::activationRangeEnd(ExecutionContext*) {
+  return activation_range_end_.Get();
+}
+
+const TimelineTriggerRange::Boundary*
+TimelineTriggerRange::activeRangeStart(ExecutionContext*) {
+  return active_range_start_.Get();
+}
+
+const TimelineTriggerRange::Boundary*
+TimelineTriggerRange::activeRangeEnd(ExecutionContext*) {
+  return active_range_end_.Get();
+}
+
+void TimelineTriggerRange::Trace(Visitor* visitor) const {
+  visitor->Trace(timeline_);
+  visitor->Trace(activation_range_start_);
+  visitor->Trace(activation_range_end_);
+  visitor->Trace(active_range_start_);
+  visitor->Trace(active_range_end_);
+  ScriptWrappable::Trace(visitor);
+}
+
+TimelineTriggerRangeList::TimelineTriggerRangeList(
+    const HeapVector<Member<TimelineTriggerRange>>& ranges)
+    : ranges_(ranges) {}
+
+void TimelineTriggerRangeList::Trace(Visitor* visitor) const {
+  visitor->Trace(ranges_);
+  ScriptWrappable::Trace(visitor);
+}
+
+TimelineTriggerRangeList* TimelineTriggerRangeList::Create(
+    ExecutionContext*,
+    const HeapVector<Member<TimelineTriggerOptions>>&,
+    ExceptionState&) {
+  return nullptr;
+}
+
+TimelineTriggerRange* TimelineTriggerRangeList::item(unsigned index) {
+  if (index < ranges_.size())
+    return ranges_[index].Get();
+  return nullptr;
+}
+
+TimelineTrigger::TimelineTrigger(TimelineTriggerRangeList* ranges,
+                                 Element* owning_element)
+    : ranges_(ranges), state_(State::kIdle) {
+  owning_element_ = owning_element;
+}
+
+bool TimelineTrigger::CanTrigger() const {
+  return false;
+}
+
+bool TimelineTrigger::IsTimelineTrigger() const {
+  return true;
+}
+
+bool AnimationTrigger::IsTimelineTrigger() const {
+  return false;
+}
+
+bool AnimationTrigger::IsEventTrigger() const {
+  return false;
+}
+
+void TimelineTrigger::Trace(Visitor* visitor) const {
+  visitor->Trace(ranges_);
+  AnimationTrigger::Trace(visitor);
+}
+
+void TimelineTrigger::CreateCompositorTrigger() {}
+
+void TimelineTrigger::WillAddAnimation(Animation*,
+                                       Behavior,
+                                       Behavior,
+                                       ExceptionState&) {}
+
+void TimelineTrigger::DidAddAnimation() {}
+
+void TimelineTrigger::DidRemoveAnimation(Animation*) {}
+
+void TimelineTrigger::NotifyActivated(base::TimeTicks) {}
+
+void TimelineTrigger::NotifyDeactivated(base::TimeTicks) {}
+
+void AnimationTrigger::Dispose() {}
+
+void AnimationTrigger::DestroyCompositorTrigger() {
+  compositor_trigger_ = nullptr;
+}
+
+void AnimationTrigger::Trace(Visitor* visitor) const {
+  visitor->Trace(owning_element_);
+  visitor->Trace(animation_behavior_map_);
+  ScriptWrappable::Trace(visitor);
+}
+
+void AnimationTrigger::WillAddAnimation(Animation*,
+                                        Behavior,
+                                        Behavior,
+                                        ExceptionState&) {}
+
+void AnimationTrigger::DidAddAnimation() {}
+
+void AnimationTrigger::DidRemoveAnimation(Animation*) {}
+
+void StyleTriggerAttachment::Attach(AnimationTrigger&,
+                                    const NamingScope&,
+                                    CSSAnimation&) const {}
+
+void WorkletAnimationController::UpdateAnimationTimings(TimingUpdateReason) {}
+void WorkletAnimationController::UpdateAnimationStates() {}
+void AnimationTrigger::UpdateCompositorTrigger(const PaintArtifactCompositor*) {}
+
+Timing TimingInput::Convert(
+    const V8UnionKeyframeEffectOptionsOrUnrestrictedDouble*,
+    Document*,
+    ExceptionState&) {
+  return Timing();
+}
+
+Timing TimingInput::Convert(
+    const V8UnionKeyframeAnimationOptionsOrUnrestrictedDouble*,
+    Document*,
+    ExceptionState&) {
+  return Timing();
+}
+
+KeyframeEffectModelBase* EffectInput::Convert(Element*,
+                                              const ScriptValue&,
+                                              EffectModel::CompositeOperation,
+                                              ScriptState*,
+                                              ExceptionState&) {
+  return nullptr;
+}
+
+StringKeyframeVector EffectInput::ParseKeyframesArgument(Element*,
+                                                         const ScriptValue&,
+                                                         ScriptState*,
+                                                         ExceptionState&) {
+  return StringKeyframeVector();
+}
+
 namespace scroll_timeline_util {
 scoped_refptr<CompositorScrollTimeline> ToCompositorScrollTimeline(
     AnimationTimeline*) {
@@ -8083,32 +8490,101 @@ ScriptObject V8ObjectBuilder::ToScriptObject() const {
   return ScriptObject();
 }
 
-unsigned PropertyHandle::GetHash() const {
-  return static_cast<unsigned>(handle_type_) ^
-         static_cast<unsigned>(css_property_->PropertyID()) ^
-         property_name_.Hash();
-}
-
-bool PropertyHandle::operator==(const PropertyHandle& other) const {
-  return handle_type_ == other.handle_type_ &&
-         css_property_ == other.css_property_ &&
-         property_name_ == other.property_name_;
-}
-
 EffectTiming* Timing::ConvertToEffectTiming() const {
   return nullptr;
 }
 
+Timing::FillMode Timing::ResolvedFillMode(bool is_keyframe_effect) const {
+  if (fill_mode != Timing::FillMode::AUTO)
+    return fill_mode;
+
+  if (is_keyframe_effect)
+    return Timing::FillMode::NONE;
+  return Timing::FillMode::BOTH;
+}
+
 Timing::CalculatedTiming Timing::CalculateTimings(
-    std::optional<AnimationTimeDelta>,
-    bool,
-    const NormalizedTiming&,
-    AnimationDirection,
-    bool,
-    std::optional<double>,
-    bool,
-    bool) const {
-  return CalculatedTiming();
+    std::optional<AnimationTimeDelta> local_time,
+    bool is_idle,
+    const NormalizedTiming& normalized_timing,
+    AnimationDirection animation_direction,
+    bool is_keyframe_effect,
+    std::optional<double> playback_rate,
+    bool paused_for_trigger,
+    bool is_endpoint_inclusive) const {
+  const AnimationTimeDelta active_duration = normalized_timing.active_duration;
+  const AnimationTimeDelta duration = normalized_timing.iteration_duration;
+
+  Timing::Phase current_phase = TimingCalculations::CalculatePhase(
+      normalized_timing, local_time, animation_direction, paused_for_trigger,
+      is_endpoint_inclusive);
+
+  const std::optional<AnimationTimeDelta> active_time =
+      TimingCalculations::CalculateActiveTime(
+          normalized_timing, ResolvedFillMode(is_keyframe_effect), local_time,
+          current_phase);
+
+  std::optional<double> progress;
+
+  const std::optional<double> overall_progress =
+      TimingCalculations::CalculateOverallProgress(
+          current_phase, active_time, duration, iteration_count,
+          iteration_start);
+  const std::optional<double> simple_iteration_progress =
+      TimingCalculations::CalculateSimpleIterationProgress(
+          current_phase, overall_progress, iteration_start, active_time,
+          active_duration, iteration_count);
+  const std::optional<double> current_iteration =
+      TimingCalculations::CalculateCurrentIteration(
+          current_phase, active_time, iteration_count, overall_progress,
+          simple_iteration_progress);
+  const bool current_direction_is_forwards =
+      TimingCalculations::IsCurrentDirectionForwards(current_iteration,
+                                                     direction);
+  const std::optional<double> directed_progress =
+      TimingCalculations::CalculateDirectedProgress(
+          simple_iteration_progress, current_iteration, direction);
+
+  progress = TimingCalculations::CalculateTransformedProgress(
+      current_phase, directed_progress, current_direction_is_forwards,
+      timing_function);
+
+  AnimationTimeDelta time_to_next_iteration = AnimationTimeDelta::Max();
+  if (!duration.is_zero()) {
+    const AnimationTimeDelta start_offset =
+        TimingCalculations::MultiplyZeroAlwaysGivesZero(duration,
+                                                        iteration_start);
+    const std::optional<AnimationTimeDelta> offset_active_time =
+        TimingCalculations::CalculateOffsetActiveTime(
+            active_duration, active_time, start_offset);
+    const std::optional<AnimationTimeDelta> iteration_time =
+        TimingCalculations::CalculateIterationTime(
+            duration, active_duration, offset_active_time, start_offset,
+            current_phase, *this);
+    if (iteration_time) {
+      time_to_next_iteration = duration - iteration_time.value();
+      if (active_duration - active_time.value() < time_to_next_iteration)
+        time_to_next_iteration = AnimationTimeDelta::Max();
+    }
+  }
+
+  CalculatedTiming calculated = CalculatedTiming();
+  calculated.phase = current_phase;
+  calculated.current_iteration = current_iteration;
+  calculated.progress = progress;
+  calculated.is_in_effect = active_time.has_value();
+  calculated.is_in_play = calculated.phase == Timing::kPhaseActive;
+  calculated.is_current =
+      calculated.is_in_play ||
+      (playback_rate.has_value() && playback_rate > 0 &&
+       calculated.phase == Timing::kPhaseBefore) ||
+      (playback_rate.has_value() && playback_rate < 0 &&
+       calculated.phase == Timing::kPhaseAfter) ||
+      (!is_idle && normalized_timing.timeline_duration);
+  calculated.local_time = local_time;
+  calculated.time_to_next_iteration = time_to_next_iteration;
+
+  return calculated;
 }
 
 ComputedEffectTiming* Timing::getComputedTiming(const CalculatedTiming&,
@@ -8125,6 +8601,7 @@ bool TimingInput::Update<OptionalEffectTiming>(Timing&,
   return false;
 }
 
+#if 0
 const CSSValue* AnimationUtils::KeyframeValueFromComputedStyle(
     const PropertyHandle&,
     const ComputedStyle&,
@@ -8138,6 +8615,7 @@ void AnimationUtils::ForEachInterpolatedPropertyValue(
     const PropertyHandleSet&,
     ActiveInterpolationsMap&,
     base::FunctionRef<void(PropertyHandle, const CSSValue*)>) {}
+#endif
 
 void ExceptionState::ThrowTypeError(const String&) {
   had_exception_ = true;
@@ -8194,6 +8672,7 @@ void V8UnionCSSNumericValueOrString::Trace(Visitor* visitor) const {
   visitor->Trace(member_css_numeric_value_);
 }
 
+#if 0
 Animation* Animation::Create(ExecutionContext*,
                              AnimationEffect*,
                              AnimationTimeline*,
@@ -8233,6 +8712,7 @@ size_t DocumentAnimations::GetAnimationsCount() {
 void DocumentAnimations::Trace(Visitor*) const {}
 void PendingAnimations::TimerFired(TimerBase*) {}
 void PendingAnimations::Trace(Visitor*) const {}
+#endif
 void WorkletAnimationController::Trace(Visitor*) const {}
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -9818,6 +10298,14 @@ void PageAnimator::UpdateAllLifecyclePhasesExceptPaint(
     DocumentUpdateReason) {}
 void PageAnimator::UpdateAllLifecyclePhases(LocalFrame&,
                                             DocumentUpdateReason) {}
+void PageAnimator::PostAnimate() {}
+HeapVector<Member<Animation>> PageAnimator::GetAnimations(const TreeScope&) {
+  return HeapVector<Member<Animation>>();
+}
+void PageAnimator::SetHasCanvasInvalidation() {}
+void PageAnimator::SetCurrentFrameHadRaf() {}
+void PageAnimator::SetNextFrameHasPendingRaf() {}
+void PageAnimator::SetHasViewTransition(bool) {}
 void AutoscrollController::Trace(Visitor*) const {}
 AutoscrollController::AutoscrollController(Page& page)
     : page_(&page),
@@ -10131,8 +10619,10 @@ Element* Fullscreen::FullscreenElementFrom(Document&) {
 bool Fullscreen::HasFullscreenElements() {
   return false;
 }
+#if 0
 void CSSAnimations::Cancel() {}
 void CSSAnimations::MaybeApplyPendingUpdate(Element*) {}
+#endif
 void Editor::ElementRemoved(Element*) {}
 void SpellChecker::ElementRemoved(Element*) {}
 void SpellChecker::RemoveSpellingMarkersUnderWords(const Vector<String>&) {}
@@ -11136,12 +11626,15 @@ TreeWalker::TreeWalker(Node* root_node,
     : NodeIteratorBase(root_node, what_to_show, filter), current_(root_node) {}
 void TreeWalker::Trace(Visitor*) const {}
 
+#if 0
 bool DocumentAnimations::NeedsAnimationTimingUpdate() {
   return false;
 }
 void DocumentAnimations::UpdateAnimationTimingIfNeeded() {}
 void DocumentAnimations::DetachCompositorTimelines() {}
 void DocumentAnimations::DetachCompositorTriggers() {}
+#endif
+#if 0
 CompositorAnimations::FailureReasons Animation::CheckCanStartAnimationOnCompositor(
     const PaintArtifactCompositor*,
     StartOnCompositorReason,
@@ -11149,11 +11642,19 @@ CompositorAnimations::FailureReasons Animation::CheckCanStartAnimationOnComposit
   return CompositorAnimations::kInvalidAnimationOrEffect;
 }
 void Animation::OnPaintWorkletImageCreated() {}
+#endif
 
 void FrameSelection::MarkCacheDirty() {}
 void DisplayLockDocumentState::EnsureMinimumForcedPhase(
     DisplayLockContext::ForcedPhase) {}
+base::TimeTicks DisplayLockDocumentState::GetLockUpdateTimestamp() {
+  return base::TimeTicks();
+}
 bool RuntimeEnabledFeaturesBase::is_update_complex_safa_area_constraints_enabled_ =
+    false;
+bool RuntimeEnabledFeaturesBase::
+    is_composited_animations_cancelled_asynchronously_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_endpoint_inclusive_commit_styles_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_html_interest_for_interest_button_pseudo_enabled_ =
     false;
@@ -11291,8 +11792,10 @@ ScriptedAnimationController::ScriptedAnimationController(
     LocalDOMWindow* window)
     : ExecutionContextLifecycleStateObserver(window),
       callback_collection_(window) {}
+#if 0
 DocumentAnimations::DocumentAnimations(Document* document)
     : current_transition_generation_(0), document_(document) {}
+#endif
 WorkletAnimationController::WorkletAnimationController(Document* document)
     : document_(document) {}
 FragmentDirective::FragmentDirective(Document& document)
@@ -12712,6 +13215,9 @@ void DOMWrapperWorld::Trace(Visitor*) const {}
 ScriptState* ToScriptState(LocalFrame*, DOMWrapperWorld&) {
   return nullptr;
 }
+ScriptState* ToScriptState(ExecutionContext*, DOMWrapperWorld&) {
+  return nullptr;
+}
 void PausableScriptExecutor::CreateAndRun(
     ScriptState*,
     Vector<WebScriptSource>,
@@ -12978,7 +13484,9 @@ DarkModeImageClassifier::~DarkModeImageClassifier() = default;
 PaintUnderInvalidationChecker::~PaintUnderInvalidationChecker() = default;
 #endif
 ElementDataCache::ElementDataCache() = default;
+#if 0
 void DocumentAnimations::MarkAnimationsCompositorPending() {}
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void ViewTransitionUtils::ForEachTransition(
     const Document&,
@@ -15112,6 +15620,17 @@ void CrossThreadPersistentRegion::ClearAllUsedNodes() {
 namespace cc {
 void PictureDebugUtil::SerializeAsBase64(const SkPicture*, std::string*) {}
 void AnimationHost::AddAnimationTimeline(scoped_refptr<AnimationTimeline>) {}
+void AnimationHost::DetachAnimationTimeline(scoped_refptr<AnimationTimeline>) {}
+void AnimationHost::DetachTrigger(scoped_refptr<AnimationTrigger>) {}
+scoped_refptr<AnimationTimeline> AnimationTimeline::Create(int, bool) {
+  return nullptr;
+}
+void AnimationTimeline::AttachAnimation(scoped_refptr<Animation>) {}
+void AnimationTimeline::DetachAnimation(scoped_refptr<Animation>) {}
+int AnimationIdProvider::NextTimelineId() {
+  static int next_timeline_id = 1;
+  return next_timeline_id++;
+}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 Region::Region() = default;
 Region::Region(const Region&) = default;
@@ -15774,8 +16293,159 @@ void AuditsIssue::ReportStylesheetLoadingRequestFailedIssue(
     OrdinalNumber,
     const String&) {}
 
-Platform* Platform::Current() {
+namespace {
+class StandalonePlatform final : public Platform {
+ public:
+  bool IsThreadedAnimationEnabled() override { return false; }
+
+  scoped_refptr<viz::RasterContextProvider> SharedMainThreadContextProvider()
+      override {
+    return nullptr;
+  }
+
+  scoped_refptr<viz::RasterContextProvider> SharedCompositorWorkerContextProvider(
+      cc::RasterDarkModeFilter*) override {
+    return nullptr;
+  }
+
+  void SharedMediaContextProvider(
+      base::OnceCallback<void(scoped_refptr<viz::RasterContextProvider>)>)
+      override {}
+
+  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override {
+    return nullptr;
+  }
+
+  bool IsGpuRemoteDisconnected() override { return true; }
+
+  void EstablishGpuChannel(EstablishGpuChannelCallback) override {}
+
+  std::unique_ptr<WebDedicatedWorkerHostFactoryClient>
+  CreateDedicatedWorkerHostFactoryClient(
+      WebDedicatedWorker*,
+      const BrowserInterfaceBrokerProxy&) override {
+    return nullptr;
+  }
+
+  void CreateServiceWorkerSubresourceLoaderFactory(
+      CrossVariantMojoRemote<mojom::ServiceWorkerContainerHostInterfaceBase>,
+      const WebString&,
+      std::unique_ptr<network::PendingSharedURLLoaderFactory>,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory>,
+      scoped_refptr<base::SequencedTaskRunner>) override {}
+
+  ThreadSafeBrowserInterfaceBrokerProxy* GetBrowserInterfaceBroker()
+      override {
+    return nullptr;
+  }
+
+  std::unique_ptr<media::MediaLog> GetMediaLog(
+      MediaInspectorContext*,
+      scoped_refptr<base::SingleThreadTaskRunner>,
+      bool) override {
+    return nullptr;
+  }
+
+  gfx::ColorSpace GetRenderingColorSpace() const override {
+    return gfx::ColorSpace();
+  }
+};
+}  // namespace
+
+Platform::Platform() = default;
+Platform::~Platform() = default;
+
+scoped_refptr<base::SingleThreadTaskRunner>
+Platform::CompositorThreadTaskRunner() {
   return nullptr;
+}
+
+std::unique_ptr<WebGraphicsContext3DProvider>
+Platform::CreateWebGLGraphicsContextProvider(bool,
+                                             bool,
+                                             WebGLContextType,
+                                             const WebURL&,
+                                             WebGLContextInfo*) {
+  return nullptr;
+}
+
+std::unique_ptr<WebGraphicsContext3DProvider>
+Platform::CreateRasterGraphicsContextProvider(const WebURL&,
+                                              RasterContextType) {
+  return nullptr;
+}
+
+std::unique_ptr<WebGraphicsContext3DProvider>
+Platform::CreateSharedOffscreenGraphicsContext3DProvider() {
+  return nullptr;
+}
+
+std::unique_ptr<WebGraphicsContext3DProvider>
+Platform::CreateWebGPUGraphicsContext3DProvider(const WebURL&,
+                                                WebGPUReplyThread) {
+  return nullptr;
+}
+
+void Platform::CreateWebGPUGraphicsContext3DProviderAsync(
+    const WebURL&,
+    WebGPUReplyThread,
+    base::OnceCallback<void(std::unique_ptr<WebGraphicsContext3DProvider>)>) {}
+
+scoped_refptr<viz::RasterContextProvider>
+Platform::SharedMainThreadContextProvider() {
+  return nullptr;
+}
+
+scoped_refptr<viz::RasterContextProvider>
+Platform::SharedCompositorWorkerContextProvider(cc::RasterDarkModeFilter*) {
+  return nullptr;
+}
+
+void Platform::SharedMediaContextProvider(
+    base::OnceCallback<void(scoped_refptr<viz::RasterContextProvider>)>) {}
+
+scoped_refptr<gpu::GpuChannelHost> Platform::EstablishGpuChannelSync() {
+  return nullptr;
+}
+
+bool Platform::IsGpuRemoteDisconnected() {
+  return true;
+}
+
+void Platform::EstablishGpuChannel(EstablishGpuChannelCallback) {}
+
+std::unique_ptr<WebDedicatedWorkerHostFactoryClient>
+Platform::CreateDedicatedWorkerHostFactoryClient(
+    WebDedicatedWorker*,
+    const BrowserInterfaceBrokerProxy&) {
+  return nullptr;
+}
+
+void Platform::CreateServiceWorkerSubresourceLoaderFactory(
+    CrossVariantMojoRemote<mojom::ServiceWorkerContainerHostInterfaceBase>,
+    const WebString&,
+    std::unique_ptr<network::PendingSharedURLLoaderFactory>,
+    mojo::PendingReceiver<network::mojom::URLLoaderFactory>,
+    scoped_refptr<base::SequencedTaskRunner>) {}
+
+ThreadSafeBrowserInterfaceBrokerProxy* Platform::GetBrowserInterfaceBroker() {
+  return nullptr;
+}
+
+std::unique_ptr<media::MediaLog> Platform::GetMediaLog(
+    MediaInspectorContext*,
+    scoped_refptr<base::SingleThreadTaskRunner>,
+    bool) {
+  return nullptr;
+}
+
+gfx::ColorSpace Platform::GetRenderingColorSpace() const {
+  return gfx::ColorSpace();
+}
+
+Platform* Platform::Current() {
+  static StandalonePlatform* platform = new StandalonePlatform();
+  return platform;
 }
 void ThreadSafeBrowserInterfaceBrokerProxy::GetInterface(
     mojo::GenericPendingReceiver) {}

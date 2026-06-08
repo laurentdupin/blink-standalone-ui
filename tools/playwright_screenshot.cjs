@@ -124,7 +124,9 @@ async function main() {
   const viewportArg = argValue("--viewport") || "320x200";
   const scrollX = Number(argValue("--scroll-x") || "0");
   const scrollY = Number(argValue("--scroll-y") || "0");
-  const timeMs = Number(argValue("--time-ms") || "0");
+  const timeMsArg = argValue("--time-ms");
+  const timeMs = Number(timeMsArg || "0");
+  const timeRequested = timeMsArg !== null && timeMsArg !== undefined;
   const outJson = argValue("--out-json");
   const attrOverrides = argValues("--attr").map(parseAttrOverride);
   const elementScrolls = argValues("--scroll-element").map(parseElementScroll);
@@ -170,9 +172,20 @@ async function main() {
       }, elementScrolls);
       await page.waitForTimeout(50);
     }
-    const playwrightTimeMode = timeMs > 0 ? "wall_clock_wait" : "not_requested";
-    if (timeMs > 0) {
-      await page.waitForTimeout(timeMs);
+    const playwrightTimeMode = timeRequested ? "deterministic_web_animations_current_time" : "not_requested";
+    if (timeRequested) {
+      await page.evaluate(async (requestedTimeMs) => {
+        await document.fonts.ready;
+        for (const animation of document.getAnimations({ subtree: true })) {
+          try {
+            animation.pause();
+            animation.currentTime = requestedTimeMs;
+          } catch {
+            // Ignore animations that cannot be controlled through Web Animations.
+          }
+        }
+      }, timeMs);
+      await page.waitForTimeout(50);
     }
     await page.screenshot({ path: out });
     if (outJson) {

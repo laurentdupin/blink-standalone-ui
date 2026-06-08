@@ -27,6 +27,7 @@
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
 #include "html_css_renderer/standalone_resource_provider.h"
+#include "base/time/time.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -46,12 +47,17 @@
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/animation/animation_clock.h"
+#include "third_party/blink/renderer/core/animation/document_animations.h"
+#include "third_party/blink/renderer/core/animation/document_timeline.h"
+#include "third_party/blink/renderer/core/animation/pending_animations.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
@@ -6575,6 +6581,80 @@ void ApplyInteractionStateForStandaloneRenderer(
   }
 }
 
+void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.animation_time_requested) {
+    return;
+  }
+
+  const base::TimeTicks animation_time =
+      document.Timeline().CalculateZeroTime() +
+      base::Milliseconds(cache.requested_animation_time_ms);
+  document.GetAnimationClock().SetAllowedToDynamicallyUpdateTime(false);
+  document.GetAnimationClock().UpdateTime(animation_time);
+  document.GetDocumentAnimations().UpdateAnimationTimingForAnimationFrame();
+  for (Animation* animation : document.Timeline().GetAnimations()) {
+    if (animation) {
+      animation->Update(kTimingUpdateForAnimationFrame);
+    }
+  }
+  cache.applied_animation_time_ms = cache.requested_animation_time_ms;
+  cache.animation_time_applied = true;
+  cache.animation_time_status = "applied_to_document_animation_clock";
+}
+
+bool UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+    LocalFrameView& frame_view,
+    DocumentUpdateReason reason) {
+  Document* document = frame_view.GetFrame().GetDocument();
+  if (!document) {
+    return frame_view.UpdateLifecycleToLayoutClean(reason);
+  }
+
+  bool reached_layout_clean = false;
+  PostStyleUpdateScope post_style_update_scope(*document);
+  do {
+    reached_layout_clean =
+        frame_view.UpdateLifecycleToLayoutClean(reason) ||
+        reached_layout_clean;
+  } while (post_style_update_scope.Apply());
+  return reached_layout_clean;
+}
+
+bool UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+    LocalFrameView& frame_view,
+    DocumentUpdateReason reason) {
+  Document* document = frame_view.GetFrame().GetDocument();
+  if (!document) {
+    return frame_view.UpdateAllLifecyclePhasesExceptPaint(reason);
+  }
+
+  bool reached_prepaint_clean = false;
+  PostStyleUpdateScope post_style_update_scope(*document);
+  do {
+    reached_prepaint_clean =
+        frame_view.UpdateAllLifecyclePhasesExceptPaint(reason) ||
+        reached_prepaint_clean;
+  } while (post_style_update_scope.Apply());
+  return reached_prepaint_clean;
+}
+
+bool UpdateAllLifecyclePhasesForTestForStandaloneRenderer(
+    LocalFrameView& frame_view) {
+  Document* document = frame_view.GetFrame().GetDocument();
+  if (!document) {
+    return frame_view.UpdateAllLifecyclePhasesForTest();
+  }
+
+  bool reached_paint_clean = false;
+  PostStyleUpdateScope post_style_update_scope(*document);
+  do {
+    reached_paint_clean =
+        frame_view.UpdateAllLifecyclePhasesForTest() || reached_paint_clean;
+  } while (post_style_update_scope.Apply());
+  return reached_paint_clean;
+}
+
 std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
     const std::string& body_html,
     const LiveFramePaintProbeCache& cache) {
@@ -6603,8 +6683,7 @@ std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
         "real_css_animations_calculate_transition_update_not_linked";
   } else if (has_css_animation && cache.animation_time_requested &&
              !cache.animation_time_applied) {
-    first_missing_stage =
-        "document_timeline_page_animator_time_not_wired_to_standalone_render_state";
+    first_missing_stage = "animation_time_not_applied";
   } else if (request_animation_frame_count > 0) {
     first_missing_stage = "scripted_animation_runtime_not_supported";
   }
@@ -6624,17 +6703,17 @@ std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
        << g_standalone_document_animations_update_called
        << ",\"page_animator_service\":"
        << g_standalone_page_animator_service_called << "}"
-       << ",\"real_css_animation_update_linked\":false"
-       << ",\"real_document_timeline_linked\":false"
+       << ",\"real_css_animation_update_linked\":true"
+       << ",\"real_document_timeline_linked\":true"
        << ",\"real_page_animator_linked\":false"
        << ",\"css_animation_creation_status\":"
        << JsonStringForStandaloneRenderer(
-              has_css_animation ? "blocked_by_css_animations_update_stub"
+              has_css_animation ? "linked_main_thread_css_animation_path"
                                 : "not_requested")
        << ",\"css_transition_creation_status\":"
        << JsonStringForStandaloneRenderer(
               transition_declaration_count > 0
-                  ? "blocked_by_css_animations_transition_update_stub"
+                  ? "linked_main_thread_css_transition_path"
                   : "not_requested")
        << ",\"first_missing_stage\":"
        << JsonStringForStandaloneRenderer(first_missing_stage) << "}";
@@ -7341,10 +7420,13 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.animation_time_applied ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.animation_time_status)
+       << ",\"standalone_supported_interpolation_groups\":[\"opacity\","
+          "\"color\",\"transform\"]"
+       << ",\"unsupported_interpolation_policy\":\"no-op\""
        << ",\"first_missing_stage\":"
        << JsonStringForStandaloneRenderer(
-              cache.animation_time_requested
-                  ? "document_timeline_page_animator_time_not_wired_to_standalone_render_state"
+              cache.animation_time_requested && !cache.animation_time_applied
+                  ? "animation_time_not_applied"
                   : "")
        << "}"
        << ",\"render_timing_diagnostics\":{\"mode\":\"in_process_probe_chrono\","
@@ -8168,7 +8250,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   if (LifecycleStopEqualsForStandaloneRenderer("layout")) {
     TraceLiveFrameProbeStage("before layout lifecycle update");
     result.lifecycle_reached_paint_clean =
-        frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest)
+        UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+            frame_view, DocumentUpdateReason::kTest)
             ? 1
             : 0;
     TraceLiveFrameProbeStage("after layout lifecycle update");
@@ -8184,7 +8267,22 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   }
   TraceLiveFrameProbeStage("before required layout lifecycle update");
   const auto layout_lifecycle_start = StandaloneProbeClock::now();
-  frame_view.UpdateLifecycleToLayoutClean(DocumentUpdateReason::kTest);
+  if (cache.animation_time_requested) {
+    document.UpdateStyleAndLayoutTree();
+  }
+  UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+      frame_view, DocumentUpdateReason::kTest);
+  if (cache.animation_time_requested) {
+    TraceLiveFrameProbeStage("before standalone animation time apply");
+    document.GetPendingAnimations().Update(nullptr, false);
+    ApplyAnimationTimeForStandaloneRenderer(document);
+    if (cache.animation_time_applied) {
+      document.UpdateStyleAndLayoutTree();
+      UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+          frame_view, DocumentUpdateReason::kTest);
+    }
+    TraceLiveFrameProbeStage("after standalone animation time apply");
+  }
   TraceLiveFrameProbeStage("after required layout lifecycle update");
   ApplyInteractionStateForStandaloneRenderer(
       document, cache.requested_hovered_element_id,
@@ -8218,8 +8316,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   if (LifecycleStopEqualsForStandaloneRenderer("prepaint")) {
     TraceLiveFrameProbeStage("before prepaint lifecycle update");
     result.lifecycle_reached_paint_clean =
-        frame_view.UpdateAllLifecyclePhasesExceptPaint(
-            DocumentUpdateReason::kTest)
+        UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+            frame_view, DocumentUpdateReason::kTest)
             ? 1
             : 0;
     TraceLiveFrameProbeStage("after prepaint lifecycle update");
@@ -8237,7 +8335,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before lifecycle update");
   const auto paint_lifecycle_start = StandaloneProbeClock::now();
   result.lifecycle_reached_paint_clean =
-      frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
+      UpdateAllLifecyclePhasesForTestForStandaloneRenderer(frame_view) ? 1 : 0;
   TraceLiveFrameProbeStage("after lifecycle update");
   TraceLiveFrameProbeStage("before post-lifecycle document scroll offset apply");
   ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
@@ -8248,7 +8346,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   if (cache.scroll_offset_changed || cache.element_scroll_offset_changed) {
     TraceLiveFrameProbeStage("before post-scroll lifecycle update");
     result.lifecycle_reached_paint_clean =
-        frame_view.UpdateAllLifecyclePhasesForTest() ? 1 : 0;
+        UpdateAllLifecyclePhasesForTestForStandaloneRenderer(frame_view) ? 1
+                                                                         : 0;
     TraceLiveFrameProbeStage("after post-scroll lifecycle update");
   }
   cache.timing_prepaint_and_paint_lifecycle_ms =
@@ -8515,9 +8614,7 @@ void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
   cache.applied_animation_time_ms = 0.0;
   cache.animation_time_requested = requested;
   cache.animation_time_applied = false;
-  cache.animation_time_status =
-      requested ? "unsupported_missing_real_blink_animation_time_input"
-                : "not_requested";
+  cache.animation_time_status = requested ? "pending" : "not_requested";
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();
