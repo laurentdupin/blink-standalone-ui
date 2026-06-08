@@ -3573,6 +3573,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             active_chunk_property_state.scroll_node_id != 0 &&
             !duplicates_document_scroll_presentation_transform &&
             !active_chunk_property_state.transform_has_non_translation &&
+            (width < -0.01f || g < -0.01f) &&
             (active_chunk_property_state.transform_chain_depth > 2 ||
              active_chunk_property_state.clip_chain_depth > 0) &&
             nearly_equal(x,
