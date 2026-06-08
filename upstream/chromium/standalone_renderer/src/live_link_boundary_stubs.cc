@@ -14319,36 +14319,6 @@ const SkBitmap& Cursor::custom_bitmap() const {
 float Cursor::image_scale_factor() const {
   return 1.0f;
 }
-std::unique_ptr<ColorProvider> CreateEmulatedForcedColorsColorProvider(bool) {
-  return std::make_unique<ColorProvider>();
-}
-std::unique_ptr<ColorProvider> CreateDefaultColorProviderForBlink(bool) {
-  return std::make_unique<ColorProvider>();
-}
-base::flat_map<color::mojom::RendererColorId, SkColor>
-GetDefaultBlinkColorProviderColorMaps(bool, bool) {
-  return {{static_cast<color::mojom::RendererColorId>(0), SK_ColorBLACK}};
-}
-bool IsRendererColorMappingEquivalent(
-    const ColorProvider* color_provider,
-    const base::flat_map<color::mojom::RendererColorId, SkColor>&) {
-  return color_provider != nullptr;
-}
-std::unique_ptr<ColorProvider> CreateColorProviderFromRendererColorMap(
-    const base::flat_map<color::mojom::RendererColorId, SkColor>&) {
-  return std::make_unique<ColorProvider>();
-}
-std::unique_ptr<ColorProvider> CreateEmulatedForcedColorsColorProviderForTest() {
-  return std::make_unique<ColorProvider>();
-}
-ColorProvider::ColorProvider() = default;
-ColorProvider::~ColorProvider() = default;
-SkColor ColorProvider::GetColor(ColorId) const {
-  return SK_ColorBLACK;
-}
-ColorMixer::~ColorMixer() = default;
-ColorRecipe::~ColorRecipe() = default;
-ColorTransform::~ColorTransform() = default;
 NativeTheme* NativeTheme::GetInstanceForWeb() {
   return nullptr;
 }
@@ -21394,27 +21364,6 @@ double Date::ValueOf() const {
 }  // namespace v8
 
 void ShowAllPropertyTrees(const blink::LocalFrameView&) {}
-
-namespace color_utils {
-float GetContrastRatio(SkColor, SkColor) {
-  return 1.0f;
-}
-float GetContrastRatio(SkColor4f, SkColor4f) {
-  return 1.0f;
-}
-float GetRelativeLuminance4f(SkColor4f) {
-  return 0.0f;
-}
-SkColor GetResultingPaintColor(SkColor foreground, SkColor) {
-  return foreground;
-}
-BlendResult BlendForMinContrast(SkColor foreground,
-                                SkColor,
-                                std::optional<SkColor>,
-                                float) {
-  return {SK_AlphaOPAQUE, foreground};
-}
-}  // namespace color_utils
 
 namespace base {
 RefCountedMemory::RefCountedMemory() = default;

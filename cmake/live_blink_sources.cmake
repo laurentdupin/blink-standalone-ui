@@ -62,6 +62,12 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/cicp.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/simdutf/simdutf.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_mixer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/third_party/mozilla/url_parse.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_etc.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_filesystemurl.cc

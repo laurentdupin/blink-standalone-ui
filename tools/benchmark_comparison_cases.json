@@ -917,14 +917,14 @@
       "source": "paint_audit",
       "html": "28b_select_basic.html",
       "viewport": "320x110",
-      "note": "Known gap: native closed select rendering has large-region differences from Chromium in the standalone subset."
+      "note": "Known gap: closed select value and control colors render through real Blink/color-provider paths, but the browser/theme-backed picker icon pseudo-element remains disabled."
     },
     {
       "name": "36_textarea_basic",
       "source": "paint_audit",
       "html": "36_textarea_basic.html",
       "viewport": "360x180",
-      "note": "Known gap: native textarea static rendering differs structurally from Chromium; text editing remains out of current scope."
+      "note": "Known gap: textarea color-provider output is restored, but native textarea intrinsic/static layout still differs structurally from Chromium; text editing remains out of current scope."
     },
     {
       "name": "35_backoffice_mixed_controls",
