@@ -104,7 +104,8 @@
       "49b_filter_resource_cards",
       "49c_ui_opacity_resource_cards",
       "49d_rounded_shadow_document_scroll",
-      "50c_callback_background_document_scroll"
+      "50c_callback_background_document_scroll",
+      "50d_opacity_overflow_clip_document_scroll"
     ],
     "animations": [
       "43_animation_opacity_basic_0ms",
@@ -750,6 +751,14 @@
       "viewport": "1280x720",
       "scroll": {"x": 0, "y": 379},
       "note": "Propagated root/body gradients and rounded UI panel effects paint in document contents space during document scroll."
+    },
+    {
+      "name": "50d_opacity_overflow_clip_document_scroll",
+      "source": "paint_audit",
+      "html": "50d_opacity_overflow_clip_document_scroll.html",
+      "viewport": "560x360",
+      "scroll": {"x": 0, "y": 540},
+      "note": "Opacity-grouped overflow clip child paint keeps its nested scroll-node clip in Blink-provided viewport space during document scroll."
     },
     {
       "name": "43_animation_opacity_basic_0ms",

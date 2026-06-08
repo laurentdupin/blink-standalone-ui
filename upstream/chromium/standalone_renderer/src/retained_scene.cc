@@ -7,6 +7,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <utility>
 
@@ -659,9 +660,45 @@ Matrix4 TranslationMatrix(Point delta) {
   return matrix;
 }
 
+using ScrollNodeIdSet = std::unordered_set<uint64_t>;
+
+bool IsDocumentScrollPresentationChunk(const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  if (chunk.kind != RetainedChunkKind::kDocument ||
+      state.scroll_node_id == 0 ||
+      state.transform_has_non_translation ||
+      state.transform_has_perspective ||
+      state.clip_chain_depth != 0 ||
+      state.transform_chain_depth > 2) {
+    return false;
+  }
+  if (state.scroll_container_rect.width > 0.0f ||
+      state.scroll_container_rect.height > 0.0f ||
+      state.scroll_contents_rect.width > 0.0f ||
+      state.scroll_contents_rect.height > 0.0f) {
+    return false;
+  }
+  return true;
+}
+
+ScrollNodeIdSet CollectDocumentScrollPresentationNodeIds(
+    const RetainedScene& scene) {
+  ScrollNodeIdSet scroll_node_ids;
+  for (const RetainedPaintChunk& chunk : scene.chunks) {
+    if (IsDocumentScrollPresentationChunk(chunk)) {
+      scroll_node_ids.insert(chunk.property_state.scroll_node_id);
+    }
+  }
+  return scroll_node_ids;
+}
+
 Point PresentationScrollOffsetDelta(const RetainedPaintChunk& chunk,
-                                    Point current_scroll_offset) {
+                                    Point current_scroll_offset,
+                                    const ScrollNodeIdSet& scroll_node_ids) {
   if (chunk.property_state.scroll_node_id == 0 || IsZero(current_scroll_offset)) {
+    return Point{};
+  }
+  if (!scroll_node_ids.contains(chunk.property_state.scroll_node_id)) {
     return Point{};
   }
   return Point{-current_scroll_offset.x, -current_scroll_offset.y};
@@ -788,23 +825,29 @@ PaintPropertyStateSnapshot TranslatePropertyStateForPresentation(
 }
 
 Rect PlacementBoundsForPresentation(const RetainedPaintChunk& chunk,
-                                    Point current_scroll_offset) {
+                                    Point current_scroll_offset,
+                                    const ScrollNodeIdSet& scroll_node_ids) {
   return Translate(chunk.placement_bounds,
-                   PresentationScrollOffsetDelta(chunk, current_scroll_offset));
+                   PresentationScrollOffsetDelta(chunk, current_scroll_offset,
+                                                 scroll_node_ids));
 }
 
 PaintPropertyStateSnapshot PropertyStateForPresentation(
     const RetainedPaintChunk& chunk,
-    Point current_scroll_offset) {
+    Point current_scroll_offset,
+    const ScrollNodeIdSet& scroll_node_ids) {
   return TranslatePropertyStateForPresentation(
       chunk.property_state,
-      PresentationScrollOffsetDelta(chunk, current_scroll_offset));
+      PresentationScrollOffsetDelta(chunk, current_scroll_offset,
+                                    scroll_node_ids));
 }
 
 DrawCommandList CommandsForPresentation(const RetainedPaintChunk& chunk,
-                                        Point current_scroll_offset) {
+                                        Point current_scroll_offset,
+                                        const ScrollNodeIdSet& scroll_node_ids) {
   const Point delta =
-      PresentationScrollOffsetDelta(chunk, current_scroll_offset);
+      PresentationScrollOffsetDelta(chunk, current_scroll_offset,
+                                    scroll_node_ids);
   if (IsZero(delta)) {
     return chunk.commands;
   }
@@ -822,9 +865,11 @@ DrawCommandList CommandsForPresentation(const RetainedPaintChunk& chunk,
 }
 
 RetainedPaintChunk ChunkForPresentation(const RetainedPaintChunk& chunk,
-                                        Point current_scroll_offset) {
+                                        Point current_scroll_offset,
+                                        const ScrollNodeIdSet& scroll_node_ids) {
   const Point delta =
-      PresentationScrollOffsetDelta(chunk, current_scroll_offset);
+      PresentationScrollOffsetDelta(chunk, current_scroll_offset,
+                                    scroll_node_ids);
   if (IsZero(delta)) {
     return chunk;
   }
@@ -833,7 +878,8 @@ RetainedPaintChunk ChunkForPresentation(const RetainedPaintChunk& chunk,
   presented.placement_bounds = Translate(presented.placement_bounds, delta);
   presented.property_state =
       TranslatePropertyStateForPresentation(presented.property_state, delta);
-  presented.commands = CommandsForPresentation(chunk, current_scroll_offset);
+  presented.commands =
+      CommandsForPresentation(chunk, current_scroll_offset, scroll_node_ids);
   return presented;
 }
 
@@ -1100,6 +1146,11 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
   PresentationUpdatePlan plan;
   plan.current_scroll_offset = current_scroll_offset;
   plan.viewport_bounds = Rect{0.0f, 0.0f, viewport.width, viewport.height};
+  const ScrollNodeIdSet current_document_scroll_node_ids =
+      CollectDocumentScrollPresentationNodeIds(current);
+  const ScrollNodeIdSet previous_document_scroll_node_ids =
+      previous ? CollectDocumentScrollPresentationNodeIds(*previous)
+               : ScrollNodeIdSet{};
   plan.scroll_translation_delta =
       Point{previous_scroll_offset.x - current_scroll_offset.x,
             previous_scroll_offset.y - current_scroll_offset.y};
@@ -1167,11 +1218,13 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
         FindChunkByKey(current, update.current_key);
     update.previous_bounds =
         previous_chunk ? PlacementBoundsForPresentation(*previous_chunk,
-                                                        previous_scroll_offset)
+                                                        previous_scroll_offset,
+                                                        previous_document_scroll_node_ids)
                        : chunk_diff.previous_bounds;
     update.current_bounds =
         current_chunk ? PlacementBoundsForPresentation(*current_chunk,
-                                                       current_scroll_offset)
+                                                       current_scroll_offset,
+                                                       current_document_scroll_node_ids)
                       : chunk_diff.current_bounds;
     update.requires_placement_update =
         chunk_diff.kind == RetainedChunkChangeKind::kMoved ||
@@ -1222,7 +1275,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
                 previous_contribution_bounds,
                 previous_chunk
                     ? PropertyStateForPresentation(*previous_chunk,
-                                                  previous_scroll_offset)
+                                                  previous_scroll_offset,
+                                                  previous_document_scroll_node_ids)
                     : PaintPropertyStateSnapshot{},
                 plan.viewport_bounds));
           }
@@ -1230,7 +1284,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
           plan.dirty_rects.push_back(MapRectConservatively(
               *update.previous_bounds,
               previous_chunk ? PropertyStateForPresentation(*previous_chunk,
-                                                            previous_scroll_offset)
+                                                            previous_scroll_offset,
+                                                            previous_document_scroll_node_ids)
                              : PaintPropertyStateSnapshot{},
               plan.viewport_bounds));
         }
@@ -1242,7 +1297,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
             plan.dirty_rects.push_back(MapRectConservatively(
                 current_contribution_bounds,
                 current_chunk ? PropertyStateForPresentation(*current_chunk,
-                                                             current_scroll_offset)
+                                                             current_scroll_offset,
+                                                             current_document_scroll_node_ids)
                               : PaintPropertyStateSnapshot{},
                 plan.viewport_bounds));
           }
@@ -1256,7 +1312,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
           plan.dirty_rects.push_back(MapRectConservatively(
               current_bounds,
               current_chunk ? PropertyStateForPresentation(*current_chunk,
-                                                           current_scroll_offset)
+                                                           current_scroll_offset,
+                                                           current_document_scroll_node_ids)
                             : PaintPropertyStateSnapshot{},
               plan.viewport_bounds));
         }
@@ -1317,11 +1374,14 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
   std::vector<FilterOperationSnapshot> active_filter_operations;
   bool mask_group_open = false;
   std::optional<size_t> active_mask_chunk_index;
+  const ScrollNodeIdSet document_scroll_node_ids =
+      CollectDocumentScrollPresentationNodeIds(scene);
   for (size_t chunk_index = 0; chunk_index < scene.chunks.size();
        ++chunk_index) {
     const RetainedPaintChunk presented_chunk =
         ChunkForPresentation(scene.chunks[chunk_index],
-                             plan.current_scroll_offset);
+                             plan.current_scroll_offset,
+                             document_scroll_node_ids);
     const RetainedPaintChunk& retained_chunk = presented_chunk;
     const bool needs_effect_layer =
         NeedsGroupedEffectLayer(retained_chunk.property_state);
