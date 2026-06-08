@@ -3539,7 +3539,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             nearly_equal(x, 1.0f) && nearly_equal(y, 0.0f) &&
             nearly_equal(height, 0.0f) && nearly_equal(r, 1.0f);
         const bool conservative_property_state =
-            active_chunk_property_state.transform_chain_depth == 2 &&
+            active_chunk_property_state.transform_chain_depth <= 3 &&
             active_chunk_property_state.scroll_node_id == 0 &&
             !active_chunk_property_state.has_clip_rect &&
             active_chunk_property_state.clip_chain_depth == 0 &&
@@ -3549,9 +3549,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             nearly_equal_root_space_origin(width, active_chunk_bounds.x) &&
             nearly_equal_root_space_origin(g, active_chunk_bounds.y) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
-        const bool duplicates_scroll_chunk_transform =
+        const bool duplicates_document_scroll_presentation_transform =
             pure_translation &&
             active_chunk_property_state.scroll_node_id != 0 &&
+            active_chunk_property_state.transform_chain_depth <= 2 &&
+            active_chunk_property_state.clip_chain_depth == 0 &&
             !active_chunk_property_state.transform_has_non_translation &&
             nearly_equal(x,
                          active_chunk_property_state.transform_to_root.values[0]) &&
@@ -3566,8 +3568,27 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             nearly_equal(g,
                          active_chunk_property_state.transform_to_root.values[13]) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
+        const bool matches_scroll_chunk_transform =
+            pure_translation &&
+            active_chunk_property_state.scroll_node_id != 0 &&
+            !duplicates_document_scroll_presentation_transform &&
+            !active_chunk_property_state.transform_has_non_translation &&
+            (active_chunk_property_state.transform_chain_depth > 2 ||
+             active_chunk_property_state.clip_chain_depth > 0) &&
+            nearly_equal(x,
+                         active_chunk_property_state.transform_to_root.values[0]) &&
+            nearly_equal(y,
+                         active_chunk_property_state.transform_to_root.values[4]) &&
+            nearly_equal(width,
+                         active_chunk_property_state.transform_to_root.values[12]) &&
+            nearly_equal(height,
+                         active_chunk_property_state.transform_to_root.values[1]) &&
+            nearly_equal(r,
+                         active_chunk_property_state.transform_to_root.values[5]) &&
+            nearly_equal(g,
+                         active_chunk_property_state.transform_to_root.values[13]);
         if (duplicates_chunk_root_space_origin ||
-            duplicates_scroll_chunk_transform) {
+            duplicates_document_scroll_presentation_transform) {
           Matrix4 skipped_matrix;
           skipped_matrix.values[0] = x;
           skipped_matrix.values[4] = y;
@@ -3590,16 +3611,17 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           skipped.effect_chain_depth =
               active_chunk_property_state.effect_chain_depth;
           skipped.source_chunk_key = active_chunk_key;
-          skipped.reason = duplicates_scroll_chunk_transform
-                               ? "duplicate_scroll_chunk_transform"
-                               : "duplicate_root_space_pure_translation";
+          skipped.reason =
+              duplicates_document_scroll_presentation_transform
+                  ? "duplicate_document_scroll_presentation_transform"
+                  : "duplicate_root_space_pure_translation";
           result.skipped_transform_diagnostics.push_back(std::move(skipped));
           result.diagnostics.push_back(
               "real Blink PaintArtifact skipped duplicate chunk "
               "translation transform for chunk " + active_chunk_key +
               " reason=" +
-              (duplicates_scroll_chunk_transform
-                   ? std::string("record_repeated_scroll_chunk_transform")
+              (duplicates_document_scroll_presentation_transform
+                   ? std::string("record_document_scroll_presented_by_retained_plan")
                    : std::string("record_geometry_already_root_space")) +
               " transform_node_id=" +
               std::to_string(active_chunk_property_state.transform_node_id) +
@@ -3631,12 +3653,19 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         Matrix4 matrix;
         matrix.values[0] = x;
         matrix.values[4] = y;
-        matrix.values[12] = width;
+        matrix.values[12] =
+            matches_scroll_chunk_transform ? width - active_chunk_bounds.x
+                                           : width;
         matrix.values[1] = height;
         matrix.values[5] = r;
-        matrix.values[13] = g;
-        active_commands->push_back(DrawCommand::Transform(matrix));
-        ++translated_command_count;
+        matrix.values[13] =
+            matches_scroll_chunk_transform ? g - active_chunk_bounds.y : g;
+        if (!matches_scroll_chunk_transform ||
+            std::abs(matrix.values[12]) > 0.01f ||
+            std::abs(matrix.values[13]) > 0.01f) {
+          active_commands->push_back(DrawCommand::Transform(matrix));
+          ++translated_command_count;
+        }
       } else {
         result.diagnostics.push_back(
             "real Blink PaintArtifact unexpected non-oracle exported op type " +

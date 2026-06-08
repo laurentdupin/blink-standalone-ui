@@ -112,12 +112,11 @@
       "43c_animation_color_basic_500ms"
     ],
     "positioning": [
-      "43ab_fixed_document_scroll_resource_120"
-    ],
-    "positioning-known-gaps": [
+      "43ab_fixed_document_scroll_resource_120",
       "43ac_sticky_document_scroll_resource_140",
       "43ad_sticky_element_scroll_resource_120"
     ],
+    "positioning-known-gaps": [],
     "sdl-demos": [
       "43u_sdl_resource_toggle_demo",
       "43v_sdl_resource_scroll_demo"
@@ -646,7 +645,7 @@
       "html": "43ac_incremental_sticky_document_scroll_resource_basic.html",
       "viewport": "360x260",
       "scroll": {"x": 0, "y": 140},
-      "note": "Known gap: standalone exports the sticky chunk at the scrolled position instead of the sticky-adjusted viewport position."
+      "note": "Document scroll sticky positioning with a resource-backed sticky card."
     },
     {
       "name": "43ad_sticky_element_scroll_resource_120",
@@ -654,7 +653,7 @@
       "html": "43ad_incremental_sticky_element_scroll_resource_basic.html",
       "viewport": "360x240",
       "element_scroll": {"scroll-panel": {"x": 0, "y": 120}},
-      "note": "Known gap: sticky positioning inside a real overflow scroller is not applied in the exported standalone paint artifact."
+      "note": "Element scroll sticky positioning with a resource-backed sticky card."
     },
     {
       "name": "43u_sdl_resource_toggle_demo",

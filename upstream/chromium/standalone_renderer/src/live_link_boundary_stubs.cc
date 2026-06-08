@@ -9176,7 +9176,7 @@ gfx::Size PaintLayerScrollableArea::ContentsSize() const {
 }
 void PaintLayerScrollableArea::EnqueueScrollEventIfNeeded() {}
 PaintLayer* PaintLayerScrollableArea::Layer() const {
-  return nullptr;
+  return layer_.Get();
 }
 bool PaintLayerScrollableArea::ScrollByPageWithSnap(
     ScrollDirectionPhysical,
@@ -9912,7 +9912,40 @@ void IdlenessDetector::WillProcessTask(base::TimeTicks) {}
 void IdlenessDetector::DidProcessTask(base::TimeTicks, base::TimeTicks) {}
 void FontFaceSetDocument::DidLayout(Document&) {}
 void EventHandler::MarkHoverStateDirty() {}
-void PaintLayerScrollableArea::UpdateAllStickyConstraints() {}
+void PaintLayerScrollableArea::UpdateAllStickyConstraints() {
+  LayoutBox* layout_box = GetLayoutBox();
+  if (!layout_box)
+    return;
+  PaintLayer* layer = Layer();
+  if (!layer)
+    return;
+  for (const auto& fragment : layout_box->PhysicalFragments()) {
+    for (const auto& item : fragment.StickyDescendants()) {
+      if (auto* sticky_descendant = item.GetIfConsumed()) {
+        StickyConstraintsData data =
+            sticky_descendant->ComputeStickyPositionConstraints(
+                *layer, item.ConsumedAxes());
+        sticky_descendant->SetStickyConstraints(data);
+        sticky_descendant->StickyConstraints().ComputeStickyOffset(
+            ScrollPosition(), item.ConsumedAxes());
+      }
+    }
+  }
+}
+void PaintLayerScrollableArea::EnqueueForStickyUpdateIfNeeded() {
+  LayoutBox* layout_box = GetLayoutBox();
+  if (!layout_box)
+    return;
+  LocalFrameView* frame_view = layout_box->GetFrameView();
+  if (!frame_view)
+    return;
+  for (const auto& fragment : layout_box->PhysicalFragments()) {
+    if (fragment.HasConsumedStickyDescendants()) {
+      frame_view->AddPendingStickyUpdate(this);
+      break;
+    }
+  }
+}
 LayoutBox* PaintLayerScrollableArea::GetLayoutBox() const {
   return layer_ ? layer_->GetLayoutBox() : nullptr;
 }
@@ -16537,6 +16570,8 @@ bool RuntimeEnabledFeaturesBase::is_single_axis_scroll_containers_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_layout_ignore_margins_for_sticky_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::is_sticky_position_has_overflow_per_axis_enabled_ =
+    true;
 bool RuntimeEnabledFeaturesBase::is_css_anchor_with_transforms_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_composite_bg_color_animation_enabled_ =
@@ -17987,7 +18022,19 @@ ScrollOffset PaintLayerScrollableArea::GetScrollOffset() const {
   return scroll_offset_;
 }
 PhysicalAxes PaintLayerScrollableArea::ScrollableAxes() const {
-  return PhysicalAxes();
+  const auto* box = GetLayoutBox();
+  if (!box || !box->IsScrollContainer())
+    return kPhysicalAxesNone;
+  if (box->IsLayoutView())
+    return kPhysicalAxesBoth;
+
+  PhysicalAxes axes = kPhysicalAxesNone;
+  const auto& style = box->StyleRef();
+  if (style.IsOverflowValueScrollableX())
+    axes |= kPhysicalAxesHorizontal;
+  if (style.IsOverflowValueScrollableY())
+    axes |= kPhysicalAxesVertical;
+  return axes;
 }
 int PaintLayerScrollableArea::VerticalScrollbarWidth(
     OverlayScrollbarClipBehavior) const {
@@ -18748,32 +18795,6 @@ StringView InlineCursorPosition::Text(const InlineCursor&) const {
   return StringView();
 }
 #endif
-PhysicalOffset StickyPositionScrollingConstraints::StickyOffset() const {
-  return PhysicalOffset();
-}
-StickyPositionScrollingConstraints::PerAxisData::PerAxisData(
-    PhysicalAxis axis,
-    const PhysicalRect&,
-    const PhysicalRect&,
-    const PhysicalRect&,
-    const LayoutObject* location_container,
-    const LayoutBox* sticky_container,
-    const PaintLayer* containing_scroll_container_layer,
-    bool is_fixed_to_view,
-    std::optional<LayoutUnit> min_inset,
-    std::optional<LayoutUnit> max_inset,
-    std::optional<LayoutUnit> min_inset_for_get_computed_style,
-    std::optional<LayoutUnit> max_inset_for_get_computed_style)
-    : axis(axis),
-      min_inset(min_inset),
-      max_inset(max_inset),
-      min_inset_for_get_computed_style(min_inset_for_get_computed_style),
-      max_inset_for_get_computed_style(max_inset_for_get_computed_style),
-      location_container(location_container),
-      sticky_container(sticky_container),
-      containing_scroll_container_layer(containing_scroll_container_layer),
-      is_fixed_to_view(is_fixed_to_view) {}
-void StickyPositionScrollingConstraints::PerAxisData::Trace(Visitor*) const {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const GCedHeapVector<SplitAxisItem<LayoutBoxModelObject>>&
 PhysicalFragment::StickyDescendants() const {
@@ -19354,7 +19375,9 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
       resizer_(nullptr),
       scroll_anchor_(this) {}
 void PaintLayerScrollableArea::UpdateAfterStyleChange(const ComputedStyle*) {}
-void PaintLayerScrollableArea::UpdateAfterLayout() {}
+void PaintLayerScrollableArea::UpdateAfterLayout() {
+  EnqueueForStickyUpdateIfNeeded();
+}
 PaintLayerScrollableArea::DelayScrollOffsetClampScope::
     DelayScrollOffsetClampScope() {}
 PaintLayerScrollableArea::DelayScrollOffsetClampScope::
@@ -21152,10 +21175,16 @@ gfx::Size PaintLayerScrollableArea::PixelSnappedBorderBoxSize() const {
   return gfx::Size();
 }
 bool PaintLayerScrollableArea::HasHorizontalOverflow() const {
-  return false;
+  const LayoutUnit client_width =
+      LayoutContentRect(kIncludeScrollbars).Width() -
+      VerticalScrollbarWidth(kIgnoreOverlayScrollbarSize);
+  return ScrollWidth().Round() > client_width.Round();
 }
 bool PaintLayerScrollableArea::HasVerticalOverflow() const {
-  return false;
+  const LayoutUnit client_height =
+      LayoutContentRect(kIncludeScrollbars).Height() -
+      HorizontalScrollbarHeight(kIgnoreOverlayScrollbarSize);
+  return ScrollHeight().Round() > client_height.Round();
 }
 gfx::Size PaintLayerScrollableArea::PixelSnappedContentsSize(
     const PhysicalOffset&) const {
@@ -21176,15 +21205,6 @@ EmbeddedContentView* LayoutEmbeddedContent::GetEmbeddedContentView() const {
 }
 AffineTransform LayoutEmbeddedContent::EmbeddedContentTransform() const {
   return AffineTransform();
-}
-const LayoutBoxModelObject*
-StickyPositionScrollingConstraints::NearestStickyLayerShiftingStickyBox()
-    const {
-  return nullptr;
-}
-const LayoutBoxModelObject* StickyPositionScrollingConstraints::
-    NearestStickyLayerShiftingContainingBlock() const {
-  return nullptr;
 }
 PhysicalOffset AnchorPositionScrollData::SpeculativeDefaultAnchorRememberedOffset()
     const {

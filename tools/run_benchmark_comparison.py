@@ -333,8 +333,8 @@ def main() -> int:
 
     cases_by_name, sets = load_manifest(args.cases_file)
     selected_names = sets.get(args.case_set)
-    if not selected_names:
-        raise SystemExit(f"Unknown or empty case set '{args.case_set}' in {args.cases_file}")
+    if selected_names is None:
+        raise SystemExit(f"Unknown case set '{args.case_set}' in {args.cases_file}")
     if args.limit:
         selected_names = selected_names[: args.limit]
 

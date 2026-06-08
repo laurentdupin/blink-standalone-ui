@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdint>
 #include <array>
+#include <functional>
 #include <iomanip>
 #include <map>
 #include <memory>
@@ -474,6 +475,12 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveScrollableElementEntry> scrollable_element_entries;
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
+  std::string sticky_position_diagnostics_json;
+  int sticky_update_scroll_area_count = 0;
+  int sticky_update_consumed_descendant_count = 0;
+  int sticky_update_constrained_after_count = 0;
+  int sticky_update_consumed_horizontal_count = 0;
+  int sticky_update_consumed_vertical_count = 0;
   std::string requested_element_scroll_offsets_serialized;
   std::unordered_map<std::string, LiveElementScrollOffset>
       requested_element_scroll_offsets_by_id;
@@ -2544,6 +2551,117 @@ void CollectLiveScrollableElementEntriesForStandaloneRenderer(
        child = child->nextSibling()) {
     CollectLiveScrollableElementEntriesForStandaloneRenderer(child, entries);
   }
+}
+
+std::string JsonStringForStandaloneRenderer(const std::string& value);
+
+std::string StickyPositionDiagnosticsJsonForStandaloneRenderer(Node* node) {
+  struct StickyEntry {
+    std::string element_id;
+    bool has_constraints = false;
+    float offset_x = 0.0f;
+    float offset_y = 0.0f;
+  };
+
+  struct StickyDiagnostics {
+    int source_sticky_count = 0;
+    int layout_sticky_count = 0;
+    int constrained_sticky_count = 0;
+    int fragment_sticky_descendant_count = 0;
+    int consumed_sticky_descendant_count = 0;
+    int pending_sticky_descendant_count = 0;
+    int scroll_container_count = 0;
+    int scroll_container_with_consumed_sticky_count = 0;
+    std::vector<StickyEntry> entries;
+  };
+
+  StickyDiagnostics diagnostics;
+  std::function<void(Node*)> walk = [&](Node* current) {
+    if (!current) {
+      return;
+    }
+    if (auto* element = DynamicTo<Element>(current)) {
+      LayoutObject* layout_object = element->GetLayoutObject();
+      if (layout_object &&
+          layout_object->StyleRef().HasStickyConstrainedPosition()) {
+        ++diagnostics.source_sticky_count;
+      }
+      if (auto* box_model = DynamicTo<LayoutBoxModelObject>(layout_object)) {
+        if (box_model->StyleRef().HasStickyConstrainedPosition()) {
+          ++diagnostics.layout_sticky_count;
+          const bool has_constraints = box_model->HasStickyConstraints();
+          if (has_constraints) {
+            ++diagnostics.constrained_sticky_count;
+          }
+          if (diagnostics.entries.size() < 16) {
+            const PhysicalOffset offset = box_model->StickyPositionOffset();
+            StickyEntry entry;
+            entry.element_id = BlinkStringToStdStringForStandaloneRenderer(
+                String(element->GetIdAttribute()));
+            entry.has_constraints = has_constraints;
+            entry.offset_x = offset.left.ToFloat();
+            entry.offset_y = offset.top.ToFloat();
+            diagnostics.entries.push_back(std::move(entry));
+          }
+        }
+      }
+      if (auto* box = DynamicTo<LayoutBox>(layout_object)) {
+        if (box->IsScrollContainer()) {
+          ++diagnostics.scroll_container_count;
+        }
+        bool scroll_container_has_consumed_sticky = false;
+        for (const auto& fragment : box->PhysicalFragments()) {
+          for (const auto& item : fragment.StickyDescendants()) {
+            ++diagnostics.fragment_sticky_descendant_count;
+            if (item.GetIfConsumed()) {
+              ++diagnostics.consumed_sticky_descendant_count;
+              scroll_container_has_consumed_sticky = true;
+            }
+            if (item.GetIfPending()) {
+              ++diagnostics.pending_sticky_descendant_count;
+            }
+          }
+        }
+        if (box->IsScrollContainer() && scroll_container_has_consumed_sticky) {
+          ++diagnostics.scroll_container_with_consumed_sticky_count;
+        }
+      }
+    }
+    for (Node* child = current->firstChild(); child; child = child->nextSibling()) {
+      walk(child);
+    }
+  };
+  walk(node);
+
+  std::ostringstream json;
+  json << "{\"source_sticky_count\":" << diagnostics.source_sticky_count
+       << ",\"layout_sticky_count\":" << diagnostics.layout_sticky_count
+       << ",\"constrained_sticky_count\":"
+       << diagnostics.constrained_sticky_count
+       << ",\"fragment_sticky_descendant_count\":"
+       << diagnostics.fragment_sticky_descendant_count
+       << ",\"consumed_sticky_descendant_count\":"
+       << diagnostics.consumed_sticky_descendant_count
+       << ",\"pending_sticky_descendant_count\":"
+       << diagnostics.pending_sticky_descendant_count
+       << ",\"scroll_container_count\":" << diagnostics.scroll_container_count
+       << ",\"scroll_container_with_consumed_sticky_count\":"
+       << diagnostics.scroll_container_with_consumed_sticky_count
+       << ",\"entries\":[";
+  for (size_t i = 0; i < diagnostics.entries.size(); ++i) {
+    if (i) {
+      json << ",";
+    }
+    const StickyEntry& entry = diagnostics.entries[i];
+    json << "{\"element_id\":"
+         << JsonStringForStandaloneRenderer(entry.element_id)
+         << ",\"has_constraints\":"
+         << (entry.has_constraints ? "true" : "false")
+         << ",\"sticky_offset\":{\"x\":" << entry.offset_x
+         << ",\"y\":" << entry.offset_y << "}}";
+  }
+  json << "]}";
+  return json.str();
 }
 
 void SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
@@ -6668,6 +6786,65 @@ bool UpdateAllLifecyclePhasesForTestForStandaloneRenderer(
   return reached_paint_clean;
 }
 
+void ExecutePendingStickyUpdatesForStandaloneRenderer(
+    LocalFrameView& frame_view) {
+  frame_view.ExecutePendingStickyUpdates();
+}
+
+void UpdateStickyConstraintsForScrollableAreaForStandaloneRenderer(
+    PaintLayerScrollableArea* scrollable_area) {
+  if (!scrollable_area) {
+    return;
+  }
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  ++cache.sticky_update_scroll_area_count;
+  scrollable_area->UpdateAfterOverflowRecalc();
+  scrollable_area->UpdateAllStickyConstraints();
+  if (LayoutBox* layout_box = scrollable_area->GetLayoutBox()) {
+    for (const auto& fragment : layout_box->PhysicalFragments()) {
+      for (const auto& item : fragment.StickyDescendants()) {
+        if (auto* sticky_descendant = item.GetIfConsumed()) {
+          ++cache.sticky_update_consumed_descendant_count;
+          if (item.ConsumedAxes() & kPhysicalAxesHorizontal) {
+            ++cache.sticky_update_consumed_horizontal_count;
+          }
+          if (item.ConsumedAxes() & kPhysicalAxesVertical) {
+            ++cache.sticky_update_consumed_vertical_count;
+          }
+          if (sticky_descendant->HasStickyConstraints()) {
+            ++cache.sticky_update_constrained_after_count;
+          }
+        }
+      }
+    }
+  }
+}
+
+void UpdateStickyConstraintsForNodeTreeForStandaloneRenderer(Node* node) {
+  if (!node) {
+    return;
+  }
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (auto* box = DynamicTo<LayoutBox>(element->GetLayoutObject())) {
+      UpdateStickyConstraintsForScrollableAreaForStandaloneRenderer(
+          box->GetScrollableArea());
+    }
+  }
+  for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
+    UpdateStickyConstraintsForNodeTreeForStandaloneRenderer(child);
+  }
+}
+
+void UpdateStickyConstraintsForStandaloneRenderer(LocalFrameView& frame_view,
+                                                  Document& document) {
+  ExecutePendingStickyUpdatesForStandaloneRenderer(frame_view);
+  if (LayoutView* layout_view = frame_view.GetLayoutView()) {
+    UpdateStickyConstraintsForScrollableAreaForStandaloneRenderer(
+        layout_view->GetScrollableArea());
+  }
+  UpdateStickyConstraintsForNodeTreeForStandaloneRenderer(&document);
+}
+
 std::string AnimationRuntimeDiagnosticsJsonForStandaloneRenderer(
     const std::string& body_html,
     const LiveFramePaintProbeCache& cache) {
@@ -7425,6 +7602,20 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
        << ",\"scrollable_element_entries\":"
        << ScrollableElementEntriesJsonForStandaloneRenderer(cache)
+       << ",\"sticky_position_diagnostics\":"
+       << (cache.sticky_position_diagnostics_json.empty()
+               ? "{}"
+               : cache.sticky_position_diagnostics_json)
+       << ",\"sticky_update_diagnostics\":{\"scroll_area_count\":"
+       << cache.sticky_update_scroll_area_count
+       << ",\"consumed_descendant_count\":"
+       << cache.sticky_update_consumed_descendant_count
+       << ",\"constrained_after_count\":"
+       << cache.sticky_update_constrained_after_count
+       << ",\"consumed_horizontal_count\":"
+       << cache.sticky_update_consumed_horizontal_count
+       << ",\"consumed_vertical_count\":"
+       << cache.sticky_update_consumed_vertical_count << "}"
        << ",\"animation_time_diagnostics\":{\"requested_ms\":"
        << cache.requested_animation_time_ms << ",\"applied_ms\":"
        << cache.applied_animation_time_ms << ",\"requested_non_zero\":"
@@ -8136,6 +8327,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.timing_cache_hit = false;
   cache.hit_test_entries.clear();
   cache.scrollable_element_entries.clear();
+  cache.sticky_update_scroll_area_count = 0;
+  cache.sticky_update_consumed_descendant_count = 0;
+  cache.sticky_update_constrained_after_count = 0;
+  cache.sticky_update_consumed_horizontal_count = 0;
+  cache.sticky_update_consumed_vertical_count = 0;
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
@@ -8267,6 +8463,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
             frame_view, DocumentUpdateReason::kTest)
             ? 1
             : 0;
+    UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
     TraceLiveFrameProbeStage("after layout lifecycle update");
     cache.image_reachability =
         CollectImageReachabilityForStandaloneRenderer(document, input_html);
@@ -8296,6 +8493,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     }
     TraceLiveFrameProbeStage("after standalone animation time apply");
   }
+  UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
   TraceLiveFrameProbeStage("after required layout lifecycle update");
   ApplyInteractionStateForStandaloneRenderer(
       document, cache.requested_hovered_element_id,
@@ -8308,6 +8506,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before element scroll offset apply");
   ApplyElementScrollOffsetsForStandaloneRenderer(document);
   TraceLiveFrameProbeStage("after element scroll offset apply");
+  UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
   cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
       layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
@@ -8356,6 +8555,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before post-lifecycle element scroll offset apply");
   ApplyElementScrollOffsetsForStandaloneRenderer(document);
   TraceLiveFrameProbeStage("after post-lifecycle element scroll offset apply");
+  UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
   if (cache.scroll_offset_changed || cache.element_scroll_offset_changed) {
     TraceLiveFrameProbeStage("before post-scroll lifecycle update");
     result.lifecycle_reached_paint_clean =
@@ -8374,6 +8574,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.scrollable_element_entries.clear();
   CollectLiveScrollableElementEntriesForStandaloneRenderer(
       &document, cache.scrollable_element_entries);
+  cache.sticky_position_diagnostics_json =
+      StickyPositionDiagnosticsJsonForStandaloneRenderer(&document);
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
