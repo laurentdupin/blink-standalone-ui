@@ -2956,6 +2956,18 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     auto nearly_equal_root_space_origin = [](float left, float right) {
       return std::abs(left - right) <= 1.5f;
     };
+    auto nearly_equal_rect = [&](Rect left, Rect right) {
+      return nearly_equal(left.x, right.x) && nearly_equal(left.y, right.y) &&
+             nearly_equal(left.width, right.width) &&
+             nearly_equal(left.height, right.height);
+    };
+    auto duplicates_chunk_property_clip =
+        [&](Rect clip, const PaintPropertyStateSnapshot& state) {
+          return (state.has_clip_rect &&
+                  nearly_equal_rect(clip, state.clip_rect)) ||
+                 (state.has_clip_rrect &&
+                  nearly_equal_rect(clip, state.clip_rrect));
+        };
     for (int i = 0; i < exported_draw_op_count; ++i) {
       int type = 0;
       float x = 0.0f;
@@ -3379,8 +3391,15 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_commands->push_back(DrawCommand::Restore());
         ++translated_command_count;
       } else if (type == 10) {
-        active_commands->push_back(
-            DrawCommand::ClipRect(Rect{x, y, width, height}));
+        Rect clip_rect{x, y, width, height};
+        if (inside_chunk && active_chunk_property_state.scroll_node_id != 0 &&
+            active_chunk_property_state.transform_is_2d &&
+            !active_chunk_property_state.transform_has_non_translation &&
+            duplicates_chunk_property_clip(clip_rect,
+                                           active_chunk_property_state)) {
+          continue;
+        }
+        active_commands->push_back(DrawCommand::ClipRect(clip_rect));
         ++translated_command_count;
       } else if (type == 15) {
         std::array<Point, 4> corner_radii = {
@@ -3553,7 +3572,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             pure_translation &&
             active_chunk_property_state.scroll_node_id != 0 &&
             active_chunk_property_state.transform_chain_depth <= 2 &&
-            active_chunk_property_state.clip_chain_depth == 0 &&
             !active_chunk_property_state.transform_has_non_translation &&
             nearly_equal(x,
                          active_chunk_property_state.transform_to_root.values[0]) &&
