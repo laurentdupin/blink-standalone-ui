@@ -34,9 +34,11 @@ ScopedPaintState::ScopedPaintState(const LayoutObject& object,
 
   paint_offset_ = fragment_to_paint_->PaintOffset();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (std::optional<PhysicalOffset> standalone_paint_offset =
-          StandaloneCurrentFragmentPaintOffsetOverride()) {
-    paint_offset_ = *standalone_paint_offset;
+  if (!object.IsSVGChild()) {
+    if (std::optional<PhysicalOffset> standalone_paint_offset =
+            StandaloneCurrentFragmentPaintOffsetOverride()) {
+      paint_offset_ = *standalone_paint_offset;
+    }
   }
 #endif
   if (paint_info.phase == PaintPhase::kOverlayOverflowControls ||

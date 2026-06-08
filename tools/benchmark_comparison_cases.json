@@ -95,6 +95,11 @@
       "50_inline_monospace_paragraph",
       "50b_text_transform_uppercase_labels"
     ],
+    "svg-text-placement": [
+      "51_svg_text_city_route_scaled_card",
+      "51a_svg_text_status_orbit_scaled_card",
+      "51b_svg_text_city_route_document_scroll_850"
+    ],
     "visual-effects": [
       "45e_transform_png_image_basic",
       "45f_transform_png_background_basic",
@@ -953,6 +958,28 @@
       "html": "48c_ui_toolbar_panel_resource_layout.html",
       "viewport": "680x320",
       "note": "UI toolbar and panel layout combining flex wrap, grid cards, PNG backgrounds, external non-text SVG, clip-path, masks, and transforms."
+    },
+    {
+      "name": "51_svg_text_city_route_scaled_card",
+      "source": "paint_audit",
+      "html": "51_svg_text_city_route_scaled_card.html",
+      "viewport": "520x350",
+      "note": "Reduced city-route SVG text placement in a scaled card; text origins must stay local to the nested SVG record."
+    },
+    {
+      "name": "51a_svg_text_status_orbit_scaled_card",
+      "source": "paint_audit",
+      "html": "51a_svg_text_status_orbit_scaled_card.html",
+      "viewport": "460x390",
+      "note": "Reduced status-orbit SVG text placement in a scaled card; text must align with the nested vector rings."
+    },
+    {
+      "name": "51b_svg_text_city_route_document_scroll_850",
+      "source": "paint_audit",
+      "html": "51b_svg_text_city_route_document_scroll.html",
+      "viewport": "520x350",
+      "scroll": {"x": 0, "y": 850},
+      "note": "Scrolled city-route SVG text placement; text origins must not include document scroll or host image offsets."
     },
     {
       "name": "28b_select_basic",
