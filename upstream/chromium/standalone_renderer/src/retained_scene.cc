@@ -951,6 +951,16 @@ DrawCommandList LocalizeRootSpaceCommandsForTransform(
   return commands;
 }
 
+int DrawSceneCommandCount(const std::vector<SceneCommand>& commands) {
+  int count = 0;
+  for (const SceneCommand& command : commands) {
+    if (command.type == SceneCommandType::kDrawCommand) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 void RecordChange(RetainedSceneDiff& diff, RetainedChunkDiff chunk_diff) {
   switch (chunk_diff.kind) {
     case RetainedChunkChangeKind::kRetained:
@@ -1497,6 +1507,31 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::ClipRRect(
           retained_chunk.property_state.clip_rrect,
           retained_chunk.property_state.clip_rrect_radii, false)));
+    }
+    const int chunk_scene_command_base =
+        static_cast<int>(frame.scene_commands.size());
+    const int chunk_flat_draw_command_base =
+        DrawSceneCommandCount(frame.scene_commands);
+    for (FinerCacheUnitDescriptor& descriptor : chunk.finer_cache_units) {
+      if (!descriptor.translated_command_span_available ||
+          descriptor.translated_command_begin_index < 0 ||
+          descriptor.translated_command_end_index <
+              descriptor.translated_command_begin_index ||
+          static_cast<size_t>(descriptor.translated_command_end_index) >
+              chunk.commands.size()) {
+        continue;
+      }
+      descriptor.scene_command_span_available = true;
+      descriptor.scene_command_begin_index =
+          chunk_scene_command_base + descriptor.translated_command_begin_index;
+      descriptor.scene_command_end_index =
+          chunk_scene_command_base + descriptor.translated_command_end_index;
+      descriptor.flattened_draw_command_span_available = true;
+      descriptor.flattened_draw_command_begin_index =
+          chunk_flat_draw_command_base +
+          descriptor.translated_command_begin_index;
+      descriptor.flattened_draw_command_end_index =
+          chunk_flat_draw_command_base + descriptor.translated_command_end_index;
     }
     for (const DrawCommand& command : chunk.commands) {
       frame.scene_commands.push_back(SceneCommand::Draw(command));

@@ -105,6 +105,17 @@ struct DrawLooperLayer {
   uint32_t flags = 0;
 };
 
+struct DrawCommandSourceMetadata {
+  bool available = false;
+  int chunk_debug_index = -1;
+  int display_item_index = -1;
+  uint64_t display_item_client_id = 0;
+  bool display_item_client_id_valid = false;
+  int finer_cache_unit_index = -1;
+  std::string finer_cache_unit_stable_key;
+  int translated_command_index = -1;
+};
+
 struct DrawCommand {
   DrawCommandType type = DrawCommandType::kDiagnostic;
   Rect rect;
@@ -136,6 +147,7 @@ struct DrawCommand {
   std::string paint_flags_summary;
   std::vector<DrawLooperLayer> draw_looper_layers;
   std::vector<FilterOperationSnapshot> filter_operations;
+  DrawCommandSourceMetadata source;
 
   static DrawCommand Save();
   static DrawCommand Restore();

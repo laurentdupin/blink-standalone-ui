@@ -411,6 +411,10 @@ struct LiveExportedDrawOp {
   std::vector<LiveExportedDrawLooperLayer> draw_looper_layers;
   std::string debug_label;
   bool save_layer_bounds_unset = false;
+  int source_chunk_index = -1;
+  int source_display_item_index = -1;
+  uint64_t source_display_item_client_id = 0;
+  bool source_display_item_client_id_valid = false;
 };
 
 struct LiveFinerCacheUnitDescriptor {
@@ -2456,11 +2460,24 @@ bool AppendPaintArtifactExtractedOps(
       if (!drawing) {
         continue;
       }
+      const size_t exported_op_begin = exported_draw_ops.size();
       if (!AppendPaintRecordExtractedOps(
               drawing->GetPaintRecord(), 0.0f, 0.0f, viewport_width,
               viewport_height, exported_draw_ops, diagnostics,
               projection_has_non_translation)) {
         complete = false;
+      }
+      const DisplayItemClientId item_client_id =
+          display_items[item_index].ClientId();
+      for (size_t op_index = exported_op_begin;
+           op_index < exported_draw_ops.size(); ++op_index) {
+        LiveExportedDrawOp& op = exported_draw_ops[op_index];
+        op.source_chunk_index = static_cast<int>(chunk_index);
+        op.source_display_item_index = static_cast<int>(item_index);
+        op.source_display_item_client_id =
+            static_cast<uint64_t>(item_client_id);
+        op.source_display_item_client_id_valid =
+            item_client_id != kInvalidDisplayItemClientId;
       }
     }
     AppendRestoreOp(exported_draw_ops);
@@ -10810,6 +10827,35 @@ int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
   }
   if (glyph_count) {
     *glyph_count = static_cast<int>(op.glyphs.size());
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeExportedDrawOpSourceAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* source_chunk_index,
+    int* source_display_item_index,
+    uint64_t* source_display_item_client_id,
+    int* source_display_item_client_id_valid) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& ops = ProbeCache().exported_draw_ops;
+  if (op_index < 0 || static_cast<size_t>(op_index) >= ops.size()) {
+    return 0;
+  }
+  const LiveExportedDrawOp& op = ops[static_cast<size_t>(op_index)];
+  if (source_chunk_index) {
+    *source_chunk_index = op.source_chunk_index;
+  }
+  if (source_display_item_index) {
+    *source_display_item_index = op.source_display_item_index;
+  }
+  if (source_display_item_client_id) {
+    *source_display_item_client_id = op.source_display_item_client_id;
+  }
+  if (source_display_item_client_id_valid) {
+    *source_display_item_client_id_valid =
+        op.source_display_item_client_id_valid ? 1 : 0;
   }
   return 1;
 }

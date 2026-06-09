@@ -251,6 +251,13 @@ int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(
     float* radius_x,
     float* radius_y,
     int* glyph_count);
+int StandaloneBlinkLiveFrameBridgeExportedDrawOpSourceAtForStandaloneRenderer(
+    const char* body_html,
+    int op_index,
+    int* source_chunk_index,
+    int* source_display_item_index,
+    uint64_t* source_display_item_client_id,
+    int* source_display_item_client_id_valid);
 int StandaloneBlinkLiveFrameBridgeExportedGlyphAtForStandaloneRenderer(
     const char* body_html,
     int op_index,
@@ -616,6 +623,122 @@ std::vector<FinerCacheUnitDescriptor> ImportFinerCacheUnitDescriptors(
     descriptors.push_back(std::move(descriptor));
   }
   return descriptors;
+}
+
+FinerCacheUnitDescriptor* FindFinerCacheUnitForDisplayItem(
+    std::vector<FinerCacheUnitDescriptor>& descriptors,
+    int chunk_index,
+    int display_item_index) {
+  if (chunk_index < 0 || display_item_index < 0) {
+    return nullptr;
+  }
+  for (FinerCacheUnitDescriptor& descriptor : descriptors) {
+    if (descriptor.parent_chunk_debug_index != chunk_index) {
+      continue;
+    }
+    if (descriptor.begin_display_item_index <= display_item_index &&
+        display_item_index < descriptor.end_display_item_index) {
+      return &descriptor;
+    }
+  }
+  return nullptr;
+}
+
+void RecordFinerCacheUnitCommandSpan(FinerCacheUnitDescriptor& descriptor,
+                                     size_t translated_command_index) {
+  const int index = static_cast<int>(translated_command_index);
+  if (!descriptor.translated_command_span_available ||
+      descriptor.translated_command_begin_index < 0 ||
+      index < descriptor.translated_command_begin_index) {
+    descriptor.translated_command_begin_index = index;
+  }
+  if (!descriptor.translated_command_span_available ||
+      descriptor.translated_command_end_index < index + 1) {
+    descriptor.translated_command_end_index = index + 1;
+  }
+  descriptor.translated_command_span_available = true;
+}
+
+void AnnotateTranslatedCommandsFromSource(
+    DrawCommandList& commands,
+    size_t begin_index,
+    int source_chunk_index,
+    int source_display_item_index,
+    uint64_t source_display_item_client_id,
+    bool source_display_item_client_id_valid,
+    std::vector<FinerCacheUnitDescriptor>& descriptors) {
+  if (source_chunk_index < 0 || source_display_item_index < 0 ||
+      begin_index >= commands.size()) {
+    return;
+  }
+  FinerCacheUnitDescriptor* descriptor =
+      FindFinerCacheUnitForDisplayItem(descriptors, source_chunk_index,
+                                       source_display_item_index);
+  for (size_t command_index = begin_index; command_index < commands.size();
+       ++command_index) {
+    DrawCommand& command = commands[command_index];
+    command.source.available = true;
+    command.source.chunk_debug_index = source_chunk_index;
+    command.source.display_item_index = source_display_item_index;
+    command.source.display_item_client_id = source_display_item_client_id;
+    command.source.display_item_client_id_valid =
+        source_display_item_client_id_valid;
+    command.source.translated_command_index =
+        static_cast<int>(command_index);
+    if (descriptor) {
+      command.source.finer_cache_unit_index = descriptor->unit_index;
+      command.source.finer_cache_unit_stable_key = descriptor->stable_key;
+      RecordFinerCacheUnitCommandSpan(*descriptor, command_index);
+    }
+  }
+}
+
+int EntryLocalSaveDepthForCommandSpan(const DrawCommandList& commands,
+                                      int begin_index) {
+  if (begin_index <= 0) {
+    return 0;
+  }
+  int save_depth = 0;
+  const size_t limit = std::min(commands.size(),
+                                static_cast<size_t>(begin_index));
+  for (size_t command_index = 0; command_index < limit; ++command_index) {
+    switch (commands[command_index].type) {
+      case DrawCommandType::kSave:
+      case DrawCommandType::kSaveLayer:
+        ++save_depth;
+        break;
+      case DrawCommandType::kRestore:
+        if (save_depth > 0) {
+          --save_depth;
+        }
+        break;
+      default:
+        break;
+    }
+  }
+  return save_depth;
+}
+
+void PopulateFinerCacheUnitEntryStateSummaries(
+    std::vector<FinerCacheUnitDescriptor>& descriptors,
+    const DrawCommandList& commands) {
+  for (FinerCacheUnitDescriptor& descriptor : descriptors) {
+    if (!descriptor.translated_command_span_available ||
+        descriptor.translated_command_begin_index < 0) {
+      descriptor.entry_state_status =
+          "unavailable_no_translated_command_span";
+      continue;
+    }
+    descriptor.entry_local_save_depth_available = true;
+    descriptor.entry_local_save_depth =
+        EntryLocalSaveDepthForCommandSpan(commands,
+                                          descriptor.translated_command_begin_index);
+    descriptor.entry_clip_bounds_available = false;
+    descriptor.entry_transform_available = false;
+    descriptor.entry_effect_layer_depth_available = false;
+    descriptor.entry_state_status =
+        "partial_local_save_depth_only_canvas_clip_transform_unavailable";
+  }
 }
 
 constexpr const char* kRuntimeSeedFiles[] = {
@@ -3238,6 +3361,18 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                   &stroke_miter, &radius_x, &radius_y, &glyph_count)) {
         continue;
       }
+      DrawCommandList* source_annotation_commands = active_commands;
+      const size_t source_annotation_begin =
+          source_annotation_commands ? source_annotation_commands->size() : 0;
+      int source_chunk_index = -1;
+      int source_display_item_index = -1;
+      uint64_t source_display_item_client_id = 0;
+      int source_display_item_client_id_valid = 0;
+      live_probe::
+          StandaloneBlinkLiveFrameBridgeExportedDrawOpSourceAtForStandaloneRenderer(
+              probe_html.c_str(), i, &source_chunk_index,
+              &source_display_item_index, &source_display_item_client_id,
+              &source_display_item_client_id_valid);
       auto normalize_component = [](float value) {
         return value > 1.0f ? value / 255.0f : value;
       };
@@ -3339,6 +3474,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           current_scene.chunks.back().chunk_id_string =
               active_chunk_id_string.empty() ? active_chunk_key
                                              : active_chunk_id_string;
+          PopulateFinerCacheUnitEntryStateSummaries(
+              active_chunk_finer_cache_units, chunk_commands);
           current_scene.chunks.back().finer_cache_units =
               std::move(active_chunk_finer_cache_units);
           chunk_commands.clear();
@@ -3524,6 +3661,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           current_scene.chunks.back().chunk_id_string =
               active_chunk_id_string.empty() ? active_chunk_key
                                              : active_chunk_id_string;
+          PopulateFinerCacheUnitEntryStateSummaries(
+              active_chunk_finer_cache_units, chunk_commands);
           current_scene.chunks.back().finer_cache_units =
               std::move(active_chunk_finer_cache_units);
           chunk_commands.clear();
@@ -3976,6 +4115,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             "real Blink PaintArtifact unexpected non-oracle exported op type " +
             std::to_string(type));
       }
+      if (type != 12 && type != 13 && source_annotation_commands) {
+        AnnotateTranslatedCommandsFromSource(
+            *source_annotation_commands, source_annotation_begin,
+            source_chunk_index, source_display_item_index,
+            source_display_item_client_id,
+            source_display_item_client_id_valid != 0,
+            active_chunk_finer_cache_units);
+      }
     }
     if (inside_chunk) {
       current_scene.chunks.push_back(MakeRetainedPaintChunk(
@@ -3991,6 +4138,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       current_scene.chunks.back().chunk_id_string =
           active_chunk_id_string.empty() ? active_chunk_key
                                          : active_chunk_id_string;
+      PopulateFinerCacheUnitEntryStateSummaries(
+          active_chunk_finer_cache_units, chunk_commands);
       current_scene.chunks.back().finer_cache_units =
           std::move(active_chunk_finer_cache_units);
       chunk_commands.clear();

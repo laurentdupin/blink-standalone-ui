@@ -447,6 +447,35 @@ void WriteFinerCacheUnitDescriptors(
         << ",\"recursive_paint_op_count\":"
         << unit.recursive_paint_op_count
         << ",\"visual_op_count\":" << unit.visual_op_count
+        << ",\"translated_command_span\":{\"available\":"
+        << (unit.translated_command_span_available ? "true" : "false")
+        << ",\"begin\":" << unit.translated_command_begin_index
+        << ",\"end\":" << unit.translated_command_end_index << "}"
+        << ",\"scene_command_span\":{\"available\":"
+        << (unit.scene_command_span_available ? "true" : "false")
+        << ",\"begin\":" << unit.scene_command_begin_index
+        << ",\"end\":" << unit.scene_command_end_index << "}"
+        << ",\"flattened_draw_command_span\":{\"available\":"
+        << (unit.flattened_draw_command_span_available ? "true" : "false")
+        << ",\"begin\":" << unit.flattened_draw_command_begin_index
+        << ",\"end\":" << unit.flattened_draw_command_end_index << "}"
+        << ",\"entry_state_summary\":{\"status\":\""
+        << EscapeJson(unit.entry_state_status)
+        << "\",\"local_save_depth_available\":"
+        << (unit.entry_local_save_depth_available ? "true" : "false")
+        << ",\"local_save_depth\":" << unit.entry_local_save_depth
+        << ",\"clip_bounds_available\":"
+        << (unit.entry_clip_bounds_available ? "true" : "false")
+        << ",\"clip_bounds\":";
+    WriteRect(out, unit.entry_clip_bounds);
+    out << ",\"transform_available\":"
+        << (unit.entry_transform_available ? "true" : "false")
+        << ",\"transform\":";
+    WriteMatrix(out, unit.entry_transform);
+    out << ",\"effect_layer_depth_available\":"
+        << (unit.entry_effect_layer_depth_available ? "true" : "false")
+        << ",\"effect_layer_depth\":" << unit.entry_effect_layer_depth
+        << "}"
         << ",\"conservative_candidate\":"
         << (unit.conservative_candidate ? "true" : "false")
         << ",\"blockers\":";
@@ -1074,6 +1103,23 @@ std::string SerializeLoadCommandListJsonLines(
   return out.str();
 }
 
+void WriteDrawCommandSourceMetadata(
+    std::ostringstream& out,
+    const DrawCommandSourceMetadata& source) {
+  out << "{\"available\":" << (source.available ? "true" : "false")
+      << ",\"chunk_debug_index\":" << source.chunk_debug_index
+      << ",\"display_item_index\":" << source.display_item_index
+      << ",\"display_item_client_id\":" << source.display_item_client_id
+      << ",\"display_item_client_id_valid\":"
+      << (source.display_item_client_id_valid ? "true" : "false")
+      << ",\"finer_cache_unit_index\":"
+      << source.finer_cache_unit_index
+      << ",\"finer_cache_unit_stable_key\":\""
+      << EscapeJson(source.finer_cache_unit_stable_key)
+      << "\",\"translated_command_index\":"
+      << source.translated_command_index << "}";
+}
+
 std::string SerializeDrawCommandJson(const DrawCommand& command) {
   std::ostringstream out;
   out << std::setprecision(9);
@@ -1233,6 +1279,9 @@ std::string SerializeDrawCommandJson(const DrawCommand& command) {
       out << ",\"message\":\"" << EscapeJson(command.text) << "\"";
       break;
   }
+
+  out << ",\"source_metadata\":";
+  WriteDrawCommandSourceMetadata(out, command.source);
 
   if (!command.draw_looper_layers.empty()) {
     out << ",\"draw_looper_layer_count\":"
