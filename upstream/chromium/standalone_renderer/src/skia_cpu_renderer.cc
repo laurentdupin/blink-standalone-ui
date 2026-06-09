@@ -88,6 +88,29 @@ std::unordered_map<uint64_t, std::vector<CachedShader>>& ShaderCache() {
   return *cache;
 }
 
+std::mutex& ShaderRectImageCacheMutex() {
+  static auto* mutex = new std::mutex();
+  return *mutex;
+}
+
+struct CachedShaderRectImage {
+  std::vector<uint8_t> shader_bytes;
+  int left = 0;
+  int top = 0;
+  int width = 0;
+  int height = 0;
+  uint8_t alpha = 255;
+  sk_sp<SkImage> image;
+  size_t byte_count = 0;
+};
+
+std::unordered_map<uint64_t, std::vector<CachedShaderRectImage>>&
+ShaderRectImageCache() {
+  static auto* cache =
+      new std::unordered_map<uint64_t, std::vector<CachedShaderRectImage>>();
+  return *cache;
+}
+
 using CpuReplayProfileClock = std::chrono::steady_clock;
 
 struct CpuReplayCommandTimingAccumulator {
@@ -499,6 +522,178 @@ bool QuickRejectBoundedDraw(SkCanvas& canvas,
   return canvas.quickReject(bounds);
 }
 
+bool RectCoversActiveDeviceClip(SkCanvas& canvas, SkRect local_rect) {
+  SkIRect device_clip;
+  if (!canvas.getDeviceClipBounds(&device_clip) || device_clip.isEmpty()) {
+    return false;
+  }
+  SkMatrix inverse;
+  if (!canvas.getTotalMatrix().invert(&inverse)) {
+    return false;
+  }
+  SkRect local_clip = SkRect::Make(device_clip);
+  inverse.mapRect(&local_clip);
+  return local_rect.contains(local_clip);
+}
+
+bool IsUnitScaleTranslation(const SkMatrix& matrix) {
+  return matrix.getScaleX() == 1.0f && matrix.getScaleY() == 1.0f &&
+         matrix.getSkewX() == 0.0f && matrix.getSkewY() == 0.0f &&
+         matrix.getPerspX() == 0.0f && matrix.getPerspY() == 0.0f &&
+         matrix.get(SkMatrix::kMPersp2) == 1.0f;
+}
+
+bool IntegralRect(SkRect rect,
+                  int* left,
+                  int* top,
+                  int* width,
+                  int* height) {
+  const float rounded_left = std::round(rect.left());
+  const float rounded_top = std::round(rect.top());
+  const float rounded_width = std::round(rect.width());
+  const float rounded_height = std::round(rect.height());
+  constexpr float kTolerance = 0.01f;
+  if (std::abs(rect.left() - rounded_left) > kTolerance ||
+      std::abs(rect.top() - rounded_top) > kTolerance ||
+      std::abs(rect.width() - rounded_width) > kTolerance ||
+      std::abs(rect.height() - rounded_height) > kTolerance) {
+    return false;
+  }
+  *left = static_cast<int>(rounded_left);
+  *top = static_cast<int>(rounded_top);
+  *width = static_cast<int>(rounded_width);
+  *height = static_cast<int>(rounded_height);
+  return *width > 0 && *height > 0;
+}
+
+uint64_t HashShaderRectImageKey(const std::vector<uint8_t>& shader_bytes,
+                                int left,
+                                int top,
+                                int width,
+                                int height,
+                                uint8_t alpha) {
+  uint64_t hash = HashBytesForCache(shader_bytes);
+  auto combine = [&hash](uint64_t value) {
+    hash ^= value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2);
+  };
+  combine(static_cast<uint32_t>(left));
+  combine(static_cast<uint32_t>(top));
+  combine(static_cast<uint32_t>(width));
+  combine(static_cast<uint32_t>(height));
+  combine(alpha);
+  return hash;
+}
+
+sk_sp<SkImage> FindCachedShaderRectImage(
+    uint64_t hash,
+    const std::vector<uint8_t>& shader_bytes,
+    int left,
+    int top,
+    int width,
+    int height,
+    uint8_t alpha) {
+  std::lock_guard<std::mutex> lock(ShaderRectImageCacheMutex());
+  const auto found = ShaderRectImageCache().find(hash);
+  if (found == ShaderRectImageCache().end()) {
+    return nullptr;
+  }
+  for (const CachedShaderRectImage& cached : found->second) {
+    if (cached.left == left && cached.top == top && cached.width == width &&
+        cached.height == height && cached.alpha == alpha &&
+        cached.shader_bytes == shader_bytes) {
+      return cached.image;
+    }
+  }
+  return nullptr;
+}
+
+void StoreCachedShaderRectImage(uint64_t hash,
+                                std::vector<uint8_t> shader_bytes,
+                                int left,
+                                int top,
+                                int width,
+                                int height,
+                                uint8_t alpha,
+                                sk_sp<SkImage> image) {
+  if (!image) {
+    return;
+  }
+  const size_t byte_count =
+      static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+  std::lock_guard<std::mutex> lock(ShaderRectImageCacheMutex());
+  size_t total_bytes = 0;
+  for (const auto& bucket : ShaderRectImageCache()) {
+    for (const CachedShaderRectImage& cached : bucket.second) {
+      total_bytes += cached.byte_count;
+    }
+  }
+  constexpr size_t kMaxShaderRectImageCacheBytes = 64u * 1024u * 1024u;
+  if (total_bytes + byte_count > kMaxShaderRectImageCacheBytes) {
+    ShaderRectImageCache().clear();
+  }
+  ShaderRectImageCache()[hash].push_back(CachedShaderRectImage{
+      std::move(shader_bytes), left, top, width, height, alpha, std::move(image),
+      byte_count});
+}
+
+sk_sp<SkImage> CreateShaderRectImage(SkRect rect,
+                                     sk_sp<SkShader> shader,
+                                     uint8_t alpha,
+                                     int left,
+                                     int top,
+                                     int width,
+                                     int height) {
+  SkImageInfo info =
+      SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
+                        kPremul_SkAlphaType);
+  sk_sp<SkSurface> surface = SkSurfaces::Raster(info);
+  if (!surface) {
+    return nullptr;
+  }
+  SkCanvas* cache_canvas = surface->getCanvas();
+  cache_canvas->translate(-static_cast<float>(left), -static_cast<float>(top));
+  SkPaint paint;
+  paint.setAntiAlias(true);
+  paint.setStyle(SkPaint::kFill_Style);
+  paint.setShader(std::move(shader));
+  paint.setColor(SkColorSetARGB(alpha, 255, 255, 255));
+  cache_canvas->drawRect(rect, paint);
+  return surface->makeImageSnapshot();
+}
+
+sk_sp<SkImage> GetOrCreateShaderRectImage(const DrawCommand& command,
+                                          SkRect rect,
+                                          sk_sp<SkShader> shader,
+                                          uint8_t alpha) {
+  int left = 0;
+  int top = 0;
+  int width = 0;
+  int height = 0;
+  if (!IntegralRect(rect, &left, &top, &width, &height)) {
+    return nullptr;
+  }
+  constexpr int kMinCachedArea = 256 * 256;
+  constexpr int kMaxCachedDimension = 2048;
+  if (width > kMaxCachedDimension || height > kMaxCachedDimension ||
+      width * height < kMinCachedArea) {
+    return nullptr;
+  }
+  const uint64_t hash = HashShaderRectImageKey(
+      command.shader_bytes, left, top, width, height, alpha);
+  if (sk_sp<SkImage> cached =
+          FindCachedShaderRectImage(hash, command.shader_bytes, left, top,
+                                    width, height, alpha)) {
+    return cached;
+  }
+  sk_sp<SkImage> image =
+      CreateShaderRectImage(rect, shader, alpha, left, top, width, height);
+  if (image) {
+    StoreCachedShaderRectImage(hash, command.shader_bytes, left, top, width,
+                               height, alpha, image);
+  }
+  return image;
+}
+
 uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
                             const uint8_t* after,
                             size_t after_size) {
@@ -866,27 +1061,44 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                            });
       break;
     case DrawCommandType::kFillRectShader:
-      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+      {
+        const SkRect rect = ToSkRect(command.rect);
+        const bool fill_active_clip = RectCoversActiveDeviceClip(canvas, rect);
+        if (!fill_active_clip &&
+            QuickRejectBoundedDraw(canvas, command, rect)) {
+          break;
+        }
+        if (coverage) {
+          coverage->shader_resource_present = !command.shader_bytes.empty();
+          coverage->shader_byte_count = command.shader_bytes.size();
+        }
+        if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
+          if (coverage) {
+            coverage->shader_deserialize_success = true;
+          }
+          const uint8_t alpha = ClampByte(command.color.a);
+          if (fill_active_clip &&
+              IsUnitScaleTranslation(canvas.getTotalMatrix())) {
+            if (sk_sp<SkImage> image =
+                    GetOrCreateShaderRectImage(command, rect, shader, alpha)) {
+              canvas.drawImageRect(image, rect, SkSamplingOptions(), nullptr);
+              break;
+            }
+          }
+          paint.setStyle(SkPaint::kFill_Style);
+          paint.setShader(std::move(shader));
+          paint.setColor(SkColorSetARGB(alpha, 255, 255, 255));
+          if (fill_active_clip) {
+            canvas.drawPaint(paint);
+          } else {
+            canvas.drawRect(rect, paint);
+          }
+        } else if (coverage) {
+          coverage->skipped = true;
+          coverage->skip_reason = "shader_deserialize_failed";
+        }
         break;
       }
-      if (coverage) {
-        coverage->shader_resource_present = !command.shader_bytes.empty();
-        coverage->shader_byte_count = command.shader_bytes.size();
-      }
-      if (sk_sp<SkShader> shader = DeserializeShader(command.shader_bytes)) {
-        if (coverage) {
-          coverage->shader_deserialize_success = true;
-        }
-        paint.setStyle(SkPaint::kFill_Style);
-        paint.setShader(std::move(shader));
-        paint.setColor(SkColorSetARGB(ClampByte(command.color.a), 255, 255,
-                                      255));
-        canvas.drawRect(ToSkRect(command.rect), paint);
-      } else if (coverage) {
-        coverage->skipped = true;
-        coverage->skip_reason = "shader_deserialize_failed";
-      }
-      break;
     case DrawCommandType::kFillRRect:
       if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
         break;
