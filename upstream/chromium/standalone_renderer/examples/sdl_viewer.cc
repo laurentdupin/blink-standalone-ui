@@ -858,12 +858,13 @@ html_css_renderer::Size RendererOutputViewportSize(SDL_Renderer* renderer,
 }
 
 bool RecreateFrameTexture(SDL_Renderer* renderer,
+                          SDL_PixelFormat pixel_format,
                           SDL_TextureAccess texture_access,
                           int width,
                           int height,
                           SDL_Texture** texture) {
   SDL_Texture* next_texture =
-      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888, texture_access,
+      SDL_CreateTexture(renderer, pixel_format, texture_access,
                         std::max(1, width), std::max(1, height));
   if (!next_texture) {
     std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
@@ -960,28 +961,6 @@ void SetViewerWindowTitle(
   SDL_SetWindowTitle(window, title.c_str());
 }
 
-std::vector<uint32_t> ConvertRgbaToAbgr(
-    const html_css_renderer::CpuImage& image) {
-  std::vector<uint32_t> pixels;
-  pixels.reserve(image.pixels_rgba.size());
-  for (const uint32_t rgba : image.pixels_rgba) {
-    const uint32_t r = (rgba >> 24) & 0xff;
-    const uint32_t g = (rgba >> 16) & 0xff;
-    const uint32_t b = (rgba >> 8) & 0xff;
-    const uint32_t a = rgba & 0xff;
-    pixels.push_back((a << 24) | (b << 16) | (g << 8) | r);
-  }
-  return pixels;
-}
-
-uint32_t ConvertRgbaPixelToAbgr(uint32_t rgba) {
-  const uint32_t r = (rgba >> 24) & 0xff;
-  const uint32_t g = (rgba >> 16) & 0xff;
-  const uint32_t b = (rgba >> 8) & 0xff;
-  const uint32_t a = rgba & 0xff;
-  return (a << 24) | (b << 16) | (g << 8) | r;
-}
-
 std::optional<SDL_Rect> DamageRectToTextureRect(
     const html_css_renderer::Rect& rect,
     int width,
@@ -1017,33 +996,30 @@ std::vector<SDL_Rect> TextureUpdateRectsForFrame(
   return rects;
 }
 
-void ConvertRgbaRectsToAbgr(const html_css_renderer::CpuImage& image,
-                            const std::vector<SDL_Rect>& rects,
-                            std::vector<uint32_t>* pixels) {
-  pixels->resize(image.pixels_rgba.size());
+bool UploadCpuImageRectsToTexture(SDL_Texture* texture,
+                                  const html_css_renderer::CpuImage& image,
+                                  const std::vector<SDL_Rect>& rects) {
   for (const SDL_Rect& rect : rects) {
-    for (int y = rect.y; y < rect.y + rect.h; ++y) {
-      const size_t row_offset = static_cast<size_t>(y) * image.width;
-      for (int x = rect.x; x < rect.x + rect.w; ++x) {
-        const size_t index = row_offset + static_cast<size_t>(x);
-        (*pixels)[index] = ConvertRgbaPixelToAbgr(image.pixels_rgba[index]);
-      }
-    }
-  }
-}
-
-bool UploadTextureRects(SDL_Texture* texture,
-                        const html_css_renderer::CpuImage& image,
-                        const std::vector<uint32_t>& pixels,
-                        const std::vector<SDL_Rect>& rects) {
-  const int pitch = image.width * static_cast<int>(sizeof(uint32_t));
-  for (const SDL_Rect& rect : rects) {
-    const uint32_t* data =
-        pixels.data() + static_cast<size_t>(rect.y) * image.width + rect.x;
-    if (!SDL_UpdateTexture(texture, &rect, data, pitch)) {
-      std::fprintf(stderr, "SDL_UpdateTexture failed: %s\n", SDL_GetError());
+    void* texture_pixels = nullptr;
+    int pitch = 0;
+    if (!SDL_LockTexture(texture, &rect, &texture_pixels, &pitch)) {
+      std::fprintf(stderr, "SDL_LockTexture failed: %s\n", SDL_GetError());
       return false;
     }
+    auto* dst = static_cast<uint8_t*>(texture_pixels);
+    for (int y = 0; y < rect.h; ++y) {
+      auto* dst_row = dst + static_cast<size_t>(y) * pitch;
+      const size_t src_row =
+          static_cast<size_t>(rect.y + y) * image.width + rect.x;
+      for (int x = 0; x < rect.w; ++x) {
+        const uint32_t rgba = image.pixels_rgba[src_row + x];
+        dst_row[x * 4 + 0] = static_cast<uint8_t>((rgba >> 24) & 0xff);
+        dst_row[x * 4 + 1] = static_cast<uint8_t>((rgba >> 16) & 0xff);
+        dst_row[x * 4 + 2] = static_cast<uint8_t>((rgba >> 8) & 0xff);
+        dst_row[x * 4 + 3] = static_cast<uint8_t>(rgba & 0xff);
+      }
+    }
+    SDL_UnlockTexture(texture);
   }
   return true;
 }
@@ -1722,7 +1698,6 @@ int main(int argc, char** argv) {
   int frame_height =
       std::max(1, static_cast<int>(std::floor(initial_viewport.height)));
   html_css_renderer::CpuImage image;
-  std::vector<uint32_t> pixels;
   if (use_cpu) {
     html_css_renderer::CpuRenderOptions cpu_options;
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
@@ -1750,15 +1725,6 @@ int main(int argc, char** argv) {
     }
     frame_width = image.width;
     frame_height = image.height;
-    ProfileClock::time_point pixel_convert_start;
-    if (profiler.enabled()) {
-      pixel_convert_start = ProfileClock::now();
-    }
-    pixels = ConvertRgbaToAbgr(image);
-    if (profiler.enabled()) {
-      initial_profile.pixel_convert_ms =
-          ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
-    }
   }
 
   if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -1793,10 +1759,12 @@ int main(int argc, char** argv) {
   std::fprintf(stderr, "viewer renderer: %s\n",
                renderer_name ? renderer_name : "unknown");
 
+  const SDL_PixelFormat frame_texture_format =
+      use_cpu ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_ABGR8888;
   const SDL_TextureAccess texture_access =
-      use_cpu ? SDL_TEXTUREACCESS_STATIC : SDL_TEXTUREACCESS_TARGET;
+      use_cpu ? SDL_TEXTUREACCESS_STREAMING : SDL_TEXTUREACCESS_TARGET;
   SDL_Texture* texture =
-      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
+      SDL_CreateTexture(renderer, frame_texture_format,
                         texture_access, frame_width, frame_height);
   if (!texture) {
     std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
@@ -1813,8 +1781,14 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       texture_upload_start = ProfileClock::now();
     }
-    SDL_UpdateTexture(texture, nullptr, pixels.data(),
-                      image.width * static_cast<int>(sizeof(uint32_t)));
+    if (!UploadCpuImageRectsToTexture(
+            texture, image, {SDL_Rect{0, 0, image.width, image.height}})) {
+      SDL_DestroyTexture(texture);
+      SDL_DestroyRenderer(renderer);
+      SDL_DestroyWindow(window);
+      SDL_Quit();
+      return 1;
+    }
     if (profiler.enabled()) {
       initial_profile.texture_upload_ms =
           ElapsedProfileMs(texture_upload_start, ProfileClock::now());
@@ -1921,7 +1895,8 @@ int main(int argc, char** argv) {
       const bool texture_size_changed =
           image.width != frame_width || image.height != frame_height;
       if (texture_size_changed) {
-        if (!RecreateFrameTexture(renderer, texture_access, image.width,
+        if (!RecreateFrameTexture(renderer, frame_texture_format,
+                                  texture_access, image.width,
                                   image.height, &texture)) {
           return false;
         }
@@ -1935,7 +1910,6 @@ int main(int argc, char** argv) {
       std::vector<SDL_Rect> texture_update_rects =
           TextureUpdateRectsForFrame(next_result, image,
                                      use_incremental && !texture_size_changed);
-      ConvertRgbaRectsToAbgr(image, texture_update_rects, &pixels);
       if (profile) {
         profile_frame.pixel_convert_ms =
             ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
@@ -1944,7 +1918,8 @@ int main(int argc, char** argv) {
       if (profile) {
         texture_upload_start = ProfileClock::now();
       }
-      if (!UploadTextureRects(texture, image, pixels, texture_update_rects)) {
+      if (!UploadCpuImageRectsToTexture(texture, image,
+                                        texture_update_rects)) {
         return false;
       }
       if (profile) {
@@ -1964,7 +1939,8 @@ int main(int argc, char** argv) {
                  next_result.successor_snapshot.viewport.height)));
       if (next_frame_width != frame_width ||
           next_frame_height != frame_height) {
-        if (!RecreateFrameTexture(renderer, texture_access, next_frame_width,
+        if (!RecreateFrameTexture(renderer, frame_texture_format,
+                                  texture_access, next_frame_width,
                                   next_frame_height, &texture)) {
           return false;
         }
