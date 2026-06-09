@@ -978,11 +978,13 @@ void PrintViewerStatus(
   const html_css_renderer::Size viewport = result.successor_snapshot.viewport;
   std::fprintf(stderr,
                "viewer status: frame=%llu event=%s incremental=%d "
-               "viewport=(%.0fx%.0f) scroll=(%.1f,%.1f) "
+               "viewport=(%.0fx%.0f) time=%.3f dt=%.3f "
+               "scroll=(%.1f,%.1f) "
                "full_redraw=%d scroll_reuse=%d scroll_delta=(%.1f,%.1f) "
                "needs_begin_frame=%d damage_rects=%zu",
                static_cast<unsigned long long>(frame_count), reason,
                incremental_update ? 1 : 0, viewport.width, viewport.height,
+               input.timeline_time_seconds, input.delta_time_seconds,
                CurrentDocumentScrollX(input),
                CurrentDocumentScrollY(input), requires_full_redraw ? 1 : 0,
                scroll_reuse ? 1 : 0,
