@@ -123,6 +123,17 @@
       "43c_animation_color_basic_0ms",
       "43c_animation_color_basic_500ms"
     ],
+    "dynamic-local": [
+      "43_animation_opacity_basic_dynamic",
+      "43b_animation_transform_basic_dynamic",
+      "43c_animation_color_basic_dynamic"
+    ],
+    "dynamic-hcsr": [
+      "hcsr_animation_playground_dynamic",
+      "hcsr_transition_playground_dynamic",
+      "hcsr_compositing_playground_dynamic",
+      "hcsr_bouncing_ball_dynamic"
+    ],
     "positioning": [
       "43ab_fixed_document_scroll_resource_120",
       "43ac_sticky_document_scroll_resource_140",
@@ -831,6 +842,27 @@
       "note": "Deterministic CSS background-color animation sampled at 500ms."
     },
     {
+      "name": "43_animation_opacity_basic_dynamic",
+      "source": "paint_audit",
+      "html": "43_animation_opacity_basic.html",
+      "viewport": "260x190",
+      "note": "Dynamic deterministic CSS opacity animation sequence."
+    },
+    {
+      "name": "43b_animation_transform_basic_dynamic",
+      "source": "paint_audit",
+      "html": "43b_animation_transform_basic.html",
+      "viewport": "300x200",
+      "note": "Dynamic deterministic CSS transform animation sequence."
+    },
+    {
+      "name": "43c_animation_color_basic_dynamic",
+      "source": "paint_audit",
+      "html": "43c_animation_color_basic.html",
+      "viewport": "300x200",
+      "note": "Dynamic deterministic CSS background-color animation sequence."
+    },
+    {
       "name": "45i_svg_image_preserve_aspect_ratio",
       "source": "paint_audit",
       "html": "45i_svg_image_preserve_aspect_ratio.html",
@@ -1031,6 +1063,34 @@
       "catalog_name": "ImageShowcase",
       "viewport": "1024x768",
       "note": "Known gap: BMP <img> content is out of current PNG/SVG scope."
+    },
+    {
+      "name": "hcsr_animation_playground_dynamic",
+      "source": "hcsr",
+      "catalog_name": "AnimationPlayground",
+      "viewport": "1280x720",
+      "note": "Dynamic deterministic HCSR animation playground sequence."
+    },
+    {
+      "name": "hcsr_transition_playground_dynamic",
+      "source": "hcsr",
+      "catalog_name": "TransitionPlayground",
+      "viewport": "1280x720",
+      "note": "Dynamic deterministic HCSR transition playground sequence."
+    },
+    {
+      "name": "hcsr_compositing_playground_dynamic",
+      "source": "hcsr",
+      "catalog_name": "CompositingPlayground",
+      "viewport": "1280x720",
+      "note": "Dynamic deterministic HCSR compositing playground sequence."
+    },
+    {
+      "name": "hcsr_bouncing_ball_dynamic",
+      "source": "hcsr",
+      "catalog_name": "BouncingBall",
+      "viewport": "1280x720",
+      "note": "Dynamic deterministic HCSR bouncing ball sequence."
     }
   ]
 }
