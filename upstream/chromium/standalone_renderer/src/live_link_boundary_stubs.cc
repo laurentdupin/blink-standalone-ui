@@ -138,6 +138,7 @@
 #include "third_party/blink/renderer/core/animation/timeline_trigger.h"
 #include "third_party/blink/renderer/core/animation/css_color_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/css_default_interpolation_type.h"
+#include "third_party/blink/renderer/core/animation/css_length_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/css_number_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/css_transform_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/css/css_transition.h"
@@ -6184,6 +6185,14 @@ const InterpolationTypes* InterpolationTypesMap::Get(
           MakeGarbageCollected<CSSTransformInterpolationType>(property));
       supported_by_standalone = true;
       break;
+    case CSSPropertyID::kHeight:
+    case CSSPropertyID::kLeft:
+    case CSSPropertyID::kTop:
+    case CSSPropertyID::kWidth:
+      applicable_types->push_back(
+          MakeGarbageCollected<CSSLengthInterpolationType>(property));
+      supported_by_standalone = true;
+      break;
     default:
       break;
   }
@@ -8624,11 +8633,6 @@ void ExceptionState::ThrowDOMException(DOMExceptionCode, const String&) {
 }
 void ExceptionState::ThrowDOMException(DOMExceptionCode, const char*) {
   had_exception_ = true;
-}
-
-bool LengthPropertyFunctions::CanAnimateKeyword(const CSSProperty&,
-                                                CSSValueID) {
-  return false;
 }
 
 bool CompositorAnimations::CompositedPropertyRequiresSnapshot(
@@ -16686,7 +16690,25 @@ String CSSValue::CssText() const {
 bool CSSValue::operator==(const CSSValue& other) const {
   return this == &other;
 }
-CSSValue* CSSValue::Create(const Length&, float) {
+CSSValue* CSSValue::Create(const Length& value, float zoom) {
+  switch (value.GetType()) {
+    case Length::kAuto:
+    case Length::kMinContent:
+    case Length::kMaxContent:
+    case Length::kStretch:
+    case Length::kFitContent:
+    case Length::kContent:
+      return CSSIdentifierValue::Create(value);
+    case Length::kPercent:
+    case Length::kFixed:
+    case Length::kCalculated:
+    case Length::kFlex:
+      return CSSPrimitiveValue::CreateFromLength(value, zoom);
+    case Length::kMinIntrinsic:
+    case Length::kNone:
+    case Length::kOverlapJoin:
+      break;
+  }
   return nullptr;
 }
 void CSSValue::Trace(Visitor*) const {}

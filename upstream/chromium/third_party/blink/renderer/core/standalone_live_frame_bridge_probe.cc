@@ -7626,7 +7626,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.animation_time_status)
        << ",\"standalone_supported_interpolation_groups\":[\"opacity\","
-          "\"color\",\"transform\"]"
+          "\"color\",\"transform\",\"length\"]"
        << ",\"unsupported_interpolation_policy\":\"no-op\""
        << ",\"first_missing_stage\":"
        << JsonStringForStandaloneRenderer(
