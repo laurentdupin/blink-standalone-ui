@@ -49,9 +49,11 @@
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
+#include "third_party/blink/renderer/core/animation/animation.h"
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
+#include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/pending_animations.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
@@ -62,6 +64,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
+#include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
@@ -7555,6 +7558,35 @@ void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   cache.animation_time_status = "applied_to_document_animation_clock";
 }
 
+void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
+  // Standalone does not run the browser compositor commit path that can directly
+  // refresh animated property nodes, so keep Blink's prepaint builder honest
+  // after sampled opacity/transform style changes.
+  for (Animation* animation : document.Timeline().GetAnimations()) {
+    if (!animation) {
+      continue;
+    }
+    auto* effect = DynamicTo<KeyframeEffect>(animation->effect());
+    if (!effect) {
+      continue;
+    }
+    if (!effect->Affects(PropertyHandle(GetCSSPropertyOpacity())) &&
+        !effect->Affects(PropertyHandle(GetCSSPropertyTransform())) &&
+        !effect->Affects(PropertyHandle(GetCSSPropertyTranslate())) &&
+        !effect->Affects(PropertyHandle(GetCSSPropertyScale())) &&
+        !effect->Affects(PropertyHandle(GetCSSPropertyRotate()))) {
+      continue;
+    }
+    Element* target = effect->EffectTarget();
+    if (!target) {
+      continue;
+    }
+    if (LayoutObject* layout_object = target->GetLayoutObject()) {
+      layout_object->SetNeedsPaintPropertyUpdate();
+    }
+  }
+}
+
 void UpdateFrameSchedulingStateForStandaloneRenderer(
     Document& document,
     LocalFrameView& frame_view) {
@@ -9432,6 +9464,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     ApplyAnimationTimeForStandaloneRenderer(document);
     if (cache.animation_time_applied) {
       document.UpdateStyleAndLayoutTree();
+      MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(document);
       UpdateLifecycleToLayoutCleanForStandaloneRenderer(
           frame_view, DocumentUpdateReason::kTest);
     }
@@ -9870,7 +9903,6 @@ void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
   cache.animation_time_applied = false;
   cache.animation_time_status = requested ? "pending" : "not_requested";
   cache.initialized = false;
-  cache.body_html.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();

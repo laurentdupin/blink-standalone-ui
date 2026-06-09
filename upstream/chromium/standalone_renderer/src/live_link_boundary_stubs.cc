@@ -9805,6 +9805,8 @@ bool IsReloadLoadType(WebFrameLoadType) {
   return false;
 }
 void FrameSelection::DidLayout() {}
+void FrameSelection::InvalidatePaint(const LayoutBlock&,
+                                     const PaintInvalidatorContext&) {}
 void FrameSelection::DidAttachDocument(Document*) {}
 FrameSelection::FrameSelection(LocalFrame& frame)
     : frame_(frame),
@@ -10384,6 +10386,8 @@ void PageAnimator::ReportFrameAnimations(cc::AnimationHost*) {}
 void WebPluginContainerImpl::UpdateAllLifecyclePhases() {}
 void FrameSelection::UpdateStyleAndLayoutIfNeeded() {}
 void DragCaret::UpdateStyleAndLayoutIfNeeded() {}
+void DragCaret::InvalidatePaint(const LayoutBlock&,
+                                const PaintInvalidatorContext&) {}
 bool SnapCoordinator::UpdateSnapContainerData(LayoutBox&) {
   return false;
 }
@@ -17086,7 +17090,6 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
       should_paint_color(false),
       should_paint_color_with_paint_worklet_image(false) {}
 #endif
-void BlockPaintInvalidator::InvalidatePaint(const PaintInvalidatorContext&) {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void PhysicalBoxFragment::RecalcInkOverflow() {}
 #endif
@@ -18526,7 +18529,6 @@ PaintImageBuilder Image::CreatePaintImageBuilder(
       .set_is_multipart(is_multipart_);
   return builder;
 }
-void BoxPaintInvalidator::InvalidatePaint() {}
 void CustomScrollbar::ClearPaintFlags() {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
@@ -19664,6 +19666,8 @@ bool PaintLayerScrollableArea::ShouldPlaceVerticalScrollbarOnLeft() const {
 }
 void PaintLayerScrollableArea::DisposeImpl() {}
 void PaintLayerScrollableArea::ScrollControlWasSetNeedsPaintInvalidation() {}
+void PaintLayerScrollableArea::InvalidatePaintOfScrollControlsIfNeeded(
+    const PaintInvalidatorContext&) {}
 mojom::blink::ScrollBehavior PaintLayerScrollableArea::ScrollBehaviorStyle()
     const {
   return mojom::blink::ScrollBehavior::kAuto;

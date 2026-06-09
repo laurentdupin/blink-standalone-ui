@@ -714,14 +714,12 @@ void PrePaintTreeWalk::WalkInternal(const LayoutObject& object,
   TraceStandalonePrePaintStage("WalkInternal after soft navigation");
 
   TraceStandalonePrePaintStage("WalkInternal before invalidate paint");
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (paint_invalidator_.InvalidatePaint(
           object, pre_paint_info,
           base::OptionalToPtr(context.tree_builder_context),
           paint_invalidator_context)) {
     needs_invalidate_chrome_client_and_intersection_ = true;
   }
-#endif
   TraceStandalonePrePaintStage("WalkInternal after invalidate paint");
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
