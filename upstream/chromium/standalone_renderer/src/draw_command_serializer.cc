@@ -1,8 +1,11 @@
 #include "html_css_renderer/draw_command_serializer.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <map>
 #include <sstream>
+#include <utility>
+#include <vector>
 
 #include "html_css_renderer/skia_cpu_renderer.h"
 
@@ -134,6 +137,50 @@ void WriteRect(std::ostringstream& out, const Rect& rect) {
   out << "{\"x\":" << rect.x << ",\"y\":" << rect.y
       << ",\"width\":" << rect.width << ",\"height\":" << rect.height
       << "}";
+}
+
+bool IsEmptyRect(const Rect& rect) {
+  return rect.width <= 0.0f || rect.height <= 0.0f;
+}
+
+double RectArea(const Rect& rect) {
+  if (IsEmptyRect(rect)) {
+    return 0.0;
+  }
+  return static_cast<double>(rect.width) * static_cast<double>(rect.height);
+}
+
+Rect IntersectRectsForMetadata(Rect a, Rect b) {
+  const float left = std::max(a.x, b.x);
+  const float top = std::max(a.y, b.y);
+  const float right = std::min(a.x + a.width, b.x + b.width);
+  const float bottom = std::min(a.y + a.height, b.y + b.height);
+  if (right <= left || bottom <= top) {
+    return {};
+  }
+  return Rect{left, top, right - left, bottom - top};
+}
+
+bool NearlyEqual(float left, float right) {
+  const float diff = left - right;
+  return diff >= -0.001f && diff <= 0.001f;
+}
+
+bool MatrixIsUnitScaleTranslation(const Matrix4& matrix) {
+  return NearlyEqual(matrix.values[0], 1.0f) &&
+         NearlyEqual(matrix.values[1], 0.0f) &&
+         NearlyEqual(matrix.values[2], 0.0f) &&
+         NearlyEqual(matrix.values[3], 0.0f) &&
+         NearlyEqual(matrix.values[4], 0.0f) &&
+         NearlyEqual(matrix.values[5], 1.0f) &&
+         NearlyEqual(matrix.values[6], 0.0f) &&
+         NearlyEqual(matrix.values[7], 0.0f) &&
+         NearlyEqual(matrix.values[8], 0.0f) &&
+         NearlyEqual(matrix.values[9], 0.0f) &&
+         NearlyEqual(matrix.values[10], 1.0f) &&
+         NearlyEqual(matrix.values[11], 0.0f) &&
+         NearlyEqual(matrix.values[14], 0.0f) &&
+         NearlyEqual(matrix.values[15], 1.0f);
 }
 
 void WriteMatrix(std::ostringstream& out, const Matrix4& matrix) {
@@ -452,6 +499,329 @@ void WriteSceneChunks(std::ostringstream& out,
         << ",\"command_count\":" << chunks[i].commands.size() << "}";
   }
   out << "]";
+}
+
+bool DrawCommandHasResourceDependency(const DrawCommand& command) {
+  return !command.resource_id.empty() || !command.shader_bytes.empty() ||
+         !command.path_bytes.empty() || !command.path_effect_bytes.empty() ||
+         !command.text_blob_bytes.empty();
+}
+
+bool EffectRequiresIsolation(const PaintPropertyStateSnapshot& state) {
+  return state.effect_has_non_default_opacity || state.effect_has_filter ||
+         state.effect_has_unsupported_filter ||
+         state.effect_has_backdrop_filter || state.effect_has_blend_mode;
+}
+
+std::vector<std::string> ConservativeTileCacheBlockers(
+    const SceneChunk& chunk) {
+  std::vector<std::string> blockers;
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  if (chunk.stable_key.empty()) {
+    blockers.push_back("missing_stable_key");
+  }
+  if (IsEmptyRect(chunk.bounds)) {
+    blockers.push_back("empty_raster_bounds");
+  }
+  if (!state.transform_is_2d) {
+    blockers.push_back("non_2d_transform");
+  }
+  if (state.transform_has_perspective) {
+    blockers.push_back("perspective_transform");
+  }
+  if (state.transform_has_non_translation) {
+    blockers.push_back("non_translation_transform");
+  }
+  if (!MatrixIsUnitScaleTranslation(state.transform_to_root)) {
+    blockers.push_back("non_unit_scale_translation_matrix");
+  }
+  if (state.clip_has_path_clip) {
+    blockers.push_back("path_clip");
+  }
+  if (state.has_clip_rrect || state.clip_has_rounded_clip) {
+    blockers.push_back("rounded_clip");
+  }
+  if (state.effect_has_non_default_opacity) {
+    blockers.push_back("non_default_opacity");
+  }
+  if (state.effect_has_filter) {
+    blockers.push_back("effect_filter");
+  }
+  if (state.effect_has_unsupported_filter) {
+    blockers.push_back("unsupported_effect_filter");
+  }
+  if (state.effect_has_backdrop_filter) {
+    blockers.push_back("backdrop_filter");
+  }
+  if (state.effect_has_blend_mode) {
+    blockers.push_back("blend_mode");
+  }
+  return blockers;
+}
+
+int HistogramCount(const std::map<std::string, int>& histogram,
+                   const std::string& key) {
+  const auto it = histogram.find(key);
+  return it == histogram.end() ? 0 : it->second;
+}
+
+std::map<std::string, int> BuildCommandHistogram(const SceneChunk& chunk) {
+  std::map<std::string, int> histogram;
+  for (const DrawCommand& command : chunk.commands) {
+    ++histogram[ToString(command.type)];
+  }
+  return histogram;
+}
+
+std::vector<std::string> TileCacheDesignNotes(
+    const SceneChunk& chunk,
+    const std::map<std::string, int>& chunk_histogram,
+    double viewport_area) {
+  std::vector<std::string> notes;
+  if (viewport_area > 0.0 && RectArea(chunk.bounds) > viewport_area) {
+    notes.push_back("chunk_larger_than_viewport");
+  }
+  if (HistogramCount(chunk_histogram, "SaveLayer") > 0) {
+    notes.push_back("contains_save_layer_commands");
+  }
+  if (HistogramCount(chunk_histogram, "ClipRRect") > 0 ||
+      HistogramCount(chunk_histogram, "ClipPath") > 0) {
+    notes.push_back("contains_non_rect_clip_commands");
+  }
+  if (HistogramCount(chunk_histogram, "FillRectShader") > 0 ||
+      HistogramCount(chunk_histogram, "FillRRectShader") > 0) {
+    notes.push_back("contains_shader_commands");
+  }
+  if (HistogramCount(chunk_histogram, "DrawImageRect") > 0 ||
+      HistogramCount(chunk_histogram, "DrawImage") > 0) {
+    notes.push_back("contains_image_commands");
+  }
+  if (chunk.commands.size() > 128) {
+    notes.push_back("large_command_span");
+  }
+  return notes;
+}
+
+size_t ResourceDependentCommandCount(const SceneChunk& chunk) {
+  size_t count = 0;
+  for (const DrawCommand& command : chunk.commands) {
+    if (DrawCommandHasResourceDependency(command)) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+void WriteRetainedCacheMetadata(std::ostringstream& out,
+                                const RenderResult& result) {
+  size_t candidate_count = 0;
+  size_t larger_than_viewport_count = 0;
+  size_t resource_dependent_command_count = 0;
+  size_t total_chunk_command_count = 0;
+  double total_damage_area = 0.0;
+  const double viewport_area =
+      static_cast<double>(result.successor_snapshot.viewport.width) *
+      static_cast<double>(result.successor_snapshot.viewport.height);
+  for (const Rect& damage_rect : result.frame.damage_rects) {
+    total_damage_area += RectArea(damage_rect);
+  }
+  for (const SceneChunk& chunk : result.frame.scene_chunks) {
+    const std::map<std::string, int> chunk_histogram =
+        BuildCommandHistogram(chunk);
+    if (ConservativeTileCacheBlockers(chunk).empty() &&
+        TileCacheDesignNotes(chunk, chunk_histogram, viewport_area).empty()) {
+      ++candidate_count;
+    }
+    if (viewport_area > 0.0 && RectArea(chunk.bounds) > viewport_area) {
+      ++larger_than_viewport_count;
+    }
+    resource_dependent_command_count += ResourceDependentCommandCount(chunk);
+    total_chunk_command_count += chunk.commands.size();
+  }
+
+  out << "{\"schema_version\":1"
+      << ",\"behavior_neutral\":true"
+      << ",\"cache_behavior_enabled\":false"
+      << ",\"raster_space\":\"root_presentation_pixels\""
+      << ",\"damage_mapping_source\":\"frame.damage_rects_intersect_chunk_bounds\""
+      << ",\"chunk_count\":" << result.frame.scene_chunks.size()
+      << ",\"scene_command_count\":" << result.frame.scene_commands.size()
+      << ",\"chunk_command_count\":" << total_chunk_command_count
+      << ",\"viewport_area\":" << viewport_area
+      << ",\"resource_command_count\":"
+      << result.frame.resource_commands.size()
+      << ",\"resource_dependent_chunk_command_count\":"
+      << resource_dependent_command_count
+      << ",\"conservative_tile_cache_candidate_count\":"
+      << candidate_count
+      << ",\"chunks_larger_than_viewport_count\":"
+      << larger_than_viewport_count
+      << ",\"unsafe_or_unproven_chunk_count\":"
+      << (result.frame.scene_chunks.size() - candidate_count)
+      << ",\"damage_rect_count\":" << result.frame.damage_rects.size()
+      << ",\"damage_area\":" << total_damage_area
+      << ",\"chunks\":[";
+  for (size_t i = 0; i < result.frame.scene_chunks.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const SceneChunk& chunk = result.frame.scene_chunks[i];
+    const PaintPropertyStateSnapshot& state = chunk.property_state;
+    const std::vector<std::string> blockers =
+        ConservativeTileCacheBlockers(chunk);
+    double chunk_damage_area = 0.0;
+    std::vector<std::pair<size_t, Rect>> damage_intersections;
+    for (size_t damage_index = 0;
+         damage_index < result.frame.damage_rects.size(); ++damage_index) {
+      const Rect intersection = IntersectRectsForMetadata(
+          chunk.bounds, result.frame.damage_rects[damage_index]);
+      if (IsEmptyRect(intersection)) {
+        continue;
+      }
+      chunk_damage_area += RectArea(intersection);
+      damage_intersections.push_back({damage_index, intersection});
+    }
+    const double chunk_area = RectArea(chunk.bounds);
+    const double damaged_fraction =
+        chunk_area > 0.0 ? chunk_damage_area / chunk_area : 0.0;
+    const std::map<std::string, int> chunk_histogram =
+        BuildCommandHistogram(chunk);
+    const std::vector<std::string> design_notes =
+        TileCacheDesignNotes(chunk, chunk_histogram, viewport_area);
+
+    out << "{\"index\":" << i
+        << ",\"debug_index\":" << chunk.debug_index
+        << ",\"chunk_id\":\"" << EscapeJson(chunk.chunk_id)
+        << "\",\"stable_key\":\"" << EscapeJson(chunk.stable_key)
+        << "\",\"content_hash\":" << chunk.content_hash
+        << ",\"resource_hash\":" << chunk.resource_hash
+        << ",\"property_state_hash\":" << state.state_hash
+        << ",\"retained_from_previous_frame\":"
+        << (chunk.retained_from_previous_frame ? "true" : "false")
+        << ",\"raster_bounds\":";
+    WriteRect(out, chunk.bounds);
+    out << ",\"damage_bounds\":";
+    WriteRect(out, chunk.damage_bounds);
+    out << ",\"command_count\":" << chunk.commands.size()
+        << ",\"chunk_area\":" << chunk_area
+        << ",\"viewport_area_ratio\":"
+        << (viewport_area > 0.0 ? chunk_area / viewport_area : 0.0)
+        << ",\"larger_than_viewport\":"
+        << (viewport_area > 0.0 && chunk_area > viewport_area ? "true"
+                                                              : "false")
+        << ",\"resource_dependent_command_count\":"
+        << ResourceDependentCommandCount(chunk)
+        << ",\"command_histogram\":";
+    WriteStringIntMap(out, chunk_histogram);
+    out << ",\"command_state_summary\":{\"save_count\":"
+        << HistogramCount(chunk_histogram, "Save")
+        << ",\"restore_count\":" << HistogramCount(chunk_histogram, "Restore")
+        << ",\"save_layer_count\":"
+        << HistogramCount(chunk_histogram, "SaveLayer")
+        << ",\"clip_rect_count\":"
+        << HistogramCount(chunk_histogram, "ClipRect")
+        << ",\"clip_rrect_count\":"
+        << HistogramCount(chunk_histogram, "ClipRRect")
+        << ",\"clip_path_count\":"
+        << HistogramCount(chunk_histogram, "ClipPath")
+        << ",\"transform_count\":"
+        << HistogramCount(chunk_histogram, "Transform")
+        << ",\"shader_command_count\":"
+        << (HistogramCount(chunk_histogram, "FillRectShader") +
+            HistogramCount(chunk_histogram, "FillRRectShader"))
+        << ",\"image_command_count\":"
+        << (HistogramCount(chunk_histogram, "DrawImage") +
+            HistogramCount(chunk_histogram, "DrawImageRect"))
+        << "}";
+    out << ",\"transform_summary\":{\"node_id\":"
+        << state.transform_node_id << ",\"parent_id\":"
+        << state.transform_parent_id << ",\"chain_depth\":"
+        << state.transform_chain_depth << ",\"is_2d\":"
+        << (state.transform_is_2d ? "true" : "false")
+        << ",\"has_perspective\":"
+        << (state.transform_has_perspective ? "true" : "false")
+        << ",\"has_non_translation\":"
+        << (state.transform_has_non_translation ? "true" : "false")
+        << ",\"unit_scale_translation\":"
+        << (MatrixIsUnitScaleTranslation(state.transform_to_root) ? "true"
+                                                                  : "false")
+        << ",\"translation\":{\"x\":" << state.transform_to_root.values[12]
+        << ",\"y\":" << state.transform_to_root.values[13] << "}}";
+    out << ",\"clip_summary\":{\"node_id\":" << state.clip_node_id
+        << ",\"parent_id\":" << state.clip_parent_id
+        << ",\"local_transform_id\":" << state.clip_local_transform_id
+        << ",\"chain_depth\":" << state.clip_chain_depth
+        << ",\"has_clip_rect\":"
+        << (state.has_clip_rect ? "true" : "false")
+        << ",\"has_clip_rrect\":"
+        << (state.has_clip_rrect ? "true" : "false")
+        << ",\"has_rounded_clip\":"
+        << (state.clip_has_rounded_clip ? "true" : "false")
+        << ",\"has_path_clip\":"
+        << (state.clip_has_path_clip ? "true" : "false")
+        << ",\"clip_rect\":";
+    WriteRect(out, state.clip_rect);
+    out << ",\"clip_rrect\":";
+    WriteRect(out, state.clip_rrect);
+    out << "}";
+    out << ",\"effect_summary\":{\"node_id\":" << state.effect_node_id
+        << ",\"parent_id\":" << state.effect_parent_id
+        << ",\"chain_depth\":" << state.effect_chain_depth
+        << ",\"requires_isolation\":"
+        << (EffectRequiresIsolation(state) ? "true" : "false")
+        << ",\"opacity\":" << state.effect_opacity
+        << ",\"has_non_default_opacity\":"
+        << (state.effect_has_non_default_opacity ? "true" : "false")
+        << ",\"has_filter\":"
+        << (state.effect_has_filter ? "true" : "false")
+        << ",\"has_unsupported_filter\":"
+        << (state.effect_has_unsupported_filter ? "true" : "false")
+        << ",\"has_backdrop_filter\":"
+        << (state.effect_has_backdrop_filter ? "true" : "false")
+        << ",\"has_blend_mode\":"
+        << (state.effect_has_blend_mode ? "true" : "false")
+        << ",\"blend_mode\":" << state.effect_blend_mode
+        << ",\"output_clip_id\":" << state.effect_output_clip_id
+        << ",\"filter_operation_count\":"
+        << state.effect_filter_operations.size() << "}";
+    out << ",\"scroll_summary\":{\"node_id\":" << state.scroll_node_id
+        << ",\"parent_id\":" << state.scroll_parent_id
+        << ",\"has_scroll_offset\":"
+        << (state.has_scroll_offset ? "true" : "false")
+        << ",\"offset\":{\"x\":" << state.scroll_offset_x
+        << ",\"y\":" << state.scroll_offset_y
+        << "},\"container_rect\":";
+    WriteRect(out, state.scroll_container_rect);
+    out << ",\"contents_rect\":";
+    WriteRect(out, state.scroll_contents_rect);
+    out << "}";
+    out << ",\"damage_summary\":{\"intersects_damage\":"
+        << (!damage_intersections.empty() ? "true" : "false")
+        << ",\"intersection_count\":" << damage_intersections.size()
+        << ",\"intersection_area\":" << chunk_damage_area
+        << ",\"damaged_fraction_of_chunk\":" << damaged_fraction
+        << ",\"intersections\":[";
+    for (size_t intersection_index = 0;
+         intersection_index < damage_intersections.size();
+         ++intersection_index) {
+      if (intersection_index > 0) {
+        out << ",";
+      }
+      out << "{\"damage_index\":"
+          << damage_intersections[intersection_index].first << ",\"rect\":";
+      WriteRect(out, damage_intersections[intersection_index].second);
+      out << "}";
+    }
+    out << "]}";
+    out << ",\"conservative_tile_cache_candidate\":"
+        << (blockers.empty() && design_notes.empty() ? "true" : "false")
+        << ",\"conservative_blockers\":";
+    WriteStringArray(out, blockers);
+    out << ",\"tile_cache_design_notes\":";
+    WriteStringArray(out, design_notes);
+    out << "}";
+  }
+  out << "]}";
 }
 
 void WriteSceneCommands(std::ostringstream& out,
@@ -867,6 +1237,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
              << ",\"chunks\":";
     WriteSceneChunks(retained, result.frame.scene_chunks);
     retained << "}";
+    retained << ",\"retained_cache_metadata\":";
+    WriteRetainedCacheMetadata(retained, result);
     retained << ",\"missing_from_retained\":[]";
     retained << ",\"damage\":{\"requires_full_redraw\":"
              << (result.frame.requires_full_redraw ? "true" : "false")
@@ -998,6 +1370,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
       << ",\"shader_count\":" << shader_count
       << ",\"path_count\":" << path_count
       << ",\"filter_count\":" << filter_count << "}";
+  out << ",\"retained_cache_metadata\":";
+  WriteRetainedCacheMetadata(out, result);
   const SkiaCpuSurfaceDiagnostics surface = SnapshotSkiaCpuSurfaceDiagnostics();
   out << ",\"skia_cpu_surface_diagnostics\":{\"color_type\":\""
       << EscapeJson(surface.color_type)
