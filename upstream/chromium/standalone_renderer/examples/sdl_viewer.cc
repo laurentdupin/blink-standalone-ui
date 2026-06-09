@@ -1998,12 +1998,26 @@ int main(int argc, char** argv) {
   SetViewerWindowTitle(window, "initial", rendered_frame_count, input, result,
                        attribute_toggles, false);
 
+  const uint64_t animation_start_ms = SDL_GetTicks();
+  auto current_timeline_seconds = [&]() -> double {
+    return static_cast<double>(SDL_GetTicks() - animation_start_ms) / 1000.0;
+  };
+  auto stamp_frame_time =
+      [&](html_css_renderer::FrameInput* next_input) -> double {
+    const double next_timeline_time = current_timeline_seconds();
+    next_input->delta_time_seconds =
+        std::max(0.0, next_timeline_time - input.timeline_time_seconds);
+    next_input->timeline_time_seconds = next_timeline_time;
+    return next_input->delta_time_seconds;
+  };
+
   auto render_updated_input =
       [&](const char* reason,
           html_css_renderer::FrameInput next_input,
           double input_update_ms,
           ProfileClock::time_point frame_start,
           bool force_full_render = false) -> bool {
+    stamp_frame_time(&next_input);
     const bool use_incremental = incremental && use_cpu && !force_full_render;
     const bool profile = profiler.enabled();
     SdlProfileFrame profile_frame;
@@ -2394,6 +2408,20 @@ int main(int argc, char** argv) {
       }
       profile_resize_done = true;
       texture_dirty = true;
+    }
+    if (running) {
+      html_css_renderer::FrameInput next_input = input;
+      const double delta_time_seconds = stamp_frame_time(&next_input);
+      if (delta_time_seconds > 0.0) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
+        if (!render_updated_input("animation-tick", std::move(next_input),
+                                  0.0, input_update_start)) {
+          running = false;
+        }
+        texture_dirty = true;
+      }
     }
     (void)texture_dirty;
     ProfileClock::time_point draw_present_start;
