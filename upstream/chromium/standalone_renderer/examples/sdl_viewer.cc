@@ -1,5 +1,10 @@
 #include <SDL3/SDL.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#include <shobjidl.h>
+#endif
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
@@ -58,7 +63,7 @@ std::vector<uint8_t> ReadBinaryFile(const std::string& path) {
                               std::istreambuf_iterator<char>());
 }
 
-std::optional<std::string> ReadTextFile(const std::string& path) {
+std::optional<std::string> ReadTextFile(const fs::path& path) {
   std::ifstream file(path, std::ios::binary);
   if (!file) {
     return std::nullopt;
@@ -104,6 +109,135 @@ std::string InjectBaseHrefForHtmlFile(const std::string& html_path,
   html.insert(0, base);
   return html;
 }
+
+enum class ResourceRootPolicy {
+  kUseHtmlDirectory,
+  kUseHtmlDirectoryIfUnset,
+};
+
+bool LoadHtmlFileForViewer(
+    const fs::path& html_path,
+    ResourceRootPolicy resource_root_policy,
+    html_css_renderer::RendererCreateInfo* create_info,
+    std::string* resource_root,
+    std::string* resource_base_path,
+    std::vector<std::string>* stylesheet_loader_diagnostics) {
+  std::optional<std::string> html = ReadTextFile(html_path);
+  if (!html) {
+    std::fprintf(stderr, "failed to read html file: %s\n",
+                 html_path.string().c_str());
+    return false;
+  }
+  const fs::path absolute_html_path = fs::absolute(html_path);
+  create_info->html =
+      InjectBaseHrefForHtmlFile(absolute_html_path.string(), std::move(*html));
+  *resource_base_path = absolute_html_path.parent_path().string();
+  if (resource_root_policy == ResourceRootPolicy::kUseHtmlDirectory ||
+      resource_root->empty()) {
+    *resource_root = *resource_base_path;
+  }
+  html_css_renderer::AddLocalLinkedStylesheetsForDocument(
+      absolute_html_path, create_info->html, create_info,
+      stylesheet_loader_diagnostics);
+  return true;
+}
+
+#if defined(_WIN32)
+std::optional<fs::path> ShowNativeHtmlFileDialog() {
+  HRESULT initialize_result =
+      CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED |
+                                  COINIT_DISABLE_OLE1DDE);
+  const bool should_uninitialize = SUCCEEDED(initialize_result);
+  if (initialize_result == RPC_E_CHANGED_MODE) {
+    initialize_result = S_OK;
+  }
+  if (FAILED(initialize_result)) {
+    std::fprintf(stderr, "failed to initialize file dialog COM: 0x%08lx\n",
+                 static_cast<unsigned long>(initialize_result));
+    return std::nullopt;
+  }
+
+  IFileOpenDialog* dialog = nullptr;
+  HRESULT result = CoCreateInstance(CLSID_FileOpenDialog, nullptr,
+                                    CLSCTX_INPROC_SERVER,
+                                    IID_PPV_ARGS(&dialog));
+  if (FAILED(result)) {
+    std::fprintf(stderr, "failed to create file dialog: 0x%08lx\n",
+                 static_cast<unsigned long>(result));
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    return std::nullopt;
+  }
+
+  COMDLG_FILTERSPEC filters[] = {
+      {L"HTML files", L"*.html;*.htm"},
+      {L"All files", L"*.*"},
+  };
+  dialog->SetTitle(L"Open HTML file");
+  dialog->SetFileTypes(static_cast<UINT>(std::size(filters)), filters);
+  dialog->SetFileTypeIndex(1);
+  DWORD options = 0;
+  if (SUCCEEDED(dialog->GetOptions(&options))) {
+    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+                       FOS_PATHMUSTEXIST);
+  }
+
+  result = dialog->Show(nullptr);
+  if (result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
+    dialog->Release();
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    return std::nullopt;
+  }
+  if (FAILED(result)) {
+    std::fprintf(stderr, "file dialog failed: 0x%08lx\n",
+                 static_cast<unsigned long>(result));
+    dialog->Release();
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    return std::nullopt;
+  }
+
+  IShellItem* item = nullptr;
+  result = dialog->GetResult(&item);
+  if (FAILED(result) || !item) {
+    std::fprintf(stderr, "file dialog result failed: 0x%08lx\n",
+                 static_cast<unsigned long>(result));
+    dialog->Release();
+    if (should_uninitialize) {
+      CoUninitialize();
+    }
+    return std::nullopt;
+  }
+
+  PWSTR selected_path = nullptr;
+  result = item->GetDisplayName(SIGDN_FILESYSPATH, &selected_path);
+  std::optional<fs::path> path;
+  if (SUCCEEDED(result) && selected_path) {
+    path = fs::path(selected_path);
+    CoTaskMemFree(selected_path);
+  } else {
+    std::fprintf(stderr, "file dialog path conversion failed: 0x%08lx\n",
+                 static_cast<unsigned long>(result));
+  }
+  item->Release();
+  dialog->Release();
+  if (should_uninitialize) {
+    CoUninitialize();
+  }
+  return path;
+}
+#else
+std::optional<fs::path> ShowNativeHtmlFileDialog() {
+  std::fprintf(stderr,
+               "no native file dialog is wired for this platform; pass "
+               "--html-file <path>\n");
+  return std::nullopt;
+}
+#endif
 
 bool ParseFloat(const std::string& value, float* output) {
   char* end = nullptr;
@@ -204,7 +338,9 @@ void PrintUsage() {
                " [--profile-resize-to WxH]"
                " [--profile-resize-after-frame count]"
                " [--blink]"
-               "\nControls: Space/T toggle configured attrs, left click toggles "
+               "\nIf no --html or --html-file input is provided, the viewer "
+               "opens a native HTML file picker.\n"
+               "Controls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls hit scrollable elements "
                "or the document, arrow/Page/Home keys scroll the document, "
                "Esc quits.\n");
@@ -254,17 +390,12 @@ bool ParseArgs(int argc,
       if (!value) {
         return false;
       }
-      std::optional<std::string> html = ReadTextFile(value);
-      if (!html) {
-        std::fprintf(stderr, "failed to read html file: %s\n", value);
+      if (!LoadHtmlFileForViewer(value, ResourceRootPolicy::kUseHtmlDirectory,
+                                 create_info, resource_root,
+                                 resource_base_path,
+                                 stylesheet_loader_diagnostics)) {
         return false;
       }
-      create_info->html = InjectBaseHrefForHtmlFile(value, std::move(*html));
-      *resource_base_path = fs::absolute(value).parent_path().string();
-      *resource_root = *resource_base_path;
-      html_css_renderer::AddLocalLinkedStylesheetsForDocument(
-          value, create_info->html, create_info,
-          stylesheet_loader_diagnostics);
     } else if (arg == "--resource-root") {
       const char* value = next_value();
       if (!value) {
@@ -438,7 +569,7 @@ bool ParseArgs(int argc,
       return false;
     }
   }
-  return !create_info->html.empty();
+  return true;
 }
 
 struct ScrollDelta {
@@ -1579,12 +1710,6 @@ int main(int argc, char** argv) {
   EmptyAssets assets;
   html_css_renderer::RendererCreateInfo create_info;
   create_info.asset_provider = &assets;
-  if (argc <= 1) {
-    create_info.html =
-        "<main><img src=\"missing.png\"><h1>SDL renderer</h1></main>";
-    create_info.stylesheets.push_back(
-        {"viewer", "body { background: #f5f7fb; }"});
-  }
   html_css_renderer::FrameInput input;
   uint64_t quit_after_ms = 0;
   float window_scale = 1.0f;
@@ -1621,6 +1746,23 @@ int main(int argc, char** argv) {
                              &stylesheet_loader_diagnostics)) {
     PrintUsage();
     return 2;
+  }
+
+  if (create_info.html.empty()) {
+    std::fprintf(stderr, "no HTML input provided; opening file dialog...\n");
+    std::optional<fs::path> selected_html = ShowNativeHtmlFileDialog();
+    if (!selected_html) {
+      std::fprintf(stderr, "no HTML file selected; exiting\n");
+      return 0;
+    }
+    if (!LoadHtmlFileForViewer(
+            *selected_html, ResourceRootPolicy::kUseHtmlDirectoryIfUnset,
+            &create_info, &resource_root, &resource_base_path,
+            &stylesheet_loader_diagnostics)) {
+      return 2;
+    }
+    std::fprintf(stderr, "selected HTML file: %s\n",
+                 selected_html->string().c_str());
   }
 
   for (AttributeToggle& toggle : attribute_toggles) {
