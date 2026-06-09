@@ -485,6 +485,19 @@ void ApplyStrokeStyle(const DrawCommand& command, SkPaint& paint) {
   paint.setStrokeMiter(command.stroke_miter);
 }
 
+bool QuickRejectBoundedDraw(SkCanvas& canvas,
+                            const DrawCommand& command,
+                            SkRect bounds) {
+  if (!command.draw_looper_layers.empty()) {
+    return false;
+  }
+  if (command.stroke_width > 0.0f) {
+    const float outset = command.stroke_width * 0.5f + 1.0f;
+    bounds.outset(outset, outset);
+  }
+  return canvas.quickReject(bounds);
+}
+
 uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
                             const std::vector<uint8_t>& after) {
   const size_t byte_count = std::min(before.size(), after.size());
@@ -789,6 +802,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
 
   switch (command.type) {
     case DrawCommandType::kFillRect:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       paint.setStyle(SkPaint::kFill_Style);
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
@@ -798,6 +814,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                            });
       break;
     case DrawCommandType::kStrokeRect:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
       ApplyStrokeStyle(command, paint);
@@ -810,6 +829,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                            });
       break;
     case DrawCommandType::kFillRectShader:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       if (coverage) {
         coverage->shader_resource_present = !command.shader_bytes.empty();
         coverage->shader_byte_count = command.shader_bytes.size();
@@ -829,6 +851,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       }
       break;
     case DrawCommandType::kFillRRect:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       paint.setStyle(SkPaint::kFill_Style);
       DrawWithLooperLayers(canvas, command, paint,
                            [&](SkCanvas& layer_canvas,
@@ -838,6 +863,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                             });
       break;
     case DrawCommandType::kStrokeRRect:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       paint.setStyle(SkPaint::kStroke_Style);
       paint.setStrokeWidth(command.stroke_width);
       ApplyStrokeStyle(command, paint);
@@ -850,6 +878,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                             });
       break;
     case DrawCommandType::kFillRRectShader:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       if (coverage) {
         coverage->shader_resource_present = !command.shader_bytes.empty();
         coverage->shader_byte_count = command.shader_bytes.size();
@@ -932,6 +963,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       break;
     }
     case DrawCommandType::kDrawImage:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       if (const auto found = images.find(command.resource_id);
           found != images.end()) {
         const ImageResource& resource = found->second;
@@ -951,6 +985,9 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       }
       break;
     case DrawCommandType::kDrawImageRect:
+      if (QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       if (const auto found = images.find(command.resource_id);
           found != images.end()) {
         const ImageResource& resource = found->second;
