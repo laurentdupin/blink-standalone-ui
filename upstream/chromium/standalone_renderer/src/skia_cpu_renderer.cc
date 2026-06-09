@@ -1021,6 +1021,10 @@ void DrawCommandWithSkia(SkCanvas& canvas,
       DrawGlyphRunWithSkia(canvas, glyphs, command.glyph_run);
       break;
     case DrawCommandType::kDrawTextBlob: {
+      if (command.rect.width > 0.0f && command.rect.height > 0.0f &&
+          QuickRejectBoundedDraw(canvas, command, ToSkRect(command.rect))) {
+        break;
+      }
       if (coverage) {
         coverage->text_blob_resource_present = !command.text_blob_bytes.empty();
         coverage->text_blob_byte_count = command.text_blob_bytes.size();

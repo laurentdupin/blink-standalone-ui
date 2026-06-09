@@ -3513,6 +3513,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             DrawCommand command =
                 DrawCommand::DrawTextBlob(std::move(blob_bytes), Point{x, y},
                                           color);
+            command.rect.width = width;
+            command.rect.height = height;
             append_draw_looper_layers(command);
             active_commands->push_back(std::move(command));
             ++translated_command_count;
