@@ -346,8 +346,8 @@ void PrintUsage() {
                "--cpu for the generic CPU rasterizer, or --no-incremental for "
                "full render updates.\n"
                "Controls: Space/T toggle configured attrs, left click toggles "
-               "matching targets, mouse wheel scrolls hit scrollable elements "
-               "or the document, arrow/Page/Home keys scroll the document, "
+               "matching targets, mouse wheel scrolls the document viewport, "
+               "arrow/Page/Home keys scroll the document, "
                "Esc quits.\n");
 }
 
@@ -637,62 +637,6 @@ void SetDocumentScroll(html_css_renderer::FrameInput* input,
 }
 
 bool Contains(html_css_renderer::Rect rect, float x, float y);
-
-bool CanScrollAxis(float delta,
-                   float current_offset,
-                   float max_offset,
-                   bool can_scroll_axis) {
-  if (std::abs(delta) < 0.001f || !can_scroll_axis) {
-    return false;
-  }
-  if (delta < 0.0f) {
-    return current_offset > 0.001f;
-  }
-  return current_offset + 0.001f < max_offset;
-}
-
-bool CanScrollEntryForDelta(
-    const html_css_renderer::ScrollableElementEntry& entry,
-    const ScrollDelta& delta) {
-  return CanScrollAxis(delta.x, entry.scroll_offset.x, entry.max_scroll_offset.x,
-                       entry.can_scroll_x) ||
-         CanScrollAxis(delta.y, entry.scroll_offset.y, entry.max_scroll_offset.y,
-                       entry.can_scroll_y);
-}
-
-const html_css_renderer::ScrollableElementEntry* HitScrollableElementForDelta(
-    const std::vector<html_css_renderer::ScrollableElementEntry>& entries,
-    float x,
-    float y,
-    const ScrollDelta& delta) {
-  for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
-    if (Contains(it->bounds, x, y) && CanScrollEntryForDelta(*it, delta)) {
-      return &*it;
-    }
-  }
-  return nullptr;
-}
-
-bool ApplyScrollableElementScroll(
-    html_css_renderer::FrameInput* input,
-    const html_css_renderer::ScrollableElementEntry& entry,
-    const ScrollDelta& delta) {
-  html_css_renderer::Point next_offset = entry.scroll_offset;
-  if (entry.can_scroll_x) {
-    next_offset.x =
-        std::clamp(next_offset.x + delta.x, 0.0f, entry.max_scroll_offset.x);
-  }
-  if (entry.can_scroll_y) {
-    next_offset.y =
-        std::clamp(next_offset.y + delta.y, 0.0f, entry.max_scroll_offset.y);
-  }
-  if (std::abs(next_offset.x - entry.scroll_offset.x) < 0.001f &&
-      std::abs(next_offset.y - entry.scroll_offset.y) < 0.001f) {
-    return false;
-  }
-  input->scroll_offsets_by_element_id[entry.element_id] = next_offset;
-  return true;
-}
 
 using ProfileClock = std::chrono::steady_clock;
 
@@ -2021,8 +1965,8 @@ int main(int argc, char** argv) {
                  attribute_toggles.size());
   }
   std::fprintf(stderr,
-               "viewer controls: mouse wheel scrolls hit scrollable elements "
-               "or document by %.1f px\n",
+               "viewer controls: mouse wheel scrolls the document viewport "
+               "by %.1f px\n",
                scroll_step);
   std::fprintf(stderr,
                "viewer controls: arrow keys scroll by %.1f px; PageUp/"
@@ -2170,6 +2114,9 @@ int main(int argc, char** argv) {
       }
     }
     ++rendered_frame_count;
+    next_input.scroll_offsets_by_element_id =
+        next_result.successor_snapshot.scroll_offsets_by_element_id;
+    next_input.wheel = std::nullopt;
     PrintViewerStatus(reason, rendered_frame_count, next_input, next_result,
                       attribute_toggles, use_incremental);
     SetViewerWindowTitle(window, reason, rendered_frame_count, next_input,
@@ -2235,39 +2182,19 @@ int main(int argc, char** argv) {
             WindowEventToDocumentPoint(renderer, frame_width, frame_height,
                                        event.wheel.mouse_x,
                                        event.wheel.mouse_y);
-        const html_css_renderer::ScrollableElementEntry* scrollable =
-            HitScrollableElementForDelta(result.scrollable_element_entries,
-                                         document_point.x, document_point.y,
-                                         wheel_delta);
-        bool scroll_changed = false;
-        const char* scroll_reason = "scroll";
-        if (scrollable) {
-          scroll_changed =
-              ApplyScrollableElementScroll(&next_input, *scrollable,
-                                           wheel_delta);
-          scroll_reason = "element-scroll";
-        } else {
-          const float next_x =
-              CurrentDocumentScrollX(next_input) + wheel_delta.x;
-          const float next_y =
-              CurrentDocumentScrollY(next_input) + wheel_delta.y;
-          SetDocumentScroll(&next_input, next_x, next_y);
-          scroll_changed =
-              CurrentDocumentScrollX(next_input) != CurrentDocumentScrollX(input) ||
-              CurrentDocumentScrollY(next_input) != CurrentDocumentScrollY(input);
+        next_input.wheel = html_css_renderer::WheelInput{
+            document_point,
+            html_css_renderer::Point{wheel_delta.x, wheel_delta.y}};
+        const double input_update_ms =
+            profiler.enabled()
+                ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                : 0.0;
+        if (!render_updated_input("wheel-scroll", std::move(next_input),
+                                  input_update_ms, input_update_start)) {
+          running = false;
+          break;
         }
-        if (scroll_changed) {
-          const double input_update_ms =
-              profiler.enabled()
-                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
-                  : 0.0;
-          if (!render_updated_input(scroll_reason, std::move(next_input),
-                                    input_update_ms, input_update_start)) {
-            running = false;
-            break;
-          }
-          texture_dirty = true;
-        }
+        texture_dirty = true;
       } else if (event.type == SDL_EVENT_KEY_DOWN &&
                  (event.key.key == ' ' || event.key.key == 't' ||
                   event.key.key == 'T')) {

@@ -41,6 +41,12 @@ void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
     int pressed,
     int event_type,
     int requested);
+void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
+    float x,
+    float y,
+    float delta_x,
+    float delta_y,
+    int requested);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
@@ -61,6 +67,12 @@ int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
     const char* body_html);
+int StandaloneBlinkLiveFrameBridgeDocumentScrollOffsetForStandaloneRenderer(
+    const char* body_html,
+    float* x,
+    float* y,
+    float* max_x,
+    float* max_y);
 int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
@@ -2866,6 +2878,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
         result.successor_snapshot.hovered_element_id.c_str(),
         result.successor_snapshot.active_element_id.c_str());
+    if (input.wheel) {
+      live_probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
+          input.wheel->position.x, input.wheel->position.y,
+          input.wheel->delta.x, input.wheel->delta.y, 1);
+    } else {
+      live_probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
+          0.0f, 0.0f, 0.0f, 0.0f, 0);
+    }
     if (!input.pointers.empty()) {
       const PointerState& pointer = input.pointers.front();
       int pointer_event_type = 0;
@@ -2922,6 +2942,20 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       result.diagnostics.push_back(
           "real Blink PaintArtifact bridge did not reach PaintClean");
       return;
+    }
+    float applied_scroll_x = 0.0f;
+    float applied_scroll_y = 0.0f;
+    float max_scroll_x = 0.0f;
+    float max_scroll_y = 0.0f;
+    if (live_probe::StandaloneBlinkLiveFrameBridgeDocumentScrollOffsetForStandaloneRenderer(
+            probe_html.c_str(), &applied_scroll_x, &applied_scroll_y,
+            &max_scroll_x, &max_scroll_y)) {
+      Point& document_scroll =
+          result.successor_snapshot.scroll_offsets_by_element_id["document"];
+      document_scroll.x = applied_scroll_x;
+      document_scroll.y = applied_scroll_y;
+      snapshot_.scroll_offsets_by_element_id =
+          result.successor_snapshot.scroll_offsets_by_element_id;
     }
     result.needs_begin_frame =
         live_probe::

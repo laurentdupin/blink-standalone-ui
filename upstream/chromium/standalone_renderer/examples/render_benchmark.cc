@@ -190,6 +190,32 @@ bool ParsePoint(const std::string& value, html_css_renderer::Point* output) {
   return true;
 }
 
+bool ParseWheelInput(const std::string& value,
+                     html_css_renderer::WheelInput* output) {
+  const size_t first = value.find(',');
+  const size_t second =
+      first == std::string::npos ? std::string::npos : value.find(',', first + 1);
+  const size_t third =
+      second == std::string::npos ? std::string::npos : value.find(',', second + 1);
+  if (first == std::string::npos || second == std::string::npos ||
+      third == std::string::npos) {
+    return false;
+  }
+  float x = 0.0f;
+  float y = 0.0f;
+  float delta_x = 0.0f;
+  float delta_y = 0.0f;
+  if (!ParseFloat(value.substr(0, first), &x) ||
+      !ParseFloat(value.substr(first + 1, second - first - 1), &y) ||
+      !ParseFloat(value.substr(second + 1, third - second - 1), &delta_x) ||
+      !ParseFloat(value.substr(third + 1), &delta_y)) {
+    return false;
+  }
+  output->position = html_css_renderer::Point{x, y};
+  output->delta = html_css_renderer::Point{delta_x, delta_y};
+  return true;
+}
+
 void SetPrimaryPointer(html_css_renderer::FrameInput* input,
                        html_css_renderer::Point point,
                        bool pressed) {
@@ -279,6 +305,15 @@ bool SamePointers(const std::vector<html_css_renderer::PointerState>& a,
     }
   }
   return true;
+}
+
+bool SameWheelInput(const std::optional<html_css_renderer::WheelInput>& a,
+                    const std::optional<html_css_renderer::WheelInput>& b) {
+  if (!a || !b) {
+    return !a && !b;
+  }
+  return a->position.x == b->position.x && a->position.y == b->position.y &&
+         a->delta.x == b->delta.x && a->delta.y == b->delta.y;
 }
 
 bool SameStringMap(
@@ -879,6 +914,7 @@ void PrintUsage() {
                "[--active id] [--previous-active id] "
                "[--pointer x,y] [--pointer-down] "
                "[--previous-pointer x,y] [--previous-pointer-down] "
+               "[--wheel x,y,dx,dy] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--previous-scroll-x px] [--previous-scroll-y px] "
                "[--scroll-x px] [--scroll-y px] "
@@ -1169,6 +1205,14 @@ int main(int argc, char** argv) {
       if (!previous_input.pointers.empty()) {
         previous_input.pointers.front().pressed = true;
       }
+    } else if (arg == "--wheel") {
+      const char* value = next_value();
+      html_css_renderer::WheelInput wheel;
+      if (!value || !ParseWheelInput(value, &wheel)) {
+        PrintUsage();
+        return 2;
+      }
+      input.wheel = wheel;
     } else if (arg == "--viewport") {
       const char* value = next_value();
       if (!value || !ParseViewport(value, &create_info.viewport)) {
@@ -1471,12 +1515,13 @@ int main(int argc, char** argv) {
                         input.form_values_by_element_id);
       const bool same_pointers =
           SamePointers(previous_input.pointers, input.pointers);
+      const bool same_wheel = SameWheelInput(previous_input.wheel, input.wheel);
       identical_incremental_requested =
           same_delta && same_timeline && same_viewport && same_html &&
           same_element_attributes &&
           (same_stylesheets || same_requested_css_file) && same_scroll &&
           same_focus && same_hover && same_active && same_form &&
-          same_pointers;
+          same_pointers && same_wheel;
       previous_result = blink_embedder->AdvanceAndRender(previous_input);
       have_previous_result = true;
       if (identical_incremental_requested) {

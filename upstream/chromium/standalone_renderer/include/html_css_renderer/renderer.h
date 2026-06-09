@@ -60,6 +60,11 @@ struct PointerState {
   bool pressed = false;
 };
 
+struct WheelInput {
+  Point position;
+  Point delta;
+};
+
 struct KeyboardState {
   std::vector<uint32_t> pressed_key_codes;
 };
@@ -72,6 +77,7 @@ struct FrameInput {
   std::optional<std::vector<Stylesheet>> stylesheets_override;
   std::unordered_map<std::string, std::string> element_attributes_by_id_and_name;
   std::vector<PointerState> pointers;
+  std::optional<WheelInput> wheel;
   KeyboardState keyboard;
   std::unordered_map<std::string, Point> scroll_offsets_by_element_id;
   std::string focused_element_id;

@@ -485,6 +485,17 @@ struct LiveFramePaintProbeCache {
   bool pointer_focus_applied = false;
   std::string pointer_focus_status = "not_requested";
   std::string pointer_focused_element_id;
+  bool requested_wheel_scroll = false;
+  float requested_wheel_x = 0.0f;
+  float requested_wheel_y = 0.0f;
+  float requested_wheel_delta_x = 0.0f;
+  float requested_wheel_delta_y = 0.0f;
+  bool wheel_scroll_base_captured = false;
+  float wheel_scroll_base_x = 0.0f;
+  float wheel_scroll_base_y = 0.0f;
+  bool wheel_scroll_applied = false;
+  bool wheel_scroll_changed = false;
+  std::string wheel_scroll_status = "not_requested";
   std::vector<LiveExportedDrawOp> exported_draw_ops;
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
@@ -656,6 +667,9 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
   ScrollableArea* viewport = frame_view.GetScrollableArea();
   if (!viewport) {
     cache.scroll_offset_status = "frame_scrollable_area_missing";
+    if (cache.requested_wheel_scroll && !cache.wheel_scroll_applied) {
+      cache.wheel_scroll_status = "frame_scrollable_area_missing";
+    }
     return;
   }
   cache.scroll_area_is_root_frame_viewport =
@@ -681,6 +695,32 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
         cc::ScrollSourceType::kAbsoluteScroll,
         mojom::blink::ScrollBehavior::kInstant);
     cache.scroll_offset_status = "applied_to_frame_scrollable_area";
+  }
+  if (cache.requested_wheel_scroll) {
+    if (!cache.wheel_scroll_base_captured) {
+      const ScrollOffset base_offset = viewport->GetScrollOffset();
+      cache.wheel_scroll_base_x = base_offset.x();
+      cache.wheel_scroll_base_y = base_offset.y();
+      cache.wheel_scroll_base_captured = true;
+    }
+    const ScrollOffset requested_offset =
+        ScrollOffset(cache.wheel_scroll_base_x + cache.requested_wheel_delta_x,
+                     cache.wheel_scroll_base_y + cache.requested_wheel_delta_y);
+    const ScrollOffset clamped_offset =
+        viewport->ClampScrollOffset(requested_offset);
+    const ScrollOffset before_wheel_offset = viewport->GetScrollOffset();
+    viewport->SetScrollOffset(
+        clamped_offset, mojom::blink::ScrollType::kProgrammatic,
+        cc::ScrollSourceType::kRelativeScroll,
+        mojom::blink::ScrollBehavior::kInstant);
+    cache.wheel_scroll_changed =
+        cache.wheel_scroll_changed ||
+        viewport->GetScrollOffset() != before_wheel_offset;
+    cache.scroll_offset_changed =
+        cache.scroll_offset_changed || cache.wheel_scroll_changed;
+    cache.wheel_scroll_applied = true;
+    cache.wheel_scroll_status =
+        "applied_to_frame_scrollable_area_relative_instant";
   }
   const gfx::PointF applied_position = viewport->ScrollPosition();
   cache.applied_scroll_x = applied_position.x();
@@ -7730,6 +7770,18 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.scroll_offset_changed ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.scroll_offset_status) << "}"
+       << ",\"wheel_scroll_diagnostics\":{\"requested\":"
+       << (cache.requested_wheel_scroll ? "true" : "false")
+       << ",\"x\":" << cache.requested_wheel_x
+       << ",\"y\":" << cache.requested_wheel_y
+       << ",\"delta\":{\"x\":" << cache.requested_wheel_delta_x
+       << ",\"y\":" << cache.requested_wheel_delta_y
+       << "},\"applied_to_blink\":"
+       << (cache.wheel_scroll_applied ? "true" : "false")
+       << ",\"changed\":"
+       << (cache.wheel_scroll_changed ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.wheel_scroll_status) << "}"
        << ",\"pointer_interaction\":{\"requested\":"
        << (cache.requested_pointer_state ? "true" : "false")
        << ",\"pressed\":"
@@ -8959,6 +9011,34 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
   cache.raw_paint_artifact_audit_json.clear();
 }
 
+void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
+    float x,
+    float y,
+    float delta_x,
+    float delta_y,
+    int requested) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool next_requested = requested != 0;
+  cache.requested_wheel_scroll = next_requested;
+  cache.requested_wheel_x = x;
+  cache.requested_wheel_y = y;
+  cache.requested_wheel_delta_x = delta_x;
+  cache.requested_wheel_delta_y = delta_y;
+  cache.wheel_scroll_base_captured = false;
+  cache.wheel_scroll_base_x = 0.0f;
+  cache.wheel_scroll_base_y = 0.0f;
+  cache.wheel_scroll_applied = false;
+  cache.wheel_scroll_changed = false;
+  cache.wheel_scroll_status = next_requested ? "requested" : "not_requested";
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
 void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
     const char* serialized_offsets) {
   LiveFramePaintProbeCache& cache = ProbeCache();
@@ -8982,6 +9062,32 @@ void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
   cache.chunk_id_strings.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
+}
+
+int StandaloneBlinkLiveFrameBridgeDocumentScrollOffsetForStandaloneRenderer(
+    const char* body_html,
+    float* x,
+    float* y,
+    float* max_x,
+    float* max_y) {
+  RunLiveFramePaintProbe(body_html);
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.scroll_offset_applied) {
+    return 0;
+  }
+  if (x) {
+    *x = cache.applied_scroll_x;
+  }
+  if (y) {
+    *y = cache.applied_scroll_y;
+  }
+  if (max_x) {
+    *max_x = cache.max_scroll_x;
+  }
+  if (max_y) {
+    *max_y = cache.max_scroll_y;
+  }
+  return 1;
 }
 
 void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
