@@ -54,6 +54,8 @@
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/animation/pending_animations.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
+#include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
@@ -69,6 +71,7 @@
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/radio_button_group_scope.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
@@ -104,6 +107,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
+#include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
@@ -485,6 +489,15 @@ struct LiveFramePaintProbeCache {
   bool pointer_focus_applied = false;
   std::string pointer_focus_status = "not_requested";
   std::string pointer_focused_element_id;
+  std::string pointer_down_activation_element_id;
+  DOMNodeId pointer_down_activation_node_id = kInvalidDOMNodeId;
+  bool pointer_activation_requested = false;
+  bool pointer_activation_applied = false;
+  std::string pointer_activation_element_id;
+  std::string pointer_activation_down_element_id;
+  DOMNodeId pointer_activation_node_id = kInvalidDOMNodeId;
+  DOMNodeId pointer_activation_down_node_id = kInvalidDOMNodeId;
+  std::string pointer_activation_status = "not_requested";
   bool requested_wheel_scroll = false;
   float requested_wheel_x = 0.0f;
   float requested_wheel_y = 0.0f;
@@ -659,6 +672,53 @@ PaintLayerScrollableArea* ScrollableAreaForElementForStandaloneRenderer(
 std::string ElementIdForStandaloneRenderer(Element& element) {
   return BlinkStringToStdStringForStandaloneRenderer(
       String(element.GetIdAttribute()));
+}
+
+Element* ActivationTargetForStandaloneRenderer(Element* hit_element) {
+  for (Element* element = hit_element; element;
+       element = element->parentElement()) {
+    Node& node = *element;
+    if (node.HasActivationBehavior()) {
+      return element;
+    }
+  }
+  return nullptr;
+}
+
+MouseEvent* CreateTrustedLeftClickEventForStandaloneRenderer(
+    Document& document,
+    Element& target,
+    float x,
+    float y) {
+  MouseEvent* event = MouseEvent::Create();
+  const int rounded_x = static_cast<int>(std::lround(x));
+  const int rounded_y = static_cast<int>(std::lround(y));
+  event->initMouseEvent(
+      nullptr, event_type_names::kClick, true, true, nullptr, /*detail=*/1,
+      rounded_x, rounded_y, rounded_x, rounded_y,
+      /*ctrl_key=*/false, /*alt_key=*/false, /*shift_key=*/false,
+      /*meta_key=*/false, /*button=*/0, /*related_target=*/nullptr,
+      /*buttons=*/0);
+  event->SetTarget(&target);
+  event->SetTrusted(true);
+  return event;
+}
+
+bool ApplyActivationBehaviorForStandaloneRenderer(Document& document,
+                                                  Element& target,
+                                                  float x,
+                                                  float y) {
+  MouseEvent* click_event =
+      CreateTrustedLeftClickEventForStandaloneRenderer(document, target, x, y);
+  Node& target_node = target;
+  EventDispatchHandlingState* pre_activation_state =
+      target_node.LegacyPreActivationBehavior(*click_event);
+  if (pre_activation_state) {
+    target_node.RunActivationBehavior(*click_event, pre_activation_state);
+    return click_event->DefaultHandled() || click_event->defaultPrevented();
+  }
+
+  return false;
 }
 
 bool ApplyRelativeWheelDeltaToScrollableAreaForStandaloneRenderer(
@@ -4962,6 +5022,8 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string tag_name;
   std::string debug_id;
   std::string type_attr;
+  std::string name_attr;
+  std::string input_name;
   std::string value_attr;
   std::string element_interface;
   std::string computed_display;
@@ -4971,7 +5033,10 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string standalone_support_status;
   std::string unsupported_closure_boundary;
   bool layout_object_present = false;
+  bool is_connected = false;
   bool checked = false;
+  bool radio_group_scope_present = false;
+  bool radio_group_checked = false;
   bool user_agent_shadow_root_present = false;
   bool text_control_inner_editor_present = false;
   bool placeholder_attr_present = false;
@@ -4981,6 +5046,7 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   int shadow_layout_text_count = 0;
   int option_count = 0;
   int selected_option_count = 0;
+  unsigned radio_group_size = 0;
 };
 
 struct FormControlDiagnosticsForStandaloneRenderer {
@@ -5103,13 +5169,27 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
           element->getAttribute(AtomicString("data-debug-id")));
       item.type_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kTypeAttr));
+      item.name_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kNameAttr));
       item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kValueAttr));
+      item.is_connected = element->isConnected();
       item.placeholder_attr_present =
           element->FastHasAttribute(html_names::kPlaceholderAttr);
       if (auto* input = DynamicTo<HTMLInputElement>(element)) {
         item.element_interface = "HTMLInputElement";
         item.checked = input->Checked();
+        item.input_name =
+            BlinkStringToStdStringForStandaloneRenderer(input->GetName());
+        if (input->FormControlType() ==
+            mojom::blink::FormControlType::kInputRadio) {
+          item.radio_group_size = input->SizeOfRadioGroup();
+          if (RadioButtonGroupScope* scope = input->GetRadioButtonGroupScope()) {
+            item.radio_group_scope_present = true;
+            item.radio_group_checked =
+                scope->CheckedButtonForGroup(input->GetName()) == input;
+          }
+        }
       } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
         item.element_interface = "HTMLSelectElement";
       } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
@@ -5400,10 +5480,18 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << ",\"data_debug_id\":"
          << JsonStringForStandaloneRenderer(item.debug_id)
          << ",\"type_attr\":" << JsonStringForStandaloneRenderer(item.type_attr)
+         << ",\"name_attr\":" << JsonStringForStandaloneRenderer(item.name_attr)
+         << ",\"input_name\":" << JsonStringForStandaloneRenderer(item.input_name)
          << ",\"value_length\":" << item.value_attr.size()
          << ",\"element_interface\":"
          << JsonStringForStandaloneRenderer(item.element_interface)
          << ",\"checked\":" << (item.checked ? "true" : "false")
+         << ",\"is_connected\":" << (item.is_connected ? "true" : "false")
+         << ",\"radio_group_scope_present\":"
+         << (item.radio_group_scope_present ? "true" : "false")
+         << ",\"radio_group_size\":" << item.radio_group_size
+         << ",\"radio_group_checked\":"
+         << (item.radio_group_checked ? "true" : "false")
          << ",\"computed_display\":"
          << JsonStringForStandaloneRenderer(item.computed_display)
          << ",\"layout_object_present\":"
@@ -6926,7 +7014,17 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_focus_applied = false;
   cache.pointer_focus_status = "not_requested";
   cache.pointer_focused_element_id.clear();
+  cache.pointer_activation_requested = false;
+  cache.pointer_activation_applied = false;
+  cache.pointer_activation_element_id.clear();
+  cache.pointer_activation_down_element_id.clear();
+  cache.pointer_activation_node_id = kInvalidDOMNodeId;
+  cache.pointer_activation_down_node_id = kInvalidDOMNodeId;
+  cache.pointer_activation_status =
+      cache.requested_pointer_state ? "not_activation_event" : "not_requested";
   if (!cache.requested_pointer_state) {
+    cache.pointer_down_activation_element_id.clear();
+    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
     return;
   }
 
@@ -6968,6 +7066,55 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_state_applied = hit_element != nullptr;
   cache.pointer_state_status =
       hit_element ? "applied_to_blink_hit_test_target" : "no_hit_test_target";
+
+  Element* activation_target = ActivationTargetForStandaloneRenderer(hit_element);
+  const std::string activation_element_id =
+      activation_target ? ElementIdForStandaloneRenderer(*activation_target)
+                        : std::string();
+  const DOMNodeId activation_node_id =
+      activation_target ? activation_target->GetDomNodeId()
+                        : kInvalidDOMNodeId;
+  if (cache.requested_pointer_event_type == 1) {
+    cache.pointer_down_activation_element_id.clear();
+    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
+    if (!activation_target) {
+      cache.pointer_activation_status = "no_activation_behavior_at_pointer_down";
+    } else {
+      cache.pointer_down_activation_element_id = activation_element_id;
+      cache.pointer_down_activation_node_id = activation_node_id;
+      cache.pointer_activation_down_element_id = activation_element_id;
+      cache.pointer_activation_down_node_id = activation_node_id;
+      cache.pointer_activation_element_id = activation_element_id;
+      cache.pointer_activation_node_id = activation_node_id;
+      cache.pointer_activation_status = "stored_pointer_down_activation_target";
+    }
+  } else if (cache.requested_pointer_event_type == 2) {
+    cache.pointer_activation_requested = true;
+    cache.pointer_activation_down_element_id =
+        cache.pointer_down_activation_element_id;
+    cache.pointer_activation_down_node_id =
+        cache.pointer_down_activation_node_id;
+    cache.pointer_activation_element_id = activation_element_id;
+    cache.pointer_activation_node_id = activation_node_id;
+    if (!activation_target) {
+      cache.pointer_activation_status = "no_activation_behavior_at_pointer_up";
+    } else if (cache.pointer_down_activation_node_id == kInvalidDOMNodeId) {
+      cache.pointer_activation_status = "missing_pointer_down_activation_target";
+    } else if (activation_node_id != cache.pointer_down_activation_node_id) {
+      cache.pointer_activation_status = "pointer_up_target_mismatch";
+    } else {
+      cache.pointer_activation_applied =
+          ApplyActivationBehaviorForStandaloneRenderer(
+              document, *activation_target, cache.requested_pointer_x,
+              cache.requested_pointer_y);
+      cache.pointer_activation_status =
+          cache.pointer_activation_applied
+              ? "applied_blink_default_activation"
+              : "unsupported_default_activation_behavior";
+    }
+    cache.pointer_down_activation_element_id.clear();
+    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
+  }
 
   if (cache.requested_pointer_event_type != 1) {
     cache.pointer_focus_status = "not_focus_event";
@@ -7949,7 +8096,22 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"focused_element_id\":"
        << JsonStringForStandaloneRenderer(cache.pointer_focused_element_id)
        << ",\"focus_status\":"
-       << JsonStringForStandaloneRenderer(cache.pointer_focus_status) << "}"
+       << JsonStringForStandaloneRenderer(cache.pointer_focus_status)
+       << ",\"activation_requested\":"
+       << (cache.pointer_activation_requested ? "true" : "false")
+       << ",\"activation_applied_to_blink\":"
+       << (cache.pointer_activation_applied ? "true" : "false")
+       << ",\"activation_element_id\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_activation_element_id)
+       << ",\"activation_down_element_id\":"
+       << JsonStringForStandaloneRenderer(
+              cache.pointer_activation_down_element_id)
+       << ",\"activation_node_id\":" << cache.pointer_activation_node_id
+       << ",\"activation_down_node_id\":"
+       << cache.pointer_activation_down_node_id
+       << ",\"activation_status\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_activation_status)
+       << "}"
        << ",\"element_scroll_diagnostics\":"
        << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
        << ",\"scrollable_element_entries\":"
@@ -9360,6 +9522,18 @@ void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
   cache.pointer_focus_applied = false;
   cache.pointer_focus_status = next_requested ? "requested" : "not_requested";
   cache.pointer_focused_element_id.clear();
+  cache.pointer_activation_requested = false;
+  cache.pointer_activation_applied = false;
+  cache.pointer_activation_element_id.clear();
+  cache.pointer_activation_down_element_id.clear();
+  cache.pointer_activation_node_id = kInvalidDOMNodeId;
+  cache.pointer_activation_down_node_id = kInvalidDOMNodeId;
+  cache.pointer_activation_status =
+      next_requested ? "requested" : "not_requested";
+  if (!next_requested) {
+    cache.pointer_down_activation_element_id.clear();
+    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
+  }
   cache.initialized = false;
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();

@@ -3534,6 +3534,8 @@ const WrapperTypeInfo& MutationObserver::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("MutationObserver");
 const WrapperTypeInfo& UIEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("UIEvent");
+const WrapperTypeInfo& MouseEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("MouseEvent");
 const WrapperTypeInfo& DOMSelection::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("DOMSelection");
 const WrapperTypeInfo& CSSStyleDeclaration::wrapper_type_info_ =
@@ -4234,6 +4236,165 @@ unsigned UIEvent::which() const {
 void UIEvent::Trace(Visitor* visitor) const {
   Event::Trace(visitor);
   visitor->Trace(view_);
+}
+
+void UIEventWithKeyState::InitModifiers(bool ctrl_key,
+                                        bool alt_key,
+                                        bool shift_key,
+                                        bool meta_key) {
+  modifiers_ = 0;
+  if (ctrl_key) {
+    modifiers_ |= WebInputEvent::kControlKey;
+  }
+  if (alt_key) {
+    modifiers_ |= WebInputEvent::kAltKey;
+  }
+  if (shift_key) {
+    modifiers_ |= WebInputEvent::kShiftKey;
+  }
+  if (meta_key) {
+    modifiers_ |= WebInputEvent::kMetaKey;
+  }
+}
+
+MouseEvent::MouseEvent()
+    : UIEventWithKeyState(),
+      position_type_(PositionType::kPosition),
+      button_(-1),
+      buttons_(0),
+      synthetic_event_type_(kRealOrIndistinguishable),
+      menu_source_type_(ui::mojom::blink::MenuSourceType::kNone) {}
+
+void MouseEvent::InitCoordinates(const double client_x,
+                                 const double client_y,
+                                 const LocalDOMWindow*) {
+  client_x_ = client_x;
+  client_y_ = client_y;
+  page_x_ = client_x;
+  page_y_ = client_y;
+  absolute_location_ = gfx::PointF(client_x, client_y);
+  layer_location_ = gfx::PointF(client_x, client_y);
+  offset_x_ = client_x;
+  offset_y_ = client_y;
+  has_cached_relative_position_ = true;
+}
+
+void MouseEvent::InitCoordinatesForTesting(double screen_x,
+                                           double screen_y,
+                                           double client_x,
+                                           double client_y) {
+  screen_x_ = screen_x;
+  screen_y_ = screen_y;
+  InitCoordinates(client_x, client_y);
+}
+
+uint16_t MouseEvent::WebInputEventModifiersToButtons(unsigned modifiers) {
+  uint16_t buttons = 0;
+  if (modifiers & WebInputEvent::kLeftButtonDown) {
+    buttons |= 1;
+  }
+  if (modifiers & WebInputEvent::kRightButtonDown) {
+    buttons |= 2;
+  }
+  if (modifiers & WebInputEvent::kMiddleButtonDown) {
+    buttons |= 4;
+  }
+  return buttons;
+}
+
+void MouseEvent::initMouseEvent(ScriptState*,
+                                const AtomicString& type,
+                                bool bubbles,
+                                bool cancelable,
+                                AbstractView* view,
+                                int detail,
+                                int screen_x,
+                                int screen_y,
+                                int client_x,
+                                int client_y,
+                                bool ctrl_key,
+                                bool alt_key,
+                                bool shift_key,
+                                bool meta_key,
+                                int16_t button,
+                                EventTarget* related_target,
+                                uint16_t buttons) {
+  initEvent(type, bubbles, cancelable);
+  initUIEvent(type, bubbles, cancelable, view, detail);
+  InitModifiers(ctrl_key, alt_key, shift_key, meta_key);
+  screen_x_ = screen_x;
+  screen_y_ = screen_y;
+  InitCoordinates(client_x, client_y);
+  button_ = button;
+  buttons_ = buttons;
+  related_target_ = related_target;
+  position_type_ = PositionType::kPosition;
+  synthetic_event_type_ = kRealOrIndistinguishable;
+  menu_source_type_ = ui::mojom::blink::MenuSourceType::kNone;
+}
+
+const AtomicString& MouseEvent::InterfaceName() const {
+  return event_interface_names::kEvent;
+}
+
+bool MouseEvent::IsMouseEvent() const {
+  return true;
+}
+
+int16_t MouseEvent::button() const {
+  return button_;
+}
+
+bool MouseEvent::IsLeftButton() const {
+  return button_ == 0;
+}
+
+bool MouseEvent::IsLinkClickButton() const {
+  return IsLeftButton();
+}
+
+unsigned MouseEvent::which() const {
+  if (button_ < 0) {
+    return 0;
+  }
+  return static_cast<unsigned>(button_) + 1;
+}
+
+Node* MouseEvent::toElement() const {
+  return RawTarget() ? RawTarget()->ToNode() : nullptr;
+}
+
+Node* MouseEvent::fromElement() const {
+  return related_target_ ? related_target_->ToNode() : nullptr;
+}
+
+void MouseEvent::Trace(Visitor* visitor) const {
+  UIEvent::Trace(visitor);
+  visitor->Trace(related_target_);
+}
+
+DispatchEventResult MouseEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  return dispatcher.Dispatch();
+}
+
+void MouseEvent::ReceivedTarget() {}
+
+void MouseEvent::ComputeRelativePosition() {}
+
+int MouseEvent::layerX() {
+  return static_cast<int>(std::floor(layer_location_.x()));
+}
+
+int MouseEvent::layerY() {
+  return static_cast<int>(std::floor(layer_location_.y()));
+}
+
+double MouseEvent::offsetX() const {
+  return std::floor(offset_x_);
+}
+
+double MouseEvent::offsetY() const {
+  return std::floor(offset_y_);
 }
 
 void ContextMenuController::HandleContextMenuEvent(MouseEvent*) {}
@@ -6812,10 +6973,6 @@ Element* DisplayLockUtilities::LockedInclusiveAncestorPreventingStyleWithinTreeS
     const Node&) {
   return nullptr;
 }
-Node* DOMNodeIds::NodeForId(DOMNodeId) {
-  return nullptr;
-}
-
 unsigned FirstLetterPseudoElement::FirstLetterLength(
     const String& string,
     bool,
@@ -6846,27 +7003,6 @@ PictureInPictureController& PictureInPictureController::From(Document&) {
 }
 
 bool PictureInPictureController::IsElementInPictureInPicture(const Element*) {
-  return false;
-}
-
-void RadioButtonGroupScope::Trace(Visitor*) const {}
-void RadioButtonGroupScope::AddButton(HTMLInputElement*) {}
-void RadioButtonGroupScope::UpdateCheckedState(HTMLInputElement*) {}
-void RadioButtonGroupScope::UpdateLastFocusedState(HTMLInputElement*) {}
-void RadioButtonGroupScope::RequiredAttributeChanged(HTMLInputElement*) {}
-void RadioButtonGroupScope::RemoveButton(HTMLInputElement*) {}
-unsigned RadioButtonGroupScope::GroupSizeFor(const HTMLInputElement*) const {
-  return 0;
-}
-HTMLInputElement* RadioButtonGroupScope::CheckedButtonForGroup(
-    const AtomicString&) const {
-  return nullptr;
-}
-HTMLInputElement* RadioButtonGroupScope::LastFocusedButtonForGroup(
-    const AtomicString&) const {
-  return nullptr;
-}
-bool RadioButtonGroupScope::IsInRequiredGroup(HTMLInputElement*) const {
   return false;
 }
 
@@ -7032,10 +7168,6 @@ void FlatTreeNodeData::Trace(Visitor* visitor) const {
   visitor->Trace(previous_in_assigned_nodes_);
   visitor->Trace(next_in_assigned_nodes_);
   visitor->Trace(manually_assigned_slot_);
-}
-
-DOMNodeId DOMNodeIds::IdForNode(Node*) {
-  return 0;
 }
 
 Vector<AtomicString> const

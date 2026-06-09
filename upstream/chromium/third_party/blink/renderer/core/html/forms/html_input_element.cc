@@ -999,6 +999,15 @@ void HTMLInputElement::ParseAttribute(
 
 void HTMLInputElement::ParserDidSetAttributes() {
   DCHECK(parsing_in_progress_);
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  // The standalone body-fragment parser route can leave the cached input name
+  // unset even though the parsed name attribute is present. Mirror the normal
+  // ParseAttribute side effect before type initialization registers radio
+  // inputs with Blink's radio group scope.
+  if (FastHasAttribute(html_names::kNameAttr)) {
+    name_ = FastGetAttribute(html_names::kNameAttr);
+  }
+#endif
   InitializeTypeInParsing();
   TextControlElement::ParserDidSetAttributes();
 #if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
