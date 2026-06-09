@@ -9335,7 +9335,6 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
   cache.scroll_offset_changed = false;
   cache.scroll_offset_status = requested ? "requested" : "not_requested";
   cache.initialized = false;
-  cache.body_html.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();

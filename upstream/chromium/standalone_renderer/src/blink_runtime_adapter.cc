@@ -660,6 +660,11 @@ Point SnapshotDocumentScrollOffset(const RendererSnapshot& snapshot) {
   return Point{};
 }
 
+void SetSnapshotDocumentScrollOffset(RendererSnapshot& snapshot,
+                                     Point scroll_offset) {
+  snapshot.scroll_offsets_by_element_id["document"] = scroll_offset;
+}
+
 std::string SerializeElementScrollOffsetsForStandaloneRenderer(
     const std::unordered_map<std::string, Point>& scroll_offsets) {
   std::vector<std::pair<std::string, Point>> ordered;
@@ -2624,8 +2629,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ApplyInput(input);
     RenderResult result;
     result.successor_snapshot = snapshot_;
-    if (TryRenderDocumentScrollOnlyFromRetainedScene(result,
-                                                     previous_snapshot)) {
+    if (TryRenderDocumentScrollOnlyFromRetainedScene(result, previous_snapshot,
+                                                    input)) {
       return result;
     }
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, input, true,
@@ -2796,8 +2801,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     }
     if (snapshot_.timeline_time_seconds !=
         previous_snapshot.timeline_time_seconds) {
-      push_diagnostic("document scroll fast path ineligible: time changed");
-      return false;
+      if (previous_needs_begin_frame_) {
+        push_diagnostic("document scroll fast path ineligible: time changed");
+        return false;
+      }
+      push_diagnostic(
+          "document scroll fast path allowed time change because previous "
+          "Blink frame did not request begin frame");
     }
     if (!SameStringMap(snapshot_.element_attributes_by_id_and_name,
                        previous_snapshot.element_attributes_by_id_and_name)) {
@@ -2827,17 +2837,40 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     if (SamePoint(SnapshotDocumentScrollOffset(snapshot_),
                   SnapshotDocumentScrollOffset(previous_snapshot))) {
       push_diagnostic(
-          "document scroll fast path ineligible: document scroll unchanged");
-      return false;
+          "document scroll fast path using retained no-op because document "
+          "scroll is unchanged");
     }
     return true;
   }
 
   bool TryRenderDocumentScrollOnlyFromRetainedScene(
       RenderResult& result,
-      const RendererSnapshot& previous_snapshot) {
+      const RendererSnapshot& previous_snapshot,
+      const FrameInput& input) {
+    if (input.wheel || !input.pointers.empty() ||
+        !input.keyboard.pressed_key_codes.empty()) {
+      return false;
+    }
+    const RendererSnapshot unclamped_snapshot = snapshot_;
+    bool clamped_to_previous_max = false;
+    if (previous_document_max_scroll_offset_) {
+      const Point requested_scroll = SnapshotDocumentScrollOffset(snapshot_);
+      const Point maximum = *previous_document_max_scroll_offset_;
+      const Point clamped_scroll{
+          std::clamp(requested_scroll.x, 0.0f, std::max(0.0f, maximum.x)),
+          std::clamp(requested_scroll.y, 0.0f, std::max(0.0f, maximum.y))};
+      if (!SamePoint(requested_scroll, clamped_scroll)) {
+        SetSnapshotDocumentScrollOffset(snapshot_, clamped_scroll);
+        result.successor_snapshot = snapshot_;
+        clamped_to_previous_max = true;
+      }
+    }
     if (!CanUseDocumentScrollOnlyFastPath(previous_snapshot,
                                          &result.diagnostics)) {
+      if (clamped_to_previous_max) {
+        snapshot_ = unclamped_snapshot;
+        result.successor_snapshot = snapshot_;
+      }
       return false;
     }
     const Point current_scroll_offset = SnapshotDocumentScrollOffset(snapshot_);
@@ -2852,6 +2885,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     result.frame.resource_commands = previous_resource_commands_;
     result.hit_test_entries = previous_hit_test_entries_;
     result.scrollable_element_entries = previous_scrollable_element_entries_;
+    result.needs_begin_frame = previous_needs_begin_frame_;
     const Point scroll_delta{previous_scroll_offset.x - current_scroll_offset.x,
                              previous_scroll_offset.y - current_scroll_offset.y};
     TranslateHitTestEntries(result.hit_test_entries, scroll_delta);
@@ -2859,6 +2893,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                       scroll_delta);
     result.diagnostics.push_back(
         "live Blink document scroll-only fast path reused retained scene");
+    if (clamped_to_previous_max) {
+      result.diagnostics.push_back(
+          "live Blink document scroll-only fast path clamped to previous "
+          "Blink-reported maximum scroll offset");
+    }
     result.diagnostics.push_back(
         "paint artifact source: real Blink PaintArtifact; "
         "extractor=real_blink_paint_artifact_extractor; "
@@ -2977,6 +3016,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           result.successor_snapshot.scroll_offsets_by_element_id["document"];
       document_scroll.x = applied_scroll_x;
       document_scroll.y = applied_scroll_y;
+      previous_document_max_scroll_offset_ = Point{max_scroll_x, max_scroll_y};
       snapshot_.scroll_offsets_by_element_id =
           result.successor_snapshot.scroll_offsets_by_element_id;
     }
@@ -2984,6 +3024,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         live_probe::
             StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
                 probe_html.c_str()) != 0;
+    previous_needs_begin_frame_ = result.needs_begin_frame;
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
     ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
     PersistObservedScrollableElementOffsetsForStandaloneRenderer(result);
@@ -3889,6 +3930,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   bool force_paint_oracle_bitmap_ = false;
   std::string lifecycle_stop_;
   bool last_pointer_pressed_ = false;
+  bool previous_needs_begin_frame_ = false;
+  std::optional<Point> previous_document_max_scroll_offset_;
   std::optional<RetainedScene> previous_retained_scene_;
   std::vector<ResourceCommand> previous_resource_commands_;
   std::vector<HitTestEntry> previous_hit_test_entries_;
