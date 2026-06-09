@@ -140,6 +140,10 @@ struct FinerCacheUnitDescriptor {
   bool entry_effect_layer_depth_available = false;
   int entry_effect_layer_depth = -1;
   std::string entry_state_status = "unavailable";
+  bool entry_state_complete = false;
+  std::vector<std::string> entry_state_blockers;
+  std::string entry_clip_kind = "unavailable";
+  std::string entry_transform_kind = "unavailable";
   bool conservative_candidate = false;
   bool has_save_layer_ops = false;
   bool has_non_rect_clip_ops = false;

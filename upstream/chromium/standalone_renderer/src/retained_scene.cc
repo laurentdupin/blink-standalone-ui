@@ -961,6 +961,211 @@ int DrawSceneCommandCount(const std::vector<SceneCommand>& commands) {
   return count;
 }
 
+bool Matrix4IsUnitScaleTranslation(const Matrix4& matrix) {
+  const auto& m = matrix.values;
+  return NearlyEqual(m[0], 1.0f) && NearlyEqual(m[1], 0.0f) &&
+         NearlyEqual(m[2], 0.0f) && NearlyEqual(m[3], 0.0f) &&
+         NearlyEqual(m[4], 0.0f) && NearlyEqual(m[5], 1.0f) &&
+         NearlyEqual(m[6], 0.0f) && NearlyEqual(m[7], 0.0f) &&
+         NearlyEqual(m[8], 0.0f) && NearlyEqual(m[9], 0.0f) &&
+         NearlyEqual(m[10], 1.0f) && NearlyEqual(m[11], 0.0f) &&
+         NearlyEqual(m[14], 0.0f) && NearlyEqual(m[15], 1.0f);
+}
+
+bool Matrix4IsIdentity(const Matrix4& matrix) {
+  return Matrix4IsUnitScaleTranslation(matrix) &&
+         NearlyEqual(matrix.values[12], 0.0f) &&
+         NearlyEqual(matrix.values[13], 0.0f);
+}
+
+Rect TranslateRect(Rect rect, const Matrix4& matrix) {
+  rect.x += matrix.values[12];
+  rect.y += matrix.values[13];
+  return rect;
+}
+
+struct CommandStreamEntryState {
+  int save_depth = 0;
+  int effect_layer_depth = 0;
+  bool transform_available = true;
+  Matrix4 transform;
+  bool has_clip = false;
+  bool clip_bounds_available = true;
+  Rect clip_bounds;
+  std::string clip_kind = "none";
+  std::vector<std::string> blockers;
+};
+
+void AddEntryStateBlocker(CommandStreamEntryState& state,
+                          std::string blocker) {
+  if (std::find(state.blockers.begin(), state.blockers.end(), blocker) ==
+      state.blockers.end()) {
+    state.blockers.push_back(std::move(blocker));
+  }
+}
+
+void MarkClipUnavailable(CommandStreamEntryState& state,
+                         const std::string& blocker) {
+  state.has_clip = true;
+  state.clip_bounds_available = false;
+  state.clip_kind = "unavailable";
+  AddEntryStateBlocker(state, blocker);
+}
+
+void ApplyRectClipToEntryState(CommandStreamEntryState& state,
+                               Rect clip,
+                               const char* clip_kind) {
+  if (!state.transform_available) {
+    MarkClipUnavailable(state, "clip_after_unavailable_transform");
+    return;
+  }
+  clip = TranslateRect(clip, state.transform);
+  if (state.has_clip && !state.clip_bounds_available) {
+    return;
+  }
+  state.clip_bounds =
+      state.has_clip ? IntersectRects(state.clip_bounds, clip) : clip;
+  state.has_clip = true;
+  state.clip_bounds_available = true;
+  if (std::string(clip_kind) == "rounded_rect" ||
+      state.clip_kind == "rounded_rect") {
+    state.clip_kind = "rounded_rect";
+  } else {
+    state.clip_kind = "rect";
+  }
+}
+
+void ApplyCommandToEntryState(
+    const DrawCommand& command,
+    CommandStreamEntryState& state,
+    std::vector<CommandStreamEntryState>& saved_states) {
+  switch (command.type) {
+    case DrawCommandType::kSave:
+      saved_states.push_back(state);
+      ++state.save_depth;
+      break;
+    case DrawCommandType::kSaveLayer:
+      saved_states.push_back(state);
+      ++state.save_depth;
+      ++state.effect_layer_depth;
+      break;
+    case DrawCommandType::kRestore:
+      if (!saved_states.empty()) {
+        state = saved_states.back();
+        saved_states.pop_back();
+      } else {
+        AddEntryStateBlocker(state, "restore_without_saved_state");
+      }
+      break;
+    case DrawCommandType::kTransform:
+      if (state.transform_available &&
+          Matrix4IsUnitScaleTranslation(command.transform)) {
+        state.transform.values[12] += command.transform.values[12];
+        state.transform.values[13] += command.transform.values[13];
+      } else {
+        state.transform_available = false;
+        AddEntryStateBlocker(state, "active_non_translation_transform");
+      }
+      break;
+    case DrawCommandType::kClipRect:
+      if (command.clip_difference) {
+        MarkClipUnavailable(state, "active_difference_clip");
+      } else {
+        ApplyRectClipToEntryState(state, command.rect, "rect");
+      }
+      break;
+    case DrawCommandType::kClipRRect:
+      if (command.clip_difference) {
+        MarkClipUnavailable(state, "active_difference_clip");
+      } else {
+        ApplyRectClipToEntryState(state, command.rect, "rounded_rect");
+      }
+      break;
+    case DrawCommandType::kClipPath:
+      MarkClipUnavailable(state, command.clip_difference
+                                     ? "active_difference_path_clip"
+                                     : "active_path_clip");
+      break;
+    default:
+      break;
+  }
+}
+
+CommandStreamEntryState EntryStateForSceneCommands(
+    const std::vector<SceneCommand>& scene_commands) {
+  CommandStreamEntryState state;
+  std::vector<CommandStreamEntryState> saved_states;
+  for (const SceneCommand& scene_command : scene_commands) {
+    if (scene_command.type != SceneCommandType::kDrawCommand) {
+      continue;
+    }
+    ApplyCommandToEntryState(scene_command.draw_command, state, saved_states);
+  }
+  return state;
+}
+
+void WriteEntryStateToDescriptor(FinerCacheUnitDescriptor& descriptor,
+                                 const CommandStreamEntryState& state) {
+  descriptor.entry_local_save_depth_available = true;
+  descriptor.entry_local_save_depth = state.save_depth;
+  descriptor.entry_effect_layer_depth_available = true;
+  descriptor.entry_effect_layer_depth = state.effect_layer_depth;
+  descriptor.entry_transform_available = state.transform_available;
+  if (state.transform_available) {
+    descriptor.entry_transform = state.transform;
+    descriptor.entry_transform_kind =
+        Matrix4IsIdentity(state.transform) ? "identity"
+                                           : "unit_scale_translation";
+  } else {
+    descriptor.entry_transform_kind = "unavailable_non_translation";
+  }
+  descriptor.entry_clip_bounds_available =
+      state.has_clip && state.clip_bounds_available;
+  if (descriptor.entry_clip_bounds_available) {
+    descriptor.entry_clip_bounds = state.clip_bounds;
+  }
+  descriptor.entry_clip_kind = state.clip_kind;
+  descriptor.entry_state_blockers = state.blockers;
+  if (state.clip_kind == "rounded_rect") {
+    descriptor.entry_state_blockers.push_back(
+        "active_rounded_clip_shape_not_serialized");
+  }
+  if (state.effect_layer_depth > 0) {
+    descriptor.entry_state_blockers.push_back(
+        "active_save_layer_context_not_serialized");
+  }
+  descriptor.entry_state_complete = descriptor.entry_state_blockers.empty() &&
+                                    state.transform_available &&
+                                    state.clip_bounds_available;
+  descriptor.entry_state_status =
+      descriptor.entry_state_complete
+          ? "complete_scene_command_state_before_damage_clip"
+          : "incomplete_scene_command_state_before_damage_clip";
+}
+
+void PopulateFinerCacheUnitSceneEntryStates(
+    std::vector<FinerCacheUnitDescriptor>& descriptors,
+    const std::vector<SceneCommand>& scene_commands_before_chunk_commands,
+    const DrawCommandList& chunk_commands) {
+  CommandStreamEntryState state =
+      EntryStateForSceneCommands(scene_commands_before_chunk_commands);
+  std::vector<CommandStreamEntryState> saved_states;
+  for (size_t command_index = 0; command_index <= chunk_commands.size();
+       ++command_index) {
+    for (FinerCacheUnitDescriptor& descriptor : descriptors) {
+      if (descriptor.translated_command_span_available &&
+          descriptor.translated_command_begin_index ==
+              static_cast<int>(command_index)) {
+        WriteEntryStateToDescriptor(descriptor, state);
+      }
+    }
+    if (command_index < chunk_commands.size()) {
+      ApplyCommandToEntryState(chunk_commands[command_index], state,
+                               saved_states);
+    }
+  }
+}
+
 void RecordChange(RetainedSceneDiff& diff, RetainedChunkDiff chunk_diff) {
   switch (chunk_diff.kind) {
     case RetainedChunkChangeKind::kRetained:
@@ -1533,6 +1738,9 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
       descriptor.flattened_draw_command_end_index =
           chunk_flat_draw_command_base + descriptor.translated_command_end_index;
     }
+    PopulateFinerCacheUnitSceneEntryStates(chunk.finer_cache_units,
+                                           frame.scene_commands,
+                                           chunk.commands);
     for (const DrawCommand& command : chunk.commands) {
       frame.scene_commands.push_back(SceneCommand::Draw(command));
     }

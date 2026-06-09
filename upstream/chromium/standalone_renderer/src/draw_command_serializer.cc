@@ -475,6 +475,13 @@ void WriteFinerCacheUnitDescriptors(
     out << ",\"effect_layer_depth_available\":"
         << (unit.entry_effect_layer_depth_available ? "true" : "false")
         << ",\"effect_layer_depth\":" << unit.entry_effect_layer_depth
+        << ",\"complete\":"
+        << (unit.entry_state_complete ? "true" : "false")
+        << ",\"blockers\":";
+    WriteStringArray(out, unit.entry_state_blockers);
+    out << ",\"clip_kind\":\"" << EscapeJson(unit.entry_clip_kind)
+        << "\",\"transform_kind\":\""
+        << EscapeJson(unit.entry_transform_kind) << "\""
         << "}"
         << ",\"conservative_candidate\":"
         << (unit.conservative_candidate ? "true" : "false")
