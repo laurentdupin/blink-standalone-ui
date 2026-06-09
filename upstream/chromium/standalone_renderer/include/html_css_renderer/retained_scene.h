@@ -44,6 +44,7 @@ struct RetainedPaintChunk {
   DrawCommandList commands;
   uint64_t content_hash = 0;
   uint64_t resource_hash = 0;
+  std::vector<FinerCacheUnitDescriptor> finer_cache_units;
 };
 
 struct RetainedScene {

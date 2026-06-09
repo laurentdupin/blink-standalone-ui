@@ -104,6 +104,36 @@ struct PaintPropertyStateSnapshot {
   Rect scroll_container_rect;
   Rect scroll_contents_rect;
 };
+
+struct FinerCacheUnitDescriptor {
+  std::string stable_key;
+  int parent_chunk_debug_index = -1;
+  std::string parent_chunk_stable_key;
+  int unit_index = -1;
+  int begin_display_item_index = -1;
+  int end_display_item_index = -1;
+  uint64_t display_item_client_id = 0;
+  bool display_item_client_id_valid = false;
+  Rect visual_bounds;
+  uint64_t content_hash = 0;
+  uint64_t resource_signal_hash = 0;
+  int display_item_count = 0;
+  int drawing_item_count = 0;
+  int paint_op_count = 0;
+  int recursive_paint_op_count = 0;
+  int visual_op_count = 0;
+  bool conservative_candidate = false;
+  bool has_save_layer_ops = false;
+  bool has_non_rect_clip_ops = false;
+  bool has_non_translation_transform = false;
+  bool has_effect_opacity = false;
+  bool has_shader_ops = false;
+  bool has_image_ops = false;
+  bool has_path_ops = false;
+  bool has_filter_ops = false;
+  bool has_path_effect_ops = false;
+};
+
 struct SceneChunk {
   int debug_index = -1;
   std::string stable_key;
@@ -115,6 +145,7 @@ struct SceneChunk {
   uint64_t resource_hash = 0;
   bool retained_from_previous_frame = false;
   DrawCommandList commands;
+  std::vector<FinerCacheUnitDescriptor> finer_cache_units;
 };
 
 struct SceneCommand {

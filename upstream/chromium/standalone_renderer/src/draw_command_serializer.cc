@@ -341,6 +341,121 @@ void WriteStringArray(std::ostringstream& out,
   out << "]";
 }
 
+std::vector<std::string> FinerCacheUnitBlockers(
+    const FinerCacheUnitDescriptor& unit) {
+  std::vector<std::string> blockers;
+  if (!unit.display_item_client_id_valid) {
+    blockers.push_back("invalid_display_item_client_id");
+  }
+  if (unit.display_item_count <= 0) {
+    blockers.push_back("no_display_items");
+  }
+  if (unit.drawing_item_count <= 0) {
+    blockers.push_back("no_drawing_display_items");
+  }
+  if (IsEmptyRect(unit.visual_bounds)) {
+    blockers.push_back("empty_visual_bounds");
+  }
+  if (unit.has_save_layer_ops) {
+    blockers.push_back("contains_save_layer_ops");
+  }
+  if (unit.has_non_rect_clip_ops) {
+    blockers.push_back("contains_non_rect_clip_ops");
+  }
+  if (unit.has_non_translation_transform) {
+    blockers.push_back("contains_non_translation_transform");
+  }
+  if (unit.has_effect_opacity) {
+    blockers.push_back("contains_effect_opacity");
+  }
+  if (unit.has_shader_ops) {
+    blockers.push_back("contains_shader_ops");
+  }
+  if (unit.has_image_ops) {
+    blockers.push_back("contains_image_ops");
+  }
+  if (unit.has_path_ops) {
+    blockers.push_back("contains_path_ops");
+  }
+  if (unit.has_filter_ops) {
+    blockers.push_back("contains_filter_ops");
+  }
+  if (unit.has_path_effect_ops) {
+    blockers.push_back("contains_path_effect_ops");
+  }
+  return blockers;
+}
+
+void WriteFinerCacheUnitDescriptors(
+    std::ostringstream& out,
+    const std::vector<FinerCacheUnitDescriptor>& units) {
+  size_t candidate_count = 0;
+  size_t invalid_client_count = 0;
+  size_t resource_signal_count = 0;
+  for (const FinerCacheUnitDescriptor& unit : units) {
+    if (unit.conservative_candidate) {
+      ++candidate_count;
+    }
+    if (!unit.display_item_client_id_valid) {
+      ++invalid_client_count;
+    }
+    if (unit.resource_signal_hash != 0) {
+      ++resource_signal_count;
+    }
+  }
+
+  out << "{\"schema_version\":1"
+      << ",\"behavior_neutral\":true"
+      << ",\"cache_behavior_enabled\":false"
+      << ",\"boundary_source\":\"consecutive_blink_display_item_client_runs\""
+      << ",\"unit_count\":" << units.size()
+      << ",\"conservative_candidate_count\":" << candidate_count
+      << ",\"unproven_or_blocked_count\":"
+      << (units.size() - candidate_count)
+      << ",\"invalid_client_unit_count\":" << invalid_client_count
+      << ",\"resource_signal_unit_count\":" << resource_signal_count
+      << ",\"units\":[";
+  for (size_t i = 0; i < units.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const FinerCacheUnitDescriptor& unit = units[i];
+    const std::vector<std::string> blockers =
+        FinerCacheUnitBlockers(unit);
+    out << "{\"unit_index\":" << unit.unit_index
+        << ",\"stable_key\":\"" << EscapeJson(unit.stable_key)
+        << "\",\"parent_chunk_debug_index\":"
+        << unit.parent_chunk_debug_index
+        << ",\"parent_chunk_stable_key\":\""
+        << EscapeJson(unit.parent_chunk_stable_key)
+        << "\",\"begin_display_item_index\":"
+        << unit.begin_display_item_index
+        << ",\"end_display_item_index\":"
+        << unit.end_display_item_index
+        << ",\"display_item_client_id\":"
+        << unit.display_item_client_id
+        << ",\"display_item_client_id_valid\":"
+        << (unit.display_item_client_id_valid ? "true" : "false")
+        << ",\"visual_bounds\":";
+    WriteRect(out, unit.visual_bounds);
+    out << ",\"content_hash\":" << unit.content_hash
+        << ",\"resource_signal_hash\":"
+        << unit.resource_signal_hash
+        << ",\"display_item_count\":" << unit.display_item_count
+        << ",\"drawing_item_count\":" << unit.drawing_item_count
+        << ",\"paint_op_count\":" << unit.paint_op_count
+        << ",\"recursive_paint_op_count\":"
+        << unit.recursive_paint_op_count
+        << ",\"visual_op_count\":" << unit.visual_op_count
+        << ",\"conservative_candidate\":"
+        << (unit.conservative_candidate ? "true" : "false")
+        << ",\"blockers\":";
+    WriteStringArray(out, blockers);
+    out << "}";
+  }
+  out << "]}";
+}
+
 void WriteSkippedTransformDiagnostics(
     std::ostringstream& out,
     const std::vector<SkippedTransformDiagnostic>& diagnostics) {
@@ -496,7 +611,10 @@ void WriteSceneChunks(std::ostringstream& out,
         << ",\"resource_hash\":" << chunks[i].resource_hash
         << ",\"retained_from_previous_frame\":"
         << (chunks[i].retained_from_previous_frame ? "true" : "false")
-        << ",\"command_count\":" << chunks[i].commands.size() << "}";
+        << ",\"command_count\":" << chunks[i].commands.size()
+        << ",\"finer_cache_unit_descriptors\":";
+    WriteFinerCacheUnitDescriptors(out, chunks[i].finer_cache_units);
+    out << "}";
   }
   out << "]";
 }
@@ -618,6 +736,8 @@ void WriteRetainedCacheMetadata(std::ostringstream& out,
   size_t larger_than_viewport_count = 0;
   size_t resource_dependent_command_count = 0;
   size_t total_chunk_command_count = 0;
+  size_t total_finer_cache_unit_count = 0;
+  size_t total_finer_cache_unit_candidate_count = 0;
   double total_damage_area = 0.0;
   const double viewport_area =
       static_cast<double>(result.successor_snapshot.viewport.width) *
@@ -637,6 +757,12 @@ void WriteRetainedCacheMetadata(std::ostringstream& out,
     }
     resource_dependent_command_count += ResourceDependentCommandCount(chunk);
     total_chunk_command_count += chunk.commands.size();
+    total_finer_cache_unit_count += chunk.finer_cache_units.size();
+    for (const FinerCacheUnitDescriptor& unit : chunk.finer_cache_units) {
+      if (unit.conservative_candidate) {
+        ++total_finer_cache_unit_candidate_count;
+      }
+    }
   }
 
   out << "{\"schema_version\":1"
@@ -647,6 +773,10 @@ void WriteRetainedCacheMetadata(std::ostringstream& out,
       << ",\"chunk_count\":" << result.frame.scene_chunks.size()
       << ",\"scene_command_count\":" << result.frame.scene_commands.size()
       << ",\"chunk_command_count\":" << total_chunk_command_count
+      << ",\"finer_cache_unit_descriptor_count\":"
+      << total_finer_cache_unit_count
+      << ",\"finer_cache_unit_conservative_candidate_count\":"
+      << total_finer_cache_unit_candidate_count
       << ",\"viewport_area\":" << viewport_area
       << ",\"resource_command_count\":"
       << result.frame.resource_commands.size()
@@ -688,6 +818,12 @@ void WriteRetainedCacheMetadata(std::ostringstream& out,
         BuildCommandHistogram(chunk);
     const std::vector<std::string> design_notes =
         TileCacheDesignNotes(chunk, chunk_histogram, viewport_area);
+    size_t chunk_finer_cache_candidate_count = 0;
+    for (const FinerCacheUnitDescriptor& unit : chunk.finer_cache_units) {
+      if (unit.conservative_candidate) {
+        ++chunk_finer_cache_candidate_count;
+      }
+    }
 
     out << "{\"index\":" << i
         << ",\"debug_index\":" << chunk.debug_index
@@ -711,6 +847,10 @@ void WriteRetainedCacheMetadata(std::ostringstream& out,
                                                               : "false")
         << ",\"resource_dependent_command_count\":"
         << ResourceDependentCommandCount(chunk)
+        << ",\"finer_cache_unit_descriptor_count\":"
+        << chunk.finer_cache_units.size()
+        << ",\"finer_cache_unit_conservative_candidate_count\":"
+        << chunk_finer_cache_candidate_count
         << ",\"command_histogram\":";
     WriteStringIntMap(out, chunk_histogram);
     out << ",\"command_state_summary\":{\"save_count\":"
@@ -1404,7 +1544,10 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     out << ",\"op_histogram\":";
     WriteStringIntMap(out, chunk_histogram);
     out << ",\"unsupported_ops\":[],\"fallback_rasterized_ops\":[]";
-    out << ",\"display_items\":[]}";
+    out << ",\"display_items\":[]";
+    out << ",\"finer_cache_unit_descriptors\":";
+    WriteFinerCacheUnitDescriptors(out, chunk.finer_cache_units);
+    out << "}";
   }
   out << "],\"warnings\":";
   WriteStringArray(out, result.diagnostics);

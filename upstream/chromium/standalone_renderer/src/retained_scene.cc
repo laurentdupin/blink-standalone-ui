@@ -1457,6 +1457,7 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
     chunk.property_state = retained_chunk.property_state;
     chunk.content_hash = retained_chunk.content_hash;
     chunk.resource_hash = retained_chunk.resource_hash;
+    chunk.finer_cache_units = retained_chunk.finer_cache_units;
     chunk.commands = LocalizeRootSpaceCommandsForTransform(retained_chunk);
     chunk.retained_from_previous_frame = true;
     for (const PresentationChunkUpdate& update : plan.chunk_updates) {

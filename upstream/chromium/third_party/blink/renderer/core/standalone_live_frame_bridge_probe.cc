@@ -413,6 +413,36 @@ struct LiveExportedDrawOp {
   bool save_layer_bounds_unset = false;
 };
 
+struct LiveFinerCacheUnitDescriptor {
+  int unit_index = -1;
+  int begin_display_item_index = -1;
+  int end_display_item_index = -1;
+  uint64_t display_item_client_id = 0;
+  bool display_item_client_id_valid = false;
+  float visual_x = 0.0f;
+  float visual_y = 0.0f;
+  float visual_width = 0.0f;
+  float visual_height = 0.0f;
+  uint64_t content_hash = 0;
+  uint64_t resource_signal_hash = 0;
+  int display_item_count = 0;
+  int drawing_item_count = 0;
+  int paint_op_count = 0;
+  int recursive_paint_op_count = 0;
+  int visual_op_count = 0;
+  bool conservative_candidate = false;
+  bool has_save_layer_ops = false;
+  bool has_non_rect_clip_ops = false;
+  bool has_non_translation_transform = false;
+  bool has_effect_opacity = false;
+  bool has_shader_ops = false;
+  bool has_image_ops = false;
+  bool has_path_ops = false;
+  bool has_filter_ops = false;
+  bool has_path_effect_ops = false;
+  std::string stable_key;
+};
+
 struct LiveHitTestEntry {
   std::string element_id;
   DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
@@ -519,6 +549,8 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
   std::vector<std::string> chunk_id_strings;
+  std::vector<std::vector<LiveFinerCacheUnitDescriptor>>
+      finer_cache_units_by_chunk;
   std::vector<LiveHitTestEntry> hit_test_entries;
   std::vector<LiveScrollableElementEntry> scrollable_element_entries;
   std::vector<std::string> artifact_audit_lines;
@@ -6499,6 +6531,73 @@ std::string StringArrayJsonForStandaloneRenderer(
   return json.str();
 }
 
+uint64_t FinerCacheUnitContentHash(const FinerCacheUnitAudit& unit) {
+  return HashStringForStandaloneRenderer(unit.content_fingerprint);
+}
+
+uint64_t FinerCacheUnitResourceSignalHash(const FinerCacheUnitAudit& unit) {
+  return HashStringForStandaloneRenderer(
+      std::to_string(unit.audit.image_count) + ":" +
+      std::to_string(unit.audit.shader_count) + ":" +
+      std::to_string(unit.audit.path_count) + ":" +
+      std::to_string(unit.audit.filter_count) + ":" +
+      std::to_string(unit.audit.path_effect_count) + ":" +
+      std::to_string(unit.audit.text_blob_count));
+}
+
+std::string FinerCacheUnitStableKey(const std::string& chunk_stable_key,
+                                    const FinerCacheUnitAudit& unit) {
+  return chunk_stable_key + ":display-client=" +
+         std::to_string(static_cast<uint64_t>(unit.client_id)) +
+         ":content=" + std::to_string(FinerCacheUnitContentHash(unit));
+}
+
+LiveFinerCacheUnitDescriptor ExportFinerCacheUnitDescriptor(
+    const std::string& chunk_stable_key,
+    const FinerCacheUnitAudit& unit) {
+  const std::vector<std::string> notes = FinerCacheUnitDesignNotes(unit);
+  LiveFinerCacheUnitDescriptor descriptor;
+  descriptor.unit_index = unit.unit_index;
+  descriptor.begin_display_item_index =
+      static_cast<int>(unit.begin_item_index);
+  descriptor.end_display_item_index = static_cast<int>(unit.end_item_index);
+  descriptor.display_item_client_id =
+      static_cast<uint64_t>(unit.client_id);
+  descriptor.display_item_client_id_valid = unit.client_id_valid;
+  descriptor.visual_x = static_cast<float>(unit.visual_bounds.x());
+  descriptor.visual_y = static_cast<float>(unit.visual_bounds.y());
+  descriptor.visual_width = static_cast<float>(unit.visual_bounds.width());
+  descriptor.visual_height = static_cast<float>(unit.visual_bounds.height());
+  descriptor.content_hash = FinerCacheUnitContentHash(unit);
+  descriptor.resource_signal_hash = FinerCacheUnitResourceSignalHash(unit);
+  descriptor.display_item_count = unit.display_item_count;
+  descriptor.drawing_item_count = unit.drawing_item_count;
+  descriptor.paint_op_count = unit.audit.paint_op_count;
+  descriptor.recursive_paint_op_count =
+      unit.audit.recursive_paint_op_count;
+  descriptor.visual_op_count = unit.audit.visual_op_count;
+  descriptor.conservative_candidate = notes.empty();
+  descriptor.has_save_layer_ops =
+      AuditHistogramCount(unit.audit.recursive_histogram,
+                          "SaveLayerAlphaOp") > 0 ||
+      AuditHistogramCount(unit.audit.recursive_histogram,
+                          "SaveLayerFiltersOp") > 0;
+  descriptor.has_non_rect_clip_ops =
+      AuditHistogramCount(unit.audit.recursive_histogram, "ClipRRectOp") >
+          0 ||
+      AuditHistogramCount(unit.audit.recursive_histogram, "ClipPathOp") > 0;
+  descriptor.has_non_translation_transform =
+      unit.audit.has_non_translation_transform;
+  descriptor.has_effect_opacity = unit.audit.has_effect_opacity;
+  descriptor.has_shader_ops = unit.audit.shader_count > 0;
+  descriptor.has_image_ops = unit.audit.image_count > 0;
+  descriptor.has_path_ops = unit.audit.path_count > 0;
+  descriptor.has_filter_ops = unit.audit.filter_count > 0;
+  descriptor.has_path_effect_ops = unit.audit.path_effect_count > 0;
+  descriptor.stable_key = FinerCacheUnitStableKey(chunk_stable_key, unit);
+  return descriptor;
+}
+
 std::string FinerCacheUnitMetadataJsonForStandaloneRenderer(
     wtf_size_t chunk_index,
     const std::string& chunk_stable_key,
@@ -6558,19 +6657,11 @@ std::string FinerCacheUnitMetadataJsonForStandaloneRenderer(
     }
     const FinerCacheUnitAudit& unit = units[i];
     const std::vector<std::string> notes = FinerCacheUnitDesignNotes(unit);
-    const uint64_t content_hash =
-        HashStringForStandaloneRenderer(unit.content_fingerprint);
-    const uint64_t resource_signal_hash = HashStringForStandaloneRenderer(
-        std::to_string(unit.audit.image_count) + ":" +
-        std::to_string(unit.audit.shader_count) + ":" +
-        std::to_string(unit.audit.path_count) + ":" +
-        std::to_string(unit.audit.filter_count) + ":" +
-        std::to_string(unit.audit.path_effect_count) + ":" +
-        std::to_string(unit.audit.text_blob_count));
+    const uint64_t content_hash = FinerCacheUnitContentHash(unit);
+    const uint64_t resource_signal_hash =
+        FinerCacheUnitResourceSignalHash(unit);
     const std::string unit_stable_key =
-        chunk_stable_key + ":display-client=" +
-        std::to_string(static_cast<uint64_t>(unit.client_id)) +
-        ":content=" + std::to_string(content_hash);
+        FinerCacheUnitStableKey(chunk_stable_key, unit);
     json << "{\"unit_index\":" << unit.unit_index
          << ",\"stable_key\":"
          << JsonStringForStandaloneRenderer(unit_stable_key)
@@ -7658,6 +7749,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   const DisplayItemList& items = artifact.GetDisplayItemList();
   const wtf_size_t chunk_count = chunks.size();
   const wtf_size_t display_item_count = items.size();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.finer_cache_units_by_chunk.resize(chunk_count);
   TraceLiveFrameProbeStage("paint audit after chunks/items");
   cache.artifact_audit_lines.push_back(
       "paint_artifact_audit summary chunks=" + std::to_string(chunk_count) +
@@ -8120,6 +8213,17 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     const std::string finer_cache_unit_metadata_json =
         FinerCacheUnitMetadataJsonForStandaloneRenderer(
             chunk_index, stable_key, finer_cache_units);
+    std::vector<LiveFinerCacheUnitDescriptor> exported_finer_units;
+    exported_finer_units.reserve(finer_cache_units.size());
+    for (const FinerCacheUnitAudit& unit : finer_cache_units) {
+      exported_finer_units.push_back(
+          ExportFinerCacheUnitDescriptor(stable_key, unit));
+    }
+    if (cache.finer_cache_units_by_chunk.size() <= chunk_index) {
+      cache.finer_cache_units_by_chunk.resize(chunk_index + 1);
+    }
+    cache.finer_cache_units_by_chunk[chunk_index] =
+        std::move(exported_finer_units);
     TraceLiveFrameProbeStagef("paint audit after remaining chunk json strings %lu",
                               chunk_index);
     TraceLiveFrameProbeStagef("paint audit after chunk json strings %lu",
@@ -9600,6 +9704,7 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9611,6 +9716,7 @@ void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer() {
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9640,6 +9746,7 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9674,6 +9781,7 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9699,6 +9807,7 @@ void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9749,6 +9858,7 @@ void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9769,6 +9879,7 @@ void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9791,6 +9902,7 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -9839,6 +9951,7 @@ void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
@@ -10476,6 +10589,153 @@ int StandaloneBlinkLiveFrameBridgeChunkIdStringAtForStandaloneRenderer(
   std::memcpy(buffer, id.data(), static_cast<size_t>(copy_count));
   buffer[copy_count] = '\0';
   return copy_count;
+}
+
+int StandaloneBlinkLiveFrameBridgeFinerCacheUnitCountForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& units_by_chunk = ProbeCache().finer_cache_units_by_chunk;
+  if (chunk_index < 0 ||
+      static_cast<size_t>(chunk_index) >= units_by_chunk.size()) {
+    return 0;
+  }
+  return static_cast<int>(
+      units_by_chunk[static_cast<size_t>(chunk_index)].size());
+}
+
+int StandaloneBlinkLiveFrameBridgeFinerCacheUnitAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int unit_index,
+    int* exported_unit_index,
+    int* begin_display_item_index,
+    int* end_display_item_index,
+    uint64_t* display_item_client_id,
+    int* display_item_client_id_valid,
+    float* visual_x,
+    float* visual_y,
+    float* visual_width,
+    float* visual_height,
+    uint64_t* content_hash,
+    uint64_t* resource_signal_hash,
+    int* display_item_count,
+    int* drawing_item_count,
+    int* paint_op_count,
+    int* recursive_paint_op_count,
+    int* visual_op_count,
+    int* conservative_candidate,
+    int* has_save_layer_ops,
+    int* has_non_rect_clip_ops,
+    int* has_non_translation_transform,
+    int* has_effect_opacity,
+    int* has_shader_ops,
+    int* has_image_ops,
+    int* has_path_ops,
+    int* has_filter_ops,
+    int* has_path_effect_ops,
+    char* stable_key_buffer,
+    int stable_key_buffer_size) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& units_by_chunk = ProbeCache().finer_cache_units_by_chunk;
+  if (chunk_index < 0 ||
+      static_cast<size_t>(chunk_index) >= units_by_chunk.size()) {
+    return 0;
+  }
+  const auto& units = units_by_chunk[static_cast<size_t>(chunk_index)];
+  if (unit_index < 0 || static_cast<size_t>(unit_index) >= units.size()) {
+    return 0;
+  }
+  const LiveFinerCacheUnitDescriptor& unit =
+      units[static_cast<size_t>(unit_index)];
+  if (exported_unit_index) {
+    *exported_unit_index = unit.unit_index;
+  }
+  if (begin_display_item_index) {
+    *begin_display_item_index = unit.begin_display_item_index;
+  }
+  if (end_display_item_index) {
+    *end_display_item_index = unit.end_display_item_index;
+  }
+  if (display_item_client_id) {
+    *display_item_client_id = unit.display_item_client_id;
+  }
+  if (display_item_client_id_valid) {
+    *display_item_client_id_valid =
+        unit.display_item_client_id_valid ? 1 : 0;
+  }
+  if (visual_x) {
+    *visual_x = unit.visual_x;
+  }
+  if (visual_y) {
+    *visual_y = unit.visual_y;
+  }
+  if (visual_width) {
+    *visual_width = unit.visual_width;
+  }
+  if (visual_height) {
+    *visual_height = unit.visual_height;
+  }
+  if (content_hash) {
+    *content_hash = unit.content_hash;
+  }
+  if (resource_signal_hash) {
+    *resource_signal_hash = unit.resource_signal_hash;
+  }
+  if (display_item_count) {
+    *display_item_count = unit.display_item_count;
+  }
+  if (drawing_item_count) {
+    *drawing_item_count = unit.drawing_item_count;
+  }
+  if (paint_op_count) {
+    *paint_op_count = unit.paint_op_count;
+  }
+  if (recursive_paint_op_count) {
+    *recursive_paint_op_count = unit.recursive_paint_op_count;
+  }
+  if (visual_op_count) {
+    *visual_op_count = unit.visual_op_count;
+  }
+  if (conservative_candidate) {
+    *conservative_candidate = unit.conservative_candidate ? 1 : 0;
+  }
+  if (has_save_layer_ops) {
+    *has_save_layer_ops = unit.has_save_layer_ops ? 1 : 0;
+  }
+  if (has_non_rect_clip_ops) {
+    *has_non_rect_clip_ops = unit.has_non_rect_clip_ops ? 1 : 0;
+  }
+  if (has_non_translation_transform) {
+    *has_non_translation_transform =
+        unit.has_non_translation_transform ? 1 : 0;
+  }
+  if (has_effect_opacity) {
+    *has_effect_opacity = unit.has_effect_opacity ? 1 : 0;
+  }
+  if (has_shader_ops) {
+    *has_shader_ops = unit.has_shader_ops ? 1 : 0;
+  }
+  if (has_image_ops) {
+    *has_image_ops = unit.has_image_ops ? 1 : 0;
+  }
+  if (has_path_ops) {
+    *has_path_ops = unit.has_path_ops ? 1 : 0;
+  }
+  if (has_filter_ops) {
+    *has_filter_ops = unit.has_filter_ops ? 1 : 0;
+  }
+  if (has_path_effect_ops) {
+    *has_path_effect_ops = unit.has_path_effect_ops ? 1 : 0;
+  }
+  if (stable_key_buffer && stable_key_buffer_size > 0) {
+    const int copy_count = std::min(
+        static_cast<int>(unit.stable_key.size()), stable_key_buffer_size - 1);
+    std::memcpy(stable_key_buffer, unit.stable_key.data(),
+                static_cast<size_t>(copy_count));
+    stable_key_buffer[copy_count] = '\0';
+  }
+  return 1;
 }
 
 int StandaloneBlinkLiveFrameBridgeExportedDrawOpAtForStandaloneRenderer(

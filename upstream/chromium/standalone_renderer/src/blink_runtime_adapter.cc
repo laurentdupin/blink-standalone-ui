@@ -143,6 +143,41 @@ int StandaloneBlinkLiveFrameBridgeChunkIdStringAtForStandaloneRenderer(
     int chunk_index,
     char* buffer,
     int buffer_size);
+int StandaloneBlinkLiveFrameBridgeFinerCacheUnitCountForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index);
+int StandaloneBlinkLiveFrameBridgeFinerCacheUnitAtForStandaloneRenderer(
+    const char* body_html,
+    int chunk_index,
+    int unit_index,
+    int* exported_unit_index,
+    int* begin_display_item_index,
+    int* end_display_item_index,
+    uint64_t* display_item_client_id,
+    int* display_item_client_id_valid,
+    float* visual_x,
+    float* visual_y,
+    float* visual_width,
+    float* visual_height,
+    uint64_t* content_hash,
+    uint64_t* resource_signal_hash,
+    int* display_item_count,
+    int* drawing_item_count,
+    int* paint_op_count,
+    int* recursive_paint_op_count,
+    int* visual_op_count,
+    int* conservative_candidate,
+    int* has_save_layer_ops,
+    int* has_non_rect_clip_ops,
+    int* has_non_translation_transform,
+    int* has_effect_opacity,
+    int* has_shader_ops,
+    int* has_image_ops,
+    int* has_path_ops,
+    int* has_filter_ops,
+    int* has_path_effect_ops,
+    char* stable_key_buffer,
+    int stable_key_buffer_size);
 int StandaloneBlinkLiveFrameBridgePaintChunkPropertyMetadataAtForStandaloneRenderer(
     const char* body_html,
     int chunk_index,
@@ -502,6 +537,85 @@ void PopulateFilterOperationsFromLiveProbe(
     operation.matrix = matrix;
     property_state.effect_filter_operations.push_back(operation);
   }
+}
+
+std::vector<FinerCacheUnitDescriptor> ImportFinerCacheUnitDescriptors(
+    const std::string& probe_html,
+    int chunk_index,
+    const std::string& chunk_stable_key) {
+  const int unit_count = ::blink::standalone_renderer_probe::
+      StandaloneBlinkLiveFrameBridgeFinerCacheUnitCountForStandaloneRenderer(
+          probe_html.c_str(), chunk_index);
+  std::vector<FinerCacheUnitDescriptor> descriptors;
+  descriptors.reserve(static_cast<size_t>(std::max(0, unit_count)));
+  for (int unit_probe_index = 0; unit_probe_index < unit_count;
+       ++unit_probe_index) {
+    FinerCacheUnitDescriptor descriptor;
+    uint64_t client_id = 0;
+    uint64_t content_hash = 0;
+    uint64_t resource_signal_hash = 0;
+    int client_id_valid = 0;
+    int conservative_candidate = 0;
+    int has_save_layer_ops = 0;
+    int has_non_rect_clip_ops = 0;
+    int has_non_translation_transform = 0;
+    int has_effect_opacity = 0;
+    int has_shader_ops = 0;
+    int has_image_ops = 0;
+    int has_path_ops = 0;
+    int has_filter_ops = 0;
+    int has_path_effect_ops = 0;
+    float visual_x = 0.0f;
+    float visual_y = 0.0f;
+    float visual_width = 0.0f;
+    float visual_height = 0.0f;
+    std::array<char, 1024> stable_key_buffer{};
+    if (!::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgeFinerCacheUnitAtForStandaloneRenderer(
+                probe_html.c_str(), chunk_index, unit_probe_index,
+                &descriptor.unit_index,
+                &descriptor.begin_display_item_index,
+                &descriptor.end_display_item_index, &client_id,
+                &client_id_valid, &visual_x, &visual_y, &visual_width,
+                &visual_height, &content_hash, &resource_signal_hash,
+                &descriptor.display_item_count, &descriptor.drawing_item_count,
+                &descriptor.paint_op_count,
+                &descriptor.recursive_paint_op_count,
+                &descriptor.visual_op_count, &conservative_candidate,
+                &has_save_layer_ops, &has_non_rect_clip_ops,
+                &has_non_translation_transform, &has_effect_opacity,
+                &has_shader_ops, &has_image_ops, &has_path_ops,
+                &has_filter_ops, &has_path_effect_ops,
+                stable_key_buffer.data(),
+                static_cast<int>(stable_key_buffer.size()))) {
+      continue;
+    }
+    descriptor.parent_chunk_debug_index = chunk_index;
+    descriptor.parent_chunk_stable_key = chunk_stable_key;
+    descriptor.display_item_client_id = client_id;
+    descriptor.display_item_client_id_valid = client_id_valid != 0;
+    descriptor.visual_bounds =
+        Rect{visual_x, visual_y, visual_width, visual_height};
+    descriptor.content_hash = content_hash;
+    descriptor.resource_signal_hash = resource_signal_hash;
+    descriptor.conservative_candidate = conservative_candidate != 0;
+    descriptor.has_save_layer_ops = has_save_layer_ops != 0;
+    descriptor.has_non_rect_clip_ops = has_non_rect_clip_ops != 0;
+    descriptor.has_non_translation_transform =
+        has_non_translation_transform != 0;
+    descriptor.has_effect_opacity = has_effect_opacity != 0;
+    descriptor.has_shader_ops = has_shader_ops != 0;
+    descriptor.has_image_ops = has_image_ops != 0;
+    descriptor.has_path_ops = has_path_ops != 0;
+    descriptor.has_filter_ops = has_filter_ops != 0;
+    descriptor.has_path_effect_ops = has_path_effect_ops != 0;
+    descriptor.stable_key = stable_key_buffer[0] != '\0'
+                                ? std::string(stable_key_buffer.data())
+                                : chunk_stable_key + ":unit=" +
+                                      std::to_string(descriptor.unit_index);
+    descriptors.push_back(std::move(descriptor));
+  }
+  return descriptors;
 }
 
 constexpr const char* kRuntimeSeedFiles[] = {
@@ -3063,6 +3177,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     Rect active_chunk_drawable_bounds;
     PaintPropertyStateSnapshot active_chunk_property_state;
     int active_chunk_debug_index = -1;
+    std::vector<FinerCacheUnitDescriptor> active_chunk_finer_cache_units;
     bool inside_chunk = false;
     LoadCommandList load_commands;
     std::vector<ResourceCommand> explicit_resource_commands;
@@ -3224,6 +3339,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           current_scene.chunks.back().chunk_id_string =
               active_chunk_id_string.empty() ? active_chunk_key
                                              : active_chunk_id_string;
+          current_scene.chunks.back().finer_cache_units =
+              std::move(active_chunk_finer_cache_units);
           chunk_commands.clear();
         }
         inside_chunk = true;
@@ -3388,6 +3505,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_chunk_id_string =
             chunk_id_buffer[0] != '\0' ? std::string(chunk_id_buffer.data())
                                        : active_chunk_key;
+        active_chunk_finer_cache_units = ImportFinerCacheUnitDescriptors(
+            probe_html, chunk_index, active_chunk_key);
         active_commands = &chunk_commands;
       } else if (type == 13) {
         if (inside_chunk) {
@@ -3405,6 +3524,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           current_scene.chunks.back().chunk_id_string =
               active_chunk_id_string.empty() ? active_chunk_key
                                              : active_chunk_id_string;
+          current_scene.chunks.back().finer_cache_units =
+              std::move(active_chunk_finer_cache_units);
           chunk_commands.clear();
         }
         inside_chunk = false;
@@ -3414,6 +3535,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         active_chunk_drawable_bounds = Rect{};
         active_chunk_property_state = PaintPropertyStateSnapshot{};
         active_chunk_debug_index = -1;
+        active_chunk_finer_cache_units.clear();
         active_commands = &commands;
       } else if (type == 1) {
         DrawCommand command = DrawCommand::FillRect(
@@ -3869,6 +3991,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       current_scene.chunks.back().chunk_id_string =
           active_chunk_id_string.empty() ? active_chunk_key
                                          : active_chunk_id_string;
+      current_scene.chunks.back().finer_cache_units =
+          std::move(active_chunk_finer_cache_units);
       chunk_commands.clear();
       inside_chunk = false;
       active_commands = &commands;
