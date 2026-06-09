@@ -6198,6 +6198,21 @@ struct RawPaintRecordAudit {
   bool has_effect_opacity = false;
 };
 
+struct FinerCacheUnitAudit {
+  int unit_index = 0;
+  wtf_size_t begin_item_index = 0;
+  wtf_size_t end_item_index = 0;
+  DisplayItemClientId client_id = kInvalidDisplayItemClientId;
+  bool client_id_valid = false;
+  std::string first_item_id;
+  std::string last_item_id;
+  gfx::Rect visual_bounds;
+  int display_item_count = 0;
+  int drawing_item_count = 0;
+  RawPaintRecordAudit audit;
+  std::string content_fingerprint;
+};
+
 bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type);
 
 int DrawLooperLayerCountForStandaloneRenderer(const cc::PaintFlags& flags) {
@@ -6333,6 +6348,267 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
           paint_ops_json, false, depth + 1, first_paint_op);
     }
   }
+}
+
+int AuditHistogramCount(const std::map<std::string, int>& histogram,
+                        const std::string& key) {
+  const auto it = histogram.find(key);
+  return it == histogram.end() ? 0 : it->second;
+}
+
+void MergeRawPaintRecordAudit(RawPaintRecordAudit& target,
+                              const RawPaintRecordAudit& source) {
+  for (const auto& [name, count] : source.top_level_histogram) {
+    target.top_level_histogram[name] += count;
+  }
+  for (const auto& [name, count] : source.recursive_histogram) {
+    target.recursive_histogram[name] += count;
+  }
+  for (const auto& [name, count] : source.unsupported_histogram) {
+    target.unsupported_histogram[name] += count;
+  }
+  for (const auto& [name, count] : source.fallback_histogram) {
+    target.fallback_histogram[name] += count;
+  }
+  target.paint_op_count += source.paint_op_count;
+  target.recursive_paint_op_count += source.recursive_paint_op_count;
+  target.visual_op_count += source.visual_op_count;
+  target.retained_supported_visual_op_count +=
+      source.retained_supported_visual_op_count;
+  target.retained_unsupported_visual_op_count +=
+      source.retained_unsupported_visual_op_count;
+  target.diagnostic_bitmap_fallback_visual_op_count +=
+      source.diagnostic_bitmap_fallback_visual_op_count;
+  target.text_blob_count += source.text_blob_count;
+  target.image_count += source.image_count;
+  target.shader_count += source.shader_count;
+  target.path_count += source.path_count;
+  target.filter_count += source.filter_count;
+  target.draw_looper_count += source.draw_looper_count;
+  target.draw_looper_layer_count += source.draw_looper_layer_count;
+  target.path_effect_count += source.path_effect_count;
+  target.has_non_text_visual_paint |= source.has_non_text_visual_paint;
+  target.has_non_translation_transform |=
+      source.has_non_translation_transform;
+  target.has_effect_opacity |= source.has_effect_opacity;
+}
+
+void AppendDisplayItemToFinerCacheUnits(
+    std::vector<FinerCacheUnitAudit>& units,
+    wtf_size_t item_index,
+    DisplayItemClientId client_id,
+    const std::string& item_id,
+    const std::string& item_type,
+    const gfx::Rect& visual_rect,
+    bool is_drawing,
+    const RawPaintRecordAudit& item_audit) {
+  const bool client_id_valid = client_id != kInvalidDisplayItemClientId;
+  const bool can_extend_previous =
+      client_id_valid && !units.empty() && units.back().client_id == client_id;
+  if (!can_extend_previous) {
+    FinerCacheUnitAudit unit;
+    unit.unit_index = static_cast<int>(units.size());
+    unit.begin_item_index = item_index;
+    unit.end_item_index = item_index;
+    unit.client_id = client_id;
+    unit.client_id_valid = client_id_valid;
+    unit.first_item_id = item_id;
+    unit.visual_bounds = visual_rect;
+    units.push_back(std::move(unit));
+  }
+  FinerCacheUnitAudit& unit = units.back();
+  unit.end_item_index = item_index + 1;
+  unit.last_item_id = item_id;
+  ++unit.display_item_count;
+  if (is_drawing) {
+    ++unit.drawing_item_count;
+  }
+  if (!visual_rect.IsEmpty()) {
+    if (unit.visual_bounds.IsEmpty()) {
+      unit.visual_bounds = visual_rect;
+    } else {
+      unit.visual_bounds.Union(visual_rect);
+    }
+  }
+  MergeRawPaintRecordAudit(unit.audit, item_audit);
+  unit.content_fingerprint += "|" + item_id + ":" + item_type + ":" +
+                              std::to_string(visual_rect.x()) + "," +
+                              std::to_string(visual_rect.y()) + "," +
+                              std::to_string(visual_rect.width()) + "," +
+                              std::to_string(visual_rect.height()) + ":" +
+                              std::to_string(item_audit.recursive_paint_op_count);
+}
+
+std::vector<std::string> FinerCacheUnitDesignNotes(
+    const FinerCacheUnitAudit& unit) {
+  std::vector<std::string> notes;
+  if (!unit.client_id_valid) {
+    notes.push_back("invalid_display_item_client_id");
+  }
+  if (unit.drawing_item_count == 0) {
+    notes.push_back("no_drawing_display_items");
+  }
+  if (unit.visual_bounds.IsEmpty()) {
+    notes.push_back("empty_visual_bounds");
+  }
+  if (AuditHistogramCount(unit.audit.recursive_histogram,
+                          "SaveLayerAlphaOp") > 0 ||
+      AuditHistogramCount(unit.audit.recursive_histogram,
+                          "SaveLayerFiltersOp") > 0) {
+    notes.push_back("contains_save_layer_ops");
+  }
+  if (AuditHistogramCount(unit.audit.recursive_histogram, "ClipRRectOp") > 0 ||
+      AuditHistogramCount(unit.audit.recursive_histogram, "ClipPathOp") > 0) {
+    notes.push_back("contains_non_rect_clip_ops");
+  }
+  if (unit.audit.has_non_translation_transform) {
+    notes.push_back("contains_non_translation_transform");
+  }
+  if (unit.audit.has_effect_opacity) {
+    notes.push_back("contains_effect_opacity");
+  }
+  if (unit.audit.shader_count > 0) {
+    notes.push_back("contains_shader_ops");
+  }
+  if (unit.audit.image_count > 0) {
+    notes.push_back("contains_image_ops");
+  }
+  if (unit.audit.path_count > 0) {
+    notes.push_back("contains_path_ops");
+  }
+  if (unit.audit.filter_count > 0) {
+    notes.push_back("contains_filter_ops");
+  }
+  if (unit.audit.path_effect_count > 0) {
+    notes.push_back("contains_path_effect_ops");
+  }
+  return notes;
+}
+
+std::string StringArrayJsonForStandaloneRenderer(
+    const std::vector<std::string>& values) {
+  std::ostringstream json;
+  json << "[";
+  for (size_t i = 0; i < values.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    json << JsonStringForStandaloneRenderer(values[i]);
+  }
+  json << "]";
+  return json.str();
+}
+
+std::string FinerCacheUnitMetadataJsonForStandaloneRenderer(
+    wtf_size_t chunk_index,
+    const std::string& chunk_stable_key,
+    const std::vector<FinerCacheUnitAudit>& units) {
+  int candidate_count = 0;
+  int invalid_client_count = 0;
+  int save_layer_unit_count = 0;
+  int non_rect_clip_unit_count = 0;
+  int resource_dependent_unit_count = 0;
+  for (const FinerCacheUnitAudit& unit : units) {
+    const std::vector<std::string> notes = FinerCacheUnitDesignNotes(unit);
+    if (notes.empty()) {
+      ++candidate_count;
+    }
+    if (!unit.client_id_valid) {
+      ++invalid_client_count;
+    }
+    if (AuditHistogramCount(unit.audit.recursive_histogram,
+                            "SaveLayerAlphaOp") > 0 ||
+        AuditHistogramCount(unit.audit.recursive_histogram,
+                            "SaveLayerFiltersOp") > 0) {
+      ++save_layer_unit_count;
+    }
+    if (AuditHistogramCount(unit.audit.recursive_histogram, "ClipRRectOp") >
+            0 ||
+        AuditHistogramCount(unit.audit.recursive_histogram, "ClipPathOp") >
+            0) {
+      ++non_rect_clip_unit_count;
+    }
+    if (unit.audit.shader_count > 0 || unit.audit.image_count > 0 ||
+        unit.audit.path_count > 0 || unit.audit.filter_count > 0 ||
+        unit.audit.path_effect_count > 0) {
+      ++resource_dependent_unit_count;
+    }
+  }
+
+  std::ostringstream json;
+  json << "{\"schema_version\":1"
+       << ",\"behavior_neutral\":true"
+       << ",\"cache_behavior_enabled\":false"
+       << ",\"boundary_source\":\"consecutive_blink_display_item_client_runs\""
+       << ",\"chunk_index\":" << chunk_index
+       << ",\"chunk_stable_key\":"
+       << JsonStringForStandaloneRenderer(chunk_stable_key)
+       << ",\"unit_count\":" << units.size()
+       << ",\"conservative_candidate_count\":" << candidate_count
+       << ",\"unproven_or_blocked_count\":"
+       << (static_cast<int>(units.size()) - candidate_count)
+       << ",\"invalid_client_unit_count\":" << invalid_client_count
+       << ",\"save_layer_unit_count\":" << save_layer_unit_count
+       << ",\"non_rect_clip_unit_count\":" << non_rect_clip_unit_count
+       << ",\"resource_dependent_unit_count\":"
+       << resource_dependent_unit_count << ",\"units\":[";
+  for (size_t i = 0; i < units.size(); ++i) {
+    if (i > 0) {
+      json << ",";
+    }
+    const FinerCacheUnitAudit& unit = units[i];
+    const std::vector<std::string> notes = FinerCacheUnitDesignNotes(unit);
+    const uint64_t content_hash =
+        HashStringForStandaloneRenderer(unit.content_fingerprint);
+    const uint64_t resource_signal_hash = HashStringForStandaloneRenderer(
+        std::to_string(unit.audit.image_count) + ":" +
+        std::to_string(unit.audit.shader_count) + ":" +
+        std::to_string(unit.audit.path_count) + ":" +
+        std::to_string(unit.audit.filter_count) + ":" +
+        std::to_string(unit.audit.path_effect_count) + ":" +
+        std::to_string(unit.audit.text_blob_count));
+    const std::string unit_stable_key =
+        chunk_stable_key + ":display-client=" +
+        std::to_string(static_cast<uint64_t>(unit.client_id)) +
+        ":content=" + std::to_string(content_hash);
+    json << "{\"unit_index\":" << unit.unit_index
+         << ",\"stable_key\":"
+         << JsonStringForStandaloneRenderer(unit_stable_key)
+         << ",\"client_id\":"
+         << static_cast<uint64_t>(unit.client_id)
+         << ",\"client_id_valid\":"
+         << (unit.client_id_valid ? "true" : "false")
+         << ",\"begin_item_index\":" << unit.begin_item_index
+         << ",\"end_item_index\":" << unit.end_item_index
+         << ",\"display_item_count\":" << unit.display_item_count
+         << ",\"drawing_item_count\":" << unit.drawing_item_count
+         << ",\"first_item_id\":"
+         << JsonStringForStandaloneRenderer(unit.first_item_id)
+         << ",\"last_item_id\":"
+         << JsonStringForStandaloneRenderer(unit.last_item_id)
+         << ",\"visual_bounds\":"
+         << RectJsonForStandaloneRenderer(unit.visual_bounds)
+         << ",\"content_hash\":" << content_hash
+         << ",\"resource_signal_hash\":" << resource_signal_hash
+         << ",\"paint_op_count\":" << unit.audit.paint_op_count
+         << ",\"recursive_paint_op_count\":"
+         << unit.audit.recursive_paint_op_count
+         << ",\"visual_op_count\":" << unit.audit.visual_op_count
+         << ",\"text_blob_count\":" << unit.audit.text_blob_count
+         << ",\"image_count\":" << unit.audit.image_count
+         << ",\"shader_count\":" << unit.audit.shader_count
+         << ",\"path_count\":" << unit.audit.path_count
+         << ",\"filter_count\":" << unit.audit.filter_count
+         << ",\"path_effect_count\":" << unit.audit.path_effect_count
+         << ",\"recursive_op_histogram\":"
+         << MapToJsonObject(unit.audit.recursive_histogram)
+         << ",\"conservative_candidate\":"
+         << (notes.empty() ? "true" : "false")
+         << ",\"design_notes\":"
+         << StringArrayJsonForStandaloneRenderer(notes) << "}";
+  }
+  json << "]}";
+  return json.str();
 }
 
 std::string LowerAsciiForStandaloneRenderer(std::string value) {
@@ -7449,6 +7725,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                      "PaintOp evidence; chunk bounds remain exported\"}"
                   << ",\"op_histogram\":{},\"recursive_op_histogram\":{}"
                   << ",\"unsupported_ops\":{},\"fallback_rasterized_ops\":{}"
+                  << ",\"finer_cache_unit_metadata\":"
+                  << FinerCacheUnitMetadataJsonForStandaloneRenderer(
+                         chunk_index, empty_stable_key, {})
                   << ",\"display_items\":[]}";
       cache.artifact_audit_lines.push_back(
           "paint_artifact_audit chunk index=" + std::to_string(chunk_index) +
@@ -7465,6 +7744,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     int drawing_item_count = 0;
     int non_drawing_item_count = 0;
     RawPaintRecordAudit chunk_raw_audit;
+    std::vector<FinerCacheUnitAudit> finer_cache_units;
     std::ostringstream display_items_json;
     display_items_json << "[";
     bool first_display_item = true;
@@ -7512,18 +7792,29 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       const bool item_is_drawing = item.IsDrawing();
       TraceLiveFrameProbeStagef("paint audit after item is_drawing %lu %lu",
                                 chunk_index, item_index);
+      const DisplayItemClientId item_client_id = item.ClientId();
       display_items_json << "{\"index\":" << item_index << ",\"id\":"
                          << JsonStringForStandaloneRenderer(item_id)
                          << ",\"type\":"
                          << JsonStringForStandaloneRenderer(item_type)
+                         << ",\"client_id\":"
+                         << static_cast<uint64_t>(item_client_id)
+                         << ",\"client_id_valid\":"
+                         << (item_client_id != kInvalidDisplayItemClientId
+                                 ? "true"
+                                 : "false")
                          << ",\"client_debug_name\":null"
                          << ",\"client_owner_node_id\":null"
                          << ",\"visual_rect\":"
                          << RectJsonForStandaloneRenderer(item_visual_rect)
                          << ",\"is_drawing\":"
                          << (item_is_drawing ? "true" : "false");
+      RawPaintRecordAudit item_audit;
       if (!item_is_drawing) {
         ++non_drawing_item_count;
+        AppendDisplayItemToFinerCacheUnits(
+            finer_cache_units, item_index, item_client_id, item_id, item_type,
+            item_visual_rect, item_is_drawing, item_audit);
         display_items_json
             << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
@@ -7535,11 +7826,13 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       TraceLiveFrameProbeStagef("paint audit after dynamic drawing %lu %lu",
                                 chunk_index, item_index);
       if (!drawing) {
+        AppendDisplayItemToFinerCacheUnits(
+            finer_cache_units, item_index, item_client_id, item_id, item_type,
+            item_visual_rect, item_is_drawing, item_audit);
         display_items_json
             << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
       }
-      RawPaintRecordAudit item_audit;
       std::ostringstream paint_ops_json;
       paint_ops_json << "[";
       TraceLiveFrameProbeStagef("paint audit before paint record %lu %lu",
@@ -7584,6 +7877,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       chunk_raw_audit.has_non_translation_transform |=
           item_audit.has_non_translation_transform;
       chunk_raw_audit.has_effect_opacity |= item_audit.has_effect_opacity;
+      AppendDisplayItemToFinerCacheUnits(
+          finer_cache_units, item_index, item_client_id, item_id, item_type,
+          item_visual_rect, item_is_drawing, item_audit);
       display_items_json << ",\"paint_record_op_histogram\":"
                          << MapToJsonObject(item_audit.top_level_histogram)
                          << ",\"recursive_paint_record_op_histogram\":"
@@ -7821,6 +8117,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     const std::string chunk_fallback_histogram_json =
         MapToJsonObject(chunk_fallback_histogram);
     const std::string display_items_json_string = display_items_json.str();
+    const std::string finer_cache_unit_metadata_json =
+        FinerCacheUnitMetadataJsonForStandaloneRenderer(
+            chunk_index, stable_key, finer_cache_units);
     TraceLiveFrameProbeStagef("paint audit after remaining chunk json strings %lu",
                               chunk_index);
     TraceLiveFrameProbeStagef("paint audit after chunk json strings %lu",
@@ -7880,6 +8179,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                 << chunk_unsupported_histogram_json
                 << ",\"fallback_rasterized_ops\":"
                 << chunk_fallback_histogram_json
+                << ",\"finer_cache_unit_metadata\":"
+                << finer_cache_unit_metadata_json
                 << ",\"display_items\":" << display_items_json_string << "}";
 
     cache.artifact_audit_lines.push_back(
