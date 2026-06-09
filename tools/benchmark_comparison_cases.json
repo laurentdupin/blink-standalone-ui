@@ -1002,7 +1002,7 @@
       "source": "paint_audit",
       "html": "28b_select_basic.html",
       "viewport": "320x110",
-      "note": "Known gap: closed select value and control colors render through real Blink/color-provider paths, but the browser/theme-backed picker icon pseudo-element remains disabled."
+      "note": "Known gap: closed select value, colors, and picker arrow render through real Blink/theme paths; menu popover and interaction behavior remain out of scope."
     },
     {
       "name": "36_textarea_basic",

@@ -1,6 +1,7 @@
 set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base64.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_op.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/callback_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/case_conversion.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/i18n_constants.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
@@ -68,6 +69,10 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/features/native_theme_features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/native_theme_aura.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/native_theme_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/overlay_scrollbar_constants.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/third_party/mozilla/url_parse.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_etc.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon_filesystemurl.cc
@@ -137,6 +142,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_core_initializer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_link_boundary_stubs.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_native_theme.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_element_resource_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/load_command.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_feature_standalone.cc
@@ -188,6 +194,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/image_observer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/parkable_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/parkable_image_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/scrollbar_theme_settings.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/static_bitmap_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/image-decoders/fast_shared_buffer_reader.cc
@@ -1009,6 +1016,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_break_iterator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_break_iterator_icu.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_break_iterator_internal_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_conversions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_default.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_helper.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/transforms/affine_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/transforms/interpolated_transform_operation.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/transforms/matrix_3d_transform_operation.cc

@@ -6278,6 +6278,11 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element* elem
                             element ? &element->GetDocument() : nullptr);
     }
   }
+  if (builder.Appearance() == AppearanceValue::kNone || !element) {
+    builder.SetEffectiveAppearance(AppearanceValue::kNone);
+  } else {
+    LayoutTheme::GetTheme().AdjustStyle(*element, builder);
+  }
   builder.SetForcesStackingContext(false);
   if (builder.GetPosition() != EPosition::kStatic) {
     builder.SetAllowsZIndex(true);
@@ -13898,16 +13903,6 @@ void FrameLoader::CommitNavigation(
     CommitReason) {}
 void DocumentLoader::DisableCodeCacheForTesting() {}
 void test::RunPendingTasks() {}
-bool ScrollbarThemeSettings::MockScrollbarsEnabled() {
-  return false;
-}
-bool ScrollbarThemeSettings::OverlayScrollbarsEnabled() {
-  return false;
-}
-void ScrollbarThemeSettings::SetOverlayScrollbarsEnabled(bool) {
-}
-void ScrollbarThemeSettings::SetMockScrollbarsEnabled(bool) {
-}
 MainThread* Thread::MainThread() {
   return &StandaloneMainThread();
 }
@@ -14303,15 +14298,6 @@ const SkBitmap& Cursor::custom_bitmap() const {
 }
 float Cursor::image_scale_factor() const {
   return 1.0f;
-}
-NativeTheme* NativeTheme::GetInstanceForWeb() {
-  return nullptr;
-}
-float NativeTheme::AdjustBorderRadiusByZoom(Part, float border_radius, float) {
-  return border_radius;
-}
-float NativeTheme::AdjustBorderWidthByZoom(float border_width, float) {
-  return border_width;
 }
 }  // namespace ui
 
@@ -17876,10 +17862,6 @@ bool HasValidAvgCharWidth(const Font&) {
 }
 }  // namespace layout_text_control
 #endif
-
-WebThemeEngine* WebThemeEngineHelper::GetNativeThemeEngine() {
-  return nullptr;
-}
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 bool PhysicalFragment::IsImplicitAnchor() const {
