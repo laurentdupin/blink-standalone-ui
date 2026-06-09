@@ -760,6 +760,8 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
   out << "{";
   out << "\"requires_full_redraw\":"
       << (result.frame.requires_full_redraw ? "true" : "false")
+      << ",\"needs_begin_frame\":"
+      << (result.needs_begin_frame ? "true" : "false")
       << ",\"damage_bounds\":";
   WriteRect(out, result.frame.damage_bounds);
   out << ",\"damage_rects\":[";

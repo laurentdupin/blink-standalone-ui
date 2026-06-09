@@ -128,6 +128,7 @@ struct RenderResult {
   Rect damage_bounds;
   std::vector<Rect> damage_rects;
   bool requires_full_redraw = true;
+  bool needs_begin_frame = false;
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<ScrollableElementEntry> scrollable_element_entries;

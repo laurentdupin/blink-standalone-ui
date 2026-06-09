@@ -521,6 +521,10 @@ struct LiveFramePaintProbeCache {
   bool animation_time_requested = false;
   bool animation_time_applied = false;
   std::string animation_time_status = "not_requested";
+  int active_animation_count = 0;
+  bool needs_animation_timing_update = false;
+  bool needs_lifecycle_update = false;
+  bool needs_begin_frame = false;
   double timing_total_ms = 0.0;
   double timing_input_setup_ms = 0.0;
   double timing_html_document_setup_ms = 0.0;
@@ -6735,6 +6739,29 @@ void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   cache.animation_time_status = "applied_to_document_animation_clock";
 }
 
+void UpdateFrameSchedulingStateForStandaloneRenderer(
+    Document& document,
+    LocalFrameView& frame_view) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.active_animation_count = 0;
+  for (Animation* animation : document.Timeline().GetAnimations()) {
+    if (!animation || animation->AnimationHasNoEffect()) {
+      continue;
+    }
+    if (animation->Playing() || animation->EffectivelyPlaying() ||
+        animation->CompositorPending()) {
+      ++cache.active_animation_count;
+    }
+  }
+  cache.needs_animation_timing_update =
+      document.GetDocumentAnimations().NeedsAnimationTimingUpdate();
+  cache.needs_lifecycle_update =
+      document.NeedsLayoutTreeUpdate() || frame_view.NeedsLayout();
+  cache.needs_begin_frame = cache.active_animation_count > 0 ||
+                            cache.needs_animation_timing_update ||
+                            cache.needs_lifecycle_update;
+}
+
 bool UpdateLifecycleToLayoutCleanForStandaloneRenderer(
     LocalFrameView& frame_view,
     DocumentUpdateReason reason) {
@@ -8333,6 +8360,10 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.sticky_update_constrained_after_count = 0;
   cache.sticky_update_consumed_horizontal_count = 0;
   cache.sticky_update_consumed_vertical_count = 0;
+  cache.active_animation_count = 0;
+  cache.needs_animation_timing_update = false;
+  cache.needs_lifecycle_update = false;
+  cache.needs_begin_frame = false;
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
@@ -8564,6 +8595,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
                                                                          : 0;
     TraceLiveFrameProbeStage("after post-scroll lifecycle update");
   }
+  UpdateFrameSchedulingStateForStandaloneRenderer(document, frame_view);
   cache.timing_prepaint_and_paint_lifecycle_ms =
       StandaloneProbeElapsedMs(paint_lifecycle_start,
                                StandaloneProbeClock::now());
@@ -8957,6 +8989,12 @@ int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
 int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html) {
   return RunLiveFramePaintProbe(body_html).lifecycle_reached_paint_clean;
+}
+
+int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().needs_begin_frame ? 1 : 0;
 }
 
 int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(

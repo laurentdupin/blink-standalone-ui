@@ -53,6 +53,8 @@ int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html);
+int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
+    const char* body_html);
 int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
@@ -2897,6 +2899,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "real Blink PaintArtifact bridge did not reach PaintClean");
       return;
     }
+    result.needs_begin_frame =
+        live_probe::
+            StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
+                probe_html.c_str()) != 0;
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
     ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
 

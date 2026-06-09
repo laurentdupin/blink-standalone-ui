@@ -1036,7 +1036,7 @@ void PrintViewerStatus(
                "viewer status: frame=%llu event=%s incremental=%d "
                "viewport=(%.0fx%.0f) scroll=(%.1f,%.1f) "
                "full_redraw=%d scroll_reuse=%d scroll_delta=(%.1f,%.1f) "
-               "damage_rects=%zu",
+               "needs_begin_frame=%d damage_rects=%zu",
                static_cast<unsigned long long>(frame_count), reason,
                incremental_update ? 1 : 0, viewport.width, viewport.height,
                CurrentDocumentScrollX(input),
@@ -1044,6 +1044,7 @@ void PrintViewerStatus(
                scroll_reuse ? 1 : 0,
                result.frame.scroll_translation_delta.x,
                result.frame.scroll_translation_delta.y,
+               result.needs_begin_frame ? 1 : 0,
                damage_rects.size());
   for (size_t i = 0; i < damage_rects.size(); ++i) {
     const html_css_renderer::Rect& rect = damage_rects[i];
@@ -2409,7 +2410,7 @@ int main(int argc, char** argv) {
       profile_resize_done = true;
       texture_dirty = true;
     }
-    if (running) {
+    if (running && result.needs_begin_frame) {
       html_css_renderer::FrameInput next_input = input;
       const double delta_time_seconds = stamp_frame_time(&next_input);
       if (delta_time_seconds > 0.0) {
