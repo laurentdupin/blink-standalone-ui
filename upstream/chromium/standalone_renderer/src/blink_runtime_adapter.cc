@@ -35,6 +35,12 @@ void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
 void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
     const char* hovered_element_id,
     const char* active_element_id);
+void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
+    float x,
+    float y,
+    int pressed,
+    int event_type,
+    int requested);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
@@ -2573,7 +2579,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ApplyInput(input);
     RenderResult result;
     result.successor_snapshot = snapshot_;
-    TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, false,
+    TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, input, false,
                                          snapshot_.html, snapshot_.stylesheets);
     return result;
   }
@@ -2587,7 +2593,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                                                      previous_snapshot)) {
       return result;
     }
-    TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, true,
+    TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, input, true,
                                          snapshot_.html, snapshot_.stylesheets);
     return result;
   }
@@ -2830,6 +2836,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   void TryReplaceWithLivePaintArtifactScene(
       RenderResult& result,
       const RendererSnapshot& previous_snapshot,
+      const FrameInput& input,
       bool incremental,
       const std::string& html,
       const std::vector<Stylesheet>& stylesheets) {
@@ -2859,6 +2866,23 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
         result.successor_snapshot.hovered_element_id.c_str(),
         result.successor_snapshot.active_element_id.c_str());
+    if (!input.pointers.empty()) {
+      const PointerState& pointer = input.pointers.front();
+      int pointer_event_type = 0;
+      if (!last_pointer_pressed_ && pointer.pressed) {
+        pointer_event_type = 1;
+      } else if (last_pointer_pressed_ && !pointer.pressed) {
+        pointer_event_type = 2;
+      }
+      live_probe::StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
+          pointer.position.x, pointer.position.y, pointer.pressed ? 1 : 0,
+          pointer_event_type, 1);
+      last_pointer_pressed_ = pointer.pressed;
+    } else {
+      live_probe::StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
+          0.0f, 0.0f, 0, 0, 0);
+      last_pointer_pressed_ = false;
+    }
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
@@ -3804,6 +3828,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   bool debug_text_blob_replay_ = false;
   bool force_paint_oracle_bitmap_ = false;
   std::string lifecycle_stop_;
+  bool last_pointer_pressed_ = false;
   std::optional<RetainedScene> previous_retained_scene_;
   std::vector<ResourceCommand> previous_resource_commands_;
   std::vector<HitTestEntry> previous_hit_test_entries_;

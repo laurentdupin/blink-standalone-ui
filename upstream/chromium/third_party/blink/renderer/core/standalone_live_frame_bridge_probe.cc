@@ -71,7 +71,11 @@
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
+#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
+#include "third_party/blink/renderer/core/layout/hit_test_result.h"
+#include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
@@ -467,6 +471,13 @@ struct LiveFramePaintProbeCache {
       requested_element_attributes_by_id_and_name;
   std::string requested_hovered_element_id;
   std::string requested_active_element_id;
+  bool requested_pointer_state = false;
+  float requested_pointer_x = 0.0f;
+  float requested_pointer_y = 0.0f;
+  bool requested_pointer_pressed = false;
+  int requested_pointer_event_type = 0;
+  bool pointer_state_applied = false;
+  std::string pointer_state_status = "not_requested";
   std::vector<LiveExportedDrawOp> exported_draw_ops;
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
@@ -6717,6 +6728,56 @@ void ApplyInteractionStateForStandaloneRenderer(
   }
 }
 
+void ApplyPointerStateForStandaloneRenderer(Document& document,
+                                            LocalFrameView& frame_view) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.pointer_state_applied = false;
+  cache.pointer_state_status =
+      cache.requested_pointer_state ? "requested" : "not_requested";
+  if (!cache.requested_pointer_state) {
+    return;
+  }
+
+  TraceLiveFrameProbeStage("before pointer interaction clear");
+  document.UpdateHoverActiveState(/*is_active=*/false,
+                                  /*update_active_chain=*/true, nullptr);
+  TraceLiveFrameProbeStage("after pointer interaction clear");
+  LocalFrame* frame = document.GetFrame();
+  if (!frame || !frame->View()) {
+    cache.pointer_state_status = "frame_missing";
+    return;
+  }
+
+  HitTestRequest::HitTestRequestType hit_type = HitTestRequest::kMove;
+  if (cache.requested_pointer_event_type == 1) {
+    hit_type = HitTestRequest::kActive;
+  } else if (cache.requested_pointer_event_type == 2) {
+    hit_type = HitTestRequest::kRelease;
+  } else if (cache.requested_pointer_pressed) {
+    hit_type |= HitTestRequest::kActive;
+  }
+
+  const gfx::PointF root_point(cache.requested_pointer_x,
+                               cache.requested_pointer_y);
+  const HitTestLocation location(frame_view.ConvertFromRootFrame(root_point));
+  TraceLiveFrameProbeStage("before pointer hit test");
+  const HitTestResult result =
+      frame->GetEventHandler().HitTestResultAtLocation(
+          location, hit_type, nullptr, /*no_lifecycle_update=*/true);
+  TraceLiveFrameProbeStage("after pointer hit test");
+  Element* hit_element = result.InnerPossiblyPseudoElement();
+  if (!hit_element && result.InnerNode()) {
+    hit_element = DynamicTo<Element>(result.InnerNode());
+    if (!hit_element) {
+      hit_element = result.InnerNode()->parentElement();
+    }
+  }
+  TraceLiveFrameProbeStage("after pointer target resolve");
+  cache.pointer_state_applied = hit_element != nullptr;
+  cache.pointer_state_status =
+      hit_element ? "applied_to_blink_hit_test_target" : "no_hit_test_target";
+}
+
 void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   LiveFramePaintProbeCache& cache = ProbeCache();
   if (!cache.animation_time_requested) {
@@ -7626,6 +7687,17 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.scroll_offset_changed ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.scroll_offset_status) << "}"
+       << ",\"pointer_interaction\":{\"requested\":"
+       << (cache.requested_pointer_state ? "true" : "false")
+       << ",\"pressed\":"
+       << (cache.requested_pointer_pressed ? "true" : "false")
+       << ",\"event_type\":" << cache.requested_pointer_event_type
+       << ",\"x\":" << cache.requested_pointer_x
+       << ",\"y\":" << cache.requested_pointer_y
+       << ",\"applied_to_blink\":"
+       << (cache.pointer_state_applied ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_state_status) << "}"
        << ",\"element_scroll_diagnostics\":"
        << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
        << ",\"scrollable_element_entries\":"
@@ -8527,9 +8599,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   }
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
   TraceLiveFrameProbeStage("after required layout lifecycle update");
-  ApplyInteractionStateForStandaloneRenderer(
-      document, cache.requested_hovered_element_id,
-      cache.requested_active_element_id);
+  if (!cache.requested_pointer_state) {
+    ApplyInteractionStateForStandaloneRenderer(
+        document, cache.requested_hovered_element_id,
+        cache.requested_active_element_id);
+  }
   frame_view.SetNeedsUpdateGeometries();
   frame_view.UpdateGeometry();
   TraceLiveFrameProbeStage("before document scroll offset apply");
@@ -8539,6 +8613,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   ApplyElementScrollOffsetsForStandaloneRenderer(document);
   TraceLiveFrameProbeStage("after element scroll offset apply");
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
+  ApplyPointerStateForStandaloneRenderer(document, frame_view);
   cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
       layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
@@ -8905,6 +8980,39 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
   }
   cache.requested_hovered_element_id = hovered;
   cache.requested_active_element_id = active;
+  cache.initialized = false;
+  cache.body_html.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
+    float x,
+    float y,
+    int pressed,
+    int event_type,
+    int requested) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool next_requested = requested != 0;
+  const bool next_pressed = pressed != 0;
+  if (cache.requested_pointer_state == next_requested &&
+      std::abs(cache.requested_pointer_x - x) <= 0.001f &&
+      std::abs(cache.requested_pointer_y - y) <= 0.001f &&
+      cache.requested_pointer_pressed == next_pressed &&
+      cache.requested_pointer_event_type == event_type) {
+    return;
+  }
+  cache.requested_pointer_state = next_requested;
+  cache.requested_pointer_x = x;
+  cache.requested_pointer_y = y;
+  cache.requested_pointer_pressed = next_pressed;
+  cache.requested_pointer_event_type = event_type;
+  cache.pointer_state_applied = false;
+  cache.pointer_state_status = next_requested ? "requested" : "not_requested";
   cache.initialized = false;
   cache.body_html.clear();
   cache.exported_draw_ops.clear();

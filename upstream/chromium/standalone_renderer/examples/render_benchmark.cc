@@ -174,6 +174,33 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* output) {
   return true;
 }
 
+bool ParsePoint(const std::string& value, html_css_renderer::Point* output) {
+  const size_t separator = value.find(',');
+  if (separator == std::string::npos) {
+    return false;
+  }
+  float x = 0.0f;
+  float y = 0.0f;
+  if (!ParseFloat(value.substr(0, separator), &x) ||
+      !ParseFloat(value.substr(separator + 1), &y)) {
+    return false;
+  }
+  output->x = x;
+  output->y = y;
+  return true;
+}
+
+void SetPrimaryPointer(html_css_renderer::FrameInput* input,
+                       html_css_renderer::Point point,
+                       bool pressed) {
+  html_css_renderer::PointerState pointer;
+  pointer.id = 0;
+  pointer.position = point;
+  pointer.pressed = pressed;
+  input->pointers.clear();
+  input->pointers.push_back(pointer);
+}
+
 bool ParseElementAttributeOverride(const std::string& value,
                                    std::string* key,
                                    std::string* attribute_value) {
@@ -234,6 +261,20 @@ bool SamePointMap(const std::unordered_map<std::string, html_css_renderer::Point
     const auto found = b.find(entry.first);
     if (found == b.end() || found->second.x != entry.second.x ||
         found->second.y != entry.second.y) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SamePointers(const std::vector<html_css_renderer::PointerState>& a,
+                  const std::vector<html_css_renderer::PointerState>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i].id != b[i].id || a[i].position.x != b[i].position.x ||
+        a[i].position.y != b[i].position.y || a[i].pressed != b[i].pressed) {
       return false;
     }
   }
@@ -836,6 +877,8 @@ void PrintUsage() {
                "[--attr id:name=value] [--previous-attr id:name=value] "
                "[--hover id] [--previous-hover id] "
                "[--active id] [--previous-active id] "
+               "[--pointer x,y] [--pointer-down] "
+               "[--previous-pointer x,y] [--previous-pointer-down] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--previous-scroll-x px] [--previous-scroll-y px] "
                "[--scroll-x px] [--scroll-y px] "
@@ -928,6 +971,8 @@ int main(int argc, char** argv) {
   create_info.viewport = {800.0f, 600.0f};
   html_css_renderer::FrameInput input;
   html_css_renderer::FrameInput previous_input;
+  bool pointer_pressed = false;
+  bool previous_pointer_pressed = false;
   std::string out_path;
   std::string json_path;
   std::string paint_artifact_dump_path;
@@ -1098,6 +1143,32 @@ int main(int argc, char** argv) {
         return 2;
       }
       previous_input.active_element_id = value;
+    } else if (arg == "--pointer") {
+      const char* value = next_value();
+      html_css_renderer::Point point;
+      if (!value || !ParsePoint(value, &point)) {
+        PrintUsage();
+        return 2;
+      }
+      SetPrimaryPointer(&input, point, pointer_pressed);
+    } else if (arg == "--pointer-down") {
+      pointer_pressed = true;
+      if (!input.pointers.empty()) {
+        input.pointers.front().pressed = true;
+      }
+    } else if (arg == "--previous-pointer") {
+      const char* value = next_value();
+      html_css_renderer::Point point;
+      if (!value || !ParsePoint(value, &point)) {
+        PrintUsage();
+        return 2;
+      }
+      SetPrimaryPointer(&previous_input, point, previous_pointer_pressed);
+    } else if (arg == "--previous-pointer-down") {
+      previous_pointer_pressed = true;
+      if (!previous_input.pointers.empty()) {
+        previous_input.pointers.front().pressed = true;
+      }
     } else if (arg == "--viewport") {
       const char* value = next_value();
       if (!value || !ParseViewport(value, &create_info.viewport)) {
@@ -1398,11 +1469,14 @@ int main(int argc, char** argv) {
       const bool same_form =
           SameStringMap(previous_input.form_values_by_element_id,
                         input.form_values_by_element_id);
+      const bool same_pointers =
+          SamePointers(previous_input.pointers, input.pointers);
       identical_incremental_requested =
           same_delta && same_timeline && same_viewport && same_html &&
           same_element_attributes &&
           (same_stylesheets || same_requested_css_file) && same_scroll &&
-          same_focus && same_hover && same_active && same_form;
+          same_focus && same_hover && same_active && same_form &&
+          same_pointers;
       previous_result = blink_embedder->AdvanceAndRender(previous_input);
       have_previous_result = true;
       if (identical_incremental_requested) {

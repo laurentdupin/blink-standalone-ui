@@ -1717,6 +1717,41 @@ html_css_renderer::Point WindowEventToDocumentPoint(SDL_Renderer* renderer,
                                image_height, render_x, render_y);
 }
 
+bool PrimaryPointerPressed(const html_css_renderer::FrameInput& input) {
+  return !input.pointers.empty() && input.pointers.front().pressed;
+}
+
+bool SamePrimaryPointer(const html_css_renderer::FrameInput& a,
+                        const html_css_renderer::FrameInput& b) {
+  const bool a_has_pointer = !a.pointers.empty();
+  const bool b_has_pointer = !b.pointers.empty();
+  if (a_has_pointer != b_has_pointer) {
+    return false;
+  }
+  if (!a_has_pointer) {
+    return true;
+  }
+  const html_css_renderer::PointerState& a_pointer = a.pointers.front();
+  const html_css_renderer::PointerState& b_pointer = b.pointers.front();
+  return a_pointer.id == b_pointer.id &&
+         a_pointer.position.x == b_pointer.position.x &&
+         a_pointer.position.y == b_pointer.position.y &&
+         a_pointer.pressed == b_pointer.pressed;
+}
+
+void SetPrimaryPointer(html_css_renderer::FrameInput* input,
+                       html_css_renderer::Point point,
+                       bool pressed) {
+  html_css_renderer::PointerState pointer;
+  pointer.id = 0;
+  pointer.position = point;
+  pointer.pressed = pressed;
+  input->pointers.clear();
+  input->pointers.push_back(pointer);
+  input->hovered_element_id.clear();
+  input->active_element_id.clear();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -2292,17 +2327,24 @@ int main(int argc, char** argv) {
         }
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
                  event.button.button == SDL_BUTTON_LEFT) {
-        if (!input.active_element_id.empty()) {
-          const ProfileClock::time_point input_update_start =
-              profiler.enabled() ? ProfileClock::now()
-                                 : ProfileClock::time_point{};
-          html_css_renderer::FrameInput next_input = input;
-          next_input.active_element_id.clear();
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
+        const html_css_renderer::Point pointer_point =
+            WindowEventToDocumentPoint(renderer, frame_width, frame_height,
+                                       event.button.x, event.button.y);
+        html_css_renderer::FrameInput next_input = input;
+        SetPrimaryPointer(&next_input, pointer_point, false);
+        const bool pointer_changed =
+            !SamePrimaryPointer(input, next_input) ||
+            !input.active_element_id.empty() ||
+            !input.hovered_element_id.empty();
+        if (pointer_changed) {
           const double input_update_ms =
               profiler.enabled()
                   ? ElapsedProfileMs(input_update_start, ProfileClock::now())
                   : 0.0;
-          if (!render_updated_input("active-up", std::move(next_input),
+          if (!render_updated_input("pointer-up", std::move(next_input),
                                     input_update_ms, input_update_start)) {
             running = false;
             break;
@@ -2314,20 +2356,16 @@ int main(int argc, char** argv) {
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
                                : ProfileClock::time_point{};
-        const html_css_renderer::Point document_point =
+        const html_css_renderer::Point pointer_point =
             WindowEventToDocumentPoint(renderer, frame_width, frame_height,
                                        event.button.x, event.button.y);
         const std::string clicked =
-            HitTest(result.hit_test_entries, document_point.x,
-                    document_point.y);
+            HitTest(result.hit_test_entries, pointer_point.x, pointer_point.y);
+        html_css_renderer::FrameInput next_input = input;
+        SetPrimaryPointer(&next_input, pointer_point, true);
+        const bool pointer_changed = !SamePrimaryPointer(input, next_input);
+        bool toggle_changed = false;
         if (!clicked.empty()) {
-          html_css_renderer::FrameInput next_input = input;
-          next_input.active_element_id = clicked;
-          next_input.hovered_element_id = clicked;
-          bool active_changed =
-              input.active_element_id != next_input.active_element_id ||
-              input.hovered_element_id != next_input.hovered_element_id;
-          bool toggle_changed = false;
           for (AttributeToggle& toggle : attribute_toggles) {
             if (AttributeToggleElementId(toggle) != clicked) {
               continue;
@@ -2337,39 +2375,36 @@ int main(int argc, char** argv) {
                 toggle.is_on ? toggle.on_value : toggle.off_value;
             toggle_changed = true;
           }
-          if (active_changed || toggle_changed) {
-            const double input_update_ms =
-                profiler.enabled()
-                    ? ElapsedProfileMs(input_update_start, ProfileClock::now())
-                    : 0.0;
-            if (!render_updated_input(toggle_changed ? "click" : "active",
-                                      std::move(next_input), input_update_ms,
-                                      input_update_start)) {
-              running = false;
-              break;
-            }
-            texture_dirty = true;
-          }
         }
-      } else if (incremental && use_cpu &&
-                 event.type == SDL_EVENT_MOUSE_MOTION) {
-        const ProfileClock::time_point input_update_start =
-            profiler.enabled() ? ProfileClock::now()
-                               : ProfileClock::time_point{};
-        const html_css_renderer::Point document_point =
-            WindowEventToDocumentPoint(renderer, frame_width, frame_height,
-                                       event.motion.x, event.motion.y);
-        const std::string hovered =
-            HitTest(result.hit_test_entries, document_point.x,
-                    document_point.y);
-        if (hovered != input.hovered_element_id) {
-          html_css_renderer::FrameInput next_input = input;
-          next_input.hovered_element_id = hovered;
+        if (pointer_changed || toggle_changed) {
           const double input_update_ms =
               profiler.enabled()
                   ? ElapsedProfileMs(input_update_start, ProfileClock::now())
                   : 0.0;
-          if (!render_updated_input("hover", std::move(next_input),
+          if (!render_updated_input(toggle_changed ? "click" : "pointer-down",
+                                    std::move(next_input), input_update_ms,
+                                    input_update_start)) {
+            running = false;
+            break;
+          }
+          texture_dirty = true;
+        }
+      } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        const ProfileClock::time_point input_update_start =
+            profiler.enabled() ? ProfileClock::now()
+                               : ProfileClock::time_point{};
+        const html_css_renderer::Point pointer_point =
+            WindowEventToDocumentPoint(renderer, frame_width, frame_height,
+                                       event.motion.x, event.motion.y);
+        html_css_renderer::FrameInput next_input = input;
+        SetPrimaryPointer(&next_input, pointer_point,
+                          PrimaryPointerPressed(input));
+        if (!SamePrimaryPointer(input, next_input)) {
+          const double input_update_ms =
+              profiler.enabled()
+                  ? ElapsedProfileMs(input_update_start, ProfileClock::now())
+                  : 0.0;
+          if (!render_updated_input("pointer-move", std::move(next_input),
                                     input_update_ms, input_update_start)) {
             running = false;
             break;

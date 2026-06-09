@@ -6917,7 +6917,11 @@ bool IsWordBreak(char16_t) {
 
 void EventDispatcher::DispatchSimulatedEnterEvent(HTMLInputElement&) {}
 
-void HitTestResult::OverrideNodeAndPosition(Node*, PhysicalOffset) {}
+void HitTestResult::OverrideNodeAndPosition(Node* node,
+                                            PhysicalOffset position) {
+  local_point_ = position;
+  SetInnerNode(node);
+}
 
 void OpaqueRange::Trace(Visitor*) const {}
 
@@ -9733,12 +9737,47 @@ bool EventHandler::BubblingScroll(mojom::blink::ScrollDirection,
   return false;
 }
 HitTestResult EventHandler::HitTestResultAtLocation(
-    const HitTestLocation&,
-    HitTestRequest::HitTestRequestType,
-    const LayoutObject*,
-    bool,
-    std::optional<HitTestRequest::HitNodeCb>) {
-  return HitTestResult();
+    const HitTestLocation& location,
+    HitTestRequest::HitTestRequestType hit_type,
+    const LayoutObject* stop_node,
+    bool no_lifecycle_update,
+    std::optional<HitTestRequest::HitNodeCb> hit_node_cb) {
+  if (frame_->GetPage()) {
+    LocalFrame& main_frame = frame_->LocalFrameRoot();
+    if (frame_ != &main_frame) {
+      LocalFrameView* frame_view = frame_->View();
+      LocalFrameView* main_view = main_frame.View();
+      if (frame_view && main_view) {
+        HitTestLocation adjusted_location;
+        if (location.IsRectBasedTest()) {
+          if (hit_type & HitTestRequest::kHitTestVisualOverflow) {
+            PhysicalRect local_rect = location.BoundingBox();
+            PhysicalRect main_frame_rect =
+                frame_view->GetLayoutView()->LocalToAncestorRect(
+                    local_rect, main_view->GetLayoutView(),
+                    kTraverseDocumentBoundaries);
+            adjusted_location = HitTestLocation(main_frame_rect);
+          } else {
+            PhysicalOffset main_content_point = main_view->ConvertFromRootFrame(
+                frame_view->ConvertToRootFrame(location.BoundingBox().offset));
+            adjusted_location = HitTestLocation(
+                PhysicalRect(main_content_point, location.BoundingBox().size));
+          }
+        } else {
+          adjusted_location = HitTestLocation(main_view->ConvertFromRootFrame(
+              frame_view->ConvertToRootFrame(location.Point())));
+        }
+        return main_frame.GetEventHandler().HitTestResultAtLocation(
+            adjusted_location, hit_type, stop_node, no_lifecycle_update);
+      }
+    }
+  }
+
+  HitTestRequest request(hit_type | HitTestRequest::kAllowChildFrameContent,
+                         stop_node, std::move(hit_node_cb));
+  HitTestResult result(request, location);
+  PerformHitTest(location, result, no_lifecycle_update);
+  return result;
 }
 void EventHandler::HoverTimerFired(TimerBase*) {}
 void EventHandler::CursorUpdateTimerFired(TimerBase*) {}
@@ -11904,15 +11943,36 @@ LocalDOMWindow* PictureInPictureController::GetDocumentPictureInPictureWindow(
 }
 HitTestResult::HitTestResult(const HitTestRequest& request,
                              const HitTestLocation& location)
-    : hit_test_request_(request), cacheable_(true) {}
+    : hit_test_request_(request),
+      cacheable_(true),
+      point_in_inner_node_frame_(location.Point()),
+      is_over_embedded_content_view_(false),
+      is_over_resizer_(false),
+      is_over_scroll_corner_(false) {}
 HitTestResult::HitTestResult(const HitTestResult&) = default;
 HitTestResult& HitTestResult::operator=(const HitTestResult&) = default;
-void HitTestResult::Trace(Visitor*) const {}
-void HitTestResult::CacheValues(const HitTestResult&) {}
+void HitTestResult::Trace(Visitor* visitor) const {
+  visitor->Trace(hit_test_request_);
+  visitor->Trace(inner_node_);
+  visitor->Trace(inner_element_);
+  visitor->Trace(inner_possibly_pseudo_node_);
+  visitor->Trace(inner_url_element_);
+  visitor->Trace(scrollbar_);
+  visitor->Trace(list_based_test_result_);
+}
+void HitTestRequest::Trace(Visitor* visitor) const {
+  visitor->Trace(stop_node_);
+}
+void HitTestResult::CacheValues(const HitTestResult& other) {
+  hit_test_request_ =
+      other.hit_test_request_.GetType() & ~HitTestRequest::kAvoidCache;
+}
 PositionWithAffinity HitTestResult::GetPosition() const {
   return PositionWithAffinity();
 }
-void HitTestResult::SetURLElement(Element*) {}
+void HitTestResult::SetURLElement(Element* element) {
+  inner_url_element_ = element;
+}
 void HitTestResult::SetToShadowHostIfInUAShadowRoot() {}
 HitTestResult::~HitTestResult() = default;
 PositionWithAffinity HitTestResult::GetPositionForInnerNodeOrImageMapImage()
@@ -11930,10 +11990,13 @@ String HitTestResult::Title(TextDirection& direction) const {
   return String();
 }
 Element* HitTestResult::InnerPossiblyPseudoElement() const {
-  return nullptr;
+  if (auto* element = DynamicTo<Element>(inner_possibly_pseudo_node_.Get())) {
+    return element;
+  }
+  return inner_element_.Get();
 }
 Node* HitTestResult::InnerNodeOrImageMapImage() const {
-  return nullptr;
+  return inner_node_.Get();
 }
 CDATASection* CDATASection::Create(Document&, const String&) {
   return nullptr;
@@ -13822,7 +13885,7 @@ const TransformPaintPropertyNodeOrAlias& FragmentData::ContentsTransform()
 }
 #endif
 HitTestResult::HitTestResult()
-    : hit_test_request_(0),
+    : hit_test_request_(HitTestRequest::kReadOnly | HitTestRequest::kActive),
       cacheable_(true),
       is_over_embedded_content_view_(false),
       is_over_resizer_(false),
@@ -18209,6 +18272,12 @@ ListBasedHitTestBehavior HitTestResult::AddNodeToListBasedTestResult(
 }
 void HitTestResult::SetInnerNode(Node* node) {
   inner_node_ = node;
+  inner_possibly_pseudo_node_ = node;
+  if (auto* element = DynamicTo<Element>(node)) {
+    inner_element_ = element;
+  } else {
+    inner_element_ = node ? node->parentElement() : nullptr;
+  }
 }
 Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
@@ -19988,6 +20057,27 @@ bool DragCaret::ShouldPaintCaret(const PhysicalBoxFragment&) const {
   return false;
 }
 void MathMLPainter::Paint(const PaintInfo&, PhysicalOffset) {}
+void EventHandler::PerformHitTest(const HitTestLocation& location,
+                                  HitTestResult& result,
+                                  bool no_lifecycle_update) const {
+  if (!frame_->ContentLayoutObject() || !frame_->View() ||
+      !frame_->View()->DidFirstLayout() ||
+      !frame_->View()->LifecycleUpdatesActive()) {
+    return;
+  }
+
+  if (no_lifecycle_update) {
+    frame_->ContentLayoutObject()->HitTestNoLifecycleUpdate(location, result);
+  } else {
+    frame_->ContentLayoutObject()->HitTest(location, result);
+  }
+  const HitTestRequest& request = result.GetHitTestRequest();
+  if (!request.ReadOnly()) {
+    frame_->GetDocument()->UpdateHoverActiveState(
+        request.Active(), !request.Move(), result.InnerPossiblyPseudoElement());
+  }
+}
+
 void HitTestResult::SetNodeAndPosition(Node* node,
                                        const PhysicalBoxFragment*,
                                        const PhysicalOffset& point) {
@@ -20806,7 +20896,20 @@ bool AutoscrollController::AutoscrollInProgressFor(const LayoutBox*) const {
 }
 void AutoscrollController::StopAutoscroll() {}
 
-void HitTestResult::Append(const HitTestResult&) {}
+void HitTestResult::Append(const HitTestResult& other) {
+  if (!inner_node_ && other.InnerNode()) {
+    inner_node_ = other.InnerNode();
+    inner_element_ = other.InnerElement();
+    inner_possibly_pseudo_node_ = other.InnerPossiblyPseudoNode();
+    local_point_ = other.LocalPoint();
+    point_in_inner_node_frame_ = other.PointInInnerNodeFrame();
+    inner_url_element_ = other.URLElement();
+    scrollbar_ = other.GetScrollbar();
+    is_over_embedded_content_view_ = other.IsOverEmbeddedContentView();
+    is_over_resizer_ = other.IsOverResizer();
+    is_over_scroll_corner_ = other.IsOverScrollCorner();
+  }
+}
 void SVGMaskPainter::Paint(GraphicsContext&,
                            const LayoutObject&,
                            const DisplayItemClient&) {}
