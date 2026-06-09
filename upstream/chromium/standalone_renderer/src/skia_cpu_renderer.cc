@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <memory>
 #include <optional>
 #include <mutex>
 #include <string>
@@ -499,8 +500,9 @@ bool QuickRejectBoundedDraw(SkCanvas& canvas,
 }
 
 uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
-                            const std::vector<uint8_t>& after) {
-  const size_t byte_count = std::min(before.size(), after.size());
+                            const uint8_t* after,
+                            size_t after_size) {
+  const size_t byte_count = std::min(before.size(), after_size);
   uint64_t changed = 0;
   for (size_t i = 0; i + 3 < byte_count; i += 4) {
     if (before[i] != after[i] || before[i + 1] != after[i + 1] ||
@@ -541,7 +543,7 @@ void StoreCpuReplayCommandTimings(
 }
 
 void BlitPreviousPixelsTranslated(const CpuImage& previous,
-                                  std::vector<uint8_t>& pixels,
+                                  uint8_t* pixels,
                                   int width,
                                   int height,
                                   Point delta) {
@@ -649,7 +651,7 @@ void BlitPreviousImageTranslated(const CpuImage& previous,
   }
 }
 
-void CopySkiaPixelsToCpuImageRect(const std::vector<uint8_t>& pixels,
+void CopySkiaPixelsToCpuImageRect(const uint8_t* pixels,
                                   const SkIRect& rect,
                                   CpuImage& image) {
   for (int y = rect.top(); y < rect.bottom(); ++y) {
@@ -1162,8 +1164,9 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   SkImageInfo info =
       SkImageInfo::Make(image.width, image.height, kRGBA_8888_SkColorType,
                         kPremul_SkAlphaType);
-  std::vector<uint8_t> pixels(static_cast<size_t>(image.width) * image.height *
-                              4u);
+  const size_t pixel_byte_count =
+      static_cast<size_t>(image.width) * image.height * 4u;
+  std::unique_ptr<uint8_t[]> pixels(new uint8_t[pixel_byte_count]);
   SkSurfaceProps surface_props(0, kRGB_H_SkPixelGeometry);
   {
     std::lock_guard<std::mutex> lock(CommandCoverageMutex());
@@ -1176,7 +1179,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
         surface_props.isUseDeviceIndependentFonts();
   }
   sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      info, pixels.data(), static_cast<size_t>(image.width) * 4u,
+      info, pixels.get(), static_cast<size_t>(image.width) * 4u,
       &surface_props);
   if (!surface) {
     return RasterizeDrawCommands(commands, viewport, options);
@@ -1187,8 +1190,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       previous->height == image.height &&
       previous->pixels_rgba.size() == image.pixels_rgba.size()) {
     if (scroll_translation_delta) {
-      BlitPreviousPixelsTranslated(*previous, pixels, image.width, image.height,
-                                   *scroll_translation_delta);
+      BlitPreviousPixelsTranslated(*previous, pixels.get(), image.width,
+                                   image.height, *scroll_translation_delta);
     } else {
       for (size_t i = 0; i < previous->pixels_rgba.size(); ++i) {
         const uint32_t packed = previous->pixels_rgba[i];
@@ -1236,7 +1239,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       CommandCoverageRecord coverage;
       CommandCoverageRecord* coverage_ptr = nullptr;
       if (measure_coverage) {
-        before_pixels = pixels;
+        before_pixels.assign(pixels.get(), pixels.get() + pixel_byte_count);
         coverage_ptr = &coverage;
         coverage.command_index = static_cast<int>(command_index);
         coverage.command_type = ToString(command.type);
@@ -1268,7 +1271,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       }
       if (measure_coverage) {
         coverage.save_depth_after = save_depth;
-        coverage.pixels_changed = CountChangedPixels(before_pixels, pixels);
+        coverage.pixels_changed =
+            CountChangedPixels(before_pixels, pixels.get(), pixel_byte_count);
         StoreCommandCoverage(std::move(coverage));
       }
     }
@@ -1306,7 +1310,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       const SkIRect clip =
           ToSkIRectClamped(damage_rect, image.width, image.height);
       if (!IsEmpty(clip)) {
-        CopySkiaPixelsToCpuImageRect(pixels, clip, image);
+        CopySkiaPixelsToCpuImageRect(pixels.get(), clip, image);
       }
     }
   } else {
