@@ -766,6 +766,29 @@ void ImportLiveScrollableElementEntriesForStandaloneRenderer(
   }
 }
 
+void PersistObservedScrollableElementOffsetsForStandaloneRenderer(
+    RenderResult& result) {
+  for (const ScrollableElementEntry& entry :
+       result.scrollable_element_entries) {
+    if (entry.element_id.empty() || entry.element_id == "document" ||
+        entry.element_id == "body") {
+      continue;
+    }
+    const bool offset_is_nonzero =
+        std::abs(entry.scroll_offset.x) > 0.001f ||
+        std::abs(entry.scroll_offset.y) > 0.001f;
+    const bool already_tracked =
+        result.successor_snapshot.scroll_offsets_by_element_id.find(
+            entry.element_id) !=
+        result.successor_snapshot.scroll_offsets_by_element_id.end();
+    if (!offset_is_nonzero && !already_tracked) {
+      continue;
+    }
+    result.successor_snapshot.scroll_offsets_by_element_id[entry.element_id] =
+        entry.scroll_offset;
+  }
+}
+
 void ApplyRetainedScenePlan(RenderResult& result,
                             const RetainedScene& current_scene,
                             const LoadCommandList& load_commands,
@@ -2963,6 +2986,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 probe_html.c_str()) != 0;
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
     ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
+    PersistObservedScrollableElementOffsetsForStandaloneRenderer(result);
+    snapshot_.scroll_offsets_by_element_id =
+        result.successor_snapshot.scroll_offsets_by_element_id;
 
     const int chunk_count =
         live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
