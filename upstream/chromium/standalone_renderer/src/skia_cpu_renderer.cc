@@ -1,6 +1,8 @@
 #include "html_css_renderer/skia_cpu_renderer.h"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -58,9 +60,55 @@ std::vector<CommandCoverageRecord>& CommandCoverageRecords() {
   return *records;
 }
 
+std::vector<CpuReplayCommandTimingRecord>& CpuReplayCommandTimingRecords() {
+  static auto* records =
+      new std::vector<CpuReplayCommandTimingRecord>();
+  return *records;
+}
+
 SkiaCpuSurfaceDiagnostics& LastSurfaceDiagnostics() {
   static auto* diagnostics = new SkiaCpuSurfaceDiagnostics();
   return *diagnostics;
+}
+
+std::mutex& ShaderCacheMutex() {
+  static auto* mutex = new std::mutex();
+  return *mutex;
+}
+
+struct CachedShader {
+  std::vector<uint8_t> bytes;
+  sk_sp<SkShader> shader;
+};
+
+std::unordered_map<uint64_t, std::vector<CachedShader>>& ShaderCache() {
+  static auto* cache =
+      new std::unordered_map<uint64_t, std::vector<CachedShader>>();
+  return *cache;
+}
+
+using CpuReplayProfileClock = std::chrono::steady_clock;
+
+struct CpuReplayCommandTimingAccumulator {
+  uint64_t count = 0;
+  double elapsed_ms = 0.0;
+};
+
+constexpr size_t kDrawCommandTypeCount = 20;
+
+size_t DrawCommandTypeIndex(DrawCommandType type) {
+  const size_t index = static_cast<size_t>(type);
+  return index < kDrawCommandTypeCount ? index
+                                       : kDrawCommandTypeCount - 1;
+}
+
+uint64_t HashBytesForCache(const std::vector<uint8_t>& bytes) {
+  uint64_t hash = 1469598103934665603ull;
+  for (uint8_t byte : bytes) {
+    hash ^= byte;
+    hash *= 1099511628211ull;
+  }
+  return hash;
 }
 
 uint8_t ClampByte(float value) {
@@ -302,7 +350,7 @@ SkMatrix ToSkMatrix(const Matrix4& matrix) {
                            m[15]);
 }
 
-sk_sp<SkShader> DeserializeShader(const std::vector<uint8_t>& bytes) {
+sk_sp<SkShader> DeserializeShaderUncached(const std::vector<uint8_t>& bytes) {
   if (bytes.empty()) {
     return nullptr;
   }
@@ -314,6 +362,49 @@ sk_sp<SkShader> DeserializeShader(const std::vector<uint8_t>& bytes) {
     return nullptr;
   }
   return sk_sp<SkShader>(static_cast<SkShader*>(flattenable.release()));
+}
+
+sk_sp<SkShader> DeserializeShader(const std::vector<uint8_t>& bytes) {
+  if (bytes.empty()) {
+    return nullptr;
+  }
+  const uint64_t hash = HashBytesForCache(bytes);
+  {
+    std::lock_guard<std::mutex> lock(ShaderCacheMutex());
+    const auto found = ShaderCache().find(hash);
+    if (found != ShaderCache().end()) {
+      for (const CachedShader& cached : found->second) {
+        if (cached.bytes == bytes) {
+          return cached.shader;
+        }
+      }
+    }
+  }
+
+  sk_sp<SkShader> shader = DeserializeShaderUncached(bytes);
+  if (!shader) {
+    return nullptr;
+  }
+  {
+    std::lock_guard<std::mutex> lock(ShaderCacheMutex());
+    auto& cache = ShaderCache();
+    size_t entry_count = 0;
+    for (const auto& bucket : cache) {
+      entry_count += bucket.second.size();
+    }
+    constexpr size_t kMaxShaderCacheEntries = 256;
+    if (entry_count >= kMaxShaderCacheEntries) {
+      cache.clear();
+    }
+    auto& bucket = cache[hash];
+    for (const CachedShader& cached : bucket) {
+      if (cached.bytes == bytes) {
+        return cached.shader;
+      }
+    }
+    bucket.push_back(CachedShader{bytes, shader});
+  }
+  return shader;
 }
 
 sk_sp<SkPathEffect> DeserializePathEffect(const std::vector<uint8_t>& bytes) {
@@ -410,6 +501,30 @@ uint64_t CountChangedPixels(const std::vector<uint8_t>& before,
 void StoreCommandCoverage(CommandCoverageRecord record) {
   std::lock_guard<std::mutex> lock(CommandCoverageMutex());
   CommandCoverageRecords().push_back(std::move(record));
+}
+
+void ResetCpuReplayCommandTimingDiagnostics() {
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  CpuReplayCommandTimingRecords().clear();
+}
+
+void StoreCpuReplayCommandTimings(
+    const std::array<CpuReplayCommandTimingAccumulator,
+                     kDrawCommandTypeCount>& timings) {
+  std::vector<CpuReplayCommandTimingRecord> records;
+  records.reserve(kDrawCommandTypeCount);
+  for (size_t i = 0; i < timings.size(); ++i) {
+    if (timings[i].count == 0) {
+      continue;
+    }
+    CpuReplayCommandTimingRecord record;
+    record.command_type = ToString(static_cast<DrawCommandType>(i));
+    record.count = timings[i].count;
+    record.elapsed_ms = timings[i].elapsed_ms;
+    records.push_back(std::move(record));
+  }
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  CpuReplayCommandTimingRecords() = std::move(records);
 }
 
 void BlitPreviousPixelsTranslated(const CpuImage& previous,
@@ -1071,6 +1186,11 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   if (options.debug_command_coverage) {
     ResetCommandCoverageDiagnostics();
   }
+  std::array<CpuReplayCommandTimingAccumulator, kDrawCommandTypeCount>
+      command_timings = {};
+  if (options.profile_command_timings) {
+    ResetCpuReplayCommandTimingDiagnostics();
+  }
   auto replay_commands = [&](bool measure_coverage) {
     for (size_t command_index = 0; command_index < commands.size();
          ++command_index) {
@@ -1092,9 +1212,23 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
         }
         coverage.save_depth_before = save_depth;
       }
+      CpuReplayProfileClock::time_point command_timing_start;
+      if (options.profile_command_timings) {
+        command_timing_start = CpuReplayProfileClock::now();
+      }
       DrawCommandWithSkia(*canvas, command, images, glyphs,
                           options.strict_text_blob_typefaces, &save_depth,
                           coverage_ptr);
+      if (options.profile_command_timings) {
+        const double elapsed_ms =
+            std::chrono::duration<double, std::milli>(
+                CpuReplayProfileClock::now() - command_timing_start)
+                .count();
+        CpuReplayCommandTimingAccumulator& timing =
+            command_timings[DrawCommandTypeIndex(command.type)];
+        ++timing.count;
+        timing.elapsed_ms += elapsed_ms;
+      }
       if (measure_coverage) {
         coverage.save_depth_after = save_depth;
         coverage.pixels_changed = CountChangedPixels(before_pixels, pixels);
@@ -1125,6 +1259,9 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   while (save_depth > 0) {
     canvas->restore();
     --save_depth;
+  }
+  if (options.profile_command_timings) {
+    StoreCpuReplayCommandTimings(command_timings);
   }
 
   if (incremental_base && damage_rects) {
@@ -1159,6 +1296,12 @@ void ResetCommandCoverageDiagnostics() {
 std::vector<CommandCoverageRecord> SnapshotCommandCoverageDiagnostics() {
   std::lock_guard<std::mutex> lock(CommandCoverageMutex());
   return CommandCoverageRecords();
+}
+
+std::vector<CpuReplayCommandTimingRecord>
+SnapshotCpuReplayCommandTimingDiagnostics() {
+  std::lock_guard<std::mutex> lock(CommandCoverageMutex());
+  return CpuReplayCommandTimingRecords();
 }
 
 SkiaCpuSurfaceDiagnostics SnapshotSkiaCpuSurfaceDiagnostics() {

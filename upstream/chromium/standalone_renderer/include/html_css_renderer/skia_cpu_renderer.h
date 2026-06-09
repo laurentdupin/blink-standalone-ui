@@ -44,6 +44,12 @@ struct CommandCoverageRecord {
   int image_height = 0;
 };
 
+struct CpuReplayCommandTimingRecord {
+  std::string command_type;
+  uint64_t count = 0;
+  double elapsed_ms = 0.0;
+};
+
 struct SkiaCpuSurfaceDiagnostics {
   std::string color_type;
   std::string alpha_type;
@@ -54,6 +60,8 @@ struct SkiaCpuSurfaceDiagnostics {
 
 void ResetCommandCoverageDiagnostics();
 std::vector<CommandCoverageRecord> SnapshotCommandCoverageDiagnostics();
+std::vector<CpuReplayCommandTimingRecord>
+SnapshotCpuReplayCommandTimingDiagnostics();
 SkiaCpuSurfaceDiagnostics SnapshotSkiaCpuSurfaceDiagnostics();
 
 CpuImage RasterizeDrawCommandsWithSkiaCpu(

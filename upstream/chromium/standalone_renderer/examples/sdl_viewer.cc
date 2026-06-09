@@ -579,6 +579,7 @@ struct SdlProfileFrame {
   double direct_render_ms = 0.0;
   double sdl_draw_present_ms = 0.0;
   double total_ms = 0.0;
+  std::string cpu_replay_command_top;
 };
 
 double SdlProfileMeasuredSubtotal(const SdlProfileFrame& frame) {
@@ -637,6 +638,41 @@ void PopulateProbeProfileTimings(
   set_if_present("paint_artifact_extraction_ms",
                  &frame->probe_paint_artifact_extraction_ms);
   set_if_present("total_probe_ms", &frame->probe_total_ms);
+}
+
+std::string FormatCpuReplayCommandTimingTop(size_t max_records) {
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+  std::vector<html_css_renderer::CpuReplayCommandTimingRecord> records =
+      html_css_renderer::SnapshotCpuReplayCommandTimingDiagnostics();
+  std::sort(records.begin(), records.end(), [](const auto& left,
+                                               const auto& right) {
+    return left.elapsed_ms > right.elapsed_ms;
+  });
+  std::string output;
+  size_t written = 0;
+  for (const auto& record : records) {
+    if (record.count == 0 || record.elapsed_ms <= 0.0) {
+      continue;
+    }
+    if (written >= max_records) {
+      break;
+    }
+    char buffer[160];
+    std::snprintf(buffer, sizeof(buffer), "%s:%llux/%.3fms",
+                  record.command_type.c_str(),
+                  static_cast<unsigned long long>(record.count),
+                  record.elapsed_ms);
+    if (!output.empty()) {
+      output += ",";
+    }
+    output += buffer;
+    ++written;
+  }
+  return output;
+#else
+  (void)max_records;
+  return {};
+#endif
 }
 
 class SdlFrameProfiler {
@@ -736,7 +772,7 @@ class SdlFrameProfiler {
         "probe_prepaint_paint=%.3fms probe_artifact=%.3fms "
         "probe_audit=%.3fms probe_extraction=%.3fms probe_total=%.3fms "
         "cpu_replay=%.3fms pixel_convert=%.3fms texture_upload=%.3fms "
-        "direct_render=%.3fms sdl_draw_present=%.3fms total=%.3fms\n",
+        "direct_render=%.3fms sdl_draw_present=%.3fms total=%.3fms%s%s\n",
         static_cast<unsigned long long>(frame.frame), frame.reason.c_str(),
         frame.incremental ? 1 : 0, frame.input_update_ms,
         frame.blink_initialize_ms, frame.blink_export_retained_ms,
@@ -747,7 +783,11 @@ class SdlFrameProfiler {
         frame.probe_paint_artifact_audit_json_ms,
         frame.probe_paint_artifact_extraction_ms, frame.probe_total_ms,
         frame.cpu_replay_ms, frame.pixel_convert_ms, frame.texture_upload_ms,
-        frame.direct_render_ms, frame.sdl_draw_present_ms, frame.total_ms);
+        frame.direct_render_ms, frame.sdl_draw_present_ms, frame.total_ms,
+        frame.cpu_replay_command_top.empty() ? "" : " cpu_replay_top=",
+        frame.cpu_replay_command_top.empty()
+            ? ""
+            : frame.cpu_replay_command_top.c_str());
   }
 
   void PrintMetric(const char* name, MetricSelector selector) const {
@@ -1684,19 +1724,29 @@ int main(int argc, char** argv) {
   html_css_renderer::CpuImage image;
   std::vector<uint32_t> pixels;
   if (use_cpu) {
+    html_css_renderer::CpuRenderOptions cpu_options;
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+    cpu_options.profile_command_timings = profiler.enabled() && use_skia_cpu;
+#endif
     ProfileClock::time_point cpu_replay_start;
     if (profiler.enabled()) {
       cpu_replay_start = ProfileClock::now();
     }
     image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-        use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(result)
+        use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                           result, cpu_options)
                      :
 #endif
-                     html_css_renderer::RasterizeRenderResult(result);
+                     html_css_renderer::RasterizeRenderResult(result,
+                                                              cpu_options);
     if (profiler.enabled()) {
       initial_profile.cpu_replay_ms =
           ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+      if (use_skia_cpu) {
+        initial_profile.cpu_replay_command_top =
+            FormatCpuReplayCommandTimingTop(5);
+      }
     }
     frame_width = image.width;
     frame_height = image.height;
@@ -1836,6 +1886,10 @@ int main(int argc, char** argv) {
       PopulateProbeProfileTimings(next_result, &profile_frame);
     }
     if (use_cpu) {
+      html_css_renderer::CpuRenderOptions cpu_options;
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+      cpu_options.profile_command_timings = profile && use_skia_cpu;
+#endif
       ProfileClock::time_point cpu_replay_start;
       if (profile) {
         cpu_replay_start = ProfileClock::now();
@@ -1846,18 +1900,23 @@ int main(int argc, char** argv) {
               ? (use_incremental
                      ? html_css_renderer::
                            RasterizeRenderResultIncrementalWithSkiaCpu(
-                               next_result, &image)
+                               next_result, &image, cpu_options)
                      : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                           next_result))
+                           next_result, cpu_options))
               :
 #endif
               (use_incremental
                    ? html_css_renderer::RasterizeRenderResultIncremental(
-                         next_result, &image)
-                   : html_css_renderer::RasterizeRenderResult(next_result));
+                         next_result, &image, cpu_options)
+                   : html_css_renderer::RasterizeRenderResult(next_result,
+                                                              cpu_options));
       if (profile) {
         profile_frame.cpu_replay_ms =
             ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+        if (use_skia_cpu) {
+          profile_frame.cpu_replay_command_top =
+              FormatCpuReplayCommandTimingTop(5);
+        }
       }
       const bool texture_size_changed =
           image.width != frame_width || image.height != frame_height;
