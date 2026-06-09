@@ -13,6 +13,9 @@ struct CpuImage {
   int width = 0;
   int height = 0;
   std::vector<uint32_t> pixels_rgba;
+  // Optional RGBA byte-order mirror used by retained Skia/SDL paths to reuse
+  // the previous frame surface without reconstructing it from packed pixels.
+  std::vector<uint8_t> pixels_rgba_bytes;
 };
 
 struct CpuRenderOptions {

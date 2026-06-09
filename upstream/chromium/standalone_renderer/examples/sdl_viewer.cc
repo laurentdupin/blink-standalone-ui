@@ -999,6 +999,10 @@ std::vector<SDL_Rect> TextureUpdateRectsForFrame(
 bool UploadCpuImageRectsToTexture(SDL_Texture* texture,
                                   const html_css_renderer::CpuImage& image,
                                   const std::vector<SDL_Rect>& rects) {
+  const size_t expected_byte_count =
+      static_cast<size_t>(image.width) * static_cast<size_t>(image.height) * 4u;
+  const bool has_rgba_bytes =
+      image.pixels_rgba_bytes.size() == expected_byte_count;
   for (const SDL_Rect& rect : rects) {
     void* texture_pixels = nullptr;
     int pitch = 0;
@@ -1011,6 +1015,12 @@ bool UploadCpuImageRectsToTexture(SDL_Texture* texture,
       auto* dst_row = dst + static_cast<size_t>(y) * pitch;
       const size_t src_row =
           static_cast<size_t>(rect.y + y) * image.width + rect.x;
+      if (has_rgba_bytes) {
+        const uint8_t* src =
+            image.pixels_rgba_bytes.data() + src_row * 4u;
+        std::copy_n(src, static_cast<size_t>(rect.w) * 4u, dst_row);
+        continue;
+      }
       for (int x = 0; x < rect.w; ++x) {
         const uint32_t rgba = image.pixels_rgba[src_row + x];
         dst_row[x * 4 + 0] = static_cast<uint8_t>((rgba >> 24) & 0xff);

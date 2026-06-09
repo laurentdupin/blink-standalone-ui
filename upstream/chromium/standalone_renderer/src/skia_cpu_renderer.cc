@@ -547,6 +547,8 @@ void BlitPreviousPixelsTranslated(const CpuImage& previous,
                                   int width,
                                   int height,
                                   Point delta) {
+  const size_t expected_byte_count =
+      static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
   const int dx = static_cast<int>(std::lround(delta.x));
   const int dy = static_cast<int>(std::lround(delta.y));
   const int src_left = std::max(0, -dx);
@@ -556,6 +558,18 @@ void BlitPreviousPixelsTranslated(const CpuImage& previous,
   const int copy_width = std::min(width - src_left, width - dst_left);
   const int copy_height = std::min(height - src_top, height - dst_top);
   if (copy_width <= 0 || copy_height <= 0) {
+    return;
+  }
+  if (previous.pixels_rgba_bytes.size() == expected_byte_count) {
+    for (int row = 0; row < copy_height; ++row) {
+      const size_t src_offset =
+          (static_cast<size_t>(src_top + row) * width + src_left) * 4u;
+      const size_t dst_offset =
+          (static_cast<size_t>(dst_top + row) * width + dst_left) * 4u;
+      std::copy_n(previous.pixels_rgba_bytes.data() + src_offset,
+                  static_cast<size_t>(copy_width) * 4u,
+                  pixels + dst_offset);
+    }
     return;
   }
   for (int row = 0; row < copy_height; ++row) {
@@ -571,6 +585,27 @@ void BlitPreviousPixelsTranslated(const CpuImage& previous,
       pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
       pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
     }
+  }
+}
+
+void CopyPreviousPixelsToSkiaBytes(const CpuImage& previous,
+                                   uint8_t* pixels,
+                                   int width,
+                                   int height) {
+  const size_t expected_byte_count =
+      static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+  if (previous.pixels_rgba_bytes.size() == expected_byte_count) {
+    std::copy(previous.pixels_rgba_bytes.begin(),
+              previous.pixels_rgba_bytes.end(), pixels);
+    return;
+  }
+  for (size_t i = 0; i < previous.pixels_rgba.size(); ++i) {
+    const uint32_t packed = previous.pixels_rgba[i];
+    const size_t offset = i * 4u;
+    pixels[offset + 0] = static_cast<uint8_t>((packed >> 24) & 0xff);
+    pixels[offset + 1] = static_cast<uint8_t>((packed >> 16) & 0xff);
+    pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
+    pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
   }
 }
 
@@ -1170,7 +1205,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
                         kPremul_SkAlphaType);
   const size_t pixel_byte_count =
       static_cast<size_t>(image.width) * image.height * 4u;
-  std::unique_ptr<uint8_t[]> pixels(new uint8_t[pixel_byte_count]);
+  std::vector<uint8_t> pixel_bytes(pixel_byte_count);
+  uint8_t* pixels = pixel_bytes.data();
   SkSurfaceProps surface_props(0, kRGB_H_SkPixelGeometry);
   {
     std::lock_guard<std::mutex> lock(CommandCoverageMutex());
@@ -1183,7 +1219,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
         surface_props.isUseDeviceIndependentFonts();
   }
   sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      info, pixels.get(), static_cast<size_t>(image.width) * 4u,
+      info, pixels, static_cast<size_t>(image.width) * 4u,
       &surface_props);
   if (!surface) {
     return RasterizeDrawCommands(commands, viewport, options);
@@ -1194,17 +1230,11 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       previous->height == image.height &&
       previous->pixels_rgba.size() == image.pixels_rgba.size()) {
     if (scroll_translation_delta) {
-      BlitPreviousPixelsTranslated(*previous, pixels.get(), image.width,
+      BlitPreviousPixelsTranslated(*previous, pixels, image.width,
                                    image.height, *scroll_translation_delta);
     } else {
-      for (size_t i = 0; i < previous->pixels_rgba.size(); ++i) {
-        const uint32_t packed = previous->pixels_rgba[i];
-        const size_t offset = i * 4u;
-        pixels[offset + 0] = static_cast<uint8_t>((packed >> 24) & 0xff);
-        pixels[offset + 1] = static_cast<uint8_t>((packed >> 16) & 0xff);
-        pixels[offset + 2] = static_cast<uint8_t>((packed >> 8) & 0xff);
-        pixels[offset + 3] = static_cast<uint8_t>(packed & 0xff);
-      }
+      CopyPreviousPixelsToSkiaBytes(*previous, pixels, image.width,
+                                    image.height);
     }
   }
   if (clear_before_render) {
@@ -1243,7 +1273,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       CommandCoverageRecord coverage;
       CommandCoverageRecord* coverage_ptr = nullptr;
       if (measure_coverage) {
-        before_pixels.assign(pixels.get(), pixels.get() + pixel_byte_count);
+        before_pixels.assign(pixels, pixels + pixel_byte_count);
         coverage_ptr = &coverage;
         coverage.command_index = static_cast<int>(command_index);
         coverage.command_type = ToString(command.type);
@@ -1276,7 +1306,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       if (measure_coverage) {
         coverage.save_depth_after = save_depth;
         coverage.pixels_changed =
-            CountChangedPixels(before_pixels, pixels.get(), pixel_byte_count);
+            CountChangedPixels(before_pixels, pixels, pixel_byte_count);
         StoreCommandCoverage(std::move(coverage));
       }
     }
@@ -1314,7 +1344,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       const SkIRect clip =
           ToSkIRectClamped(damage_rect, image.width, image.height);
       if (!IsEmpty(clip)) {
-        CopySkiaPixelsToCpuImageRect(pixels.get(), clip, image);
+        CopySkiaPixelsToCpuImageRect(pixels, clip, image);
       }
     }
   } else {
@@ -1327,6 +1357,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       }
     }
   }
+  image.pixels_rgba_bytes = std::move(pixel_bytes);
 
   return image;
 }
