@@ -45,6 +45,7 @@
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text.h"
@@ -84,6 +85,8 @@
 #include "third_party/blink/renderer/core/layout/table/layout_table.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
+#include "third_party/blink/renderer/core/page/focus_controller.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/physical_fragment.h"
@@ -478,6 +481,10 @@ struct LiveFramePaintProbeCache {
   int requested_pointer_event_type = 0;
   bool pointer_state_applied = false;
   std::string pointer_state_status = "not_requested";
+  bool pointer_focus_requested = false;
+  bool pointer_focus_applied = false;
+  std::string pointer_focus_status = "not_requested";
+  std::string pointer_focused_element_id;
   std::vector<LiveExportedDrawOp> exported_draw_ops;
   std::vector<LiveExportedChunkPropertyState> chunk_property_states;
   std::vector<std::string> chunk_stable_keys;
@@ -6734,6 +6741,10 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_state_applied = false;
   cache.pointer_state_status =
       cache.requested_pointer_state ? "requested" : "not_requested";
+  cache.pointer_focus_requested = false;
+  cache.pointer_focus_applied = false;
+  cache.pointer_focus_status = "not_requested";
+  cache.pointer_focused_element_id.clear();
   if (!cache.requested_pointer_state) {
     return;
   }
@@ -6776,6 +6787,38 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_state_applied = hit_element != nullptr;
   cache.pointer_state_status =
       hit_element ? "applied_to_blink_hit_test_target" : "no_hit_test_target";
+
+  if (cache.requested_pointer_event_type != 1) {
+    cache.pointer_focus_status = "not_focus_event";
+    return;
+  }
+
+  cache.pointer_focus_requested = true;
+  if (!hit_element) {
+    cache.pointer_focus_status = "no_hit_test_target";
+    return;
+  }
+  Page* page = frame->GetPage();
+  if (!page) {
+    cache.pointer_focus_status = "page_missing";
+    return;
+  }
+
+  const bool focus_applied = page->GetFocusController().SetFocusedElement(
+      hit_element, frame,
+      FocusParams(SelectionBehaviorOnFocus::kNone,
+                  mojom::blink::FocusType::kMouse, nullptr));
+  Element* focused_element = document.FocusedElement();
+  cache.pointer_focus_applied =
+      focus_applied && focused_element == hit_element;
+  if (focused_element) {
+    cache.pointer_focused_element_id =
+        BlinkStringToStdStringForStandaloneRenderer(
+            String(focused_element->GetIdAttribute()));
+  }
+  cache.pointer_focus_status =
+      cache.pointer_focus_applied ? "applied_to_blink_hit_test_target"
+                                  : "no_focusable_target";
 }
 
 void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
@@ -7697,7 +7740,15 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"applied_to_blink\":"
        << (cache.pointer_state_applied ? "true" : "false")
        << ",\"status\":"
-       << JsonStringForStandaloneRenderer(cache.pointer_state_status) << "}"
+       << JsonStringForStandaloneRenderer(cache.pointer_state_status)
+       << ",\"focus_requested\":"
+       << (cache.pointer_focus_requested ? "true" : "false")
+       << ",\"focus_applied_to_blink\":"
+       << (cache.pointer_focus_applied ? "true" : "false")
+       << ",\"focused_element_id\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_focused_element_id)
+       << ",\"focus_status\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_focus_status) << "}"
        << ",\"element_scroll_diagnostics\":"
        << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
        << ",\"scrollable_element_entries\":"
@@ -8402,6 +8453,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     cache.timing_cache_hit = true;
     return cache.result;
   }
+  const bool html_content_already_loaded =
+      cache.holder && cache.body_html == input_html;
   const auto setup_start = StandaloneProbeClock::now();
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
   StandaloneRendererResetImageReachabilityDiagnostics();
@@ -8467,61 +8520,63 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("before SetInnerHTML");
   const auto html_setup_start = StandaloneProbeClock::now();
   g_standalone_blink_saw_font_draw_text = false;
-  const std::string head_open = "<head>";
-  const std::string head_close = "</head>";
-  const std::string body_close = "</body>";
-  const size_t head_start = input_html.find(head_open);
-  const size_t head_end = input_html.find(head_close);
-  const size_t body_start =
-      head_end == std::string::npos
-          ? std::string::npos
-          : input_html.find("<body", head_end + head_close.size());
-  if (head_start != std::string::npos && head_end != std::string::npos &&
-      body_start != std::string::npos) {
-    const size_t head_content_start = head_start + head_open.size();
-    const std::string head_html =
-        input_html.substr(head_content_start, head_end - head_content_start);
-    const size_t body_open_end = input_html.find('>', body_start);
-    const size_t body_content_start =
-        body_open_end == std::string::npos ? input_html.size()
-                                           : body_open_end + 1;
-    size_t body_end = input_html.rfind(body_close);
-    if (body_end == std::string::npos || body_end < body_content_start) {
-      body_end = input_html.size();
+  if (!html_content_already_loaded) {
+    const std::string head_open = "<head>";
+    const std::string head_close = "</head>";
+    const std::string body_close = "</body>";
+    const size_t head_start = input_html.find(head_open);
+    const size_t head_end = input_html.find(head_close);
+    const size_t body_start =
+        head_end == std::string::npos
+            ? std::string::npos
+            : input_html.find("<body", head_end + head_close.size());
+    if (head_start != std::string::npos && head_end != std::string::npos &&
+        body_start != std::string::npos) {
+      const size_t head_content_start = head_start + head_open.size();
+      const std::string head_html =
+          input_html.substr(head_content_start, head_end - head_content_start);
+      const size_t body_open_end = input_html.find('>', body_start);
+      const size_t body_content_start =
+          body_open_end == std::string::npos ? input_html.size()
+                                             : body_open_end + 1;
+      size_t body_end = input_html.rfind(body_close);
+      if (body_end == std::string::npos || body_end < body_content_start) {
+        body_end = input_html.size();
+      }
+      const std::string body_open_tag =
+          body_open_end == std::string::npos
+              ? std::string()
+              : input_html.substr(body_start, body_open_end - body_start + 1);
+      const std::string body_fragment =
+          input_html.substr(body_content_start, body_end - body_content_start);
+      InstallStyleElementsForStandaloneRenderer(document, *head, head_html);
+      const std::string body_class =
+          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "class");
+      if (!body_class.empty()) {
+        document.body()->setAttribute(
+            html_names::kClassAttr, AtomicString(String::FromUtf8(body_class)));
+      }
+      const std::string body_id =
+          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "id");
+      if (!body_id.empty()) {
+        document.body()->setAttribute(html_names::kIdAttr,
+                                      AtomicString(String::FromUtf8(body_id)));
+      }
+      String body_string = String::FromUtf8(body_fragment);
+      if (!body_fragment.empty() && body_string.empty()) {
+        body_string = String(body_fragment);
+      }
+      document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
+    } else {
+      InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
+      const std::string body_fragment =
+          RemoveStyleElementBlocksForStandaloneRenderer(input_html);
+      document.body()->SetInnerHTMLWithoutTrustedTypes(
+          String::FromUtf8(body_fragment));
     }
-    const std::string body_open_tag =
-        body_open_end == std::string::npos
-            ? std::string()
-            : input_html.substr(body_start, body_open_end - body_start + 1);
-    const std::string body_fragment =
-        input_html.substr(body_content_start, body_end - body_content_start);
-    InstallStyleElementsForStandaloneRenderer(document, *head, head_html);
-    const std::string body_class =
-        ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "class");
-    if (!body_class.empty()) {
-      document.body()->setAttribute(html_names::kClassAttr,
-                                    AtomicString(String::FromUtf8(body_class)));
-    }
-    const std::string body_id =
-        ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "id");
-    if (!body_id.empty()) {
-      document.body()->setAttribute(html_names::kIdAttr,
-                                    AtomicString(String::FromUtf8(body_id)));
-    }
-    String body_string = String::FromUtf8(body_fragment);
-    if (!body_fragment.empty() && body_string.empty()) {
-      body_string = String(body_fragment);
-    }
-    document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
-  } else {
-    InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
-    const std::string body_fragment =
-        RemoveStyleElementBlocksForStandaloneRenderer(input_html);
-    document.body()->SetInnerHTMLWithoutTrustedTypes(
-        String::FromUtf8(body_fragment));
+    ApplyElementAttributesForStandaloneRenderer(
+        document, cache.requested_element_attributes_by_id_and_name);
   }
-  ApplyElementAttributesForStandaloneRenderer(
-      document, cache.requested_element_attributes_by_id_and_name);
   TraceLiveFrameProbeStage("after SetInnerHTML");
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
@@ -8614,6 +8669,12 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("after element scroll offset apply");
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
   ApplyPointerStateForStandaloneRenderer(document, frame_view);
+  if (cache.pointer_state_applied || cache.pointer_focus_requested) {
+    TraceLiveFrameProbeStage("before post-pointer lifecycle update");
+    UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+        frame_view, DocumentUpdateReason::kTest);
+    TraceLiveFrameProbeStage("after post-pointer lifecycle update");
+  }
   cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
       layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
@@ -8860,7 +8921,6 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
 void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.initialized = false;
-  cache.body_html.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -9013,8 +9073,11 @@ void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
   cache.requested_pointer_event_type = event_type;
   cache.pointer_state_applied = false;
   cache.pointer_state_status = next_requested ? "requested" : "not_requested";
+  cache.pointer_focus_requested = false;
+  cache.pointer_focus_applied = false;
+  cache.pointer_focus_status = next_requested ? "requested" : "not_requested";
+  cache.pointer_focused_element_id.clear();
   cache.initialized = false;
-  cache.body_html.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();

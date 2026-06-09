@@ -538,7 +538,9 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/page/autoscroll_controller.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 #include "third_party/blink/renderer/core/page/drag_controller.h"
+#include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/link_highlight.h"
+#include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/page_animator.h"
 #include "third_party/blink/renderer/core/page/page_visibility_observer.h"
 #include "third_party/blink/renderer/core/page/plugin_data.h"
@@ -11439,8 +11441,12 @@ Element* RootEditableElement(const Node&) {
   return nullptr;
 }
 void FrameSelection::DidChangeFocus() {}
+void FrameSelection::SetFrameIsFocused(bool flag) {
+  focused_ = flag;
+}
 bool FrameSelection::FrameIsFocusedAndActive() const {
-  return false;
+  return focused_ && frame_->GetPage() &&
+         frame_->GetPage()->GetFocusController().IsActive();
 }
 Element* FocusgroupControllerUtils::GetFocusgroupOwnerOfItem(
     const Element*) {

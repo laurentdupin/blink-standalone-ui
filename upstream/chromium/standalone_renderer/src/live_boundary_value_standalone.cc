@@ -27,6 +27,7 @@
 #include "third_party/blink/public/platform/web_url_error.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_encoding_data.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -1198,10 +1199,20 @@ const ContainerNode* FocusController::ReadingFlowContainerOrDisplayContents(
   return nullptr;
 }
 void FocusController::SetFocusedFrame(Frame* frame, bool) {
+  LocalFrame* old_focused_frame = FocusedFrame();
+  if (old_focused_frame == frame) {
+    return;
+  }
+  if (old_focused_frame) {
+    old_focused_frame->Selection().SetFrameIsFocused(false);
+  }
   focused_frame_ = frame;
+  if (auto* new_focused_frame = DynamicTo<LocalFrame>(frame)) {
+    new_focused_frame->Selection().SetFrameIsFocused(true);
+  }
 }
 void FocusController::FocusDocumentView(Frame* frame, bool) {
-  focused_frame_ = frame;
+  SetFocusedFrame(frame);
 }
 LocalFrame* FocusController::FocusedFrame() const {
   return DynamicTo<LocalFrame>(focused_frame_.Get());
@@ -1245,20 +1256,64 @@ Element* FocusController::FindFocusableElementForImeAutofillAndTesting(
     OwnerMap&) {
   return nullptr;
 }
-bool FocusController::SetFocusedElement(Element*, Frame* frame,
-                                        const FocusParams&) {
-  focused_frame_ = frame;
-  return true;
+bool FocusController::SetFocusedElement(Element* element,
+                                        Frame* new_focused_frame,
+                                        const FocusParams& params) {
+  LocalFrame* old_focused_frame = FocusedFrame();
+  Document* old_document =
+      old_focused_frame ? old_focused_frame->GetDocument() : nullptr;
+  Element* old_focused_element =
+      old_document ? old_document->FocusedElement() : nullptr;
+  if (element && old_focused_element == element) {
+    return true;
+  }
+
+  Document* new_document = nullptr;
+  if (element) {
+    new_document = &element->GetDocument();
+  } else if (auto* new_focused_local_frame =
+                 DynamicTo<LocalFrame>(new_focused_frame)) {
+    new_document = new_focused_local_frame->GetDocument();
+  }
+
+  if (new_document && old_document == new_document &&
+      new_document->FocusedElement() == element) {
+    return true;
+  }
+
+  if (old_document && old_document != new_document) {
+    old_document->ClearFocusedElement();
+  }
+
+  if (new_focused_frame && !new_focused_frame->GetPage()) {
+    SetFocusedFrame(nullptr);
+    return false;
+  }
+
+  SetFocusedFrame(new_focused_frame);
+  if (!new_document) {
+    return true;
+  }
+  return new_document->SetFocusedElement(element, params);
 }
-bool FocusController::SetFocusedElement(Element*, Frame* frame) {
-  focused_frame_ = frame;
-  return true;
+bool FocusController::SetFocusedElement(Element* element,
+                                        Frame* new_focused_frame) {
+  return SetFocusedElement(
+      element, new_focused_frame,
+      FocusParams(SelectionBehaviorOnFocus::kNone,
+                  mojom::blink::FocusType::kNone, nullptr));
 }
 void FocusController::SetActive(bool active) {
   is_active_ = active;
 }
 void FocusController::SetFocused(bool focused) {
+  if (is_focused_ == focused) {
+    return;
+  }
   is_focused_ = focused;
+  if (auto* focused_frame = FocusedFrame()) {
+    focused_frame->Selection().SetFrameIsFocused(focused);
+  }
 }
 void FocusController::SetFocusEmulationEnabled(bool enabled) {
   is_emulating_focus_ = enabled;
