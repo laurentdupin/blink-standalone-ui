@@ -330,7 +330,8 @@ void PrintUsage() {
                "[--scroll-x px] [--scroll-y px] [--scroll-step px] "
                "[--viewport WxH] [--delta seconds] "
                "[--font-file path] [--window-scale factor] "
-               "[--quit-after-ms ms] [--incremental] [--cpu] [--skia-cpu]"
+               "[--quit-after-ms ms] [--incremental] [--no-incremental] "
+               "[--cpu] [--skia-cpu] [--direct-sdl]"
                " [--dump-paint-artifact path]"
                " [--profile] [--profile-summary-frames count]"
                " [--profile-auto-scroll-frames count]"
@@ -340,6 +341,10 @@ void PrintUsage() {
                " [--blink]"
                "\nIf no --html or --html-file input is provided, the viewer "
                "opens a native HTML file picker.\n"
+               "Defaults: Skia CPU rendering and incremental updates are "
+               "enabled. Use --direct-sdl for the old SDL render-target path, "
+               "--cpu for the generic CPU rasterizer, or --no-incremental for "
+               "full render updates.\n"
                "Controls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls hit scrollable elements "
                "or the document, arrow/Page/Home keys scroll the document, "
@@ -504,11 +509,18 @@ bool ParseArgs(int argc,
       *font_file = value;
     } else if (arg == "--incremental") {
       *incremental = true;
+    } else if (arg == "--no-incremental") {
+      *incremental = false;
     } else if (arg == "--cpu") {
       *use_cpu = true;
+      *use_skia_cpu = false;
     } else if (arg == "--skia-cpu") {
       *use_skia_cpu = true;
       *use_cpu = true;
+    } else if (arg == "--direct-sdl") {
+      *use_skia_cpu = false;
+      *use_cpu = false;
+      *incremental = false;
     } else if (arg == "--dump-paint-artifact") {
       const char* value = next_value();
       if (!value) {
@@ -1726,9 +1738,9 @@ int main(int argc, char** argv) {
   std::optional<float> profile_auto_scroll_step;
   std::optional<html_css_renderer::Size> profile_resize_to;
   uint64_t profile_resize_after_frame = 1;
-  bool incremental = false;
-  bool use_cpu = false;
-  bool use_skia_cpu = false;
+  bool incremental = true;
+  bool use_cpu = true;
+  bool use_skia_cpu = true;
   bool use_blink = true;
 
   if (argc > 1 && !ParseArgs(argc, argv, &create_info, &input,
@@ -2324,7 +2336,8 @@ int main(int argc, char** argv) {
             texture_dirty = true;
           }
         }
-      } else if (incremental && event.type == SDL_EVENT_MOUSE_MOTION) {
+      } else if (incremental && use_cpu &&
+                 event.type == SDL_EVENT_MOUSE_MOTION) {
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
                                : ProfileClock::time_point{};
