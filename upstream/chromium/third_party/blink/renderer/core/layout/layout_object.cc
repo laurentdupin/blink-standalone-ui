@@ -4491,12 +4491,6 @@ bool LayoutObject::NodeAtPoint(HitTestResult&,
 
 void LayoutObject::ScheduleRelayout() {
   NOT_DESTROYED();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  // The standalone renderer is advanced explicitly by its caller. Blink's
-  // browser embedder path schedules asynchronous relayout work through
-  // LocalFrameView/chrome services, which are intentionally absent here.
-  return;
-#endif
   if (auto* layout_view = DynamicTo<LayoutView>(this)) {
     if (LocalFrameView* view = layout_view->GetFrameView())
       view->ScheduleRelayout();
