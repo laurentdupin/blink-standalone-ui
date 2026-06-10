@@ -19311,9 +19311,9 @@ void OutOfFlowLayoutPart::Run() {
     const std::optional<LayoutUnit> block_end_offset =
         ResolveStandaloneInset(block_end, containing_size.block_size);
 
-    ConstraintSpaceBuilder child_space_builder(
-        parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
     LogicalSize available_size = parent_space.AvailableSize();
+    bool is_fixed_inline_size = false;
+    bool is_fixed_block_size = false;
     const BoxStrut child_border_padding =
         ComputeBorders(parent_space, child) +
         ComputePadding(parent_space, style);
@@ -19321,13 +19321,13 @@ void OutOfFlowLayoutPart::Run() {
       available_size.inline_size =
           LayoutUnit(style.LogicalWidth().Pixels()) +
           child_border_padding.InlineSum();
-      child_space_builder.SetIsFixedInlineSize(true);
+      is_fixed_inline_size = true;
     }
     if (style.LogicalHeight().IsFixed()) {
       available_size.block_size =
           LayoutUnit(style.LogicalHeight().Pixels()) +
           child_border_padding.BlockSum();
-      child_space_builder.SetIsFixedBlockSize(true);
+      is_fixed_block_size = true;
     }
     if (!style.LogicalWidth().IsFixed() && inline_start_offset &&
         inline_end_offset) {
@@ -19335,7 +19335,7 @@ void OutOfFlowLayoutPart::Run() {
           (containing_size.inline_size - *inline_start_offset -
            *inline_end_offset)
               .ClampNegativeToZero();
-      child_space_builder.SetIsFixedInlineSize(true);
+      is_fixed_inline_size = true;
     }
     if (!style.LogicalHeight().IsFixed() && block_start_offset &&
         block_end_offset) {
@@ -19343,11 +19343,19 @@ void OutOfFlowLayoutPart::Run() {
           (containing_size.block_size - *block_start_offset -
            *block_end_offset)
               .ClampNegativeToZero();
-      child_space_builder.SetIsFixedBlockSize(true);
+      is_fixed_block_size = true;
     }
-    child_space_builder.SetAvailableSize(available_size);
+    ConstraintSpaceBuilder intrinsic_space_builder(
+        parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
+    intrinsic_space_builder.SetAvailableSize(available_size);
+    if (is_fixed_inline_size) {
+      intrinsic_space_builder.SetIsFixedInlineSize(true);
+    }
+    if (is_fixed_block_size) {
+      intrinsic_space_builder.SetIsFixedBlockSize(true);
+    }
     const ConstraintSpace child_intrinsic_space =
-        child_space_builder.ToConstraintSpace();
+        intrinsic_space_builder.ToConstraintSpace();
     auto MinMaxSizesFunc = [&](SizeType type) -> MinMaxSizesResult {
       return child.ComputeMinMaxSizes(style.GetWritingMode(), type,
                                       child_intrinsic_space);
@@ -19359,7 +19367,7 @@ void OutOfFlowLayoutPart::Run() {
           available_size.inline_size);
       if (inline_size != kIndefiniteSize) {
         available_size.inline_size = inline_size;
-        child_space_builder.SetIsFixedInlineSize(true);
+        is_fixed_inline_size = true;
       }
     }
     if (style.LogicalMinWidth().HasContentOrIntrinsic() ||
@@ -19371,9 +19379,17 @@ void OutOfFlowLayoutPart::Run() {
           available_size.inline_size);
       available_size.inline_size =
           min_max_inline_sizes.ClampSizeToMinAndMax(available_size.inline_size);
+      is_fixed_inline_size = true;
+    }
+    ConstraintSpaceBuilder child_space_builder(
+        parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
+    child_space_builder.SetAvailableSize(available_size);
+    if (is_fixed_inline_size) {
       child_space_builder.SetIsFixedInlineSize(true);
     }
-    child_space_builder.SetAvailableSize(available_size);
+    if (is_fixed_block_size) {
+      child_space_builder.SetIsFixedBlockSize(true);
+    }
     child_space_builder.SetPercentageResolutionSize(
         parent_space.PercentageResolutionSize());
     if (parent_space.IsHiddenForPaint()) {

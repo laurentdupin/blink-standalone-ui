@@ -897,7 +897,10 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
   cache.scroll_offset_changed = false;
   cache.scroll_offset_status = cache.scroll_offset_requested ? "requested"
                                                              : "not_requested";
-  ScrollableArea* viewport = frame_view.GetScrollableArea();
+  ScrollableArea* viewport = frame_view.LayoutViewport();
+  if (!viewport) {
+    viewport = frame_view.GetScrollableArea();
+  }
   if (!viewport) {
     cache.scroll_offset_status = "frame_scrollable_area_missing";
     if (cache.requested_wheel_scroll && !cache.wheel_scroll_applied) {
@@ -930,6 +933,11 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
         clamped_offset, mojom::blink::ScrollType::kProgrammatic,
         cc::ScrollSourceType::kAbsoluteScroll,
         mojom::blink::ScrollBehavior::kInstant);
+    // The standalone bridge may apply an explicit document scroll state after
+    // a previous frame's paint properties were built. Rebuild Blink's scroll
+    // paint properties even if the ScrollableArea reports no offset delta
+    // because the requested state matches the underlying scroller.
+    frame_view.SetNeedsPaintPropertyUpdate();
     cache.scroll_offset_status = "applied_to_frame_scrollable_area";
   } else if (cache.scroll_offset_requested && cache.requested_wheel_scroll &&
              cache.wheel_scroll_applied) {
@@ -9948,7 +9956,7 @@ void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
     float x,
     float y) {
   LiveFramePaintProbeCache& cache = ProbeCache();
-  const bool requested = std::abs(x) > 0.001f || std::abs(y) > 0.001f;
+  const bool requested = true;
   if (cache.scroll_offset_requested == requested &&
       std::abs(cache.requested_scroll_x - x) <= 0.001f &&
       std::abs(cache.requested_scroll_y - y) <= 0.001f) {

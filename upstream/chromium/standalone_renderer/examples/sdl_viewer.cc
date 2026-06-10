@@ -2386,7 +2386,8 @@ int main(int argc, char** argv) {
                     ? ElapsedProfileMs(input_update_start, ProfileClock::now())
                     : 0.0;
             if (!render_updated_input("key-scroll", std::move(next_input),
-                                      input_update_ms, input_update_start)) {
+                                      input_update_ms, input_update_start,
+                                      true)) {
               running = false;
               break;
             }
@@ -2493,7 +2494,7 @@ int main(int argc, char** argv) {
               ? ElapsedProfileMs(pending_wheel_start, ProfileClock::now())
               : 0.0;
       if (!render_updated_input("wheel-scroll", std::move(next_input),
-                                input_update_ms, pending_wheel_start)) {
+                                input_update_ms, pending_wheel_start, true)) {
         running = false;
       }
       texture_dirty = true;
@@ -2507,7 +2508,7 @@ int main(int argc, char** argv) {
       const double input_update_ms =
           ElapsedProfileMs(input_update_start, ProfileClock::now());
       if (!render_updated_input("profile-auto-scroll", std::move(next_input),
-                                input_update_ms, input_update_start)) {
+                                input_update_ms, input_update_start, true)) {
         running = false;
       }
       --profile_auto_scroll_remaining;
@@ -2537,8 +2538,12 @@ int main(int argc, char** argv) {
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
                                : ProfileClock::time_point{};
-        if (!render_updated_input("animation-tick", std::move(next_input),
-                                  0.0, input_update_start)) {
+        const bool force_full_render_for_scrolled_animation =
+            std::abs(CurrentDocumentScrollX(next_input)) > 0.5f ||
+            std::abs(CurrentDocumentScrollY(next_input)) > 0.5f;
+        if (!render_updated_input("animation-tick", std::move(next_input), 0.0,
+                                  input_update_start,
+                                  force_full_render_for_scrolled_animation)) {
           running = false;
         }
         texture_dirty = true;
