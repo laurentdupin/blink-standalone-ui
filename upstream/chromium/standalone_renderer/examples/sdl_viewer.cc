@@ -20,6 +20,7 @@
 #include <optional>
 #include <unordered_map>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -115,6 +116,12 @@ enum class ResourceRootPolicy {
   kUseHtmlDirectoryIfUnset,
 };
 
+struct HtmlPlaylist {
+  fs::path root;
+  std::vector<fs::path> html_files;
+  size_t index = 0;
+};
+
 fs::path DefaultResourceRootForHtmlPath(const fs::path& absolute_html_path) {
   const fs::path document_directory = absolute_html_path.parent_path();
   const fs::path parent = document_directory.parent_path();
@@ -124,6 +131,59 @@ fs::path DefaultResourceRootForHtmlPath(const fs::path& absolute_html_path) {
     return parent;
   }
   return document_directory;
+}
+
+bool IsHtmlPlaylistPath(const fs::path& path) {
+  const std::string extension = ToLowerAscii(path.extension().string());
+  return extension == ".html" || extension == ".htm";
+}
+
+std::string PlaylistSortKey(const fs::path& root, const fs::path& path) {
+  std::error_code error;
+  fs::path relative = fs::relative(path, root, error);
+  if (error) {
+    relative = path;
+  }
+  return ToLowerAscii(relative.generic_string());
+}
+
+std::vector<fs::path> DiscoverHtmlPlaylist(const fs::path& directory) {
+  std::vector<fs::path> files;
+  std::error_code error;
+  const fs::path root = fs::absolute(directory, error);
+  if (error || !fs::is_directory(root, error)) {
+    return files;
+  }
+
+  fs::recursive_directory_iterator iterator(
+      root, fs::directory_options::skip_permission_denied, error);
+  const fs::recursive_directory_iterator end;
+  while (!error && iterator != end) {
+    const fs::directory_entry& entry = *iterator;
+    std::error_code entry_error;
+    if (entry.is_regular_file(entry_error) &&
+        IsHtmlPlaylistPath(entry.path())) {
+      files.push_back(fs::absolute(entry.path(), entry_error));
+      if (entry_error) {
+        files.pop_back();
+      }
+    }
+    iterator.increment(error);
+    if (error) {
+      error.clear();
+    }
+  }
+
+  std::stable_sort(files.begin(), files.end(),
+                   [&](const fs::path& a, const fs::path& b) {
+                     const std::string key_a = PlaylistSortKey(root, a);
+                     const std::string key_b = PlaylistSortKey(root, b);
+                     if (key_a != key_b) {
+                       return key_a < key_b;
+                     }
+                     return a.generic_string() < b.generic_string();
+                   });
+  return files;
 }
 
 bool LoadHtmlFileForViewer(
@@ -154,7 +214,7 @@ bool LoadHtmlFileForViewer(
 }
 
 #if defined(_WIN32)
-std::optional<fs::path> ShowNativeHtmlFileDialog() {
+std::optional<fs::path> ShowNativeHtmlDirectoryDialog() {
   HRESULT initialize_result =
       CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED |
                                   COINIT_DISABLE_OLE1DDE);
@@ -163,7 +223,7 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
     initialize_result = S_OK;
   }
   if (FAILED(initialize_result)) {
-    std::fprintf(stderr, "failed to initialize file dialog COM: 0x%08lx\n",
+    std::fprintf(stderr, "failed to initialize directory dialog COM: 0x%08lx\n",
                  static_cast<unsigned long>(initialize_result));
     return std::nullopt;
   }
@@ -173,7 +233,7 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
                                     CLSCTX_INPROC_SERVER,
                                     IID_PPV_ARGS(&dialog));
   if (FAILED(result)) {
-    std::fprintf(stderr, "failed to create file dialog: 0x%08lx\n",
+    std::fprintf(stderr, "failed to create directory dialog: 0x%08lx\n",
                  static_cast<unsigned long>(result));
     if (should_uninitialize) {
       CoUninitialize();
@@ -181,16 +241,10 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
     return std::nullopt;
   }
 
-  COMDLG_FILTERSPEC filters[] = {
-      {L"HTML files", L"*.html;*.htm"},
-      {L"All files", L"*.*"},
-  };
-  dialog->SetTitle(L"Open HTML file");
-  dialog->SetFileTypes(static_cast<UINT>(std::size(filters)), filters);
-  dialog->SetFileTypeIndex(1);
+  dialog->SetTitle(L"Open HTML directory");
   DWORD options = 0;
   if (SUCCEEDED(dialog->GetOptions(&options))) {
-    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_PICKFOLDERS |
                        FOS_PATHMUSTEXIST);
   }
 
@@ -203,7 +257,7 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
     return std::nullopt;
   }
   if (FAILED(result)) {
-    std::fprintf(stderr, "file dialog failed: 0x%08lx\n",
+    std::fprintf(stderr, "directory dialog failed: 0x%08lx\n",
                  static_cast<unsigned long>(result));
     dialog->Release();
     if (should_uninitialize) {
@@ -215,7 +269,7 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
   IShellItem* item = nullptr;
   result = dialog->GetResult(&item);
   if (FAILED(result) || !item) {
-    std::fprintf(stderr, "file dialog result failed: 0x%08lx\n",
+    std::fprintf(stderr, "directory dialog result failed: 0x%08lx\n",
                  static_cast<unsigned long>(result));
     dialog->Release();
     if (should_uninitialize) {
@@ -231,7 +285,7 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
     path = fs::path(selected_path);
     CoTaskMemFree(selected_path);
   } else {
-    std::fprintf(stderr, "file dialog path conversion failed: 0x%08lx\n",
+    std::fprintf(stderr, "directory dialog path conversion failed: 0x%08lx\n",
                  static_cast<unsigned long>(result));
   }
   item->Release();
@@ -242,10 +296,10 @@ std::optional<fs::path> ShowNativeHtmlFileDialog() {
   return path;
 }
 #else
-std::optional<fs::path> ShowNativeHtmlFileDialog() {
+std::optional<fs::path> ShowNativeHtmlDirectoryDialog() {
   std::fprintf(stderr,
-               "no native file dialog is wired for this platform; pass "
-               "--html-file <path>\n");
+               "no native directory dialog is wired for this platform; pass "
+               "--html-directory <path> or --html-file <path>\n");
   return std::nullopt;
 }
 #endif
@@ -375,7 +429,8 @@ bool ParseAttributeToggle(const std::string& value,
 void PrintUsage() {
   std::fprintf(stderr,
                "Usage: html_css_renderer_sdl_viewer --html <html> "
-               "[--html-file <path>] [--css <css>] [--css-file <path>] "
+               "[--html-file <path>] [--html-directory <path>] "
+               "[--css <css>] [--css-file <path>] "
                "[--attr id:name=value] "
                "[--toggle-attr id:name=off,on] "
                "[--resource-root <path>] "
@@ -395,10 +450,13 @@ void PrintUsage() {
                " [--profile-resize-to WxH]"
                " [--profile-resize-after-frame count]"
                " [--profile-pointer-move frame:x,y]"
+               " [--profile-playlist-next-after-frame count]"
+               " [--profile-playlist-prev-after-frame count]"
                " [--capture-frames-dir path]"
                " [--blink]"
                "\nIf no --html or --html-file input is provided, the viewer "
-               "opens a native HTML file picker.\n"
+               "opens a native directory picker and builds a recursive HTML "
+               "playlist.\n"
                "Defaults: Skia CPU rendering and incremental updates are "
                "enabled. Use --direct-sdl for the old SDL render-target path, "
                "--cpu for the generic CPU rasterizer, or --no-incremental for "
@@ -406,6 +464,7 @@ void PrintUsage() {
                "Controls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls the document viewport, "
                "arrow/Page/Home keys scroll the document, "
+               "F1/F2 navigate the directory playlist, "
                "Esc quits.\n");
 }
 
@@ -420,7 +479,9 @@ bool ParseArgs(int argc,
                bool* use_cpu,
                bool* use_skia_cpu,
                std::string* paint_artifact_dump_path,
+               std::optional<fs::path>* html_directory,
                std::string* resource_root,
+               bool* resource_root_explicit,
                std::string* resource_base_path,
                std::vector<AttributeToggle>* attribute_toggles,
                float* scroll_step,
@@ -435,6 +496,8 @@ bool ParseArgs(int argc,
                std::optional<html_css_renderer::Size>* profile_resize_to,
                uint64_t* profile_resize_after_frame,
                std::vector<ProfilePointerMove>* profile_pointer_moves,
+               std::optional<uint64_t>* profile_playlist_next_after_frame,
+               std::optional<uint64_t>* profile_playlist_prev_after_frame,
                std::string* capture_frames_dir,
                bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
@@ -466,12 +529,19 @@ bool ParseArgs(int argc,
                                  stylesheet_loader_diagnostics)) {
         return false;
       }
+    } else if (arg == "--html-directory") {
+      const char* value = next_value();
+      if (!value) {
+        return false;
+      }
+      *html_directory = fs::path(value);
     } else if (arg == "--resource-root") {
       const char* value = next_value();
       if (!value) {
         return false;
       }
       *resource_root = fs::absolute(value).string();
+      *resource_root_explicit = true;
     } else if (arg == "--css") {
       const char* value = next_value();
       if (!value) {
@@ -674,6 +744,24 @@ bool ParseArgs(int argc,
         return false;
       }
       profile_pointer_moves->push_back(parsed);
+      *profile_enabled = true;
+    } else if (arg == "--profile-playlist-next-after-frame") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 1.0 ||
+          parsed > 100000.0) {
+        return false;
+      }
+      *profile_playlist_next_after_frame = static_cast<uint64_t>(parsed);
+      *profile_enabled = true;
+    } else if (arg == "--profile-playlist-prev-after-frame") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 1.0 ||
+          parsed > 100000.0) {
+        return false;
+      }
+      *profile_playlist_prev_after_frame = static_cast<uint64_t>(parsed);
       *profile_enabled = true;
     } else if (arg == "--capture-frames-dir") {
       const char* value = next_value();
@@ -1869,7 +1957,9 @@ int main(int argc, char** argv) {
   float window_scale = 1.0f;
   std::string font_file;
   std::string paint_artifact_dump_path;
+  std::optional<fs::path> html_directory;
   std::string resource_root;
+  bool resource_root_explicit = false;
   std::string resource_base_path;
   std::vector<AttributeToggle> attribute_toggles;
   std::vector<std::string> stylesheet_loader_diagnostics;
@@ -1885,6 +1975,8 @@ int main(int argc, char** argv) {
   std::optional<html_css_renderer::Size> profile_resize_to;
   uint64_t profile_resize_after_frame = 1;
   std::vector<ProfilePointerMove> profile_pointer_moves;
+  std::optional<uint64_t> profile_playlist_next_after_frame;
+  std::optional<uint64_t> profile_playlist_prev_after_frame;
   std::string capture_frames_dir;
   bool incremental = true;
   bool use_cpu = true;
@@ -1894,7 +1986,8 @@ int main(int argc, char** argv) {
   if (argc > 1 && !ParseArgs(argc, argv, &create_info, &input,
                              &quit_after_ms, &window_scale, &font_file,
                              &incremental, &use_cpu, &use_skia_cpu,
-                             &paint_artifact_dump_path, &resource_root,
+                             &paint_artifact_dump_path, &html_directory,
+                             &resource_root, &resource_root_explicit,
                              &resource_base_path,
                              &attribute_toggles, &scroll_step,
                              &profile_enabled, &profile_summary_frames,
@@ -1907,6 +2000,8 @@ int main(int argc, char** argv) {
                              &profile_resize_to,
                              &profile_resize_after_frame,
                              &profile_pointer_moves,
+                             &profile_playlist_next_after_frame,
+                             &profile_playlist_prev_after_frame,
                              &capture_frames_dir,
                              &use_blink,
                              &stylesheet_loader_diagnostics)) {
@@ -1914,29 +2009,83 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  if (create_info.html.empty()) {
-    std::fprintf(stderr, "no HTML input provided; opening file dialog...\n");
-    std::optional<fs::path> selected_html = ShowNativeHtmlFileDialog();
-    if (!selected_html) {
-      std::fprintf(stderr, "no HTML file selected; exiting\n");
-      return 0;
+  HtmlPlaylist playlist;
+  const std::vector<html_css_renderer::Stylesheet> base_stylesheets =
+      create_info.stylesheets;
+  const std::vector<std::string> base_stylesheet_loader_diagnostics =
+      stylesheet_loader_diagnostics;
+  auto load_playlist_root = [&](const fs::path& directory) -> bool {
+    std::error_code error;
+    playlist.root = fs::absolute(directory, error);
+    if (error || !fs::is_directory(playlist.root, error)) {
+      std::fprintf(stderr, "HTML directory is not readable: %s\n",
+                   directory.string().c_str());
+      return false;
     }
+    playlist.html_files = DiscoverHtmlPlaylist(playlist.root);
+    playlist.index = 0;
+    if (playlist.html_files.empty()) {
+      std::fprintf(stderr, "no .html or .htm files found under: %s\n",
+                   playlist.root.string().c_str());
+      return false;
+    }
+    if (!resource_root_explicit) {
+      resource_root = playlist.root.string();
+    }
+    create_info.stylesheets = base_stylesheets;
+    stylesheet_loader_diagnostics = base_stylesheet_loader_diagnostics;
     if (!LoadHtmlFileForViewer(
-            *selected_html, ResourceRootPolicy::kUseHtmlDirectoryIfUnset,
-            &create_info, &resource_root, &resource_base_path,
+            playlist.html_files[playlist.index],
+            ResourceRootPolicy::kUseHtmlDirectoryIfUnset, &create_info,
+            &resource_root, &resource_base_path,
             &stylesheet_loader_diagnostics)) {
-      return 2;
+      return false;
     }
-    std::fprintf(stderr, "selected HTML file: %s\n",
-                 selected_html->string().c_str());
+    std::fprintf(stderr, "HTML playlist root: %s\n",
+                 playlist.root.string().c_str());
+    std::fprintf(stderr, "HTML playlist files: %zu\n",
+                 playlist.html_files.size());
+    std::fprintf(stderr, "HTML playlist loaded [1/%zu]: %s\n",
+                 playlist.html_files.size(),
+                 playlist.html_files[playlist.index].string().c_str());
+    return true;
+  };
+
+  if (html_directory && !create_info.html.empty()) {
+    std::fprintf(stderr,
+                 "--html-directory cannot be combined with --html or "
+                 "--html-file\n");
+    return 2;
+  }
+  if (html_directory && !load_playlist_root(*html_directory)) {
+    return 2;
   }
 
-  for (AttributeToggle& toggle : attribute_toggles) {
-    const auto found = input.element_attributes_by_id_and_name.find(toggle.key);
-    toggle.is_on =
-        found != input.element_attributes_by_id_and_name.end() &&
-        found->second == toggle.on_value;
+  if (create_info.html.empty()) {
+    std::fprintf(stderr,
+                 "no HTML input provided; opening directory picker...\n");
+    std::optional<fs::path> selected_directory =
+        ShowNativeHtmlDirectoryDialog();
+    if (!selected_directory) {
+      std::fprintf(stderr, "no HTML directory selected; exiting\n");
+      return 0;
+    }
+    if (!load_playlist_root(*selected_directory)) {
+      return 2;
+    }
   }
+
+  auto sync_attribute_toggles_from_input =
+      [&](const html_css_renderer::FrameInput& source_input) {
+        for (AttributeToggle& toggle : attribute_toggles) {
+          const auto found =
+              source_input.element_attributes_by_id_and_name.find(toggle.key);
+          toggle.is_on =
+              found != source_input.element_attributes_by_id_and_name.end() &&
+              found->second == toggle.on_value;
+        }
+      };
+  sync_attribute_toggles_from_input(input);
 
   if (!font_file.empty()) {
     assets.font_bytes = ReadBinaryFile(font_file);
@@ -1949,6 +2098,7 @@ int main(int argc, char** argv) {
                  font_file.c_str());
   }
   const html_css_renderer::Size initial_viewport = create_info.viewport;
+  const html_css_renderer::FrameInput initial_input_template = input;
   input.viewport = initial_viewport;
   html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
   html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
@@ -1964,7 +2114,7 @@ int main(int argc, char** argv) {
 
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
-    blink_create_info.renderer = std::move(create_info);
+    blink_create_info.renderer = create_info;
     blink_create_info.enable_paint_artifact_audit =
         !paint_artifact_dump_path.empty();
     blink_embedder =
@@ -2148,13 +2298,19 @@ int main(int argc, char** argv) {
                "viewer controls: arrow keys scroll by %.1f px; PageUp/"
                "PageDown scroll by viewport; Home returns to top\n",
                scroll_step);
+  if (!playlist.html_files.empty()) {
+    std::fprintf(stderr,
+                 "viewer controls: F1/F2 navigate %zu HTML playlist file(s) "
+                 "with wrap-around\n",
+                 playlist.html_files.size());
+  }
   uint64_t rendered_frame_count = 1;
   PrintViewerStatus("initial", rendered_frame_count, input, result,
                     attribute_toggles, false);
   SetViewerWindowTitle(window, "initial", rendered_frame_count, input, result,
                        attribute_toggles, false);
 
-  const uint64_t animation_start_ms = SDL_GetTicks();
+  uint64_t animation_start_ms = SDL_GetTicks();
   auto current_timeline_seconds = [&]() -> double {
     return static_cast<double>(SDL_GetTicks() - animation_start_ms) / 1000.0;
   };
@@ -2323,9 +2479,208 @@ int main(int argc, char** argv) {
             });
   size_t profile_pointer_move_index = 0;
   bool first_present_complete = false;
+  auto load_playlist_index = [&](size_t next_index,
+                                 const char* reason) -> bool {
+    if (playlist.html_files.empty() || next_index >= playlist.html_files.size()) {
+      return true;
+    }
+    const ProfileClock::time_point frame_start =
+        profiler.enabled() ? ProfileClock::now() : ProfileClock::time_point{};
+    create_info.stylesheets = base_stylesheets;
+    stylesheet_loader_diagnostics = base_stylesheet_loader_diagnostics;
+    if (!resource_root_explicit) {
+      resource_root = playlist.root.string();
+    }
+    if (!LoadHtmlFileForViewer(
+            playlist.html_files[next_index],
+            ResourceRootPolicy::kUseHtmlDirectoryIfUnset, &create_info,
+            &resource_root, &resource_base_path,
+            &stylesheet_loader_diagnostics)) {
+      return false;
+    }
+    create_info.viewport = RendererOutputViewportSize(renderer, window);
+    html_css_renderer::SetStandaloneResourceProviderResourceRoot(
+        resource_root);
+    html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
+        resource_base_path);
+
+    html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
+    blink_create_info.renderer = create_info;
+    blink_create_info.enable_paint_artifact_audit =
+        !paint_artifact_dump_path.empty();
+    blink_embedder =
+        html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
+    if (!blink_embedder) {
+      std::fprintf(stderr, "failed to create Blink adapter for playlist file\n");
+      return false;
+    }
+
+    animation_start_ms = SDL_GetTicks();
+    html_css_renderer::FrameInput next_input = initial_input_template;
+    next_input.viewport = create_info.viewport;
+    next_input.timeline_time_seconds = 0.0;
+    next_input.delta_time_seconds = 0.0;
+    next_input.pointers.clear();
+    next_input.wheel = std::nullopt;
+    next_input.keyboard.pressed_key_codes.clear();
+    next_input.scroll_offsets_by_element_id.clear();
+    next_input.focused_element_id.clear();
+    next_input.hovered_element_id.clear();
+    next_input.active_element_id.clear();
+    next_input.form_values_by_element_id.clear();
+    sync_attribute_toggles_from_input(next_input);
+
+    SdlProfileFrame profile_frame;
+    ProfileClock::time_point blink_init_start;
+    if (profiler.enabled()) {
+      profile_frame.frame = rendered_frame_count + 1;
+      profile_frame.reason = reason;
+      profile_frame.incremental = false;
+      blink_init_start = ProfileClock::now();
+    }
+    const html_css_renderer::BlinkLifecycleReport init =
+        blink_embedder->Initialize();
+    if (profiler.enabled()) {
+      profile_frame.blink_initialize_ms =
+          ElapsedProfileMs(blink_init_start, ProfileClock::now());
+    }
+    ProfileClock::time_point blink_render_start;
+    if (profiler.enabled()) {
+      blink_render_start = ProfileClock::now();
+    }
+    html_css_renderer::RenderResult next_result =
+        blink_embedder->AdvanceAndRender(next_input);
+    if (profiler.enabled()) {
+      profile_frame.blink_export_retained_ms =
+          ElapsedProfileMs(blink_render_start, ProfileClock::now());
+      PopulateProbeProfileTimings(next_result, &profile_frame);
+    }
+    next_result.diagnostics.insert(next_result.diagnostics.begin(),
+                                   init.diagnostics.begin(),
+                                   init.diagnostics.end());
+    next_result.diagnostics.insert(next_result.diagnostics.begin(),
+                                   stylesheet_loader_diagnostics.begin(),
+                                   stylesheet_loader_diagnostics.end());
+    for (const std::string& diagnostic : next_result.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+
+    if (use_cpu) {
+      html_css_renderer::CpuRenderOptions cpu_options;
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+      cpu_options.profile_command_timings =
+          profiler.enabled() && use_skia_cpu;
+#endif
+      ProfileClock::time_point cpu_replay_start;
+      if (profiler.enabled()) {
+        cpu_replay_start = ProfileClock::now();
+      }
+      image =
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+          use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                             next_result, cpu_options)
+                       :
+#endif
+                       html_css_renderer::RasterizeRenderResult(next_result,
+                                                                cpu_options);
+      if (profiler.enabled()) {
+        profile_frame.cpu_replay_ms =
+            ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+        if (use_skia_cpu) {
+          profile_frame.cpu_replay_command_top =
+              FormatCpuReplayCommandTimingTop(5);
+        }
+      }
+      if (!RecreateFrameTexture(renderer, frame_texture_format, texture_access,
+                                image.width, image.height, &texture)) {
+        return false;
+      }
+      frame_width = image.width;
+      frame_height = image.height;
+      ProfileClock::time_point texture_upload_start;
+      if (profiler.enabled()) {
+        texture_upload_start = ProfileClock::now();
+      }
+      if (!UploadCpuImageRectsToTexture(
+              texture, image,
+              {SDL_Rect{0, 0, image.width, image.height}})) {
+        return false;
+      }
+      if (profiler.enabled()) {
+        profile_frame.texture_upload_ms =
+            ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+      }
+    } else if (direct_renderer) {
+      const int next_frame_width = std::max(
+          1, static_cast<int>(std::floor(
+                 next_result.successor_snapshot.viewport.width)));
+      const int next_frame_height = std::max(
+          1, static_cast<int>(std::floor(
+                 next_result.successor_snapshot.viewport.height)));
+      if (!RecreateFrameTexture(renderer, frame_texture_format, texture_access,
+                                next_frame_width, next_frame_height,
+                                &texture)) {
+        return false;
+      }
+      frame_width = next_frame_width;
+      frame_height = next_frame_height;
+      ProfileClock::time_point direct_render_start;
+      if (profiler.enabled()) {
+        direct_render_start = ProfileClock::now();
+      }
+      if (!direct_renderer->Render(next_result, texture)) {
+        return false;
+      }
+      if (profiler.enabled()) {
+        profile_frame.direct_render_ms =
+            ElapsedProfileMs(direct_render_start, ProfileClock::now());
+      }
+    }
+
+    ++rendered_frame_count;
+    next_input.scroll_offsets_by_element_id =
+        next_result.successor_snapshot.scroll_offsets_by_element_id;
+    next_input.wheel = std::nullopt;
+    playlist.index = next_index;
+    std::fprintf(stderr, "HTML playlist loaded [%zu/%zu]: %s\n",
+                 playlist.index + 1, playlist.html_files.size(),
+                 playlist.html_files[playlist.index].string().c_str());
+    PrintViewerStatus(reason, rendered_frame_count, next_input, next_result,
+                      attribute_toggles, false);
+    SetViewerWindowTitle(window, reason, rendered_frame_count, next_input,
+                         next_result, attribute_toggles, false);
+    result = std::move(next_result);
+    input = std::move(next_input);
+    if (profiler.enabled()) {
+      if (pending_profile_frame) {
+        profiler.Record(std::move(pending_profile_frame->frame));
+      }
+      pending_profile_frame =
+          PendingSdlProfileFrame{std::move(profile_frame), frame_start};
+    }
+    first_present_complete = false;
+    return true;
+  };
+
   while (running) {
     bool texture_dirty = false;
     if (first_present_complete) {
+      if (profile_playlist_next_after_frame &&
+          rendered_frame_count >= *profile_playlist_next_after_frame) {
+        SDL_Event key_event{};
+        key_event.type = SDL_EVENT_KEY_DOWN;
+        key_event.key.key = SDLK_F2;
+        SDL_PushEvent(&key_event);
+        profile_playlist_next_after_frame = std::nullopt;
+      }
+      if (profile_playlist_prev_after_frame &&
+          rendered_frame_count >= *profile_playlist_prev_after_frame) {
+        SDL_Event key_event{};
+        key_event.type = SDL_EVENT_KEY_DOWN;
+        key_event.key.key = SDLK_F1;
+        SDL_PushEvent(&key_event);
+        profile_playlist_prev_after_frame = std::nullopt;
+      }
       while (profile_pointer_move_index < profile_pointer_moves.size() &&
              rendered_frame_count >=
                  profile_pointer_moves[profile_pointer_move_index]
@@ -2409,6 +2764,29 @@ int main(int argc, char** argv) {
                                        event.wheel.mouse_y);
         pending_wheel_delta.x += wheel_delta.x;
         pending_wheel_delta.y += wheel_delta.y;
+      } else if (event.type == SDL_EVENT_KEY_DOWN &&
+                 (event.key.key == SDLK_F1 || event.key.key == SDLK_F2)) {
+        if (!playlist.html_files.empty()) {
+          if (playlist.html_files.size() == 1) {
+            std::fprintf(stderr,
+                         "HTML playlist contains one file; staying on %s\n",
+                         playlist.html_files[playlist.index].string().c_str());
+          } else {
+            const bool next = event.key.key == SDLK_F2;
+            const size_t count = playlist.html_files.size();
+            const size_t next_index =
+                next ? (playlist.index + 1) % count
+                     : (playlist.index + count - 1) % count;
+            if (!load_playlist_index(next_index,
+                                     next ? "playlist-next"
+                                          : "playlist-prev")) {
+              running = false;
+              break;
+            }
+            texture_dirty = true;
+            break;
+          }
+        }
       } else if (event.type == SDL_EVENT_KEY_DOWN &&
                  (event.key.key == ' ' || event.key.key == 't' ||
                   event.key.key == 'T')) {
