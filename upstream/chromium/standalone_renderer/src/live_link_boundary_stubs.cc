@@ -9331,7 +9331,14 @@ void PaintLayer::SetNeedsCullRectUpdate() {}
 void PaintLayer::UpdateDescendantDependentFlags() {}
 void PaintLayer::DirtyVisibleContentStatus() {}
 #endif
-void PaintLayerScrollableArea::Trace(Visitor*) const {}
+void PaintLayerScrollableArea::Trace(Visitor* visitor) const {
+  visitor->Trace(scrollbar_manager_);
+  visitor->Trace(layer_);
+  visitor->Trace(scroll_anchor_);
+  visitor->Trace(rare_data_);
+  visitor->Trace(scroll_corner_display_item_client_);
+  ScrollableArea::Trace(visitor);
+}
 CompositorElementId PaintLayerScrollableArea::GetScrollElementId() const {
   return CompositorElementId();
 }
@@ -11893,6 +11900,8 @@ bool RuntimeEnabledFeaturesBase::is_endpoint_inclusive_commit_styles_enabled_ =
     false;
 bool RuntimeEnabledFeaturesBase::is_html_interest_for_interest_button_pseudo_enabled_ =
     false;
+bool RuntimeEnabledFeaturesBase::is_root_scrollbar_follows_browser_theme_enabled_ =
+    false;
 unsigned FontPerformance::in_style_ = 0;
 void DocumentSpeculationRules::DocumentStyleUpdated() {}
 void DocumentSpeculationRules::DocumentBaseTargetChanged() {}
@@ -11937,12 +11946,6 @@ void FrameLoader::SaveScrollAnchor() {}
 void PaintLayerScrollableArea::ApplyPendingHistoryRestoreScrollOffset() {}
 PhysicalSize PaintLayerScrollableArea::Size() const {
   return PhysicalSize();
-}
-LayoutBox* Scrollbar::GetLayoutBox() const {
-  return nullptr;
-}
-bool Scrollbar::IsScrollCornerVisible() const {
-  return false;
 }
 gfx::Rect PaintLayerScrollableArea::ResizerCornerRect(
     ResizerHitTestType) const {
@@ -13564,7 +13567,20 @@ void PaintLayerScrollableArea::RemoveScrollbarsForReconstruction() {}
 bool PaintLayerScrollableArea::ShouldPerformScrollAnchoring() const {
   return false;
 }
-void PaintLayerScrollableArea::SetHasVerticalScrollbar(bool) {}
+void PaintLayerScrollableArea::SetHasHorizontalScrollbar(bool has_scrollbar) {
+  if (has_scrollbar == HasHorizontalScrollbar())
+    return;
+  SetScrollbarNeedsPaintInvalidation(kHorizontalScrollbar);
+  scrollbar_manager_.SetHasHorizontalScrollbar(has_scrollbar);
+  SetScrollCornerNeedsPaintInvalidation();
+}
+void PaintLayerScrollableArea::SetHasVerticalScrollbar(bool has_scrollbar) {
+  if (has_scrollbar == HasVerticalScrollbar())
+    return;
+  SetScrollbarNeedsPaintInvalidation(kVerticalScrollbar);
+  scrollbar_manager_.SetHasVerticalScrollbar(has_scrollbar);
+  SetScrollCornerNeedsPaintInvalidation();
+}
 gfx::Point EmbeddedContentView::Location() const {
   return gfx::Point();
 }
@@ -13854,7 +13870,6 @@ void PreferenceOverrides::SetOverride(const AtomicString&,
                                       const String&,
                                       const Document*) {}
 void PaintLayerScrollableArea::SetTickmarksOverride(Vector<gfx::Rect>) {}
-void Scrollbar::SetNeedsPaintInvalidation(ScrollbarPart) {}
 AnchorScopedName* ToAnchorScopedName(const ScopedCSSName&,
                                      const LayoutObject&) {
   return nullptr;
@@ -14142,59 +14157,6 @@ namespace probe {
 void WillRunJavaScriptDialog(LocalFrame*) {}
 void DidRunJavaScriptDialog(LocalFrame*) {}
 }  // namespace probe
-ScrollbarTheme& ScrollbarTheme::GetTheme() {
-  return *static_cast<ScrollbarTheme*>(nullptr);
-}
-void ScrollbarTheme::PaintScrollCorner(const PaintInfo&,
-                                       const ScrollableArea&,
-                                       const DisplayItemClient&,
-                                       const gfx::Rect&) {}
-void ScrollbarTheme::PaintTickmarks(const PaintInfo&,
-                                    const Scrollbar&,
-                                    const gfx::Rect&) {}
-int ScrollbarTheme::ThumbPosition(const Scrollbar&, float) const {
-  return 0;
-}
-base::TimeDelta ScrollbarTheme::OverlayScrollbarFadeOutDelay() const {
-  return base::TimeDelta();
-}
-base::TimeDelta ScrollbarTheme::OverlayScrollbarFadeOutDuration() const {
-  return base::TimeDelta();
-}
-int ScrollbarTheme::TrackPosition(const Scrollbar&) const {
-  return 0;
-}
-int ScrollbarTheme::TrackLength(const Scrollbar&) const {
-  return 0;
-}
-gfx::Rect ScrollbarTheme::ThumbRect(const Scrollbar&) const {
-  return gfx::Rect();
-}
-void ScrollbarTheme::SplitTrack(const Scrollbar&,
-                                const gfx::Rect& track,
-                                gfx::Rect& start_track,
-                                gfx::Rect& thumb_track,
-                                gfx::Rect& end_track) const {
-  start_track = gfx::Rect();
-  thumb_track = track;
-  end_track = gfx::Rect();
-}
-base::TimeDelta ScrollbarTheme::InitialAutoscrollTimerDelay() const {
-  return base::TimeDelta();
-}
-base::TimeDelta ScrollbarTheme::AutoscrollTimerDelay() const {
-  return base::TimeDelta();
-}
-ScrollbarPart ScrollbarTheme::HitTest(const Scrollbar&,
-                                      const gfx::Point&) const {
-  return kNoPart;
-}
-void ScrollbarTheme::PaintTrackBackgroundAndButtons(const PaintInfo&,
-                                                    const Scrollbar&,
-                                                    const gfx::Rect&) {}
-ScrollbarThemeOverlayMobile& ScrollbarThemeOverlayMobile::GetInstance() {
-  return *static_cast<ScrollbarThemeOverlayMobile*>(nullptr);
-}
 void ActiveScriptWrappableBase::RegisterActiveScriptWrappable() {}
 WorkletAnimationController::~WorkletAnimationController() = default;
 void WorkletAnimationController::SynchronizeAnimatorName(const String&) {}
@@ -18198,12 +18160,34 @@ PhysicalAxes PaintLayerScrollableArea::ScrollableAxes() const {
   return axes;
 }
 int PaintLayerScrollableArea::VerticalScrollbarWidth(
-    OverlayScrollbarClipBehavior) const {
-  return 0;
+    OverlayScrollbarClipBehavior overlay_scrollbar_clip_behavior) const {
+  if (!HasVerticalScrollbar())
+    return 0;
+  if (overlay_scrollbar_clip_behavior == kIgnoreOverlayScrollbarSize &&
+      GetLayoutBox()->StyleRef().OverflowY() == EOverflow::kOverlay) {
+    return 0;
+  }
+  if ((overlay_scrollbar_clip_behavior == kIgnoreOverlayScrollbarSize ||
+       !VerticalScrollbar()->ShouldParticipateInHitTesting()) &&
+      VerticalScrollbar()->IsOverlayScrollbar()) {
+    return 0;
+  }
+  return VerticalScrollbar()->ScrollbarThickness();
 }
 int PaintLayerScrollableArea::HorizontalScrollbarHeight(
-    OverlayScrollbarClipBehavior) const {
-  return 0;
+    OverlayScrollbarClipBehavior overlay_scrollbar_clip_behavior) const {
+  if (!HasHorizontalScrollbar())
+    return 0;
+  if (overlay_scrollbar_clip_behavior == kIgnoreOverlayScrollbarSize &&
+      GetLayoutBox()->StyleRef().OverflowX() == EOverflow::kOverlay) {
+    return 0;
+  }
+  if ((overlay_scrollbar_clip_behavior == kIgnoreOverlayScrollbarSize ||
+       !HorizontalScrollbar()->ShouldParticipateInHitTesting()) &&
+      HorizontalScrollbar()->IsOverlayScrollbar()) {
+    return 0;
+  }
+  return HorizontalScrollbar()->ScrollbarThickness();
 }
 LayoutUnit PaintLayerScrollableArea::ScrollWidth() const {
   return overflow_rect_.Width();
@@ -19536,8 +19520,180 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
       resizer_(nullptr),
       scroll_anchor_(this) {}
 void PaintLayerScrollableArea::UpdateAfterStyleChange(const ComputedStyle*) {}
+namespace {
+const LayoutObject& StandaloneScrollbarStyleSource(const LayoutBox& box) {
+  if (IsA<LayoutView>(box)) {
+    Document& document = box.GetDocument();
+    if (Element* body = document.body()) {
+      if (LayoutObject* body_layout = body->GetLayoutObject()) {
+        if (body_layout->StyleRef().HasCustomScrollbarStyle(body))
+          return *body_layout;
+      }
+    }
+    if (Element* document_element = document.documentElement()) {
+      if (LayoutObject* document_layout = document_element->GetLayoutObject()) {
+        if (document_layout->StyleRef().HasCustomScrollbarStyle(
+                document_element)) {
+          return *document_layout;
+        }
+      }
+    }
+  } else if (!box.GetNode() && box.Parent()) {
+    return *box.Parent();
+  }
+  return box;
+}
+
+void StandaloneComputeScrollbarNeed(PaintLayerScrollableArea& area,
+                                    bool& needs_horizontal,
+                                    bool& needs_vertical) {
+  needs_horizontal = false;
+  needs_vertical = false;
+  LayoutBox* box = area.GetLayoutBox();
+  if (!box || !box->GetFrame() || !box->GetFrame()->GetSettings() ||
+      box->GetFrame()->GetSettings()->GetHideScrollbars() ||
+      box->StyleRef().UsedScrollbarWidth() == EScrollbarWidth::kNone) {
+    return;
+  }
+
+  mojom::blink::ScrollbarMode horizontal_mode =
+      mojom::blink::ScrollbarMode::kAuto;
+  mojom::blink::ScrollbarMode vertical_mode =
+      mojom::blink::ScrollbarMode::kAuto;
+  if (auto* layout_view = DynamicTo<LayoutView>(box)) {
+    layout_view->CalculateScrollbarModes(horizontal_mode, vertical_mode);
+  } else {
+    const EOverflow overflow_x = box->StyleRef().OverflowX();
+    if (overflow_x == EOverflow::kScroll) {
+      horizontal_mode = mojom::blink::ScrollbarMode::kAlwaysOn;
+    } else if (overflow_x == EOverflow::kHidden ||
+               overflow_x == EOverflow::kClip ||
+               overflow_x == EOverflow::kVisible) {
+      horizontal_mode = mojom::blink::ScrollbarMode::kAlwaysOff;
+    }
+
+    const EOverflow overflow_y = box->StyleRef().OverflowY();
+    if (overflow_y == EOverflow::kScroll) {
+      vertical_mode = mojom::blink::ScrollbarMode::kAlwaysOn;
+    } else if (overflow_y == EOverflow::kHidden ||
+               overflow_y == EOverflow::kClip ||
+               overflow_y == EOverflow::kVisible) {
+      vertical_mode = mojom::blink::ScrollbarMode::kAlwaysOff;
+    }
+  }
+
+  if (horizontal_mode == mojom::blink::ScrollbarMode::kAlwaysOn)
+    needs_horizontal = true;
+  else if (horizontal_mode == mojom::blink::ScrollbarMode::kAuto)
+    needs_horizontal = area.HasHorizontalOverflow();
+
+  if (vertical_mode == mojom::blink::ScrollbarMode::kAlwaysOn)
+    needs_vertical = true;
+  else if (vertical_mode == mojom::blink::ScrollbarMode::kAuto)
+    needs_vertical = area.HasVerticalOverflow();
+}
+}  // namespace
+
 void PaintLayerScrollableArea::UpdateAfterLayout() {
   EnqueueForStickyUpdateIfNeeded();
+  UpdateAfterOverflowRecalc();
+  if (!ScrollbarsCanBeActive())
+    return;
+
+  bool needs_horizontal_scrollbar = false;
+  bool needs_vertical_scrollbar = false;
+  StandaloneComputeScrollbarNeed(*this, needs_horizontal_scrollbar,
+                                 needs_vertical_scrollbar);
+  SetHasHorizontalScrollbar(needs_horizontal_scrollbar);
+  SetHasVerticalScrollbar(needs_vertical_scrollbar);
+
+  const gfx::Size visible = VisibleContentRect(kExcludeScrollbars).size();
+  const gfx::Size contents = ContentsSize();
+  if (Scrollbar* scrollbar = HorizontalScrollbar())
+    scrollbar->SetProportion(visible.width(), contents.width());
+  if (Scrollbar* scrollbar = VerticalScrollbar())
+    scrollbar->SetProportion(visible.height(), contents.height());
+  PositionOverflowControls();
+}
+void PaintLayerScrollableArea::ScrollbarManager::SetHasHorizontalScrollbar(
+    bool has_scrollbar) {
+  if (has_scrollbar) {
+    if (!h_bar_) {
+      h_bar_ = CreateScrollbar(kHorizontalScrollbar);
+      h_bar_is_attached_ = 1;
+      if (h_bar_)
+        ScrollableArea()->DidAddScrollbar(*h_bar_, kHorizontalScrollbar);
+    } else {
+      h_bar_is_attached_ = 1;
+    }
+  } else {
+    h_bar_is_attached_ = 0;
+    if (h_bar_)
+      DestroyScrollbar(kHorizontalScrollbar);
+  }
+}
+void PaintLayerScrollableArea::ScrollbarManager::SetHasVerticalScrollbar(
+    bool has_scrollbar) {
+  if (has_scrollbar) {
+    if (!v_bar_) {
+      v_bar_ = CreateScrollbar(kVerticalScrollbar);
+      v_bar_is_attached_ = 1;
+      if (v_bar_)
+        ScrollableArea()->DidAddScrollbar(*v_bar_, kVerticalScrollbar);
+    } else {
+      v_bar_is_attached_ = 1;
+    }
+  } else {
+    v_bar_is_attached_ = 0;
+    if (v_bar_)
+      DestroyScrollbar(kVerticalScrollbar);
+  }
+}
+Scrollbar* PaintLayerScrollableArea::ScrollbarManager::CreateScrollbar(
+    ScrollbarOrientation orientation) {
+  LayoutBox* box = ScrollableArea()->GetLayoutBox();
+  if (!box || !box->GetDocument().View())
+    return nullptr;
+
+  const LayoutObject& style_source = StandaloneScrollbarStyleSource(*box);
+  Scrollbar* scrollbar =
+      MakeGarbageCollected<Scrollbar>(ScrollableArea(), orientation,
+                                      &style_source);
+  box->GetDocument().View()->AddScrollbar(scrollbar);
+  return scrollbar;
+}
+void PaintLayerScrollableArea::ScrollbarManager::DestroyScrollbar(
+    ScrollbarOrientation orientation) {
+  Member<Scrollbar>& scrollbar =
+      orientation == kHorizontalScrollbar ? h_bar_ : v_bar_;
+  if (!scrollbar)
+    return;
+
+  ScrollableArea()->SetScrollbarNeedsPaintInvalidation(orientation);
+  ScrollableArea()->WillRemoveScrollbar(*scrollbar, orientation);
+  if (LayoutBox* box = ScrollableArea()->GetLayoutBox()) {
+    if (LocalFrameView* view = box->GetDocument().View())
+      view->RemoveScrollbar(scrollbar);
+  }
+  scrollbar->DisconnectFromScrollableArea();
+  scrollbar = nullptr;
+}
+void PaintLayerScrollableArea::ScrollbarManager::DestroyDetachedScrollbars() {
+  if (h_bar_ && !h_bar_is_attached_)
+    DestroyScrollbar(kHorizontalScrollbar);
+  if (v_bar_ && !v_bar_is_attached_)
+    DestroyScrollbar(kVerticalScrollbar);
+}
+void PaintLayerScrollableArea::ScrollbarManager::Dispose() {
+  h_bar_is_attached_ = 0;
+  v_bar_is_attached_ = 0;
+  DestroyScrollbar(kHorizontalScrollbar);
+  DestroyScrollbar(kVerticalScrollbar);
+}
+void PaintLayerScrollableArea::ScrollbarManager::Trace(Visitor* visitor) const {
+  visitor->Trace(scrollable_area_);
+  visitor->Trace(h_bar_);
+  visitor->Trace(v_bar_);
 }
 PaintLayerScrollableArea::DelayScrollOffsetClampScope::
     DelayScrollOffsetClampScope() {}
@@ -19651,7 +19807,13 @@ gfx::Point PaintLayerScrollableArea::LastKnownMousePosition() const {
 bool PaintLayerScrollableArea::ShouldSuspendScrollAnimations() const {
   return true;
 }
-bool PaintLayerScrollableArea::ScrollbarsCanBeActive() const { return false; }
+bool PaintLayerScrollableArea::ScrollbarsCanBeActive() const {
+  LayoutBox* box = GetLayoutBox();
+  if (!box || !box->GetFrame())
+    return false;
+  LocalFrameView* frame_view = box->GetFrameView();
+  return frame_view && box->GetFrame()->GetDocument();
+}
 bool PaintLayerScrollableArea::ScrollAnimatorEnabled() const { return false; }
 bool PaintLayerScrollableArea::ScheduleAnimation() { return false; }
 void PaintLayerScrollableArea::RegisterForAnimation() {}
@@ -19664,7 +19826,11 @@ bool PaintLayerScrollableArea::UserInputScrollable(ScrollbarOrientation) const {
 bool PaintLayerScrollableArea::ShouldPlaceVerticalScrollbarOnLeft() const {
   return false;
 }
-void PaintLayerScrollableArea::DisposeImpl() {}
+void PaintLayerScrollableArea::DisposeImpl() {
+  scrollbar_manager_.Dispose();
+  ClearScrollableArea();
+  layer_ = nullptr;
+}
 void PaintLayerScrollableArea::ScrollControlWasSetNeedsPaintInvalidation() {}
 void PaintLayerScrollableArea::InvalidatePaintOfScrollControlsIfNeeded(
     const PaintInvalidatorContext&) {}
@@ -19703,6 +19869,9 @@ void PaintLayerScrollableArea::DidCompositorScroll(const gfx::PointF&,
                                                    cc::ScrollSourceType) {}
 void PaintLayerScrollableArea::ScrollbarFrameRectChanged() {}
 ScrollbarTheme& PaintLayerScrollableArea::GetPageScrollbarTheme() const {
+  LayoutBox* box = GetLayoutBox();
+  if (box && box->GetFrame() && box->GetFrame()->GetPage())
+    return box->GetFrame()->GetPage()->GetScrollbarTheme();
   return *static_cast<ScrollbarTheme*>(nullptr);
 }
 bool PaintLayerScrollableArea::IsApplyingScrollStart() const { return false; }
@@ -20008,117 +20177,6 @@ void CustomScrollbarTheme::PaintIntoRect(const LayoutCustomScrollbarPart&,
                                          const PaintInfo&,
                                          const PhysicalRect&) {}
 void CustomScrollbar::Paint(const PaintInfo&, const PhysicalOffset&) const {}
-ScrollbarLayerDelegate::ScrollbarLayerDelegate(blink::Scrollbar& scrollbar)
-    : scrollbar_(&scrollbar) {}
-ScrollbarLayerDelegate::~ScrollbarLayerDelegate() = default;
-bool ScrollbarLayerDelegate::IsSame(const cc::Scrollbar&) const {
-  return false;
-}
-cc::ScrollbarOrientation ScrollbarLayerDelegate::Orientation() const {
-  return cc::ScrollbarOrientation::kVertical;
-}
-bool ScrollbarLayerDelegate::IsLeftSideVerticalScrollbar() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::HasThumb() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::IsSolidColor() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::IsOverlay() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::IsRunningWebTest() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::IsFluentOverlayScrollbarMinimalMode() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::SupportsDragSnapBack() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::JumpOnTrackClick() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::IsOpaque() const {
-  return false;
-}
-int ScrollbarLayerDelegate::MinimumThumbLength() const {
-  return 0;
-}
-gfx::Rect ScrollbarLayerDelegate::ThumbRect() const {
-  return gfx::Rect();
-}
-gfx::Rect ScrollbarLayerDelegate::TrackRect() const {
-  return gfx::Rect();
-}
-gfx::Rect ScrollbarLayerDelegate::BackButtonRect() const {
-  return gfx::Rect();
-}
-gfx::Rect ScrollbarLayerDelegate::ForwardButtonRect() const {
-  return gfx::Rect();
-}
-float ScrollbarLayerDelegate::Opacity() const {
-  return 0.0f;
-}
-bool ScrollbarLayerDelegate::ThumbNeedsRepaint() const {
-  return false;
-}
-void ScrollbarLayerDelegate::ClearThumbNeedsRepaint() {}
-bool ScrollbarLayerDelegate::TrackAndButtonsNeedRepaint() const {
-  return false;
-}
-bool ScrollbarLayerDelegate::NeedsUpdateDisplay() const {
-  return false;
-}
-void ScrollbarLayerDelegate::ClearNeedsUpdateDisplay() {}
-bool ScrollbarLayerDelegate::HasTickmarks() const {
-  return false;
-}
-void ScrollbarLayerDelegate::PaintThumb(cc::PaintCanvas&,
-                                        const gfx::Rect&) {}
-void ScrollbarLayerDelegate::PaintTrackAndButtons(cc::PaintCanvas&,
-                                                  const gfx::Rect&) {}
-SkColor4f ScrollbarLayerDelegate::ThumbColor() const {
-  return SkColor4f{0.0f, 0.0f, 0.0f, 0.0f};
-}
-bool ScrollbarLayerDelegate::UsesNinePatchThumbResource() const {
-  return false;
-}
-gfx::Size ScrollbarLayerDelegate::NinePatchThumbCanvasSize() const {
-  return gfx::Size();
-}
-gfx::Rect ScrollbarLayerDelegate::NinePatchThumbAperture() const {
-  return gfx::Rect();
-}
-bool ScrollbarLayerDelegate::UsesSolidColorThumb() const {
-  return false;
-}
-gfx::Insets ScrollbarLayerDelegate::SolidColorThumbInsets() const {
-  return gfx::Insets();
-}
-bool ScrollbarLayerDelegate::UsesNinePatchTrackAndButtonsResource() const {
-  return false;
-}
-gfx::Size ScrollbarLayerDelegate::NinePatchTrackAndButtonsCanvasSize(
-    float) const {
-  return gfx::Size();
-}
-gfx::Rect ScrollbarLayerDelegate::NinePatchTrackAndButtonsAperture(
-    float) const {
-  return gfx::Rect();
-}
-gfx::Rect ScrollbarLayerDelegate::ShrinkMainThreadedMinimalModeThumbRect(
-    gfx::Rect& rect) const {
-  return rect;
-}
-bool ScrollbarLayerDelegate::ShouldPaint() const {
-  return false;
-}
-CompositorElementId Scrollbar::GetElementId() const {
-  return CompositorElementId();
-}
 RoundedInnerRectClipper::RoundedInnerRectClipper(GraphicsContext& context,
                                                  const PhysicalRect&,
                                                  const ContouredRect&)
@@ -21364,12 +21422,59 @@ bool CompositingReasonFinder::ShouldForcePreferCompositingToLCDText(
 bool PaintLayerScrollableArea::PrefersNonCompositedScrolling() const {
   return true;
 }
-void PaintLayerScrollableArea::PositionOverflowControls() {}
+gfx::Rect PaintLayerScrollableArea::RectForHorizontalScrollbar() const {
+  if (!HasHorizontalScrollbar())
+    return gfx::Rect();
+
+  const gfx::Rect scroll_corner = ScrollCornerRect();
+  const gfx::Size border_box_size = PixelSnappedBorderBoxSize();
+  const PhysicalBoxStrut border = GetLayoutBox()->BorderOutsets();
+  int left = border.left.ToInt();
+  if (GetLayoutBox()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft()) {
+    left += HasVerticalScrollbar() ? VerticalScrollbar()->ScrollbarThickness()
+                                   : ResizerCornerRect(kResizerForPointer)
+                                         .width();
+  }
+
+  return gfx::Rect(left,
+                   border_box_size.height() - border.bottom.ToInt() -
+                       HorizontalScrollbar()->ScrollbarThickness(),
+                   border_box_size.width() - border.HorizontalSum().ToInt() -
+                       scroll_corner.width(),
+                   HorizontalScrollbar()->ScrollbarThickness());
+}
+gfx::Rect PaintLayerScrollableArea::RectForVerticalScrollbar() const {
+  if (!HasVerticalScrollbar())
+    return gfx::Rect();
+
+  const gfx::Rect scroll_corner = ScrollCornerRect();
+  const gfx::Size border_box_size = PixelSnappedBorderBoxSize();
+  const PhysicalBoxStrut border = GetLayoutBox()->BorderOutsets();
+  const int left =
+      GetLayoutBox()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft()
+          ? border.left.ToInt()
+          : border_box_size.width() - border.right.ToInt() -
+                VerticalScrollbar()->ScrollbarThickness();
+
+  return gfx::Rect(left, border.top.ToInt(),
+                   VerticalScrollbar()->ScrollbarThickness(),
+                   border_box_size.height() - border.VerticalSum().ToInt() -
+                       scroll_corner.height());
+}
+void PaintLayerScrollableArea::PositionOverflowControls() {
+  if (Scrollbar* vertical_scrollbar = VerticalScrollbar())
+    vertical_scrollbar->SetFrameRect(RectForVerticalScrollbar());
+  if (Scrollbar* horizontal_scrollbar = HorizontalScrollbar())
+    horizontal_scrollbar->SetFrameRect(RectForHorizontalScrollbar());
+}
 gfx::Rect PaintLayerScrollableArea::ScrollCornerAndResizerRect() const {
   return gfx::Rect();
 }
 gfx::Size PaintLayerScrollableArea::PixelSnappedBorderBoxSize() const {
-  return gfx::Size();
+  const LayoutBox* box = GetLayoutBox();
+  if (!box)
+    return gfx::Size();
+  return ToPixelSnappedRect(box->PhysicalBorderBoxRect()).size();
 }
 bool PaintLayerScrollableArea::HasHorizontalOverflow() const {
   const LayoutUnit client_width =

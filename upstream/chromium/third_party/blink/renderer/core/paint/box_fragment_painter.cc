@@ -805,13 +805,6 @@ void BoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
 bool BoxFragmentPainter::PaintOverflowControls(
     const PaintInfo& paint_info,
     const PhysicalOffset& paint_offset) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  // The standalone renderer preserves Blink-owned content overflow clips and
-  // scroll property state, but does not expose browser scrollbar/resizer chrome
-  // as visual output. Avoid entering ScrollableAreaPainter here because the
-  // reduced scrollbar theme/manager boundary is intentionally incomplete.
-  return false;
-#endif
   if (!box_fragment_.IsScrollContainer())
     return false;
 

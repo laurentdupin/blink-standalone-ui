@@ -109,6 +109,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_artifact.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_chunk.h"
+#include "third_party/blink/renderer/platform/graphics/paint/scrollbar_display_item.h"
 #include "third_party/blink/renderer/platform/geometry/length.h"
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -2466,20 +2467,33 @@ bool AppendPaintArtifactExtractedOps(
     for (wtf_size_t item_index = chunk.begin_index;
          item_index < chunk.end_index && item_index < display_items.size();
          ++item_index) {
+      const DisplayItem& item = display_items[item_index];
       const auto* drawing =
-          DynamicTo<DrawingDisplayItem>(display_items[item_index]);
-      if (!drawing) {
+          DynamicTo<DrawingDisplayItem>(item);
+      const auto* scrollbar =
+          DynamicTo<ScrollbarDisplayItem>(item);
+      if (!drawing && !scrollbar) {
         continue;
       }
       const size_t exported_op_begin = exported_draw_ops.size();
-      if (!AppendPaintRecordExtractedOps(
-              drawing->GetPaintRecord(), 0.0f, 0.0f, viewport_width,
-              viewport_height, exported_draw_ops, diagnostics,
-              projection_has_non_translation)) {
-        complete = false;
+      if (drawing) {
+        if (!AppendPaintRecordExtractedOps(
+                drawing->GetPaintRecord(), 0.0f, 0.0f, viewport_width,
+                viewport_height, exported_draw_ops, diagnostics,
+                projection_has_non_translation)) {
+          complete = false;
+        }
+      } else {
+        cc::PaintRecord scrollbar_record = scrollbar->Paint();
+        if (!AppendPaintRecordExtractedOps(
+                scrollbar_record, 0.0f, 0.0f, viewport_width,
+                viewport_height, exported_draw_ops, diagnostics,
+                projection_has_non_translation)) {
+          complete = false;
+        }
       }
       const DisplayItemClientId item_client_id =
-          display_items[item_index].ClientId();
+          item.ClientId();
       for (size_t op_index = exported_op_begin;
            op_index < exported_draw_ops.size(); ++op_index) {
         LiveExportedDrawOp& op = exported_draw_ops[op_index];
@@ -2601,11 +2615,17 @@ bool AppendPaintArtifactOracleBitmapOp(
     for (wtf_size_t item_index = chunk.begin_index;
          item_index < chunk.end_index && item_index < display_items.size();
          ++item_index) {
-      const auto* drawing = DynamicTo<DrawingDisplayItem>(display_items[item_index]);
-      if (!drawing) {
+      const DisplayItem& item = display_items[item_index];
+      const auto* drawing = DynamicTo<DrawingDisplayItem>(item);
+      const auto* scrollbar = DynamicTo<ScrollbarDisplayItem>(item);
+      if (!drawing && !scrollbar) {
         continue;
       }
-      drawing->GetPaintRecord().Playback(canvas);
+      if (drawing) {
+        drawing->GetPaintRecord().Playback(canvas);
+      } else {
+        scrollbar->Paint().Playback(canvas);
+      }
     }
     canvas->restore();
   }
@@ -6269,6 +6289,7 @@ struct FinerCacheUnitAudit {
   gfx::Rect visual_bounds;
   int display_item_count = 0;
   int drawing_item_count = 0;
+  int scrollbar_display_item_count = 0;
   RawPaintRecordAudit audit;
   std::string content_fingerprint;
 };
@@ -6461,6 +6482,7 @@ void AppendDisplayItemToFinerCacheUnits(
     const std::string& item_type,
     const gfx::Rect& visual_rect,
     bool is_drawing,
+    bool is_scrollbar,
     const RawPaintRecordAudit& item_audit) {
   const bool client_id_valid = client_id != kInvalidDisplayItemClientId;
   const bool can_extend_previous =
@@ -6482,6 +6504,9 @@ void AppendDisplayItemToFinerCacheUnits(
   ++unit.display_item_count;
   if (is_drawing) {
     ++unit.drawing_item_count;
+  }
+  if (is_scrollbar) {
+    ++unit.scrollbar_display_item_count;
   }
   if (!visual_rect.IsEmpty()) {
     if (unit.visual_bounds.IsEmpty()) {
@@ -6505,8 +6530,12 @@ std::vector<std::string> FinerCacheUnitDesignNotes(
   if (!unit.client_id_valid) {
     notes.push_back("invalid_display_item_client_id");
   }
-  if (unit.drawing_item_count == 0) {
+  if (unit.drawing_item_count == 0 &&
+      unit.scrollbar_display_item_count == 0) {
     notes.push_back("no_drawing_display_items");
+  }
+  if (unit.scrollbar_display_item_count > 0) {
+    notes.push_back("contains_scrollbar_display_items");
   }
   if (unit.visual_bounds.IsEmpty()) {
     notes.push_back("empty_visual_bounds");
@@ -6701,6 +6730,8 @@ std::string FinerCacheUnitMetadataJsonForStandaloneRenderer(
          << ",\"end_item_index\":" << unit.end_item_index
          << ",\"display_item_count\":" << unit.display_item_count
          << ",\"drawing_item_count\":" << unit.drawing_item_count
+         << ",\"scrollbar_display_item_count\":"
+         << unit.scrollbar_display_item_count
          << ",\"first_item_id\":"
          << JsonStringForStandaloneRenderer(unit.first_item_id)
          << ",\"last_item_id\":"
@@ -7942,6 +7973,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       const bool item_is_drawing = item.IsDrawing();
       TraceLiveFrameProbeStagef("paint audit after item is_drawing %lu %lu",
                                 chunk_index, item_index);
+      const bool item_is_scrollbar = item.IsScrollbar();
       const DisplayItemClientId item_client_id = item.ClientId();
       display_items_json << "{\"index\":" << item_index << ",\"id\":"
                          << JsonStringForStandaloneRenderer(item_id)
@@ -7958,13 +7990,51 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                          << ",\"visual_rect\":"
                          << RectJsonForStandaloneRenderer(item_visual_rect)
                          << ",\"is_drawing\":"
-                         << (item_is_drawing ? "true" : "false");
+                         << (item_is_drawing ? "true" : "false")
+                         << ",\"is_scrollbar\":"
+                         << (item_is_scrollbar ? "true" : "false");
       RawPaintRecordAudit item_audit;
       if (!item_is_drawing) {
         ++non_drawing_item_count;
+        const auto* scrollbar = DynamicTo<ScrollbarDisplayItem>(item);
+        if (scrollbar) {
+          std::ostringstream paint_ops_json;
+          paint_ops_json << "[";
+          cc::PaintRecord scrollbar_record = scrollbar->Paint();
+          AppendPaintRecordAuditJson(scrollbar_record, item_audit,
+                                     &paint_ops_json, true);
+          paint_ops_json << "]";
+          for (const auto& [name, count] : item_audit.top_level_histogram) {
+            chunk_op_histogram[name] += count;
+          }
+          for (const auto& [name, count] : item_audit.recursive_histogram) {
+            chunk_recursive_op_histogram[name] += count;
+          }
+          for (const auto& [name, count] : item_audit.unsupported_histogram) {
+            chunk_unsupported_histogram[name] += count;
+          }
+          for (const auto& [name, count] : item_audit.fallback_histogram) {
+            chunk_fallback_histogram[name] += count;
+          }
+          chunk_op_count += item_audit.paint_op_count;
+          chunk_recursive_op_count += item_audit.recursive_paint_op_count;
+          MergeRawPaintRecordAudit(chunk_raw_audit, item_audit);
+          AppendDisplayItemToFinerCacheUnits(
+              finer_cache_units, item_index, item_client_id, item_id,
+              item_type, item_visual_rect, item_is_drawing,
+              item_is_scrollbar, item_audit);
+          display_items_json
+              << ",\"scrollbar_paint_record_extracted\":true"
+              << ",\"paint_record_op_histogram\":"
+              << MapToJsonObject(item_audit.top_level_histogram)
+              << ",\"recursive_paint_record_op_histogram\":"
+              << MapToJsonObject(item_audit.recursive_histogram)
+              << ",\"paint_ops\":" << paint_ops_json.str() << "}";
+          continue;
+        }
         AppendDisplayItemToFinerCacheUnits(
             finer_cache_units, item_index, item_client_id, item_id, item_type,
-            item_visual_rect, item_is_drawing, item_audit);
+            item_visual_rect, item_is_drawing, item_is_scrollbar, item_audit);
         display_items_json
             << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
@@ -7978,7 +8048,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       if (!drawing) {
         AppendDisplayItemToFinerCacheUnits(
             finer_cache_units, item_index, item_client_id, item_id, item_type,
-            item_visual_rect, item_is_drawing, item_audit);
+            item_visual_rect, item_is_drawing, item_is_scrollbar, item_audit);
         display_items_json
             << ",\"paint_record_op_histogram\":{},\"recursive_paint_record_op_histogram\":{},\"paint_ops\":[]}";
         continue;
@@ -8029,7 +8099,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       chunk_raw_audit.has_effect_opacity |= item_audit.has_effect_opacity;
       AppendDisplayItemToFinerCacheUnits(
           finer_cache_units, item_index, item_client_id, item_id, item_type,
-          item_visual_rect, item_is_drawing, item_audit);
+          item_visual_rect, item_is_drawing, item_is_scrollbar, item_audit);
       display_items_json << ",\"paint_record_op_histogram\":"
                          << MapToJsonObject(item_audit.top_level_histogram)
                          << ",\"recursive_paint_record_op_histogram\":"
@@ -8657,7 +8727,11 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           "display-item, PaintOp, bounds, and property-state metadata are "
           "still collected field-by-field\"}}"
        << ",\"scrollbar_chrome_policy\":{"
-       << "\"standalone_paints_scrollbars\":false,"
+       << "\"standalone_paints_scrollbars\":true,"
+       << "\"standard_scrollbars_painted\":true,"
+       << "\"custom_scrollbars_painted\":false,"
+       << "\"overlay_or_visual_viewport_scrollbars_painted\":false,"
+       << "\"paint_source\":\"ScrollbarDisplayItem::Paint\","
        << "\"standalone_paints_resizers\":false,"
        << "\"content_overflow_clip_preserved\":true,"
        << "\"scroll_background_failsoft_enabled\":true}"

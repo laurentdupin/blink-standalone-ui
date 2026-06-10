@@ -179,6 +179,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_gesture_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/animation/element_smil_animations.cc
@@ -823,6 +824,13 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scroll_animator_base.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scroll_into_view_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollable_area.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_layer_delegate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_theme.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_theme_aura.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_theme_fluent.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_theme_overlay.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_theme_overlay_mobile.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/scrolling/sticky_position_scrolling_constraints.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/standalone_live_frame_bridge_probe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/standalone_renderer_probe.cc
