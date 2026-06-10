@@ -60,6 +60,19 @@ HOVER_SCALE_TRANSITION_HTML = (
     "</style><div id='card' class='card'><div id='runner' class='runner'></div></div>"
 )
 
+CURSOR_HTML = (
+    "<!doctype html><style>"
+    "body{margin:0;font:16px Arial,sans-serif}"
+    ".row{height:48px;margin:12px;padding:12px;border:1px solid #999}"
+    "#pointer{cursor:pointer}#text{cursor:text}"
+    "#resize{cursor:ew-resize}#notallowed{cursor:not-allowed}"
+    "</style>"
+    "<div id='pointer' class='row'>pointer</div>"
+    "<div id='text' class='row'>text</div>"
+    "<div id='resize' class='row'>resize</div>"
+    "<div id='notallowed' class='row'>not allowed</div>"
+)
+
 
 def base_command(benchmark: Path, case: dict[str, Any], out_bmp: Path, out_json: Path) -> list[str]:
     cmd = [str(benchmark)]
@@ -193,6 +206,11 @@ def control_by_debug_id(payload: dict[str, Any], debug_id: str) -> dict[str, Any
         if control.get("data_debug_id") == debug_id:
             return control
     return {}
+
+
+def cursor_type(payload: dict[str, Any]) -> str:
+    value = payload.get("render_result", {}).get("cursor_type", "")
+    return value if isinstance(value, str) else ""
 
 
 def scrollable_entry(payload: dict[str, Any], element_id: str) -> dict[str, Any]:
@@ -361,6 +379,21 @@ def check_overflow_wheel(payload: dict[str, Any], failures: list[str]) -> None:
     )
 
 
+def check_cursor(expected_cursor: str, expected_hover: str) -> CaseCheck:
+    def check(payload: dict[str, Any], failures: list[str]) -> None:
+        expect_equal(failures, cursor_type(payload), expected_cursor, "cursor type")
+        expect_equal(
+            failures,
+            payload.get("render_result", {})
+            .get("successor_snapshot", {})
+            .get("hovered_element_id"),
+            expected_hover,
+            "hovered element",
+        )
+
+    return check
+
+
 CaseCheck = Callable[[dict[str, Any], list[str]], None]
 
 
@@ -420,6 +453,34 @@ CASES: list[dict[str, Any]] = [
             "label": "hover scale transition midpoint expanded pixel",
         },
         "check": lambda payload, failures: None,
+    },
+    {
+        "name": "cursor-pointer",
+        "html": CURSOR_HTML,
+        "viewport": "320x360",
+        "pointer": "40,40",
+        "check": check_cursor("pointer", "pointer"),
+    },
+    {
+        "name": "cursor-text",
+        "html": CURSOR_HTML,
+        "viewport": "320x360",
+        "pointer": "40,126",
+        "check": check_cursor("text", "text"),
+    },
+    {
+        "name": "cursor-ew-resize",
+        "html": CURSOR_HTML,
+        "viewport": "320x360",
+        "pointer": "40,212",
+        "check": check_cursor("ew-resize", "resize"),
+    },
+    {
+        "name": "cursor-not-allowed",
+        "html": CURSOR_HTML,
+        "viewport": "320x360",
+        "pointer": "40,300",
+        "check": check_cursor("not-allowed", "notallowed"),
     },
     {
         "name": "checkbox-default-activation",

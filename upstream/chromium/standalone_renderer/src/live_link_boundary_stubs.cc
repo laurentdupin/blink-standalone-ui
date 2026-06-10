@@ -69,6 +69,7 @@
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/html/html_anchor_element.h"
 #include "third_party/blink/renderer/core/html/html_table_caption_element.h"
 #include "third_party/blink/renderer/core/html/html_table_cell_element.h"
 #include "third_party/blink/renderer/core/html/html_table_col_element.h"
@@ -76,6 +77,7 @@
 #include "third_party/blink/renderer/core/html/html_table_row_element.h"
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/events/animation_playback_event.h"
+#include "third_party/blink/renderer/core/events/pointer_event_factory.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
@@ -1829,6 +1831,44 @@ extern "C" int g_standalone_oof_layout_null_results = 0;
 extern "C" int g_standalone_oof_zero_size_fragments = 0;
 extern "C" int g_standalone_oof_safety_limit_hit = 0;
 
+DOMURLUtils::~DOMURLUtils() = default;
+
+void DOMURLUtils::setProtocol(const String&) {}
+void DOMURLUtils::setUsername(const String&) {}
+void DOMURLUtils::setPassword(const String&) {}
+void DOMURLUtils::setHost(const String&) {}
+void DOMURLUtils::setHostname(const String&) {}
+void DOMURLUtils::setPort(const String&) {}
+void DOMURLUtils::setPathname(const String&) {}
+void DOMURLUtils::setHash(const String&) {}
+void DOMURLUtils::setSearch(const String&) {}
+void DOMURLUtils::SetSearchInternal(const String&) {}
+
+String DOMURLUtilsReadOnly::href() {
+  const KURL& url = Url();
+  return url.IsNull() ? Input() : url.GetString();
+}
+
+String DOMURLUtilsReadOnly::origin(const KURL&) {
+  return String();
+}
+
+String DOMURLUtilsReadOnly::host(const KURL& url) {
+  return url.Host().ToString();
+}
+
+String DOMURLUtilsReadOnly::port(const KURL&) {
+  return String();
+}
+
+String DOMURLUtilsReadOnly::search(const KURL&) {
+  return String();
+}
+
+String DOMURLUtilsReadOnly::hash(const KURL&) {
+  return String();
+}
+
 extern "C" void StandaloneRendererResetOutOfFlowDiagnostics() {
   g_standalone_oof_layout_part_run_called = 0;
   g_standalone_oof_candidate_count = 0;
@@ -3118,6 +3158,8 @@ bool RuntimeEnabledFeaturesBase::is_input_multiple_fields_ui_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_html_command_actions_v_2_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_popover_hint_new_behavior_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_access_key_label_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_anchor_focus_ring_fix_enabled_ = false;
+bool RuntimeEnabledFeaturesBase::is_link_blur_improvement_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_list_counter_accounting_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_about_blank_page_respects_dark_mode_on_user_action_enabled_ = false;
 bool RuntimeEnabledFeaturesBase::is_css_scopeified_parent_pseudo_class_enabled_ = false;
@@ -3428,6 +3470,8 @@ const WrapperTypeInfo& HTMLBRElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBRElement");
 const WrapperTypeInfo& HTMLBodyElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBodyElement");
+const WrapperTypeInfo& HTMLAnchorElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLAnchorElement");
 const WrapperTypeInfo& HTMLDivElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLDivElement");
 const WrapperTypeInfo& HTMLFormElement::wrapper_type_info_ =
@@ -3651,6 +3695,9 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
   }
   if (local_name == html_names::kFormTag.LocalName()) {
     return MakeGarbageCollected<HTMLFormElement>(document);
+  }
+  if (local_name == html_names::kATag.LocalName()) {
+    return MakeGarbageCollected<HTMLAnchorElement>(document);
   }
 #if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
   if (local_name == html_names::kInputTag.LocalName()) {
@@ -4615,10 +4662,6 @@ void ScrollMarkerGroupData::Trace(Visitor* visitor) const {
   visitor->Trace(focus_group_);
   visitor->Trace(selected_marker_);
   visitor->Trace(pending_selected_marker_);
-}
-
-Element* HTMLAnchorElement::ScrollTargetElement() const {
-  return nullptr;
 }
 
 void StyleAdjuster::RunUncacheableStyleAdjustment(
@@ -5702,11 +5745,6 @@ double MediaValuesCached::ContainerHeight() const { return 0; }
 double MediaValuesCached::ContainerWidth(const ScopedCSSName&) const { return 0; }
 double MediaValuesCached::ContainerHeight(const ScopedCSSName&) const { return 0; }
 
-const AtomicString& HTMLAnchorElementBase::GetName() const {
-  return g_null_atom;
-}
-
-
 CSSStyleSheet* ViewTransition::UAStyleSheet() const {
   return nullptr;
 }
@@ -6454,6 +6492,9 @@ void StyleAdjuster::AdjustComputedStyle(StyleResolverState& state, Element* elem
     builder.SetEffectiveAppearance(AppearanceValue::kNone);
   } else {
     LayoutTheme::GetTheme().AdjustStyle(*element, builder);
+  }
+  if (element && element->HasCustomStyleCallbacks()) {
+    element->AdjustStyle(base::PassKey<StyleAdjuster>(), builder);
   }
   builder.SetForcesStackingContext(false);
   if (builder.GetPosition() != EPosition::kStatic) {
@@ -7957,8 +7998,10 @@ FontFace* FontFace::Create(Document*,
 
 void FontFaceCache::Add(const StyleRuleFontFace*, FontFace*) {}
 
-EInsideLink VisitedLinkState::DetermineLinkStateSlowCase(const Element&) {
-  return EInsideLink::kNotInsideLink;
+EInsideLink VisitedLinkState::DetermineLinkStateSlowCase(
+    const Element& element) {
+  return element.IsLink() ? EInsideLink::kInsideUnvisitedLink
+                          : EInsideLink::kNotInsideLink;
 }
 
 #if 0
@@ -10432,7 +10475,6 @@ bool SoftNavigationHeuristics::ModifiedNode(Node*) {
   return false;
 }
 void SoftNavigationHeuristics::Shutdown() {}
-void HTMLAnchorElement::UpdateScrollTargetGroupMembership() {}
 namespace focusgroup {
 FocusgroupData ParseFocusgroup(const Element*, const AtomicString&) {
   return FocusgroupData();
@@ -20662,9 +20704,6 @@ Decimal HTMLInputElement::RatioValue() const {
   return Decimal(0);
 }
 #endif
-HTMLInputElement* SliderThumbElement::HostInput() const {
-  return nullptr;
-}
 bool ViewTransition::IsRepresentedViaPseudoElements(
     const LayoutObject&) const {
   return false;
@@ -20793,7 +20832,9 @@ void HTMLFormControlElement::DidMoveToNewDocument(Document& old_document) {
   HTMLElement::DidMoveToNewDocument(old_document);
 }
 void HTMLFormControlElement::AttributeChanged(
-    const AttributeModificationParams&) {}
+    const AttributeModificationParams& params) {
+  HTMLElement::AttributeChanged(params);
+}
 void HTMLFormControlElement::ParseAttribute(
     const AttributeModificationParams&) {}
 void HTMLFormControlElement::CloneNonAttributePropertiesFrom(
@@ -21059,6 +21100,10 @@ String Locale::ValidationMessageTooShortText(unsigned, int) {
 String Locale::QueryString(int, const String&) {
   return String();
 }
+String Locale::QueryString(int, const String&, const String&) {
+  return String();
+}
+const PointerId PointerEventFactory::kMouseId = 1;
 void V8UnionHTMLOptGroupElementOrHTMLOptionElement::Trace(
     Visitor*) const {}
 void V8UnionHTMLElementOrLong::Trace(Visitor*) const {}

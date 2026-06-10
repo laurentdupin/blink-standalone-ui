@@ -69,6 +69,11 @@ struct KeyboardState {
   std::vector<uint32_t> pressed_key_codes;
 };
 
+struct SelectPopupChoice {
+  int list_index = -1;
+  bool cancel = false;
+};
+
 struct FrameInput {
   double delta_time_seconds = 0.0;
   double timeline_time_seconds = 0.0;
@@ -78,6 +83,7 @@ struct FrameInput {
   std::unordered_map<std::string, std::string> element_attributes_by_id_and_name;
   std::vector<PointerState> pointers;
   std::optional<WheelInput> wheel;
+  std::optional<SelectPopupChoice> select_popup_choice;
   KeyboardState keyboard;
   std::unordered_map<std::string, Point> scroll_offsets_by_element_id;
   std::string focused_element_id;
@@ -116,6 +122,22 @@ struct ScrollableElementEntry {
   bool can_scroll_y = false;
 };
 
+struct SelectPopupItem {
+  int list_index = -1;
+  std::string label;
+  bool enabled = false;
+  bool selected = false;
+  bool separator = false;
+  bool group = false;
+};
+
+struct SelectPopupState {
+  bool open = false;
+  Rect anchor_bounds;
+  int selected_list_index = -1;
+  std::vector<SelectPopupItem> items;
+};
+
 struct SkippedTransformDiagnostic {
   std::string reason;
   Matrix4 matrix;
@@ -138,8 +160,10 @@ struct RenderResult {
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<ScrollableElementEntry> scrollable_element_entries;
+  SelectPopupState select_popup;
   Point document_max_scroll_offset;
   std::vector<SkippedTransformDiagnostic> skipped_transform_diagnostics;
+  std::string cursor_type;
   std::vector<std::string> diagnostics;
   std::vector<std::string> missing_resources;
   RendererSnapshot successor_snapshot;

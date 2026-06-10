@@ -47,11 +47,19 @@ int StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
     int hovered_element_id_capacity,
     char* active_element_id,
     int active_element_id_capacity);
+int StandaloneBlinkLiveFrameBridgePointerCursorTypeForStandaloneRenderer(
+    const char* body_html,
+    char* cursor_type,
+    int cursor_type_capacity);
 void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     float x,
     float y,
     float delta_x,
     float delta_y,
+    int requested);
+void StandaloneBlinkLiveFrameBridgeSetSelectPopupChoiceForStandaloneRenderer(
+    int list_index,
+    int cancel,
     int requested);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
@@ -81,6 +89,28 @@ int StandaloneBlinkLiveFrameBridgeDocumentScrollOffsetForStandaloneRenderer(
     float* y,
     float* max_x,
     float* max_y);
+int StandaloneBlinkLiveFrameBridgeSelectPopupOpenForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeSelectPopupAnchorBoundsForStandaloneRenderer(
+    const char* body_html,
+    float* x,
+    float* y,
+    float* width,
+    float* height);
+int StandaloneBlinkLiveFrameBridgeSelectPopupSelectedListIndexForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeSelectPopupItemCountForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeSelectPopupItemAtForStandaloneRenderer(
+    const char* body_html,
+    int item_index,
+    int* list_index,
+    char* label,
+    int label_capacity,
+    int* enabled,
+    int* selected,
+    int* separator,
+    int* group);
 int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
@@ -853,14 +883,49 @@ float ScrollClipEdgeDamageThickness(const RetainedScene& scene) {
   return std::min(std::ceil(thickness), 32.0f);
 }
 
+bool DamageRectEmpty(Rect rect) {
+  return rect.width <= 0.0f || rect.height <= 0.0f;
+}
+
+bool DamageRectsIntersect(Rect a, Rect b) {
+  return !DamageRectEmpty(a) && !DamageRectEmpty(b) && a.x < b.x + b.width &&
+         a.x + a.width > b.x && a.y < b.y + b.height &&
+         a.y + a.height > b.y;
+}
+
+void SyncDamageRects(RenderResult& result) {
+  result.damage_bounds = Rect{};
+  for (const Rect rect : result.damage_rects) {
+    result.damage_bounds = UnionRectBounds(result.damage_bounds, rect);
+  }
+  result.frame.damage_rects = result.damage_rects;
+  result.frame.damage_bounds = result.damage_bounds;
+}
+
 void AppendDamageRect(RenderResult& result, Rect damage) {
-  if (damage.width <= 0.0f || damage.height <= 0.0f) {
+  if (DamageRectEmpty(damage)) {
     return;
   }
   result.damage_rects.push_back(damage);
-  result.damage_bounds = UnionRectBounds(result.damage_bounds, damage);
-  result.frame.damage_rects = result.damage_rects;
-  result.frame.damage_bounds = result.damage_bounds;
+  bool merged = true;
+  while (merged) {
+    merged = false;
+    for (size_t i = 0; i < result.damage_rects.size() && !merged; ++i) {
+      for (size_t j = i + 1; j < result.damage_rects.size(); ++j) {
+        if (!DamageRectsIntersect(result.damage_rects[i],
+                                  result.damage_rects[j])) {
+          continue;
+        }
+        result.damage_rects[i] =
+            UnionRectBounds(result.damage_rects[i], result.damage_rects[j]);
+        result.damage_rects.erase(
+            result.damage_rects.begin() + static_cast<std::ptrdiff_t>(j));
+        merged = true;
+        break;
+      }
+    }
+  }
+  SyncDamageRects(result);
 }
 
 void AddScrollClipEdgeDamage(RenderResult& result,
@@ -1013,6 +1078,58 @@ void ImportLiveScrollableElementEntriesForStandaloneRenderer(
          Point{max_scroll_x, max_scroll_y},
          can_scroll_x != 0,
          can_scroll_y != 0});
+  }
+}
+
+void ImportLiveSelectPopupStateForStandaloneRenderer(
+    const std::string& probe_html,
+    RenderResult& result) {
+  namespace live_probe = ::blink::standalone_renderer_probe;
+  result.select_popup = SelectPopupState{};
+  if (!live_probe::StandaloneBlinkLiveFrameBridgeSelectPopupOpenForStandaloneRenderer(
+          probe_html.c_str())) {
+    return;
+  }
+
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+  if (live_probe::
+          StandaloneBlinkLiveFrameBridgeSelectPopupAnchorBoundsForStandaloneRenderer(
+              probe_html.c_str(), &x, &y, &width, &height)) {
+    result.select_popup.anchor_bounds = Rect{x, y, width, height};
+  }
+  result.select_popup.open = true;
+  result.select_popup.selected_list_index =
+      live_probe::
+          StandaloneBlinkLiveFrameBridgeSelectPopupSelectedListIndexForStandaloneRenderer(
+              probe_html.c_str());
+  const int item_count =
+      live_probe::StandaloneBlinkLiveFrameBridgeSelectPopupItemCountForStandaloneRenderer(
+          probe_html.c_str());
+  for (int i = 0; i < item_count && i < 1024; ++i) {
+    int list_index = -1;
+    std::array<char, 512> label{};
+    int enabled = 0;
+    int selected = 0;
+    int separator = 0;
+    int group = 0;
+    if (!live_probe::
+            StandaloneBlinkLiveFrameBridgeSelectPopupItemAtForStandaloneRenderer(
+                probe_html.c_str(), i, &list_index, label.data(),
+                static_cast<int>(label.size()), &enabled, &selected,
+                &separator, &group)) {
+      continue;
+    }
+    SelectPopupItem item;
+    item.list_index = list_index;
+    item.label = label.data();
+    item.enabled = enabled != 0;
+    item.selected = selected != 0;
+    item.separator = separator != 0;
+    item.group = group != 0;
+    result.select_popup.items.push_back(std::move(item));
   }
 }
 
@@ -3113,7 +3230,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       RenderResult& result,
       const RendererSnapshot& previous_snapshot,
       const FrameInput& input) {
-    if (input.wheel || !input.pointers.empty() ||
+    if (input.wheel || input.select_popup_choice || !input.pointers.empty() ||
         !input.keyboard.pressed_key_codes.empty()) {
       return false;
     }
@@ -3224,6 +3341,16 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       live_probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
           0.0f, 0.0f, 0.0f, 0.0f, 0);
     }
+    if (input.select_popup_choice) {
+      live_probe::
+          StandaloneBlinkLiveFrameBridgeSetSelectPopupChoiceForStandaloneRenderer(
+              input.select_popup_choice->list_index,
+              input.select_popup_choice->cancel ? 1 : 0, 1);
+    } else {
+      live_probe::
+          StandaloneBlinkLiveFrameBridgeSetSelectPopupChoiceForStandaloneRenderer(
+              -1, 0, 0);
+    }
     if (!input.pointers.empty()) {
       const PointerState& pointer = input.pointers.front();
       int pointer_event_type = 0;
@@ -3321,8 +3448,16 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           result.successor_snapshot.hovered_element_id;
       snapshot_.active_element_id = result.successor_snapshot.active_element_id;
     }
+    std::array<char, 64> observed_cursor_type{};
+    if (live_probe::
+            StandaloneBlinkLiveFrameBridgePointerCursorTypeForStandaloneRenderer(
+                probe_html.c_str(), observed_cursor_type.data(),
+                static_cast<int>(observed_cursor_type.size()))) {
+      result.cursor_type = observed_cursor_type.data();
+    }
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
     ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
+    ImportLiveSelectPopupStateForStandaloneRenderer(probe_html, result);
     PersistObservedScrollableElementOffsetsForStandaloneRenderer(result);
     snapshot_.scroll_offsets_by_element_id =
         result.successor_snapshot.scroll_offsets_by_element_id;
@@ -4060,6 +4195,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             active_commands->back().stroke_cap = stroke_cap;
             active_commands->back().stroke_join = stroke_join;
             active_commands->back().stroke_miter = stroke_miter;
+            append_draw_looper_layers(active_commands->back());
             append_path_effect_bytes(active_commands->back());
             ++translated_command_count;
           }

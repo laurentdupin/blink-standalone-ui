@@ -26,6 +26,8 @@
 
 #include <utility>
 
+#include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
@@ -35,10 +37,22 @@
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
-#include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/ad_tracker/ad_tracker.h"
 #include "third_party/blink/renderer/core/css/scroll_target_group_scope.h"
+#include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
+#include "third_party/blink/renderer/core/html/anchor_element_metrics_sender.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
+#include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
+#include "third_party/blink/renderer/core/loader/frame_load_request.h"
+#include "third_party/blink/renderer/core/loader/navigation_policy.h"
+#include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
+#include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
+#include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
+#include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
+#include "third_party/blink/renderer/platform/timer.h"
+#endif
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/layout_tree_builder_traversal.h"
 #include "third_party/blink/renderer/core/dom/scroll_marker_group_data.h"
@@ -47,35 +61,23 @@
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/events/pointer_event.h"
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
-#include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
-#include "third_party/blink/renderer/core/html/anchor_element_metrics_sender.h"
 #include "third_party/blink/renderer/core/html/anchor_element_utils.h"
 #include "third_party/blink/renderer/core/html/html_area_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
-#include "third_party/blink/renderer/core/inspector/console_message.h"
-#include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
-#include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
-#include "third_party/blink/renderer/core/loader/frame_load_request.h"
-#include "third_party/blink/renderer/core/loader/navigation_policy.h"
-#include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
-#include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
-#include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
-#include "third_party/blink/renderer/core/speculation_rules/document_speculation_rules.h"
 #include "third_party/blink/renderer/core/url/dom_origin.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
-#include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "ui/events/event_constants.h"
@@ -105,6 +107,9 @@ FocusableState HTMLAnchorElementBase::SupportsFocus(
 }
 
 bool HTMLAnchorElementBase::ShouldHaveFocusAppearance() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return HTMLElement::ShouldHaveFocusAppearance();
+#else
   if (RuntimeEnabledFeatures::AnchorFocusRingFixEnabled()) {
     // When this flag is removed, we can remove
     // HTMLAnchorElementBase::ShouldHaveFocusAppearance.
@@ -114,6 +119,7 @@ bool HTMLAnchorElementBase::ShouldHaveFocusAppearance() const {
   return (GetDocument().LastFocusType() != mojom::blink::FocusType::kMouse) ||
          HTMLElement::SupportsFocus(UpdateBehavior::kNoneForFocusManagement) !=
              FocusableState::kNotFocusable;
+#endif
 }
 
 FocusableState HTMLAnchorElementBase::IsFocusableState(
@@ -225,6 +231,11 @@ void HTMLAnchorElementBase::AttributeChanged(
     return;
   if (params.name != html_names::kHrefAttr)
     return;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!IsLink() && AdjustedFocusedElementInTreeScope() == this) {
+    blur();
+  }
+#else
   if (RuntimeEnabledFeatures::LinkBlurImprovementEnabled()) {
     if (!IsLink() && AdjustedFocusedElementInTreeScope() == this) {
       // Removing the href attribute might make this element no longer
@@ -236,36 +247,26 @@ void HTMLAnchorElementBase::AttributeChanged(
   } else if (!IsLink() && AdjustedFocusedElementInTreeScope() == this) {
     blur();
   }
+#endif
 }
 
 void HTMLAnchorElementBase::ParseAttribute(
     const AttributeModificationParams& params) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
   if (params.name == html_names::kHrefAttr) {
     if (params.old_value == params.new_value) {
       return;
     }
     bool was_link = IsLink();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
     SetIsLink(!params.new_value.IsNull());
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
     if (was_link || IsLink()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
       PseudoStateChanged(CSSSelector::kPseudoLink);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
       PseudoStateChanged(CSSSelector::kPseudoVisited);
       if (was_link != IsLink()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
         PseudoStateChanged(CSSSelector::kPseudoWebkitAnyLink);
         PseudoStateChanged(CSSSelector::kPseudoAnyLink);
       }
     }
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (isConnected() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
@@ -273,36 +274,49 @@ void HTMLAnchorElementBase::ParseAttribute(
                                              params.new_value);
       }
     }
+#endif
     InvalidateCachedVisitedLinkHash();
     LogUpdateAttributeIfIsolatedWorldAndInDocument("a", params);
   } else if (params.name == html_names::kNameAttr) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     ProcessElementRenderBlocking(params.new_value);
+#endif
   } else if (params.name == html_names::kTitleAttr) {
     // Do nothing.
   } else if (params.name == html_names::kRelAttr) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    link_relations_ = 0;
+#else
     link_relations_ =
         AnchorElementUtils::ParseRelAttribute(params.new_value, GetDocument());
+#endif
     rel_list_->DidUpdateAttributeValue(params.old_value, params.new_value);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (isConnected() && IsLink() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->RelAttributeChanged(this);
       }
     }
+#endif
   } else if (params.name == html_names::kReferrerpolicyAttr) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (isConnected() && IsLink() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->ReferrerPolicyAttributeChanged(this);
       }
     }
+#endif
   } else if (params.name == html_names::kTargetAttr) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (isConnected() && IsLink() && params.old_value != params.new_value) {
       if (auto* document_rules =
               DocumentSpeculationRules::FromIfExists(GetDocument())) {
         document_rules->TargetAttributeChanged(this);
       }
     }
+#endif
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -321,12 +335,14 @@ bool HTMLAnchorElementBase::HasLegalLinkAttribute(
 
 void HTMLAnchorElementBase::FinishParsingChildren() {
   Element::FinishParsingChildren();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (GetDocument().HasPendingExpectLinkElements()) {
     DCHECK(GetDocument().GetRenderBlockingResourceManager());
     GetDocument()
         .GetRenderBlockingResourceManager()
         ->RemovePendingParsingElement(GetNameAttribute(), this);
   }
+#endif
 }
 
 bool HTMLAnchorElementBase::CanStartSelection() const {
@@ -369,12 +385,16 @@ void HTMLAnchorElementBase::SetURL(const KURL& url) {
 }
 
 DOMOrigin* HTMLAnchorElementBase::GetDOMOrigin(LocalDOMWindow*) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   // No access check is necessary, as anchor elements are not accessible
   // cross-origin.
   if (FastHasAttribute(html_names::kHrefAttr)) {
     return DOMOrigin::Create(SecurityOrigin::Create(Url()));
   }
   return nullptr;
+#endif
 }
 
 String HTMLAnchorElementBase::Input() const {
@@ -410,6 +430,9 @@ void HTMLAnchorElementBase::NavigateToHyperlink(
     bool is_trusted,
     base::TimeTicks platform_time_stamp,
     KURL completed_url) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   LocalDOMWindow* window = GetDocument().domWindow();
   if (!window) {
     return;
@@ -509,6 +532,7 @@ void HTMLAnchorElementBase::NavigateToHyperlink(
   if (target_frame) {
     target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
   }
+#endif
 }
 
 bool HTMLAnchorElementBase::IsValidInterestInvoker(Element& target) const {
@@ -519,6 +543,9 @@ bool HTMLAnchorElementBase::IsValidInterestInvoker(Element& target) const {
 
 void HTMLAnchorElementBase::HandleClick(MouseEvent& event) {
   event.SetDefaultHandled();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
 
   // It's unclear whether synthesized middle-button "click" events should be
   // allowed to be dispatched and create a navigation. Measure how common this
@@ -608,6 +635,7 @@ void HTMLAnchorElementBase::HandleClick(MouseEvent& event) {
   } else {
     std::move(navigate_closure).Run();
   }
+#endif
 }
 
 bool IsEnterKeyKeydownEvent(Event& event) {
@@ -641,6 +669,7 @@ Node::InsertionNotificationRequest HTMLAnchorElementBase::InsertedInto(
       HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("a", html_names::kHrefAttr);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (isConnected()) {
     if (auto* sender =
             AnchorElementMetricsSender::GetForFrame(GetDocument().GetFrame())) {
@@ -654,9 +683,12 @@ Node::InsertionNotificationRequest HTMLAnchorElementBase::InsertedInto(
       document_rules->LinkInserted(this);
     }
   }
+#endif
 
   if (FastHasAttribute(html_names::kNameAttr)) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     ProcessElementRenderBlocking(FastGetAttribute(html_names::kNameAttr));
+#endif
   }
   return request;
 }
@@ -664,6 +696,7 @@ Node::InsertionNotificationRequest HTMLAnchorElementBase::InsertedInto(
 void HTMLAnchorElementBase::RemovedFrom(ContainerNode& insertion_point) {
   HTMLElement::RemovedFrom(insertion_point);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (insertion_point.isConnected()) {
     if (auto* sender =
             AnchorElementMetricsSender::GetForFrame(GetDocument().GetFrame())) {
@@ -677,6 +710,7 @@ void HTMLAnchorElementBase::RemovedFrom(ContainerNode& insertion_point) {
       document_rules->LinkRemoved(this);
     }
   }
+#endif
 }
 
 void HTMLAnchorElementBase::Trace(Visitor* visitor) const {
@@ -689,6 +723,7 @@ HTMLAnchorElement::HTMLAnchorElement(Document& document)
 
 void HTMLAnchorElement::AttachLayoutTree(AttachContext& context) {
   HTMLAnchorElementBase::AttachLayoutTree(context);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   // Only add to scope tree if there's a non-root enclosing scope.
   // This avoids performance overhead on pages without scroll-target-group.
   // When a scroll-target-group scope is created later, it will collect
@@ -709,16 +744,22 @@ void HTMLAnchorElement::AttachLayoutTree(AttachContext& context) {
     scope->AttachItem(*this);
     tree->UpdateOutermostDirtyScope(scope);
   }
+#endif
 }
 
 void HTMLAnchorElement::DetachLayoutTree(bool performing_reattach) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (ScrollMarkerGroupData* data = GetScrollTargetGroupContainerData()) {
     data->RemoveFromFocusGroup(*this);
   }
+#endif
   HTMLAnchorElementBase::DetachLayoutTree(performing_reattach);
 }
 
 void HTMLAnchorElement::UpdateScrollTargetGroupMembership() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   // Remove from current focus group (if any).
   if (ScrollMarkerGroupData* data = GetScrollTargetGroupContainerData()) {
     data->RemoveFromFocusGroup(*this);
@@ -741,9 +782,13 @@ void HTMLAnchorElement::UpdateScrollTargetGroupMembership() {
     scope->AttachItem(*this);
     tree->UpdateOutermostDirtyScope(scope);
   }
+#endif
 }
 
 Element* HTMLAnchorElement::ScrollTargetElement() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   const KURL& url = Url();
   if (!url.HasFragmentIdentifier()) {
     return nullptr;
@@ -751,6 +796,7 @@ Element* HTMLAnchorElement::ScrollTargetElement() const {
   String fragment = url.FragmentIdentifier().ToString();
   Node* anchor_node = GetDocument().FindAnchor(fragment);
   return DynamicTo<Element>(anchor_node);
+#endif
 }
 
 }  // namespace blink

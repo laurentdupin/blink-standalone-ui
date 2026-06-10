@@ -78,6 +78,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
+#include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
@@ -91,6 +92,8 @@
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
+#include "third_party/blink/renderer/core/layout/table/table_borders.h"
+#include "third_party/blink/renderer/core/layout/table/table_fragment_data.h"
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -122,6 +125,28 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+
+namespace blink {
+bool StandaloneSelectPopupOpenForStandaloneRenderer();
+void StandaloneSelectPopupAnchorBoundsForStandaloneRenderer(float* x,
+                                                            float* y,
+                                                            float* width,
+                                                            float* height);
+int StandaloneSelectPopupSelectedListIndexForStandaloneRenderer();
+int StandaloneSelectPopupItemCountForStandaloneRenderer();
+int StandaloneSelectPopupItemAtForStandaloneRenderer(int item_index,
+                                                     int* list_index,
+                                                     char* label,
+                                                     int label_capacity,
+                                                     int* enabled,
+                                                     int* selected,
+                                                     int* separator,
+                                                     int* group);
+int StandaloneSelectPopupApplyChoiceForStandaloneRenderer(int list_index,
+                                                          int cancel);
+void StandaloneSelectPopupClearForStandaloneRenderer();
+bool StandaloneSelectPopupShowForStandaloneRenderer(HTMLSelectElement& select);
+}  // namespace blink
 
 namespace blink::standalone_renderer_probe {
 
@@ -529,6 +554,7 @@ struct LiveFramePaintProbeCache {
   std::string pointer_hit_element_id;
   std::string pointer_hit_element_tag;
   std::string pointer_hit_element_class;
+  std::string pointer_cursor_type = "default";
   std::string pointer_hover_element_id;
   std::string pointer_hover_element_tag;
   std::string pointer_hover_element_class;
@@ -550,6 +576,11 @@ struct LiveFramePaintProbeCache {
   float requested_wheel_y = 0.0f;
   float requested_wheel_delta_x = 0.0f;
   float requested_wheel_delta_y = 0.0f;
+  bool requested_select_popup_choice = false;
+  int requested_select_popup_list_index = -1;
+  bool requested_select_popup_cancel = false;
+  bool select_popup_choice_applied = false;
+  std::string select_popup_choice_status = "not_requested";
   bool wheel_scroll_base_captured = false;
   float wheel_scroll_base_x = 0.0f;
   float wheel_scroll_base_y = 0.0f;
@@ -726,7 +757,10 @@ std::string ElementIdForStandaloneRenderer(Element& element) {
 
 Element* ActivationTargetForStandaloneRenderer(Element* hit_element) {
   for (Element* element = hit_element; element;
-       element = element->parentElement()) {
+       element = element->ParentOrShadowHostElement()) {
+    if (IsA<HTMLSelectElement>(element)) {
+      return element;
+    }
     Node& node = *element;
     if (node.HasActivationBehavior()) {
       return element;
@@ -758,6 +792,10 @@ bool ApplyActivationBehaviorForStandaloneRenderer(Document& document,
                                                   Element& target,
                                                   float x,
                                                   float y) {
+  if (auto* select = DynamicTo<HTMLSelectElement>(&target)) {
+    return ::blink::StandaloneSelectPopupShowForStandaloneRenderer(*select);
+  }
+
   MouseEvent* click_event =
       CreateTrustedLeftClickEventForStandaloneRenderer(document, target, x, y);
   Node& target_node = target;
@@ -1866,6 +1904,7 @@ void AppendSkPathOpWithFlags(
     exported.shader_bytes = SerializeShaderBytes(flags);
   }
   exported.path_effect_bytes = SerializePathEffectBytes(flags);
+  AppendDrawLooperLayers(flags, exported);
 
   exported_draw_ops.push_back(std::move(exported));
 }
@@ -4761,6 +4800,21 @@ struct TableColumnElementDiagnosticForStandaloneRenderer {
   bool production_failsoft_skipped = false;
 };
 
+struct TableCellBorderDiagnosticForStandaloneRenderer {
+  std::string tag_name;
+  std::string class_attr;
+  std::string layout_object_type;
+  bool layout_object_present = false;
+  int border_bottom_width = 0;
+  int border_bottom_style = 0;
+  int border_bottom_color_r = 0;
+  int border_bottom_color_g = 0;
+  int border_bottom_color_b = 0;
+  int border_bottom_color_a = 0;
+  float layout_logical_width = 0.0f;
+  float layout_logical_height = 0.0f;
+};
+
 struct TableColumnDiagnosticsForStandaloneRenderer {
   int source_table_count = 0;
   int source_colgroup_count = 0;
@@ -4783,10 +4837,18 @@ struct TableColumnDiagnosticsForStandaloneRenderer {
   int layout_table_row_count = 0;
   int layout_table_cell_count = 0;
   int layout_table_caption_count = 0;
+  int layout_table_collapsed_border_table_count = 0;
+  int layout_table_collapsed_border_fragment_count = 0;
+  int layout_table_collapsed_border_edge_count = 0;
+  int layout_table_collapsed_border_paintable_edge_count = 0;
+  int layout_table_collapsed_border_edges_per_row = 0;
+  int layout_table_collapsed_border_geometry_column_count = 0;
   int production_failsoft_skipped_column_count = 0;
   int column_width_hint_count = 0;
   bool fixed_table_layout_requested = false;
   std::vector<TableColumnElementDiagnosticForStandaloneRenderer> column_elements;
+  std::vector<TableCellBorderDiagnosticForStandaloneRenderer>
+      cell_border_elements;
 };
 
 void CollectTableColumnLayoutDiagnosticsForStandaloneRenderer(
@@ -4810,6 +4872,33 @@ void CollectTableColumnLayoutDiagnosticsForStandaloneRenderer(
     ++diagnostics.layout_table_caption_count;
   } else if (debug_name.find("LayoutTable") != std::string::npos) {
     ++diagnostics.layout_table_count;
+    if (const auto* table = DynamicTo<LayoutTable>(object)) {
+      if (table->HasCollapsedBorders()) {
+        ++diagnostics.layout_table_collapsed_border_table_count;
+      }
+      for (const auto& fragment : table->PhysicalFragments()) {
+        const auto& box_fragment = To<PhysicalBoxFragment>(fragment);
+        const TableBorders* borders = box_fragment.TableCollapsedBorders();
+        if (!borders) {
+          continue;
+        }
+        ++diagnostics.layout_table_collapsed_border_fragment_count;
+        diagnostics.layout_table_collapsed_border_edge_count +=
+            static_cast<int>(borders->EdgeCount());
+        diagnostics.layout_table_collapsed_border_edges_per_row =
+            static_cast<int>(borders->EdgesPerRow());
+        for (wtf_size_t i = 0; i < borders->EdgeCount(); ++i) {
+          if (borders->CanPaint(i)) {
+            ++diagnostics.layout_table_collapsed_border_paintable_edge_count;
+          }
+        }
+        if (const CollapsedTableBordersGeometry* geometry =
+                box_fragment.TableCollapsedBordersGeometry()) {
+          diagnostics.layout_table_collapsed_border_geometry_column_count +=
+              static_cast<int>(geometry->columns.size());
+        }
+      }
+    }
   }
   for (const LayoutObject* child = object->SlowFirstChild(); child;
        child = child->NextSibling()) {
@@ -4876,6 +4965,36 @@ void CollectTableColumnDomDiagnosticsForStandaloneRenderer(
           ++diagnostics.computed_css_table_column_count;
         }
       }
+    }
+
+    if (is_cell && diagnostics.cell_border_elements.size() < 24) {
+      TableCellBorderDiagnosticForStandaloneRenderer cell;
+      cell.tag_name =
+          BlinkStringToStdStringForStandaloneRenderer(element->tagName());
+      cell.class_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kClassAttr));
+      if (style) {
+        cell.border_bottom_width = style->BorderBottomWidth();
+        cell.border_bottom_style = static_cast<int>(style->BorderBottomStyle());
+        const Color border_color =
+            style->VisitedDependentColor(GetCSSPropertyBorderBottomColor());
+        cell.border_bottom_color_r = border_color.Red();
+        cell.border_bottom_color_g = border_color.Green();
+        cell.border_bottom_color_b = border_color.Blue();
+        cell.border_bottom_color_a = border_color.Alpha();
+      }
+      if (LayoutObject* layout_object = element->GetLayoutObject()) {
+        cell.layout_object_present = true;
+        cell.layout_object_type = BlinkStringToStdStringForStandaloneRenderer(
+            layout_object->DebugName());
+        if (auto* layout_box = DynamicTo<LayoutBox>(layout_object)) {
+          cell.layout_logical_width = layout_box->LogicalWidth().ToFloat();
+          cell.layout_logical_height = layout_box->LogicalHeight().ToFloat();
+        }
+      } else {
+        cell.layout_object_type = "null";
+      }
+      diagnostics.cell_border_elements.push_back(std::move(cell));
     }
 
     if (is_column_diagnostic_element) {
@@ -5047,13 +5166,51 @@ std::string TableColumnDiagnosticsJsonForStandaloneRenderer(
        << ",\"layout_table_row\":" << diagnostics.layout_table_row_count
        << ",\"layout_table_cell\":" << diagnostics.layout_table_cell_count
        << ",\"layout_table_caption\":"
-       << diagnostics.layout_table_caption_count << "}"
+       << diagnostics.layout_table_caption_count
+       << ",\"collapsed_border_table\":"
+       << diagnostics.layout_table_collapsed_border_table_count
+       << ",\"collapsed_border_fragment\":"
+       << diagnostics.layout_table_collapsed_border_fragment_count
+       << ",\"collapsed_border_edge\":"
+       << diagnostics.layout_table_collapsed_border_edge_count
+       << ",\"collapsed_border_paintable_edge\":"
+       << diagnostics.layout_table_collapsed_border_paintable_edge_count
+       << ",\"collapsed_border_edges_per_row\":"
+       << diagnostics.layout_table_collapsed_border_edges_per_row
+       << ",\"collapsed_border_geometry_column\":"
+       << diagnostics.layout_table_collapsed_border_geometry_column_count << "}"
        << ",\"table_grouped_children\":"
        << TableGroupedChildrenSummaryJsonForStandaloneRenderer(table)
        << ",\"column_width_hint_count\":"
        << diagnostics.column_width_hint_count
        << ",\"production_failsoft_skipped_column_count\":"
        << diagnostics.production_failsoft_skipped_column_count
+       << ",\"cell_border_elements\":[";
+  for (size_t i = 0; i < diagnostics.cell_border_elements.size(); ++i) {
+    if (i) {
+      json << ",";
+    }
+    const auto& cell = diagnostics.cell_border_elements[i];
+    json << "{\"tag_name\":"
+         << JsonStringForStandaloneRenderer(cell.tag_name)
+         << ",\"class_attr\":"
+         << JsonStringForStandaloneRenderer(cell.class_attr)
+         << ",\"layout_object_present\":"
+         << (cell.layout_object_present ? "true" : "false")
+         << ",\"layout_object_type\":"
+         << JsonStringForStandaloneRenderer(cell.layout_object_type)
+         << ",\"border_bottom_width\":" << cell.border_bottom_width
+         << ",\"border_bottom_style\":" << cell.border_bottom_style
+         << ",\"border_bottom_color\":{"
+         << "\"r\":" << cell.border_bottom_color_r
+         << ",\"g\":" << cell.border_bottom_color_g
+         << ",\"b\":" << cell.border_bottom_color_b
+         << ",\"a\":" << cell.border_bottom_color_a << "}"
+         << ",\"layout_logical_width\":" << cell.layout_logical_width
+         << ",\"layout_logical_height\":" << cell.layout_logical_height
+         << "}";
+  }
+  json << "]"
        << ",\"column_elements\":[";
   for (size_t i = 0; i < diagnostics.column_elements.size(); ++i) {
     if (i) {
@@ -5122,6 +5279,8 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string name_attr;
   std::string input_name;
   std::string value_attr;
+  std::string rows_attr;
+  std::string cols_attr;
   std::string element_interface;
   std::string computed_display;
   std::string layout_object_type;
@@ -5138,11 +5297,23 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   bool text_control_inner_editor_present = false;
   bool placeholder_attr_present = false;
   bool placeholder_visible = false;
+  bool apply_control_fixed_size = false;
   int user_agent_shadow_child_count = 0;
   int shadow_layout_object_count = 0;
   int shadow_layout_text_count = 0;
   int option_count = 0;
   int selected_option_count = 0;
+  int field_sizing = -1;
+  float layout_logical_width = 0.0f;
+  float layout_logical_height = 0.0f;
+  float layout_content_width = 0.0f;
+  float layout_content_height = 0.0f;
+  unsigned textarea_rows = 0;
+  unsigned textarea_cols = 0;
+  unsigned textarea_rows_attr_parsed = 0;
+  unsigned textarea_cols_attr_parsed = 0;
+  bool textarea_rows_attr_parse_ok = false;
+  bool textarea_cols_attr_parse_ok = false;
   unsigned radio_group_size = 0;
 };
 
@@ -5193,6 +5364,16 @@ bool IsStandaloneSupportedCheckableInputTypeForDiagnostics(
                    return static_cast<char>(std::tolower(c));
                  });
   return lower_type == "checkbox" || lower_type == "radio";
+}
+
+bool IsStandaloneSupportedRangeInputTypeForDiagnostics(
+    const std::string& type_attr) {
+  std::string lower_type = type_attr;
+  std::transform(lower_type.begin(), lower_type.end(), lower_type.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return lower_type == "range";
 }
 
 bool IsStandaloneTemporalInputTypeForDiagnostics(
@@ -5270,6 +5451,10 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
           element->getAttribute(html_names::kNameAttr));
       item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kValueAttr));
+      item.rows_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kRowsAttr));
+      item.cols_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kColsAttr));
       item.is_connected = element->isConnected();
       item.placeholder_attr_present =
           element->FastHasAttribute(html_names::kPlaceholderAttr);
@@ -5295,6 +5480,16 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
             textarea->Value());
         item.placeholder_visible =
             item.placeholder_attr_present && item.value_attr.empty();
+        item.textarea_rows = textarea->rows();
+        item.textarea_cols = textarea->cols();
+        item.textarea_rows_attr_parse_ok =
+            ParseHTMLNonNegativeInteger(
+                element->getAttribute(html_names::kRowsAttr),
+                item.textarea_rows_attr_parsed);
+        item.textarea_cols_attr_parse_ok =
+            ParseHTMLNonNegativeInteger(
+                element->getAttribute(html_names::kColsAttr),
+                item.textarea_cols_attr_parsed);
       } else if (auto* text_control =
                      DynamicTo<TextControlElement>(element)) {
         item.element_interface = "TextControlElement";
@@ -5309,6 +5504,9 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
       }
       if (const ComputedStyle* style = element->GetComputedStyle()) {
         item.computed_display = DisplayNameForTableDiagnostics(style->Display());
+        item.field_sizing = static_cast<int>(style->FieldSizing());
+        item.apply_control_fixed_size =
+            style->ApplyControlFixedSize(element);
       } else {
         item.computed_display = "style_unavailable";
       }
@@ -5321,6 +5519,14 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
           item.parent_layout_object_type =
               BlinkStringToStdStringForStandaloneRenderer(
                   layout_object->Parent()->DebugName());
+        }
+        if (auto* layout_box = DynamicTo<LayoutBox>(layout_object)) {
+          item.layout_logical_width = layout_box->LogicalWidth().ToFloat();
+          item.layout_logical_height = layout_box->LogicalHeight().ToFloat();
+          item.layout_content_width =
+              layout_box->ContentLogicalWidth().ToFloat();
+          item.layout_content_height =
+              layout_box->ContentLogicalHeight().ToFloat();
         }
       } else {
         item.layout_object_type = "null";
@@ -5357,10 +5563,17 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
       const bool is_temporal_input =
           is_input &&
           IsStandaloneTemporalInputTypeForDiagnostics(item.type_attr);
+      const bool is_supported_range_input =
+          is_input &&
+          IsStandaloneSupportedRangeInputTypeForDiagnostics(item.type_attr);
       if (is_input && is_supported_checkable_input &&
           item.layout_object_present) {
         item.first_missing_stage = "checkable_control_layout_present";
         item.standalone_support_status = "supported_checkable_input";
+      } else if (is_input && is_supported_range_input &&
+                 item.layout_object_present) {
+        item.first_missing_stage = "range_control_layout_present";
+        item.standalone_support_status = "supported_range_input";
       } else if (is_temporal_input) {
         item.first_missing_stage =
             "temporal_input_type_requires_date_time_view_or_chooser_path";
@@ -5376,14 +5589,15 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         diagnostics.temporal_input_type_stage = true;
         diagnostics.unsupported_input_type_stage = true;
       } else if (is_input &&
-          !IsStandaloneSupportedTextInputTypeForDiagnostics(item.type_attr)) {
+                 !IsStandaloneSupportedTextInputTypeForDiagnostics(
+                     item.type_attr)) {
         item.first_missing_stage =
             "unsupported_input_type_normalized_to_text_subset";
         item.standalone_support_status =
             "unsupported_input_normalized_to_text_subset";
         item.unsupported_closure_boundary =
             "InputType::Create is narrowed to text/search/password/"
-            "checkbox/radio/default in standalone; browser-facing input "
+            "checkbox/radio/range/default in standalone; browser-facing input "
             "families remain fail-soft";
         diagnostics.unsupported_input_type_stage = true;
       } else if (is_input && !item.user_agent_shadow_root_present) {
@@ -5497,10 +5711,10 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
        << "\"select_picker_icon_pseudo_failsoft\":false,"
 #endif
        << "\"enabled_input_type_names\":[\"text\",\"search\",\"password\","
-          "\"checkbox\",\"radio\",\"empty-default-to-text\"],"
+          "\"checkbox\",\"radio\",\"range\",\"empty-default-to-text\"],"
        << "\"unsupported_input_behavior\":\"unsupported input types normalize "
           "to the standalone text-control subset rather than linking "
-          "file/date/color/range/chooser UI paths\","
+          "file/date/color/chooser UI paths\","
        << "\"temporal_input_support_status\":\"unsupported_failsoft\","
        << "\"temporal_input_blocker\":\"BaseTemporalInputType::CreateView "
           "selects ChooserOnlyTemporalInputTypeView or "
@@ -5510,23 +5724,22 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
           "hooks that are intentionally out of scope for standalone.\","
        << "\"standalone_guards\":["
        << "\"InputType factory is narrowed to text/search/password/checkbox/"
-          "radio/default\","
-       << "\"numeric range/step validation and spin-button paths are no-op\","
+          "radio/range/default\","
        << "\"datalist/browser chooser paths are disabled\","
        << "\"text-control selection/editing APIs use cached selection only\","
        << "\"opaque ranges are unsupported in standalone text input\"],"
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
        << "\"remaining_unsupported_controls\":[\"file\",\"color\","
-          "\"date/time\",\"range\"],"
+          "\"date/time\"],"
        << "\"production_policy\":\"real Blink text input and closed/basic "
           "select subsets, real textarea text-control layout, and real "
-          "checkbox/radio input types are enabled; picker-icon/popup/browser-"
-          "facing controls remain fail-soft\""
+          "checkbox/radio/range input types are enabled; picker-icon/popup/"
+          "browser-facing controls remain fail-soft\""
 #else
        << "\"remaining_unsupported_controls\":[\"select\",\"file\","
-          "\"color\",\"date/time\",\"range\"],"
+          "\"color\",\"date/time\"],"
        << "\"production_policy\":\"real Blink text input subset is enabled; "
-         "real textarea text-control layout and real checkbox/radio input "
+         "real textarea text-control layout and real checkbox/radio/range input "
          "types are enabled; non-text browser-facing controls remain "
          "fail-soft\""
 #endif
@@ -5580,6 +5793,8 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << ",\"name_attr\":" << JsonStringForStandaloneRenderer(item.name_attr)
          << ",\"input_name\":" << JsonStringForStandaloneRenderer(item.input_name)
          << ",\"value_length\":" << item.value_attr.size()
+         << ",\"rows_attr\":" << JsonStringForStandaloneRenderer(item.rows_attr)
+         << ",\"cols_attr\":" << JsonStringForStandaloneRenderer(item.cols_attr)
          << ",\"element_interface\":"
          << JsonStringForStandaloneRenderer(item.element_interface)
          << ",\"checked\":" << (item.checked ? "true" : "false")
@@ -5609,6 +5824,23 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << (item.placeholder_attr_present ? "true" : "false")
          << ",\"placeholder_visible\":"
          << (item.placeholder_visible ? "true" : "false")
+         << ",\"field_sizing\":" << item.field_sizing
+         << ",\"apply_control_fixed_size\":"
+         << (item.apply_control_fixed_size ? "true" : "false")
+         << ",\"layout_logical_width\":" << item.layout_logical_width
+         << ",\"layout_logical_height\":" << item.layout_logical_height
+         << ",\"layout_content_width\":" << item.layout_content_width
+         << ",\"layout_content_height\":" << item.layout_content_height
+         << ",\"textarea_rows\":" << item.textarea_rows
+         << ",\"textarea_cols\":" << item.textarea_cols
+         << ",\"textarea_rows_attr_parse_ok\":"
+         << (item.textarea_rows_attr_parse_ok ? "true" : "false")
+         << ",\"textarea_rows_attr_parsed\":"
+         << item.textarea_rows_attr_parsed
+         << ",\"textarea_cols_attr_parse_ok\":"
+         << (item.textarea_cols_attr_parse_ok ? "true" : "false")
+         << ",\"textarea_cols_attr_parsed\":"
+         << item.textarea_cols_attr_parsed
          << ",\"user_agent_shadow_child_count\":"
          << item.user_agent_shadow_child_count
          << ",\"shadow_layout_object_count\":"
@@ -7455,6 +7687,80 @@ void ApplyInteractionStateForStandaloneRenderer(
   UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
 }
 
+const char* CursorTypeNameForStandaloneRenderer(ECursor cursor) {
+  switch (cursor) {
+    case ECursor::kNone:
+      return "none";
+    case ECursor::kCrosshair:
+      return "crosshair";
+    case ECursor::kPointer:
+      return "pointer";
+    case ECursor::kMove:
+    case ECursor::kAllScroll:
+      return "move";
+    case ECursor::kProgress:
+      return "progress";
+    case ECursor::kNoDrop:
+    case ECursor::kNotAllowed:
+      return "not-allowed";
+    case ECursor::kEResize:
+      return "e-resize";
+    case ECursor::kNeResize:
+      return "ne-resize";
+    case ECursor::kNwResize:
+      return "nw-resize";
+    case ECursor::kNResize:
+      return "n-resize";
+    case ECursor::kSeResize:
+      return "se-resize";
+    case ECursor::kSwResize:
+      return "sw-resize";
+    case ECursor::kSResize:
+      return "s-resize";
+    case ECursor::kWResize:
+      return "w-resize";
+    case ECursor::kEwResize:
+    case ECursor::kColResize:
+      return "ew-resize";
+    case ECursor::kNsResize:
+    case ECursor::kRowResize:
+      return "ns-resize";
+    case ECursor::kNeswResize:
+      return "nesw-resize";
+    case ECursor::kNwseResize:
+      return "nwse-resize";
+    case ECursor::kText:
+    case ECursor::kVerticalText:
+      return "text";
+    case ECursor::kWait:
+      return "wait";
+    case ECursor::kHelp:
+      return "help";
+    case ECursor::kGrab:
+    case ECursor::kGrabbing:
+      return "grab";
+    case ECursor::kCopy:
+    case ECursor::kCell:
+    case ECursor::kContextMenu:
+    case ECursor::kAlias:
+    case ECursor::kZoomIn:
+    case ECursor::kZoomOut:
+    case ECursor::kAuto:
+    case ECursor::kDefault:
+      return "default";
+  }
+  return "default";
+}
+
+std::string CursorTypeForElementForStandaloneRenderer(const Element& element) {
+  const ComputedStyle* style = element.GetComputedStyle();
+  if (!style && element.GetLayoutObject()) {
+    style = &element.GetLayoutObject()->StyleRef();
+  }
+  return style ? CursorTypeNameForStandaloneRenderer(style->Cursor())
+               : std::string("default");
+}
+
 void ApplyPointerStateForStandaloneRenderer(Document& document,
                                             LocalFrameView& frame_view) {
   LiveFramePaintProbeCache& cache = ProbeCache();
@@ -7464,6 +7770,7 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_hit_element_id.clear();
   cache.pointer_hit_element_tag.clear();
   cache.pointer_hit_element_class.clear();
+  cache.pointer_cursor_type = "default";
   cache.pointer_hover_element_id.clear();
   cache.pointer_hover_element_tag.clear();
   cache.pointer_hover_element_class.clear();
@@ -7535,6 +7842,8 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
     cache.pointer_hit_element_class =
         BlinkStringToStdStringForStandaloneRenderer(
             hit_element->getAttribute(html_names::kClassAttr));
+    cache.pointer_cursor_type =
+        CursorTypeForElementForStandaloneRenderer(*hit_element);
     if (Element* hover_element = document.HoverElement()) {
       cache.pointer_hover_element_id =
           BlinkStringToStdStringForStandaloneRenderer(
@@ -7650,6 +7959,27 @@ void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   cache.applied_animation_time_ms = cache.requested_animation_time_ms;
   cache.animation_time_applied = true;
   cache.animation_time_status = "applied_to_document_animation_clock";
+}
+
+void ApplySelectPopupChoiceForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.select_popup_choice_applied = false;
+  cache.select_popup_choice_status =
+      cache.requested_select_popup_choice ? "requested" : "not_requested";
+  if (!cache.requested_select_popup_choice) {
+    return;
+  }
+
+  cache.select_popup_choice_applied =
+      ::blink::StandaloneSelectPopupApplyChoiceForStandaloneRenderer(
+          cache.requested_select_popup_list_index,
+          cache.requested_select_popup_cancel ? 1 : 0) != 0;
+  cache.select_popup_choice_status =
+      cache.select_popup_choice_applied
+          ? (cache.requested_select_popup_cancel ? "cancelled_blink_popup"
+                                                 : "applied_blink_popup_choice")
+          : "no_open_blink_popup";
+  cache.requested_select_popup_choice = false;
 }
 
 void MarkPaintPropertyTargetForStandaloneRenderer(LayoutObject& layout_object,
@@ -8761,6 +9091,16 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"activation_status\":"
        << JsonStringForStandaloneRenderer(cache.pointer_activation_status)
        << "}"
+       << ",\"select_popup_choice_diagnostics\":{\"requested\":"
+       << (cache.requested_select_popup_choice ? "true" : "false")
+       << ",\"list_index\":" << cache.requested_select_popup_list_index
+       << ",\"cancel\":"
+       << (cache.requested_select_popup_cancel ? "true" : "false")
+       << ",\"applied_to_blink\":"
+       << (cache.select_popup_choice_applied ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.select_popup_choice_status)
+       << "}"
        << ",\"element_scroll_diagnostics\":"
        << ElementScrollDiagnosticsJsonForStandaloneRenderer(cache)
        << ",\"scrollable_element_entries\":"
@@ -9620,6 +9960,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   const auto html_setup_start = StandaloneProbeClock::now();
   g_standalone_blink_saw_font_draw_text = false;
   if (!html_content_already_loaded) {
+    ::blink::StandaloneSelectPopupClearForStandaloneRenderer();
     const std::string head_open = "<head>";
     const std::string head_close = "</head>";
     const std::string body_close = "</body>";
@@ -9677,6 +10018,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         document, cache.requested_element_attributes_by_id_and_name);
   }
   TraceLiveFrameProbeStage("after SetInnerHTML");
+  ApplySelectPopupChoiceForStandaloneRenderer();
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
   cache.image_reachability =
@@ -10034,6 +10376,7 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
       cache.viewport_height == clamped_height) {
     return;
   }
+  ::blink::StandaloneSelectPopupClearForStandaloneRenderer();
   cache.viewport_width = clamped_width;
   cache.viewport_height = clamped_height;
   g_standalone_blink_viewport_width = clamped_width;
@@ -10118,6 +10461,34 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
   cache.wheel_scroll_max_x = 0.0f;
   cache.wheel_scroll_max_y = 0.0f;
   cache.wheel_scroll_status = next_requested ? "requested" : "not_requested";
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetSelectPopupChoiceForStandaloneRenderer(
+    int list_index,
+    int cancel,
+    int requested) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool next_requested = requested != 0;
+  const bool next_cancel = cancel != 0;
+  if (cache.requested_select_popup_choice == next_requested &&
+      cache.requested_select_popup_list_index == list_index &&
+      cache.requested_select_popup_cancel == next_cancel) {
+    return;
+  }
+  cache.requested_select_popup_choice = next_requested;
+  cache.requested_select_popup_list_index = list_index;
+  cache.requested_select_popup_cancel = next_cancel;
+  cache.select_popup_choice_applied = false;
+  cache.select_popup_choice_status =
+      next_requested ? "requested" : "not_requested";
   cache.initialized = false;
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
@@ -10431,6 +10802,80 @@ int StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
     active_element_id[copied] = '\0';
   }
   return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgePointerCursorTypeForStandaloneRenderer(
+    const char* body_html,
+    char* cursor_type,
+    int cursor_type_capacity) {
+  RunLiveFramePaintProbe(body_html);
+  const LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.pointer_state_applied) {
+    return 0;
+  }
+  if (cursor_type && cursor_type_capacity > 0) {
+    const size_t copied =
+        std::min(cache.pointer_cursor_type.size(),
+                 static_cast<size_t>(cursor_type_capacity - 1));
+    std::memcpy(cursor_type, cache.pointer_cursor_type.data(), copied);
+    cursor_type[copied] = '\0';
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeSelectPopupOpenForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ::blink::StandaloneSelectPopupOpenForStandaloneRenderer() ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeSelectPopupAnchorBoundsForStandaloneRenderer(
+    const char* body_html,
+    float* x,
+    float* y,
+    float* width,
+    float* height) {
+  RunLiveFramePaintProbe(body_html);
+  if (!::blink::StandaloneSelectPopupOpenForStandaloneRenderer()) {
+    return 0;
+  }
+  ::blink::StandaloneSelectPopupAnchorBoundsForStandaloneRenderer(
+      x, y, width, height);
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeSelectPopupSelectedListIndexForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ::blink::StandaloneSelectPopupSelectedListIndexForStandaloneRenderer();
+}
+
+int StandaloneBlinkLiveFrameBridgeSelectPopupItemCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  if (!::blink::StandaloneSelectPopupOpenForStandaloneRenderer()) {
+    return 0;
+  }
+  return ::blink::StandaloneSelectPopupItemCountForStandaloneRenderer();
+}
+
+int StandaloneBlinkLiveFrameBridgeSelectPopupItemAtForStandaloneRenderer(
+    const char* body_html,
+    int item_index,
+    int* list_index,
+    char* label,
+    int label_capacity,
+    int* enabled,
+    int* selected,
+    int* separator,
+    int* group) {
+  RunLiveFramePaintProbe(body_html);
+  if (!::blink::StandaloneSelectPopupOpenForStandaloneRenderer()) {
+    return 0;
+  }
+  return ::blink::StandaloneSelectPopupItemAtForStandaloneRenderer(
+      item_index, list_index, label, label_capacity, enabled, selected,
+      separator, group);
 }
 
 int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(

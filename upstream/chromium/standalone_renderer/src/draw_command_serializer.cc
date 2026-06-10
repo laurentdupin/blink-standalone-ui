@@ -578,6 +578,28 @@ void WriteScrollableElementEntries(
   out << "]";
 }
 
+void WriteSelectPopup(std::ostringstream& out,
+                      const SelectPopupState& popup) {
+  out << "{\"open\":" << (popup.open ? "true" : "false")
+      << ",\"anchor_bounds\":";
+  WriteRect(out, popup.anchor_bounds);
+  out << ",\"selected_list_index\":" << popup.selected_list_index
+      << ",\"items\":[";
+  for (size_t i = 0; i < popup.items.size(); ++i) {
+    if (i > 0) {
+      out << ",";
+    }
+    const SelectPopupItem& item = popup.items[i];
+    out << "{\"list_index\":" << item.list_index << ",\"label\":\""
+        << EscapeJson(item.label) << "\",\"enabled\":"
+        << (item.enabled ? "true" : "false") << ",\"selected\":"
+        << (item.selected ? "true" : "false") << ",\"separator\":"
+        << (item.separator ? "true" : "false") << ",\"group\":"
+        << (item.group ? "true" : "false") << "}";
+  }
+  out << "]}";
+}
+
 void WriteResourceCommands(std::ostringstream& out,
                            const std::vector<ResourceCommand>& commands) {
   out << "[";
@@ -1349,8 +1371,11 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
   WriteHitTestEntries(out, result.hit_test_entries);
   out << ",\"scrollable_element_entries\":";
   WriteScrollableElementEntries(out, result.scrollable_element_entries);
+  out << ",\"select_popup\":";
+  WriteSelectPopup(out, result.select_popup);
   out << ",\"document_max_scroll_offset\":";
   WritePoint(out, result.document_max_scroll_offset);
+  out << ",\"cursor_type\":\"" << EscapeJson(result.cursor_type) << "\"";
   out << ",\"diagnostics\":";
   WriteStringArray(out, result.diagnostics);
   if (!result.raw_paint_artifact_audit_json.empty()) {

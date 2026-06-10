@@ -914,6 +914,7 @@ void PrintUsage() {
                "[--active id] [--previous-active id] "
                "[--pointer x,y] [--pointer-down] "
                "[--previous-pointer x,y] [--previous-pointer-down] "
+               "[--select-popup-choice list-index] [--select-popup-cancel] "
                "[--wheel x,y,dx,dy] "
                "[--resource-root <path>] "
                "[--viewport WxH] [--previous-scroll-x px] [--previous-scroll-y px] "
@@ -1205,6 +1206,24 @@ int main(int argc, char** argv) {
       if (!previous_input.pointers.empty()) {
         previous_input.pointers.front().pressed = true;
       }
+    } else if (arg == "--select-popup-choice") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      char* end = nullptr;
+      const long list_index = std::strtol(value, &end, 10);
+      if (end == value || *end != '\0') {
+        PrintUsage();
+        return 2;
+      }
+      input.select_popup_choice =
+          html_css_renderer::SelectPopupChoice{static_cast<int>(list_index),
+                                               false};
+    } else if (arg == "--select-popup-cancel") {
+      input.select_popup_choice =
+          html_css_renderer::SelectPopupChoice{-1, true};
     } else if (arg == "--wheel") {
       const char* value = next_value();
       html_css_renderer::WheelInput wheel;
@@ -1518,12 +1537,20 @@ int main(int argc, char** argv) {
       const bool same_pointers =
           SamePointers(previous_input.pointers, input.pointers);
       const bool same_wheel = SameWheelInput(previous_input.wheel, input.wheel);
+      const bool same_select_popup_choice =
+          previous_input.select_popup_choice.has_value() ==
+              input.select_popup_choice.has_value() &&
+          (!previous_input.select_popup_choice ||
+           (previous_input.select_popup_choice->list_index ==
+                input.select_popup_choice->list_index &&
+            previous_input.select_popup_choice->cancel ==
+                input.select_popup_choice->cancel));
       identical_incremental_requested =
           same_delta && same_timeline && same_viewport && same_html &&
           same_element_attributes &&
           (same_stylesheets || same_requested_css_file) && same_scroll &&
           same_focus && same_hover && same_active && same_form &&
-          same_pointers && same_wheel;
+          same_pointers && same_wheel && same_select_popup_choice;
       previous_result = blink_embedder->AdvanceAndRender(previous_input);
       have_previous_result = true;
       if (identical_incremental_requested) {

@@ -1219,6 +1219,10 @@ void BoxFragmentPainter::PaintBlockChild(
         PaintInfo local_paint_info(paint_info_for_descendants);
         local_paint_info.phase = PaintPhase::kBlockBackground;
         child_painter.PaintObject(local_paint_info, child_offset);
+        if (box_child_fragment.IsTable()) {
+          local_paint_info.phase = PaintPhase::kDescendantBlockBackgroundsOnly;
+          child_painter.PaintObject(local_paint_info, child_offset);
+        }
         local_paint_info.phase = PaintPhase::kForcedColorsModeBackplate;
         child_painter.PaintObject(local_paint_info, child_offset);
         local_paint_info.phase = PaintPhase::kFloat;
