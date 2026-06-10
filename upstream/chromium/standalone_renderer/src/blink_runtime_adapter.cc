@@ -1039,10 +1039,24 @@ void ApplyRetainedScenePlan(RenderResult& result,
                             const RetainedScene* previous_scene,
                             const RendererSnapshot& previous_snapshot,
                             Point current_scroll_offset,
-                            Point previous_scroll_offset) {
-  const PresentationUpdatePlan plan = PlanPresentationUpdate(
+                            Point previous_scroll_offset,
+                            bool force_full_redraw_for_active_animation_change =
+                                false) {
+  PresentationUpdatePlan plan = PlanPresentationUpdate(
       current_scene, previous_scene, result.successor_snapshot.viewport,
       current_scroll_offset, previous_scroll_offset);
+  if (force_full_redraw_for_active_animation_change &&
+      !plan.requires_full_redraw) {
+    plan.requires_full_redraw = true;
+    plan.allows_scroll_translation_reuse = false;
+    plan.scroll_translation_delta = Point{};
+    plan.scroll_exposed_rects.clear();
+    plan.dirty_rects.clear();
+    plan.dirty_rects.push_back(plan.viewport_bounds);
+    result.diagnostics.push_back(
+        "disabled retained partial presentation because Blink requested "
+        "another begin frame while viewport or scroll state changed");
+  }
   result.frame = BuildRenderFrame(current_scene, load_commands, plan);
   result.damage_rects = plan.dirty_rects;
   result.damage_bounds = Rect{};
@@ -3273,6 +3287,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       snapshot_.scroll_offsets_by_element_id =
           result.successor_snapshot.scroll_offsets_by_element_id;
     }
+    const bool prior_needs_begin_frame = previous_needs_begin_frame_;
     result.needs_begin_frame =
         live_probe::
             StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
@@ -4176,12 +4191,26 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     result.diagnostics.push_back(
         "retained Blink PaintChunk scene chunks=" +
         std::to_string(current_scene.chunks.size()));
+    const Point current_document_scroll =
+        SnapshotDocumentScrollOffset(result.successor_snapshot);
+    const Point previous_document_scroll =
+        SnapshotDocumentScrollOffset(previous_snapshot);
+    const bool viewport_changed =
+        !SameSize(result.successor_snapshot.viewport, previous_snapshot.viewport);
+    const bool document_scroll_changed =
+        !SamePoint(current_document_scroll, previous_document_scroll);
+    const bool element_scroll_changed = !SameNonDocumentScrollOffsets(
+        result.successor_snapshot.scroll_offsets_by_element_id,
+        previous_snapshot.scroll_offsets_by_element_id);
+    const bool force_full_redraw_for_active_animation_change =
+        (prior_needs_begin_frame || result.needs_begin_frame) &&
+        (viewport_changed || document_scroll_changed || element_scroll_changed);
     ApplyRetainedScenePlan(
         result, current_scene, load_commands,
         incremental && previous_retained_scene_ ? &*previous_retained_scene_
                                                 : nullptr,
-        previous_snapshot, SnapshotDocumentScrollOffset(result.successor_snapshot),
-        SnapshotDocumentScrollOffset(previous_snapshot));
+        previous_snapshot, current_document_scroll, previous_document_scroll,
+        force_full_redraw_for_active_animation_change);
     previous_retained_scene_ = std::move(current_scene);
     result.diagnostics.push_back(
         "paint artifact source: real Blink PaintArtifact; "
