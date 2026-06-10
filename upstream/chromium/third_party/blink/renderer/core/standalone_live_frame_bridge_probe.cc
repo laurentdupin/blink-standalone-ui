@@ -84,6 +84,7 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
+#include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
 #include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/block_node.h"
@@ -517,6 +518,7 @@ struct LiveFramePaintProbeCache {
       requested_element_attributes_by_id_and_name;
   std::string requested_hovered_element_id;
   std::string requested_active_element_id;
+  bool requested_interaction_state = false;
   bool requested_pointer_state = false;
   float requested_pointer_x = 0.0f;
   float requested_pointer_y = 0.0f;
@@ -7653,6 +7655,12 @@ void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
 void MarkPaintPropertyTargetForStandaloneRenderer(LayoutObject& layout_object,
                                                   bool affects_opacity,
                                                   bool affects_transform) {
+  if (affects_transform || affects_opacity) {
+    if (auto* box_model_object =
+            DynamicTo<LayoutBoxModelObject>(layout_object)) {
+      box_model_object->EnsureLayerAfterAttachForStandalone();
+    }
+  }
   bool scheduled_deferred_update = false;
   if (affects_opacity) {
     scheduled_deferred_update |=
@@ -9747,7 +9755,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   }
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
   TraceLiveFrameProbeStage("after required layout lifecycle update");
-  if (!cache.requested_pointer_state) {
+  if (!cache.requested_pointer_state && cache.requested_interaction_state) {
     ApplyInteractionStateForStandaloneRenderer(
         document, cache.requested_hovered_element_id,
         cache.requested_active_element_id);
@@ -10221,12 +10229,15 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
     const char* hovered_element_id,
     const char* active_element_id) {
   LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool next_requested = hovered_element_id || active_element_id;
   const std::string hovered = hovered_element_id ? hovered_element_id : "";
   const std::string active = active_element_id ? active_element_id : "";
-  if (cache.requested_hovered_element_id == hovered &&
+  if (cache.requested_interaction_state == next_requested &&
+      cache.requested_hovered_element_id == hovered &&
       cache.requested_active_element_id == active) {
     return;
   }
+  cache.requested_interaction_state = next_requested;
   cache.requested_hovered_element_id = hovered;
   cache.requested_active_element_id = active;
   cache.initialized = false;

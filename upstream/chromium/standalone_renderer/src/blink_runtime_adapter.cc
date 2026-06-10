@@ -3206,9 +3206,16 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             result.successor_snapshot.element_attributes_by_id_and_name);
     live_probe::StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
         serialized_attributes.c_str());
-    live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
-        result.successor_snapshot.hovered_element_id.c_str(),
-        result.successor_snapshot.active_element_id.c_str());
+    const bool primary_pointer_state_changed =
+        PrimaryPointerStateChangedForStandaloneRenderer(input);
+    if (input.pointers.empty()) {
+      live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+          result.successor_snapshot.hovered_element_id.c_str(),
+          result.successor_snapshot.active_element_id.c_str());
+    } else {
+      live_probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+          nullptr, nullptr);
+    }
     if (input.wheel) {
       live_probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
           input.wheel->position.x, input.wheel->position.y,
@@ -3227,15 +3234,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       }
       live_probe::StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
           pointer.position.x, pointer.position.y, pointer.pressed ? 1 : 0,
-          pointer_event_type, 1);
+          pointer_event_type, primary_pointer_state_changed ? 1 : 0);
       last_pointer_pressed_ = pointer.pressed;
     } else {
       live_probe::StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
           0.0f, 0.0f, 0, 0, 0);
       last_pointer_pressed_ = false;
     }
-    const bool primary_pointer_state_changed =
-        PrimaryPointerStateChangedForStandaloneRenderer(input);
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
@@ -3272,7 +3277,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         result.raw_paint_artifact_audit_json = std::move(raw_json);
       }
     };
-    copy_raw_paint_artifact_audit_json();
     if (!live_probe::StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
             probe_html.c_str())) {
       result.diagnostics.push_back(

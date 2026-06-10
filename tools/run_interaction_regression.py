@@ -40,6 +40,26 @@ HOVER_TRANSITION_HTML = (
     "</style><div id='card' class='card'><div id='runner' class='runner'></div></div>"
 )
 
+HOVER_OPACITY_TRANSITION_HTML = (
+    "<!doctype html><style>"
+    "body{margin:0;background:rgb(255,255,255)}"
+    ".card{margin:20px;width:140px;height:120px;background:rgb(255,255,255)}"
+    ".runner{width:100px;height:80px;background:rgb(255,106,74);"
+    "transition:opacity 1000ms linear}"
+    ".card:hover .runner{opacity:0.2}"
+    "</style><div id='card' class='card'><div id='runner' class='runner'></div></div>"
+)
+
+HOVER_SCALE_TRANSITION_HTML = (
+    "<!doctype html><style>"
+    "body{margin:0;background:rgb(255,255,255)}"
+    ".card{margin:20px;width:160px;height:140px;background:rgb(255,255,255)}"
+    ".runner{width:64px;height:64px;background:rgb(255,106,74);"
+    "transition:transform 1000ms linear}"
+    ".card:hover .runner{transform:scale(1.7)}"
+    "</style><div id='card' class='card'><div id='runner' class='runner'></div></div>"
+)
+
 
 def base_command(benchmark: Path, case: dict[str, Any], out_bmp: Path, out_json: Path) -> list[str]:
     cmd = [str(benchmark)]
@@ -366,6 +386,38 @@ CASES: list[dict[str, Any]] = [
             "y": 40,
             "rgb": (68, 120, 255),
             "label": "hover transition final color",
+        },
+        "check": lambda payload, failures: None,
+    },
+    {
+        "name": "raw-pointer-hover-opacity-transition-progress",
+        "html": HOVER_OPACITY_TRANSITION_HTML,
+        "viewport": "180x140",
+        "previous_pointer": "40,40",
+        "previous_time_ms": "0",
+        "pointer": "40,40",
+        "time_ms": "500",
+        "pixel_check": {
+            "x": 40,
+            "y": 40,
+            "rgb": (255, 166, 146),
+            "label": "hover opacity transition mid color",
+        },
+        "check": lambda payload, failures: None,
+    },
+    {
+        "name": "raw-pointer-hover-scale-transition-progress",
+        "html": HOVER_SCALE_TRANSITION_HTML,
+        "viewport": "200x160",
+        "previous_pointer": "40,40",
+        "previous_time_ms": "0",
+        "pointer": "40,40",
+        "time_ms": "500",
+        "pixel_check": {
+            "x": 92,
+            "y": 52,
+            "rgb": (255, 106, 74),
+            "label": "hover scale transition midpoint expanded pixel",
         },
         "check": lambda payload, failures: None,
     },

@@ -908,8 +908,47 @@ bool ShouldReplayChunkPropertyTransform(const RetainedPaintChunk& chunk) {
          chunk.bounds.height > 0.0f && HasNonIdentity2dTransform(state);
 }
 
+bool HasNonTranslationTransformCommand(const DrawCommandList& commands) {
+  for (const DrawCommand& command : commands) {
+    if (command.type != DrawCommandType::kTransform) {
+      continue;
+    }
+    const auto& m = command.transform.values;
+    if (!NearlyEqual(m[0], 1.0f) || !NearlyEqual(m[1], 0.0f) ||
+        !NearlyEqual(m[2], 0.0f) || !NearlyEqual(m[3], 0.0f) ||
+        !NearlyEqual(m[4], 0.0f) || !NearlyEqual(m[5], 1.0f) ||
+        !NearlyEqual(m[6], 0.0f) || !NearlyEqual(m[7], 0.0f) ||
+        !NearlyEqual(m[8], 0.0f) || !NearlyEqual(m[9], 0.0f) ||
+        !NearlyEqual(m[10], 1.0f) || !NearlyEqual(m[11], 0.0f) ||
+        !NearlyEqual(m[14], 0.0f) || !NearlyEqual(m[15], 1.0f)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool VisualCommandsAppearInChunkSpace(const RetainedPaintChunk& chunk) {
+  for (const DrawCommand& command : chunk.commands) {
+    if (IsVisualCommandType(command.type) && !IsEmpty(command.rect) &&
+        Intersects(command.rect, chunk.bounds)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ShouldLocalizeForExportedChunkTransform(
+    const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  return state.transform_is_2d && !state.transform_has_perspective &&
+         chunk.bounds.width > 0.0f && chunk.bounds.height > 0.0f &&
+         HasNonTranslationTransformCommand(chunk.commands) &&
+         !VisualCommandsAppearInChunkSpace(chunk);
+}
+
 bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
-  return ShouldReplayChunkPropertyTransform(chunk);
+  return ShouldReplayChunkPropertyTransform(chunk) ||
+         ShouldLocalizeForExportedChunkTransform(chunk);
 }
 
 void LocalizeRect(Rect& rect, Point origin) {
@@ -951,6 +990,20 @@ DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
   return command;
 }
 
+std::optional<Point> VisualCommandOrigin(const DrawCommandList& commands) {
+  Rect bounds;
+  for (const DrawCommand& command : commands) {
+    if (!IsVisualCommandType(command.type) || IsEmpty(command.rect)) {
+      continue;
+    }
+    bounds = IsEmpty(bounds) ? command.rect : UnionRects(bounds, command.rect);
+  }
+  if (IsEmpty(bounds)) {
+    return std::nullopt;
+  }
+  return Point{bounds.x, bounds.y};
+}
+
 DrawCommandList LocalizeRootSpaceCommandsForTransform(
     const RetainedPaintChunk& chunk) {
   if (!ShouldLocalizeRootSpaceCommands(chunk)) {
@@ -959,7 +1012,9 @@ DrawCommandList LocalizeRootSpaceCommandsForTransform(
 
   DrawCommandList commands;
   commands.reserve(chunk.commands.size());
-  const Point origin{chunk.bounds.x, chunk.bounds.y};
+  const Point origin =
+      VisualCommandOrigin(chunk.commands).value_or(Point{chunk.bounds.x,
+                                                         chunk.bounds.y});
   for (const DrawCommand& command : chunk.commands) {
     commands.push_back(LocalizeRootSpaceCommand(command, origin));
   }

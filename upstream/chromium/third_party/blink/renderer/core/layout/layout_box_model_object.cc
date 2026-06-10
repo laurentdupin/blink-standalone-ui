@@ -361,8 +361,11 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
 void LayoutBoxModelObject::EnsureLayerAfterAttachForStandalone() {
   NOT_DESTROYED();
   const bool scrolls_overflow = StyleRef().ScrollsOverflow();
+  // Standalone animation sampling can update computed transform style before
+  // the cached layout transform bit is refreshed; keep the normal
+  // LayerTypeRequired() gate but consult computed style for the repair check.
   if (!Layer() &&
-      (StyleRef().HasOpacity() || HasTransformRelatedProperty() ||
+      (StyleRef().HasOpacity() || StyleRef().HasTransformRelatedProperty() ||
        HasFilterInducingProperty() || IsStacked() || scrolls_overflow) &&
       LayerTypeRequired() != kNoPaintLayer) {
     CreateLayerAfterStyleChange();
