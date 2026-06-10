@@ -12,9 +12,6 @@
 #include <unordered_map>
 #include <utility>
 
-#include "third_party/skia/include/core/SkMatrix.h"
-#include "third_party/skia/include/core/SkPath.h"
-
 namespace html_css_renderer {
 namespace {
 
@@ -542,17 +539,6 @@ bool Intersects(Rect a, Rect b) {
          a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
-bool ContainsRect(Rect outer, Rect inner) {
-  constexpr float kEpsilon = 0.001f;
-  if (IsEmpty(outer) || IsEmpty(inner)) {
-    return false;
-  }
-  return outer.x <= inner.x + kEpsilon &&
-         outer.y <= inner.y + kEpsilon &&
-         outer.x + outer.width + kEpsilon >= inner.x + inner.width &&
-         outer.y + outer.height + kEpsilon >= inner.y + inner.height;
-}
-
 Point MapPoint(const Matrix4& matrix, Point point) {
   return Point{
       matrix.values[0] * point.x + matrix.values[4] * point.y +
@@ -624,18 +610,6 @@ std::vector<Rect> NormalizeDirtyRects(std::vector<Rect> rects,
         merged = true;
         break;
       }
-    }
-  }
-  for (size_t i = 0; i < normalized.size(); ++i) {
-    for (size_t j = 0; j < normalized.size();) {
-      if (i != j && ContainsRect(normalized[i], normalized[j])) {
-        normalized.erase(normalized.begin() + static_cast<std::ptrdiff_t>(j));
-        if (j < i) {
-          --i;
-        }
-        continue;
-      }
-      ++j;
     }
   }
   return normalized;
@@ -934,33 +908,52 @@ bool ShouldReplayChunkPropertyTransform(const RetainedPaintChunk& chunk) {
          chunk.bounds.height > 0.0f && HasNonIdentity2dTransform(state);
 }
 
+bool HasNonTranslationTransformCommand(const DrawCommandList& commands) {
+  for (const DrawCommand& command : commands) {
+    if (command.type != DrawCommandType::kTransform) {
+      continue;
+    }
+    const auto& m = command.transform.values;
+    if (!NearlyEqual(m[0], 1.0f) || !NearlyEqual(m[1], 0.0f) ||
+        !NearlyEqual(m[2], 0.0f) || !NearlyEqual(m[3], 0.0f) ||
+        !NearlyEqual(m[4], 0.0f) || !NearlyEqual(m[5], 1.0f) ||
+        !NearlyEqual(m[6], 0.0f) || !NearlyEqual(m[7], 0.0f) ||
+        !NearlyEqual(m[8], 0.0f) || !NearlyEqual(m[9], 0.0f) ||
+        !NearlyEqual(m[10], 1.0f) || !NearlyEqual(m[11], 0.0f) ||
+        !NearlyEqual(m[14], 0.0f) || !NearlyEqual(m[15], 1.0f)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool VisualCommandsAppearInChunkSpace(const RetainedPaintChunk& chunk) {
+  for (const DrawCommand& command : chunk.commands) {
+    if (IsVisualCommandType(command.type) && !IsEmpty(command.rect) &&
+        Intersects(command.rect, chunk.bounds)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool ShouldLocalizeForExportedChunkTransform(
+    const RetainedPaintChunk& chunk) {
+  const PaintPropertyStateSnapshot& state = chunk.property_state;
+  return state.transform_is_2d && !state.transform_has_perspective &&
+         chunk.bounds.width > 0.0f && chunk.bounds.height > 0.0f &&
+         HasNonTranslationTransformCommand(chunk.commands) &&
+         !VisualCommandsAppearInChunkSpace(chunk);
+}
+
 bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
-  return ShouldReplayChunkPropertyTransform(chunk);
+  return ShouldReplayChunkPropertyTransform(chunk) ||
+         ShouldLocalizeForExportedChunkTransform(chunk);
 }
 
 void LocalizeRect(Rect& rect, Point origin) {
   rect.x -= origin.x;
   rect.y -= origin.y;
-}
-
-void LocalizeSerializedPath(std::vector<uint8_t>& path_bytes, Point origin) {
-  if (path_bytes.empty() || IsZero(origin)) {
-    return;
-  }
-  std::optional<SkPath> path =
-      SkPath::ReadFromMemory(path_bytes.data(), path_bytes.size());
-  if (!path) {
-    return;
-  }
-  SkMatrix matrix = SkMatrix::Translate(-origin.x, -origin.y);
-  SkPath localized_path = path->makeTransform(matrix);
-  const size_t byte_count = localized_path.writeToMemory(nullptr);
-  if (byte_count == 0) {
-    return;
-  }
-  std::vector<uint8_t> localized(byte_count);
-  localized_path.writeToMemory(localized.data());
-  path_bytes = std::move(localized);
 }
 
 DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
@@ -980,14 +973,6 @@ DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
     case DrawCommandType::kDrawText:
       LocalizeRect(command.rect, origin);
       break;
-    case DrawCommandType::kClipPath:
-      LocalizeRect(command.rect, origin);
-      LocalizeSerializedPath(command.path_bytes, origin);
-      break;
-    case DrawCommandType::kFillPath:
-      LocalizeRect(command.rect, origin);
-      LocalizeSerializedPath(command.path_bytes, origin);
-      break;
     case DrawCommandType::kDrawGlyphRun:
       for (Point& position : command.glyph_run.positions) {
         position.x -= origin.x;
@@ -997,6 +982,8 @@ DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
     case DrawCommandType::kSave:
     case DrawCommandType::kRestore:
     case DrawCommandType::kTransform:
+    case DrawCommandType::kClipPath:
+    case DrawCommandType::kFillPath:
     case DrawCommandType::kDiagnostic:
       break;
   }
@@ -1017,22 +1004,6 @@ std::optional<Point> VisualCommandOrigin(const DrawCommandList& commands) {
   return Point{bounds.x, bounds.y};
 }
 
-Rect VisualCommandBounds(const DrawCommandList& commands) {
-  Rect bounds;
-  for (const DrawCommand& command : commands) {
-    if (!IsVisualCommandType(command.type) || IsEmpty(command.rect)) {
-      continue;
-    }
-    Rect command_bounds = command.rect;
-    if (!command.draw_looper_layers.empty()) {
-      command_bounds = InflateForDrawLooperLayers(command_bounds, command);
-    }
-    bounds = IsEmpty(bounds) ? command_bounds
-                             : UnionRects(bounds, command_bounds);
-  }
-  return bounds;
-}
-
 DrawCommandList LocalizeRootSpaceCommandsForTransform(
     const RetainedPaintChunk& chunk) {
   if (!ShouldLocalizeRootSpaceCommands(chunk)) {
@@ -1041,8 +1012,9 @@ DrawCommandList LocalizeRootSpaceCommandsForTransform(
 
   DrawCommandList commands;
   commands.reserve(chunk.commands.size());
-  const Point origin{chunk.property_state.transform_to_root.values[12],
-                     chunk.property_state.transform_to_root.values[13]};
+  const Point origin =
+      VisualCommandOrigin(chunk.commands).value_or(Point{chunk.bounds.x,
+                                                         chunk.bounds.y});
   for (const DrawCommand& command : chunk.commands) {
     commands.push_back(LocalizeRootSpaceCommand(command, origin));
   }
@@ -1055,21 +1027,6 @@ Rect BoundsForPropertyTransformReplay(Rect bounds,
     return bounds;
   }
   return Rect{0.0f, 0.0f, bounds.width, bounds.height};
-}
-
-Rect BoundsForPropertyTransformReplayWithVisualOverflow(
-    Rect bounds,
-    const RetainedPaintChunk* chunk) {
-  if (!chunk || !ShouldReplayChunkPropertyTransform(*chunk)) {
-    return bounds;
-  }
-  Rect local_bounds{0.0f, 0.0f, bounds.width, bounds.height};
-  const Rect visual_bounds =
-      VisualCommandBounds(LocalizeRootSpaceCommandsForTransform(*chunk));
-  if (!IsEmpty(visual_bounds)) {
-    local_bounds = UnionRects(local_bounds, visual_bounds);
-  }
-  return local_bounds;
 }
 
 Rect PresentationBoundsForSceneChunk(const RetainedPaintChunk& chunk) {
@@ -1665,13 +1622,9 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
               current_chunk->property_state.scroll_node_id == 0 &&
               !IsRootDocumentScrollReuseChunk(*current_chunk)) {
             current_bounds = OutsetRect(current_bounds, 1.0f);
-            current_bounds =
-                BoundsForPropertyTransformReplayWithVisualOverflow(
-                    current_bounds, current_chunk);
-          } else {
-            current_bounds =
-                BoundsForPropertyTransformReplay(current_bounds, current_chunk);
           }
+          current_bounds =
+              BoundsForPropertyTransformReplay(current_bounds, current_chunk);
           plan.dirty_rects.push_back(MapRectConservatively(
               current_bounds,
               current_chunk ? PropertyStateForPresentation(*current_chunk,

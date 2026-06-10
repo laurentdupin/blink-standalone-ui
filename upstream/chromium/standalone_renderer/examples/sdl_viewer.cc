@@ -367,11 +367,6 @@ struct ProfilePointerMove {
   html_css_renderer::Point point;
 };
 
-struct ProfilePointerClick {
-  uint64_t after_frame = 1;
-  html_css_renderer::Point point;
-};
-
 bool ParsePoint(const std::string& value, html_css_renderer::Point* output) {
   const size_t separator = value.find(',');
   if (separator == std::string::npos) {
@@ -390,26 +385,6 @@ bool ParsePoint(const std::string& value, html_css_renderer::Point* output) {
 
 bool ParseProfilePointerMove(const std::string& value,
                              ProfilePointerMove* output) {
-  const size_t separator = value.find(':');
-  if (separator == std::string::npos) {
-    return false;
-  }
-  double frame = 0.0;
-  if (!ParseDouble(value.substr(0, separator), &frame) || frame < 1.0 ||
-      frame > 100000.0) {
-    return false;
-  }
-  html_css_renderer::Point point;
-  if (!ParsePoint(value.substr(separator + 1), &point)) {
-    return false;
-  }
-  output->after_frame = static_cast<uint64_t>(frame);
-  output->point = point;
-  return true;
-}
-
-bool ParseProfilePointerClick(const std::string& value,
-                              ProfilePointerClick* output) {
   const size_t separator = value.find(':');
   if (separator == std::string::npos) {
     return false;
@@ -475,8 +450,6 @@ void PrintUsage() {
                " [--profile-resize-to WxH]"
                " [--profile-resize-after-frame count]"
                " [--profile-pointer-move frame:x,y]"
-               " [--profile-pointer-click frame:x,y]"
-               " [--profile-escape-after-frame count]"
                " [--profile-playlist-next-after-frame count]"
                " [--profile-playlist-prev-after-frame count]"
                " [--capture-frames-dir path]"
@@ -523,8 +496,6 @@ bool ParseArgs(int argc,
                std::optional<html_css_renderer::Size>* profile_resize_to,
                uint64_t* profile_resize_after_frame,
                std::vector<ProfilePointerMove>* profile_pointer_moves,
-               std::vector<ProfilePointerClick>* profile_pointer_clicks,
-               std::optional<uint64_t>* profile_escape_after_frame,
                std::optional<uint64_t>* profile_playlist_next_after_frame,
                std::optional<uint64_t>* profile_playlist_prev_after_frame,
                std::string* capture_frames_dir,
@@ -773,23 +744,6 @@ bool ParseArgs(int argc,
         return false;
       }
       profile_pointer_moves->push_back(parsed);
-      *profile_enabled = true;
-    } else if (arg == "--profile-pointer-click") {
-      const char* value = next_value();
-      ProfilePointerClick parsed;
-      if (!value || !ParseProfilePointerClick(value, &parsed)) {
-        return false;
-      }
-      profile_pointer_clicks->push_back(parsed);
-      *profile_enabled = true;
-    } else if (arg == "--profile-escape-after-frame") {
-      const char* value = next_value();
-      double parsed = 0.0;
-      if (!value || !ParseDouble(value, &parsed) || parsed < 1.0 ||
-          parsed > 100000.0) {
-        return false;
-      }
-      *profile_escape_after_frame = static_cast<uint64_t>(parsed);
       *profile_enabled = true;
     } else if (arg == "--profile-playlist-next-after-frame") {
       const char* value = next_value();
@@ -1305,114 +1259,6 @@ void SetViewerWindowTitle(
   SDL_SetWindowTitle(window, title.c_str());
 }
 
-std::optional<SDL_SystemCursor> SdlSystemCursorForBlinkCursor(
-    const std::string& cursor_type) {
-  if (cursor_type == "pointer") {
-    return SDL_SYSTEM_CURSOR_POINTER;
-  }
-  if (cursor_type == "text") {
-    return SDL_SYSTEM_CURSOR_TEXT;
-  }
-  if (cursor_type == "wait") {
-    return SDL_SYSTEM_CURSOR_WAIT;
-  }
-  if (cursor_type == "progress") {
-    return SDL_SYSTEM_CURSOR_PROGRESS;
-  }
-  if (cursor_type == "crosshair") {
-    return SDL_SYSTEM_CURSOR_CROSSHAIR;
-  }
-  if (cursor_type == "move" || cursor_type == "grab") {
-    return SDL_SYSTEM_CURSOR_MOVE;
-  }
-  if (cursor_type == "not-allowed") {
-    return SDL_SYSTEM_CURSOR_NOT_ALLOWED;
-  }
-  if (cursor_type == "e-resize") {
-    return SDL_SYSTEM_CURSOR_E_RESIZE;
-  }
-  if (cursor_type == "w-resize") {
-    return SDL_SYSTEM_CURSOR_W_RESIZE;
-  }
-  if (cursor_type == "n-resize") {
-    return SDL_SYSTEM_CURSOR_N_RESIZE;
-  }
-  if (cursor_type == "s-resize") {
-    return SDL_SYSTEM_CURSOR_S_RESIZE;
-  }
-  if (cursor_type == "ne-resize") {
-    return SDL_SYSTEM_CURSOR_NE_RESIZE;
-  }
-  if (cursor_type == "nw-resize") {
-    return SDL_SYSTEM_CURSOR_NW_RESIZE;
-  }
-  if (cursor_type == "se-resize") {
-    return SDL_SYSTEM_CURSOR_SE_RESIZE;
-  }
-  if (cursor_type == "sw-resize") {
-    return SDL_SYSTEM_CURSOR_SW_RESIZE;
-  }
-  if (cursor_type == "ew-resize") {
-    return SDL_SYSTEM_CURSOR_EW_RESIZE;
-  }
-  if (cursor_type == "ns-resize") {
-    return SDL_SYSTEM_CURSOR_NS_RESIZE;
-  }
-  if (cursor_type == "nesw-resize") {
-    return SDL_SYSTEM_CURSOR_NESW_RESIZE;
-  }
-  if (cursor_type == "nwse-resize") {
-    return SDL_SYSTEM_CURSOR_NWSE_RESIZE;
-  }
-  return SDL_SYSTEM_CURSOR_DEFAULT;
-}
-
-struct ViewerCursorCache {
-  std::unordered_map<std::string, SDL_Cursor*> cursors;
-  std::string applied_cursor_type = "default";
-  bool cursor_hidden = false;
-
-  SDL_Cursor* CursorFor(const std::string& cursor_type) {
-    const auto found = cursors.find(cursor_type);
-    if (found != cursors.end()) {
-      return found->second;
-    }
-    std::optional<SDL_SystemCursor> system_cursor =
-        SdlSystemCursorForBlinkCursor(cursor_type);
-    SDL_Cursor* cursor = system_cursor ? SDL_CreateSystemCursor(*system_cursor)
-                                       : nullptr;
-    if (!cursor) {
-      cursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
-    }
-    cursors[cursor_type] = cursor;
-    return cursor;
-  }
-};
-
-void ApplyViewerCursor(ViewerCursorCache* cache,
-                       const html_css_renderer::RenderResult& result) {
-  const std::string cursor_type =
-      result.cursor_type.empty() ? "default" : result.cursor_type;
-  if (cursor_type == cache->applied_cursor_type &&
-      cache->cursor_hidden == (cursor_type == "none")) {
-    return;
-  }
-  if (cursor_type == "none") {
-    SDL_HideCursor();
-    cache->cursor_hidden = true;
-    cache->applied_cursor_type = cursor_type;
-    return;
-  }
-  if (cache->cursor_hidden) {
-    SDL_ShowCursor();
-    cache->cursor_hidden = false;
-  }
-  if (SDL_Cursor* cursor = cache->CursorFor(cursor_type)) {
-    SDL_SetCursor(cursor);
-    cache->applied_cursor_type = cursor_type;
-  }
-}
-
 std::optional<SDL_Rect> DamageRectToTextureRect(
     const html_css_renderer::Rect& rect,
     int width,
@@ -1535,134 +1381,11 @@ SDL_FRect ToSdlRect(html_css_renderer::Rect rect) {
   return SDL_FRect{rect.x, rect.y, rect.width, rect.height};
 }
 
-SDL_FRect PresentedRectForDocumentRect(html_css_renderer::Rect rect,
-                                       const SDL_FRect& target,
-                                       float scale) {
-  return SDL_FRect{
-      target.x + rect.x * scale,
-      target.y + rect.y * scale,
-      rect.width * scale,
-      rect.height * scale,
-  };
-}
-
 void SetSdlColor(SDL_Renderer* renderer,
                  html_css_renderer::Color color,
                  float opacity = 1.0f) {
   SDL_SetRenderDrawColor(renderer, ClampByte(color.r), ClampByte(color.g),
                          ClampByte(color.b), ClampByte(color.a * opacity));
-}
-
-constexpr float kSelectPopupRowHeight = 24.0f;
-constexpr float kSelectPopupMinWidth = 180.0f;
-constexpr size_t kSelectPopupMaxVisibleRows = 16;
-
-html_css_renderer::Rect SelectPopupDocumentRect(
-    const html_css_renderer::SelectPopupState& popup,
-    html_css_renderer::Size viewport) {
-  const float visible_rows = static_cast<float>(
-      std::min(popup.items.size(), kSelectPopupMaxVisibleRows));
-  const float width = std::max(kSelectPopupMinWidth, popup.anchor_bounds.width);
-  const float height = std::max(1.0f, visible_rows) * kSelectPopupRowHeight;
-  float x = popup.anchor_bounds.x;
-  if (x + width > viewport.width) {
-    x = std::max(0.0f, viewport.width - width);
-  }
-  float y = popup.anchor_bounds.y + popup.anchor_bounds.height;
-  if (y + height > viewport.height &&
-      popup.anchor_bounds.y - height >= 0.0f) {
-    y = popup.anchor_bounds.y - height;
-  }
-  return html_css_renderer::Rect{x, y, width, height};
-}
-
-std::optional<int> SelectPopupChoiceAtPoint(
-    const html_css_renderer::SelectPopupState& popup,
-    html_css_renderer::Size viewport,
-    html_css_renderer::Point point,
-    bool* inside_popup) {
-  if (inside_popup) {
-    *inside_popup = false;
-  }
-  if (!popup.open || popup.items.empty()) {
-    return std::nullopt;
-  }
-  const html_css_renderer::Rect popup_rect =
-      SelectPopupDocumentRect(popup, viewport);
-  if (!Contains(popup_rect, point.x, point.y)) {
-    return std::nullopt;
-  }
-  if (inside_popup) {
-    *inside_popup = true;
-  }
-  const int row = static_cast<int>(
-      std::floor((point.y - popup_rect.y) / kSelectPopupRowHeight));
-  if (row < 0 || static_cast<size_t>(row) >= popup.items.size() ||
-      static_cast<size_t>(row) >= kSelectPopupMaxVisibleRows) {
-    return std::nullopt;
-  }
-  const html_css_renderer::SelectPopupItem& item =
-      popup.items[static_cast<size_t>(row)];
-  if (!item.enabled) {
-    return std::nullopt;
-  }
-  return item.list_index;
-}
-
-void DrawSelectPopupOverlay(
-    SDL_Renderer* renderer,
-    const html_css_renderer::SelectPopupState& popup,
-    html_css_renderer::Size viewport,
-    const SDL_FRect& target,
-    float scale) {
-  if (!popup.open || popup.items.empty() || scale <= 0.0f) {
-    return;
-  }
-  const html_css_renderer::Rect popup_rect =
-      SelectPopupDocumentRect(popup, viewport);
-  SDL_FRect sdl_popup = PresentedRectForDocumentRect(popup_rect, target, scale);
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_SetRenderDrawColor(renderer, 255, 255, 255, 245);
-  SDL_RenderFillRect(renderer, &sdl_popup);
-  SDL_SetRenderDrawColor(renderer, 71, 85, 105, 255);
-  SDL_RenderRect(renderer, &sdl_popup);
-
-  const size_t visible_rows =
-      std::min(popup.items.size(), kSelectPopupMaxVisibleRows);
-  for (size_t row = 0; row < visible_rows; ++row) {
-    const html_css_renderer::SelectPopupItem& item = popup.items[row];
-    const float y = popup_rect.y + static_cast<float>(row) *
-                                       kSelectPopupRowHeight;
-    html_css_renderer::Rect row_rect{popup_rect.x, y, popup_rect.width,
-                                     kSelectPopupRowHeight};
-    SDL_FRect sdl_row = PresentedRectForDocumentRect(row_rect, target, scale);
-    if (item.separator) {
-      SDL_SetRenderDrawColor(renderer, 203, 213, 225, 255);
-      SDL_RenderLine(renderer, sdl_row.x + 4.0f, sdl_row.y + sdl_row.h * 0.5f,
-                     sdl_row.x + sdl_row.w - 4.0f,
-                     sdl_row.y + sdl_row.h * 0.5f);
-      continue;
-    }
-    if (item.selected || item.list_index == popup.selected_list_index) {
-      SDL_SetRenderDrawColor(renderer, 219, 234, 254, 245);
-      SDL_RenderFillRect(renderer, &sdl_row);
-    } else if (item.group) {
-      SDL_SetRenderDrawColor(renderer, 248, 250, 252, 245);
-      SDL_RenderFillRect(renderer, &sdl_row);
-    }
-    SDL_SetRenderDrawColor(renderer, 226, 232, 240, 255);
-    SDL_RenderLine(renderer, sdl_row.x, sdl_row.y + sdl_row.h, sdl_row.x + sdl_row.w,
-                   sdl_row.y + sdl_row.h);
-    if (item.enabled) {
-      SDL_SetRenderDrawColor(renderer, 15, 23, 42, 255);
-    } else {
-      SDL_SetRenderDrawColor(renderer, 100, 116, 139, 255);
-    }
-    const std::string label = item.group ? "[" + item.label + "]" : item.label;
-    SDL_RenderDebugText(renderer, sdl_row.x + 8.0f, sdl_row.y + 6.0f,
-                        label.c_str());
-  }
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
 std::vector<uint32_t> ConvertRawRgbaBytesToAbgr(
@@ -2252,8 +1975,6 @@ int main(int argc, char** argv) {
   std::optional<html_css_renderer::Size> profile_resize_to;
   uint64_t profile_resize_after_frame = 1;
   std::vector<ProfilePointerMove> profile_pointer_moves;
-  std::vector<ProfilePointerClick> profile_pointer_clicks;
-  std::optional<uint64_t> profile_escape_after_frame;
   std::optional<uint64_t> profile_playlist_next_after_frame;
   std::optional<uint64_t> profile_playlist_prev_after_frame;
   std::string capture_frames_dir;
@@ -2279,8 +2000,6 @@ int main(int argc, char** argv) {
                              &profile_resize_to,
                              &profile_resize_after_frame,
                              &profile_pointer_moves,
-                             &profile_pointer_clicks,
-                             &profile_escape_after_frame,
                              &profile_playlist_next_after_frame,
                              &profile_playlist_prev_after_frame,
                              &capture_frames_dir,
@@ -2585,8 +2304,6 @@ int main(int argc, char** argv) {
                  "with wrap-around\n",
                  playlist.html_files.size());
   }
-  ViewerCursorCache cursor_cache;
-  ApplyViewerCursor(&cursor_cache, result);
   uint64_t rendered_frame_count = 1;
   PrintViewerStatus("initial", rendered_frame_count, input, result,
                     attribute_toggles, false);
@@ -2728,7 +2445,6 @@ int main(int argc, char** argv) {
             ElapsedProfileMs(direct_render_start, ProfileClock::now());
       }
     }
-    ApplyViewerCursor(&cursor_cache, next_result);
     ++rendered_frame_count;
     next_input.scroll_offsets_by_element_id =
         next_result.successor_snapshot.scroll_offsets_by_element_id;
@@ -2737,7 +2453,6 @@ int main(int argc, char** argv) {
     SetViewerWindowTitle(window, reason, rendered_frame_count, next_input,
                          next_result, attribute_toggles, use_incremental);
     next_input.wheel = std::nullopt;
-    next_input.select_popup_choice = std::nullopt;
     result = std::move(next_result);
     input = std::move(next_input);
     if (profile) {
@@ -2762,14 +2477,8 @@ int main(int argc, char** argv) {
             [](const ProfilePointerMove& a, const ProfilePointerMove& b) {
               return a.after_frame < b.after_frame;
             });
-  std::sort(profile_pointer_clicks.begin(), profile_pointer_clicks.end(),
-            [](const ProfilePointerClick& a, const ProfilePointerClick& b) {
-              return a.after_frame < b.after_frame;
-            });
   size_t profile_pointer_move_index = 0;
-  size_t profile_pointer_click_index = 0;
   bool first_present_complete = false;
-  bool suppress_next_mouse_up_after_popup = false;
   auto load_playlist_index = [&](size_t next_index,
                                  const char* reason) -> bool {
     if (playlist.html_files.empty() || next_index >= playlist.html_files.size()) {
@@ -2789,7 +2498,7 @@ int main(int argc, char** argv) {
             &stylesheet_loader_diagnostics)) {
       return false;
     }
-    create_info.viewport = initial_viewport;
+    create_info.viewport = RendererOutputViewportSize(renderer, window);
     html_css_renderer::SetStandaloneResourceProviderResourceRoot(
         resource_root);
     html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
@@ -2813,7 +2522,6 @@ int main(int argc, char** argv) {
     next_input.delta_time_seconds = 0.0;
     next_input.pointers.clear();
     next_input.wheel = std::nullopt;
-    next_input.select_popup_choice = std::nullopt;
     next_input.keyboard.pressed_key_codes.clear();
     next_input.scroll_offsets_by_element_id.clear();
     next_input.focused_element_id.clear();
@@ -2929,12 +2637,10 @@ int main(int argc, char** argv) {
       }
     }
 
-    ApplyViewerCursor(&cursor_cache, next_result);
     ++rendered_frame_count;
     next_input.scroll_offsets_by_element_id =
         next_result.successor_snapshot.scroll_offsets_by_element_id;
     next_input.wheel = std::nullopt;
-    next_input.select_popup_choice = std::nullopt;
     playlist.index = next_index;
     std::fprintf(stderr, "HTML playlist loaded [%zu/%zu]: %s\n",
                  playlist.index + 1, playlist.html_files.size(),
@@ -2956,22 +2662,6 @@ int main(int argc, char** argv) {
     return true;
   };
 
-  auto render_select_popup_choice = [&](int list_index,
-                                        bool cancel,
-                                        const char* reason,
-                                        ProfileClock::time_point frame_start)
-      -> bool {
-    html_css_renderer::FrameInput next_input = input;
-    next_input.select_popup_choice =
-        html_css_renderer::SelectPopupChoice{list_index, cancel};
-    next_input.wheel = std::nullopt;
-    const double input_update_ms =
-        profiler.enabled() ? ElapsedProfileMs(frame_start, ProfileClock::now())
-                           : 0.0;
-    return render_updated_input(reason, std::move(next_input), input_update_ms,
-                                frame_start, true);
-  };
-
   while (running) {
     bool texture_dirty = false;
     if (first_present_complete) {
@@ -2991,14 +2681,6 @@ int main(int argc, char** argv) {
         SDL_PushEvent(&key_event);
         profile_playlist_prev_after_frame = std::nullopt;
       }
-      if (profile_escape_after_frame &&
-          rendered_frame_count >= *profile_escape_after_frame) {
-        SDL_Event key_event{};
-        key_event.type = SDL_EVENT_KEY_DOWN;
-        key_event.key.key = SDLK_ESCAPE;
-        SDL_PushEvent(&key_event);
-        profile_escape_after_frame = std::nullopt;
-      }
       while (profile_pointer_move_index < profile_pointer_moves.size() &&
              rendered_frame_count >=
                  profile_pointer_moves[profile_pointer_move_index]
@@ -3011,23 +2693,6 @@ int main(int argc, char** argv) {
         motion_event.motion.y = move.point.y;
         SDL_PushEvent(&motion_event);
         ++profile_pointer_move_index;
-      }
-      while (profile_pointer_click_index < profile_pointer_clicks.size() &&
-             rendered_frame_count >=
-                 profile_pointer_clicks[profile_pointer_click_index]
-                     .after_frame) {
-        const ProfilePointerClick& click =
-            profile_pointer_clicks[profile_pointer_click_index];
-        SDL_Event down_event{};
-        down_event.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
-        down_event.button.button = SDL_BUTTON_LEFT;
-        down_event.button.x = click.point.x;
-        down_event.button.y = click.point.y;
-        SDL_PushEvent(&down_event);
-        SDL_Event up_event = down_event;
-        up_event.type = SDL_EVENT_MOUSE_BUTTON_UP;
-        SDL_PushEvent(&up_event);
-        ++profile_pointer_click_index;
       }
     }
     if (first_present_complete && profile_wheel_repeat_frames > 0 &&
@@ -3059,23 +2724,9 @@ int main(int argc, char** argv) {
     ProfileClock::time_point pending_wheel_start;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_EVENT_QUIT) {
+      if (event.type == SDL_EVENT_QUIT ||
+          (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
-      } else if (event.type == SDL_EVENT_KEY_DOWN &&
-                 event.key.key == SDLK_ESCAPE) {
-        if (result.select_popup.open) {
-          const ProfileClock::time_point input_update_start =
-              profiler.enabled() ? ProfileClock::now()
-                                 : ProfileClock::time_point{};
-          if (!render_select_popup_choice(-1, true, "select-popup-cancel",
-                                          input_update_start)) {
-            running = false;
-            break;
-          }
-          texture_dirty = true;
-        } else {
-          running = false;
-        }
       } else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
         const ProfileClock::time_point input_update_start =
@@ -3196,10 +2847,6 @@ int main(int argc, char** argv) {
         }
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
                  event.button.button == SDL_BUTTON_LEFT) {
-        if (suppress_next_mouse_up_after_popup) {
-          suppress_next_mouse_up_after_popup = false;
-          continue;
-        }
         const ProfileClock::time_point input_update_start =
             profiler.enabled() ? ProfileClock::now()
                                : ProfileClock::time_point{};
@@ -3232,31 +2879,6 @@ int main(int argc, char** argv) {
         const html_css_renderer::Point pointer_point =
             WindowEventToDocumentPoint(renderer, frame_width, frame_height,
                                        event.button.x, event.button.y);
-        if (result.select_popup.open) {
-          bool inside_popup = false;
-          const std::optional<int> popup_choice = SelectPopupChoiceAtPoint(
-              result.select_popup, result.successor_snapshot.viewport,
-              pointer_point, &inside_popup);
-          if (popup_choice) {
-            if (!render_select_popup_choice(*popup_choice, false,
-                                            "select-popup-choice",
-                                            input_update_start)) {
-              running = false;
-              break;
-            }
-            suppress_next_mouse_up_after_popup = true;
-            texture_dirty = true;
-          } else if (!inside_popup) {
-            if (!render_select_popup_choice(-1, true, "select-popup-cancel",
-                                            input_update_start)) {
-              running = false;
-              break;
-            }
-            suppress_next_mouse_up_after_popup = true;
-            texture_dirty = true;
-          }
-          continue;
-        }
         const std::string clicked =
             HitTest(result.hit_test_entries, pointer_point.x, pointer_point.y);
         html_css_renderer::FrameInput next_input = input;
@@ -3407,8 +3029,6 @@ int main(int argc, char** argv) {
         target_height,
     };
     SDL_RenderTexture(renderer, texture, nullptr, &target);
-    DrawSelectPopupOverlay(renderer, result.select_popup,
-                           result.successor_snapshot.viewport, target, scale);
     if (!CapturePresentedFrame(renderer, capture_frames_dir,
                                rendered_frame_count,
                                pending_profile_frame

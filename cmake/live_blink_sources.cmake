@@ -509,13 +509,10 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/base_checkable_input_type.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/checkbox_input_type.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/radio_input_type.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/range_input_type.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/radio_button_group_scope.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/base_text_input_type.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/text_input_type.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/text_field_input_type.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/slider_thumb_element.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/slider_track_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/text_control_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/text_control_inner_elements.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_span_element.cc
@@ -534,7 +531,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
 
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_body_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_br_element.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_anchor_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_collection.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_dimension.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_div_element.cc
@@ -553,7 +549,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_title_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_unknown_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/list_item_ordinal.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/rel_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/atomic_html_token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/fragment_parser.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_construction_site.cc

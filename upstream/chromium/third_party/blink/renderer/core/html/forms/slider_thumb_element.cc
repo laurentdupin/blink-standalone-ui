@@ -325,20 +325,13 @@ LayoutObject* SliderContainerElement::CreateLayoutObject(const ComputedStyle&) {
 }
 
 void SliderContainerElement::DefaultEventHandler(Event& event) {
-#if HTML_CSS_RENDERER_STANDALONE
-  HTMLDivElement::DefaultEventHandler(event);
-#else
   if (auto* touch_event = DynamicTo<TouchEvent>(event)) {
     HandleTouchEvent(touch_event);
     return;
   }
-#endif
 }
 
 void SliderContainerElement::HandleTouchEvent(TouchEvent* event) {
-#if HTML_CSS_RENDERER_STANDALONE
-  return;
-#else
   HTMLInputElement* input = HostInput();
   if (!input || !input->UserAgentShadowRoot() ||
       input->IsDisabledFormControl() || !event) {
@@ -387,7 +380,6 @@ void SliderContainerElement::HandleTouchEvent(TouchEvent* event) {
       }
     }
   }
-#endif
 }
 
 SliderContainerElement::Direction SliderContainerElement::GetDirection(
