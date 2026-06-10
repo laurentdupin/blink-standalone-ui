@@ -1830,6 +1830,8 @@ int main(int argc, char** argv) {
   if (use_blink) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
     blink_create_info.renderer = std::move(create_info);
+    blink_create_info.enable_paint_artifact_audit =
+        !paint_artifact_dump_path.empty();
     blink_embedder =
         html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
     if (!blink_embedder) {

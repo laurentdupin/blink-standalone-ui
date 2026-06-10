@@ -49,6 +49,8 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     int requested);
 void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
     int disabled);
+void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
+    int enabled);
 void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
@@ -2816,6 +2818,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
  public:
   explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
     disable_retained_extraction_ = create_info.disable_retained_extraction;
+    enable_paint_artifact_audit_ = create_info.enable_paint_artifact_audit;
     trace_stages_ = create_info.trace_stages;
     debug_text_blob_replay_ = create_info.debug_text_blob_replay;
     force_paint_oracle_bitmap_ = create_info.force_paint_oracle_bitmap;
@@ -2824,6 +2827,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
+            enable_paint_artifact_audit_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
             force_paint_oracle_bitmap_ ? 1 : 0);
@@ -3208,6 +3214,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
+    live_probe::
+        StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
+            enable_paint_artifact_audit_ ? 1 : 0);
     live_probe::StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
         force_paint_oracle_bitmap_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
@@ -4201,6 +4210,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
 
   RendererSnapshot snapshot_;
   bool disable_retained_extraction_ = false;
+  bool enable_paint_artifact_audit_ = false;
   bool trace_stages_ = false;
   bool debug_text_blob_replay_ = false;
   bool force_paint_oracle_bitmap_ = false;

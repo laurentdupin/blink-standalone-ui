@@ -623,6 +623,7 @@ struct LiveFramePaintProbeCache {
   double timing_paint_artifact_extraction_ms = 0.0;
   bool timing_cache_hit = false;
   bool disable_retained_extraction = false;
+  bool full_paint_artifact_audit = false;
   bool force_oracle_bitmap = false;
   bool trace_stages = false;
   std::string lifecycle_stop;
@@ -9177,6 +9178,89 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   cache.raw_paint_artifact_audit_json = json.str();
 }
 
+void BuildPaintArtifactRetainedMetadata(const PaintArtifact& artifact,
+                                        LiveFramePaintProbeCache& cache) {
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  const PaintChunks& chunks = artifact.GetPaintChunks();
+  const DisplayItemList& items = artifact.GetDisplayItemList();
+  const wtf_size_t chunk_count = chunks.size();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.finer_cache_units_by_chunk.resize(chunk_count);
+  cache.artifact_audit_lines.push_back(
+      "paint_artifact_audit summary chunks=" + std::to_string(chunk_count) +
+      " display_items=" + std::to_string(items.size()) +
+      " mode=retained_metadata_only");
+
+  cache.chunk_stable_keys.resize(chunk_count);
+  cache.chunk_id_strings.resize(chunk_count);
+  for (wtf_size_t chunk_index = 0; chunk_index < chunk_count; ++chunk_index) {
+    const PaintChunk& chunk = chunks[chunk_index];
+    const std::string chunk_id =
+        BlinkStringToStdStringForStandaloneRenderer(chunk.id.ToString());
+    std::string stable_key;
+    if (chunk.begin_index == chunk.end_index) {
+      stable_key =
+          !chunk_id.empty()
+              ? "blink-chunk:id=" + chunk_id + ":empty"
+              : "blink-chunk:empty:debug-index=" +
+                    std::to_string(chunk_index);
+    } else {
+      const PropertyTreeState chunk_state = chunk.properties.Unalias();
+      const gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
+          chunk_state, nullptr, nullptr);
+      const std::string property_fingerprint =
+          chunk_id + ":" + std::to_string(chunk.begin_index) + ":" +
+          std::to_string(chunk.end_index) + ":" +
+          MatrixJsonForStandaloneRenderer(projection);
+      const uint64_t property_hash =
+          HashStringForStandaloneRenderer(property_fingerprint);
+      stable_key =
+          !chunk_id.empty()
+              ? "blink-chunk:id=" + chunk_id + ":state=" +
+                    std::to_string(property_hash)
+              : "blink-chunk:fingerprint=" +
+                    std::to_string(HashStringForStandaloneRenderer(
+                        std::to_string(chunk.begin_index) + ":" +
+                        std::to_string(chunk.end_index))) +
+                    ":state=" + std::to_string(property_hash) +
+                    ":debug-index=" + std::to_string(chunk_index);
+    }
+    cache.chunk_stable_keys[chunk_index] = stable_key;
+    cache.chunk_id_strings[chunk_index] = chunk_id;
+  }
+}
+
+std::string BuildRetainedMetadataTimingJsonForStandaloneRenderer(
+    const LiveFramePaintProbeCache& cache) {
+  std::ostringstream json;
+  json << "{\"source\":\"real Blink PaintArtifact\","
+       << "\"audit_mode\":\"retained_metadata_only\","
+       << "\"render_timing_diagnostics\":{"
+       << "\"mode\":\"in_process_probe_chrono\","
+       << "\"warm_or_cold\":\"cold_or_rebuilt_probe_state\","
+       << "\"cache_hit\":" << (cache.timing_cache_hit ? "true" : "false")
+       << ",\"input_setup_ms\":" << cache.timing_input_setup_ms
+       << ",\"html_parse_document_setup_ms\":"
+       << cache.timing_html_document_setup_ms
+       << ",\"style_update_ms\":" << cache.timing_style_update_ms
+       << ",\"layout_lifecycle_ms\":" << cache.timing_layout_lifecycle_ms
+       << ",\"prepaint_paint_lifecycle_ms\":"
+       << cache.timing_prepaint_and_paint_lifecycle_ms
+       << ",\"paint_artifact_generation_ms\":"
+       << cache.timing_paint_artifact_generation_ms
+       << ",\"paint_artifact_audit_json_ms\":"
+       << cache.timing_paint_artifact_audit_ms
+       << ",\"paint_artifact_extraction_ms\":"
+       << cache.timing_paint_artifact_extraction_ms
+       << ",\"total_probe_ms\":" << cache.timing_total_ms
+       << ",\"caveat\":\"probe timings exclude process startup and CPU replay\""
+       << "}}";
+  return json.str();
+}
+
 void InstallStyleElementsForStandaloneRenderer(Document& document,
                                                Element& head,
                                                const std::string& head_html) {
@@ -9620,7 +9704,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.timing_total_ms =
       StandaloneProbeElapsedMs(total_start, StandaloneProbeClock::now());
   const auto audit_start = StandaloneProbeClock::now();
-  BuildPaintArtifactAudit(artifact, cache);
+  if (cache.full_paint_artifact_audit) {
+    BuildPaintArtifactAudit(artifact, cache);
+  } else {
+    BuildPaintArtifactRetainedMetadata(artifact, cache);
+  }
   cache.timing_paint_artifact_audit_ms =
       StandaloneProbeElapsedMs(audit_start, StandaloneProbeClock::now());
   if (LifecycleStopEqualsForStandaloneRenderer("artifact")) {
@@ -9635,6 +9723,10 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
       StandaloneProbeElapsedMs(extraction_start, StandaloneProbeClock::now());
   cache.timing_total_ms =
       StandaloneProbeElapsedMs(total_start, StandaloneProbeClock::now());
+  if (!cache.full_paint_artifact_audit) {
+    cache.raw_paint_artifact_audit_json =
+        BuildRetainedMetadataTimingJsonForStandaloneRenderer(cache);
+  }
   cache.result = result;
   cache.initialized = true;
   return result;
@@ -10019,6 +10111,24 @@ void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRend
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
+    int enabled) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool value = enabled != 0;
+  if (cache.full_paint_artifact_audit == value) {
+    return;
+  }
+  cache.full_paint_artifact_audit = value;
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }

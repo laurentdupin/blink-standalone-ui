@@ -1458,6 +1458,8 @@ int main(int argc, char** argv) {
     html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
     blink_create_info.renderer = std::move(create_info);
     blink_create_info.disable_retained_extraction = disable_retained_extraction;
+    blink_create_info.enable_paint_artifact_audit =
+        audit_only || !json_path.empty() || !paint_artifact_dump_path.empty();
     blink_create_info.trace_stages = trace_stages;
     blink_create_info.debug_text_blob_replay = debug_text_blob_replay;
     blink_create_info.lifecycle_stop = lifecycle_stop;

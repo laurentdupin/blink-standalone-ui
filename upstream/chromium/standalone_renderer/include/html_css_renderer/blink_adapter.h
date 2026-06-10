@@ -91,6 +91,7 @@ struct BlinkPageEmbedderCreateInfo {
   std::string chromium_root;
   bool allow_transitional_v8_link = true;
   bool disable_retained_extraction = false;
+  bool enable_paint_artifact_audit = false;
   bool trace_stages = false;
   bool debug_text_blob_replay = false;
   bool force_paint_oracle_bitmap = false;
