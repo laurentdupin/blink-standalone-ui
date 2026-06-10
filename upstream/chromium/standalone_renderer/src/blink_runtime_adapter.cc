@@ -2999,15 +2999,12 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "document scroll fast path ineligible: no retained scene");
       return false;
     }
+    const bool document_scroll_unchanged =
+        SamePoint(SnapshotDocumentScrollOffset(snapshot_),
+                  SnapshotDocumentScrollOffset(previous_snapshot));
     const ScrollLifecycleSourceSummary source_summary =
         SummarizeScrollLifecycleSource(snapshot_.html, snapshot_.stylesheets);
     push_diagnostic(ScrollLifecycleSummaryDiagnostic(source_summary));
-    if (source_summary.active_sticky_rule_count > 0) {
-      push_diagnostic(
-          "document scroll fast path ineligible: active sticky position "
-          "requires Blink lifecycle");
-      return false;
-    }
     if (snapshot_.html != previous_snapshot.html) {
       push_diagnostic("document scroll fast path ineligible: html changed");
       return false;
@@ -3064,6 +3061,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "document scroll fast path ineligible: form state changed");
       return false;
     }
+    if (source_summary.active_sticky_rule_count > 0 &&
+        !document_scroll_unchanged) {
+      push_diagnostic(
+          "document scroll fast path ineligible: active sticky position "
+          "requires Blink lifecycle");
+      return false;
+    }
     if (!SameNonDocumentScrollOffsets(
             snapshot_.scroll_offsets_by_element_id,
             previous_snapshot.scroll_offsets_by_element_id)) {
@@ -3071,8 +3075,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "document scroll fast path ineligible: element scroll changed");
       return false;
     }
-    if (SamePoint(SnapshotDocumentScrollOffset(snapshot_),
-                  SnapshotDocumentScrollOffset(previous_snapshot))) {
+    if (document_scroll_unchanged) {
       push_diagnostic(
           "document scroll fast path using retained no-op because document "
           "scroll is unchanged");
