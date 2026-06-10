@@ -349,8 +349,11 @@ void PrintUsage() {
                " [--profile-auto-scroll-step px]"
                " [--profile-wheel-burst-events count]"
                " [--profile-wheel-burst-y units]"
+               " [--profile-wheel-burst-after-frame count]"
+               " [--profile-wheel-repeat-frames count]"
                " [--profile-resize-to WxH]"
                " [--profile-resize-after-frame count]"
+               " [--capture-frames-dir path]"
                " [--blink]"
                "\nIf no --html or --html-file input is provided, the viewer "
                "opens a native HTML file picker.\n"
@@ -385,8 +388,11 @@ bool ParseArgs(int argc,
                std::optional<float>* profile_auto_scroll_step,
                uint64_t* profile_wheel_burst_events,
                float* profile_wheel_burst_y,
+               uint64_t* profile_wheel_burst_after_frame,
+               uint64_t* profile_wheel_repeat_frames,
                std::optional<html_css_renderer::Size>* profile_resize_to,
                uint64_t* profile_resize_after_frame,
+               std::string* capture_frames_dir,
                bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
   for (int i = 1; i < argc; ++i) {
@@ -587,6 +593,22 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_wheel_burst_y = parsed;
+    } else if (arg == "--profile-wheel-burst-after-frame") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 1.0 ||
+          parsed > 100000.0) {
+        return false;
+      }
+      *profile_wheel_burst_after_frame = static_cast<uint64_t>(parsed);
+    } else if (arg == "--profile-wheel-repeat-frames") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 1.0 ||
+          parsed > 100000.0) {
+        return false;
+      }
+      *profile_wheel_repeat_frames = static_cast<uint64_t>(parsed);
     } else if (arg == "--profile-resize-to") {
       const char* value = next_value();
       html_css_renderer::Size parsed;
@@ -602,6 +624,12 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_resize_after_frame = static_cast<uint64_t>(parsed);
+    } else if (arg == "--capture-frames-dir") {
+      const char* value = next_value();
+      if (!value) {
+        return false;
+      }
+      *capture_frames_dir = value;
     } else if (arg == "--blink") {
       *use_blink = true;
     } else if (arg == "--manual") {
@@ -1012,19 +1040,27 @@ void PrintViewerStatus(
   std::fprintf(stderr,
                "viewer status: frame=%llu event=%s incremental=%d "
                "viewport=(%.0fx%.0f) time=%.3f dt=%.3f "
-               "scroll=(%.1f,%.1f) "
+               "scroll=(%.1f,%.1f) scroll_max=(%.1f,%.1f) "
                "full_redraw=%d scroll_reuse=%d scroll_delta=(%.1f,%.1f) "
                "needs_begin_frame=%d damage_rects=%zu",
                static_cast<unsigned long long>(frame_count), reason,
                incremental_update ? 1 : 0, viewport.width, viewport.height,
                input.timeline_time_seconds, input.delta_time_seconds,
                CurrentDocumentScrollX(input),
-               CurrentDocumentScrollY(input), requires_full_redraw ? 1 : 0,
+               CurrentDocumentScrollY(input),
+               result.document_max_scroll_offset.x,
+               result.document_max_scroll_offset.y,
+               requires_full_redraw ? 1 : 0,
                scroll_reuse ? 1 : 0,
                result.frame.scroll_translation_delta.x,
                result.frame.scroll_translation_delta.y,
                result.needs_begin_frame ? 1 : 0,
                damage_rects.size());
+  if (input.wheel) {
+    std::fprintf(stderr, " wheel=(pos=%.1f,%.1f delta=%.1f,%.1f)",
+                 input.wheel->position.x, input.wheel->position.y,
+                 input.wheel->delta.x, input.wheel->delta.y);
+  }
   for (size_t i = 0; i < damage_rects.size(); ++i) {
     const html_css_renderer::Rect& rect = damage_rects[i];
     std::fprintf(stderr, " rect%zu=(%.1f,%.1f %.1fx%.1f)", i, rect.x, rect.y,
@@ -1153,6 +1189,46 @@ bool UploadCpuImageRectsToTexture(SDL_Texture* texture,
       }
     }
     SDL_UnlockTexture(texture);
+  }
+  return true;
+}
+
+bool CapturePresentedFrame(SDL_Renderer* renderer,
+                           const std::string& capture_frames_dir,
+                           uint64_t frame_count,
+                           const char* reason) {
+  if (capture_frames_dir.empty()) {
+    return true;
+  }
+  std::error_code error;
+  fs::create_directories(capture_frames_dir, error);
+  if (error) {
+    std::fprintf(stderr, "failed to create capture dir: %s\n",
+                 capture_frames_dir.c_str());
+    return false;
+  }
+  SDL_Surface* surface = SDL_RenderReadPixels(renderer, nullptr);
+  if (!surface) {
+    std::fprintf(stderr, "SDL_RenderReadPixels failed: %s\n", SDL_GetError());
+    return false;
+  }
+  char file_name[128];
+  std::snprintf(file_name, sizeof(file_name), "frame_%04llu_%s.bmp",
+                static_cast<unsigned long long>(frame_count),
+                reason ? reason : "frame");
+  std::string safe_name(file_name);
+  for (char& ch : safe_name) {
+    if (!(std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' ||
+          ch == '-' || ch == '.')) {
+      ch = '_';
+    }
+  }
+  const fs::path output_path = fs::path(capture_frames_dir) / safe_name;
+  const bool saved = SDL_SaveBMP(surface, output_path.string().c_str());
+  SDL_DestroySurface(surface);
+  if (!saved) {
+    std::fprintf(stderr, "SDL_SaveBMP failed: %s\n", SDL_GetError());
+    return false;
   }
   return true;
 }
@@ -1753,8 +1829,11 @@ int main(int argc, char** argv) {
   std::optional<float> profile_auto_scroll_step;
   uint64_t profile_wheel_burst_events = 0;
   float profile_wheel_burst_y = -1.0f;
+  uint64_t profile_wheel_burst_after_frame = 1;
+  uint64_t profile_wheel_repeat_frames = 0;
   std::optional<html_css_renderer::Size> profile_resize_to;
   uint64_t profile_resize_after_frame = 1;
+  std::string capture_frames_dir;
   bool incremental = true;
   bool use_cpu = true;
   bool use_skia_cpu = true;
@@ -1771,8 +1850,11 @@ int main(int argc, char** argv) {
                              &profile_auto_scroll_step,
                              &profile_wheel_burst_events,
                              &profile_wheel_burst_y,
+                             &profile_wheel_burst_after_frame,
+                             &profile_wheel_repeat_frames,
                              &profile_resize_to,
                              &profile_resize_after_frame,
+                             &capture_frames_dir,
                              &use_blink,
                              &stylesheet_loader_diagnostics)) {
     PrintUsage();
@@ -2157,11 +2239,11 @@ int main(int argc, char** argv) {
     ++rendered_frame_count;
     next_input.scroll_offsets_by_element_id =
         next_result.successor_snapshot.scroll_offsets_by_element_id;
-    next_input.wheel = std::nullopt;
     PrintViewerStatus(reason, rendered_frame_count, next_input, next_result,
                       attribute_toggles, use_incremental);
     SetViewerWindowTitle(window, reason, rendered_frame_count, next_input,
                          next_result, attribute_toggles, use_incremental);
+    next_input.wheel = std::nullopt;
     result = std::move(next_result);
     input = std::move(next_input);
     if (profile) {
@@ -2185,7 +2267,18 @@ int main(int argc, char** argv) {
   bool first_present_complete = false;
   while (running) {
     bool texture_dirty = false;
-    if (first_present_complete && profile_wheel_burst_events > 0) {
+    if (first_present_complete && profile_wheel_repeat_frames > 0 &&
+        rendered_frame_count >= profile_wheel_burst_after_frame) {
+      SDL_Event wheel_event{};
+      wheel_event.type = SDL_EVENT_MOUSE_WHEEL;
+      wheel_event.wheel.x = 0.0f;
+      wheel_event.wheel.y = profile_wheel_burst_y;
+      wheel_event.wheel.mouse_x = frame_width * 0.5f;
+      wheel_event.wheel.mouse_y = frame_height * 0.5f;
+      SDL_PushEvent(&wheel_event);
+      --profile_wheel_repeat_frames;
+    } else if (first_present_complete && profile_wheel_burst_events > 0 &&
+               rendered_frame_count >= profile_wheel_burst_after_frame) {
       for (uint64_t i = 0; i < profile_wheel_burst_events; ++i) {
         SDL_Event wheel_event{};
         wheel_event.type = SDL_EVENT_MOUSE_WHEEL;
@@ -2480,6 +2573,13 @@ int main(int argc, char** argv) {
         target_height,
     };
     SDL_RenderTexture(renderer, texture, nullptr, &target);
+    if (!CapturePresentedFrame(renderer, capture_frames_dir,
+                               rendered_frame_count,
+                               pending_profile_frame
+                                   ? pending_profile_frame->frame.reason.c_str()
+                                   : "present")) {
+      running = false;
+    }
     SDL_RenderPresent(renderer);
     if (pending_profile_frame) {
       const ProfileClock::time_point draw_present_end = ProfileClock::now();

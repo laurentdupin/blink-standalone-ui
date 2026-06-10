@@ -138,6 +138,7 @@ struct RenderResult {
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<ScrollableElementEntry> scrollable_element_entries;
+  Point document_max_scroll_offset;
   std::vector<SkippedTransformDiagnostic> skipped_transform_diagnostics;
   std::vector<std::string> diagnostics;
   std::vector<std::string> missing_resources;

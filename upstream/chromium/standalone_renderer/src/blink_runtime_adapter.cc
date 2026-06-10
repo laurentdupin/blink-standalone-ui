@@ -3131,6 +3131,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     result.frame.resource_commands = previous_resource_commands_;
     result.hit_test_entries = previous_hit_test_entries_;
     result.scrollable_element_entries = previous_scrollable_element_entries_;
+    if (previous_document_max_scroll_offset_) {
+      result.document_max_scroll_offset = *previous_document_max_scroll_offset_;
+    }
     result.needs_begin_frame = previous_needs_begin_frame_;
     const Point scroll_delta{previous_scroll_offset.x - current_scroll_offset.x,
                              previous_scroll_offset.y - current_scroll_offset.y};
@@ -3265,7 +3268,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           result.successor_snapshot.scroll_offsets_by_element_id["document"];
       document_scroll.x = applied_scroll_x;
       document_scroll.y = applied_scroll_y;
-      previous_document_max_scroll_offset_ = Point{max_scroll_x, max_scroll_y};
+      result.document_max_scroll_offset = Point{max_scroll_x, max_scroll_y};
+      previous_document_max_scroll_offset_ = result.document_max_scroll_offset;
       snapshot_.scroll_offsets_by_element_id =
           result.successor_snapshot.scroll_offsets_by_element_id;
     }

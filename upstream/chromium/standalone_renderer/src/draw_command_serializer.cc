@@ -1349,6 +1349,8 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
   WriteHitTestEntries(out, result.hit_test_entries);
   out << ",\"scrollable_element_entries\":";
   WriteScrollableElementEntries(out, result.scrollable_element_entries);
+  out << ",\"document_max_scroll_offset\":";
+  WritePoint(out, result.document_max_scroll_offset);
   out << ",\"diagnostics\":";
   WriteStringArray(out, result.diagnostics);
   if (!result.raw_paint_artifact_audit_json.empty()) {

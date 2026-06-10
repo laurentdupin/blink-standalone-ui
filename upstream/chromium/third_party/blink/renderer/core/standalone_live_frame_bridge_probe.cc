@@ -917,7 +917,10 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
       viewport->VisibleContentRect(kExcludeScrollbars);
   cache.scroll_visible_width = visible_rect.width();
   cache.scroll_visible_height = visible_rect.height();
-  if (cache.scroll_offset_requested) {
+  const bool should_apply_requested_document_scroll =
+      cache.scroll_offset_requested &&
+      !(cache.requested_wheel_scroll && cache.wheel_scroll_applied);
+  if (should_apply_requested_document_scroll) {
     const ScrollOffset requested_offset = viewport->ScrollPositionToOffset(
         gfx::PointF(cache.requested_scroll_x, cache.requested_scroll_y));
     const ScrollOffset clamped_offset =
@@ -927,6 +930,10 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
         cc::ScrollSourceType::kAbsoluteScroll,
         mojom::blink::ScrollBehavior::kInstant);
     cache.scroll_offset_status = "applied_to_frame_scrollable_area";
+  } else if (cache.scroll_offset_requested && cache.requested_wheel_scroll &&
+             cache.wheel_scroll_applied) {
+    cache.scroll_offset_status =
+        "skipped_absolute_document_scroll_after_wheel_applied";
   }
   if (cache.requested_wheel_scroll && !cache.wheel_scroll_applied) {
     TryApplyWheelScrollToOverflowElementForStandaloneRenderer(frame_view);
