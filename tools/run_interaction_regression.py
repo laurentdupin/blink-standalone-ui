@@ -31,6 +31,15 @@ FOCUS_HTML = (
     "</style><div id='target' data-debug-id='target' class='box' tabindex='0'></div>"
 )
 
+HOVER_TRANSITION_HTML = (
+    "<!doctype html><style>"
+    "body{margin:0}.card{margin:20px;width:100px;height:80px;background:#f8fafc}"
+    ".runner{width:64px;height:64px;background:rgb(255,106,74);"
+    "transition:background-color 1000ms linear}"
+    ".card:hover .runner{background:rgb(68,120,255)}"
+    "</style><div id='card' class='card'><div id='runner' class='runner'></div></div>"
+)
+
 
 def base_command(benchmark: Path, case: dict[str, Any], out_bmp: Path, out_json: Path) -> list[str]:
     cmd = [str(benchmark)]
@@ -55,10 +64,14 @@ def base_command(benchmark: Path, case: dict[str, Any], out_bmp: Path, out_json:
         cmd.extend(["--previous-pointer", pointer])
     if case.get("previous_pointer_down"):
         cmd.append("--previous-pointer-down")
+    if previous_time_ms := case.get("previous_time_ms"):
+        cmd.extend(["--previous-time-ms", str(previous_time_ms)])
     if pointer := case.get("pointer"):
         cmd.extend(["--pointer", pointer])
     if case.get("pointer_down"):
         cmd.append("--pointer-down")
+    if time_ms := case.get("time_ms"):
+        cmd.extend(["--time-ms", str(time_ms)])
     if wheel := case.get("wheel"):
         cmd.extend(["--wheel", wheel])
     return cmd
@@ -97,6 +110,33 @@ def read_json(path: Path) -> dict[str, Any]:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:  # pragma: no cover - diagnostic tooling path.
         return {"_json_error": str(exc)}
+
+
+def read_bmp_pixel(path: Path, x: int, y: int) -> tuple[int, int, int, int] | None:
+    data = path.read_bytes()
+    if len(data) < 54 or data[:2] != b"BM":
+        return None
+    pixel_offset = int.from_bytes(data[10:14], "little", signed=False)
+    dib_size = int.from_bytes(data[14:18], "little", signed=False)
+    if dib_size < 40:
+        return None
+    width = int.from_bytes(data[18:22], "little", signed=True)
+    height = int.from_bytes(data[22:26], "little", signed=True)
+    bits_per_pixel = int.from_bytes(data[28:30], "little", signed=False)
+    if width <= 0 or height == 0 or bits_per_pixel not in (24, 32):
+        return None
+    abs_height = abs(height)
+    if x < 0 or y < 0 or x >= width or y >= abs_height:
+        return None
+    bytes_per_pixel = bits_per_pixel // 8
+    row_stride = ((width * bits_per_pixel + 31) // 32) * 4
+    source_y = y if height < 0 else abs_height - 1 - y
+    index = pixel_offset + source_y * row_stride + x * bytes_per_pixel
+    if index + bytes_per_pixel > len(data):
+        return None
+    b, g, r = data[index], data[index + 1], data[index + 2]
+    a = data[index + 3] if bits_per_pixel == 32 else 255
+    return r, g, b, a
 
 
 def audit(payload: dict[str, Any]) -> dict[str, Any]:
@@ -181,6 +221,25 @@ def expect_number(
 ) -> None:
     if abs(actual - expected) > tolerance:
         failures.append(f"{label}: expected {expected}, got {actual}")
+
+
+def expect_pixel(
+    failures: list[str],
+    out_bmp: Path,
+    x: int,
+    y: int,
+    expected: tuple[int, int, int],
+    label: str,
+    tolerance: int = 4,
+) -> None:
+    pixel = read_bmp_pixel(out_bmp, x, y)
+    if pixel is None:
+        failures.append(f"{label}: missing or unsupported BMP pixel")
+        return
+    for actual, want in zip(pixel[:3], expected):
+        if abs(actual - want) > tolerance:
+            failures.append(f"{label}: expected rgb{expected}, got rgba{pixel}")
+            return
 
 
 def check_focus(payload: dict[str, Any], failures: list[str]) -> None:
@@ -295,6 +354,22 @@ CASES: list[dict[str, Any]] = [
         "check": check_focus,
     },
     {
+        "name": "raw-pointer-hover-transition-progress",
+        "html": HOVER_TRANSITION_HTML,
+        "viewport": "160x120",
+        "previous_pointer": "40,40",
+        "previous_time_ms": "0",
+        "pointer": "40,40",
+        "time_ms": "1000",
+        "pixel_check": {
+            "x": 40,
+            "y": 40,
+            "rgb": (68, 120, 255),
+            "label": "hover transition final color",
+        },
+        "check": lambda payload, failures: None,
+    },
+    {
         "name": "checkbox-default-activation",
         "html_file": "37_checkbox_unchecked.html",
         "viewport": "320x220",
@@ -362,6 +437,16 @@ def render_case(
         failures.append("raw Blink audit missing")
     check: CaseCheck = case["check"]
     check(payload, failures)
+    pixel_check = case.get("pixel_check")
+    if isinstance(pixel_check, dict):
+        expect_pixel(
+            failures,
+            out_bmp,
+            int(pixel_check["x"]),
+            int(pixel_check["y"]),
+            tuple(pixel_check["rgb"]),
+            str(pixel_check["label"]),
+        )
     return {
         "name": case["name"],
         "passed": not failures,

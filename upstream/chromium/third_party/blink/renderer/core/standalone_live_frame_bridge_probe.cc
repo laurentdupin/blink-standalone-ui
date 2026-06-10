@@ -101,6 +101,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
+#include "third_party/blink/renderer/core/paint/paint_property_tree_builder.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/style_image.h"
@@ -523,6 +524,12 @@ struct LiveFramePaintProbeCache {
   int requested_pointer_event_type = 0;
   bool pointer_state_applied = false;
   std::string pointer_state_status = "not_requested";
+  std::string pointer_hit_element_id;
+  std::string pointer_hit_element_tag;
+  std::string pointer_hit_element_class;
+  std::string pointer_hover_element_id;
+  std::string pointer_hover_element_tag;
+  std::string pointer_hover_element_class;
   bool pointer_focus_requested = false;
   bool pointer_focus_applied = false;
   std::string pointer_focus_status = "not_requested";
@@ -7334,6 +7341,15 @@ void ApplyElementScrollOffsetsForStandaloneRenderer(Document& document) {
   }
 }
 
+void UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(
+    Document& document) {
+  StyleEngine& style_engine = document.GetStyleEngine();
+  style_engine.UpdateActiveStyle();
+  if (style_engine.NeedsStyleInvalidation()) {
+    style_engine.InvalidateStyle();
+  }
+}
+
 std::string ElementScrollDiagnosticsJsonForStandaloneRenderer(
     const LiveFramePaintProbeCache& cache) {
   std::ostringstream json;
@@ -7428,14 +7444,13 @@ void ApplyInteractionStateForStandaloneRenderer(
                                       /*update_active_chain=*/false,
                                       hovered_element);
     }
-    return;
-  }
-
-  if (hovered_element) {
+  } else if (hovered_element) {
     document.UpdateHoverActiveState(/*is_active=*/false,
                                     /*update_active_chain=*/false,
                                     hovered_element);
   }
+
+  UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
 }
 
 void ApplyPointerStateForStandaloneRenderer(Document& document,
@@ -7444,6 +7459,12 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_state_applied = false;
   cache.pointer_state_status =
       cache.requested_pointer_state ? "requested" : "not_requested";
+  cache.pointer_hit_element_id.clear();
+  cache.pointer_hit_element_tag.clear();
+  cache.pointer_hit_element_class.clear();
+  cache.pointer_hover_element_id.clear();
+  cache.pointer_hover_element_tag.clear();
+  cache.pointer_hover_element_class.clear();
   cache.pointer_focus_requested = false;
   cache.pointer_focus_applied = false;
   cache.pointer_focus_status = "not_requested";
@@ -7500,6 +7521,30 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   cache.pointer_state_applied = hit_element != nullptr;
   cache.pointer_state_status =
       hit_element ? "applied_to_blink_hit_test_target" : "no_hit_test_target";
+  if (hit_element) {
+    document.UpdateHoverActiveState(cache.requested_pointer_pressed,
+                                    cache.requested_pointer_pressed,
+                                    hit_element);
+    cache.pointer_hit_element_id =
+        BlinkStringToStdStringForStandaloneRenderer(
+            String(hit_element->GetIdAttribute()));
+    cache.pointer_hit_element_tag =
+        BlinkStringToStdStringForStandaloneRenderer(hit_element->tagName());
+    cache.pointer_hit_element_class =
+        BlinkStringToStdStringForStandaloneRenderer(
+            hit_element->getAttribute(html_names::kClassAttr));
+    if (Element* hover_element = document.HoverElement()) {
+      cache.pointer_hover_element_id =
+          BlinkStringToStdStringForStandaloneRenderer(
+              String(hover_element->GetIdAttribute()));
+      cache.pointer_hover_element_tag =
+          BlinkStringToStdStringForStandaloneRenderer(hover_element->tagName());
+      cache.pointer_hover_element_class =
+          BlinkStringToStdStringForStandaloneRenderer(
+            hover_element->getAttribute(html_names::kClassAttr));
+    }
+  }
+  UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
 
   Element* activation_target = ActivationTargetForStandaloneRenderer(hit_element);
   const std::string activation_element_id =
@@ -7605,6 +7650,43 @@ void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   cache.animation_time_status = "applied_to_document_animation_clock";
 }
 
+void MarkPaintPropertyTargetForStandaloneRenderer(LayoutObject& layout_object,
+                                                  bool affects_opacity,
+                                                  bool affects_transform) {
+  bool scheduled_deferred_update = false;
+  if (affects_opacity) {
+    scheduled_deferred_update |=
+        PaintPropertyTreeBuilder::ScheduleDeferredOpacityNodeUpdate(
+            layout_object);
+  }
+  if (affects_transform) {
+    scheduled_deferred_update |=
+        PaintPropertyTreeBuilder::ScheduleDeferredTransformNodeUpdate(
+            layout_object);
+  }
+  if (!scheduled_deferred_update) {
+    layout_object.SetNeedsPaintPropertyUpdate();
+  }
+}
+
+void MarkComputedPaintPropertyTargetsForStandaloneRenderer(Node& node) {
+  if (auto* element = DynamicTo<Element>(node)) {
+    if (const ComputedStyle* style = element->GetComputedStyle()) {
+      const bool has_opacity_property = style->HasNonInitialOpacity();
+      const bool has_transform_property = style->HasTransform();
+      if ((has_opacity_property || has_transform_property) &&
+          element->GetLayoutObject()) {
+        MarkPaintPropertyTargetForStandaloneRenderer(
+            *element->GetLayoutObject(), has_opacity_property,
+            has_transform_property);
+      }
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    MarkComputedPaintPropertyTargetsForStandaloneRenderer(*child);
+  }
+}
+
 void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
   // Standalone does not run the browser compositor commit path that can directly
   // refresh animated property nodes, so keep Blink's prepaint builder honest
@@ -7617,11 +7699,14 @@ void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
     if (!effect) {
       continue;
     }
-    if (!effect->Affects(PropertyHandle(GetCSSPropertyOpacity())) &&
-        !effect->Affects(PropertyHandle(GetCSSPropertyTransform())) &&
-        !effect->Affects(PropertyHandle(GetCSSPropertyTranslate())) &&
-        !effect->Affects(PropertyHandle(GetCSSPropertyScale())) &&
-        !effect->Affects(PropertyHandle(GetCSSPropertyRotate()))) {
+    const bool affects_opacity =
+        effect->Affects(PropertyHandle(GetCSSPropertyOpacity()));
+    const bool affects_transform =
+        effect->Affects(PropertyHandle(GetCSSPropertyTransform())) ||
+        effect->Affects(PropertyHandle(GetCSSPropertyTranslate())) ||
+        effect->Affects(PropertyHandle(GetCSSPropertyScale())) ||
+        effect->Affects(PropertyHandle(GetCSSPropertyRotate()));
+    if (!affects_opacity && !affects_transform) {
       continue;
     }
     Element* target = effect->EffectTarget();
@@ -7629,8 +7714,12 @@ void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
       continue;
     }
     if (LayoutObject* layout_object = target->GetLayoutObject()) {
-      layout_object->SetNeedsPaintPropertyUpdate();
+      MarkPaintPropertyTargetForStandaloneRenderer(
+          *layout_object, affects_opacity, affects_transform);
     }
+  }
+  if (Element* document_element = document.documentElement()) {
+    MarkComputedPaintPropertyTargetsForStandaloneRenderer(*document_element);
   }
 }
 
@@ -8629,6 +8718,18 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.pointer_state_applied ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.pointer_state_status)
+       << ",\"hit_element_id\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_hit_element_id)
+       << ",\"hit_element_tag\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_hit_element_tag)
+       << ",\"hit_element_class\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_hit_element_class)
+       << ",\"hover_element_id\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_hover_element_id)
+       << ",\"hover_element_tag\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_hover_element_tag)
+       << ",\"hover_element_class\":"
+       << JsonStringForStandaloneRenderer(cache.pointer_hover_element_class)
        << ",\"focus_requested\":"
        << (cache.pointer_focus_requested ? "true" : "false")
        << ",\"focus_applied_to_blink\":"
@@ -9572,6 +9673,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
+  document.RenderBlockingResourceUnblocked();
   if (LifecycleStopEqualsForStandaloneRenderer("html")) {
     result.lifecycle_reached_paint_clean = 0;
     cache.body_html = input_html;
@@ -9671,6 +9773,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   ApplyPointerStateForStandaloneRenderer(document, frame_view);
   if (cache.pointer_state_applied || cache.pointer_focus_requested) {
     TraceLiveFrameProbeStage("before post-pointer lifecycle update");
+    document.UpdateStyleAndLayoutTree();
     UpdateLifecycleToLayoutCleanForStandaloneRenderer(
         frame_view, DocumentUpdateReason::kTest);
     TraceLiveFrameProbeStage("after post-pointer lifecycle update");
@@ -10284,6 +10387,39 @@ int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);
   return ProbeCache().needs_begin_frame ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
+    const char* body_html,
+    char* hovered_element_id,
+    int hovered_element_id_capacity,
+    char* active_element_id,
+    int active_element_id_capacity) {
+  RunLiveFramePaintProbe(body_html);
+  const LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.pointer_state_applied) {
+    return 0;
+  }
+  if (hovered_element_id && hovered_element_id_capacity > 0) {
+    const size_t copied =
+        std::min(cache.pointer_hover_element_id.size(),
+                 static_cast<size_t>(hovered_element_id_capacity - 1));
+    std::memcpy(hovered_element_id, cache.pointer_hover_element_id.data(),
+                copied);
+    hovered_element_id[copied] = '\0';
+  }
+  if (active_element_id && active_element_id_capacity > 0) {
+    static const std::string empty_active_id;
+    const std::string& active_id =
+        cache.requested_pointer_pressed ? cache.pointer_hit_element_id
+                                        : empty_active_id;
+    const size_t copied =
+        std::min(active_id.size(),
+                 static_cast<size_t>(active_element_id_capacity - 1));
+    std::memcpy(active_element_id, active_id.data(), copied);
+    active_element_id[copied] = '\0';
+  }
+  return 1;
 }
 
 int StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(

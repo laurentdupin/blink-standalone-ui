@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -889,12 +890,26 @@ RetainedPaintChunk ChunkForPresentation(const RetainedPaintChunk& chunk,
   return presented;
 }
 
-bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
+bool HasNonIdentity2dTransform(const PaintPropertyStateSnapshot& state) {
+  const Matrix4& matrix = state.transform_to_root;
+  return state.transform_has_non_translation ||
+         !NearlyEqual(matrix.values[12], 0.0f) ||
+         !NearlyEqual(matrix.values[13], 0.0f);
+}
+
+bool ShouldReplayChunkPropertyTransform(const RetainedPaintChunk& chunk) {
   const PaintPropertyStateSnapshot& state = chunk.property_state;
   return state.transform_is_2d && !state.transform_has_perspective &&
-         state.transform_has_non_translation && state.effect_chain_depth == 0 &&
-         !state.effect_has_non_default_opacity && chunk.bounds.width > 0.0f &&
-         chunk.bounds.height > 0.0f;
+         state.scroll_node_id == 0 && state.clip_chain_depth == 0 &&
+         !state.has_clip_rect && !state.has_clip_rrect &&
+         state.effect_chain_depth == 0 && !state.effect_has_non_default_opacity &&
+         !state.effect_has_filter && !state.effect_has_backdrop_filter &&
+         !state.effect_has_blend_mode && chunk.bounds.width > 0.0f &&
+         chunk.bounds.height > 0.0f && HasNonIdentity2dTransform(state);
+}
+
+bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
+  return ShouldReplayChunkPropertyTransform(chunk);
 }
 
 void LocalizeRect(Rect& rect, Point origin) {
@@ -949,6 +964,28 @@ DrawCommandList LocalizeRootSpaceCommandsForTransform(
     commands.push_back(LocalizeRootSpaceCommand(command, origin));
   }
   return commands;
+}
+
+Rect BoundsForPropertyTransformReplay(Rect bounds,
+                                      const RetainedPaintChunk* chunk) {
+  if (!chunk || !ShouldReplayChunkPropertyTransform(*chunk)) {
+    return bounds;
+  }
+  return Rect{0.0f, 0.0f, bounds.width, bounds.height};
+}
+
+Rect PresentationBoundsForSceneChunk(const RetainedPaintChunk& chunk) {
+  if (!ShouldReplayChunkPropertyTransform(chunk)) {
+    return chunk.placement_bounds;
+  }
+  return MapRectConservatively(
+      Rect{0.0f, 0.0f, chunk.placement_bounds.width,
+           chunk.placement_bounds.height},
+      chunk.property_state,
+      Rect{-std::numeric_limits<float>::max() / 4.0f,
+           -std::numeric_limits<float>::max() / 4.0f,
+           std::numeric_limits<float>::max() / 2.0f,
+           std::numeric_limits<float>::max() / 2.0f});
 }
 
 int DrawSceneCommandCount(const std::vector<SceneCommand>& commands) {
@@ -1503,7 +1540,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
           }
         } else {
           plan.dirty_rects.push_back(MapRectConservatively(
-              *update.previous_bounds,
+              BoundsForPropertyTransformReplay(*update.previous_bounds,
+                                               previous_chunk),
               previous_chunk ? PropertyStateForPresentation(*previous_chunk,
                                                             previous_scroll_offset,
                                                             previous_document_scroll_node_ids)
@@ -1530,6 +1568,8 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
               !IsRootDocumentScrollReuseChunk(*current_chunk)) {
             current_bounds = OutsetRect(current_bounds, 1.0f);
           }
+          current_bounds =
+              BoundsForPropertyTransformReplay(current_bounds, current_chunk);
           plan.dirty_rects.push_back(MapRectConservatively(
               current_bounds,
               current_chunk ? PropertyStateForPresentation(*current_chunk,
@@ -1668,7 +1708,7 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
                            ? retained_chunk.key
                            : retained_chunk.stable_key;
     chunk.chunk_id = retained_chunk.key;
-    chunk.bounds = retained_chunk.placement_bounds;
+    chunk.bounds = PresentationBoundsForSceneChunk(retained_chunk);
     chunk.property_state = retained_chunk.property_state;
     chunk.content_hash = retained_chunk.content_hash;
     chunk.resource_hash = retained_chunk.resource_hash;
@@ -1698,6 +1738,13 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
 
     frame.scene_commands.push_back(
         SceneCommand::BeginChunk(chunk.chunk_id, chunk.bounds));
+    const bool replays_chunk_property_transform =
+        ShouldReplayChunkPropertyTransform(retained_chunk);
+    if (replays_chunk_property_transform) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Save()));
+      frame.scene_commands.push_back(SceneCommand::Draw(
+          DrawCommand::Transform(retained_chunk.property_state.transform_to_root)));
+    }
     const bool has_chunk_property_clip =
         retained_chunk.property_state.has_clip_rect ||
         retained_chunk.property_state.has_clip_rrect;
@@ -1745,6 +1792,9 @@ RenderFrame BuildRenderFrame(const RetainedScene& scene,
       frame.scene_commands.push_back(SceneCommand::Draw(command));
     }
     if (has_chunk_property_clip) {
+      frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
+    }
+    if (replays_chunk_property_transform) {
       frame.scene_commands.push_back(SceneCommand::Draw(DrawCommand::Restore()));
     }
     frame.scene_commands.push_back(SceneCommand::EndChunk(chunk.chunk_id));

@@ -6853,39 +6853,12 @@ String DescendantInvalidationSetToIdString(const InvalidationSet&) {
   return String();
 }
 
-template <RuleInvalidationDataVisitorType VisitorType>
-RuleInvalidationDataVisitor<
-    VisitorType>::RuleInvalidationDataVisitor(RuleInvalidationDataType& data)
-    : rule_invalidation_data_(data) {}
-
-template <RuleInvalidationDataVisitorType VisitorType>
-SelectorPreMatch
-RuleInvalidationDataVisitor<VisitorType>::
-    CollectFeaturesFromSelector(const CSSSelector&, const StyleScope*) {
-  return SelectorPreMatch::kMayMatch;
-}
-
-template SelectorPreMatch
-RuleInvalidationDataVisitor<RuleInvalidationDataVisitorType::kBuilder>::
-    CollectFeaturesFromSelector(const CSSSelector&, const StyleScope*);
-
-RuleInvalidationDataBuilder::RuleInvalidationDataBuilder(
-    RuleInvalidationData& data)
-    : RuleInvalidationDataVisitor<RuleInvalidationDataVisitorType::kBuilder>(
-          data) {}
-void RuleInvalidationDataBuilder::Merge(const RuleInvalidationData&) {}
-
 RuleInvalidationDataTracer::RuleInvalidationDataTracer(
     const RuleInvalidationData& data)
     : RuleInvalidationDataVisitor<RuleInvalidationDataVisitorType::kTracer>(
           data) {}
 void RuleInvalidationDataTracer::TraceInvalidationSetsForSelector(
     const CSSSelector&) {}
-
-StyleInvalidator::StyleInvalidator(PendingInvalidationMap& map)
-    : pending_invalidation_map_(map) {}
-StyleInvalidator::~StyleInvalidator() = default;
-void StyleInvalidator::Invalidate(Document&, Element*) {}
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 gfx::SizeF SVGViewportResolver::ResolveViewport() const {

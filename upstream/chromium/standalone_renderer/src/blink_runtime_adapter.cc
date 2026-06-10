@@ -41,6 +41,12 @@ void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
     int pressed,
     int event_type,
     int requested);
+int StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
+    const char* body_html,
+    char* hovered_element_id,
+    int hovered_element_id_capacity,
+    char* active_element_id,
+    int active_element_id_capacity);
 void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     float x,
     float y,
@@ -3228,6 +3234,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           0.0f, 0.0f, 0, 0, 0);
       last_pointer_pressed_ = false;
     }
+    const bool primary_pointer_state_changed =
+        PrimaryPointerStateChangedForStandaloneRenderer(input);
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
             disable_retained_extraction_ ? 1 : 0);
@@ -3293,6 +3301,22 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
                 probe_html.c_str()) != 0;
     previous_needs_begin_frame_ = result.needs_begin_frame;
+    std::array<char, 256> observed_hovered_element_id{};
+    std::array<char, 256> observed_active_element_id{};
+    if (live_probe::
+            StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
+                probe_html.c_str(), observed_hovered_element_id.data(),
+                static_cast<int>(observed_hovered_element_id.size()),
+                observed_active_element_id.data(),
+                static_cast<int>(observed_active_element_id.size()))) {
+      result.successor_snapshot.hovered_element_id =
+          observed_hovered_element_id.data();
+      result.successor_snapshot.active_element_id =
+          observed_active_element_id.data();
+      snapshot_.hovered_element_id =
+          result.successor_snapshot.hovered_element_id;
+      snapshot_.active_element_id = result.successor_snapshot.active_element_id;
+    }
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
     ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
     PersistObservedScrollableElementOffsetsForStandaloneRenderer(result);
@@ -3366,7 +3390,40 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           return (state.has_clip_rect &&
                   nearly_equal_rect(clip, state.clip_rect)) ||
                  (state.has_clip_rrect &&
-                  nearly_equal_rect(clip, state.clip_rrect));
+                 nearly_equal_rect(clip, state.clip_rrect));
+        };
+    auto chunk_property_transform_replayed_by_retained_scene = [&]() {
+      const Matrix4& matrix =
+          active_chunk_property_state.transform_to_root;
+      const bool has_non_identity_transform =
+          active_chunk_property_state.transform_has_non_translation ||
+          !nearly_equal(matrix.values[12], 0.0f) ||
+          !nearly_equal(matrix.values[13], 0.0f);
+      return active_chunk_property_state.transform_is_2d &&
+             !active_chunk_property_state.transform_has_perspective &&
+             active_chunk_property_state.scroll_node_id == 0 &&
+             active_chunk_property_state.clip_chain_depth == 0 &&
+             !active_chunk_property_state.has_clip_rect &&
+             !active_chunk_property_state.has_clip_rrect &&
+             active_chunk_property_state.effect_chain_depth == 0 &&
+             !active_chunk_property_state.effect_has_non_default_opacity &&
+             !active_chunk_property_state.effect_has_filter &&
+             !active_chunk_property_state.effect_has_backdrop_filter &&
+             !active_chunk_property_state.effect_has_blend_mode &&
+             active_chunk_bounds.width > 0.0f &&
+             active_chunk_bounds.height > 0.0f &&
+             has_non_identity_transform;
+    };
+    auto matrix_matches_active_chunk_property_transform =
+        [&](float m00, float m01, float tx, float m10, float m11, float ty) {
+          const Matrix4& matrix =
+              active_chunk_property_state.transform_to_root;
+          return nearly_equal(m00, matrix.values[0]) &&
+                 nearly_equal(m01, matrix.values[4]) &&
+                 nearly_equal(tx, matrix.values[12]) &&
+                 nearly_equal(m10, matrix.values[1]) &&
+                 nearly_equal(m11, matrix.values[5]) &&
+                 nearly_equal(ty, matrix.values[13]);
         };
     for (int i = 0; i < exported_draw_op_count; ++i) {
       int type = 0;
@@ -4004,6 +4061,14 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           }
         }
       } else if (type == 11) {
+        if (chunk_property_transform_replayed_by_retained_scene() &&
+            matrix_matches_active_chunk_property_transform(1.0f, 0.0f, x,
+                                                          0.0f, 1.0f, y)) {
+          result.diagnostics.push_back(
+              "real Blink PaintArtifact skipped duplicate chunk property "
+              "translation transform for chunk " + active_chunk_key);
+          continue;
+        }
         Matrix4 matrix;
         matrix.values[12] = x;
         matrix.values[13] = y;
@@ -4014,16 +4079,30 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
             nearly_equal(x, 1.0f) && nearly_equal(y, 0.0f) &&
             nearly_equal(height, 0.0f) && nearly_equal(r, 1.0f);
         const bool conservative_property_state =
-            active_chunk_property_state.transform_chain_depth <= 3 &&
+            active_chunk_property_state.transform_chain_depth <= 4 &&
             active_chunk_property_state.scroll_node_id == 0 &&
             !active_chunk_property_state.has_clip_rect &&
             active_chunk_property_state.clip_chain_depth == 0 &&
             active_chunk_property_state.effect_chain_depth <= 1;
-        const bool duplicates_chunk_root_space_origin =
+        const bool chunk_root_space_paint_offset_translation =
             pure_translation && conservative_property_state &&
-            nearly_equal_root_space_origin(width, active_chunk_bounds.x) &&
-            nearly_equal_root_space_origin(g, active_chunk_bounds.y) &&
+            nearly_equal(x,
+                         active_chunk_property_state.transform_to_root.values[0]) &&
+            nearly_equal(y,
+                         active_chunk_property_state.transform_to_root.values[4]) &&
+            nearly_equal(width,
+                         active_chunk_property_state.transform_to_root.values[12]) &&
+            nearly_equal(height,
+                         active_chunk_property_state.transform_to_root.values[1]) &&
+            nearly_equal(r,
+                         active_chunk_property_state.transform_to_root.values[5]) &&
+            nearly_equal(g,
+                         active_chunk_property_state.transform_to_root.values[13]) &&
             (std::abs(width) > 0.01f || std::abs(g) > 0.01f);
+        const bool duplicates_chunk_root_space_origin =
+            chunk_root_space_paint_offset_translation &&
+            nearly_equal_root_space_origin(width, active_chunk_bounds.x) &&
+            nearly_equal_root_space_origin(g, active_chunk_bounds.y);
         const bool duplicates_document_scroll_presentation_transform =
             pure_translation &&
             active_chunk_property_state.scroll_node_id != 0 &&
@@ -4062,8 +4141,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                          active_chunk_property_state.transform_to_root.values[5]) &&
             nearly_equal(g,
                          active_chunk_property_state.transform_to_root.values[13]);
+        const bool duplicates_replayed_chunk_property_transform =
+            chunk_property_transform_replayed_by_retained_scene() &&
+            matrix_matches_active_chunk_property_transform(x, y, width, height,
+                                                          r, g);
         if (duplicates_chunk_root_space_origin ||
-            duplicates_document_scroll_presentation_transform) {
+            duplicates_document_scroll_presentation_transform ||
+            duplicates_replayed_chunk_property_transform) {
           Matrix4 skipped_matrix;
           skipped_matrix.values[0] = x;
           skipped_matrix.values[4] = y;
@@ -4089,7 +4173,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           skipped.reason =
               duplicates_document_scroll_presentation_transform
                   ? "duplicate_document_scroll_presentation_transform"
-                  : "duplicate_root_space_pure_translation";
+                  : duplicates_replayed_chunk_property_transform
+                        ? "duplicate_chunk_property_transform"
+                        : "duplicate_root_space_pure_translation";
           result.skipped_transform_diagnostics.push_back(std::move(skipped));
           result.diagnostics.push_back(
               "real Blink PaintArtifact skipped duplicate chunk "
@@ -4097,6 +4183,8 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
               " reason=" +
               (duplicates_document_scroll_presentation_transform
                    ? std::string("record_document_scroll_presented_by_retained_plan")
+                   : duplicates_replayed_chunk_property_transform
+                         ? std::string("record_chunk_property_transform_replayed_by_retained_scene")
                    : std::string("record_geometry_already_root_space")) +
               " transform_node_id=" +
               std::to_string(active_chunk_property_state.transform_node_id) +
@@ -4129,13 +4217,19 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         matrix.values[0] = x;
         matrix.values[4] = y;
         matrix.values[12] =
-            matches_scroll_chunk_transform ? width - active_chunk_bounds.x
-                                           : width;
+            (matches_scroll_chunk_transform ||
+             chunk_root_space_paint_offset_translation)
+                ? width - active_chunk_bounds.x
+                : width;
         matrix.values[1] = height;
         matrix.values[5] = r;
         matrix.values[13] =
-            matches_scroll_chunk_transform ? g - active_chunk_bounds.y : g;
-        if (!matches_scroll_chunk_transform ||
+            (matches_scroll_chunk_transform ||
+             chunk_root_space_paint_offset_translation)
+                ? g - active_chunk_bounds.y
+                : g;
+        if ((!matches_scroll_chunk_transform &&
+             !chunk_root_space_paint_offset_translation) ||
             std::abs(matrix.values[12]) > 0.01f ||
             std::abs(matrix.values[13]) > 0.01f) {
           active_commands->push_back(DrawCommand::Transform(matrix));
@@ -4205,12 +4299,21 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     const bool force_full_redraw_for_active_animation_change =
         (prior_needs_begin_frame || result.needs_begin_frame) &&
         (viewport_changed || document_scroll_changed || element_scroll_changed);
+    const bool force_full_redraw_for_pointer_state_change =
+        primary_pointer_state_changed && !input.pointers.empty();
+    if (force_full_redraw_for_pointer_state_change) {
+      result.diagnostics.push_back(
+          "live Blink raw pointer state changed; using conservative full "
+          "viewport redraw for Blink-owned pseudo-state invalidation");
+    }
     ApplyRetainedScenePlan(
         result, current_scene, load_commands,
         incremental && previous_retained_scene_ ? &*previous_retained_scene_
                                                 : nullptr,
         previous_snapshot, current_document_scroll, previous_document_scroll,
-        force_full_redraw_for_active_animation_change);
+        force_full_redraw_for_active_animation_change ||
+            force_full_redraw_for_pointer_state_change);
+    RememberPrimaryPointerStateForStandaloneRenderer(input);
     previous_retained_scene_ = std::move(current_scene);
     result.diagnostics.push_back(
         "paint artifact source: real Blink PaintArtifact; "
@@ -4241,6 +4344,30 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     previous_scrollable_element_entries_ = result.scrollable_element_entries;
   }
 
+  bool PrimaryPointerStateChangedForStandaloneRenderer(
+      const FrameInput& input) const {
+    if (input.pointers.empty()) {
+      return previous_primary_pointer_state_.has_value();
+    }
+    const PointerState& pointer = input.pointers.front();
+    if (!previous_primary_pointer_state_) {
+      return true;
+    }
+    const PointerState& previous = *previous_primary_pointer_state_;
+    return pointer.id != previous.id || pointer.position.x != previous.position.x ||
+           pointer.position.y != previous.position.y ||
+           pointer.pressed != previous.pressed;
+  }
+
+  void RememberPrimaryPointerStateForStandaloneRenderer(
+      const FrameInput& input) {
+    if (input.pointers.empty()) {
+      previous_primary_pointer_state_.reset();
+      return;
+    }
+    previous_primary_pointer_state_ = input.pointers.front();
+  }
+
   RendererSnapshot snapshot_;
   bool disable_retained_extraction_ = false;
   bool enable_paint_artifact_audit_ = false;
@@ -4249,6 +4376,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   bool force_paint_oracle_bitmap_ = false;
   std::string lifecycle_stop_;
   bool last_pointer_pressed_ = false;
+  std::optional<PointerState> previous_primary_pointer_state_;
   bool previous_needs_begin_frame_ = false;
   std::optional<Point> previous_document_max_scroll_offset_;
   std::optional<RetainedScene> previous_retained_scene_;

@@ -308,6 +308,47 @@ struct AttributeToggle {
   bool is_on = false;
 };
 
+struct ProfilePointerMove {
+  uint64_t after_frame = 1;
+  html_css_renderer::Point point;
+};
+
+bool ParsePoint(const std::string& value, html_css_renderer::Point* output) {
+  const size_t separator = value.find(',');
+  if (separator == std::string::npos) {
+    return false;
+  }
+  float x = 0.0f;
+  float y = 0.0f;
+  if (!ParseFloat(value.substr(0, separator), &x) ||
+      !ParseFloat(value.substr(separator + 1), &y)) {
+    return false;
+  }
+  output->x = x;
+  output->y = y;
+  return true;
+}
+
+bool ParseProfilePointerMove(const std::string& value,
+                             ProfilePointerMove* output) {
+  const size_t separator = value.find(':');
+  if (separator == std::string::npos) {
+    return false;
+  }
+  double frame = 0.0;
+  if (!ParseDouble(value.substr(0, separator), &frame) || frame < 1.0 ||
+      frame > 100000.0) {
+    return false;
+  }
+  html_css_renderer::Point point;
+  if (!ParsePoint(value.substr(separator + 1), &point)) {
+    return false;
+  }
+  output->after_frame = static_cast<uint64_t>(frame);
+  output->point = point;
+  return true;
+}
+
 std::string AttributeToggleElementId(const AttributeToggle& toggle) {
   const size_t separator = toggle.key.find(':');
   return separator == std::string::npos ? std::string()
@@ -353,6 +394,7 @@ void PrintUsage() {
                " [--profile-wheel-repeat-frames count]"
                " [--profile-resize-to WxH]"
                " [--profile-resize-after-frame count]"
+               " [--profile-pointer-move frame:x,y]"
                " [--capture-frames-dir path]"
                " [--blink]"
                "\nIf no --html or --html-file input is provided, the viewer "
@@ -392,6 +434,7 @@ bool ParseArgs(int argc,
                uint64_t* profile_wheel_repeat_frames,
                std::optional<html_css_renderer::Size>* profile_resize_to,
                uint64_t* profile_resize_after_frame,
+               std::vector<ProfilePointerMove>* profile_pointer_moves,
                std::string* capture_frames_dir,
                bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
@@ -624,6 +667,14 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_resize_after_frame = static_cast<uint64_t>(parsed);
+    } else if (arg == "--profile-pointer-move") {
+      const char* value = next_value();
+      ProfilePointerMove parsed;
+      if (!value || !ParseProfilePointerMove(value, &parsed)) {
+        return false;
+      }
+      profile_pointer_moves->push_back(parsed);
+      *profile_enabled = true;
     } else if (arg == "--capture-frames-dir") {
       const char* value = next_value();
       if (!value) {
@@ -1833,6 +1884,7 @@ int main(int argc, char** argv) {
   uint64_t profile_wheel_repeat_frames = 0;
   std::optional<html_css_renderer::Size> profile_resize_to;
   uint64_t profile_resize_after_frame = 1;
+  std::vector<ProfilePointerMove> profile_pointer_moves;
   std::string capture_frames_dir;
   bool incremental = true;
   bool use_cpu = true;
@@ -1854,6 +1906,7 @@ int main(int argc, char** argv) {
                              &profile_wheel_repeat_frames,
                              &profile_resize_to,
                              &profile_resize_after_frame,
+                             &profile_pointer_moves,
                              &capture_frames_dir,
                              &use_blink,
                              &stylesheet_loader_diagnostics)) {
@@ -2264,9 +2317,29 @@ int main(int argc, char** argv) {
       profile_auto_scroll_step.value_or(scroll_step);
   const bool profile_resize_requested = profile_resize_to.has_value();
   bool profile_resize_done = false;
+  std::sort(profile_pointer_moves.begin(), profile_pointer_moves.end(),
+            [](const ProfilePointerMove& a, const ProfilePointerMove& b) {
+              return a.after_frame < b.after_frame;
+            });
+  size_t profile_pointer_move_index = 0;
   bool first_present_complete = false;
   while (running) {
     bool texture_dirty = false;
+    if (first_present_complete) {
+      while (profile_pointer_move_index < profile_pointer_moves.size() &&
+             rendered_frame_count >=
+                 profile_pointer_moves[profile_pointer_move_index]
+                     .after_frame) {
+        const ProfilePointerMove& move =
+            profile_pointer_moves[profile_pointer_move_index];
+        SDL_Event motion_event{};
+        motion_event.type = SDL_EVENT_MOUSE_MOTION;
+        motion_event.motion.x = move.point.x;
+        motion_event.motion.y = move.point.y;
+        SDL_PushEvent(&motion_event);
+        ++profile_pointer_move_index;
+      }
+    }
     if (first_present_complete && profile_wheel_repeat_frames > 0 &&
         rendered_frame_count >= profile_wheel_burst_after_frame) {
       SDL_Event wheel_event{};
