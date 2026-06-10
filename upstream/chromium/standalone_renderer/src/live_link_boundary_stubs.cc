@@ -20793,9 +20793,13 @@ void HTMLFormControlElement::DidMoveToNewDocument(Document& old_document) {
   HTMLElement::DidMoveToNewDocument(old_document);
 }
 void HTMLFormControlElement::AttributeChanged(
-    const AttributeModificationParams&) {}
+    const AttributeModificationParams& params) {
+  HTMLElement::AttributeChanged(params);
+}
 void HTMLFormControlElement::ParseAttribute(
-    const AttributeModificationParams&) {}
+    const AttributeModificationParams& params) {
+  HTMLElement::ParseAttribute(params);
+}
 void HTMLFormControlElement::CloneNonAttributePropertiesFrom(
     const Element&,
     NodeCloningData&) {}

@@ -1843,15 +1843,16 @@ void AppendSkPathOpWithFlags(
     return;
   }
 
-  const size_t path_byte_count = path.writeToMemory(nullptr);
+  SkPath local_path = path.makeOffset(-bounds.x(), -bounds.y());
+  const size_t path_byte_count = local_path.writeToMemory(nullptr);
   if (path_byte_count == 0) {
     return;
   }
 
   LiveExportedDrawOp exported;
   exported.type = 21;
-  exported.x = translate_x;
-  exported.y = translate_y;
+  exported.x = translate_x + bounds.x();
+  exported.y = translate_y + bounds.y();
   exported.width = bounds.width();
   exported.height = bounds.height();
   exported.font_size = flags.getStyle() == cc::PaintFlags::kStroke_Style
@@ -1859,8 +1860,9 @@ void AppendSkPathOpWithFlags(
                            : 0.0f;
   AppendSkColor(exported, flags.getColor4f());
   AppendStrokeStyle(flags, exported);
+  AppendDrawLooperLayers(flags, exported);
   exported.path_bytes.resize(path_byte_count);
-  path.writeToMemory(exported.path_bytes.data());
+  local_path.writeToMemory(exported.path_bytes.data());
 
   if (flags.HasShader()) {
     exported.shader_bytes = SerializeShaderBytes(flags);

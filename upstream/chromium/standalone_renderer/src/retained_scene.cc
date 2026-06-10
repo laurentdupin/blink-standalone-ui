@@ -947,8 +947,7 @@ bool ShouldLocalizeForExportedChunkTransform(
 }
 
 bool ShouldLocalizeRootSpaceCommands(const RetainedPaintChunk& chunk) {
-  return ShouldReplayChunkPropertyTransform(chunk) ||
-         ShouldLocalizeForExportedChunkTransform(chunk);
+  return ShouldReplayChunkPropertyTransform(chunk);
 }
 
 void LocalizeRect(Rect& rect, Point origin) {
@@ -967,6 +966,7 @@ DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
     case DrawCommandType::kFillRRect:
     case DrawCommandType::kStrokeRRect:
     case DrawCommandType::kFillRRectShader:
+    case DrawCommandType::kFillPath:
     case DrawCommandType::kDrawImage:
     case DrawCommandType::kDrawImageRect:
     case DrawCommandType::kDrawTextBlob:
@@ -983,7 +983,6 @@ DrawCommand LocalizeRootSpaceCommand(DrawCommand command, Point origin) {
     case DrawCommandType::kRestore:
     case DrawCommandType::kTransform:
     case DrawCommandType::kClipPath:
-    case DrawCommandType::kFillPath:
     case DrawCommandType::kDiagnostic:
       break;
   }

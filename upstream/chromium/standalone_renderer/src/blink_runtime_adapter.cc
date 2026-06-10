@@ -4052,15 +4052,17 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                 shader_bytes.clear();
               }
             }
-            active_commands->push_back(DrawCommand::FillPath(
+            DrawCommand command = DrawCommand::FillPath(
                 std::move(path_bytes), color,
                 font_size > 0.0f ? font_size : 0.0f,
-                std::move(shader_bytes)));
-            active_commands->back().rect = Rect{x, y, width, height};
-            active_commands->back().stroke_cap = stroke_cap;
-            active_commands->back().stroke_join = stroke_join;
-            active_commands->back().stroke_miter = stroke_miter;
-            append_path_effect_bytes(active_commands->back());
+                std::move(shader_bytes));
+            command.rect = Rect{x, y, width, height};
+            command.stroke_cap = stroke_cap;
+            command.stroke_join = stroke_join;
+            command.stroke_miter = stroke_miter;
+            append_draw_looper_layers(command);
+            append_path_effect_bytes(command);
+            active_commands->push_back(std::move(command));
             ++translated_command_count;
           }
         }
