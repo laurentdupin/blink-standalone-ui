@@ -115,6 +115,17 @@ enum class ResourceRootPolicy {
   kUseHtmlDirectoryIfUnset,
 };
 
+fs::path DefaultResourceRootForHtmlPath(const fs::path& absolute_html_path) {
+  const fs::path document_directory = absolute_html_path.parent_path();
+  const fs::path parent = document_directory.parent_path();
+  std::error_code ignored;
+  if (parent.filename() == "Examples" &&
+      fs::is_directory(parent / "HeavyAssets", ignored)) {
+    return parent;
+  }
+  return document_directory;
+}
+
 bool LoadHtmlFileForViewer(
     const fs::path& html_path,
     ResourceRootPolicy resource_root_policy,
@@ -134,7 +145,7 @@ bool LoadHtmlFileForViewer(
   *resource_base_path = absolute_html_path.parent_path().string();
   if (resource_root_policy == ResourceRootPolicy::kUseHtmlDirectory ||
       resource_root->empty()) {
-    *resource_root = *resource_base_path;
+    *resource_root = DefaultResourceRootForHtmlPath(absolute_html_path).string();
   }
   html_css_renderer::AddLocalLinkedStylesheetsForDocument(
       absolute_html_path, create_info->html, create_info,
@@ -336,6 +347,8 @@ void PrintUsage() {
                " [--profile] [--profile-summary-frames count]"
                " [--profile-auto-scroll-frames count]"
                " [--profile-auto-scroll-step px]"
+               " [--profile-wheel-burst-events count]"
+               " [--profile-wheel-burst-y units]"
                " [--profile-resize-to WxH]"
                " [--profile-resize-after-frame count]"
                " [--blink]"
@@ -370,6 +383,8 @@ bool ParseArgs(int argc,
                uint64_t* profile_summary_frames,
                uint64_t* profile_auto_scroll_frames,
                std::optional<float>* profile_auto_scroll_step,
+               uint64_t* profile_wheel_burst_events,
+               float* profile_wheel_burst_y,
                std::optional<html_css_renderer::Size>* profile_resize_to,
                uint64_t* profile_resize_after_frame,
                bool* use_blink,
@@ -395,7 +410,8 @@ bool ParseArgs(int argc,
       if (!value) {
         return false;
       }
-      if (!LoadHtmlFileForViewer(value, ResourceRootPolicy::kUseHtmlDirectory,
+      if (!LoadHtmlFileForViewer(value,
+                                 ResourceRootPolicy::kUseHtmlDirectoryIfUnset,
                                  create_info, resource_root,
                                  resource_base_path,
                                  stylesheet_loader_diagnostics)) {
@@ -554,6 +570,23 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_auto_scroll_step = parsed;
+    } else if (arg == "--profile-wheel-burst-events") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 0.0 ||
+          parsed > 10000.0) {
+        return false;
+      }
+      *profile_wheel_burst_events = static_cast<uint64_t>(parsed);
+      *profile_enabled = true;
+    } else if (arg == "--profile-wheel-burst-y") {
+      const char* value = next_value();
+      float parsed = 0.0f;
+      if (!value || !ParseFloat(value, &parsed) ||
+          std::abs(parsed) > 10000.0f) {
+        return false;
+      }
+      *profile_wheel_burst_y = parsed;
     } else if (arg == "--profile-resize-to") {
       const char* value = next_value();
       html_css_renderer::Size parsed;
@@ -1718,6 +1751,8 @@ int main(int argc, char** argv) {
   uint64_t profile_summary_frames = 0;
   uint64_t profile_auto_scroll_frames = 0;
   std::optional<float> profile_auto_scroll_step;
+  uint64_t profile_wheel_burst_events = 0;
+  float profile_wheel_burst_y = -1.0f;
   std::optional<html_css_renderer::Size> profile_resize_to;
   uint64_t profile_resize_after_frame = 1;
   bool incremental = true;
@@ -1734,6 +1769,8 @@ int main(int argc, char** argv) {
                              &profile_enabled, &profile_summary_frames,
                              &profile_auto_scroll_frames,
                              &profile_auto_scroll_step,
+                             &profile_wheel_burst_events,
+                             &profile_wheel_burst_y,
                              &profile_resize_to,
                              &profile_resize_after_frame,
                              &use_blink,
@@ -2146,6 +2183,22 @@ int main(int argc, char** argv) {
   bool first_present_complete = false;
   while (running) {
     bool texture_dirty = false;
+    if (first_present_complete && profile_wheel_burst_events > 0) {
+      for (uint64_t i = 0; i < profile_wheel_burst_events; ++i) {
+        SDL_Event wheel_event{};
+        wheel_event.type = SDL_EVENT_MOUSE_WHEEL;
+        wheel_event.wheel.x = 0.0f;
+        wheel_event.wheel.y = profile_wheel_burst_y;
+        wheel_event.wheel.mouse_x = frame_width * 0.5f;
+        wheel_event.wheel.mouse_y = frame_height * 0.5f;
+        SDL_PushEvent(&wheel_event);
+      }
+      profile_wheel_burst_events = 0;
+    }
+    bool pending_wheel = false;
+    html_css_renderer::Point pending_wheel_point{0.0f, 0.0f};
+    html_css_renderer::Point pending_wheel_delta{0.0f, 0.0f};
+    ProfileClock::time_point pending_wheel_start;
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT ||
@@ -2174,29 +2227,20 @@ int main(int argc, char** argv) {
           texture_dirty = true;
         }
       } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        const ProfileClock::time_point input_update_start =
-            profiler.enabled() ? ProfileClock::now()
-                               : ProfileClock::time_point{};
-        html_css_renderer::FrameInput next_input = input;
+        if (!pending_wheel) {
+          pending_wheel_start =
+              profiler.enabled() ? ProfileClock::now()
+                                 : ProfileClock::time_point{};
+          pending_wheel = true;
+        }
         const ScrollDelta wheel_delta{event.wheel.x * scroll_step,
                                       -event.wheel.y * scroll_step, false};
-        const html_css_renderer::Point document_point =
+        pending_wheel_point =
             WindowEventToDocumentPoint(renderer, frame_width, frame_height,
                                        event.wheel.mouse_x,
                                        event.wheel.mouse_y);
-        next_input.wheel = html_css_renderer::WheelInput{
-            document_point,
-            html_css_renderer::Point{wheel_delta.x, wheel_delta.y}};
-        const double input_update_ms =
-            profiler.enabled()
-                ? ElapsedProfileMs(input_update_start, ProfileClock::now())
-                : 0.0;
-        if (!render_updated_input("wheel-scroll", std::move(next_input),
-                                  input_update_ms, input_update_start)) {
-          running = false;
-          break;
-        }
-        texture_dirty = true;
+        pending_wheel_delta.x += wheel_delta.x;
+        pending_wheel_delta.y += wheel_delta.y;
       } else if (event.type == SDL_EVENT_KEY_DOWN &&
                  (event.key.key == ' ' || event.key.key == 't' ||
                   event.key.key == 'T')) {
@@ -2341,6 +2385,23 @@ int main(int argc, char** argv) {
           texture_dirty = true;
         }
       }
+    }
+    if (running && pending_wheel &&
+        (pending_wheel_delta.x != 0.0f || pending_wheel_delta.y != 0.0f)) {
+      html_css_renderer::FrameInput next_input = input;
+      next_input.wheel = html_css_renderer::WheelInput{
+          pending_wheel_point,
+          html_css_renderer::Point{pending_wheel_delta.x,
+                                   pending_wheel_delta.y}};
+      const double input_update_ms =
+          profiler.enabled()
+              ? ElapsedProfileMs(pending_wheel_start, ProfileClock::now())
+              : 0.0;
+      if (!render_updated_input("wheel-scroll", std::move(next_input),
+                                input_update_ms, pending_wheel_start)) {
+        running = false;
+      }
+      texture_dirty = true;
     }
     if (first_present_complete && profile_auto_scroll_remaining > 0) {
       const ProfileClock::time_point input_update_start = ProfileClock::now();
