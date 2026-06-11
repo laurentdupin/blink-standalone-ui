@@ -80,9 +80,14 @@ struct BenchmarkTimingDiagnostics {
   double oracle_advance_and_render_ms = 0.0;
   double oracle_cpu_raster_replay_ms = 0.0;
   double oracle_output_write_ms = 0.0;
+  int measured_frame_count = 0;
+  int measured_no_change_fast_path_count = 0;
+  int measured_paint_artifact_translation_count = 0;
+  int measured_lifecycle_count = 0;
   bool used_blink = false;
   bool used_skia_cpu = false;
   bool cold_process = true;
+  bool cpu_raster_replay_skipped = false;
 };
 
 using BenchmarkClock = std::chrono::steady_clock;
@@ -90,6 +95,21 @@ using BenchmarkClock = std::chrono::steady_clock;
 double ElapsedMs(BenchmarkClock::time_point start,
                  BenchmarkClock::time_point end) {
   return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+void AccumulateMeasuredFrameWork(
+    BenchmarkTimingDiagnostics& timing,
+    const html_css_renderer::RenderResult& result) {
+  ++timing.measured_frame_count;
+  if (result.frame_work.no_change_fast_path) {
+    ++timing.measured_no_change_fast_path_count;
+  }
+  timing.measured_paint_artifact_translation_count +=
+      result.frame_work.paint_artifact_translation_count;
+  timing.measured_lifecycle_count += result.frame_work.style_update_count +
+                                     result.frame_work.layout_count +
+                                     result.frame_work.prepaint_count +
+                                     result.frame_work.paint_count;
 }
 
 std::vector<uint8_t> ReadBinaryFile(const std::string& path) {
@@ -533,6 +553,8 @@ bool WriteJson(const std::string& path,
        << ",\n";
   file << "    \"cpu_raster_replay_ms\": " << timing.cpu_raster_replay_ms
        << ",\n";
+  file << "    \"cpu_raster_replay_skipped\": "
+       << (timing.cpu_raster_replay_skipped ? "true" : "false") << ",\n";
   file << "    \"output_image_write_ms\": " << timing.output_image_write_ms
        << ",\n";
   file << "    \"metrics_json_write_ms\": " << timing.metrics_json_write_ms
@@ -547,10 +569,22 @@ bool WriteJson(const std::string& path,
        << timing.oracle_cpu_raster_replay_ms << ",\n";
   file << "    \"oracle_output_write_ms\": " << timing.oracle_output_write_ms
        << ",\n";
+  file << "    \"measured_frame_count\": " << timing.measured_frame_count
+       << ",\n";
+  file << "    \"measured_no_change_fast_path_count\": "
+       << timing.measured_no_change_fast_path_count << ",\n";
+  file << "    \"measured_paint_artifact_translation_count\": "
+       << timing.measured_paint_artifact_translation_count << ",\n";
+  file << "    \"measured_lifecycle_count\": "
+       << timing.measured_lifecycle_count << ",\n";
   file << "    \"raw_chunk_count\": " << result.frame.scene_chunks.size()
        << ",\n";
   file << "    \"retained_command_count\": "
-       << result.frame.scene_commands.size() << "\n";
+       << result.frame.scene_commands.size() << ",\n";
+  file << "    \"frame_work\": "
+       << html_css_renderer::SerializeFrameWorkDiagnosticsJson(
+              result.frame_work)
+       << "\n";
   file << "  },\n";
   file << "  \"diagnostics\": [";
   for (size_t i = 0; i < result.diagnostics.size(); ++i) {
@@ -921,6 +955,7 @@ void PrintUsage() {
                "[--previous-scroll-element id:x,y] "
                "[--scroll-element id:x,y] "
                "[--time-ms ms] [--incremental] [--previous-time-ms ms] "
+               "[--repeat-no-change-frames count] "
                "--out <out.bmp> "
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
@@ -1036,6 +1071,7 @@ int main(int argc, char** argv) {
   bool strict_text_blob_typefaces = true;
   bool use_blink = true;
   bool incremental = false;
+  int repeat_no_change_frames = 1;
   BenchmarkTimingDiagnostics timing;
   std::vector<std::string> stylesheet_loader_diagnostics;
   std::vector<html_css_renderer::Stylesheet> previous_stylesheets_override;
@@ -1289,6 +1325,17 @@ int main(int argc, char** argv) {
       previous_input.timeline_time_seconds = std::max(0.0f, time_ms) / 1000.0;
     } else if (arg == "--incremental") {
       incremental = true;
+    } else if (arg == "--repeat-no-change-frames") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      repeat_no_change_frames =
+          std::max(1, static_cast<int>(std::strtol(value, nullptr, 10)));
+    } else if (arg.rfind("--repeat-no-change-frames=", 0) == 0) {
+      repeat_no_change_frames = std::max(
+          1, static_cast<int>(std::strtol(arg.c_str() + 26, nullptr, 10)));
     } else if (arg == "--out") {
       const char* value = next_value();
       if (!value) {
@@ -1477,7 +1524,7 @@ int main(int argc, char** argv) {
         blink_embedder->Initialize();
     timing.blink_initialize_ms =
         ElapsedMs(initialize_start, BenchmarkClock::now());
-    const auto render_start = BenchmarkClock::now();
+    BenchmarkClock::time_point render_start;
     if (incremental) {
       if (!previous_stylesheets_override.empty()) {
         previous_input.stylesheets_override = previous_stylesheets_override;
@@ -1526,18 +1573,18 @@ int main(int argc, char** argv) {
           same_pointers && same_wheel;
       previous_result = blink_embedder->AdvanceAndRender(previous_input);
       have_previous_result = true;
-      if (identical_incremental_requested) {
-        result = previous_result;
-        result.frame = html_css_renderer::RenderFrame{};
-        result.frame.requires_full_redraw = false;
-        result.damage_bounds = html_css_renderer::Rect{};
-        result.damage_rects.clear();
-        result.requires_full_redraw = false;
-      } else {
+      render_start = BenchmarkClock::now();
+      const int measured_incremental_frames =
+          identical_incremental_requested ? repeat_no_change_frames : 1;
+      for (int frame_index = 0; frame_index < measured_incremental_frames;
+           ++frame_index) {
         result = blink_embedder->AdvanceAndRenderIncremental(input);
+        AccumulateMeasuredFrameWork(timing, result);
       }
     } else {
+      render_start = BenchmarkClock::now();
       result = blink_embedder->AdvanceAndRender(input);
+      AccumulateMeasuredFrameWork(timing, result);
     }
     timing.advance_and_render_ms =
         ElapsedMs(render_start, BenchmarkClock::now());
@@ -1656,6 +1703,8 @@ int main(int argc, char** argv) {
   const auto raster_start = BenchmarkClock::now();
   html_css_renderer::CpuImage image;
   if (identical_incremental_requested && previous_image) {
+    timing.cpu_raster_replay_skipped = result.frame_work.no_change_fast_path &&
+                                       !result.frame_work.needs_raster;
     image = *previous_image;
   } else {
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)

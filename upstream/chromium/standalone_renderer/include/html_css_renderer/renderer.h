@@ -129,12 +129,33 @@ struct SkippedTransformDiagnostic {
   std::string source_chunk_key;
 };
 
+struct FrameWorkDiagnostics {
+  bool no_change_fast_path = false;
+  bool needs_document_commit = false;
+  bool needs_style = false;
+  bool needs_layout = false;
+  bool needs_prepaint = false;
+  bool needs_paint = false;
+  bool needs_composite_translation = false;
+  bool needs_raster = false;
+  bool needs_present = false;
+  bool needs_begin_frame = false;
+  int document_commit_count = 0;
+  int style_update_count = 0;
+  int layout_count = 0;
+  int prepaint_count = 0;
+  int paint_count = 0;
+  int paint_artifact_translation_count = 0;
+  int retained_scene_plan_count = 0;
+};
+
 struct RenderResult {
   RenderFrame frame;
   Rect damage_bounds;
   std::vector<Rect> damage_rects;
   bool requires_full_redraw = true;
   bool needs_begin_frame = false;
+  FrameWorkDiagnostics frame_work;
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<ScrollableElementEntry> scrollable_element_entries;

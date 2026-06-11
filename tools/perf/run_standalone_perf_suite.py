@@ -288,6 +288,14 @@ def raw_probe_timing(metrics: dict[str, Any]) -> dict[str, Any]:
     return timing if isinstance(timing, dict) else {}
 
 
+def frame_work(metrics: dict[str, Any]) -> dict[str, Any]:
+    timing_work = nested(metrics, "render_timing_diagnostics", "frame_work", default={})
+    if isinstance(timing_work, dict):
+        return timing_work
+    result_work = nested(metrics, "render_result", "frame_work", default={})
+    return result_work if isinstance(result_work, dict) else {}
+
+
 def presented_frame_ms(metrics: dict[str, Any]) -> float | None:
     timing = timing_from_metrics(metrics)
     advance = as_float(timing.get("advance_and_render_ms"))
@@ -471,6 +479,7 @@ def run_benchmark_case(
         "metrics": metrics,
         "timing": timing_from_metrics(metrics),
         "probe_timing": raw_probe_timing(metrics),
+        "frame_work": frame_work(metrics),
         "presented_frame_ms": presented_frame_ms(metrics),
         "process_startup_overhead_ms": process_startup_overhead_ms(result.wall_ms, metrics),
         "real_blink_paint": has_real_blink_paint(metrics),
@@ -659,6 +668,33 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                     timeout_count += 1
                 if value.get("failure_classification") == "flaky_timeout_recovered":
                     recovered_timeout_count += 1
+    warm_no_change_rows = [
+        row.get("warm_no_change")
+        for row in rows
+        if isinstance(row.get("warm_no_change"), dict)
+        and row.get("warm_no_change", {}).get("exit_code") == 0
+    ]
+    warm_no_change_fast_path_count = sum(
+        1
+        for mode in warm_no_change_rows
+        if nested(mode, "frame_work", "no_change_fast_path", default=False)
+    )
+    warm_no_change_translation_count = sum(
+        int(nested(mode, "frame_work", "paint_artifact_translation_count", default=0) or 0)
+        for mode in warm_no_change_rows
+    )
+    warm_no_change_lifecycle_count = sum(
+        int(nested(mode, "frame_work", "style_update_count", default=0) or 0)
+        + int(nested(mode, "frame_work", "layout_count", default=0) or 0)
+        + int(nested(mode, "frame_work", "prepaint_count", default=0) or 0)
+        + int(nested(mode, "frame_work", "paint_count", default=0) or 0)
+        for mode in warm_no_change_rows
+    )
+    warm_no_change_raster_skipped_count = sum(
+        1
+        for mode in warm_no_change_rows
+        if nested(mode, "timing", "cpu_raster_replay_skipped", default=False)
+    )
     return {
         "page_count": len(rows),
         "cold_success_count": len(cold_rows),
@@ -667,6 +703,11 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "recovered_timeout_count": recovered_timeout_count,
         "real_blink_paint_count": sum(1 for row in cold_rows if row.get("cold", {}).get("real_blink_paint")),
         "correctness_failure_count": len(correctness_failures),
+        "warm_no_change_count": len(warm_no_change_rows),
+        "warm_no_change_fast_path_count": warm_no_change_fast_path_count,
+        "warm_no_change_paint_translation_count": warm_no_change_translation_count,
+        "warm_no_change_lifecycle_count": warm_no_change_lifecycle_count,
+        "warm_no_change_raster_skipped_count": warm_no_change_raster_skipped_count,
         "stats": {key: stats(value) for key, value in values_by_key.items()},
         "slowest_20": [
             {
@@ -708,6 +749,11 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "paint_artifact_extraction_ms",
         "retained_command_count",
         "raw_chunk_count",
+        "warm_no_change_presented_frame_ms",
+        "warm_no_change_fast_path",
+        "warm_no_change_translation_count",
+        "warm_no_change_lifecycle_count",
+        "warm_no_change_raster_skipped",
         "document_max_scroll_y",
         "correctness_exit",
         "correctness_classification",
@@ -718,6 +764,13 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writeheader()
         for row in rows:
             cold = row.get("cold", {})
+            warm_no_change = row.get("warm_no_change", {})
+            warm_no_change_lifecycle_count = (
+                int(nested(warm_no_change, "frame_work", "style_update_count", default=0) or 0)
+                + int(nested(warm_no_change, "frame_work", "layout_count", default=0) or 0)
+                + int(nested(warm_no_change, "frame_work", "prepaint_count", default=0) or 0)
+                + int(nested(warm_no_change, "frame_work", "paint_count", default=0) or 0)
+            )
             writer.writerow(
                 {
                     "name": row.get("name"),
@@ -733,6 +786,19 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "paint_artifact_extraction_ms": nested(cold, "probe_timing", "paint_artifact_extraction_ms"),
                     "retained_command_count": cold.get("retained_command_count"),
                     "raw_chunk_count": cold.get("raw_chunk_count"),
+                    "warm_no_change_presented_frame_ms": warm_no_change.get("presented_frame_ms"),
+                    "warm_no_change_fast_path": nested(
+                        warm_no_change, "frame_work", "no_change_fast_path"
+                    ),
+                    "warm_no_change_translation_count": nested(
+                        warm_no_change,
+                        "frame_work",
+                        "paint_artifact_translation_count",
+                    ),
+                    "warm_no_change_lifecycle_count": warm_no_change_lifecycle_count,
+                    "warm_no_change_raster_skipped": nested(
+                        warm_no_change, "timing", "cpu_raster_replay_skipped"
+                    ),
                     "document_max_scroll_y": row.get("document_max_scroll_y"),
                     "correctness_exit": row.get("correctness", {}).get("exit_code"),
                     "correctness_classification": row.get("correctness", {}).get("diff_classification"),
@@ -809,7 +875,13 @@ def select_html_files(
     return selected, selection
 
 
-def merge_reports(inputs: list[Path], out_dir: Path, *, no_docs: bool) -> int:
+def merge_reports(
+    inputs: list[Path],
+    out_dir: Path,
+    *,
+    no_docs: bool,
+    build_config_name: str | None,
+) -> int:
     merged_pages: dict[str, dict[str, Any]] = {}
     reports: list[dict[str, Any]] = []
     for path in inputs:
@@ -828,12 +900,15 @@ def merge_reports(inputs: list[Path], out_dir: Path, *, no_docs: bool) -> int:
         for key in sorted(merged_pages.keys(), key=lambda value: value.lower())
     ]
     generated = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    build_config = dict(first.get("build_config", {}))
+    if build_config_name:
+        build_config["name"] = build_config_name
     report = {
         "schema_version": 1,
         "generated_at": generated,
         "repo": first.get("repo", rel(ROOT)),
         "benchmark": first.get("benchmark", ""),
-        "build_config": first.get("build_config", {}),
+        "build_config": build_config,
         "paint_audit_root": first.get("paint_audit_root", ""),
         "viewport": first.get("viewport", ""),
         "device_scale_factor": first.get("device_scale_factor", 1),
@@ -964,7 +1039,7 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
         "",
         "The suite passes `--min-non-white 0` because the fixture corpus includes intentional all-white, transparent, missing-resource, and unsupported-resource pages. Visual correctness is gated by retained-vs-Skia-oracle comparison instead of a non-white smoke threshold.",
         "",
-        "Important caveat: current warm incremental benchmark timings include previous-frame setup in the same process, so warm no-change/scroll/toggle rows are recorded for result correctness and rough cost only. A future benchmark harness should isolate per-frame warm timings in one live renderer session.",
+        "Warm incremental rows create the previous frame in the same benchmark process, then time only the measured incremental AdvanceAndRender call. The timing diagnostics include frame-work counters so no-change rows can prove lifecycle, PaintArtifact translation, and raster work were skipped.",
         "",
         "## Build Configuration",
         "",
@@ -1201,7 +1276,12 @@ def main() -> int:
         return 2
 
     if args.merge_json:
-        return merge_reports(args.merge_json, args.out_dir.resolve(), no_docs=args.no_docs)
+        return merge_reports(
+            args.merge_json,
+            args.out_dir.resolve(),
+            no_docs=args.no_docs,
+            build_config_name=args.build_config_name,
+        )
 
     html_root = args.root.resolve()
     benchmark = args.benchmark.resolve()
@@ -1274,7 +1354,7 @@ def main() -> int:
         "measurement_caveats": [
             "Benchmark process startup is measured as subprocess wall time minus in-process process_elapsed_ms when available.",
             "The suite passes --min-non-white 0 because paint_audit includes intentional all-white/transparent/broken-resource fixtures; retained-vs-oracle comparison is the correctness gate.",
-            "Current warm incremental timings include previous-frame setup in the same benchmark invocation; warm results are still recorded to expose damage/no-change behavior.",
+            "Warm incremental invocations create the previous frame in the same benchmark child, but reported warm timings start after that setup and cover only the measured incremental AdvanceAndRender frame.",
             "Benchmark presentation is BMP output, not SDL/GPU upload/present.",
         ],
         "summary": summary,

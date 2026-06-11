@@ -43,7 +43,7 @@ When paint artifact audit JSON is enabled, the raw Blink probe contributes stage
 Current gaps:
 
 - SDL presentation/upload is not measured by the benchmark executable. Benchmark output writes BMP files, while SDL viewer upload uses CPU raster plus `SDL_UpdateTexture`.
-- Warm incremental measurements in the perf suite still pay previous-frame setup inside one benchmark process. They are useful for baseline comparison and correctness smoke, but not yet isolated live-session frame timings.
+- Warm incremental measurements create the previous frame inside the same benchmark process, then time only the measured incremental `AdvanceAndRender` call. Warm rows also report frame-work counters that show whether lifecycle, PaintArtifact translation, raster, and presentation work ran.
 - Process startup is estimated by subprocess wall time minus benchmark `process_elapsed_ms`; this includes Python orchestration overhead and is not as precise as an in-process launcher probe.
 
 ## Intended Direction

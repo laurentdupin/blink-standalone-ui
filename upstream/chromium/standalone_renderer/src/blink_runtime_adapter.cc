@@ -2430,6 +2430,34 @@ bool SameNonDocumentScrollOffsets(
   return true;
 }
 
+bool SameRendererSnapshotForNoChangeFrame(const RendererSnapshot& left,
+                                          const RendererSnapshot& right) {
+  return left.html == right.html &&
+         SameStylesheets(left.stylesheets, right.stylesheets) &&
+         SameSize(left.viewport, right.viewport) &&
+         std::abs(left.device_scale_factor - right.device_scale_factor) <=
+             0.001f &&
+         left.asset_namespace == right.asset_namespace &&
+         SameFeatures(left.features, right.features) &&
+         std::abs(left.timeline_time_seconds - right.timeline_time_seconds) <=
+             0.000001 &&
+         SameStringMap(left.element_attributes_by_id_and_name,
+                       right.element_attributes_by_id_and_name) &&
+         SamePoint(SnapshotDocumentScrollOffset(left),
+                   SnapshotDocumentScrollOffset(right)) &&
+         SameNonDocumentScrollOffsets(left.scroll_offsets_by_element_id,
+                                      right.scroll_offsets_by_element_id) &&
+         left.focused_element_id == right.focused_element_id &&
+         left.hovered_element_id == right.hovered_element_id &&
+         left.active_element_id == right.active_element_id &&
+         SameStringMap(left.form_values_by_element_id,
+                       right.form_values_by_element_id);
+}
+
+bool FrameHasRasterDamage(const RenderFrame& frame) {
+  return frame.requires_full_redraw || !frame.damage_rects.empty();
+}
+
 void TranslateHitTestEntries(std::vector<HitTestEntry>& entries, Point delta) {
   if (SamePoint(delta, Point{})) {
     return;
@@ -2883,8 +2911,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ApplyInput(input);
     RenderResult result;
     result.successor_snapshot = snapshot_;
+    MarkFullLifecycleWorkScheduled(result, previous_snapshot);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, input, false,
                                          snapshot_.html, snapshot_.stylesheets);
+    FinalizeFrameWorkNeeds(result);
     return result;
   }
 
@@ -2893,12 +2923,19 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ApplyInput(input);
     RenderResult result;
     result.successor_snapshot = snapshot_;
-    if (TryRenderDocumentScrollOnlyFromRetainedScene(result, previous_snapshot,
-                                                    input)) {
+    if (TryRenderNoChangeFromRetainedFrame(result, previous_snapshot, input)) {
+      FinalizeFrameWorkNeeds(result);
       return result;
     }
+    if (TryRenderDocumentScrollOnlyFromRetainedScene(result, previous_snapshot,
+                                                    input)) {
+      FinalizeFrameWorkNeeds(result);
+      return result;
+    }
+    MarkFullLifecycleWorkScheduled(result, previous_snapshot);
     TryReplaceWithLivePaintArtifactScene(result, previous_snapshot, input, true,
                                          snapshot_.html, snapshot_.stylesheets);
+    FinalizeFrameWorkNeeds(result);
     return result;
   }
 
@@ -2926,6 +2963,32 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     snapshot_.hovered_element_id = input.hovered_element_id;
     snapshot_.active_element_id = input.active_element_id;
     snapshot_.form_values_by_element_id = input.form_values_by_element_id;
+  }
+
+  void MarkFullLifecycleWorkScheduled(
+      RenderResult& result,
+      const RendererSnapshot& previous_snapshot) const {
+    FrameWorkDiagnostics& work = result.frame_work;
+    const bool document_changed =
+        !previous_retained_scene_ || snapshot_.html != previous_snapshot.html ||
+        !SameStylesheets(snapshot_.stylesheets, previous_snapshot.stylesheets);
+    work.needs_document_commit = document_changed;
+    work.needs_style = true;
+    work.needs_layout = true;
+    work.needs_prepaint = true;
+    work.needs_paint = true;
+    work.needs_composite_translation = true;
+    work.document_commit_count = document_changed ? 1 : 0;
+    work.style_update_count = 1;
+    work.layout_count = 1;
+    work.prepaint_count = 1;
+    work.paint_count = 1;
+  }
+
+  void FinalizeFrameWorkNeeds(RenderResult& result) const {
+    result.frame_work.needs_begin_frame = result.needs_begin_frame;
+    result.frame_work.needs_raster = FrameHasRasterDamage(result.frame);
+    result.frame_work.needs_present = result.frame_work.needs_raster;
   }
 
   static void AppendLivePaintDiagnostics(
@@ -3110,6 +3173,76 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     return true;
   }
 
+  bool CanUseNoChangeFastPath(const RendererSnapshot& previous_snapshot,
+                              const FrameInput& input,
+                              std::vector<std::string>* diagnostics) const {
+    const auto push_diagnostic = [&](const std::string& diagnostic) {
+      if (diagnostics) {
+        diagnostics->push_back(diagnostic);
+      }
+    };
+    if (!previous_retained_scene_) {
+      push_diagnostic("no-change fast path ineligible: no retained scene");
+      return false;
+    }
+    if (input.wheel || !input.pointers.empty() ||
+        !input.keyboard.pressed_key_codes.empty()) {
+      push_diagnostic("no-change fast path ineligible: input event pending");
+      return false;
+    }
+    if (previous_needs_begin_frame_) {
+      push_diagnostic(
+          "no-change fast path ineligible: previous Blink frame requested "
+          "begin frame");
+      return false;
+    }
+    if (!SameRendererSnapshotForNoChangeFrame(snapshot_, previous_snapshot)) {
+      push_diagnostic("no-change fast path ineligible: snapshot changed");
+      return false;
+    }
+    push_diagnostic(
+        "no-change fast path eligible: retained scene and Blink begin-frame "
+        "state are unchanged");
+    return true;
+  }
+
+  bool TryRenderNoChangeFromRetainedFrame(
+      RenderResult& result,
+      const RendererSnapshot& previous_snapshot,
+      const FrameInput& input) {
+    if (!CanUseNoChangeFastPath(previous_snapshot, input,
+                                &result.diagnostics)) {
+      return false;
+    }
+    result.successor_snapshot = snapshot_;
+    result.frame = RenderFrame{};
+    result.frame.requires_full_redraw = false;
+    result.damage_bounds = Rect{};
+    result.damage_rects.clear();
+    result.requires_full_redraw = false;
+    result.needs_begin_frame = false;
+    result.hit_test_entries = previous_hit_test_entries_;
+    result.scrollable_element_entries = previous_scrollable_element_entries_;
+    if (previous_document_max_scroll_offset_) {
+      result.document_max_scroll_offset = *previous_document_max_scroll_offset_;
+    }
+    if (enable_paint_artifact_audit_) {
+      result.raw_paint_artifact_audit_json = previous_raw_paint_artifact_audit_json_;
+    }
+    result.frame_work.no_change_fast_path = true;
+    result.diagnostics.push_back(
+        "standalone frame scheduler returned no-change frame without Blink "
+        "lifecycle, PaintArtifact translation, raster, or presentation damage");
+    result.diagnostics.push_back(
+        "paint artifact source: real Blink PaintArtifact; "
+        "extractor=real_blink_paint_artifact_extractor; "
+        "reuse=no_change_retained_frame");
+    result.diagnostics.push_back(
+        "real Blink PaintArtifact retained state preserved from previous "
+        "frame");
+    return true;
+  }
+
   bool TryRenderDocumentScrollOnlyFromRetainedScene(
       RenderResult& result,
       const RendererSnapshot& previous_snapshot,
@@ -3147,6 +3280,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                            LoadCommandList{}, &*previous_retained_scene_,
                            previous_snapshot, current_scroll_offset,
                            previous_scroll_offset);
+    result.frame_work.retained_scene_plan_count = 1;
     AddScrollClipEdgeDamage(result, *previous_retained_scene_,
                             current_scroll_offset, previous_scroll_offset);
     result.frame.resource_commands = previous_resource_commands_;
@@ -4320,6 +4454,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "real Blink PaintArtifact bridge produced no translated draw commands");
       return;
     }
+    result.frame_work.paint_artifact_translation_count = 1;
     if (!commands.empty() || current_scene.chunks.empty()) {
       current_scene.chunks.push_back(MakeRetainedPaintChunk(
           "live-blink-paint-artifact", RetainedChunkKind::kDocument,
@@ -4357,6 +4492,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         previous_snapshot, current_document_scroll, previous_document_scroll,
         force_full_redraw_for_active_animation_change ||
             force_full_redraw_for_pointer_state_change);
+    result.frame_work.retained_scene_plan_count = 1;
     RememberPrimaryPointerStateForStandaloneRenderer(input);
     previous_retained_scene_ = std::move(current_scene);
     result.diagnostics.push_back(
@@ -4386,6 +4522,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     previous_resource_commands_ = result.frame.resource_commands;
     previous_hit_test_entries_ = result.hit_test_entries;
     previous_scrollable_element_entries_ = result.scrollable_element_entries;
+    previous_raw_paint_artifact_audit_json_ = result.raw_paint_artifact_audit_json;
   }
 
   bool PrimaryPointerStateChangedForStandaloneRenderer(
@@ -4427,6 +4564,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   std::vector<ResourceCommand> previous_resource_commands_;
   std::vector<HitTestEntry> previous_hit_test_entries_;
   std::vector<ScrollableElementEntry> previous_scrollable_element_entries_;
+  std::string previous_raw_paint_artifact_audit_json_;
 };
 
 }  // namespace

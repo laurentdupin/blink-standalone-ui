@@ -15,6 +15,8 @@ std::string SerializeLoadCommandListJsonLines(
     const LoadCommandList& commands);
 std::string SerializeDrawCommandListJsonLines(
     const DrawCommandList& commands);
+std::string SerializeFrameWorkDiagnosticsJson(
+    const FrameWorkDiagnostics& diagnostics);
 std::string SerializeRenderResultJson(const RenderResult& result);
 std::string SerializePaintArtifactAuditJson(const RenderResult& result);
 

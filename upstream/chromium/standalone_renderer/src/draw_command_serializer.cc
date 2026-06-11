@@ -1320,6 +1320,41 @@ std::string SerializeDrawCommandListJsonLines(
   return out.str();
 }
 
+std::string SerializeFrameWorkDiagnosticsJson(
+    const FrameWorkDiagnostics& diagnostics) {
+  std::ostringstream out;
+  out << "{\"no_change_fast_path\":"
+      << (diagnostics.no_change_fast_path ? "true" : "false")
+      << ",\"needs_document_commit\":"
+      << (diagnostics.needs_document_commit ? "true" : "false")
+      << ",\"needs_style\":" << (diagnostics.needs_style ? "true" : "false")
+      << ",\"needs_layout\":"
+      << (diagnostics.needs_layout ? "true" : "false")
+      << ",\"needs_prepaint\":"
+      << (diagnostics.needs_prepaint ? "true" : "false")
+      << ",\"needs_paint\":"
+      << (diagnostics.needs_paint ? "true" : "false")
+      << ",\"needs_composite_translation\":"
+      << (diagnostics.needs_composite_translation ? "true" : "false")
+      << ",\"needs_raster\":"
+      << (diagnostics.needs_raster ? "true" : "false")
+      << ",\"needs_present\":"
+      << (diagnostics.needs_present ? "true" : "false")
+      << ",\"needs_begin_frame\":"
+      << (diagnostics.needs_begin_frame ? "true" : "false")
+      << ",\"document_commit_count\":"
+      << diagnostics.document_commit_count
+      << ",\"style_update_count\":" << diagnostics.style_update_count
+      << ",\"layout_count\":" << diagnostics.layout_count
+      << ",\"prepaint_count\":" << diagnostics.prepaint_count
+      << ",\"paint_count\":" << diagnostics.paint_count
+      << ",\"paint_artifact_translation_count\":"
+      << diagnostics.paint_artifact_translation_count
+      << ",\"retained_scene_plan_count\":"
+      << diagnostics.retained_scene_plan_count << "}";
+  return out.str();
+}
+
 std::string SerializeRenderResultJson(const RenderResult& result) {
   std::ostringstream out;
   out << std::setprecision(9);
@@ -1328,6 +1363,8 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
       << (result.frame.requires_full_redraw ? "true" : "false")
       << ",\"needs_begin_frame\":"
       << (result.needs_begin_frame ? "true" : "false")
+      << ",\"frame_work\":"
+      << SerializeFrameWorkDiagnosticsJson(result.frame_work)
       << ",\"damage_bounds\":";
   WriteRect(out, result.frame.damage_bounds);
   out << ",\"damage_rects\":[";
