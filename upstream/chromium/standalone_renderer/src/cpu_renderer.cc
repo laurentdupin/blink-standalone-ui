@@ -104,6 +104,23 @@ bool IsEmpty(PixelRect rect) {
   return rect.right <= rect.left || rect.bottom <= rect.top;
 }
 
+uint64_t PixelArea(PixelRect rect) {
+  if (IsEmpty(rect)) {
+    return 0;
+  }
+  return static_cast<uint64_t>(rect.right - rect.left) *
+         static_cast<uint64_t>(rect.bottom - rect.top);
+}
+
+uint64_t DamagePixelArea(const std::vector<Rect>& damage_rects,
+                         const CpuImage& image) {
+  uint64_t pixels = 0;
+  for (const Rect& damage_rect : damage_rects) {
+    pixels += PixelArea(ClipRectToImage(damage_rect, image));
+  }
+  return pixels;
+}
+
 void BlitTranslated(const CpuImage& source, CpuImage& destination, Point delta) {
   const int dx = static_cast<int>(std::lround(delta.x));
   const int dy = static_cast<int>(std::lround(delta.y));
@@ -361,7 +378,12 @@ CpuGlyphAtlas BuildGlyphAtlas(const std::vector<ResourceCommand>& commands) {
 CpuImage RasterizeDrawCommands(const DrawCommandList& commands,
                                Size viewport,
                                CpuRenderOptions options) {
-  return RasterizeDrawCommandsWithAtlas(commands, viewport, {}, options);
+  CpuImage image = RasterizeDrawCommandsWithAtlas(commands, viewport, {},
+                                                  options);
+  image.raster_pixels_touched =
+      static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
+  image.damage_pixels = image.raster_pixels_touched;
+  return image;
 }
 
 CpuImage RasterizeRenderResult(const RenderResult& result,
@@ -369,9 +391,12 @@ CpuImage RasterizeRenderResult(const RenderResult& result,
   const CpuGlyphAtlas atlas = BuildGlyphAtlas(result.frame.resource_commands);
   const DrawCommandList draw_commands =
       FlattenSceneDrawCommands(result.frame.scene_commands);
-  return RasterizeDrawCommandsWithAtlas(draw_commands,
-                                        result.successor_snapshot.viewport,
-                                        atlas, options);
+  CpuImage image = RasterizeDrawCommandsWithAtlas(
+      draw_commands, result.successor_snapshot.viewport, atlas, options);
+  image.raster_pixels_touched =
+      static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
+  image.damage_pixels = image.raster_pixels_touched;
+  return image;
 }
 
 CpuImage RasterizeRenderResultIncremental(const RenderResult& result,
@@ -398,8 +423,13 @@ CpuImage RasterizeRenderResultIncremental(const RenderResult& result,
   const DrawCommandList draw_commands =
       FlattenSceneDrawCommands(result.frame.scene_commands);
   if (result.frame.damage_rects.empty()) {
+    image.raster_pixels_touched = 0;
+    image.damage_pixels = 0;
+    image.raster_skipped = true;
+    image.partial_raster = false;
     return image;
   }
+  image.damage_pixels = DamagePixelArea(result.frame.damage_rects, image);
   for (const Rect& damage_rect : result.frame.damage_rects) {
     const PixelRect clip = ClipRectToImage(damage_rect, image);
     if (IsEmpty(clip)) {
@@ -408,6 +438,10 @@ CpuImage RasterizeRenderResultIncremental(const RenderResult& result,
     ClearPixelRect(image, clip, options.clear_color);
     RasterizeDrawCommandsWithAtlasInto(image, draw_commands, atlas, clip);
   }
+  image.raster_pixels_touched = image.damage_pixels;
+  image.partial_raster =
+      image.damage_pixels <
+      static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
   return image;
 }
 

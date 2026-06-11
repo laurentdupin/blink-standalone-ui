@@ -75,6 +75,9 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
     const RenderResult& result,
     const CpuImage* previous,
     CpuRenderOptions options = {});
+CpuImage RasterizeRenderResultDamageWithSkiaCpu(
+    const RenderResult& result,
+    CpuRenderOptions options = {});
 
 }  // namespace html_css_renderer
 

@@ -84,6 +84,9 @@ struct BenchmarkTimingDiagnostics {
   int measured_no_change_fast_path_count = 0;
   int measured_paint_artifact_translation_count = 0;
   int measured_lifecycle_count = 0;
+  uint64_t raster_pixels_touched = 0;
+  uint64_t damage_pixels = 0;
+  bool partial_raster = false;
   bool used_blink = false;
   bool used_skia_cpu = false;
   bool cold_process = true;
@@ -555,6 +558,11 @@ bool WriteJson(const std::string& path,
        << ",\n";
   file << "    \"cpu_raster_replay_skipped\": "
        << (timing.cpu_raster_replay_skipped ? "true" : "false") << ",\n";
+  file << "    \"raster_pixels_touched\": "
+       << timing.raster_pixels_touched << ",\n";
+  file << "    \"damage_pixels\": " << timing.damage_pixels << ",\n";
+  file << "    \"partial_raster\": "
+       << (timing.partial_raster ? "true" : "false") << ",\n";
   file << "    \"output_image_write_ms\": " << timing.output_image_write_ms
        << ",\n";
   file << "    \"metrics_json_write_ms\": " << timing.metrics_json_write_ms
@@ -1725,6 +1733,16 @@ int main(int argc, char** argv) {
   }
   timing.cpu_raster_replay_ms =
       ElapsedMs(raster_start, BenchmarkClock::now());
+  timing.raster_pixels_touched =
+      timing.cpu_raster_replay_skipped || image.raster_skipped
+          ? 0
+          : image.raster_pixels_touched;
+  timing.damage_pixels =
+      timing.cpu_raster_replay_skipped || image.raster_skipped
+          ? 0
+          : image.damage_pixels;
+  timing.partial_raster =
+      !timing.cpu_raster_replay_skipped && image.partial_raster;
 
   const Metrics metrics = ComputeMetrics(image);
   const auto output_write_start = BenchmarkClock::now();

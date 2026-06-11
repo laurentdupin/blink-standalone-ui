@@ -994,6 +994,12 @@ struct SdlProfileFrame {
   int lifecycle_count = 0;
   int paint_artifact_translation_count = 0;
   int retained_scene_plan_count = 0;
+  uint64_t damage_pixels = 0;
+  uint64_t raster_pixels_touched = 0;
+  uint64_t uploaded_pixels = 0;
+  uint64_t texture_copy_pixels = 0;
+  bool raster_skipped = false;
+  bool partial_redraw = false;
   double input_update_ms = 0.0;
   double blink_initialize_ms = 0.0;
   double blink_export_retained_ms = 0.0;
@@ -1208,6 +1214,8 @@ class SdlFrameProfiler {
         "viewer profile: frame=%llu event=%s incremental=%d "
         "full_redraw=%d scroll_reuse=%d no_change=%d damage_rects=%zu "
         "lifecycle_count=%d translation_count=%d retained_plan_count=%d "
+        "damage_pixels=%llu raster_pixels=%llu uploaded_pixels=%llu "
+        "texture_copy_pixels=%llu raster_skipped=%d partial_redraw=%d "
         "input=%.3fms blink_init=%.3fms blink_export_retained=%.3fms "
         "probe_html=%.3fms probe_style=%.3fms probe_layout=%.3fms "
         "probe_prepaint_paint=%.3fms probe_artifact=%.3fms "
@@ -1219,7 +1227,13 @@ class SdlFrameProfiler {
         frame.scroll_reuse ? 1 : 0, frame.no_change_fast_path ? 1 : 0,
         frame.damage_rect_count, frame.lifecycle_count,
         frame.paint_artifact_translation_count,
-        frame.retained_scene_plan_count, frame.input_update_ms,
+        frame.retained_scene_plan_count,
+        static_cast<unsigned long long>(frame.damage_pixels),
+        static_cast<unsigned long long>(frame.raster_pixels_touched),
+        static_cast<unsigned long long>(frame.uploaded_pixels),
+        static_cast<unsigned long long>(frame.texture_copy_pixels),
+        frame.raster_skipped ? 1 : 0, frame.partial_redraw ? 1 : 0,
+        frame.input_update_ms,
         frame.blink_initialize_ms, frame.blink_export_retained_ms,
         frame.probe_html_document_setup_ms, frame.probe_style_update_ms,
         frame.probe_layout_lifecycle_ms,
@@ -1339,6 +1353,61 @@ bool RecreateFrameTexture(SDL_Renderer* renderer,
   return true;
 }
 
+void DestroyTexture(SDL_Texture** texture) {
+  if (texture && *texture) {
+    SDL_DestroyTexture(*texture);
+    *texture = nullptr;
+  }
+}
+
+bool CreateTexture(SDL_Renderer* renderer,
+                   SDL_PixelFormat pixel_format,
+                   SDL_TextureAccess texture_access,
+                   int width,
+                   int height,
+                   SDL_Texture** texture) {
+  SDL_Texture* next_texture =
+      SDL_CreateTexture(renderer, pixel_format, texture_access,
+                        std::max(1, width), std::max(1, height));
+  if (!next_texture) {
+    std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
+    return false;
+  }
+  SDL_SetTextureBlendMode(next_texture, SDL_BLENDMODE_NONE);
+  *texture = next_texture;
+  return true;
+}
+
+bool RecreateCpuFrameTextures(SDL_Renderer* renderer,
+                              SDL_PixelFormat pixel_format,
+                              int width,
+                              int height,
+                              SDL_Texture** frame_texture,
+                              SDL_Texture** spare_frame_texture,
+                              SDL_Texture** upload_texture) {
+  SDL_Texture* next_frame = nullptr;
+  SDL_Texture* next_spare = nullptr;
+  SDL_Texture* next_upload = nullptr;
+  if (!CreateTexture(renderer, pixel_format, SDL_TEXTUREACCESS_TARGET, width,
+                     height, &next_frame) ||
+      !CreateTexture(renderer, pixel_format, SDL_TEXTUREACCESS_TARGET, width,
+                     height, &next_spare) ||
+      !CreateTexture(renderer, pixel_format, SDL_TEXTUREACCESS_STREAMING,
+                     width, height, &next_upload)) {
+    DestroyTexture(&next_frame);
+    DestroyTexture(&next_spare);
+    DestroyTexture(&next_upload);
+    return false;
+  }
+  DestroyTexture(frame_texture);
+  DestroyTexture(spare_frame_texture);
+  DestroyTexture(upload_texture);
+  *frame_texture = next_frame;
+  *spare_frame_texture = next_spare;
+  *upload_texture = next_upload;
+  return true;
+}
+
 void PrintViewerStatus(
     const char* reason,
     uint64_t frame_count,
@@ -1450,12 +1519,33 @@ std::optional<SDL_Rect> DamageRectToTextureRect(
   return SDL_Rect{left, top, right - left, bottom - top};
 }
 
+uint64_t TextureRectPixels(const SDL_Rect& rect) {
+  if (rect.w <= 0 || rect.h <= 0) {
+    return 0;
+  }
+  return static_cast<uint64_t>(rect.w) * static_cast<uint64_t>(rect.h);
+}
+
+uint64_t TextureRectPixels(const std::vector<SDL_Rect>& rects) {
+  uint64_t pixels = 0;
+  for (const SDL_Rect& rect : rects) {
+    pixels += TextureRectPixels(rect);
+  }
+  return pixels;
+}
+
+bool CoversWholeTexture(const std::vector<SDL_Rect>& rects,
+                        int width,
+                        int height) {
+  return rects.size() == 1 && rects.front().x == 0 && rects.front().y == 0 &&
+         rects.front().w >= width && rects.front().h >= height;
+}
+
 std::vector<SDL_Rect> TextureUpdateRectsForFrame(
     const html_css_renderer::RenderResult& result,
     const html_css_renderer::CpuImage& image,
     bool incremental_update) {
-  if (!incremental_update || ViewerRequiresFullRedraw(result) ||
-      ViewerUsesScrollTranslationReuse(result)) {
+  if (!incremental_update || ViewerRequiresFullRedraw(result)) {
     return {SDL_Rect{0, 0, image.width, image.height}};
   }
   std::vector<SDL_Rect> rects;
@@ -1467,6 +1557,69 @@ std::vector<SDL_Rect> TextureUpdateRectsForFrame(
     }
   }
   return rects;
+}
+
+bool CopyTextureRects(SDL_Renderer* renderer,
+                      SDL_Texture* source,
+                      SDL_Texture* target,
+                      const std::vector<SDL_Rect>& rects) {
+  if (rects.empty()) {
+    return true;
+  }
+  if (!SDL_SetRenderTarget(renderer, target)) {
+    std::fprintf(stderr, "SDL_SetRenderTarget failed: %s\n", SDL_GetError());
+    return false;
+  }
+  SDL_SetTextureBlendMode(source, SDL_BLENDMODE_NONE);
+  for (const SDL_Rect& rect : rects) {
+    SDL_FRect src{static_cast<float>(rect.x), static_cast<float>(rect.y),
+                  static_cast<float>(rect.w), static_cast<float>(rect.h)};
+    SDL_FRect dst = src;
+    SDL_RenderTexture(renderer, source, &src, &dst);
+  }
+  SDL_SetRenderTarget(renderer, nullptr);
+  return true;
+}
+
+bool CopyTextureTranslated(SDL_Renderer* renderer,
+                           SDL_Texture* source,
+                           SDL_Texture* target,
+                           int width,
+                           int height,
+                           html_css_renderer::Point delta,
+                           uint64_t* copied_pixels) {
+  if (copied_pixels) {
+    *copied_pixels = 0;
+  }
+  const int dx = static_cast<int>(std::lround(delta.x));
+  const int dy = static_cast<int>(std::lround(delta.y));
+  const int src_left = std::max(0, -dx);
+  const int src_top = std::max(0, -dy);
+  const int dst_left = std::max(0, dx);
+  const int dst_top = std::max(0, dy);
+  const int copy_width = std::min(width - src_left, width - dst_left);
+  const int copy_height = std::min(height - src_top, height - dst_top);
+  if (copy_width <= 0 || copy_height <= 0) {
+    return true;
+  }
+  if (!SDL_SetRenderTarget(renderer, target)) {
+    std::fprintf(stderr, "SDL_SetRenderTarget failed: %s\n", SDL_GetError());
+    return false;
+  }
+  SDL_SetTextureBlendMode(source, SDL_BLENDMODE_NONE);
+  SDL_FRect src{static_cast<float>(src_left), static_cast<float>(src_top),
+                static_cast<float>(copy_width),
+                static_cast<float>(copy_height)};
+  SDL_FRect dst{static_cast<float>(dst_left), static_cast<float>(dst_top),
+                static_cast<float>(copy_width),
+                static_cast<float>(copy_height)};
+  SDL_RenderTexture(renderer, source, &src, &dst);
+  SDL_SetRenderTarget(renderer, nullptr);
+  if (copied_pixels) {
+    *copied_pixels = static_cast<uint64_t>(copy_width) *
+                     static_cast<uint64_t>(copy_height);
+  }
+  return true;
 }
 
 bool UploadCpuImageRectsToTexture(SDL_Texture* texture,
@@ -1503,6 +1656,65 @@ bool UploadCpuImageRectsToTexture(SDL_Texture* texture,
       }
     }
     SDL_UnlockTexture(texture);
+  }
+  return true;
+}
+
+bool PresentCpuImageToRetainedTexture(
+    SDL_Renderer* renderer,
+    const html_css_renderer::RenderResult& result,
+    const html_css_renderer::CpuImage& image,
+    const std::vector<SDL_Rect>& update_rects,
+    bool incremental_update,
+    SDL_Texture** frame_texture,
+    SDL_Texture** spare_frame_texture,
+    SDL_Texture* upload_texture,
+    uint64_t* uploaded_pixels,
+    uint64_t* texture_copy_pixels) {
+  if (uploaded_pixels) {
+    *uploaded_pixels = 0;
+  }
+  if (texture_copy_pixels) {
+    *texture_copy_pixels = 0;
+  }
+  if (update_rects.empty()) {
+    return true;
+  }
+  if (!UploadCpuImageRectsToTexture(upload_texture, image, update_rects)) {
+    return false;
+  }
+  if (uploaded_pixels) {
+    *uploaded_pixels = TextureRectPixels(update_rects);
+  }
+  const bool scroll_reuse = incremental_update &&
+                            ViewerUsesScrollTranslationReuse(result) &&
+                            !ViewerRequiresFullRedraw(result) &&
+                            !CoversWholeTexture(update_rects, image.width,
+                                                image.height);
+  if (scroll_reuse) {
+    uint64_t copied_pixels = 0;
+    if (!CopyTextureTranslated(renderer, *frame_texture, *spare_frame_texture,
+                               image.width, image.height,
+                               result.frame.scroll_translation_delta,
+                               &copied_pixels)) {
+      return false;
+    }
+    if (!CopyTextureRects(renderer, upload_texture, *spare_frame_texture,
+                          update_rects)) {
+      return false;
+    }
+    std::swap(*frame_texture, *spare_frame_texture);
+    if (texture_copy_pixels) {
+      *texture_copy_pixels = copied_pixels + TextureRectPixels(update_rects);
+    }
+    return true;
+  }
+  if (!CopyTextureRects(renderer, upload_texture, *frame_texture,
+                        update_rects)) {
+    return false;
+  }
+  if (texture_copy_pixels) {
+    *texture_copy_pixels = TextureRectPixels(update_rects);
   }
   return true;
 }
@@ -2364,6 +2576,10 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       initial_profile.cpu_replay_ms =
           ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+      initial_profile.raster_pixels_touched = image.raster_pixels_touched;
+      initial_profile.damage_pixels = image.damage_pixels;
+      initial_profile.raster_skipped = image.raster_skipped;
+      initial_profile.partial_redraw = image.partial_raster;
       if (use_skia_cpu) {
         initial_profile.cpu_replay_command_top =
             FormatCpuReplayCommandTimingTop(5);
@@ -2408,12 +2624,18 @@ int main(int argc, char** argv) {
   const SDL_PixelFormat frame_texture_format =
       use_cpu ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_ABGR8888;
   const SDL_TextureAccess texture_access =
-      use_cpu ? SDL_TEXTUREACCESS_STREAMING : SDL_TEXTUREACCESS_TARGET;
-  SDL_Texture* texture =
-      SDL_CreateTexture(renderer, frame_texture_format,
-                        texture_access, frame_width, frame_height);
-  if (!texture) {
-    std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
+      SDL_TEXTUREACCESS_TARGET;
+  SDL_Texture* texture = nullptr;
+  SDL_Texture* spare_cpu_texture = nullptr;
+  SDL_Texture* cpu_upload_texture = nullptr;
+  const bool texture_created =
+      use_cpu ? RecreateCpuFrameTextures(renderer, frame_texture_format,
+                                         frame_width, frame_height, &texture,
+                                         &spare_cpu_texture,
+                                         &cpu_upload_texture)
+              : CreateTexture(renderer, frame_texture_format, texture_access,
+                              frame_width, frame_height, &texture);
+  if (!texture_created) {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -2427,9 +2649,16 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       texture_upload_start = ProfileClock::now();
     }
-    if (!UploadCpuImageRectsToTexture(
-            texture, image, {SDL_Rect{0, 0, image.width, image.height}})) {
+    uint64_t uploaded_pixels = 0;
+    uint64_t texture_copy_pixels = 0;
+    if (!PresentCpuImageToRetainedTexture(
+            renderer, result, image,
+            {SDL_Rect{0, 0, image.width, image.height}}, false, &texture,
+            &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
+            &texture_copy_pixels)) {
       SDL_DestroyTexture(texture);
+      DestroyTexture(&spare_cpu_texture);
+      DestroyTexture(&cpu_upload_texture);
       SDL_DestroyRenderer(renderer);
       SDL_DestroyWindow(window);
       SDL_Quit();
@@ -2438,6 +2667,8 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       initial_profile.texture_upload_ms =
           ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+      initial_profile.uploaded_pixels = uploaded_pixels;
+      initial_profile.texture_copy_pixels = texture_copy_pixels;
     }
   } else {
     direct_renderer = std::make_unique<SdlFrameRenderer>(renderer);
@@ -2531,29 +2762,47 @@ int main(int argc, char** argv) {
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
       cpu_options.profile_command_timings = profile && use_skia_cpu;
 #endif
+      const bool frame_requires_full_redraw =
+          !use_incremental || ViewerRequiresFullRedraw(next_result);
+      const bool frame_has_damage = !ViewerDamageRects(next_result).empty();
+      const bool skip_cpu_raster =
+          use_incremental && !frame_requires_full_redraw && !frame_has_damage;
       ProfileClock::time_point cpu_replay_start;
       if (profile) {
         cpu_replay_start = ProfileClock::now();
       }
-      image =
+      if (!skip_cpu_raster) {
+        image =
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-          use_skia_cpu
-              ? (use_incremental
-                     ? html_css_renderer::
-                           RasterizeRenderResultIncrementalWithSkiaCpu(
-                               next_result, &image, cpu_options)
-                     : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                           next_result, cpu_options))
-              :
+            use_skia_cpu
+                ? (use_incremental && !frame_requires_full_redraw &&
+                           frame_has_damage
+                       ? html_css_renderer::RasterizeRenderResultDamageWithSkiaCpu(
+                             next_result, cpu_options)
+                       : (use_incremental
+                              ? html_css_renderer::
+                                    RasterizeRenderResultIncrementalWithSkiaCpu(
+                                        next_result, &image, cpu_options)
+                              : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                                    next_result, cpu_options)))
+                :
 #endif
-              (use_incremental
-                   ? html_css_renderer::RasterizeRenderResultIncremental(
-                         next_result, &image, cpu_options)
-                   : html_css_renderer::RasterizeRenderResult(next_result,
-                                                              cpu_options));
+                (use_incremental
+                     ? html_css_renderer::RasterizeRenderResultIncremental(
+                           next_result, &image, cpu_options)
+                     : html_css_renderer::RasterizeRenderResult(next_result,
+                                                                cpu_options));
+      }
       if (profile) {
         profile_frame.cpu_replay_ms =
             ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+        profile_frame.raster_skipped = skip_cpu_raster;
+        profile_frame.raster_pixels_touched =
+            skip_cpu_raster ? 0 : image.raster_pixels_touched;
+        profile_frame.damage_pixels =
+            skip_cpu_raster ? 0 : image.damage_pixels;
+        profile_frame.partial_redraw =
+            !skip_cpu_raster && image.partial_raster;
         if (use_skia_cpu) {
           profile_frame.cpu_replay_command_top =
               FormatCpuReplayCommandTimingTop(5);
@@ -2562,9 +2811,10 @@ int main(int argc, char** argv) {
       const bool texture_size_changed =
           image.width != frame_width || image.height != frame_height;
       if (texture_size_changed) {
-        if (!RecreateFrameTexture(renderer, frame_texture_format,
-                                  texture_access, image.width,
-                                  image.height, &texture)) {
+        if (!RecreateCpuFrameTextures(renderer, frame_texture_format,
+                                      image.width, image.height, &texture,
+                                      &spare_cpu_texture,
+                                      &cpu_upload_texture)) {
           return false;
         }
         frame_width = image.width;
@@ -2576,7 +2826,8 @@ int main(int argc, char** argv) {
       }
       std::vector<SDL_Rect> texture_update_rects =
           TextureUpdateRectsForFrame(next_result, image,
-                                     use_incremental && !texture_size_changed);
+                                     use_incremental && !texture_size_changed &&
+                                         !skip_cpu_raster);
       if (profile) {
         profile_frame.pixel_convert_ms =
             ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
@@ -2585,13 +2836,20 @@ int main(int argc, char** argv) {
       if (profile) {
         texture_upload_start = ProfileClock::now();
       }
-      if (!UploadCpuImageRectsToTexture(texture, image,
-                                        texture_update_rects)) {
+      uint64_t uploaded_pixels = 0;
+      uint64_t texture_copy_pixels = 0;
+      if (!PresentCpuImageToRetainedTexture(
+              renderer, next_result, image, texture_update_rects,
+              use_incremental && !texture_size_changed, &texture,
+              &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
+              &texture_copy_pixels)) {
         return false;
       }
       if (profile) {
         profile_frame.texture_upload_ms =
             ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+        profile_frame.uploaded_pixels = uploaded_pixels;
+        profile_frame.texture_copy_pixels = texture_copy_pixels;
       }
     } else if (direct_renderer) {
       ProfileClock::time_point direct_render_start;
@@ -2764,13 +3022,19 @@ int main(int argc, char** argv) {
       if (profiler.enabled()) {
         profile_frame.cpu_replay_ms =
             ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+        profile_frame.raster_pixels_touched = image.raster_pixels_touched;
+        profile_frame.damage_pixels = image.damage_pixels;
+        profile_frame.raster_skipped = image.raster_skipped;
+        profile_frame.partial_redraw = image.partial_raster;
         if (use_skia_cpu) {
           profile_frame.cpu_replay_command_top =
               FormatCpuReplayCommandTimingTop(5);
         }
       }
-      if (!RecreateFrameTexture(renderer, frame_texture_format, texture_access,
-                                image.width, image.height, &texture)) {
+      if (!RecreateCpuFrameTextures(renderer, frame_texture_format,
+                                    image.width, image.height, &texture,
+                                    &spare_cpu_texture,
+                                    &cpu_upload_texture)) {
         return false;
       }
       frame_width = image.width;
@@ -2779,14 +3043,20 @@ int main(int argc, char** argv) {
       if (profiler.enabled()) {
         texture_upload_start = ProfileClock::now();
       }
-      if (!UploadCpuImageRectsToTexture(
-              texture, image,
-              {SDL_Rect{0, 0, image.width, image.height}})) {
+      uint64_t uploaded_pixels = 0;
+      uint64_t texture_copy_pixels = 0;
+      if (!PresentCpuImageToRetainedTexture(
+              renderer, next_result, image,
+              {SDL_Rect{0, 0, image.width, image.height}}, false, &texture,
+              &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
+              &texture_copy_pixels)) {
         return false;
       }
       if (profiler.enabled()) {
         profile_frame.texture_upload_ms =
             ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+        profile_frame.uploaded_pixels = uploaded_pixels;
+        profile_frame.texture_copy_pixels = texture_copy_pixels;
       }
     } else if (direct_renderer) {
       const int next_frame_width = std::max(
@@ -3252,6 +3522,8 @@ int main(int argc, char** argv) {
   profiler.PrintSummary("exit");
 
   SDL_DestroyTexture(texture);
+  DestroyTexture(&spare_cpu_texture);
+  DestroyTexture(&cpu_upload_texture);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();

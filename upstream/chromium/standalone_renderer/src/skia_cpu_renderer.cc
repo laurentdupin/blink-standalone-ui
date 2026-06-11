@@ -361,6 +361,24 @@ bool IsEmpty(const SkIRect& rect) {
   return rect.isEmpty();
 }
 
+uint64_t PixelArea(const SkIRect& rect) {
+  if (IsEmpty(rect)) {
+    return 0;
+  }
+  return static_cast<uint64_t>(rect.width()) *
+         static_cast<uint64_t>(rect.height());
+}
+
+uint64_t DamagePixelArea(const std::vector<Rect>& damage_rects,
+                         int width,
+                         int height) {
+  uint64_t pixels = 0;
+  for (const Rect& damage_rect : damage_rects) {
+    pixels += PixelArea(ToSkIRectClamped(damage_rect, width, height));
+  }
+  return pixels;
+}
+
 std::array<float, 9> SnapshotMatrix(const SkMatrix& matrix) {
   std::array<float, 9> values = {};
   for (int i = 0; i < 9; ++i) {
@@ -1455,7 +1473,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   if (clear_before_render) {
     canvas->clear(ToSkColor(options.clear_color));
   }
-  if (!clear_before_render && previous && damage_rects) {
+  if (!clear_before_render && damage_rects) {
     SkPaint clear_paint;
     clear_paint.setBlendMode(SkBlendMode::kSrc);
     clear_paint.setColor(ToSkColor(options.clear_color));
@@ -1526,8 +1544,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       }
     }
   };
-  if (damage_rects && !damage_rects->empty() && !clear_before_render &&
-      previous) {
+  if (damage_rects && !damage_rects->empty() && !clear_before_render) {
     for (size_t i = 0; i < damage_rects->size(); ++i) {
       const SkIRect clip =
           ToSkIRectClamped((*damage_rects)[i], image.width, image.height);
@@ -1554,7 +1571,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
     StoreCpuReplayCommandTimings(command_timings);
   }
 
-  if (incremental_base && damage_rects) {
+  if (damage_rects) {
     for (const Rect& damage_rect : *damage_rects) {
       const SkIRect clip =
           ToSkIRectClamped(damage_rect, image.width, image.height);
@@ -1605,10 +1622,13 @@ CpuImage RasterizeDrawCommandsWithSkiaCpu(const DrawCommandList& commands,
                                           CpuRenderOptions options) {
   const ImageAtlas images;
   const GlyphAtlas glyphs;
-  return RasterizeDrawCommandsWithSkiaCpuInternal(commands, viewport, options,
-                                                 images, glyphs, nullptr,
-                                                 nullptr, true,
-                                                 nullptr);
+  CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
+      commands, viewport, options, images, glyphs, nullptr, nullptr, true,
+      nullptr);
+  image.raster_pixels_touched =
+      static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
+  image.damage_pixels = image.raster_pixels_touched;
+  return image;
 }
 
 CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
@@ -1620,6 +1640,9 @@ CpuImage RasterizeRenderResultWithSkiaCpu(const RenderResult& result,
   CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
       commands, result.successor_snapshot.viewport, options, images, glyphs,
       nullptr, nullptr, true, nullptr);
+  image.raster_pixels_touched =
+      static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
+  image.damage_pixels = image.raster_pixels_touched;
   return image;
 }
 
@@ -1637,7 +1660,12 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
     return RasterizeRenderResultWithSkiaCpu(result, options);
   }
   if (result.frame.damage_rects.empty()) {
-    return *previous;
+    CpuImage image = *previous;
+    image.raster_pixels_touched = 0;
+    image.damage_pixels = 0;
+    image.raster_skipped = true;
+    image.partial_raster = false;
+    return image;
   }
 
   const DrawCommandList commands =
@@ -1651,6 +1679,42 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
           ? &result.frame.scroll_translation_delta
           : nullptr,
       false, &result.frame.damage_rects);
+  image.damage_pixels =
+      DamagePixelArea(result.frame.damage_rects, image.width, image.height);
+  image.raster_pixels_touched = image.damage_pixels;
+  image.partial_raster =
+      image.damage_pixels <
+      static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
+  image.raster_skipped = false;
+  return image;
+}
+
+CpuImage RasterizeRenderResultDamageWithSkiaCpu(
+    const RenderResult& result,
+    CpuRenderOptions options) {
+  const int width =
+      std::max(1, static_cast<int>(result.successor_snapshot.viewport.width));
+  const int height =
+      std::max(1, static_cast<int>(result.successor_snapshot.viewport.height));
+  if (result.frame.requires_full_redraw || result.frame.damage_rects.empty()) {
+    return RasterizeRenderResultWithSkiaCpu(result, options);
+  }
+  const DrawCommandList commands =
+      FlattenSceneDrawCommands(result.frame.scene_commands);
+  const ImageAtlas images = BuildImageAtlas(result.frame.resource_commands);
+  const GlyphAtlas glyphs = BuildGlyphAtlas(result.frame.resource_commands);
+  CpuImage image = RasterizeDrawCommandsWithSkiaCpuInternal(
+      commands, result.successor_snapshot.viewport, options, images, glyphs,
+      nullptr, nullptr, false, &result.frame.damage_rects);
+  image.width = width;
+  image.height = height;
+  image.damage_pixels = DamagePixelArea(result.frame.damage_rects, width,
+                                        height);
+  image.raster_pixels_touched = image.damage_pixels;
+  image.partial_raster =
+      image.damage_pixels <
+      static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+  image.raster_skipped = false;
   return image;
 }
 

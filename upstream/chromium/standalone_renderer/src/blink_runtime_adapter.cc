@@ -3158,6 +3158,13 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "requires Blink lifecycle");
       return false;
     }
+    if (source_summary.clip_or_mask_rule_count > 0 &&
+        !document_scroll_unchanged) {
+      push_diagnostic(
+          "document scroll fast path ineligible: clip or mask rules require "
+          "Blink lifecycle");
+      return false;
+    }
     if (!SameNonDocumentScrollOffsets(
             snapshot_.scroll_offsets_by_element_id,
             previous_snapshot.scroll_offsets_by_element_id)) {

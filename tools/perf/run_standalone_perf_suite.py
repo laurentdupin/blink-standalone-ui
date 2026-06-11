@@ -688,6 +688,11 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for mode in warm_no_change_rows
         if nested(mode, "frame_work", "no_change_fast_path", default=False)
     )
+    warm_no_change_fast_path_rows = [
+        mode
+        for mode in warm_no_change_rows
+        if nested(mode, "frame_work", "no_change_fast_path", default=False)
+    ]
     warm_no_change_translation_count = sum(
         int(nested(mode, "frame_work", "paint_artifact_translation_count", default=0) or 0)
         for mode in warm_no_change_rows
@@ -700,6 +705,22 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         1
         for mode in warm_no_change_rows
         if nested(mode, "timing", "cpu_raster_replay_skipped", default=False)
+    )
+    warm_no_change_raster_pixels_touched = sum(
+        int(nested(mode, "timing", "raster_pixels_touched", default=0) or 0)
+        for mode in warm_no_change_rows
+    )
+    warm_no_change_damage_pixels = sum(
+        int(nested(mode, "timing", "damage_pixels", default=0) or 0)
+        for mode in warm_no_change_rows
+    )
+    warm_no_change_fast_path_raster_pixels_touched = sum(
+        int(nested(mode, "timing", "raster_pixels_touched", default=0) or 0)
+        for mode in warm_no_change_fast_path_rows
+    )
+    warm_no_change_fast_path_damage_pixels = sum(
+        int(nested(mode, "timing", "damage_pixels", default=0) or 0)
+        for mode in warm_no_change_fast_path_rows
     )
     warm_scroll_rows = [
         row.get("warm_scroll")
@@ -735,6 +756,19 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             default=False,
         )
     )
+    warm_scroll_raster_pixels_touched = sum(
+        int(nested(mode, "timing", "raster_pixels_touched", default=0) or 0)
+        for mode in warm_scroll_rows
+    )
+    warm_scroll_damage_pixels = sum(
+        int(nested(mode, "timing", "damage_pixels", default=0) or 0)
+        for mode in warm_scroll_rows
+    )
+    warm_scroll_partial_raster_count = sum(
+        1
+        for mode in warm_scroll_rows
+        if nested(mode, "timing", "partial_raster", default=False)
+    )
     return {
         "page_count": len(rows),
         "cold_success_count": len(cold_rows),
@@ -748,12 +782,19 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "warm_no_change_paint_translation_count": warm_no_change_translation_count,
         "warm_no_change_lifecycle_count": warm_no_change_lifecycle_count,
         "warm_no_change_raster_skipped_count": warm_no_change_raster_skipped_count,
+        "warm_no_change_raster_pixels_touched": warm_no_change_raster_pixels_touched,
+        "warm_no_change_damage_pixels": warm_no_change_damage_pixels,
+        "warm_no_change_fast_path_raster_pixels_touched": warm_no_change_fast_path_raster_pixels_touched,
+        "warm_no_change_fast_path_damage_pixels": warm_no_change_fast_path_damage_pixels,
         "warm_scroll_count": len(warm_scroll_rows),
         "warm_scroll_reuse_count": warm_scroll_reuse_count,
         "warm_scroll_full_redraw_count": warm_scroll_full_redraw_count,
         "warm_scroll_paint_translation_count": warm_scroll_translation_count,
         "warm_scroll_lifecycle_count": warm_scroll_lifecycle_count,
         "warm_scroll_retained_scene_plan_count": warm_scroll_retained_scene_plan_count,
+        "warm_scroll_raster_pixels_touched": warm_scroll_raster_pixels_touched,
+        "warm_scroll_damage_pixels": warm_scroll_damage_pixels,
+        "warm_scroll_partial_raster_count": warm_scroll_partial_raster_count,
         "stats": {key: stats(value) for key, value in values_by_key.items()},
         "slowest_20": [
             {
@@ -800,12 +841,17 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "warm_no_change_translation_count",
         "warm_no_change_lifecycle_count",
         "warm_no_change_raster_skipped",
+        "warm_no_change_raster_pixels_touched",
+        "warm_no_change_damage_pixels",
         "warm_scroll_presented_frame_ms",
         "warm_scroll_reuse",
         "warm_scroll_full_redraw",
         "warm_scroll_translation_count",
         "warm_scroll_lifecycle_count",
         "warm_scroll_retained_scene_plan_count",
+        "warm_scroll_raster_pixels_touched",
+        "warm_scroll_damage_pixels",
+        "warm_scroll_partial_raster",
         "document_max_scroll_y",
         "correctness_exit",
         "correctness_classification",
@@ -856,6 +902,12 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "warm_no_change_raster_skipped": nested(
                         warm_no_change, "timing", "cpu_raster_replay_skipped"
                     ),
+                    "warm_no_change_raster_pixels_touched": nested(
+                        warm_no_change, "timing", "raster_pixels_touched"
+                    ),
+                    "warm_no_change_damage_pixels": nested(
+                        warm_no_change, "timing", "damage_pixels"
+                    ),
                     "warm_scroll_presented_frame_ms": warm_scroll.get("presented_frame_ms"),
                     "warm_scroll_reuse": nested(
                         warm_scroll,
@@ -879,6 +931,15 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                         warm_scroll,
                         "frame_work",
                         "retained_scene_plan_count",
+                    ),
+                    "warm_scroll_raster_pixels_touched": nested(
+                        warm_scroll, "timing", "raster_pixels_touched"
+                    ),
+                    "warm_scroll_damage_pixels": nested(
+                        warm_scroll, "timing", "damage_pixels"
+                    ),
+                    "warm_scroll_partial_raster": nested(
+                        warm_scroll, "timing", "partial_raster"
                     ),
                     "document_max_scroll_y": row.get("document_max_scroll_y"),
                     "correctness_exit": row.get("correctness", {}).get("exit_code"),
