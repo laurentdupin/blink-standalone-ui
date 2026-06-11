@@ -227,6 +227,8 @@ extern "C" {
 __declspec(dllimport) void* __stdcall GetModuleHandleW(const wchar_t*);
 __declspec(dllimport) void* __stdcall LoadLibraryW(const wchar_t*);
 __declspec(dllimport) void* __stdcall GetProcAddress(void*, const char*);
+__declspec(dllimport) unsigned long __stdcall GetCurrentThreadId();
+__declspec(dllimport) void __stdcall AcquireSRWLockExclusive(void*);
 }
 
 extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
@@ -5060,7 +5062,7 @@ String SubresourceIntegrity::GetSubresourceIntegrityHash(
 }
 
 FetchContext& ResourceFetcher::Context() const {
-  return *static_cast<FetchContext*>(nullptr);
+  return FetchContext::NullInstance();
 }
 
 Resource* ResourceFetcher::CreateResourceForStaticData(
@@ -5110,7 +5112,7 @@ bool ResourceFetcher::StartLoad(Resource* resource,
 }
 
 FetchContext& ResourceLoader::Context() const {
-  return *static_cast<FetchContext*>(nullptr);
+  return FetchContext::NullInstance();
 }
 void ResourceLoader::ScheduleCancel() {}
 void ResourceLoader::DidChangePriority(ResourceLoadPriority, int) {}
@@ -13157,7 +13159,7 @@ const AtomicString& DOMVisualViewport::InterfaceName() const {
   return *name;
 }
 ExecutionContext* DOMVisualViewport::GetExecutionContext() const {
-  return reinterpret_cast<ExecutionContext*>(window_.Get());
+  return window_ ? window_->GetExecutionContext() : nullptr;
 }
 float DOMVisualViewport::offsetLeft() const { return 0; }
 float DOMVisualViewport::offsetTop() const { return 0; }
@@ -14627,10 +14629,10 @@ extern const ::perfetto::internal::TrackEventCategoryRegistry kCategoryRegistry(
 
 namespace base {
 PlatformThreadId PlatformThreadBase::CurrentId() {
-  return PlatformThreadId();
+  return PlatformThreadId(::GetCurrentThreadId());
 }
 PlatformThreadRef PlatformThreadBase::CurrentRef() {
-  return PlatformThreadRef();
+  return PlatformThreadRef(::GetCurrentThreadId());
 }
 SequenceCheckerImpl::SequenceCheckerImpl() = default;
 SequenceCheckerImpl::~SequenceCheckerImpl() = default;
@@ -14877,9 +14879,11 @@ RepeatingClosure RunLoop::QuitClosure() & {
   return RepeatingClosure();
 }
 namespace internal {
-LockImpl::LockImpl() = default;
+LockImpl::LockImpl() : native_handle_({0}) {}
 LockImpl::~LockImpl() = default;
-void LockImpl::LockInternal() {}
+void LockImpl::LockInternal() {
+  ::AcquireSRWLockExclusive(&native_handle_);
+}
 WeakReferenceOwner::WeakReferenceOwner() = default;
 WeakReferenceOwner::~WeakReferenceOwner() = default;
 WeakReference WeakReferenceOwner::GetRef() const {
@@ -17105,7 +17109,11 @@ String LayoutCounter::GenerateCounterText(Vector<int>,
 }
 LayoutCounter::LayoutCounter(Document& document, const CounterContentData& data)
     : LayoutText(&document, String()), counter_(&data) {}
-LayoutImageResourceStyleImage::LayoutImageResourceStyleImage(StyleImage*) {}
+LayoutImageResourceStyleImage::LayoutImageResourceStyleImage(
+    StyleImage* style_image)
+    : style_image_(style_image) {
+  DCHECK(style_image_);
+}
 StyleImageSet::StyleImageSet(StyleImage* image, CSSImageSetValue* value)
     : best_fit_image_(image), image_set_value_(value) {}
 
@@ -17844,6 +17852,7 @@ bool StyleFetchedImage::IsEqual(const StyleImage& other) const {
 }
 void StyleFetchedImage::Prefinalize() {
   if (image_) {
+    image_->DidRemoveObserver();
     image_ = nullptr;
   }
 }
@@ -17874,23 +17883,40 @@ void LayoutImageResourceStyleImage::Trace(Visitor* visitor) const {
   LayoutImageResource::Trace(visitor);
 }
 void LayoutImageResourceStyleImage::Initialize(LayoutObject* layout_object) {
-  layout_object_ = layout_object;
+  LayoutImageResource::Initialize(layout_object);
+
+  if (style_image_->IsImageResource()) {
+    cached_image_ = To<StyleFetchedImage>(style_image_.Get())->CachedImage();
+  }
+
+  style_image_->AddClient(layout_object_);
 }
 void LayoutImageResourceStyleImage::Shutdown() {
-  layout_object_ = nullptr;
-  style_image_ = nullptr;
+  DCHECK(layout_object_);
+  style_image_->RemoveClient(layout_object_);
+  cached_image_ = nullptr;
 }
 scoped_refptr<Image> LayoutImageResourceStyleImage::GetImage(
-    const gfx::SizeF&) const {
-  return nullptr;
+    const gfx::SizeF& size) const {
+  if (style_image_->IsPendingImage()) {
+    return nullptr;
+  }
+  const Node* node = layout_object_->GetNode();
+  if (!node) {
+    node = &layout_object_->GetDocument();
+  }
+  return style_image_->GetImage(*layout_object_, *node,
+                                layout_object_->StyleRef(), size);
 }
 NaturalSizingInfo LayoutImageResourceStyleImage::GetNaturalDimensions(
-    float) const {
-  return NaturalSizingInfo::None();
+    float multiplier) const {
+  return style_image_->GetNaturalSizingInfo(multiplier, ImageOrientation());
 }
 RespectImageOrientationEnum LayoutImageResourceStyleImage::ImageOrientation()
     const {
-  return kDoNotRespectImageOrientation;
+  RespectImageOrientationEnum respect_orientation =
+      layout_object_->StyleRef().ImageOrientation();
+  return style_image_->ForceOrientationIfNecessary(respect_orientation);
 }
 
 StyleImageSet::~StyleImageSet() = default;

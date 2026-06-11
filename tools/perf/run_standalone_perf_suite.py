@@ -19,7 +19,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -42,6 +42,17 @@ class CommandResult:
     code: int
     wall_ms: float
     output: str
+    timed_out: bool = False
+    timeout_s: int | None = None
+    kill_error: str = ""
+    kill_output: str = ""
+
+
+WINDOWS_STATUS_NAMES = {
+    0xC0000005: "windows_access_violation",
+    0xC000001D: "windows_illegal_instruction",
+    0xC0000409: "windows_stack_buffer_overrun",
+}
 
 
 def rel(path: Path, base: Path = ROOT) -> str:
@@ -65,31 +76,157 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def read_cmake_cache(cache_path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not cache_path.exists():
+        return values
+    for line in cache_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line or line.startswith(("#", "//")) or "=" not in line:
+            continue
+        key_type, value = line.split("=", 1)
+        key = key_type.split(":", 1)[0]
+        values[key] = value
+    return values
+
+
+def build_config_metadata(
+    benchmark: Path, build_config_name: str | None
+) -> dict[str, Any]:
+    build_dir = benchmark.parent
+    cache = read_cmake_cache(build_dir / "CMakeCache.txt")
+    perf_build = cache.get("BLINK_STANDALONE_PERF_BUILD")
+    if build_config_name:
+        name = build_config_name
+    elif perf_build and perf_build.upper() in {"ON", "TRUE", "1"}:
+        name = "x64-Perf"
+    elif "perf" in build_dir.name.lower():
+        name = "perf"
+    else:
+        name = "checked/current"
+    return {
+        "name": name,
+        "benchmark": rel(benchmark),
+        "build_dir": rel(build_dir),
+        "cmake_cache": rel(build_dir / "CMakeCache.txt")
+        if (build_dir / "CMakeCache.txt").exists()
+        else "",
+        "cmake_build_type": cache.get("CMAKE_BUILD_TYPE", ""),
+        "blink_standalone_perf_build": perf_build or "",
+        "blink_standalone_build_sdl_viewer": cache.get(
+            "BLINK_STANDALONE_BUILD_SDL_VIEWER", ""
+        ),
+        "defines_policy": (
+            "perf preset omits forced SK_ENABLE_OPTIMIZE_SIZE, CPU_NO_SIMD, "
+            "SKCMS_DISABLE_HSW, and SKCMS_DISABLE_SKX; DCHECK_ALWAYS_ON remains "
+            "enabled because the current standalone Blink cut does not compile "
+            "without DCHECK declarations"
+            if perf_build and perf_build.upper() in {"ON", "TRUE", "1"}
+            else "checked/current preset keeps historical correctness-oriented defines"
+        ),
+    }
+
+
+def terminate_process_tree(proc: subprocess.Popen[str], timeout: int = 10) -> tuple[str, str]:
+    if proc.poll() is not None:
+        return "", ""
+    output = ""
+    error = ""
+    if sys.platform == "win32":
+        try:
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                cwd=ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=timeout,
+            )
+            output = completed.stdout or ""
+            if completed.returncode != 0 and proc.poll() is None:
+                error = f"taskkill exited {completed.returncode}"
+        except Exception as exc:
+            error = str(exc)
+        if proc.poll() is None:
+            try:
+                proc.kill()
+            except Exception as exc:
+                error = error or str(exc)
+    else:
+        try:
+            proc.kill()
+        except Exception as exc:
+            error = str(exc)
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        error = error or "process did not exit after kill"
+    return output, error
+
+
+def exit_status_name(code: int) -> str:
+    if sys.platform == "win32":
+        return WINDOWS_STATUS_NAMES.get(code & 0xFFFFFFFF, "")
+    if code < 0:
+        return f"signal_{-code}"
+    return ""
+
+
 def run_command(cmd: list[str], log_path: Path, timeout: int) -> CommandResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
+    timed_out = False
+    kill_error = ""
+    kill_output = ""
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            timeout=timeout,
+            creationflags=creationflags,
         )
-        code = completed.returncode
-        output = completed.stdout
-    except subprocess.TimeoutExpired as exc:
+        try:
+            output, _ = proc.communicate(timeout=timeout)
+            code = proc.returncode
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            code = 124
+            kill_output, kill_error = terminate_process_tree(proc)
+            try:
+                output, _ = proc.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                kill_error = kill_error or "process did not exit after kill"
+                output = ""
+            output = output or ""
+            output += f"\nTIMEOUT after {timeout}s; terminated process tree\n"
+            if kill_output:
+                output += f"TASKKILL_OUTPUT:\n{kill_output}\n"
+            if kill_error:
+                output += f"KILL_ERROR: {kill_error}\n"
+    except Exception as exc:
         code = 124
-        output = exc.stdout if isinstance(exc.stdout, str) else ""
-        output += f"\nTIMEOUT after {timeout}s\n"
+        output = f"COMMAND_ERROR: {exc}\n"
     wall_ms = (time.perf_counter() - start) * 1000.0
     log_path.write_text(
-        f"$ {' '.join(cmd)}\nexit={code} wall_ms={wall_ms:.3f}\n\n{output}",
+        f"$ {' '.join(cmd)}\n"
+        f"exit={code} wall_ms={wall_ms:.3f} timed_out={str(timed_out).lower()} timeout_s={timeout}\n\n"
+        f"{output}",
         encoding="utf-8",
         errors="replace",
     )
-    return CommandResult(code=code, wall_ms=wall_ms, output=output)
+    return CommandResult(
+        code=code,
+        wall_ms=wall_ms,
+        output=output,
+        timed_out=timed_out,
+        timeout_s=timeout if timed_out else None,
+        kill_error=kill_error,
+        kill_output=kill_output,
+    )
 
 
 def percentile(values: list[float], pct: float) -> float | None:
@@ -281,6 +418,7 @@ def run_benchmark_case(
     mode: str,
     viewport: str,
     timeout: int,
+    retries: int,
     extra_args: list[str] | None = None,
     *,
     oracle: bool = False,
@@ -302,13 +440,30 @@ def run_benchmark_case(
     if disable_skia_raster:
         cmd.append("--disable-skia-raster")
         # The benchmark still requires --out to be syntactically present.
-    result = run_command(cmd, case_dir / f"{mode}.log", timeout)
+    attempts: list[CommandResult] = []
+    final_log_path = case_dir / f"{mode}.log"
+    for attempt in range(retries + 1):
+        for path in [out_path, json_path, audit_path]:
+            if path.exists():
+                path.unlink()
+        if oracle_path and oracle_path.exists():
+            oracle_path.unlink()
+        log_name = f"{mode}.log" if attempt == 0 else f"{mode}-retry{attempt}.log"
+        final_log_path = case_dir / log_name
+        result = run_command(cmd, final_log_path, timeout)
+        attempts.append(result)
+        if not result.timed_out:
+            break
+    status_name = exit_status_name(result.code)
     metrics = read_json(json_path)
-    return {
+    payload: dict[str, Any] = {
         "mode": mode,
         "exit_code": result.code,
+        "exit_status": status_name,
+        "timed_out": result.timed_out,
+        "timeout_s": result.timeout_s,
         "wall_ms": result.wall_ms,
-        "log": rel(case_dir / f"{mode}.log"),
+        "log": rel(final_log_path),
         "image": rel(out_path) if out_path.exists() else "",
         "metrics_json": rel(json_path) if json_path.exists() else "",
         "audit_json": rel(audit_path) if audit_path.exists() else "",
@@ -324,6 +479,39 @@ def run_benchmark_case(
         "retained_command_count": command_count(metrics),
         "raw_chunk_count": raw_chunk_count(metrics),
     }
+    if len(attempts) > 1 or any(attempt.timed_out for attempt in attempts):
+        payload["attempts"] = [
+            {
+                "attempt": index,
+                "exit_code": attempt.code,
+                "timed_out": attempt.timed_out,
+                "timeout_s": attempt.timeout_s,
+                "wall_ms": attempt.wall_ms,
+                "log": rel(case_dir / (f"{mode}.log" if index == 0 else f"{mode}-retry{index}.log")),
+                "kill_error": attempt.kill_error,
+                "kill_output": attempt.kill_output,
+                "exit_status": exit_status_name(attempt.code),
+            }
+            for index, attempt in enumerate(attempts)
+        ]
+    if result.timed_out:
+        payload["failure_classification"] = "timeout"
+        payload["reason"] = f"benchmark child exceeded {timeout}s timeout"
+    elif result.code == 0 and any(attempt.timed_out for attempt in attempts[:-1]):
+        payload["failure_classification"] = "flaky_timeout_recovered"
+        payload["reason"] = "benchmark child timed out on an earlier attempt and recovered on retry"
+    elif result.code != 0:
+        payload["failure_classification"] = status_name or "benchmark_exit_nonzero"
+        payload["reason"] = (
+            f"benchmark child exited with {status_name} ({result.code})"
+            if status_name
+            else f"benchmark child exited with code {result.code}"
+        )
+    if result.kill_error:
+        payload["kill_error"] = result.kill_error
+    if result.kill_output:
+        payload["kill_output"] = result.kill_output
+    return payload
 
 
 def compare_images(a: Path, b: Path, out_json: Path, out_dir: Path, timeout: int) -> dict[str, Any]:
@@ -348,6 +536,12 @@ def compare_images(a: Path, b: Path, out_json: Path, out_dir: Path, timeout: int
     result = run_command(cmd, out_json.with_suffix(".log"), timeout)
     payload = read_json(out_json)
     payload["exit_code"] = result.code
+    payload["timed_out"] = result.timed_out
+    payload["timeout_s"] = result.timeout_s
+    if result.timed_out:
+        payload["reason"] = f"comparison exceeded {timeout}s timeout"
+    if result.kill_error:
+        payload["kill_error"] = result.kill_error
     return payload
 
 
@@ -456,10 +650,21 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if row.get("correctness", {}).get("exit_code") != 0
         or row.get("correctness", {}).get("diff_classification") == "structural_layout_or_paint"
     ]
+    timeout_count = 0
+    recovered_timeout_count = 0
+    for row in rows:
+        for value in row.values():
+            if isinstance(value, dict):
+                if value.get("timed_out"):
+                    timeout_count += 1
+                if value.get("failure_classification") == "flaky_timeout_recovered":
+                    recovered_timeout_count += 1
     return {
         "page_count": len(rows),
         "cold_success_count": len(cold_rows),
         "failure_count": len(rows) - len(cold_rows),
+        "timeout_count": timeout_count,
+        "recovered_timeout_count": recovered_timeout_count,
         "real_blink_paint_count": sum(1 for row in cold_rows if row.get("cold", {}).get("real_blink_paint")),
         "correctness_failure_count": len(correctness_failures),
         "stats": {key: stats(value) for key, value in values_by_key.items()},
@@ -536,6 +741,132 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             )
 
 
+def write_partial_report(
+    out_dir: Path,
+    generated_at: str,
+    benchmark: Path,
+    build_config_name: str | None,
+    completed_rows: list[dict[str, Any]],
+    current_row: dict[str, Any] | None = None,
+    run_selection: dict[str, Any] | None = None,
+) -> None:
+    pages = list(completed_rows)
+    if current_row is not None:
+        pages.append(current_row)
+    write_json(
+        out_dir / "standalone_perf_results.partial.json",
+        {
+            "schema_version": 1,
+            "generated_at": generated_at,
+            "repo": rel(ROOT),
+            "benchmark": rel(benchmark),
+            "build_config": build_config_metadata(benchmark, build_config_name),
+            "run_selection": run_selection or {},
+            "partial": True,
+            "pages": pages,
+        },
+    )
+
+
+def select_html_files(
+    html_files: list[Path],
+    *,
+    start_index: int,
+    limit: int | None,
+    shard_index: int | None,
+    shard_count: int | None,
+) -> tuple[list[Path], dict[str, Any]]:
+    total_count = len(html_files)
+    if start_index < 1:
+        raise ValueError("--start-index is 1-based and must be at least 1")
+    if (shard_index is None) != (shard_count is None):
+        raise ValueError("--shard-index and --shard-count must be provided together")
+    if shard_count is not None:
+        if shard_count < 1:
+            raise ValueError("--shard-count must be at least 1")
+        if shard_index is None or shard_index < 0 or shard_index >= shard_count:
+            raise ValueError("--shard-index must be in [0, shard-count)")
+        indexed = [
+            (index, path)
+            for index, path in enumerate(html_files, start=1)
+            if (index - 1) % shard_count == shard_index
+        ]
+    else:
+        indexed = list(enumerate(html_files, start=1))
+    indexed = [(index, path) for index, path in indexed if index >= start_index]
+    if limit is not None:
+        indexed = indexed[:limit]
+    selected = [path for _, path in indexed]
+    selection = {
+        "total_discovered_count": total_count,
+        "selected_count": len(selected),
+        "start_index": start_index,
+        "limit": limit,
+        "shard_index": shard_index,
+        "shard_count": shard_count,
+        "selected_global_indices": [index for index, _ in indexed],
+    }
+    return selected, selection
+
+
+def merge_reports(inputs: list[Path], out_dir: Path, *, no_docs: bool) -> int:
+    merged_pages: dict[str, dict[str, Any]] = {}
+    reports: list[dict[str, Any]] = []
+    for path in inputs:
+        report = read_json(path)
+        if not report or "pages" not in report:
+            raise ValueError(f"missing pages in {path}")
+        reports.append(report)
+        for row in report["pages"]:
+            key = str(row.get("html") or row.get("name"))
+            if key in merged_pages:
+                raise ValueError(f"duplicate page in merge inputs: {key}")
+            merged_pages[key] = row
+    first = reports[0]
+    pages = [
+        merged_pages[key]
+        for key in sorted(merged_pages.keys(), key=lambda value: value.lower())
+    ]
+    generated = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    report = {
+        "schema_version": 1,
+        "generated_at": generated,
+        "repo": first.get("repo", rel(ROOT)),
+        "benchmark": first.get("benchmark", ""),
+        "build_config": first.get("build_config", {}),
+        "paint_audit_root": first.get("paint_audit_root", ""),
+        "viewport": first.get("viewport", ""),
+        "device_scale_factor": first.get("device_scale_factor", 1),
+        "resource_root_policy": first.get("resource_root_policy", ""),
+        "measurement_caveats": first.get("measurement_caveats", []),
+        "merged_from": [rel(path) for path in inputs],
+        "summary": summarize(pages),
+        "pages": pages,
+        "playwright_status": first.get("playwright_status", "not_requested"),
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    write_json(out_dir / "standalone_perf_results.json", report)
+    write_csv(out_dir / "standalone_perf_results.csv", pages)
+    if not no_docs:
+        write_baseline_doc(ROOT / "docs" / "PERF_BASELINE.md", report)
+    summary = report["summary"]
+    print(f"Wrote {rel(out_dir / 'standalone_perf_results.json')}")
+    print(
+        f"Pages: {summary['page_count']} "
+        f"failures: {summary['failure_count']} "
+        f"correctness_failures: {summary['correctness_failure_count']} "
+        f"timeouts: {summary.get('timeout_count', 0)} "
+        f"recovered_timeouts: {summary.get('recovered_timeout_count', 0)}"
+    )
+    return (
+        0
+        if summary["failure_count"] == 0
+        and summary["correctness_failure_count"] == 0
+        and summary.get("timeout_count", 0) == 0
+        else 1
+    )
+
+
 def markdown_table(rows: list[dict[str, Any]]) -> str:
     lines = [
         "| Page | Cold presented ms | Advance ms | Raster ms | Style ms | Layout ms | Prepaint/Paint ms | Extraction ms | Commands | Correctness |",
@@ -592,7 +923,7 @@ def failure_markdown_table(rows: list[dict[str, Any]]) -> str:
                     str(row.get("cold", {}).get("exit_code", "")),
                     str(correctness.get("exit_code", "")),
                     str(correctness.get("diff_classification", "")),
-                    str(correctness.get("reason", "")),
+                    str(row.get("cold", {}).get("reason", "") or correctness.get("reason", "")),
                     str(row.get("cold", {}).get("log", "")),
                 ]
             )
@@ -635,11 +966,22 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
         "",
         "Important caveat: current warm incremental benchmark timings include previous-frame setup in the same process, so warm no-change/scroll/toggle rows are recorded for result correctness and rough cost only. A future benchmark harness should isolate per-frame warm timings in one live renderer session.",
         "",
+        "## Build Configuration",
+        "",
+        f"- Name: `{report.get('build_config', {}).get('name', '')}`",
+        f"- Benchmark: `{report.get('build_config', {}).get('benchmark', report.get('benchmark', ''))}`",
+        f"- Build directory: `{report.get('build_config', {}).get('build_dir', '')}`",
+        f"- CMake build type: `{report.get('build_config', {}).get('cmake_build_type', '')}`",
+        f"- `BLINK_STANDALONE_PERF_BUILD`: `{report.get('build_config', {}).get('blink_standalone_perf_build', '')}`",
+        f"- Defines policy: {report.get('build_config', {}).get('defines_policy', '')}",
+        "",
         "## Summary",
         "",
         f"- Pages enumerated: `{summary['page_count']}`",
         f"- Cold render successes: `{summary['cold_success_count']}`",
         f"- Cold render failures: `{summary['failure_count']}`",
+        f"- Timed-out child commands: `{summary.get('timeout_count', 0)}`",
+        f"- Recovered child timeouts: `{summary.get('recovered_timeout_count', 0)}`",
         f"- Real Blink PaintArtifact successes: `{summary['real_blink_paint_count']}`",
         f"- Correctness failures against Skia PaintRecord oracle: `{summary['correctness_failure_count']}`",
         "",
@@ -684,8 +1026,11 @@ def make_row(
     viewport: str,
     timeout: int,
     correctness_timeout: int,
+    retries: int,
     *,
     run_warm_modes: bool,
+    extra_benchmark_args: list[str] | None = None,
+    on_update: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     name = html_path.stem
     case_dir = out_dir / "pages" / name
@@ -694,7 +1039,10 @@ def make_row(
         "name": name,
         "html": rel(html_path),
         "resource_root": rel(resource_root),
+        "status": "started",
     }
+    if on_update:
+        on_update(row)
     cold = run_benchmark_case(
         benchmark,
         html_path,
@@ -703,9 +1051,14 @@ def make_row(
         "cold",
         viewport,
         timeout,
+        retries,
+        extra_args=extra_benchmark_args,
         oracle=True,
     )
     row["cold"] = cold
+    row["status"] = "cold_complete"
+    if on_update:
+        on_update(row)
     row["document_max_scroll_y"] = document_max_scroll_y(cold["metrics"])
     if cold["exit_code"] == 0:
         correctness = compare_images(
@@ -716,8 +1069,15 @@ def make_row(
             correctness_timeout,
         )
     else:
-        correctness = {"exit_code": cold["exit_code"], "skipped": True, "reason": "cold render failed"}
+        reason = cold.get("reason") or "cold render failed"
+        correctness = {"exit_code": cold["exit_code"], "skipped": True, "reason": reason}
     row["correctness"] = correctness
+    row["status"] = "correctness_complete" if cold["exit_code"] == 0 else "failed"
+    if on_update:
+        on_update(row)
+
+    if cold["exit_code"] != 0:
+        return row
 
     if run_warm_modes:
         no_change = run_benchmark_case(
@@ -728,12 +1088,16 @@ def make_row(
             "warm-no-change",
             viewport,
             timeout,
-            extra_args=["--incremental"],
+            retries,
+            extra_args=[*(extra_benchmark_args or []), "--incremental"],
         )
         no_change["measurement_caveat"] = (
             "current benchmark invocation includes previous-frame render before the measured identical incremental result"
         )
         row["warm_no_change"] = no_change
+        row["status"] = "warm_no_change_complete"
+        if on_update:
+            on_update(row)
 
         max_scroll_y = row["document_max_scroll_y"]
         if max_scroll_y > 0:
@@ -746,7 +1110,15 @@ def make_row(
                 "warm-scroll",
                 viewport,
                 timeout,
-                extra_args=["--incremental", "--previous-scroll-y", "0", "--scroll-y", scroll_y],
+                retries,
+                extra_args=[
+                    *(extra_benchmark_args or []),
+                    "--incremental",
+                    "--previous-scroll-y",
+                    "0",
+                    "--scroll-y",
+                    scroll_y,
+                ],
             )
             scroll["requested_scroll_y"] = float(scroll_y)
             scroll["measurement_caveat"] = (
@@ -755,6 +1127,9 @@ def make_row(
             row["warm_scroll"] = scroll
         else:
             row["warm_scroll"] = {"skipped": True, "reason": "document not vertically scrollable"}
+        row["status"] = "warm_scroll_complete"
+        if on_update:
+            on_update(row)
 
         toggle = infer_attribute_toggle(html_path)
         if toggle:
@@ -767,7 +1142,9 @@ def make_row(
                 "warm-attr-toggle",
                 viewport,
                 timeout,
+                retries,
                 extra_args=[
+                    *(extra_benchmark_args or []),
                     "--incremental",
                     "--previous-attr",
                     f"{element_id}:{attr_name}={previous_value}",
@@ -787,6 +1164,13 @@ def make_row(
             row["warm_attr_toggle"] = attr
         else:
             row["warm_attr_toggle"] = {"skipped": True, "reason": "no simple data-* attribute toggle inferred"}
+        row["status"] = "complete"
+        if on_update:
+            on_update(row)
+    else:
+        row["status"] = "complete"
+        if on_update:
+            on_update(row)
     return row
 
 
@@ -798,13 +1182,26 @@ def main() -> int:
     parser.add_argument("--viewport", default="1280x720")
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--correctness-timeout", type=int, default=60)
+    parser.add_argument("--retries", type=int, default=0, help="retry a benchmark child this many times after timeout")
+    parser.add_argument("--benchmark-arg", action="append", default=[], help="extra argument passed through to each benchmark child")
     parser.add_argument("--filter", action="append", default=[], help="fnmatch pattern for page stem or relative path; default is all")
+    parser.add_argument("--start-index", type=int, default=1, help="1-based global page index to start from after filtering")
     parser.add_argument("--limit", type=int, help="developer iteration limit; omitted runs the full enumeration")
+    parser.add_argument("--shard-index", type=int, help="0-based shard index after filtering")
+    parser.add_argument("--shard-count", type=int, help="number of deterministic modulo shards after filtering")
+    parser.add_argument("--merge-json", type=Path, action="append", default=[], help="merge one or more standalone_perf_results.json files and exit")
     parser.add_argument("--skip-warm-modes", action="store_true")
     parser.add_argument("--playwright-top", type=int, default=10, help="compare the N slowest cold pages against Playwright when available")
     parser.add_argument("--playwright-all", action="store_true", help="compare every successful page against Playwright")
+    parser.add_argument("--build-config-name", help="label recorded in result JSON/docs, e.g. checked-current or x64-Perf")
     parser.add_argument("--no-docs", action="store_true")
     args = parser.parse_args()
+    if args.retries < 0:
+        print("--retries must be non-negative", file=sys.stderr)
+        return 2
+
+    if args.merge_json:
+        return merge_reports(args.merge_json, args.out_dir.resolve(), no_docs=args.no_docs)
 
     html_root = args.root.resolve()
     benchmark = args.benchmark.resolve()
@@ -812,8 +1209,17 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     html_files = discover_html_files(html_root, args.filter)
-    if args.limit is not None:
-        html_files = html_files[: args.limit]
+    try:
+        html_files, run_selection = select_html_files(
+            html_files,
+            start_index=args.start_index,
+            limit=args.limit,
+            shard_index=args.shard_index,
+            shard_count=args.shard_count,
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     if not html_files:
         print("No HTML files matched.", file=sys.stderr)
         return 2
@@ -830,10 +1236,28 @@ def main() -> int:
             args.viewport,
             args.timeout,
             args.correctness_timeout,
+            args.retries,
             run_warm_modes=not args.skip_warm_modes,
+            extra_benchmark_args=args.benchmark_arg,
+            on_update=lambda current_row: write_partial_report(
+                out_dir,
+                started,
+                benchmark,
+                args.build_config_name,
+                rows,
+                current_row,
+                run_selection=run_selection,
+            ),
         )
         rows.append(row)
-        write_json(out_dir / "standalone_perf_results.partial.json", {"generated_at": started, "pages": rows})
+        write_partial_report(
+            out_dir,
+            started,
+            benchmark,
+            args.build_config_name,
+            rows,
+            run_selection=run_selection,
+        )
 
     summary = summarize(rows)
     report: dict[str, Any] = {
@@ -841,6 +1265,8 @@ def main() -> int:
         "generated_at": started,
         "repo": rel(ROOT),
         "benchmark": rel(benchmark),
+        "build_config": build_config_metadata(benchmark, args.build_config_name),
+        "run_selection": run_selection,
         "paint_audit_root": rel(html_root),
         "viewport": args.viewport,
         "device_scale_factor": 1,
@@ -873,10 +1299,16 @@ def main() -> int:
             result = run_playwright_capture(html_path, out_png, out_json, args.viewport, args.timeout)
             row["playwright_capture"] = {
                 "exit_code": result.code,
+                "timed_out": result.timed_out,
+                "timeout_s": result.timeout_s,
                 "wall_ms": result.wall_ms,
                 "image": rel(out_png) if out_png.exists() else "",
                 "json": rel(out_json) if out_json.exists() else "",
             }
+            if result.timed_out:
+                row["playwright_capture"]["reason"] = (
+                    f"playwright capture exceeded {args.timeout}s timeout"
+                )
             if result.code == 0:
                 row["playwright"] = compare_images(
                     case_dir / "cold.bmp",
@@ -885,6 +1317,14 @@ def main() -> int:
                     case_dir / "correctness-retained-vs-playwright",
                     args.correctness_timeout,
                 )
+            write_partial_report(
+                out_dir,
+                started,
+                benchmark,
+                args.build_config_name,
+                rows,
+                run_selection=run_selection,
+            )
     elif play_count > 0:
         report["playwright_status"] = "unavailable"
     else:
@@ -898,8 +1338,21 @@ def main() -> int:
         write_baseline_doc(ROOT / "docs" / "PERF_BASELINE.md", report)
 
     print(f"Wrote {rel(out_dir / 'standalone_perf_results.json')}")
-    print(f"Pages: {summary['page_count']} failures: {summary['failure_count']} correctness_failures: {summary['correctness_failure_count']}")
-    return 0 if summary["failure_count"] == 0 else 1
+    final_summary = report["summary"]
+    print(
+        f"Pages: {final_summary['page_count']} "
+        f"failures: {final_summary['failure_count']} "
+        f"correctness_failures: {final_summary['correctness_failure_count']} "
+        f"timeouts: {final_summary.get('timeout_count', 0)} "
+        f"recovered_timeouts: {final_summary.get('recovered_timeout_count', 0)}"
+    )
+    return (
+        0
+        if final_summary["failure_count"] == 0
+        and final_summary["correctness_failure_count"] == 0
+        and final_summary.get("timeout_count", 0) == 0
+        else 1
+    )
 
 
 if __name__ == "__main__":

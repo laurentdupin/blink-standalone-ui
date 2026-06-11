@@ -22,6 +22,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkFlattenable.h"
 #include "third_party/skia/include/core/SkFont.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -378,7 +379,7 @@ sk_sp<SkShader> DeserializeShaderUncached(const std::vector<uint8_t>& bytes) {
   if (bytes.empty()) {
     return nullptr;
   }
-  SkDeserialProcs procs;
+  SkDeserialProcs procs = {};
   sk_sp<SkFlattenable> flattenable = SkFlattenable::Deserialize(
       SkFlattenable::kSkShader_Type, bytes.data(), bytes.size(), &procs);
   if (!flattenable ||
@@ -973,13 +974,14 @@ ImageAtlas BuildImageAtlas(const std::vector<ResourceCommand>& commands) {
     image.byte_count = std::min(
         image.pixels.size(), static_cast<size_t>(image.width) *
                                  static_cast<size_t>(image.height) * 4u);
-    SkBitmap bitmap;
-  SkImageInfo info = SkImageInfo::Make(image.width, image.height,
-                        kRGBA_8888_SkColorType,
-                        kPremul_SkAlphaType);
-    if (bitmap.installPixels(info, image.pixels.data(),
-                             static_cast<size_t>(image.width) * 4u)) {
-      image.image = bitmap.asImage();
+    SkImageInfo info = SkImageInfo::Make(image.width, image.height,
+                                         kRGBA_8888_SkColorType,
+                                         kPremul_SkAlphaType);
+    sk_sp<SkData> pixel_data =
+        SkData::MakeWithCopy(image.pixels.data(), image.byte_count);
+    if (pixel_data) {
+      image.image = SkImages::RasterFromData(
+          info, std::move(pixel_data), static_cast<size_t>(image.width) * 4u);
     }
     atlas[update.image_id] = std::move(image);
   }
@@ -1197,7 +1199,8 @@ void DrawCommandWithSkia(SkCanvas& canvas,
                 cc::PaintFilter::GetSkFilter(paint_filter.get()));
           }
         }
-        if (command.save_layer_bounds_unset) {
+        if (command.save_layer_bounds_unset &&
+            (command.rect.width <= 0.0f || command.rect.height <= 0.0f)) {
           canvas.saveLayer(nullptr, &layer_paint);
         } else {
           canvas.saveLayer(ToSkRect(command.rect), &layer_paint);

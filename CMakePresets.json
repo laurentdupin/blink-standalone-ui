@@ -45,6 +45,35 @@
         "CMAKE_C_COMPILER": "clang-cl",
         "CMAKE_CXX_COMPILER": "clang-cl"
       }
+    },
+    {
+      "name": "x64-Perf",
+      "displayName": "x64 Perf Benchmark (clang-cl)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cmake-live-image-png-ninja-vs18-perf",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "ClangCL",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "Iconv_INCLUDE_DIR": "C:/vcpkg/installed/x64-windows-static/include",
+        "Iconv_LIBRARY": "C:/vcpkg/installed/x64-windows-static/lib/iconv.lib",
+        "ZLIB_DIR": "C:/vcpkg/installed/x64-windows-static/share/zlib",
+        "libxml2_DIR": "C:/vcpkg/installed/x64-windows-static/share/libxml2",
+        "BLINK_STANDALONE_PERF_BUILD": "ON",
+        "BLINK_STANDALONE_BUILD_SDL_VIEWER": "OFF",
+        "BLINK_STANDALONE_FETCH_SDL3": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -55,6 +84,10 @@
     {
       "name": "x64-Release",
       "configurePreset": "x64-Release"
+    },
+    {
+      "name": "x64-Perf",
+      "configurePreset": "x64-Perf"
     }
   ]
 }

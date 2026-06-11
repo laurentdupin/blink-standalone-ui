@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -3185,9 +3186,18 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       const std::vector<Stylesheet>& stylesheets) {
     namespace live_probe = ::blink::standalone_renderer_probe;
     const std::string probe_html = BuildLiveBlinkProbeHtml(html, stylesheets);
+    auto trace_stage = [&](const char* stage) {
+      if (!trace_stages_) {
+        return;
+      }
+      std::fprintf(stderr, "live_adapter.stage=%s\n", stage);
+      std::fflush(stderr);
+    };
     ResetTypefaceResourceRegistryForFrame();
+    trace_stage("before invalidate cache");
     SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
     live_probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+    trace_stage("after invalidate cache");
     live_probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(result.successor_snapshot.viewport.width),
         static_cast<int>(result.successor_snapshot.viewport.height));
@@ -3259,34 +3269,41 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       return;
     }
     auto copy_raw_paint_artifact_audit_json = [&]() {
+      trace_stage("before raw paint artifact audit size");
       const int raw_audit_json_size =
           live_probe::
               StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonSizeForStandaloneRenderer(
                   probe_html.c_str());
+      trace_stage("after raw paint artifact audit size");
       if (raw_audit_json_size <= 0) {
         return;
       }
       std::string raw_json(static_cast<size_t>(raw_audit_json_size) + 1, '\0');
+      trace_stage("before raw paint artifact audit copy");
       const int copied =
           live_probe::
               StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonForStandaloneRenderer(
                   probe_html.c_str(), raw_json.data(),
                   static_cast<int>(raw_json.size()));
+      trace_stage("after raw paint artifact audit copy");
       if (copied > 0) {
         raw_json.resize(static_cast<size_t>(copied));
         result.raw_paint_artifact_audit_json = std::move(raw_json);
       }
     };
+    trace_stage("before reaches PaintClean");
     if (!live_probe::StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
             probe_html.c_str())) {
       result.diagnostics.push_back(
           "real Blink PaintArtifact bridge did not reach PaintClean");
       return;
     }
+    trace_stage("after reaches PaintClean");
     float applied_scroll_x = 0.0f;
     float applied_scroll_y = 0.0f;
     float max_scroll_x = 0.0f;
     float max_scroll_y = 0.0f;
+    trace_stage("before document scroll query");
     if (live_probe::StandaloneBlinkLiveFrameBridgeDocumentScrollOffsetForStandaloneRenderer(
             probe_html.c_str(), &applied_scroll_x, &applied_scroll_y,
             &max_scroll_x, &max_scroll_y)) {
@@ -3299,14 +3316,18 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
       snapshot_.scroll_offsets_by_element_id =
           result.successor_snapshot.scroll_offsets_by_element_id;
     }
+    trace_stage("after document scroll query");
     const bool prior_needs_begin_frame = previous_needs_begin_frame_;
+    trace_stage("before needs begin frame query");
     result.needs_begin_frame =
         live_probe::
             StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
                 probe_html.c_str()) != 0;
+    trace_stage("after needs begin frame query");
     previous_needs_begin_frame_ = result.needs_begin_frame;
     std::array<char, 256> observed_hovered_element_id{};
     std::array<char, 256> observed_active_element_id{};
+    trace_stage("before pointer observed query");
     if (live_probe::
             StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
                 probe_html.c_str(), observed_hovered_element_id.data(),
@@ -3321,15 +3342,22 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           result.successor_snapshot.hovered_element_id;
       snapshot_.active_element_id = result.successor_snapshot.active_element_id;
     }
+    trace_stage("after pointer observed query");
+    trace_stage("before hit test import");
     ImportLiveHitTestEntriesForStandaloneRenderer(probe_html, result);
+    trace_stage("after hit test import");
+    trace_stage("before scrollable element import");
     ImportLiveScrollableElementEntriesForStandaloneRenderer(probe_html, result);
+    trace_stage("after scrollable element import");
     PersistObservedScrollableElementOffsetsForStandaloneRenderer(result);
     snapshot_.scroll_offsets_by_element_id =
         result.successor_snapshot.scroll_offsets_by_element_id;
 
+    trace_stage("before paint chunk count");
     const int chunk_count =
         live_probe::StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
             probe_html.c_str());
+    trace_stage("after paint chunk count");
     copy_raw_paint_artifact_audit_json();
     if (chunk_count <= 0) {
       result.diagnostics.push_back("real Blink PaintArtifact bridge produced no chunks");
@@ -3340,9 +3368,11 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           "real Blink PaintArtifact retained extraction disabled by caller");
       return;
     }
+    trace_stage("before exported draw op count");
     const int exported_draw_op_count =
         live_probe::StandaloneBlinkLiveFrameBridgeExportedDrawOpCountForStandaloneRenderer(
             probe_html.c_str());
+    trace_stage("after exported draw op count");
     if (exported_draw_op_count <= 0) {
       result.diagnostics.push_back(
           "real Blink PaintArtifact bridge produced no exported draw ops");
@@ -3430,6 +3460,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                  nearly_equal(ty, matrix.values[13]);
         };
     for (int i = 0; i < exported_draw_op_count; ++i) {
+      if (trace_stages_ && i < 16) {
+        std::fprintf(stderr, "live_adapter.stage=before exported draw op %d\n", i);
+        std::fflush(stderr);
+      }
       int type = 0;
       float x = 0.0f;
       float y = 0.0f;
@@ -3452,6 +3486,10 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
                   &g, &b, &a, &font_size, &stroke_cap, &stroke_join,
                   &stroke_miter, &radius_x, &radius_y, &glyph_count)) {
         continue;
+      }
+      if (trace_stages_ && i < 16) {
+        std::fprintf(stderr, "live_adapter.stage=after exported draw op %d\n", i);
+        std::fflush(stderr);
       }
       DrawCommandList* source_annotation_commands = active_commands;
       const size_t source_annotation_begin =

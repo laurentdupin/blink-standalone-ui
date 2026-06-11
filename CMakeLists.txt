@@ -8,6 +8,16 @@ option(BLINK_STANDALONE_BUILD_SDL_VIEWER
   "Build the optional SDL3 viewer executables." ON)
 option(BLINK_STANDALONE_FETCH_SDL3
   "Fetch SDL3 with CMake when an installed SDL3 package is unavailable." ON)
+option(BLINK_STANDALONE_PERF_BUILD
+  "Build standalone renderer benchmark targets with release-like perf defines." OFF)
+option(BLINK_STANDALONE_OPTIMIZE_CHROMIUM
+  "Compile upstream Chromium/Blink/cc/Skia/base sources with release optimization." ON)
+option(BLINK_STANDALONE_OPTIMIZE_CODECS
+  "Compile third-party image/codec sources with release optimization." ON)
+option(BLINK_STANDALONE_OPTIMIZE_BOUNDARY
+  "Compile standalone Blink boundary/stub/resource bridge sources with release optimization." ON)
+option(BLINK_STANDALONE_OPTIMIZE_APP
+  "Compile standalone benchmark/presenter application sources with release optimization." ON)
 
 set(BLINK_STANDALONE_CHROMIUM_ROOT
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium
@@ -143,6 +153,140 @@ set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
 set_source_files_properties(${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES}
   PROPERTIES LANGUAGE CXX)
 
+if(BLINK_STANDALONE_PERF_BUILD)
+  set(BLINK_STANDALONE_PERF_SKIA_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkBitmapProcState_opts_ssse3.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkBlitMask_opts_ssse3.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkBlitRow_opts_ml3.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkMemset_opts_avx.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkMemset_opts_erms.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkSwizzler_opts_ml3.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkSwizzler_opts_ssse3.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/effects/colorfilters/SkGaussianColorFilter.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkPolyUtils.cpp
+  )
+  set(BLINK_STANDALONE_PERF_SKCMS_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformHsw.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformSkx.cc
+  )
+  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_PERF_SKIA_SOURCES}
+    ${BLINK_STANDALONE_PERF_SKCMS_SOURCES}
+  )
+  if(MSVC)
+    set_property(SOURCE
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformHsw.cc
+      APPEND PROPERTY COMPILE_OPTIONS
+        /clang:-mavx2
+        /clang:-mf16c
+        /clang:-ffp-contract=off
+    )
+    set_property(SOURCE
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformSkx.cc
+      APPEND PROPERTY COMPILE_OPTIONS
+        /clang:-mavx512f
+        /clang:-mavx512dq
+        /clang:-mavx512cd
+        /clang:-mavx512bw
+        /clang:-mavx512vl
+        /clang:-ffp-contract=off
+    )
+  endif()
+endif()
+
+set(BLINK_STANDALONE_APP_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/render_benchmark.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
+)
+set(BLINK_STANDALONE_SDL_APP_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/sdl_viewer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
+)
+set(BLINK_STANDALONE_BOUNDARY_SOURCES)
+set(BLINK_STANDALONE_CODEC_SOURCES ${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES})
+set(BLINK_STANDALONE_CHROMIUM_SOURCES)
+foreach(source IN LISTS BLINK_STANDALONE_LIVE_SOURCES)
+  if(source MATCHES "/standalone_renderer/src/")
+    list(APPEND BLINK_STANDALONE_BOUNDARY_SOURCES ${source})
+  elseif(source MATCHES "/third_party/skia/src/codec/" OR
+         source MATCHES "/third_party/skia/third_party/externals/libpng/" OR
+         source MATCHES "/third_party/zlib/")
+    list(APPEND BLINK_STANDALONE_CODEC_SOURCES ${source})
+  else()
+    list(APPEND BLINK_STANDALONE_CHROMIUM_SOURCES ${source})
+  endif()
+endforeach()
+list(REMOVE_DUPLICATES BLINK_STANDALONE_CODEC_SOURCES)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_BOUNDARY_SOURCES)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_CHROMIUM_SOURCES)
+
+function(blink_standalone_apply_optimization_group group_name optimize)
+  if(NOT MSVC OR NOT CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
+    return()
+  endif()
+  if(${optimize})
+    set(group_compile_options)
+  else()
+    set(group_compile_options /Od /Ob0 /Oy-)
+  endif()
+  foreach(source IN LISTS ARGN)
+    if(group_compile_options)
+      set_property(SOURCE ${source} APPEND PROPERTY COMPILE_OPTIONS
+        ${group_compile_options}
+      )
+    endif()
+    set_property(SOURCE ${source} PROPERTY BLINK_STANDALONE_COMPILE_GROUP ${group_name})
+  endforeach()
+endfunction()
+
+blink_standalone_apply_optimization_group(
+  chromium BLINK_STANDALONE_OPTIMIZE_CHROMIUM ${BLINK_STANDALONE_CHROMIUM_SOURCES})
+blink_standalone_apply_optimization_group(
+  codecs BLINK_STANDALONE_OPTIMIZE_CODECS ${BLINK_STANDALONE_CODEC_SOURCES})
+blink_standalone_apply_optimization_group(
+  boundary BLINK_STANDALONE_OPTIMIZE_BOUNDARY ${BLINK_STANDALONE_BOUNDARY_SOURCES})
+blink_standalone_apply_optimization_group(
+  app BLINK_STANDALONE_OPTIMIZE_APP ${BLINK_STANDALONE_APP_SOURCES} ${BLINK_STANDALONE_SDL_APP_SOURCES})
+
+function(blink_standalone_json_source_list out_var group_name optimize)
+  set(items "")
+  foreach(source IN LISTS ARGN)
+    file(RELATIVE_PATH rel_source "${CMAKE_CURRENT_SOURCE_DIR}" "${source}")
+    string(REPLACE "\\" "/" rel_source "${rel_source}")
+    string(APPEND items
+      "    {\"source\":\"${rel_source}\",\"object\":\"\",\"group\":\"${group_name}\","
+      "\"optimization\":\"$<IF:$<BOOL:${${optimize}}>,inherited Release /O2,/Od /Ob0 /Oy->\","
+      "\"runtime_library\":\"${CMAKE_MSVC_RUNTIME_LIBRARY}\","
+      "\"forced_includes\":[\"${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h\"]},\n")
+  endforeach()
+  set(${out_var} "${items}" PARENT_SCOPE)
+endfunction()
+
+blink_standalone_json_source_list(compile_group_chromium chromium BLINK_STANDALONE_OPTIMIZE_CHROMIUM ${BLINK_STANDALONE_CHROMIUM_SOURCES})
+blink_standalone_json_source_list(compile_group_codecs codecs BLINK_STANDALONE_OPTIMIZE_CODECS ${BLINK_STANDALONE_CODEC_SOURCES})
+blink_standalone_json_source_list(compile_group_boundary boundary BLINK_STANDALONE_OPTIMIZE_BOUNDARY ${BLINK_STANDALONE_BOUNDARY_SOURCES})
+blink_standalone_json_source_list(compile_group_app app BLINK_STANDALONE_OPTIMIZE_APP ${BLINK_STANDALONE_APP_SOURCES})
+set(compile_groups_json "${compile_group_chromium}${compile_group_codecs}${compile_group_boundary}${compile_group_app}")
+string(REGEX REPLACE ",\n$" "\n" compile_groups_json "${compile_groups_json}")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build/perf")
+file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/build/perf/compile_groups.json"
+  "{\n"
+  "  \"schema_version\": 1,\n"
+  "  \"build_dir\": \"${CMAKE_BINARY_DIR}\",\n"
+  "  \"cmake_build_type\": \"${CMAKE_BUILD_TYPE}\",\n"
+  "  \"options\": {\n"
+  "    \"BLINK_STANDALONE_OPTIMIZE_CHROMIUM\": \"${BLINK_STANDALONE_OPTIMIZE_CHROMIUM}\",\n"
+  "    \"BLINK_STANDALONE_OPTIMIZE_CODECS\": \"${BLINK_STANDALONE_OPTIMIZE_CODECS}\",\n"
+  "    \"BLINK_STANDALONE_OPTIMIZE_BOUNDARY\": \"${BLINK_STANDALONE_OPTIMIZE_BOUNDARY}\",\n"
+  "    \"BLINK_STANDALONE_OPTIMIZE_APP\": \"${BLINK_STANDALONE_OPTIMIZE_APP}\"\n"
+  "  },\n"
+  "  \"sources\": [\n"
+  "${compile_groups_json}"
+  "  ]\n"
+  "}\n")
+
 add_library(blink_live_modp_b64 OBJECT
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/modp_b64/modp_b64.cc
 )
@@ -166,9 +310,7 @@ if(NOT MSVC)
 endif()
 
 add_executable(blink_standalone_render_benchmark_skia
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/render_benchmark.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
+  ${BLINK_STANDALONE_APP_SOURCES}
   ${BLINK_STANDALONE_LIVE_SOURCES}
   ${BLINK_STANDALONE_LIVE_OBJECTS}
 )
@@ -228,14 +370,19 @@ add_executable(blink_standalone_render_benchmark_skia
     U_STATIC_IMPLEMENTATION
     U_I18N_IMPLEMENTATION
     U_COMMON_IMPLEMENTATION
-    SKCMS_DISABLE_HSW=1
-    SKCMS_DISABLE_SKX=1
-    SK_ENABLE_OPTIMIZE_SIZE=1
     PNG_SET_OPTION_SUPPORTED=1
     PNG_INTEL_SSE=1
-    CPU_NO_SIMD=1
     ZLIB_IMPLEMENTATION=1
   )
+
+  if(NOT BLINK_STANDALONE_PERF_BUILD)
+    target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
+      SKCMS_DISABLE_HSW=1
+      SKCMS_DISABLE_SKX=1
+      SK_ENABLE_OPTIMIZE_SIZE=1
+      CPU_NO_SIMD=1
+    )
+  endif()
 
   target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
     ole32
@@ -273,9 +420,7 @@ add_executable(blink_standalone_render_benchmark_skia
 
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/sdl_viewer.cc
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
+      ${BLINK_STANDALONE_SDL_APP_SOURCES}
       ${BLINK_STANDALONE_LIVE_SOURCES}
       ${BLINK_STANDALONE_LIVE_OBJECTS}
     )
@@ -335,15 +480,20 @@ add_executable(blink_standalone_render_benchmark_skia
       U_STATIC_IMPLEMENTATION
       U_I18N_IMPLEMENTATION
       U_COMMON_IMPLEMENTATION
-      SKCMS_DISABLE_HSW=1
-      SKCMS_DISABLE_SKX=1
-      SK_ENABLE_OPTIMIZE_SIZE=1
       PNG_SET_OPTION_SUPPORTED=1
       PNG_INTEL_SSE=1
-      CPU_NO_SIMD=1
       ZLIB_IMPLEMENTATION=1
       SDL_STATIC_LIB=1
     )
+
+    if(NOT BLINK_STANDALONE_PERF_BUILD)
+      target_compile_definitions(blink_standalone_sdl_viewer_skia PRIVATE
+        SKCMS_DISABLE_HSW=1
+        SKCMS_DISABLE_SKX=1
+        SK_ENABLE_OPTIMIZE_SIZE=1
+        CPU_NO_SIMD=1
+      )
+    endif()
 
     target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
       ole32

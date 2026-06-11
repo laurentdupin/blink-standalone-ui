@@ -360,18 +360,18 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutBoxModelObject::EnsureLayerAfterAttachForStandalone() {
   NOT_DESTROYED();
-  const bool scrolls_overflow = StyleRef().ScrollsOverflow();
+  const bool is_scroll_container = IsScrollContainer();
+  const PaintLayerType required_layer_type = LayerTypeRequired();
   // Standalone animation sampling can update computed transform style before
   // the cached layout transform bit is refreshed; keep the normal
   // LayerTypeRequired() gate but consult computed style for the repair check.
   if (!Layer() &&
       (StyleRef().HasOpacity() || StyleRef().HasTransformRelatedProperty() ||
-       HasFilterInducingProperty() || IsStacked() || scrolls_overflow) &&
-      LayerTypeRequired() != kNoPaintLayer) {
+       HasFilterInducingProperty() || IsStacked() || is_scroll_container) &&
+      required_layer_type != kNoPaintLayer) {
     CreateLayerAfterStyleChange();
   }
-  if (Layer() && scrolls_overflow && IsScrollContainer() &&
-      !GetScrollableArea()) {
+  if (Layer() && is_scroll_container && !GetScrollableArea()) {
     Layer()->ScrollContainerStatusChanged();
   }
 }
