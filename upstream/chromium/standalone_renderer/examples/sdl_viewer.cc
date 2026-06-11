@@ -838,6 +838,144 @@ void SetDocumentScroll(html_css_renderer::FrameInput* input,
 
 bool Contains(html_css_renderer::Rect rect, float x, float y);
 
+float ClampScrollCoordinate(float value, float maximum) {
+  return std::clamp(value, 0.0f, std::max(0.0f, maximum));
+}
+
+float ApplyScrollCoordinateDelta(float current,
+                                 float delta,
+                                 float maximum,
+                                 float* residual_delta) {
+  const float clamped = ClampScrollCoordinate(current + delta, maximum);
+  const float consumed = clamped - current;
+  if (residual_delta) {
+    *residual_delta = delta - consumed;
+  }
+  return clamped;
+}
+
+float EntryScrollCoordinate(
+    const html_css_renderer::FrameInput& input,
+    const html_css_renderer::ScrollableElementEntry& entry,
+    bool x_axis) {
+  const auto found = input.scroll_offsets_by_element_id.find(entry.element_id);
+  if (found == input.scroll_offsets_by_element_id.end()) {
+    return x_axis ? entry.scroll_offset.x : entry.scroll_offset.y;
+  }
+  return x_axis ? found->second.x : found->second.y;
+}
+
+bool ApplyScrollableElementScrollDelta(
+    const html_css_renderer::ScrollableElementEntry& entry,
+    html_css_renderer::Point delta,
+    html_css_renderer::FrameInput* input,
+    html_css_renderer::Point* residual_delta) {
+  if (!input || entry.element_id.empty()) {
+    return false;
+  }
+  html_css_renderer::Point residual = delta;
+  const float current_x = EntryScrollCoordinate(*input, entry, true);
+  const float current_y = EntryScrollCoordinate(*input, entry, false);
+  html_css_renderer::Point next_scroll{current_x, current_y};
+  if (entry.can_scroll_x && delta.x != 0.0f) {
+    next_scroll.x = ApplyScrollCoordinateDelta(
+        current_x, delta.x, entry.max_scroll_offset.x, &residual.x);
+  }
+  if (entry.can_scroll_y && delta.y != 0.0f) {
+    next_scroll.y = ApplyScrollCoordinateDelta(
+        current_y, delta.y, entry.max_scroll_offset.y, &residual.y);
+  }
+  if (residual_delta) {
+    *residual_delta = residual;
+  }
+  const bool changed = std::abs(next_scroll.x - current_x) > 0.001f ||
+                       std::abs(next_scroll.y - current_y) > 0.001f;
+  if (changed) {
+    input->scroll_offsets_by_element_id[entry.element_id] = next_scroll;
+  }
+  return changed;
+}
+
+bool ApplyDocumentScrollDeltaFromBlinkState(
+    const html_css_renderer::RenderResult& previous_result,
+    html_css_renderer::Point delta,
+    html_css_renderer::FrameInput* input) {
+  if (!input) {
+    return false;
+  }
+  const float current_x = CurrentDocumentScrollX(*input);
+  const float current_y = CurrentDocumentScrollY(*input);
+  const float next_x = ApplyScrollCoordinateDelta(
+      current_x, delta.x, previous_result.document_max_scroll_offset.x,
+      nullptr);
+  const float next_y = ApplyScrollCoordinateDelta(
+      current_y, delta.y, previous_result.document_max_scroll_offset.y,
+      nullptr);
+  if (std::abs(next_x - current_x) <= 0.001f &&
+      std::abs(next_y - current_y) <= 0.001f) {
+    return false;
+  }
+  SetDocumentScroll(input, next_x, next_y);
+  return true;
+}
+
+bool SetDocumentScrollFromBlinkState(
+    const html_css_renderer::RenderResult& previous_result,
+    float x,
+    float y,
+    html_css_renderer::FrameInput* input) {
+  if (!input) {
+    return false;
+  }
+  const float current_x = CurrentDocumentScrollX(*input);
+  const float current_y = CurrentDocumentScrollY(*input);
+  const float next_x =
+      ClampScrollCoordinate(x, previous_result.document_max_scroll_offset.x);
+  const float next_y =
+      ClampScrollCoordinate(y, previous_result.document_max_scroll_offset.y);
+  if (std::abs(next_x - current_x) <= 0.001f &&
+      std::abs(next_y - current_y) <= 0.001f) {
+    return false;
+  }
+  SetDocumentScroll(input, next_x, next_y);
+  return true;
+}
+
+bool ApplyWheelScrollFromBlinkState(
+    const html_css_renderer::RenderResult& previous_result,
+    html_css_renderer::Point wheel_point,
+    html_css_renderer::Point wheel_delta,
+    html_css_renderer::FrameInput* input) {
+  if (!input) {
+    return false;
+  }
+  html_css_renderer::Point residual = wheel_delta;
+  bool changed = false;
+  for (auto it = previous_result.scrollable_element_entries.rbegin();
+       it != previous_result.scrollable_element_entries.rend(); ++it) {
+    const html_css_renderer::ScrollableElementEntry& entry = *it;
+    if (!Contains(entry.bounds, wheel_point.x, wheel_point.y)) {
+      continue;
+    }
+    const bool can_scroll_requested_axis =
+        (entry.can_scroll_x && residual.x != 0.0f) ||
+        (entry.can_scroll_y && residual.y != 0.0f);
+    if (!can_scroll_requested_axis) {
+      continue;
+    }
+    html_css_renderer::Point next_residual = residual;
+    changed |= ApplyScrollableElementScrollDelta(entry, residual, input,
+                                                 &next_residual);
+    residual = next_residual;
+    break;
+  }
+  if (std::abs(residual.x) > 0.001f || std::abs(residual.y) > 0.001f) {
+    changed |= ApplyDocumentScrollDeltaFromBlinkState(previous_result,
+                                                     residual, input);
+  }
+  return changed;
+}
+
 using ProfileClock = std::chrono::steady_clock;
 
 double ElapsedProfileMs(ProfileClock::time_point start,
@@ -849,6 +987,13 @@ struct SdlProfileFrame {
   uint64_t frame = 0;
   std::string reason;
   bool incremental = false;
+  bool full_redraw = false;
+  bool scroll_reuse = false;
+  bool no_change_fast_path = false;
+  size_t damage_rect_count = 0;
+  int lifecycle_count = 0;
+  int paint_artifact_translation_count = 0;
+  int retained_scene_plan_count = 0;
   double input_update_ms = 0.0;
   double blink_initialize_ms = 0.0;
   double blink_export_retained_ms = 0.0;
@@ -868,6 +1013,13 @@ struct SdlProfileFrame {
   double total_ms = 0.0;
   std::string cpu_replay_command_top;
 };
+
+int LifecycleCount(const html_css_renderer::RenderResult& result) {
+  return result.frame_work.style_update_count +
+         result.frame_work.layout_count +
+         result.frame_work.prepaint_count +
+         result.frame_work.paint_count;
+}
 
 double SdlProfileMeasuredSubtotal(const SdlProfileFrame& frame) {
   return frame.input_update_ms + frame.blink_initialize_ms +
@@ -1054,6 +1206,8 @@ class SdlFrameProfiler {
     std::fprintf(
         stderr,
         "viewer profile: frame=%llu event=%s incremental=%d "
+        "full_redraw=%d scroll_reuse=%d no_change=%d damage_rects=%zu "
+        "lifecycle_count=%d translation_count=%d retained_plan_count=%d "
         "input=%.3fms blink_init=%.3fms blink_export_retained=%.3fms "
         "probe_html=%.3fms probe_style=%.3fms probe_layout=%.3fms "
         "probe_prepaint_paint=%.3fms probe_artifact=%.3fms "
@@ -1061,7 +1215,11 @@ class SdlFrameProfiler {
         "cpu_replay=%.3fms pixel_convert=%.3fms texture_upload=%.3fms "
         "direct_render=%.3fms sdl_draw_present=%.3fms total=%.3fms%s%s\n",
         static_cast<unsigned long long>(frame.frame), frame.reason.c_str(),
-        frame.incremental ? 1 : 0, frame.input_update_ms,
+        frame.incremental ? 1 : 0, frame.full_redraw ? 1 : 0,
+        frame.scroll_reuse ? 1 : 0, frame.no_change_fast_path ? 1 : 0,
+        frame.damage_rect_count, frame.lifecycle_count,
+        frame.paint_artifact_translation_count,
+        frame.retained_scene_plan_count, frame.input_update_ms,
         frame.blink_initialize_ms, frame.blink_export_retained_ms,
         frame.probe_html_document_setup_ms, frame.probe_style_update_ms,
         frame.probe_layout_lifecycle_ms,
@@ -1122,6 +1280,23 @@ bool ViewerUsesScrollTranslationReuse(
   return result.frame.allows_scroll_translation_reuse ||
          std::abs(result.frame.scroll_translation_delta.x) > 0.5f ||
          std::abs(result.frame.scroll_translation_delta.y) > 0.5f;
+}
+
+void PopulateFrameWorkProfile(
+    const html_css_renderer::RenderResult& result,
+    SdlProfileFrame* frame) {
+  if (!frame) {
+    return;
+  }
+  frame->full_redraw = ViewerRequiresFullRedraw(result);
+  frame->scroll_reuse = ViewerUsesScrollTranslationReuse(result);
+  frame->no_change_fast_path = result.frame_work.no_change_fast_path;
+  frame->damage_rect_count = ViewerDamageRects(result).size();
+  frame->lifecycle_count = LifecycleCount(result);
+  frame->paint_artifact_translation_count =
+      result.frame_work.paint_artifact_translation_count;
+  frame->retained_scene_plan_count =
+      result.frame_work.retained_scene_plan_count;
 }
 
 bool SameViewerSize(html_css_renderer::Size left,
@@ -2141,6 +2316,7 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       initial_profile.blink_export_retained_ms =
           ElapsedProfileMs(blink_render_start, ProfileClock::now());
+      PopulateFrameWorkProfile(result, &initial_profile);
       PopulateProbeProfileTimings(result, &initial_profile);
     }
     result.diagnostics.insert(result.diagnostics.begin(),
@@ -2347,6 +2523,7 @@ int main(int argc, char** argv) {
     if (profile) {
       profile_frame.blink_export_retained_ms =
           ElapsedProfileMs(blink_render_start, ProfileClock::now());
+      PopulateFrameWorkProfile(next_result, &profile_frame);
       PopulateProbeProfileTimings(next_result, &profile_frame);
     }
     if (use_cpu) {
@@ -2553,6 +2730,7 @@ int main(int argc, char** argv) {
     if (profiler.enabled()) {
       profile_frame.blink_export_retained_ms =
           ElapsedProfileMs(blink_render_start, ProfileClock::now());
+      PopulateFrameWorkProfile(next_result, &profile_frame);
       PopulateProbeProfileTimings(next_result, &profile_frame);
     }
     next_result.diagnostics.insert(next_result.diagnostics.begin(),
@@ -2819,26 +2997,24 @@ int main(int argc, char** argv) {
             KeyboardScrollDelta(event.key.key, scroll_step, frame_height);
         if (scroll_delta) {
           html_css_renderer::FrameInput next_input = input;
+          bool scroll_changed = false;
           if (scroll_delta->home) {
-            SetDocumentScroll(&next_input, 0.0f, 0.0f);
+            scroll_changed =
+                SetDocumentScrollFromBlinkState(result, 0.0f, 0.0f,
+                                                &next_input);
           } else {
-            SetDocumentScroll(&next_input,
-                              CurrentDocumentScrollX(next_input) +
-                                  scroll_delta->x,
-                              CurrentDocumentScrollY(next_input) +
-                                  scroll_delta->y);
+            scroll_changed = ApplyDocumentScrollDeltaFromBlinkState(
+                result, html_css_renderer::Point{scroll_delta->x,
+                                                 scroll_delta->y},
+                &next_input);
           }
-          if (CurrentDocumentScrollX(next_input) !=
-                  CurrentDocumentScrollX(input) ||
-              CurrentDocumentScrollY(next_input) !=
-                  CurrentDocumentScrollY(input)) {
+          if (scroll_changed) {
             const double input_update_ms =
                 profiler.enabled()
                     ? ElapsedProfileMs(input_update_start, ProfileClock::now())
                     : 0.0;
             if (!render_updated_input("key-scroll", std::move(next_input),
-                                      input_update_ms, input_update_start,
-                                      true)) {
+                                      input_update_ms, input_update_start)) {
               running = false;
               break;
             }
@@ -2936,34 +3112,38 @@ int main(int argc, char** argv) {
     if (running && pending_wheel &&
         (pending_wheel_delta.x != 0.0f || pending_wheel_delta.y != 0.0f)) {
       html_css_renderer::FrameInput next_input = input;
-      next_input.wheel = html_css_renderer::WheelInput{
-          pending_wheel_point,
-          html_css_renderer::Point{pending_wheel_delta.x,
-                                   pending_wheel_delta.y}};
-      const double input_update_ms =
-          profiler.enabled()
-              ? ElapsedProfileMs(pending_wheel_start, ProfileClock::now())
-              : 0.0;
-      if (!render_updated_input("wheel-scroll", std::move(next_input),
-                                input_update_ms, pending_wheel_start, true)) {
-        running = false;
+      if (ApplyWheelScrollFromBlinkState(
+              result, pending_wheel_point,
+              html_css_renderer::Point{pending_wheel_delta.x,
+                                       pending_wheel_delta.y},
+              &next_input)) {
+        const double input_update_ms =
+            profiler.enabled()
+                ? ElapsedProfileMs(pending_wheel_start, ProfileClock::now())
+                : 0.0;
+        if (!render_updated_input("wheel-scroll", std::move(next_input),
+                                  input_update_ms, pending_wheel_start)) {
+          running = false;
+        }
+        texture_dirty = true;
       }
-      texture_dirty = true;
     }
     if (first_present_complete && profile_auto_scroll_remaining > 0) {
       const ProfileClock::time_point input_update_start = ProfileClock::now();
       html_css_renderer::FrameInput next_input = input;
-      SetDocumentScroll(&next_input, CurrentDocumentScrollX(next_input),
-                        CurrentDocumentScrollY(next_input) +
-                            profile_auto_scroll_delta);
-      const double input_update_ms =
-          ElapsedProfileMs(input_update_start, ProfileClock::now());
-      if (!render_updated_input("profile-auto-scroll", std::move(next_input),
-                                input_update_ms, input_update_start, true)) {
-        running = false;
+      if (ApplyDocumentScrollDeltaFromBlinkState(
+              result,
+              html_css_renderer::Point{0.0f, profile_auto_scroll_delta},
+              &next_input)) {
+        const double input_update_ms =
+            ElapsedProfileMs(input_update_start, ProfileClock::now());
+        if (!render_updated_input("profile-auto-scroll", std::move(next_input),
+                                  input_update_ms, input_update_start)) {
+          running = false;
+        }
+        texture_dirty = true;
       }
       --profile_auto_scroll_remaining;
-      texture_dirty = true;
     }
     if (first_present_complete && profile_resize_requested &&
         !profile_resize_done &&

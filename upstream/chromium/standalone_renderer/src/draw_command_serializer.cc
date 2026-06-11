@@ -1363,7 +1363,11 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
       << (result.frame.requires_full_redraw ? "true" : "false")
       << ",\"needs_begin_frame\":"
       << (result.needs_begin_frame ? "true" : "false")
-      << ",\"frame_work\":"
+      << ",\"allows_scroll_translation_reuse\":"
+      << (result.frame.allows_scroll_translation_reuse ? "true" : "false")
+      << ",\"scroll_translation_delta\":";
+  WritePoint(out, result.frame.scroll_translation_delta);
+  out << ",\"frame_work\":"
       << SerializeFrameWorkDiagnosticsJson(result.frame_work)
       << ",\"damage_bounds\":";
   WriteRect(out, result.frame.damage_bounds);

@@ -296,6 +296,15 @@ def frame_work(metrics: dict[str, Any]) -> dict[str, Any]:
     return result_work if isinstance(result_work, dict) else {}
 
 
+def lifecycle_count_from_frame_work(work: dict[str, Any]) -> int:
+    return (
+        int(work.get("style_update_count", 0) or 0)
+        + int(work.get("layout_count", 0) or 0)
+        + int(work.get("prepaint_count", 0) or 0)
+        + int(work.get("paint_count", 0) or 0)
+    )
+
+
 def presented_frame_ms(metrics: dict[str, Any]) -> float | None:
     timing = timing_from_metrics(metrics)
     advance = as_float(timing.get("advance_and_render_ms"))
@@ -684,16 +693,47 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for mode in warm_no_change_rows
     )
     warm_no_change_lifecycle_count = sum(
-        int(nested(mode, "frame_work", "style_update_count", default=0) or 0)
-        + int(nested(mode, "frame_work", "layout_count", default=0) or 0)
-        + int(nested(mode, "frame_work", "prepaint_count", default=0) or 0)
-        + int(nested(mode, "frame_work", "paint_count", default=0) or 0)
+        lifecycle_count_from_frame_work(mode.get("frame_work") or {})
         for mode in warm_no_change_rows
     )
     warm_no_change_raster_skipped_count = sum(
         1
         for mode in warm_no_change_rows
         if nested(mode, "timing", "cpu_raster_replay_skipped", default=False)
+    )
+    warm_scroll_rows = [
+        row.get("warm_scroll")
+        for row in rows
+        if isinstance(row.get("warm_scroll"), dict)
+        and row.get("warm_scroll", {}).get("exit_code") == 0
+    ]
+    warm_scroll_translation_count = sum(
+        int(nested(mode, "frame_work", "paint_artifact_translation_count", default=0) or 0)
+        for mode in warm_scroll_rows
+    )
+    warm_scroll_lifecycle_count = sum(
+        lifecycle_count_from_frame_work(mode.get("frame_work") or {})
+        for mode in warm_scroll_rows
+    )
+    warm_scroll_retained_scene_plan_count = sum(
+        int(nested(mode, "frame_work", "retained_scene_plan_count", default=0) or 0)
+        for mode in warm_scroll_rows
+    )
+    warm_scroll_full_redraw_count = sum(
+        1
+        for mode in warm_scroll_rows
+        if nested(mode, "metrics", "render_result", "requires_full_redraw", default=False)
+    )
+    warm_scroll_reuse_count = sum(
+        1
+        for mode in warm_scroll_rows
+        if nested(
+            mode,
+            "metrics",
+            "render_result",
+            "allows_scroll_translation_reuse",
+            default=False,
+        )
     )
     return {
         "page_count": len(rows),
@@ -708,6 +748,12 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "warm_no_change_paint_translation_count": warm_no_change_translation_count,
         "warm_no_change_lifecycle_count": warm_no_change_lifecycle_count,
         "warm_no_change_raster_skipped_count": warm_no_change_raster_skipped_count,
+        "warm_scroll_count": len(warm_scroll_rows),
+        "warm_scroll_reuse_count": warm_scroll_reuse_count,
+        "warm_scroll_full_redraw_count": warm_scroll_full_redraw_count,
+        "warm_scroll_paint_translation_count": warm_scroll_translation_count,
+        "warm_scroll_lifecycle_count": warm_scroll_lifecycle_count,
+        "warm_scroll_retained_scene_plan_count": warm_scroll_retained_scene_plan_count,
         "stats": {key: stats(value) for key, value in values_by_key.items()},
         "slowest_20": [
             {
@@ -754,6 +800,12 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "warm_no_change_translation_count",
         "warm_no_change_lifecycle_count",
         "warm_no_change_raster_skipped",
+        "warm_scroll_presented_frame_ms",
+        "warm_scroll_reuse",
+        "warm_scroll_full_redraw",
+        "warm_scroll_translation_count",
+        "warm_scroll_lifecycle_count",
+        "warm_scroll_retained_scene_plan_count",
         "document_max_scroll_y",
         "correctness_exit",
         "correctness_classification",
@@ -765,11 +817,16 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         for row in rows:
             cold = row.get("cold", {})
             warm_no_change = row.get("warm_no_change", {})
-            warm_no_change_lifecycle_count = (
-                int(nested(warm_no_change, "frame_work", "style_update_count", default=0) or 0)
-                + int(nested(warm_no_change, "frame_work", "layout_count", default=0) or 0)
-                + int(nested(warm_no_change, "frame_work", "prepaint_count", default=0) or 0)
-                + int(nested(warm_no_change, "frame_work", "paint_count", default=0) or 0)
+            if not isinstance(warm_no_change, dict):
+                warm_no_change = {}
+            warm_scroll = row.get("warm_scroll", {})
+            if not isinstance(warm_scroll, dict):
+                warm_scroll = {}
+            warm_no_change_lifecycle_count = lifecycle_count_from_frame_work(
+                warm_no_change.get("frame_work", {})
+            )
+            warm_scroll_lifecycle_count = lifecycle_count_from_frame_work(
+                warm_scroll.get("frame_work", {})
             )
             writer.writerow(
                 {
@@ -798,6 +855,30 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     "warm_no_change_lifecycle_count": warm_no_change_lifecycle_count,
                     "warm_no_change_raster_skipped": nested(
                         warm_no_change, "timing", "cpu_raster_replay_skipped"
+                    ),
+                    "warm_scroll_presented_frame_ms": warm_scroll.get("presented_frame_ms"),
+                    "warm_scroll_reuse": nested(
+                        warm_scroll,
+                        "metrics",
+                        "render_result",
+                        "allows_scroll_translation_reuse",
+                    ),
+                    "warm_scroll_full_redraw": nested(
+                        warm_scroll,
+                        "metrics",
+                        "render_result",
+                        "requires_full_redraw",
+                    ),
+                    "warm_scroll_translation_count": nested(
+                        warm_scroll,
+                        "frame_work",
+                        "paint_artifact_translation_count",
+                    ),
+                    "warm_scroll_lifecycle_count": warm_scroll_lifecycle_count,
+                    "warm_scroll_retained_scene_plan_count": nested(
+                        warm_scroll,
+                        "frame_work",
+                        "retained_scene_plan_count",
                     ),
                     "document_max_scroll_y": row.get("document_max_scroll_y"),
                     "correctness_exit": row.get("correctness", {}).get("exit_code"),
