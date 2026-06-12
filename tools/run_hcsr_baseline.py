@@ -510,7 +510,6 @@ def run_view(
         "--crash-dump",
         str(crash),
         "--strict-text-blob-typefaces",
-        "--skia-cpu",
     ]
     benchmark_exit, benchmark_elapsed, _ = run(
         bench_cmd, out_dir / f"{safe_case}-{safe_label}-benchmark.log", timeout

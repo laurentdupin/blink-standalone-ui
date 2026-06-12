@@ -8,24 +8,24 @@ Verdict: the active benchmark/viewer path uses real Blink `PaintArtifact` output
 
 Evidence:
 
-- `upstream/chromium/standalone_renderer/examples/render_benchmark.cc:1468` creates the live Blink page embedder for `--blink` benchmark runs.
-- `upstream/chromium/standalone_renderer/examples/render_benchmark.cc:1549` rejects strict benchmark output unless diagnostics confirm `paint artifact source: real Blink PaintArtifact`.
-- `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc:2121` and `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc:2512` create the same live Blink page embedder for the SDL viewer path.
-- `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc:2964` and `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc:3256` verify the linked bridge exposes the expected `DummyPageHolder` and `LocalFrameView` PaintArtifact path before using live paint.
-- `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc:3179` enters `TryReplaceWithLivePaintArtifactScene`, which reads live Blink paint chunks, display items, property metadata, hit-test data, scroll data, and exported draw ops.
-- `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc:4325` records the active source as `paint artifact source: real Blink PaintArtifact; extractor=real_blink_paint_artifact_extractor`.
-- `upstream/chromium/standalone_renderer/src/retained_scene.cc:1341` converts `PaintArtifact` chunks into retained scene chunks when working from the standalone `PaintArtifact` package.
-- `upstream/chromium/standalone_renderer/src/retained_scene.cc:1658` flattens retained scenes into draw commands for presentation.
-- `upstream/chromium/standalone_renderer/src/skia_cpu_renderer.cc:1611` rasters a `RenderResult` with Skia CPU.
-- `upstream/chromium/standalone_renderer/examples/render_benchmark.cc:1667` uses `RasterizeRenderResultWithSkiaCpu` for benchmark output when `--skia-cpu` is selected.
-- `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc:2182`, `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc:2368`, and `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc:2580` use Skia CPU raster for SDL viewer frames.
-- `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc:1500` uploads CPU pixels with `SDL_UpdateTexture`.
+- `upstream/chromium/standalone_renderer/examples/render_benchmark.cc` creates the live Blink page embedder unconditionally for benchmark runs.
+- `upstream/chromium/standalone_renderer/examples/render_benchmark.cc` rejects strict benchmark output unless diagnostics confirm `paint artifact source: real Blink PaintArtifact`.
+- `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc` creates the same live Blink page embedder for the SDL viewer path.
+- `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc` verifies the linked bridge exposes the expected `DummyPageHolder` and `LocalFrameView` PaintArtifact path before using live paint.
+- `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc` enters `TryReplaceWithLivePaintArtifactScene`, which reads live Blink paint chunks, display items, property metadata, hit-test data, scroll data, and exported draw ops.
+- `upstream/chromium/standalone_renderer/src/blink_runtime_adapter.cc` records the active source as `paint artifact source: real Blink PaintArtifact; extractor=real_blink_paint_artifact_extractor`.
+- `upstream/chromium/standalone_renderer/src/retained_scene.cc` converts `PaintArtifact` chunks into retained scene chunks when working from the standalone `PaintArtifact` package.
+- `upstream/chromium/standalone_renderer/src/retained_scene.cc` flattens retained scenes into draw commands for presentation.
+- `upstream/chromium/standalone_renderer/src/skia_cpu_renderer.cc` rasters a `RenderResult` with Skia CPU.
+- `upstream/chromium/standalone_renderer/examples/render_benchmark.cc` uses `RasterizeRenderResultWithSkiaCpu` unconditionally for benchmark output.
+- `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc` uses Skia CPU raster for SDL viewer frames.
+- `upstream/chromium/standalone_renderer/examples/sdl_viewer.cc` uploads CPU pixels with `SDL_UpdateTexture`.
 
 ## Inactive Or Non-Hot Paths
 
-- `StandaloneFrame` is still present as a fallback/snapshot artifact path in `upstream/chromium/standalone_renderer/src/standalone_frame.cc`; its `CollectPaint` output is tagged as `BlinkPaintArtifactSource::kStandaloneSnapshot` at `upstream/chromium/standalone_renderer/src/standalone_frame.cc:228`. The strict benchmark rejects non-real-Blink output, so this is not the hot benchmark path.
-- Blink `PaintArtifactCompositor` is not active. The linked definitions in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc:9347` are stubs, and no active benchmark/viewer path builds a cc layer tree from `PaintArtifactCompositor`.
-- `PaintArtifact::GetPaintRecord` is not available as a real flattened Blink paint-record path. The benchmark documents that the standalone symbol resolves to the empty stub at `upstream/chromium/standalone_renderer/examples/render_benchmark.cc:1802`, with the stub in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc:9599`.
+- `StandaloneFrame` is still present as a snapshot artifact implementation in `upstream/chromium/standalone_renderer/src/standalone_frame.cc`; its `CollectPaint` output is tagged as `BlinkPaintArtifactSource::kStandaloneSnapshot`. Public benchmark and viewer entrypoints no longer expose it as a product backend, and strict benchmark output rejects non-real-Blink output.
+- Blink `PaintArtifactCompositor` is not active. The linked definitions in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` are stubs, and no active benchmark/viewer path builds a cc layer tree from `PaintArtifactCompositor`.
+- `PaintArtifact::GetPaintRecord` is not available as a real flattened Blink paint-record path. The benchmark documents that the standalone symbol resolves to the empty stub in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc`.
 
 ## Timing Boundaries
 
@@ -56,6 +56,12 @@ Current gaps:
 The post-`8382d99` damage-clip grouping work is an interim retained Skia CPU replay optimization. It groups disjoint damage clips only for command replay, keeps copyback on the original clamped damage clips, and records stable diagnostics for clip count, replay group count, command replay counts before/after grouping, raw and coalesced damage area, grouping time, SkRegion clip time, CPU replay time, and copyback time.
 
 This is still the standalone retained `DrawCommandList` path. It is not Chromium PaintArtifactCompositor, not a cc layer tree, and not a retained GPU/tile compositor. The remaining `49d_rounded_shadow_document_scroll` scroll cost is dominated by real Skia CPU replay of expensive static shadow/filter/rounded-clip content; closing that safely likely requires real retained layer/tile/cache metadata or the Chromium compositor path, not a local damage-clip shortcut.
+
+## Chromium Reuse Pivot
+
+The first pivot boundary is to stop exposing product-level renderer switches while the implementation still uses the transitional retained Skia CPU presenter. Public benchmark and SDL viewer entrypoints now use one path: live Blink `PaintArtifact` input, standalone retained `DrawCommandList` extraction, Skia CPU raster, and SDL/BMP presentation as appropriate.
+
+The long-term single rendering path should replace the standalone retained presenter with Chromium `PaintArtifactCompositor` and cc integration rather than extending local retained-renderer heuristics. Validation-only diagnostics may remain available when they inspect the active path, but they should not imply supported product fallbacks or alternate renderers.
 
 ## 49d Retained Cache Boundary
 

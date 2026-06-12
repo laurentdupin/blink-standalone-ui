@@ -29,9 +29,11 @@
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
 #include "html_css_renderer/standalone_resource_provider.h"
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-#include "html_css_renderer/skia_cpu_renderer.h"
+
+#if !defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+#error "blink_standalone_render_benchmark_skia requires Skia CPU rendering."
 #endif
+#include "html_css_renderer/skia_cpu_renderer.h"
 
 namespace {
 
@@ -861,7 +863,7 @@ bool WritePageSetupJson(const std::string& path,
                         const html_css_renderer::RenderResult& result,
                         const std::string& html_file,
                         const std::string& lifecycle_stop,
-                        bool use_blink) {
+                        bool used_live_blink) {
   std::ofstream file(path);
   if (!file) {
     return false;
@@ -908,7 +910,7 @@ bool WritePageSetupJson(const std::string& path,
   file << "    \"lifecycle_stop\": ";
   WriteJsonString(file, lifecycle_stop);
   file << ",\n";
-  file << "    \"used_blink\": " << (use_blink ? "true" : "false") << ",\n";
+  file << "    \"used_blink\": " << (used_live_blink ? "true" : "false") << ",\n";
   file << "    \"html_computed_style\": {\"status\": \"see raw_audit.page_evidence when available\"},\n";
   file << "    \"body_computed_style\": {\"status\": \"see raw_audit.page_evidence when available\"},\n";
   file << "    \"document_element_layout_rect\": {\"status\": \"not yet exported as dedicated field\"},\n";
@@ -992,8 +994,7 @@ void PrintUsage() {
                "[--json <metrics.json>] [--min-non-white pixels] "
                "[--dump-paint-artifact <artifact.json>] "
                "[--dump-page-setup <setup.json>] "
-               "[--audit-only] [--disable-retained-extraction] "
-               "[--disable-skia-raster] "
+               "[--audit-only] "
                "[--lifecycle-stop <html|style|layout|prepaint|paint|artifact>] "
                "[--crash-dump <path>] "
                "[--paint-oracle=skia-paint-record] [--oracle-out <out.bmp>] "
@@ -1006,17 +1007,11 @@ void PrintUsage() {
                "[--strict-text-blob-typefaces] "
                "[--compat-text-blob-typefaces] "
                "[--font-file path]"
-               " [--blink]"
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-               " [--skia-cpu]"
-#endif
                "\n");
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
   std::fprintf(stderr,
-               "Note: live Blink retained replay currently requires "
-               "--skia-cpu; the non-Skia backend is unsupported for this "
-               "path.\n");
-#endif
+               "Note: this executable always uses live Blink PaintArtifact "
+               "input and the Skia CPU raster path. Backend selector flags "
+               "are not supported.\n");
 }
 
 #if defined(_WIN32)
@@ -1060,7 +1055,6 @@ LONG WINAPI WriteBenchmarkCrashDump(EXCEPTION_POINTERS* exception_pointers) {
 }
 #endif
 
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
 html_css_renderer::Rect BoundsForRects(
     const std::vector<html_css_renderer::Rect>& rects) {
   bool have_bounds = false;
@@ -1256,7 +1250,6 @@ int RunDamageGroupingSelfTest() {
   }
   return failed ? 1 : 0;
 }
-#endif
 
 }  // namespace
 
@@ -1293,17 +1286,13 @@ int main(int argc, char** argv) {
   std::string resource_root;
   std::string resource_base_path;
   size_t min_non_white = 1;
-  bool use_skia_cpu = false;
   bool audit_only = false;
-  bool disable_retained_extraction = false;
-  bool disable_skia_raster = false;
   bool trace_stages = false;
   bool debug_text_blob_replay = false;
   bool debug_command_coverage = false;
   bool disable_damage_clip_grouping = false;
   bool self_test_damage_grouping = false;
   bool strict_text_blob_typefaces = true;
-  bool use_blink = true;
   bool incremental = false;
   int repeat_no_change_frames = 1;
   BenchmarkTimingDiagnostics timing;
@@ -1604,13 +1593,6 @@ int main(int argc, char** argv) {
       page_setup_dump_path = arg.substr(18);
     } else if (arg == "--audit-only") {
       audit_only = true;
-      disable_retained_extraction = true;
-      disable_skia_raster = true;
-      min_non_white = 0;
-    } else if (arg == "--disable-retained-extraction") {
-      disable_retained_extraction = true;
-    } else if (arg == "--disable-skia-raster") {
-      disable_skia_raster = true;
       min_non_white = 0;
     } else if (arg == "--lifecycle-stop") {
       const char* value = next_value();
@@ -1692,14 +1674,6 @@ int main(int argc, char** argv) {
         return 2;
       }
       font_file = value;
-    } else if (arg == "--skia-cpu") {
-      use_skia_cpu = true;
-    } else if (arg == "--blink") {
-      use_blink = true;
-    } else if (arg == "--manual") {
-      std::fprintf(stderr,
-                   "--manual is no longer supported; live Blink is required\n");
-      return 2;
     } else {
       PrintUsage();
       return 2;
@@ -1707,19 +1681,14 @@ int main(int argc, char** argv) {
   }
   timing.input_setup_ms =
       ElapsedMs(input_setup_start, BenchmarkClock::now());
-  timing.used_blink = use_blink;
-  timing.used_skia_cpu = use_skia_cpu;
+  timing.used_blink = true;
+  timing.used_skia_cpu = true;
 
   if (self_test_damage_grouping) {
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
     return RunDamageGroupingSelfTest();
-#else
-    std::fprintf(stderr, "damage grouping self-test requires Skia CPU\n");
-    return 2;
-#endif
   }
 
-  if (create_info.html.empty() || (out_path.empty() && !disable_skia_raster)) {
+  if (create_info.html.empty() || (out_path.empty() && !audit_only)) {
     PrintUsage();
     return 2;
   }
@@ -1748,114 +1717,110 @@ int main(int argc, char** argv) {
   bool have_previous_result = false;
   bool identical_incremental_requested = false;
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
-  if (use_blink) {
-    html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
-    blink_create_info.renderer = std::move(create_info);
-    blink_create_info.disable_retained_extraction = disable_retained_extraction;
-    blink_create_info.enable_paint_artifact_audit =
-        audit_only || !json_path.empty() || !paint_artifact_dump_path.empty();
-    blink_create_info.trace_stages = trace_stages;
-    blink_create_info.debug_text_blob_replay = debug_text_blob_replay;
-    blink_create_info.lifecycle_stop = lifecycle_stop;
-    const auto create_start = BenchmarkClock::now();
-    blink_embedder =
-        html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
-    timing.blink_embedder_create_ms =
-        ElapsedMs(create_start, BenchmarkClock::now());
-    if (!blink_embedder) {
-      std::fprintf(stderr, "failed to create Blink adapter\n");
-      return 1;
+  html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
+  blink_create_info.renderer = std::move(create_info);
+  blink_create_info.enable_paint_artifact_audit =
+      audit_only || !json_path.empty() || !paint_artifact_dump_path.empty();
+  blink_create_info.trace_stages = trace_stages;
+  blink_create_info.debug_text_blob_replay = debug_text_blob_replay;
+  blink_create_info.lifecycle_stop = lifecycle_stop;
+  const auto create_start = BenchmarkClock::now();
+  blink_embedder =
+      html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
+  timing.blink_embedder_create_ms =
+      ElapsedMs(create_start, BenchmarkClock::now());
+  if (!blink_embedder) {
+    std::fprintf(stderr, "failed to create Blink adapter\n");
+    return 1;
+  }
+  const auto initialize_start = BenchmarkClock::now();
+  const html_css_renderer::BlinkLifecycleReport init =
+      blink_embedder->Initialize();
+  timing.blink_initialize_ms =
+      ElapsedMs(initialize_start, BenchmarkClock::now());
+  BenchmarkClock::time_point render_start;
+  if (incremental) {
+    if (!previous_stylesheets_override.empty()) {
+      previous_input.stylesheets_override = previous_stylesheets_override;
+      input.stylesheets_override = renderer_info_for_oracle.stylesheets;
     }
-    const auto initialize_start = BenchmarkClock::now();
-    const html_css_renderer::BlinkLifecycleReport init =
-        blink_embedder->Initialize();
-    timing.blink_initialize_ms =
-        ElapsedMs(initialize_start, BenchmarkClock::now());
-    BenchmarkClock::time_point render_start;
-    if (incremental) {
-      if (!previous_stylesheets_override.empty()) {
-        previous_input.stylesheets_override = previous_stylesheets_override;
-        input.stylesheets_override = create_info.stylesheets;
-      }
-      const bool same_delta =
-          previous_input.delta_time_seconds == input.delta_time_seconds;
-      const bool same_timeline =
-          previous_input.timeline_time_seconds == input.timeline_time_seconds;
-      const bool same_viewport =
-          SameOptionalViewport(previous_input.viewport, input.viewport);
-      const bool same_html =
-          previous_input.html_override == input.html_override;
-      const bool same_element_attributes =
-          SameStringMap(previous_input.element_attributes_by_id_and_name,
-                        input.element_attributes_by_id_and_name);
-      const std::vector<html_css_renderer::Stylesheet>& previous_stylesheets =
-          previous_input.stylesheets_override ? *previous_input.stylesheets_override
-                                             : create_info.stylesheets;
-      const std::vector<html_css_renderer::Stylesheet>& current_stylesheets =
-          input.stylesheets_override ? *input.stylesheets_override
-                                     : create_info.stylesheets;
-      const bool same_stylesheets =
-          SameStylesheetList(previous_stylesheets, current_stylesheets);
-      const bool same_requested_css_file =
-          !previous_css_file.empty() && previous_css_file == current_css_file;
-      const bool same_scroll = SamePointMap(previous_input.scroll_offsets_by_element_id,
-                                            input.scroll_offsets_by_element_id);
-      const bool same_focus =
-          previous_input.focused_element_id == input.focused_element_id;
-      const bool same_hover =
-          previous_input.hovered_element_id == input.hovered_element_id;
-      const bool same_active =
-          previous_input.active_element_id == input.active_element_id;
-      const bool same_form =
-          SameStringMap(previous_input.form_values_by_element_id,
-                        input.form_values_by_element_id);
-      const bool same_pointers =
-          SamePointers(previous_input.pointers, input.pointers);
-      const bool same_wheel = SameWheelInput(previous_input.wheel, input.wheel);
-      identical_incremental_requested =
-          same_delta && same_timeline && same_viewport && same_html &&
-          same_element_attributes &&
-          (same_stylesheets || same_requested_css_file) && same_scroll &&
-          same_focus && same_hover && same_active && same_form &&
-          same_pointers && same_wheel;
-      previous_result = blink_embedder->AdvanceAndRender(previous_input);
-      have_previous_result = true;
-      render_start = BenchmarkClock::now();
-      const int measured_incremental_frames =
-          identical_incremental_requested ? repeat_no_change_frames : 1;
-      for (int frame_index = 0; frame_index < measured_incremental_frames;
-           ++frame_index) {
-        result = blink_embedder->AdvanceAndRenderIncremental(input);
-        AccumulateMeasuredFrameWork(timing, result);
-      }
-    } else {
-      render_start = BenchmarkClock::now();
-      result = blink_embedder->AdvanceAndRender(input);
+    const bool same_delta =
+        previous_input.delta_time_seconds == input.delta_time_seconds;
+    const bool same_timeline =
+        previous_input.timeline_time_seconds == input.timeline_time_seconds;
+    const bool same_viewport =
+        SameOptionalViewport(previous_input.viewport, input.viewport);
+    const bool same_html =
+        previous_input.html_override == input.html_override;
+    const bool same_element_attributes =
+        SameStringMap(previous_input.element_attributes_by_id_and_name,
+                      input.element_attributes_by_id_and_name);
+    const std::vector<html_css_renderer::Stylesheet>& previous_stylesheets =
+        previous_input.stylesheets_override ? *previous_input.stylesheets_override
+                                           : renderer_info_for_oracle.stylesheets;
+    const std::vector<html_css_renderer::Stylesheet>& current_stylesheets =
+        input.stylesheets_override ? *input.stylesheets_override
+                                   : renderer_info_for_oracle.stylesheets;
+    const bool same_stylesheets =
+        SameStylesheetList(previous_stylesheets, current_stylesheets);
+    const bool same_requested_css_file =
+        !previous_css_file.empty() && previous_css_file == current_css_file;
+    const bool same_scroll = SamePointMap(previous_input.scroll_offsets_by_element_id,
+                                          input.scroll_offsets_by_element_id);
+    const bool same_focus =
+        previous_input.focused_element_id == input.focused_element_id;
+    const bool same_hover =
+        previous_input.hovered_element_id == input.hovered_element_id;
+    const bool same_active =
+        previous_input.active_element_id == input.active_element_id;
+    const bool same_form =
+        SameStringMap(previous_input.form_values_by_element_id,
+                      input.form_values_by_element_id);
+    const bool same_pointers =
+        SamePointers(previous_input.pointers, input.pointers);
+    const bool same_wheel = SameWheelInput(previous_input.wheel, input.wheel);
+    identical_incremental_requested =
+        same_delta && same_timeline && same_viewport && same_html &&
+        same_element_attributes &&
+        (same_stylesheets || same_requested_css_file) && same_scroll &&
+        same_focus && same_hover && same_active && same_form &&
+        same_pointers && same_wheel;
+    previous_result = blink_embedder->AdvanceAndRender(previous_input);
+    have_previous_result = true;
+    render_start = BenchmarkClock::now();
+    const int measured_incremental_frames =
+        identical_incremental_requested ? repeat_no_change_frames : 1;
+    for (int frame_index = 0; frame_index < measured_incremental_frames;
+         ++frame_index) {
+      result = blink_embedder->AdvanceAndRenderIncremental(input);
       AccumulateMeasuredFrameWork(timing, result);
     }
-    timing.advance_and_render_ms =
-        ElapsedMs(render_start, BenchmarkClock::now());
-    result.diagnostics.insert(result.diagnostics.begin(),
-                              init.diagnostics.begin(), init.diagnostics.end());
-    result.diagnostics.insert(result.diagnostics.begin(),
-                              stylesheet_loader_diagnostics.begin(),
-                              stylesheet_loader_diagnostics.end());
-    if (!HasRealBlinkPaintArtifact(result) &&
-        !disable_retained_extraction && !audit_only) {
-      if (!paint_artifact_dump_path.empty()) {
-        std::ofstream audit_file(paint_artifact_dump_path);
-        if (audit_file) {
-          audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
-                     << "\n";
-        }
+  } else {
+    render_start = BenchmarkClock::now();
+    result = blink_embedder->AdvanceAndRender(input);
+    AccumulateMeasuredFrameWork(timing, result);
+  }
+  timing.advance_and_render_ms =
+      ElapsedMs(render_start, BenchmarkClock::now());
+  result.diagnostics.insert(result.diagnostics.begin(),
+                            init.diagnostics.begin(), init.diagnostics.end());
+  result.diagnostics.insert(result.diagnostics.begin(),
+                            stylesheet_loader_diagnostics.begin(),
+                            stylesheet_loader_diagnostics.end());
+  if (!HasRealBlinkPaintArtifact(result) && !audit_only) {
+    if (!paint_artifact_dump_path.empty()) {
+      std::ofstream audit_file(paint_artifact_dump_path);
+      if (audit_file) {
+        audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+                   << "\n";
       }
-      std::fprintf(stderr,
-                   "strict Blink benchmark requires real Blink PaintArtifact "
-                   "draw extraction; current output was "
-                   "not rasterized.\n");
-      PrintDiagnostics(result);
-      return 4;
     }
+    std::fprintf(stderr,
+                 "strict Blink benchmark requires real Blink PaintArtifact "
+                 "draw extraction; current output was "
+                 "not rasterized.\n");
+    PrintDiagnostics(result);
+    return 4;
   }
 
   if (!paint_artifact_dump_path.empty()) {
@@ -1876,7 +1841,7 @@ int main(int argc, char** argv) {
     const auto page_setup_write_start = BenchmarkClock::now();
     const bool wrote_page_setup =
         WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle,
-                           result, html_file, lifecycle_stop, use_blink);
+                           result, html_file, lifecycle_stop, true);
     timing.page_setup_json_write_ms +=
         ElapsedMs(page_setup_write_start, BenchmarkClock::now());
     if (!wrote_page_setup) {
@@ -1886,7 +1851,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (disable_skia_raster) {
+  if (audit_only) {
     if (!json_path.empty()) {
       Metrics empty_metrics;
       empty_metrics.width = static_cast<int>(result.successor_snapshot.viewport.width);
@@ -1918,35 +1883,15 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-  if (use_blink && !use_skia_cpu && HasRealBlinkPaintArtifact(result)) {
-    std::fprintf(stderr,
-                 "non-Skia backend unsupported for live Blink retained replay; "
-                 "pass --skia-cpu\n");
-    PrintDiagnostics(result);
-    return 5;
-  }
-#endif
-
   html_css_renderer::CpuRenderOptions cpu_options;
   cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
   cpu_options.debug_command_coverage = debug_command_coverage;
   cpu_options.disable_damage_clip_grouping = disable_damage_clip_grouping;
   std::optional<html_css_renderer::CpuImage> previous_image;
   if (incremental && have_previous_result) {
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-    if (use_skia_cpu) {
-      previous_image =
-          html_css_renderer::RasterizeRenderResultWithSkiaCpu(previous_result,
-                                                              cpu_options);
-    } else {
-#endif
-      previous_image =
-          html_css_renderer::RasterizeRenderResult(previous_result,
-                                                   cpu_options);
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-    }
-#endif
+    previous_image =
+        html_css_renderer::RasterizeRenderResultWithSkiaCpu(previous_result,
+                                                            cpu_options);
   }
   const auto raster_start = BenchmarkClock::now();
   html_css_renderer::CpuImage image;
@@ -1955,21 +1900,11 @@ int main(int argc, char** argv) {
                                        !result.frame_work.needs_raster;
     image = *previous_image;
   } else {
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-    image = use_skia_cpu ? (incremental && have_previous_result
-                                ? html_css_renderer::
-                                      RasterizeRenderResultIncrementalWithSkiaCpu(
-                                          result, &*previous_image, cpu_options)
-                                : html_css_renderer::
-                                      RasterizeRenderResultWithSkiaCpu(
-                                          result, cpu_options))
-                         :
-#endif
-                         (incremental && have_previous_result
-                              ? html_css_renderer::RasterizeRenderResultIncremental(
-                                    result, &*previous_image, cpu_options)
-                              : html_css_renderer::RasterizeRenderResult(
-                                    result, cpu_options));
+    image = incremental && have_previous_result
+                ? html_css_renderer::RasterizeRenderResultIncrementalWithSkiaCpu(
+                      result, &*previous_image, cpu_options)
+                : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                      result, cpu_options);
   }
   timing.cpu_raster_replay_ms =
       ElapsedMs(raster_start, BenchmarkClock::now());
@@ -2049,7 +1984,7 @@ int main(int argc, char** argv) {
     const auto page_setup_write_start = BenchmarkClock::now();
     const bool wrote_page_setup =
         WritePageSetupJson(page_setup_dump_path, renderer_info_for_oracle,
-                           result, html_file, lifecycle_stop, use_blink);
+                           result, html_file, lifecycle_stop, true);
     timing.page_setup_json_write_ms +=
         ElapsedMs(page_setup_write_start, BenchmarkClock::now());
     if (!wrote_page_setup) {
@@ -2065,7 +2000,6 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "--paint-oracle requires --oracle-out\n");
         return 2;
       }
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
       html_css_renderer::BlinkPageEmbedderCreateInfo oracle_create_info;
       oracle_create_info.renderer = renderer_info_for_oracle;
       oracle_create_info.trace_stages = trace_stages;
@@ -2123,11 +2057,6 @@ int main(int argc, char** argv) {
                      oracle_json_path.c_str());
         return 1;
       }
-#else
-      std::fprintf(stderr,
-                   "skia_paint_record_oracle requires Skia CPU\n");
-      return 1;
-#endif
     } else if (paint_oracle == "blink-flattened-paint-record") {
       std::fprintf(
           stderr,

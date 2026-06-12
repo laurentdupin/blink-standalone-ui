@@ -72,15 +72,6 @@ def run(args: argparse.Namespace) -> int:
         "--min-non-white",
         str(args.min_non_white),
     ]
-    if not args.no_mode_flag:
-        if args.blink:
-            renderer_cmd.append("--blink")
-        else:
-            renderer_cmd.append("--manual")
-    if args.skia_cpu:
-        renderer_cmd.append("--skia-cpu")
-    if args.allow_transitional_blink:
-        renderer_cmd.append("--allow-transitional-blink")
 
     renderer = subprocess.run(
         renderer_cmd,
@@ -159,20 +150,6 @@ def main() -> int:
     parser.add_argument("--css", default="")
     parser.add_argument("--viewport", default="800x600")
     parser.add_argument("--out-dir", default=None)
-    parser.add_argument("--blink", action="store_true")
-    parser.add_argument("--manual", dest="blink", action="store_false")
-    parser.set_defaults(blink=True)
-    parser.add_argument(
-        "--no-mode-flag",
-        action="store_true",
-        help="Do not pass --blink/--manual to older or non-live benchmark executables.",
-    )
-    parser.add_argument("--skia-cpu", action="store_true")
-    parser.add_argument(
-        "--allow-transitional-blink",
-        action="store_true",
-        help="Allow the renderer executable to emit non-real transitional Blink output.",
-    )
     parser.add_argument("--min-non-white", type=int, default=50)
     parser.add_argument("--min-coverage-ratio", type=float, default=0.05)
     parser.add_argument("--max-mean-diff", type=float, default=240.0)

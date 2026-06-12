@@ -229,7 +229,6 @@ def render_case(
         str(out_json),
         "--min-non-white",
         "0",
-        "--skia-cpu",
     ]
     for attr in case.get("attrs", []):
         cmd.extend(["--attr", attr])

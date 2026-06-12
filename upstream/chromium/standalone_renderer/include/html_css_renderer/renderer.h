@@ -33,21 +33,12 @@ class AssetProvider {
   virtual std::optional<Asset> Load(const std::string& resource_id) = 0;
 };
 
-struct RendererFeatureFlags {
-  bool enable_css_animations = true;
-  bool enable_css_transitions = true;
-  bool enable_forms_visual_state = true;
-  bool enable_svg = true;
-  bool enable_mathml = true;
-};
-
 struct RendererCreateInfo {
   std::string html;
   std::vector<Stylesheet> stylesheets;
   Size viewport = {800.0f, 600.0f};
   float device_scale_factor = 1.0f;
   std::string asset_namespace;
-  RendererFeatureFlags features;
   AssetProvider* asset_provider = nullptr;
   FontProvider* font_provider = nullptr;
   TextShaper* text_shaper = nullptr;
@@ -92,7 +83,6 @@ struct RendererSnapshot {
   Size viewport;
   float device_scale_factor = 1.0f;
   std::string asset_namespace;
-  RendererFeatureFlags features;
   double timeline_time_seconds = 0.0;
   std::unordered_map<std::string, std::string> element_attributes_by_id_and_name;
   std::unordered_map<std::string, Point> scroll_offsets_by_element_id;

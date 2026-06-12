@@ -93,7 +93,6 @@ std::unique_ptr<RendererState> RendererState::Restore(
   create_info.viewport = snapshot.viewport;
   create_info.device_scale_factor = snapshot.device_scale_factor;
   create_info.asset_namespace = std::move(snapshot.asset_namespace);
-  create_info.features = snapshot.features;
   create_info.asset_provider = asset_provider;
 
   auto state = std::unique_ptr<RendererState>(
@@ -129,7 +128,6 @@ RendererSnapshot RendererState::Snapshot() const {
   snapshot.viewport = create_info_.viewport;
   snapshot.device_scale_factor = create_info_.device_scale_factor;
   snapshot.asset_namespace = create_info_.asset_namespace;
-  snapshot.features = create_info_.features;
   snapshot.timeline_time_seconds = timeline_time_seconds_;
   snapshot.scroll_offsets_by_element_id = scroll_offsets_by_element_id_;
   snapshot.focused_element_id = focused_element_id_;

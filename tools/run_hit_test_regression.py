@@ -194,7 +194,6 @@ def benchmark_command(
         str(out_json),
         "--min-non-white",
         "0",
-        "--skia-cpu",
     ]
     if case.get("hover"):
         cmd.extend(["--hover", str(case["hover"])])

@@ -390,7 +390,6 @@ def main() -> int:
             str(crash),
             "--debug-command-coverage",
             "--strict-text-blob-typefaces",
-            "--skia-cpu",
         ]
         if case.get("time_ms") is not None:
             bench_cmd.extend(["--time-ms", str(case["time_ms"])])

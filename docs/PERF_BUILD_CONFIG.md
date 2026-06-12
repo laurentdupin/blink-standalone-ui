@@ -62,7 +62,7 @@ The comparison below is based on the Chromium sources vendored under `upstream/c
 - `DCHECK_ALWAYS_ON=1` remains active in both checked/current and perf builds, so assertion overhead can still perturb benchmark numbers.
 - The perf preset is optimized (`Release`, clang-cl `/O2`) but does not claim Chromium official-build parity: no PGO, no LTO audit, no component/official-build GN equivalence, and no full Chromium allocator/process configuration match.
 - The standalone CMake source manifest is still manually maintained rather than generated from GN target graphs.
-- The strict benchmark path requires `--skia-cpu`; non-Skia retained replay is rejected for live Blink retained output.
+- The strict benchmark path always uses live Blink retained output plus Skia CPU raster; non-Skia retained replay is no longer exposed as a benchmark mode.
 - The live Blink bridge invalidates its probe cache per render in `TryReplaceWithLivePaintArtifactScene`, so cold and warm timings include extra cache churn.
 - The benchmark performs a full lifecycle per render invocation. Warm incremental modes currently build the previous frame inside the same process before the measured frame.
 - Benchmark presentation writes BMP files, while SDL viewer presentation includes Skia CPU raster plus CPU texture upload through SDL.

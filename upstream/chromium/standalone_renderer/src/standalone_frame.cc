@@ -68,7 +68,6 @@ StandaloneFrame::StandaloneFrame(BlinkPageEmbedderCreateInfo create_info)
   state_.snapshot.device_scale_factor =
       create_info_.renderer.device_scale_factor;
   state_.snapshot.asset_namespace = create_info_.renderer.asset_namespace;
-  state_.snapshot.features = create_info_.renderer.features;
 }
 
 const RendererCreateInfo& StandaloneFrame::Renderer() const {

@@ -132,8 +132,6 @@ def run_no_change(viewer: Path, out_dir: Path, timeout: int) -> dict[str, Any]:
     html = PAINT_AUDIT_ROOT / "00_text_only.html"
     cmd = [
         str(viewer),
-        "--blink",
-        "--skia-cpu",
         "--html-file",
         str(html),
         "--resource-root",
@@ -198,8 +196,6 @@ def run_scroll(viewer: Path, out_dir: Path, timeout: int) -> dict[str, Any]:
     html = PAINT_AUDIT_ROOT / "51b_svg_text_city_route_document_scroll.html"
     cmd = [
         str(viewer),
-        "--blink",
-        "--skia-cpu",
         "--html-file",
         str(html),
         "--resource-root",

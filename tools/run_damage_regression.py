@@ -200,7 +200,6 @@ def benchmark_command(
         str(json_path),
         "--min-non-white",
         "0",
-        "--skia-cpu",
     ]
     add_attrs(cmd, "--attr", attrs)
     add_scroll(cmd, "--scroll-x", "--scroll-y", scroll)

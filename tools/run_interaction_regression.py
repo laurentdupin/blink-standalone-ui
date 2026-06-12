@@ -73,7 +73,6 @@ def base_command(benchmark: Path, case: dict[str, Any], out_bmp: Path, out_json:
             "--viewport",
             str(case["viewport"]),
             "--incremental",
-            "--skia-cpu",
             "--out",
             str(out_bmp),
             "--json",

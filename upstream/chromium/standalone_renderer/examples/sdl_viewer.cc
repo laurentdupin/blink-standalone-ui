@@ -30,9 +30,11 @@
 #include "html_css_renderer/draw_command_serializer.h"
 #include "html_css_renderer/renderer.h"
 #include "html_css_renderer/standalone_resource_provider.h"
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-#include "html_css_renderer/skia_cpu_renderer.h"
+
+#if !defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+#error "blink_standalone_sdl_viewer_skia requires Skia CPU rendering."
 #endif
+#include "html_css_renderer/skia_cpu_renderer.h"
 
 namespace {
 
@@ -437,8 +439,7 @@ void PrintUsage() {
                "[--scroll-x px] [--scroll-y px] [--scroll-step px] "
                "[--viewport WxH] [--delta seconds] "
                "[--font-file path] [--window-scale factor] "
-               "[--quit-after-ms ms] [--incremental] [--no-incremental] "
-               "[--cpu] [--skia-cpu] [--direct-sdl]"
+               "[--quit-after-ms ms] "
                " [--dump-paint-artifact path]"
                " [--profile] [--profile-summary-frames count]"
                " [--profile-no-change-frames count]"
@@ -454,14 +455,11 @@ void PrintUsage() {
                " [--profile-playlist-next-after-frame count]"
                " [--profile-playlist-prev-after-frame count]"
                " [--capture-frames-dir path]"
-               " [--blink]"
                "\nIf no --html or --html-file input is provided, the viewer "
                "opens a native directory picker and builds a recursive HTML "
                "playlist.\n"
-               "Defaults: Skia CPU rendering and incremental updates are "
-               "enabled. Use --direct-sdl for the old SDL render-target path, "
-               "--cpu for the generic CPU rasterizer, or --no-incremental for "
-               "full render updates.\n"
+               "Defaults: live Blink PaintArtifact input, Skia CPU raster, "
+               "retained SDL texture presentation, and incremental updates.\n"
                "Controls: Space/T toggle configured attrs, left click toggles "
                "matching targets, mouse wheel scrolls the document viewport, "
                "arrow/Page/Home keys scroll the document, "
@@ -476,9 +474,6 @@ bool ParseArgs(int argc,
                uint64_t* quit_after_ms,
                float* window_scale,
                std::string* font_file,
-               bool* incremental,
-               bool* use_cpu,
-               bool* use_skia_cpu,
                std::string* paint_artifact_dump_path,
                std::optional<fs::path>* html_directory,
                std::string* resource_root,
@@ -501,7 +496,6 @@ bool ParseArgs(int argc,
                std::optional<uint64_t>* profile_playlist_next_after_frame,
                std::optional<uint64_t>* profile_playlist_prev_after_frame,
                std::string* capture_frames_dir,
-               bool* use_blink,
                std::vector<std::string>* stylesheet_loader_diagnostics) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -644,20 +638,6 @@ bool ParseArgs(int argc,
         return false;
       }
       *font_file = value;
-    } else if (arg == "--incremental") {
-      *incremental = true;
-    } else if (arg == "--no-incremental") {
-      *incremental = false;
-    } else if (arg == "--cpu") {
-      *use_cpu = true;
-      *use_skia_cpu = false;
-    } else if (arg == "--skia-cpu") {
-      *use_skia_cpu = true;
-      *use_cpu = true;
-    } else if (arg == "--direct-sdl") {
-      *use_skia_cpu = false;
-      *use_cpu = false;
-      *incremental = false;
     } else if (arg == "--dump-paint-artifact") {
       const char* value = next_value();
       if (!value) {
@@ -779,12 +759,6 @@ bool ParseArgs(int argc,
         return false;
       }
       *capture_frames_dir = value;
-    } else if (arg == "--blink") {
-      *use_blink = true;
-    } else if (arg == "--manual") {
-      std::fprintf(stderr,
-                   "--manual is no longer supported; live Blink is required\n");
-      return false;
     } else if (arg == "--help" || arg == "-h") {
       return false;
     } else {
@@ -1025,7 +999,6 @@ struct SdlProfileFrame {
   double cpu_replay_ms = 0.0;
   double pixel_convert_ms = 0.0;
   double texture_upload_ms = 0.0;
-  double direct_render_ms = 0.0;
   double sdl_draw_present_ms = 0.0;
   double total_ms = 0.0;
   std::string cpu_replay_command_top;
@@ -1042,7 +1015,7 @@ double SdlProfileMeasuredSubtotal(const SdlProfileFrame& frame) {
   return frame.input_update_ms + frame.blink_initialize_ms +
          frame.blink_export_retained_ms + frame.cpu_replay_ms +
          frame.pixel_convert_ms + frame.texture_upload_ms +
-         frame.direct_render_ms + frame.sdl_draw_present_ms;
+         frame.sdl_draw_present_ms;
 }
 
 struct PendingSdlProfileFrame {
@@ -1097,7 +1070,6 @@ void PopulateProbeProfileTimings(
 }
 
 std::string FormatCpuReplayCommandTimingTop(size_t max_records) {
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
   std::vector<html_css_renderer::CpuReplayCommandTimingRecord> records =
       html_css_renderer::SnapshotCpuReplayCommandTimingDiagnostics();
   std::sort(records.begin(), records.end(), [](const auto& left,
@@ -1125,10 +1097,6 @@ std::string FormatCpuReplayCommandTimingTop(size_t max_records) {
     ++written;
   }
   return output;
-#else
-  (void)max_records;
-  return {};
-#endif
 }
 
 class SdlFrameProfiler {
@@ -1209,9 +1177,6 @@ class SdlFrameProfiler {
                 [](const SdlProfileFrame& frame) {
                   return static_cast<double>(frame.texture_update_rect_count);
                 });
-    PrintMetric("direct_render", [](const SdlProfileFrame& frame) {
-      return frame.direct_render_ms;
-    });
     PrintMetric("sdl_draw_present", [](const SdlProfileFrame& frame) {
       return frame.sdl_draw_present_ms;
     });
@@ -1237,7 +1202,7 @@ class SdlFrameProfiler {
         "probe_prepaint_paint=%.3fms probe_artifact=%.3fms "
         "probe_audit=%.3fms probe_extraction=%.3fms probe_total=%.3fms "
         "cpu_replay=%.3fms pixel_convert=%.3fms texture_upload=%.3fms "
-        "direct_render=%.3fms sdl_draw_present=%.3fms total=%.3fms%s%s\n",
+        "sdl_draw_present=%.3fms total=%.3fms%s%s\n",
         static_cast<unsigned long long>(frame.frame), frame.reason.c_str(),
         frame.incremental ? 1 : 0, frame.full_redraw ? 1 : 0,
         frame.scroll_reuse ? 1 : 0, frame.no_change_fast_path ? 1 : 0,
@@ -1259,7 +1224,7 @@ class SdlFrameProfiler {
         frame.probe_paint_artifact_audit_json_ms,
         frame.probe_paint_artifact_extraction_ms, frame.probe_total_ms,
         frame.cpu_replay_ms, frame.pixel_convert_ms, frame.texture_upload_ms,
-        frame.direct_render_ms, frame.sdl_draw_present_ms, frame.total_ms,
+        frame.sdl_draw_present_ms, frame.total_ms,
         frame.cpu_replay_command_top.empty() ? "" : " cpu_replay_top=",
         frame.cpu_replay_command_top.empty()
             ? ""
@@ -1348,26 +1313,6 @@ html_css_renderer::Size RendererOutputViewportSize(SDL_Renderer* renderer,
       static_cast<float>(std::max(1, width)),
       static_cast<float>(std::max(1, height)),
   };
-}
-
-bool RecreateFrameTexture(SDL_Renderer* renderer,
-                          SDL_PixelFormat pixel_format,
-                          SDL_TextureAccess texture_access,
-                          int width,
-                          int height,
-                          SDL_Texture** texture) {
-  SDL_Texture* next_texture =
-      SDL_CreateTexture(renderer, pixel_format, texture_access,
-                        std::max(1, width), std::max(1, height));
-  if (!next_texture) {
-    std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
-    return false;
-  }
-  if (*texture) {
-    SDL_DestroyTexture(*texture);
-  }
-  *texture = next_texture;
-  return true;
 }
 
 void DestroyTexture(SDL_Texture** texture) {
@@ -1776,487 +1721,6 @@ bool CapturePresentedFrame(SDL_Renderer* renderer,
   return true;
 }
 
-uint8_t ClampByte(float value) {
-  const float clamped = std::max(0.0f, std::min(1.0f, value));
-  return static_cast<uint8_t>(std::round(clamped * 255.0f));
-}
-
-SDL_FRect ToSdlRect(html_css_renderer::Rect rect) {
-  return SDL_FRect{rect.x, rect.y, rect.width, rect.height};
-}
-
-void SetSdlColor(SDL_Renderer* renderer,
-                 html_css_renderer::Color color,
-                 float opacity = 1.0f) {
-  SDL_SetRenderDrawColor(renderer, ClampByte(color.r), ClampByte(color.g),
-                         ClampByte(color.b), ClampByte(color.a * opacity));
-}
-
-std::vector<uint32_t> ConvertRawRgbaBytesToAbgr(
-    const std::vector<uint8_t>& pixels) {
-  std::vector<uint32_t> out;
-  out.reserve(pixels.size() / 4u);
-  for (size_t i = 0; i + 3 < pixels.size(); i += 4) {
-    const uint32_t r = pixels[i + 0];
-    const uint32_t g = pixels[i + 1];
-    const uint32_t b = pixels[i + 2];
-    const uint32_t a = pixels[i + 3];
-    out.push_back((a << 24) | (b << 16) | (g << 8) | r);
-  }
-  return out;
-}
-
-std::vector<uint32_t> ConvertAlphaMaskToAbgr(
-    const std::vector<uint8_t>& pixels,
-    html_css_renderer::Color color) {
-  std::vector<uint32_t> out;
-  out.reserve(pixels.size());
-  const uint32_t r = ClampByte(color.r);
-  const uint32_t g = ClampByte(color.g);
-  const uint32_t b = ClampByte(color.b);
-  for (uint8_t alpha : pixels) {
-    const uint32_t a =
-        static_cast<uint32_t>(std::round(alpha * std::max(0.0f, std::min(1.0f, color.a))));
-    out.push_back((a << 24) | (b << 16) | (g << 8) | r);
-  }
-  return out;
-}
-
-class SdlFrameRenderer {
- public:
-  explicit SdlFrameRenderer(SDL_Renderer* renderer) : renderer_(renderer) {}
-  SdlFrameRenderer(const SdlFrameRenderer&) = delete;
-  SdlFrameRenderer& operator=(const SdlFrameRenderer&) = delete;
-  ~SdlFrameRenderer() { Clear(); }
-
-  bool Render(const html_css_renderer::RenderResult& result,
-              SDL_Texture* target) {
-    ApplyResourceCommands(result.frame.resource_commands);
-
-    if (!SDL_SetRenderTarget(renderer_, target)) {
-      std::fprintf(stderr, "SDL_SetRenderTarget failed: %s\n", SDL_GetError());
-      return false;
-    }
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer_, 255, 255, 255, 255);
-    SDL_RenderClear(renderer_);
-
-    RenderState state;
-    std::vector<RenderState> state_stack;
-    for (const html_css_renderer::SceneCommand& scene :
-         result.frame.scene_commands) {
-      if (scene.type != html_css_renderer::SceneCommandType::kDrawCommand) {
-        continue;
-      }
-      DrawCommand(scene.draw_command, state_stack, state);
-    }
-    SDL_SetRenderClipRect(renderer_, nullptr);
-    SDL_SetRenderTarget(renderer_, nullptr);
-    return true;
-  }
-
- private:
-  struct TextureResource {
-    SDL_Texture* texture = nullptr;
-    int width = 0;
-    int height = 0;
-    html_css_renderer::Rect bounds;
-  };
-
-  struct RenderState {
-    html_css_renderer::Matrix4 transform;
-    std::optional<SDL_Rect> clip;
-    float opacity = 1.0f;
-  };
-
-  void Clear() {
-    for (auto& entry : images_) {
-      SDL_DestroyTexture(entry.second.texture);
-    }
-    for (auto& entry : glyphs_) {
-      SDL_DestroyTexture(entry.second.texture);
-    }
-    images_.clear();
-    glyphs_.clear();
-  }
-
-  static std::string GlyphKey(const std::string& font_id, uint32_t glyph_id) {
-    return font_id + "#" + std::to_string(glyph_id);
-  }
-
-  TextureResource CreateTextureFromAbgr(const std::vector<uint32_t>& pixels,
-                                        int width,
-                                        int height) {
-    TextureResource resource;
-    if (width <= 0 || height <= 0 ||
-        pixels.size() < static_cast<size_t>(width * height)) {
-      return resource;
-    }
-    resource.texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ABGR8888,
-                                         SDL_TEXTUREACCESS_STATIC, width,
-                                         height);
-    if (!resource.texture) {
-      std::fprintf(stderr, "SDL_CreateTexture resource failed: %s\n",
-                   SDL_GetError());
-      return resource;
-    }
-    SDL_SetTextureBlendMode(resource.texture, SDL_BLENDMODE_BLEND);
-    SDL_UpdateTexture(resource.texture, nullptr, pixels.data(),
-                      width * static_cast<int>(sizeof(uint32_t)));
-    resource.width = width;
-    resource.height = height;
-    return resource;
-  }
-
-  void ApplyResourceCommands(
-      const std::vector<html_css_renderer::ResourceCommand>& commands) {
-    for (const html_css_renderer::ResourceCommand& resource : commands) {
-      if (resource.type == html_css_renderer::ResourceCommandType::kDestroyResource) {
-        if (auto found = images_.find(resource.resource_id);
-            found != images_.end()) {
-          SDL_DestroyTexture(found->second.texture);
-          images_.erase(found);
-        }
-        continue;
-      }
-      if (resource.type ==
-              html_css_renderer::ResourceCommandType::kCreateOrUpdateImage &&
-          resource.load_command.type == html_css_renderer::LoadCommandType::kLoadImage) {
-        const html_css_renderer::ImageLoadInfo& image =
-            resource.load_command.image;
-        if (image.decoded_format != html_css_renderer::PixelFormat::kRgba8888) {
-          continue;
-        }
-        const int width = static_cast<int>(std::floor(image.decoded_size.width));
-        const int height =
-            static_cast<int>(std::floor(image.decoded_size.height));
-        TextureResource texture =
-            CreateTextureFromAbgr(ConvertRawRgbaBytesToAbgr(image.decoded_pixels),
-                                  width, height);
-        if (texture.texture) {
-          if (auto found = images_.find(resource.resource_id);
-              found != images_.end()) {
-            SDL_DestroyTexture(found->second.texture);
-          }
-          images_[resource.resource_id] = texture;
-        }
-      } else if (
-          resource.type ==
-              html_css_renderer::ResourceCommandType::kCreateOrUpdateGlyphAtlas &&
-          resource.load_command.type ==
-              html_css_renderer::LoadCommandType::kGlyphAtlasUpdate) {
-        const html_css_renderer::GlyphAtlasUpdate& glyph =
-            resource.load_command.glyph_atlas_update;
-        if (glyph.format != html_css_renderer::PixelFormat::kAlpha8) {
-          continue;
-        }
-        const int width = static_cast<int>(std::floor(glyph.bounds.width));
-        const int height = static_cast<int>(std::floor(glyph.bounds.height));
-        TextureResource texture = CreateTextureFromAbgr(
-            ConvertAlphaMaskToAbgr(glyph.pixels,
-                                   html_css_renderer::Color::Rgba(1, 1, 1, 1)),
-            width, height);
-        if (texture.texture) {
-          texture.bounds = glyph.bounds;
-          const std::string key = GlyphKey(glyph.font_id, glyph.glyph_id);
-          if (auto found = glyphs_.find(key); found != glyphs_.end()) {
-            SDL_DestroyTexture(found->second.texture);
-          }
-          glyphs_[key] = texture;
-        }
-      }
-    }
-  }
-
-  static bool IsIdentity(const html_css_renderer::Matrix4& matrix) {
-    const auto& m = matrix.values;
-    return m[0] == 1.0f && m[1] == 0.0f && m[4] == 0.0f &&
-           m[5] == 1.0f && m[12] == 0.0f && m[13] == 0.0f;
-  }
-
-  static html_css_renderer::Point TransformPoint(
-      const html_css_renderer::Matrix4& matrix,
-      html_css_renderer::Point point) {
-    const auto& m = matrix.values;
-    return {m[0] * point.x + m[4] * point.y + m[12],
-            m[1] * point.x + m[5] * point.y + m[13]};
-  }
-
-  static html_css_renderer::Matrix4 Multiply(
-      const html_css_renderer::Matrix4& a,
-      const html_css_renderer::Matrix4& b) {
-    html_css_renderer::Matrix4 out;
-    for (int row = 0; row < 4; ++row) {
-      for (int col = 0; col < 4; ++col) {
-        float value = 0.0f;
-        for (int k = 0; k < 4; ++k) {
-          value += a.values[k * 4 + row] * b.values[col * 4 + k];
-        }
-        out.values[col * 4 + row] = value;
-      }
-    }
-    return out;
-  }
-
-  static std::array<html_css_renderer::Point, 4> TransformRectCorners(
-      const html_css_renderer::Matrix4& matrix,
-      html_css_renderer::Rect rect) {
-    return {TransformPoint(matrix, {rect.x, rect.y}),
-            TransformPoint(matrix, {rect.x + rect.width, rect.y}),
-            TransformPoint(matrix,
-                           {rect.x + rect.width, rect.y + rect.height}),
-            TransformPoint(matrix, {rect.x, rect.y + rect.height})};
-  }
-
-  static SDL_Rect BoundsForTransformedRect(
-      const html_css_renderer::Matrix4& matrix,
-      html_css_renderer::Rect rect) {
-    const auto points = TransformRectCorners(matrix, rect);
-    float min_x = points[0].x;
-    float min_y = points[0].y;
-    float max_x = points[0].x;
-    float max_y = points[0].y;
-    for (const html_css_renderer::Point& point : points) {
-      min_x = std::min(min_x, point.x);
-      min_y = std::min(min_y, point.y);
-      max_x = std::max(max_x, point.x);
-      max_y = std::max(max_y, point.y);
-    }
-    const int left = static_cast<int>(std::floor(min_x));
-    const int top = static_cast<int>(std::floor(min_y));
-    const int right = static_cast<int>(std::ceil(max_x));
-    const int bottom = static_cast<int>(std::ceil(max_y));
-    return SDL_Rect{left, top, std::max(0, right - left),
-                    std::max(0, bottom - top)};
-  }
-
-  static SDL_FColor ToSdlColor(html_css_renderer::Color color,
-                               float opacity) {
-    return SDL_FColor{std::max(0.0f, std::min(1.0f, color.r)),
-                      std::max(0.0f, std::min(1.0f, color.g)),
-                      std::max(0.0f, std::min(1.0f, color.b)),
-                      std::max(0.0f,
-                               std::min(1.0f, color.a * opacity))};
-  }
-
-  void DrawQuad(SDL_Texture* texture,
-                html_css_renderer::Rect rect,
-                html_css_renderer::Color color,
-                const RenderState& state) {
-    const auto points = TransformRectCorners(state.transform, rect);
-    const SDL_FColor vertex_color = ToSdlColor(color, state.opacity);
-    SDL_Vertex vertices[4] = {
-        {SDL_FPoint{points[0].x, points[0].y}, vertex_color,
-         SDL_FPoint{0.0f, 0.0f}},
-        {SDL_FPoint{points[1].x, points[1].y}, vertex_color,
-         SDL_FPoint{1.0f, 0.0f}},
-        {SDL_FPoint{points[2].x, points[2].y}, vertex_color,
-         SDL_FPoint{1.0f, 1.0f}},
-        {SDL_FPoint{points[3].x, points[3].y}, vertex_color,
-         SDL_FPoint{0.0f, 1.0f}},
-    };
-    constexpr int indices[6] = {0, 1, 2, 0, 2, 3};
-    SDL_RenderGeometry(renderer_, texture, vertices, 4, indices, 6);
-  }
-
-  void FillRect(const html_css_renderer::DrawCommand& command,
-                const RenderState& state) {
-    if (IsIdentity(state.transform)) {
-      SetSdlColor(renderer_, command.color, state.opacity);
-      SDL_FRect rect = ToSdlRect(command.rect);
-      SDL_RenderFillRect(renderer_, &rect);
-      return;
-    }
-    DrawQuad(nullptr, command.rect, command.color, state);
-  }
-
-  void DrawRRectApprox(const html_css_renderer::DrawCommand& command,
-                       bool stroke,
-                       const RenderState& state) {
-    if (!stroke) {
-      FillRect(command, state);
-      return;
-    }
-    SetSdlColor(renderer_, command.color, state.opacity);
-    const float w = std::max(1.0f, command.stroke_width);
-    const html_css_renderer::Rect r = command.rect;
-    std::array<SDL_FRect, 4> sides = {
-        SDL_FRect{r.x, r.y, r.width, w},
-        SDL_FRect{r.x, r.y + r.height - w, r.width, w},
-        SDL_FRect{r.x, r.y, w, r.height},
-        SDL_FRect{r.x + r.width - w, r.y, w, r.height},
-    };
-    if (IsIdentity(state.transform)) {
-      for (SDL_FRect& side : sides) {
-        SDL_RenderFillRect(renderer_, &side);
-      }
-    } else {
-      for (SDL_FRect& side : sides) {
-        DrawQuad(nullptr, html_css_renderer::Rect{side.x, side.y, side.w,
-                                                  side.h},
-                 command.color, state);
-      }
-    }
-  }
-
-  static SDL_Rect IntersectClip(SDL_Rect a, SDL_Rect b) {
-    const int left = std::max(a.x, b.x);
-    const int top = std::max(a.y, b.y);
-    const int right = std::min(a.x + a.w, b.x + b.w);
-    const int bottom = std::min(a.y + a.h, b.y + b.h);
-    return SDL_Rect{left, top, std::max(0, right - left),
-                    std::max(0, bottom - top)};
-  }
-
-  void ApplyClip(const std::optional<SDL_Rect>& clip) {
-    if (clip) {
-      SDL_SetRenderClipRect(renderer_, &*clip);
-    } else {
-      SDL_SetRenderClipRect(renderer_, nullptr);
-    }
-  }
-
-  void DrawImage(SDL_Texture* texture,
-                 html_css_renderer::Rect rect,
-                 html_css_renderer::Color color,
-                 const RenderState& state) {
-    if (IsIdentity(state.transform)) {
-      SDL_FRect dst = ToSdlRect(rect);
-      SDL_SetTextureColorMod(texture, ClampByte(color.r), ClampByte(color.g),
-                             ClampByte(color.b));
-      SDL_SetTextureAlphaMod(texture, ClampByte(color.a * state.opacity));
-      SDL_RenderTexture(renderer_, texture, nullptr, &dst);
-      return;
-    }
-    DrawQuad(texture, rect, color, state);
-  }
-
-  void DrawCommand(const html_css_renderer::DrawCommand& command,
-                   std::vector<RenderState>& state_stack,
-                   RenderState& state) {
-    switch (command.type) {
-      case html_css_renderer::DrawCommandType::kFillRect:
-        FillRect(command, state);
-        break;
-      case html_css_renderer::DrawCommandType::kStrokeRect: {
-        SetSdlColor(renderer_, command.color, state.opacity);
-        const float w = std::max(1.0f, command.stroke_width);
-        const html_css_renderer::Rect r = command.rect;
-        std::array<html_css_renderer::Rect, 4> sides = {
-            html_css_renderer::Rect{r.x, r.y, r.width, w},
-            html_css_renderer::Rect{r.x, r.y + r.height - w, r.width, w},
-            html_css_renderer::Rect{r.x, r.y, w, r.height},
-            html_css_renderer::Rect{r.x + r.width - w, r.y, w, r.height},
-        };
-        for (const html_css_renderer::Rect& side : sides) {
-          if (IsIdentity(state.transform)) {
-            SDL_FRect sdl_side = ToSdlRect(side);
-            SDL_RenderFillRect(renderer_, &sdl_side);
-          } else {
-            DrawQuad(nullptr, side, command.color, state);
-          }
-        }
-        break;
-      }
-      case html_css_renderer::DrawCommandType::kFillRRect:
-        DrawRRectApprox(command, false, state);
-        break;
-      case html_css_renderer::DrawCommandType::kStrokeRRect:
-        DrawRRectApprox(command, true, state);
-        break;
-      case html_css_renderer::DrawCommandType::kFillRectShader:
-        FillRect(command, state);
-        break;
-      case html_css_renderer::DrawCommandType::kFillRRectShader:
-        DrawRRectApprox(command, false, state);
-        break;
-      case html_css_renderer::DrawCommandType::kDrawImage: {
-        const auto found = images_.find(command.resource_id);
-        if (found == images_.end()) {
-          break;
-        }
-        DrawImage(found->second.texture, command.rect,
-                  html_css_renderer::Color::Rgba(1, 1, 1, 1), state);
-        break;
-      }
-      case html_css_renderer::DrawCommandType::kDrawImageRect: {
-        const auto found = images_.find(command.resource_id);
-        if (found == images_.end()) {
-          break;
-        }
-        DrawImage(found->second.texture, command.rect,
-                  html_css_renderer::Color::Rgba(1, 1, 1, 1), state);
-        break;
-      }
-      case html_css_renderer::DrawCommandType::kDrawGlyphRun: {
-        const size_t count = std::min(command.glyph_run.glyph_ids.size(),
-                                      command.glyph_run.positions.size());
-        for (size_t i = 0; i < count; ++i) {
-          const std::string key = GlyphKey(command.glyph_run.font_id,
-                                           command.glyph_run.glyph_ids[i]);
-          const auto found = glyphs_.find(key);
-          if (found == glyphs_.end()) {
-            continue;
-          }
-          const html_css_renderer::Point origin =
-              command.glyph_run.positions[i];
-          const html_css_renderer::Rect dst{
-              origin.x + found->second.bounds.x,
-              origin.y + found->second.bounds.y,
-              static_cast<float>(found->second.width),
-              static_cast<float>(found->second.height)};
-          DrawImage(found->second.texture, dst, command.glyph_run.color, state);
-        }
-        break;
-      }
-      case html_css_renderer::DrawCommandType::kDrawTextBlob:
-        break;
-      case html_css_renderer::DrawCommandType::kSave:
-        state_stack.push_back(state);
-        break;
-      case html_css_renderer::DrawCommandType::kSaveLayer:
-        state_stack.push_back(state);
-        state.opacity *= command.opacity;
-        break;
-      case html_css_renderer::DrawCommandType::kRestore:
-        if (!state_stack.empty()) {
-          state = state_stack.back();
-          state_stack.pop_back();
-          ApplyClip(state.clip);
-        }
-        break;
-      case html_css_renderer::DrawCommandType::kTransform:
-        state.transform = Multiply(state.transform, command.transform);
-        if (state.clip) {
-          ApplyClip(state.clip);
-        }
-        break;
-      case html_css_renderer::DrawCommandType::kClipRect: {
-        SDL_Rect clip = BoundsForTransformedRect(state.transform, command.rect);
-        state.clip = state.clip ? IntersectClip(*state.clip, clip) : clip;
-        ApplyClip(state.clip);
-        break;
-      }
-      case html_css_renderer::DrawCommandType::kClipRRect: {
-        SDL_Rect clip = BoundsForTransformedRect(state.transform, command.rect);
-        state.clip = state.clip ? IntersectClip(*state.clip, clip) : clip;
-        ApplyClip(state.clip);
-        break;
-      }
-      case html_css_renderer::DrawCommandType::kClipPath:
-        break;
-      case html_css_renderer::DrawCommandType::kFillPath:
-      case html_css_renderer::DrawCommandType::kDrawText:
-      case html_css_renderer::DrawCommandType::kDiagnostic:
-        break;
-    }
-  }
-
-  SDL_Renderer* renderer_ = nullptr;
-  std::unordered_map<std::string, TextureResource> images_;
-  std::unordered_map<std::string, TextureResource> glyphs_;
-};
-
 bool Contains(html_css_renderer::Rect rect, float x, float y) {
   return x >= rect.x && y >= rect.y && x < rect.x + rect.width &&
          y < rect.y + rect.height;
@@ -2383,14 +1847,9 @@ int main(int argc, char** argv) {
   std::optional<uint64_t> profile_playlist_next_after_frame;
   std::optional<uint64_t> profile_playlist_prev_after_frame;
   std::string capture_frames_dir;
-  bool incremental = true;
-  bool use_cpu = true;
-  bool use_skia_cpu = true;
-  bool use_blink = true;
 
   if (argc > 1 && !ParseArgs(argc, argv, &create_info, &input,
                              &quit_after_ms, &window_scale, &font_file,
-                             &incremental, &use_cpu, &use_skia_cpu,
                              &paint_artifact_dump_path, &html_directory,
                              &resource_root, &resource_root_explicit,
                              &resource_base_path,
@@ -2409,7 +1868,6 @@ int main(int argc, char** argv) {
                              &profile_playlist_next_after_frame,
                              &profile_playlist_prev_after_frame,
                              &capture_frames_dir,
-                             &use_blink,
                              &stylesheet_loader_diagnostics)) {
     PrintUsage();
     return 2;
@@ -2518,56 +1976,54 @@ int main(int argc, char** argv) {
   initial_profile.frame = 1;
   initial_profile.reason = "initial";
 
-  if (use_blink) {
-    html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
-    blink_create_info.renderer = create_info;
-    blink_create_info.enable_paint_artifact_audit =
-        !paint_artifact_dump_path.empty();
-    blink_embedder =
-        html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
-    if (!blink_embedder) {
-      std::fprintf(stderr, "failed to create Blink adapter\n");
+  html_css_renderer::BlinkPageEmbedderCreateInfo blink_create_info;
+  blink_create_info.renderer = create_info;
+  blink_create_info.enable_paint_artifact_audit =
+      !paint_artifact_dump_path.empty();
+  blink_embedder =
+      html_css_renderer::CreateLiveBlinkPageEmbedder(std::move(blink_create_info));
+  if (!blink_embedder) {
+    std::fprintf(stderr, "failed to create Blink adapter\n");
+    return 1;
+  }
+  ProfileClock::time_point blink_init_start;
+  if (profiler.enabled()) {
+    blink_init_start = ProfileClock::now();
+  }
+  const html_css_renderer::BlinkLifecycleReport init =
+      blink_embedder->Initialize();
+  if (profiler.enabled()) {
+    initial_profile.blink_initialize_ms =
+        ElapsedProfileMs(blink_init_start, ProfileClock::now());
+  }
+  ProfileClock::time_point blink_render_start;
+  if (profiler.enabled()) {
+    blink_render_start = ProfileClock::now();
+  }
+  result = blink_embedder->AdvanceAndRender(input);
+  if (profiler.enabled()) {
+    initial_profile.blink_export_retained_ms =
+        ElapsedProfileMs(blink_render_start, ProfileClock::now());
+    PopulateFrameWorkProfile(result, &initial_profile);
+    PopulateProbeProfileTimings(result, &initial_profile);
+  }
+  result.diagnostics.insert(result.diagnostics.begin(),
+                            init.diagnostics.begin(), init.diagnostics.end());
+  result.diagnostics.insert(result.diagnostics.begin(),
+                            stylesheet_loader_diagnostics.begin(),
+                            stylesheet_loader_diagnostics.end());
+  if (!paint_artifact_dump_path.empty()) {
+    std::ofstream audit_file(paint_artifact_dump_path);
+    if (!audit_file) {
+      std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
+                   paint_artifact_dump_path.c_str());
       return 1;
     }
-    ProfileClock::time_point blink_init_start;
-    if (profiler.enabled()) {
-      blink_init_start = ProfileClock::now();
-    }
-    const html_css_renderer::BlinkLifecycleReport init =
-        blink_embedder->Initialize();
-    if (profiler.enabled()) {
-      initial_profile.blink_initialize_ms =
-          ElapsedProfileMs(blink_init_start, ProfileClock::now());
-    }
-    ProfileClock::time_point blink_render_start;
-    if (profiler.enabled()) {
-      blink_render_start = ProfileClock::now();
-    }
-    result = blink_embedder->AdvanceAndRender(input);
-    if (profiler.enabled()) {
-      initial_profile.blink_export_retained_ms =
-          ElapsedProfileMs(blink_render_start, ProfileClock::now());
-      PopulateFrameWorkProfile(result, &initial_profile);
-      PopulateProbeProfileTimings(result, &initial_profile);
-    }
-    result.diagnostics.insert(result.diagnostics.begin(),
-                              init.diagnostics.begin(), init.diagnostics.end());
-    result.diagnostics.insert(result.diagnostics.begin(),
-                              stylesheet_loader_diagnostics.begin(),
-                              stylesheet_loader_diagnostics.end());
-    if (!paint_artifact_dump_path.empty()) {
-      std::ofstream audit_file(paint_artifact_dump_path);
-      if (!audit_file) {
-        std::fprintf(stderr, "failed to write paint artifact dump: %s\n",
-                     paint_artifact_dump_path.c_str());
-        return 1;
-      }
-      audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
-                 << "\n";
-    }
-    for (const std::string& diagnostic : result.diagnostics) {
-      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
-    }
+    audit_file << html_css_renderer::SerializePaintArtifactAuditJson(result)
+               << "\n";
+  }
+  for (const std::string& diagnostic : result.diagnostics) {
+    std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
   }
 
   int frame_width =
@@ -2575,38 +2031,26 @@ int main(int argc, char** argv) {
   int frame_height =
       std::max(1, static_cast<int>(std::floor(initial_viewport.height)));
   html_css_renderer::CpuImage image;
-  if (use_cpu) {
-    html_css_renderer::CpuRenderOptions cpu_options;
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-    cpu_options.profile_command_timings = profiler.enabled() && use_skia_cpu;
-#endif
-    ProfileClock::time_point cpu_replay_start;
-    if (profiler.enabled()) {
-      cpu_replay_start = ProfileClock::now();
-    }
-    image =
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-        use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                           result, cpu_options)
-                     :
-#endif
-                     html_css_renderer::RasterizeRenderResult(result,
-                                                              cpu_options);
-    if (profiler.enabled()) {
-      initial_profile.cpu_replay_ms =
-          ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
-      initial_profile.raster_pixels_touched = image.raster_pixels_touched;
-      initial_profile.damage_pixels = image.damage_pixels;
-      initial_profile.raster_skipped = image.raster_skipped;
-      initial_profile.partial_redraw = image.partial_raster;
-      if (use_skia_cpu) {
-        initial_profile.cpu_replay_command_top =
-            FormatCpuReplayCommandTimingTop(5);
-      }
-    }
-    frame_width = image.width;
-    frame_height = image.height;
+  html_css_renderer::CpuRenderOptions cpu_options;
+  cpu_options.profile_command_timings = profiler.enabled();
+  ProfileClock::time_point cpu_replay_start;
+  if (profiler.enabled()) {
+    cpu_replay_start = ProfileClock::now();
   }
+  image = html_css_renderer::RasterizeRenderResultWithSkiaCpu(result,
+                                                              cpu_options);
+  if (profiler.enabled()) {
+    initial_profile.cpu_replay_ms =
+        ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+    initial_profile.raster_pixels_touched = image.raster_pixels_touched;
+    initial_profile.damage_pixels = image.damage_pixels;
+    initial_profile.raster_skipped = image.raster_skipped;
+    initial_profile.partial_redraw = image.partial_raster;
+    initial_profile.cpu_replay_command_top =
+        FormatCpuReplayCommandTimingTop(5);
+  }
+  frame_width = image.width;
+  frame_height = image.height;
 
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -2640,73 +2084,45 @@ int main(int argc, char** argv) {
   std::fprintf(stderr, "viewer renderer: %s\n",
                renderer_name ? renderer_name : "unknown");
 
-  const SDL_PixelFormat frame_texture_format =
-      use_cpu ? SDL_PIXELFORMAT_RGBA32 : SDL_PIXELFORMAT_ABGR8888;
-  const SDL_TextureAccess texture_access =
-      SDL_TEXTUREACCESS_TARGET;
+  const SDL_PixelFormat frame_texture_format = SDL_PIXELFORMAT_RGBA32;
   SDL_Texture* texture = nullptr;
   SDL_Texture* spare_cpu_texture = nullptr;
   SDL_Texture* cpu_upload_texture = nullptr;
-  const bool texture_created =
-      use_cpu ? RecreateCpuFrameTextures(renderer, frame_texture_format,
-                                         frame_width, frame_height, &texture,
-                                         &spare_cpu_texture,
-                                         &cpu_upload_texture)
-              : CreateTexture(renderer, frame_texture_format, texture_access,
-                              frame_width, frame_height, &texture);
-  if (!texture_created) {
+  if (!RecreateCpuFrameTextures(renderer, frame_texture_format,
+                                frame_width, frame_height, &texture,
+                                &spare_cpu_texture, &cpu_upload_texture)) {
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 1;
   }
 
-  std::unique_ptr<SdlFrameRenderer> direct_renderer;
   std::optional<PendingSdlProfileFrame> pending_profile_frame;
-  if (use_cpu) {
-    ProfileClock::time_point texture_upload_start;
-    if (profiler.enabled()) {
-      texture_upload_start = ProfileClock::now();
-    }
-    uint64_t uploaded_pixels = 0;
-    uint64_t texture_copy_pixels = 0;
-    if (!PresentCpuImageToRetainedTexture(
-            renderer, result, image,
-            {SDL_Rect{0, 0, image.width, image.height}}, false, &texture,
-            &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
-            &texture_copy_pixels)) {
-      SDL_DestroyTexture(texture);
-      DestroyTexture(&spare_cpu_texture);
-      DestroyTexture(&cpu_upload_texture);
-      SDL_DestroyRenderer(renderer);
-      SDL_DestroyWindow(window);
-      SDL_Quit();
-      return 1;
-    }
-    if (profiler.enabled()) {
-      initial_profile.texture_upload_ms =
-          ElapsedProfileMs(texture_upload_start, ProfileClock::now());
-      initial_profile.uploaded_pixels = uploaded_pixels;
-      initial_profile.texture_copy_pixels = texture_copy_pixels;
-      initial_profile.texture_update_rect_count = 1;
-    }
-  } else {
-    direct_renderer = std::make_unique<SdlFrameRenderer>(renderer);
-    ProfileClock::time_point direct_render_start;
-    if (profiler.enabled()) {
-      direct_render_start = ProfileClock::now();
-    }
-    if (!direct_renderer->Render(result, texture)) {
-      SDL_DestroyTexture(texture);
-      SDL_DestroyRenderer(renderer);
-      SDL_DestroyWindow(window);
-      SDL_Quit();
-      return 1;
-    }
-    if (profiler.enabled()) {
-      initial_profile.direct_render_ms =
-          ElapsedProfileMs(direct_render_start, ProfileClock::now());
-    }
+  ProfileClock::time_point texture_upload_start;
+  if (profiler.enabled()) {
+    texture_upload_start = ProfileClock::now();
+  }
+  uint64_t uploaded_pixels = 0;
+  uint64_t texture_copy_pixels = 0;
+  if (!PresentCpuImageToRetainedTexture(
+          renderer, result, image,
+          {SDL_Rect{0, 0, image.width, image.height}}, false, &texture,
+          &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
+          &texture_copy_pixels)) {
+    SDL_DestroyTexture(texture);
+    DestroyTexture(&spare_cpu_texture);
+    DestroyTexture(&cpu_upload_texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 1;
+  }
+  if (profiler.enabled()) {
+    initial_profile.texture_upload_ms =
+        ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+    initial_profile.uploaded_pixels = uploaded_pixels;
+    initial_profile.texture_copy_pixels = texture_copy_pixels;
+    initial_profile.texture_update_rect_count = 1;
   }
   if (profiler.enabled()) {
     pending_profile_frame = PendingSdlProfileFrame{initial_profile, std::nullopt};
@@ -2757,7 +2173,7 @@ int main(int argc, char** argv) {
           ProfileClock::time_point frame_start,
           bool force_full_render = false) -> bool {
     stamp_frame_time(&next_input);
-    const bool use_incremental = incremental && use_cpu && !force_full_render;
+    const bool use_incremental = !force_full_render;
     const bool profile = profiler.enabled();
     SdlProfileFrame profile_frame;
     ProfileClock::time_point blink_render_start;
@@ -2777,11 +2193,9 @@ int main(int argc, char** argv) {
       PopulateFrameWorkProfile(next_result, &profile_frame);
       PopulateProbeProfileTimings(next_result, &profile_frame);
     }
-    if (use_cpu) {
+    {
       html_css_renderer::CpuRenderOptions cpu_options;
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-      cpu_options.profile_command_timings = profile && use_skia_cpu;
-#endif
+      cpu_options.profile_command_timings = profile;
       const bool frame_requires_full_redraw =
           !use_incremental || ViewerRequiresFullRedraw(next_result);
       const bool frame_has_damage = !ViewerDamageRects(next_result).empty();
@@ -2792,26 +2206,16 @@ int main(int argc, char** argv) {
         cpu_replay_start = ProfileClock::now();
       }
       if (!skip_cpu_raster) {
-        image =
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-            use_skia_cpu
-                ? (use_incremental && !frame_requires_full_redraw &&
-                           frame_has_damage
-                       ? html_css_renderer::RasterizeRenderResultDamageWithSkiaCpu(
-                             next_result, cpu_options)
-                       : (use_incremental
-                              ? html_css_renderer::
-                                    RasterizeRenderResultIncrementalWithSkiaCpu(
-                                        next_result, &image, cpu_options)
-                              : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                                    next_result, cpu_options)))
-                :
-#endif
-                (use_incremental
-                     ? html_css_renderer::RasterizeRenderResultIncremental(
-                           next_result, &image, cpu_options)
-                     : html_css_renderer::RasterizeRenderResult(next_result,
-                                                                cpu_options));
+        image = use_incremental && !frame_requires_full_redraw &&
+                        frame_has_damage
+                    ? html_css_renderer::RasterizeRenderResultDamageWithSkiaCpu(
+                          next_result, cpu_options)
+                    : (use_incremental
+                           ? html_css_renderer::
+                                 RasterizeRenderResultIncrementalWithSkiaCpu(
+                                     next_result, &image, cpu_options)
+                           : html_css_renderer::RasterizeRenderResultWithSkiaCpu(
+                                 next_result, cpu_options));
       }
       if (profile) {
         profile_frame.cpu_replay_ms =
@@ -2823,10 +2227,8 @@ int main(int argc, char** argv) {
             skip_cpu_raster ? 0 : image.damage_pixels;
         profile_frame.partial_redraw =
             !skip_cpu_raster && image.partial_raster;
-        if (use_skia_cpu) {
-          profile_frame.cpu_replay_command_top =
-              FormatCpuReplayCommandTimingTop(5);
-        }
+        profile_frame.cpu_replay_command_top =
+            FormatCpuReplayCommandTimingTop(5);
       }
       const bool texture_size_changed =
           image.width != frame_width || image.height != frame_height;
@@ -2878,34 +2280,6 @@ int main(int argc, char** argv) {
         profile_frame.uploaded_pixels = uploaded_pixels;
         profile_frame.texture_copy_pixels = texture_copy_pixels;
         profile_frame.texture_update_rect_count = texture_update_rects.size();
-      }
-    } else if (direct_renderer) {
-      ProfileClock::time_point direct_render_start;
-      if (profile) {
-        direct_render_start = ProfileClock::now();
-      }
-      const int next_frame_width = std::max(
-          1, static_cast<int>(std::floor(
-                 next_result.successor_snapshot.viewport.width)));
-      const int next_frame_height = std::max(
-          1, static_cast<int>(std::floor(
-                 next_result.successor_snapshot.viewport.height)));
-      if (next_frame_width != frame_width ||
-          next_frame_height != frame_height) {
-        if (!RecreateFrameTexture(renderer, frame_texture_format,
-                                  texture_access, next_frame_width,
-                                  next_frame_height, &texture)) {
-          return false;
-        }
-        frame_width = next_frame_width;
-        frame_height = next_frame_height;
-      }
-      if (!direct_renderer->Render(next_result, texture)) {
-        return false;
-      }
-      if (profile) {
-        profile_frame.direct_render_ms =
-            ElapsedProfileMs(direct_render_start, ProfileClock::now());
       }
     }
     ++rendered_frame_count;
@@ -3031,89 +2405,51 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
     }
 
-    if (use_cpu) {
-      html_css_renderer::CpuRenderOptions cpu_options;
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-      cpu_options.profile_command_timings =
-          profiler.enabled() && use_skia_cpu;
-#endif
-      ProfileClock::time_point cpu_replay_start;
-      if (profiler.enabled()) {
-        cpu_replay_start = ProfileClock::now();
-      }
-      image =
-#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
-          use_skia_cpu ? html_css_renderer::RasterizeRenderResultWithSkiaCpu(
-                             next_result, cpu_options)
-                       :
-#endif
-                       html_css_renderer::RasterizeRenderResult(next_result,
+    html_css_renderer::CpuRenderOptions cpu_options;
+    cpu_options.profile_command_timings = profiler.enabled();
+    ProfileClock::time_point cpu_replay_start;
+    if (profiler.enabled()) {
+      cpu_replay_start = ProfileClock::now();
+    }
+    image = html_css_renderer::RasterizeRenderResultWithSkiaCpu(next_result,
                                                                 cpu_options);
-      if (profiler.enabled()) {
-        profile_frame.cpu_replay_ms =
-            ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
-        profile_frame.raster_pixels_touched = image.raster_pixels_touched;
-        profile_frame.damage_pixels = image.damage_pixels;
-        profile_frame.raster_skipped = image.raster_skipped;
-        profile_frame.partial_redraw = image.partial_raster;
-        if (use_skia_cpu) {
-          profile_frame.cpu_replay_command_top =
-              FormatCpuReplayCommandTimingTop(5);
-        }
-      }
-      if (!RecreateCpuFrameTextures(renderer, frame_texture_format,
-                                    image.width, image.height, &texture,
-                                    &spare_cpu_texture,
-                                    &cpu_upload_texture)) {
-        return false;
-      }
-      frame_width = image.width;
-      frame_height = image.height;
-      ProfileClock::time_point texture_upload_start;
-      if (profiler.enabled()) {
-        texture_upload_start = ProfileClock::now();
-      }
-      uint64_t uploaded_pixels = 0;
-      uint64_t texture_copy_pixels = 0;
-      if (!PresentCpuImageToRetainedTexture(
-              renderer, next_result, image,
-              {SDL_Rect{0, 0, image.width, image.height}}, false, &texture,
-              &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
-              &texture_copy_pixels)) {
-        return false;
-      }
-      if (profiler.enabled()) {
-        profile_frame.texture_upload_ms =
-            ElapsedProfileMs(texture_upload_start, ProfileClock::now());
-        profile_frame.uploaded_pixels = uploaded_pixels;
-        profile_frame.texture_copy_pixels = texture_copy_pixels;
-        profile_frame.texture_update_rect_count = 1;
-      }
-    } else if (direct_renderer) {
-      const int next_frame_width = std::max(
-          1, static_cast<int>(std::floor(
-                 next_result.successor_snapshot.viewport.width)));
-      const int next_frame_height = std::max(
-          1, static_cast<int>(std::floor(
-                 next_result.successor_snapshot.viewport.height)));
-      if (!RecreateFrameTexture(renderer, frame_texture_format, texture_access,
-                                next_frame_width, next_frame_height,
-                                &texture)) {
-        return false;
-      }
-      frame_width = next_frame_width;
-      frame_height = next_frame_height;
-      ProfileClock::time_point direct_render_start;
-      if (profiler.enabled()) {
-        direct_render_start = ProfileClock::now();
-      }
-      if (!direct_renderer->Render(next_result, texture)) {
-        return false;
-      }
-      if (profiler.enabled()) {
-        profile_frame.direct_render_ms =
-            ElapsedProfileMs(direct_render_start, ProfileClock::now());
-      }
+    if (profiler.enabled()) {
+      profile_frame.cpu_replay_ms =
+          ElapsedProfileMs(cpu_replay_start, ProfileClock::now());
+      profile_frame.raster_pixels_touched = image.raster_pixels_touched;
+      profile_frame.damage_pixels = image.damage_pixels;
+      profile_frame.raster_skipped = image.raster_skipped;
+      profile_frame.partial_redraw = image.partial_raster;
+      profile_frame.cpu_replay_command_top =
+          FormatCpuReplayCommandTimingTop(5);
+    }
+    if (!RecreateCpuFrameTextures(renderer, frame_texture_format,
+                                  image.width, image.height, &texture,
+                                  &spare_cpu_texture,
+                                  &cpu_upload_texture)) {
+      return false;
+    }
+    frame_width = image.width;
+    frame_height = image.height;
+    ProfileClock::time_point texture_upload_start;
+    if (profiler.enabled()) {
+      texture_upload_start = ProfileClock::now();
+    }
+    uint64_t uploaded_pixels = 0;
+    uint64_t texture_copy_pixels = 0;
+    if (!PresentCpuImageToRetainedTexture(
+            renderer, next_result, image,
+            {SDL_Rect{0, 0, image.width, image.height}}, false, &texture,
+            &spare_cpu_texture, cpu_upload_texture, &uploaded_pixels,
+            &texture_copy_pixels)) {
+      return false;
+    }
+    if (profiler.enabled()) {
+      profile_frame.texture_upload_ms =
+          ElapsedProfileMs(texture_upload_start, ProfileClock::now());
+      profile_frame.uploaded_pixels = uploaded_pixels;
+      profile_frame.texture_copy_pixels = texture_copy_pixels;
+      profile_frame.texture_update_rect_count = 1;
     }
 
     ++rendered_frame_count;

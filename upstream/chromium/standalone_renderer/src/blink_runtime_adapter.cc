@@ -2393,15 +2393,6 @@ bool SameStylesheets(const std::vector<Stylesheet>& left,
   return true;
 }
 
-bool SameFeatures(const RendererFeatureFlags& left,
-                  const RendererFeatureFlags& right) {
-  return left.enable_css_animations == right.enable_css_animations &&
-         left.enable_css_transitions == right.enable_css_transitions &&
-         left.enable_forms_visual_state == right.enable_forms_visual_state &&
-         left.enable_svg == right.enable_svg &&
-         left.enable_mathml == right.enable_mathml;
-}
-
 bool IsDocumentScrollKey(const std::string& key) {
   return key == "document" || key == "body";
 }
@@ -2438,7 +2429,6 @@ bool SameRendererSnapshotForNoChangeFrame(const RendererSnapshot& left,
          std::abs(left.device_scale_factor - right.device_scale_factor) <=
              0.001f &&
          left.asset_namespace == right.asset_namespace &&
-         SameFeatures(left.features, right.features) &&
          std::abs(left.timeline_time_seconds - right.timeline_time_seconds) <=
              0.000001 &&
          SameStringMap(left.element_attributes_by_id_and_name,
@@ -2866,7 +2856,6 @@ BlinkTreeFrameBuildResult BuildBlinkTreeFrameOutput(
 class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
  public:
   explicit LiveBlinkPageEmbedder(BlinkPageEmbedderCreateInfo create_info) {
-    disable_retained_extraction_ = create_info.disable_retained_extraction;
     enable_paint_artifact_audit_ = create_info.enable_paint_artifact_audit;
     trace_stages_ = create_info.trace_stages;
     debug_text_blob_replay_ = create_info.debug_text_blob_replay;
@@ -2875,7 +2864,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
-            disable_retained_extraction_ ? 1 : 0);
+            0);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
             enable_paint_artifact_audit_ ? 1 : 0);
@@ -2893,7 +2882,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     snapshot_.viewport = create_info.renderer.viewport;
     snapshot_.device_scale_factor = create_info.renderer.device_scale_factor;
     snapshot_.asset_namespace = create_info.renderer.asset_namespace;
-    snapshot_.features = create_info.renderer.features;
   }
 
   BlinkLifecycleReport Initialize() override {
@@ -3117,10 +3105,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     if (snapshot_.asset_namespace != previous_snapshot.asset_namespace) {
       push_diagnostic(
           "document scroll fast path ineligible: asset namespace changed");
-      return false;
-    }
-    if (!SameFeatures(snapshot_.features, previous_snapshot.features)) {
-      push_diagnostic("document scroll fast path ineligible: features changed");
       return false;
     }
     if (snapshot_.timeline_time_seconds !=
@@ -3394,7 +3378,7 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     }
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
-            disable_retained_extraction_ ? 1 : 0);
+            0);
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
             enable_paint_artifact_audit_ ? 1 : 0);
@@ -3502,11 +3486,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     copy_raw_paint_artifact_audit_json();
     if (chunk_count <= 0) {
       result.diagnostics.push_back("real Blink PaintArtifact bridge produced no chunks");
-      return;
-    }
-    if (disable_retained_extraction_) {
-      result.diagnostics.push_back(
-          "real Blink PaintArtifact retained extraction disabled by caller");
       return;
     }
     trace_stage("before exported draw op count");
@@ -4557,7 +4536,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   }
 
   RendererSnapshot snapshot_;
-  bool disable_retained_extraction_ = false;
   bool enable_paint_artifact_audit_ = false;
   bool trace_stages_ = false;
   bool debug_text_blob_replay_ = false;

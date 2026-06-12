@@ -19,7 +19,6 @@ RendererSnapshot InitialSnapshotFromRenderer(const RendererCreateInfo& renderer)
   snapshot.viewport = renderer.viewport;
   snapshot.device_scale_factor = renderer.device_scale_factor;
   snapshot.asset_namespace = renderer.asset_namespace;
-  snapshot.features = renderer.features;
   return snapshot;
 }
 

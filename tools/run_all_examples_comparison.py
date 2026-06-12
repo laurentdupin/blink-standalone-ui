@@ -252,7 +252,6 @@ def main() -> int:
             str(crash),
             "--debug-command-coverage",
             "--strict-text-blob-typefaces",
-            "--skia-cpu",
         ]
         status["benchmark_exit"], status["benchmark_elapsed_seconds"] = run(
             bench_cmd, item_dir / f"{name}-benchmark.log", args.timeout

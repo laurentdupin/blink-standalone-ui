@@ -446,8 +446,6 @@ def benchmark_base_cmd(
         str(resource_root),
         "--viewport",
         viewport,
-        "--skia-cpu",
-        "--blink",
         "--min-non-white",
         "0",
         "--out",
@@ -469,7 +467,6 @@ def run_benchmark_case(
     extra_args: list[str] | None = None,
     *,
     oracle: bool = False,
-    disable_skia_raster: bool = False,
 ) -> dict[str, Any]:
     out_path = case_dir / f"{mode}.bmp"
     json_path = case_dir / f"{mode}.json"
@@ -484,9 +481,6 @@ def run_benchmark_case(
     if oracle:
         oracle_path = case_dir / f"{mode}-oracle.bmp"
         cmd.extend(["--paint-oracle=skia-paint-record", "--oracle-out", str(oracle_path)])
-    if disable_skia_raster:
-        cmd.append("--disable-skia-raster")
-        # The benchmark still requires --out to be syntactically present.
     attempts: list[CommandResult] = []
     final_log_path = case_dir / f"{mode}.log"
     for attempt in range(retries + 1):

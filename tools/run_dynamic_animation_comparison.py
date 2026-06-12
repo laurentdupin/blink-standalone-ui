@@ -130,7 +130,6 @@ def build_frame_commands(
         str(crash),
         "--debug-command-coverage",
         "--strict-text-blob-typefaces",
-        "--skia-cpu",
         "--time-ms",
         time_value,
     ]

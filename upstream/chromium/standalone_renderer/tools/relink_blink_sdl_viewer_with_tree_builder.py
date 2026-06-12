@@ -173,7 +173,6 @@ def run_sdl_viewer(out_dir: pathlib.Path, timeout: int) -> int:
     result = subprocess.run(
         [
             str(executable),
-            "--blink",
             "--html",
             "<main><p>Hello from Blink SDL</p></main>",
             "--viewport",
