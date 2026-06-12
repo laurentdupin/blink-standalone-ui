@@ -14767,13 +14767,6 @@ void* AlignedAlloc(size_t size, size_t alignment) {
 }
 namespace debug {
 void Alias(const void*) {}
-ScopedCrashKeyString::ScopedCrashKeyString(CrashKeyString* crash_key,
-                                           std::string_view)
-    : crash_key_(crash_key) {}
-ScopedCrashKeyString::~ScopedCrashKeyString() = default;
-CrashKeyString* AllocateCrashKeyString(const char[], CrashKeySize) {
-  return nullptr;
-}
 bool DumpWithoutCrashing(const Location&, TimeDelta) {
   return false;
 }

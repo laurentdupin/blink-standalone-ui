@@ -2,6 +2,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base64.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_op.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/callback_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/crash_logging.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/case_conversion.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/i18n_constants.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
