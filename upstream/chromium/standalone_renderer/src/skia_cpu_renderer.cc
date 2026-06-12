@@ -32,6 +32,7 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/core/SkSamplingOptions.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
@@ -1473,7 +1474,9 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   if (clear_before_render) {
     canvas->clear(ToSkColor(options.clear_color));
   }
+  std::vector<SkIRect> damage_clips;
   if (!clear_before_render && damage_rects) {
+    damage_clips.reserve(damage_rects->size());
     SkPaint clear_paint;
     clear_paint.setBlendMode(SkBlendMode::kSrc);
     clear_paint.setColor(ToSkColor(options.clear_color));
@@ -1483,6 +1486,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       if (IsEmpty(clip)) {
         continue;
       }
+      damage_clips.push_back(clip);
       canvas->save();
       canvas->clipIRect(clip);
       canvas->drawIRect(clip, clear_paint);
@@ -1544,21 +1548,124 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       }
     }
   };
-  if (damage_rects && !damage_rects->empty() && !clear_before_render) {
-    for (size_t i = 0; i < damage_rects->size(); ++i) {
-      const SkIRect clip =
-          ToSkIRectClamped((*damage_rects)[i], image.width, image.height);
-      if (IsEmpty(clip)) {
-        continue;
-      }
+  if (!damage_clips.empty() && !clear_before_render) {
+    if (damage_clips.size() == 1) {
       canvas->save();
-      canvas->clipIRect(clip);
-      replay_commands(options.debug_command_coverage && i == 0);
+      canvas->clipIRect(damage_clips.front());
+      replay_commands(options.debug_command_coverage);
       while (save_depth > 0) {
         canvas->restore();
         --save_depth;
       }
       canvas->restore();
+    } else {
+      struct ReplayClipGroup {
+        std::vector<SkIRect> clips;
+        SkIRect bounds;
+        uint64_t pixel_area = 0;
+      };
+      auto clip_area = [](const SkIRect& clip) -> uint64_t {
+        return static_cast<uint64_t>(std::max(0, clip.width())) *
+               static_cast<uint64_t>(std::max(0, clip.height()));
+      };
+      auto union_clips = [](const SkIRect& a, const SkIRect& b) {
+        SkIRect out = a;
+        out.join(b);
+        return out;
+      };
+      auto clips_overlap = [](const ReplayClipGroup& a,
+                              const ReplayClipGroup& b) {
+        for (const SkIRect& clip_a : a.clips) {
+          for (const SkIRect& clip_b : b.clips) {
+            if (SkIRect::Intersects(clip_a, clip_b)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+      const uint64_t viewport_area = static_cast<uint64_t>(image.width) *
+                                     static_cast<uint64_t>(image.height);
+      const uint64_t max_added_group_pixels = viewport_area / 8u;
+      constexpr double kMaxReplayGroupBoundsToDamageAreaRatio = 1.25;
+
+      // Reduce duplicate command replay for nearby disjoint damage clips without
+      // changing the damage clips copied back into the retained frame.
+      std::vector<ReplayClipGroup> replay_groups;
+      replay_groups.reserve(damage_clips.size());
+      for (const SkIRect& clip : damage_clips) {
+        replay_groups.push_back(ReplayClipGroup{{clip}, clip, clip_area(clip)});
+      }
+      bool merged_group = true;
+      while (merged_group) {
+        merged_group = false;
+        size_t best_i = 0;
+        size_t best_j = 0;
+        SkIRect best_bounds;
+        uint64_t best_added_pixels = 0;
+        bool have_best = false;
+        for (size_t i = 0; i < replay_groups.size(); ++i) {
+          for (size_t j = i + 1; j < replay_groups.size(); ++j) {
+            if (clips_overlap(replay_groups[i], replay_groups[j])) {
+              continue;
+            }
+            const SkIRect bounds =
+                union_clips(replay_groups[i].bounds, replay_groups[j].bounds);
+            const uint64_t damage_area =
+                replay_groups[i].pixel_area + replay_groups[j].pixel_area;
+            const uint64_t bounds_area = clip_area(bounds);
+            if (bounds_area < damage_area) {
+              continue;
+            }
+            const uint64_t added_pixels = bounds_area - damage_area;
+            if (added_pixels > max_added_group_pixels ||
+                static_cast<double>(bounds_area) >
+                    static_cast<double>(damage_area) *
+                        kMaxReplayGroupBoundsToDamageAreaRatio) {
+              continue;
+            }
+            if (!have_best || added_pixels < best_added_pixels) {
+              best_i = i;
+              best_j = j;
+              best_bounds = bounds;
+              best_added_pixels = added_pixels;
+              have_best = true;
+            }
+          }
+        }
+        if (have_best) {
+          replay_groups[best_i].clips.insert(
+              replay_groups[best_i].clips.end(),
+              replay_groups[best_j].clips.begin(),
+              replay_groups[best_j].clips.end());
+          replay_groups[best_i].bounds = best_bounds;
+          replay_groups[best_i].pixel_area += replay_groups[best_j].pixel_area;
+          replay_groups.erase(replay_groups.begin() +
+                              static_cast<std::ptrdiff_t>(best_j));
+          merged_group = true;
+        }
+      }
+
+      for (size_t group_index = 0; group_index < replay_groups.size();
+           ++group_index) {
+        const ReplayClipGroup& group = replay_groups[group_index];
+        canvas->save();
+        if (group.clips.size() == 1) {
+          canvas->clipIRect(group.clips.front());
+        } else {
+          SkRegion damage_region;
+          for (const SkIRect& clip : group.clips) {
+            damage_region.op(clip, SkRegion::kUnion_Op);
+          }
+          canvas->clipRegion(damage_region);
+        }
+        replay_commands(options.debug_command_coverage && group_index == 0);
+        while (save_depth > 0) {
+          canvas->restore();
+          --save_depth;
+        }
+        canvas->restore();
+      }
     }
   } else {
     replay_commands(options.debug_command_coverage);
@@ -1572,12 +1679,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
   }
 
   if (damage_rects) {
-    for (const Rect& damage_rect : *damage_rects) {
-      const SkIRect clip =
-          ToSkIRectClamped(damage_rect, image.width, image.height);
-      if (!IsEmpty(clip)) {
-        CopySkiaPixelsToCpuImageRect(pixels, clip, image);
-      }
+    for (const SkIRect& clip : damage_clips) {
+      CopySkiaPixelsToCpuImageRect(pixels, clip, image);
     }
   } else {
     for (int y = 0; y < image.height; ++y) {
