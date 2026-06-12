@@ -126,6 +126,7 @@ ROOT_COPY_DIRS = (
     "gin",
     "gpu/command_buffer/client",
     "gpu/command_buffer/common",
+    "gpu/ipc/common",
     "ipc",
     "media/audio",
     "media/base",
