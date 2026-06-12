@@ -49,6 +49,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/region_capture_bounds.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
@@ -68,6 +69,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/cicp.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skcolorspace_primaries.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skcolorspace_trfn.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skia_utils_base.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/simdutf/simdutf.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_mixer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider.cc
@@ -75,6 +79,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/linear_gradient.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/skia_color_space_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/features/native_theme_features.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/native_theme_aura.cc

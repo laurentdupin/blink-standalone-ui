@@ -15218,13 +15218,6 @@ sk_sp<SkFontMgr> DefaultFontMgr() {
   }();
   return sk_ref_sp(font_manager);
 }
-base::span<const uint8_t> as_byte_span(const SkData& data) {
-  return base::span(static_cast<const uint8_t*>(data.data()), data.size());
-}
-base::span<uint8_t> as_writable_byte_span(SkData& data) {
-  CHECK(data.empty() || data.unique());
-  return base::span(static_cast<uint8_t*>(data.writable_data()), data.size());
-}
 void DrawGainmapImage(SkCanvas*,
                       sk_sp<SkImage>,
                       sk_sp<SkImage>,
