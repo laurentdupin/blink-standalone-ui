@@ -86,8 +86,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/linear_gradient.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/hdr_static_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/skia_span_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/skia_color_space_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/switches.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/features/native_theme_features.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/native_theme_aura.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/native_theme_base.cc

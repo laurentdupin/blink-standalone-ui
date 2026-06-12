@@ -15965,9 +15965,6 @@ bool HdrMetadataAgtm::IsEnabled() {
 bool ColorSpace::operator==(const ColorSpace&) const {
   return false;
 }
-sk_sp<SkData> MakeSkDataFromSpanWithCopy(base::span<const uint8_t> data) {
-  return SkData::MakeWithCopy(data.data(), data.size());
-}
 float Tween::FloatValueBetween(double value, float start, float target) {
   return start + static_cast<float>(value) * (target - start);
 }
