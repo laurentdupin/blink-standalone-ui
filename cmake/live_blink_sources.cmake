@@ -55,6 +55,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/mailbox.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/shared_image_capabilities.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/shared_image_pool_id.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/shared_image_usage.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/sync_token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/ip_address.cc
