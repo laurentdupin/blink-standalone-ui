@@ -509,6 +509,11 @@ struct EmptyClipChunkForStandaloneRenderer {
   std::optional<SkRRect> clip_rrect;
 };
 
+struct OriginalElementAttributeValue {
+  bool present = false;
+  std::string value;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   LiveFramePaintProbeResult result;
@@ -516,6 +521,11 @@ struct LiveFramePaintProbeCache {
   std::string requested_element_attributes_serialized;
   std::unordered_map<std::string, std::string>
       requested_element_attributes_by_id_and_name;
+  bool element_attributes_changed_since_probe = false;
+  std::unordered_map<std::string, OriginalElementAttributeValue>
+      original_element_attribute_values;
+  std::unordered_map<std::string, std::string>
+      applied_element_attributes_by_id_and_name;
   std::string requested_hovered_element_id;
   std::string requested_active_element_id;
   bool requested_interaction_state = false;
@@ -7183,9 +7193,81 @@ ParseElementAttributesForStandaloneRenderer(const std::string& serialized) {
   return output;
 }
 
+bool AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
+    const std::string& html,
+    const std::unordered_map<std::string, std::string>& attributes) {
+  if (attributes.empty()) {
+    return false;
+  }
+  const std::string lower_html = LowerAsciiForStandaloneRenderer(html);
+  bool selector_mentions_changed_attribute = false;
+  for (const auto& [key, value] : attributes) {
+    const size_t separator = key.find(':');
+    if (separator == std::string::npos || separator + 1 >= key.size()) {
+      continue;
+    }
+    const std::string attribute_name =
+        LowerAsciiForStandaloneRenderer(key.substr(separator + 1));
+    if (lower_html.find("[" + attribute_name) != std::string::npos) {
+      selector_mentions_changed_attribute = true;
+      break;
+    }
+  }
+  if (!selector_mentions_changed_attribute) {
+    return false;
+  }
+
+  static constexpr const char* kRetainedBoundarySensitiveCssTokens[] = {
+      "-webkit-mask", "mask-image", "mask:", "opacity:", "transform:",
+      "filter:", "backdrop-filter:", "clip-path:", "clip:", "box-shadow:",
+      "text-shadow:", "overflow:", "overflow-x:", "overflow-y:",
+      "scrollbar", "z-index:", "order:"};
+  for (const char* token : kRetainedBoundarySensitiveCssTokens) {
+    if (lower_html.find(token) != std::string::npos) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void ApplyElementAttributesForStandaloneRenderer(
     Document& document,
-    const std::unordered_map<std::string, std::string>& attributes) {
+    const std::unordered_map<std::string, std::string>& attributes,
+    std::unordered_map<std::string, OriginalElementAttributeValue>*
+        original_values,
+    std::unordered_map<std::string, std::string>* applied_attributes) {
+  if (applied_attributes && original_values) {
+    std::vector<std::string> restore_keys;
+    for (const auto& [key, value] : *applied_attributes) {
+      if (attributes.find(key) == attributes.end()) {
+        restore_keys.push_back(key);
+      }
+    }
+    for (const std::string& key : restore_keys) {
+      const size_t separator = key.find(':');
+      if (separator != std::string::npos && separator != 0 &&
+          separator + 1 < key.size()) {
+        Element* element =
+            document.getElementById(AtomicString(String::FromUtf8(
+                key.substr(0, separator))));
+        if (element) {
+          const AtomicString attribute_name(
+              String::FromUtf8(key.substr(separator + 1)));
+          const auto original = original_values->find(key);
+          if (original != original_values->end() && original->second.present) {
+            element->setAttribute(
+                attribute_name,
+                AtomicString(String::FromUtf8(original->second.value)));
+          } else {
+            element->removeAttribute(attribute_name);
+          }
+        }
+      }
+      applied_attributes->erase(key);
+      original_values->erase(key);
+    }
+  }
+
   for (const auto& [key, value] : attributes) {
     const size_t separator = key.find(':');
     if (separator == std::string::npos || separator == 0 ||
@@ -7200,10 +7282,22 @@ void ApplyElementAttributesForStandaloneRenderer(
     }
     const AtomicString attribute_name(
         String::FromUtf8(key.substr(separator + 1)));
+    if (original_values && original_values->find(key) == original_values->end()) {
+      OriginalElementAttributeValue original;
+      original.present = element->hasAttribute(attribute_name);
+      if (original.present) {
+        original.value = BlinkStringToStdStringForStandaloneRenderer(
+            String(element->getAttribute(attribute_name)));
+      }
+      (*original_values)[key] = std::move(original);
+    }
     if (value.empty()) {
       element->removeAttribute(attribute_name);
     } else {
       element->setAttribute(attribute_name, AtomicString(String::FromUtf8(value)));
+    }
+    if (applied_attributes) {
+      (*applied_attributes)[key] = value;
     }
   }
 }
@@ -9554,8 +9648,15 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     cache.timing_cache_hit = true;
     return cache.result;
   }
+  const bool rebuild_for_attribute_mutation =
+      cache.element_attributes_changed_since_probe &&
+      (AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
+           input_html, cache.requested_element_attributes_by_id_and_name) ||
+       AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
+           input_html, cache.applied_element_attributes_by_id_and_name));
   const bool html_content_already_loaded =
-      cache.holder && cache.body_html == input_html;
+      cache.holder && cache.body_html == input_html &&
+      !rebuild_for_attribute_mutation;
   const auto setup_start = StandaloneProbeClock::now();
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
   StandaloneRendererResetImageReachabilityDiagnostics();
@@ -9622,6 +9723,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   const auto html_setup_start = StandaloneProbeClock::now();
   g_standalone_blink_saw_font_draw_text = false;
   if (!html_content_already_loaded) {
+    cache.original_element_attribute_values.clear();
+    cache.applied_element_attributes_by_id_and_name.clear();
     const std::string head_open = "<head>";
     const std::string head_close = "</head>";
     const std::string body_close = "</body>";
@@ -9675,9 +9778,12 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
       document.body()->SetInnerHTMLWithoutTrustedTypes(
           String::FromUtf8(body_fragment));
     }
-    ApplyElementAttributesForStandaloneRenderer(
-        document, cache.requested_element_attributes_by_id_and_name);
   }
+  ApplyElementAttributesForStandaloneRenderer(
+      document, cache.requested_element_attributes_by_id_and_name,
+      &cache.original_element_attribute_values,
+      &cache.applied_element_attributes_by_id_and_name);
+  cache.element_attributes_changed_since_probe = false;
   TraceLiveFrameProbeStage("after SetInnerHTML");
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
@@ -10044,6 +10150,9 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   cache.holder = nullptr;
   cache.initialized = false;
   cache.body_html.clear();
+  cache.element_attributes_changed_since_probe = false;
+  cache.original_element_attribute_values.clear();
+  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -10147,6 +10256,9 @@ void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
   cache.element_scroll_offset_changed = false;
   cache.initialized = false;
   cache.body_html.clear();
+  cache.element_attributes_changed_since_probe = false;
+  cache.original_element_attribute_values.clear();
+  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -10216,8 +10328,8 @@ void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
   cache.requested_element_attributes_serialized = value;
   cache.requested_element_attributes_by_id_and_name =
       ParseElementAttributesForStandaloneRenderer(value);
+  cache.element_attributes_changed_since_probe = true;
   cache.initialized = false;
-  cache.body_html.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -10244,6 +10356,9 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
   cache.requested_active_element_id = active;
   cache.initialized = false;
   cache.body_html.clear();
+  cache.element_attributes_changed_since_probe = false;
+  cache.original_element_attribute_values.clear();
+  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -10312,6 +10427,9 @@ void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRend
   cache.disable_retained_extraction = value;
   cache.initialized = false;
   cache.body_html.clear();
+  cache.element_attributes_changed_since_probe = false;
+  cache.original_element_attribute_values.clear();
+  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();

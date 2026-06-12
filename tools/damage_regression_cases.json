@@ -142,7 +142,7 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "local",
-        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+        "damage_bounds": {"x": 23, "y": 23, "width": 122, "height": 122}
       }
     },
     {
@@ -155,7 +155,7 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "tight",
-        "damage_bounds": {"x": 24, "y": 24, "width": 120, "height": 120}
+        "damage_bounds": {"x": 23, "y": 23, "width": 122, "height": 122}
       }
     },
     {
@@ -180,7 +180,7 @@
         "exact_pixel_identical": true,
         "requires_full_redraw": false,
         "damage_class": "tight",
-        "damage_bounds": {"x": 32, "y": 32, "width": 160, "height": 120}
+        "damage_bounds": {"x": 31, "y": 31, "width": 162, "height": 122}
       }
     },
     {

@@ -513,6 +513,16 @@ bool HasNonDefaultOpacity(const RetainedPaintChunk* chunk) {
          chunk->property_state.effect_opacity < 1.0f;
 }
 
+bool HasEdgeSensitivePropertyState(const RetainedPaintChunk* chunk) {
+  if (!chunk) {
+    return false;
+  }
+  const PaintPropertyStateSnapshot& state = chunk->property_state;
+  return HasNonDefaultOpacity(chunk) || state.effect_has_filter ||
+         state.effect_has_backdrop_filter || state.has_clip_rrect ||
+         state.clip_has_rounded_clip || state.clip_has_path_clip;
+}
+
 Rect ConsumeContributionDamageBounds(const RetainedPaintChunk* chunk,
                                      ContributionCountMap* remaining_counts) {
   Rect bounds;
@@ -1477,6 +1487,7 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
 
   const RetainedSceneDiff diff = DiffRetainedScenes(current, previous);
   bool has_opacity_transition = false;
+  bool has_edge_sensitive_property_transition = false;
   for (const RetainedChunkDiff& chunk_diff : diff.chunks) {
     const RetainedPaintChunk* previous_chunk =
         previous && !chunk_diff.previous_key.empty()
@@ -1488,7 +1499,11 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
             : nullptr;
     if (HasNonDefaultOpacity(previous_chunk) || HasNonDefaultOpacity(current_chunk)) {
       has_opacity_transition = true;
-      break;
+    }
+    if (chunk_diff.kind != RetainedChunkChangeKind::kRetained &&
+        (HasEdgeSensitivePropertyState(previous_chunk) ||
+         HasEdgeSensitivePropertyState(current_chunk))) {
+      has_edge_sensitive_property_transition = true;
     }
   }
   ContributionCountMap previous_contribution_excess;
@@ -1639,6 +1654,12 @@ PresentationUpdatePlan PlanPresentationUpdate(const RetainedScene& current,
 
   for (const Rect& rect : plan.scroll_exposed_rects) {
     plan.dirty_rects.push_back(rect);
+  }
+
+  if (has_edge_sensitive_property_transition) {
+    for (Rect& rect : plan.dirty_rects) {
+      rect = OutsetRect(rect, 1.0f);
+    }
   }
 
   plan.dirty_rects =
