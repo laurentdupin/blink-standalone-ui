@@ -57,6 +57,52 @@ The post-`8382d99` damage-clip grouping work is an interim retained Skia CPU rep
 
 This is still the standalone retained `DrawCommandList` path. It is not Chromium PaintArtifactCompositor, not a cc layer tree, and not a retained GPU/tile compositor. The remaining `49d_rounded_shadow_document_scroll` scroll cost is dominated by real Skia CPU replay of expensive static shadow/filter/rounded-clip content; closing that safely likely requires real retained layer/tile/cache metadata or the Chromium compositor path, not a local damage-clip shortcut.
 
+## 49d Retained Cache Boundary
+
+The post-`fd752623` architecture boundary for `49d_rounded_shadow_document_scroll` is that the retained scene has enough metadata to explain why CPU replay is expensive, but not enough retained surface state to replace the expensive replay with cached pixels.
+
+Current evidence from `build/perf/post-8382d99-full-shard-04/pages/49d_rounded_shadow_document_scroll/warm-scroll.json`:
+
+- Presented scroll frame: 42.11 ms.
+- Skia CPU raster: 41.72 ms, with 38.33 ms in command replay and 0.57 ms in copyback.
+- Damage grouping overhead: 0.004 ms, `SkRegion` clip overhead: 0.002 ms.
+- Damage: four clamped clips, 383,040 raw/coalesced pixels, grouped into two replay clips.
+- Replay work: 175 draw commands per replay group; command executions drop from 700 to 350 after grouping.
+- The full retained scene has 10 chunks, 195 scene commands, and 12 finer cache-unit descriptors. Zero finer units are conservative cache candidates.
+
+The expensive command classes are structural, not damage bookkeeping. The warm scroll scene contains 20 rounded-rect clips, 10 save layers, 18 shader fill commands, 10 path fills, 8 rounded-rect fills, and 10 draw-looper shadow draws. The resource summary reports 18 shaders, 10 paths, one filter signal, no images, and no text blobs.
+
+The slow chunks fall into repeatable categories:
+
+| Chunk class | Count | Commands | Damage relation | Current blockers |
+| --- | ---: | ---: | --- | --- |
+| Document background | 1 | 8 | Intersects all four damage clips; bounds are 1280x982, larger than the viewport | Larger-than-viewport shader content |
+| Column/container decoration chunks | 2 | 28 each | Two damage intersections each, 154,560 px each | Save layers, rounded clips, shaders, paths |
+| Card background chunks | 6 | 15 each | Full or partial card intersections | Save layers, rounded clips, opacity/effect-style ops, shaders, paths |
+| Scrollbar chunk | 1 | 3 | Small intersections only | Trivial candidate, not the bottleneck |
+
+The finer cache-unit metadata from the prior retained-cache commits is present:
+
+- `ac7ac005` added chunk-level retained-cache feasibility JSON.
+- `3990c22c` added finer retained cache-unit reporting from the Blink bridge.
+- `aae576f0` persisted finer cache-unit descriptors through retained frames.
+- `0c74cbbb` annotated retained draw commands with source chunk, display item, and finer cache-unit spans.
+- `9fce3bf7` recorded cache-unit entry-state metadata.
+
+What remains missing is not another scalar diagnostic. The CPU replay path receives a flattened command list plus damage clips, and replays the list under clip groups. It does not own retained raster surfaces, cache memory, or a compositing graph. A correct cache for 49d needs at least:
+
+- Retained surface or tile storage with explicit allocation, eviction, and invalidation.
+- Cache keys that combine chunk/finer-unit stable keys, content hashes, resource-signal hashes, paint property-state hashes, device scale, viewport, and scroll/transform state.
+- Complete entry and exit canvas state for cached spans. Current entry summaries can record save depth, transform, clip bounds, and effect depth, but 49d still reports `active_rounded_clip_shape_not_serialized` and `active_save_layer_context_not_serialized` on inner units.
+- Layer isolation semantics for save layers, opacity/blend/filter/backdrop state, and unset/full-viewport save-layer bounds.
+- Conservative surface bounds and outsets for blur shadows, filters, rounded clips, paths, and shader draws.
+- Resource lifetime tracking for shader bytes, path bytes, image/text resources, decoded resource reuse, and invalidation when Blink resource state changes.
+- Ordered composition of cached and uncached content in scene order, including interactions between chunks that overlap the same damage region.
+
+Without that model, caching the 49d shadow/card work would have to guess at isolation, clip shape, resource lifetime, or composition ordering. The next standalone step should therefore be a disabled-by-default retained cache validation mode: build candidate surfaces from the existing metadata, composite them into a comparison output, and require pixel identity against the uncached replay before enabling any cached presentation. Initial candidates should be restricted to complete entry-state units with translation-only transforms, no save layer, no non-rect clip, no shader/path/filter/image/text dependency, and stable bounds. The 49d bottleneck would remain open until the cache model can represent rounded clips, save layers, shadow outsets, and resource dependencies.
+
+The Chromium-parity path is broader: replace the custom retained replay boundary with a real `PaintArtifactCompositor`/cc layer-tree route. That requires turning the current linked compositor stubs into a working compositor integration, including cc layer tree creation, frame sink/output surface plumbing, resource providers, image/resource upload, scheduling, and software/GPU presentation. That is the correct long-term direction, but it is a separate integration seam from the current standalone `DrawCommandList` renderer.
+
 ## SDL Retained Upload Status
 
 The checked SDL viewer path at `build/cmake-live-image-png-ninja-vs18/blink_standalone_sdl_viewer_skia.exe` now has a focused profile gate in `tools/perf/run_sdl_profile_benchmark.py`.
