@@ -15339,23 +15339,6 @@ PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::
     ~PropertyHandle() = default;
 }  // namespace skottie
 
-namespace gpu {
-Mailbox::Mailbox() {
-  SetZero();
-}
-bool Mailbox::IsZero() const {
-  for (int8_t byte : name) {
-    if (byte != 0) {
-      return false;
-    }
-  }
-  return true;
-}
-void Mailbox::SetZero() {
-  std::memset(name, 0, sizeof(name));
-}
-}  // namespace gpu
-
 namespace mojo {
 Message::Message() = default;
 Message::Message(uint32_t,
