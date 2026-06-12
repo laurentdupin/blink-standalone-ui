@@ -48,6 +48,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/region_capture_bounds.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc

@@ -21814,13 +21814,6 @@ extern "C" MojoResult MojoAppendMessageData(
 }
 
 namespace viz {
-RegionCaptureBounds::RegionCaptureBounds() = default;
-RegionCaptureBounds::RegionCaptureBounds(RegionCaptureBounds&&) = default;
-RegionCaptureBounds::~RegionCaptureBounds() = default;
-void RegionCaptureBounds::Set(const RegionCaptureCropId& crop_id,
-                              const gfx::Rect& bounds) {
-  bounds_[crop_id] = bounds;
-}
 }  // namespace viz
 
 namespace cc {
