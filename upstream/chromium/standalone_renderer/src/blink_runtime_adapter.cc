@@ -58,8 +58,6 @@ void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRend
     int disabled);
 void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
     int enabled);
-void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
-    int enabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
@@ -1624,7 +1622,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     enable_paint_artifact_audit_ = create_info.enable_paint_artifact_audit;
     trace_stages_ = create_info.trace_stages;
     debug_text_blob_replay_ = create_info.debug_text_blob_replay;
-    force_paint_oracle_bitmap_ = create_info.force_paint_oracle_bitmap;
     lifecycle_stop_ = create_info.lifecycle_stop;
     SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
     ::blink::standalone_renderer_probe::
@@ -1633,9 +1630,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
             enable_paint_artifact_audit_ ? 1 : 0);
-    ::blink::standalone_renderer_probe::
-        StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
-            force_paint_oracle_bitmap_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
             trace_stages_ ? 1 : 0);
@@ -2147,8 +2141,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
             enable_paint_artifact_audit_ ? 1 : 0);
-    live_probe::StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
-        force_paint_oracle_bitmap_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
             lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
@@ -2727,24 +2719,28 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         append_path_effect_bytes(command);
         active_commands->push_back(std::move(command));
         ++translated_command_count;
-      } else if (type == 7 || type == 22) {
+      } else if (type == 7) {
         std::array<char, 128> debug_label{};
         live_probe::
             StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
                 probe_html.c_str(), i, debug_label.data(),
                 static_cast<int>(debug_label.size()));
-        if (type == 7) {
-          std::string diagnostic =
-              "diagnostic_bitmap_fallback fallback_rasterized=true "
-              "fallback_reason=unsupported_retained_resource original_paint_op="
-              "bitmap-backed source_chunk=" + active_chunk_key +
-              " source_display_item=unknown op " + std::to_string(i);
-          if (debug_label[0] != '\0') {
-            diagnostic += " source=";
-            diagnostic += debug_label.data();
-          }
-          result.diagnostics.push_back(std::move(diagnostic));
+        std::string diagnostic =
+            "unsupported retained PaintOp requires Chromium "
+            "PaintArtifactCompositor/cc source_chunk=" + active_chunk_key +
+            " source_display_item=unknown op=" + std::to_string(i);
+        if (debug_label[0] != '\0') {
+          diagnostic += " source=";
+          diagnostic += debug_label.data();
         }
+        result.diagnostics.push_back(std::move(diagnostic));
+        continue;
+      } else if (type == 22) {
+        std::array<char, 128> debug_label{};
+        live_probe::
+            StandaloneBlinkLiveFrameBridgeExportedDebugLabelAtForStandaloneRenderer(
+                probe_html.c_str(), i, debug_label.data(),
+                static_cast<int>(debug_label.size()));
         int bitmap_width = 0;
         int bitmap_height = 0;
         int byte_count = 0;
@@ -2771,13 +2767,9 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         }
         const uint64_t pixel_hash = HashBytes(rgba_pixels);
         ImageLoadInfo image;
-        image.image_id =
-            std::string(type == 22 ? "blink-paint-image-"
-                                   : "blink-paint-bitmap-") +
-            std::to_string(pixel_hash);
+        image.image_id = "blink-paint-image-" + std::to_string(pixel_hash);
         image.resource_id = image.image_id;
-        image.mime_type = type == 22 ? "image/x-blink-paint-image-rgba"
-                                     : "image/x-raw-rgba";
+        image.mime_type = "image/x-blink-paint-image-rgba";
         image.decoded_format = PixelFormat::kRgba8888;
         image.decoded_size = Size{static_cast<float>(bitmap_width),
                                   static_cast<float>(bitmap_height)};
@@ -2787,39 +2779,33 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
         Rect src_rect{0.0f, 0.0f, static_cast<float>(bitmap_width),
                       static_cast<float>(bitmap_height)};
         std::string sampling_options = "filter=nearest,mipmap=none";
-        if (type == 22) {
-          float src_x = 0.0f;
-          float src_y = 0.0f;
-          float src_width = 0.0f;
-          float src_height = 0.0f;
-          if (live_probe::
-                  StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer(
-                      probe_html.c_str(), i, &src_x, &src_y, &src_width,
-                      &src_height) &&
-              src_width > 0.0f && src_height > 0.0f) {
-            src_rect = Rect{src_x, src_y, src_width, src_height};
-          }
-          std::array<char, 128> sampling_buffer{};
-          if (live_probe::
-                  StandaloneBlinkLiveFrameBridgeExportedImageSamplingOptionsAtForStandaloneRenderer(
-                      probe_html.c_str(), i, sampling_buffer.data(),
-                      static_cast<int>(sampling_buffer.size())) > 0) {
-            sampling_options = sampling_buffer.data();
-          }
-          result.diagnostics.push_back(
-              std::string("retained_image_resource source_raw_op=") +
-              (debug_label[0] != '\0' ? debug_label.data()
-                                      : "DrawImageRectOp") +
-              " source_chunk=" + active_chunk_key + " op=" +
-              std::to_string(i) + " resource_id=" + image.image_id);
+        float src_x = 0.0f;
+        float src_y = 0.0f;
+        float src_width = 0.0f;
+        float src_height = 0.0f;
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedImageSourceRectAtForStandaloneRenderer(
+                    probe_html.c_str(), i, &src_x, &src_y, &src_width,
+                    &src_height) &&
+            src_width > 0.0f && src_height > 0.0f) {
+          src_rect = Rect{src_x, src_y, src_width, src_height};
         }
+        std::array<char, 128> sampling_buffer{};
+        if (live_probe::
+                StandaloneBlinkLiveFrameBridgeExportedImageSamplingOptionsAtForStandaloneRenderer(
+                    probe_html.c_str(), i, sampling_buffer.data(),
+                    static_cast<int>(sampling_buffer.size())) > 0) {
+          sampling_options = sampling_buffer.data();
+        }
+        result.diagnostics.push_back(
+            std::string("retained_image_resource source_raw_op=") +
+            (debug_label[0] != '\0' ? debug_label.data()
+                                    : "DrawImageRectOp") +
+            " source_chunk=" + active_chunk_key + " op=" +
+            std::to_string(i) + " resource_id=" + image.image_id);
         const std::string image_id = image.image_id;
-        active_commands->push_back(
-            type == 22 ? DrawCommand::DrawImageRect(
-                             image_id, src_rect, Rect{x, y, width, height},
-                             sampling_options)
-                       : DrawCommand::DrawImage(image_id,
-                                                Rect{x, y, width, height}));
+        active_commands->push_back(DrawCommand::DrawImageRect(
+            image_id, src_rect, Rect{x, y, width, height}, sampling_options));
         load_commands.push_back(LoadCommand::LoadImage(std::move(image)));
         ++translated_command_count;
       } else if (type == 8) {
@@ -3304,7 +3290,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
   bool enable_paint_artifact_audit_ = false;
   bool trace_stages_ = false;
   bool debug_text_blob_replay_ = false;
-  bool force_paint_oracle_bitmap_ = false;
   std::string lifecycle_stop_;
   bool last_pointer_pressed_ = false;
   std::optional<PointerState> previous_primary_pointer_state_;

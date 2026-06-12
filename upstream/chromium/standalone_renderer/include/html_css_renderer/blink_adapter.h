@@ -93,7 +93,6 @@ struct BlinkPageEmbedderCreateInfo {
   bool enable_paint_artifact_audit = false;
   bool trace_stages = false;
   bool debug_text_blob_replay = false;
-  bool force_paint_oracle_bitmap = false;
   std::string lifecycle_stop;
 };
 

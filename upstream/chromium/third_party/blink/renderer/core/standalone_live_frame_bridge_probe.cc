@@ -644,7 +644,6 @@ struct LiveFramePaintProbeCache {
   bool timing_cache_hit = false;
   bool disable_retained_extraction = false;
   bool full_paint_artifact_audit = false;
-  bool force_oracle_bitmap = false;
   bool trace_stages = false;
   std::string lifecycle_stop;
   ImageReachabilityDiagnostics image_reachability;
@@ -1699,14 +1698,14 @@ SkRect SkRectFromGfxRectForStandaloneRenderer(const gfx::Rect& rect) {
                           static_cast<SkScalar>(rect.height()));
 }
 
-void AppendSkRectOpWithFlags(
+bool AppendSkRectOpWithFlags(
     const SkRect& rect,
     float translate_x,
     float translate_y,
     const cc::PaintFlags& flags,
     std::vector<LiveExportedDrawOp>& exported_draw_ops) {
   if (!rect.isFinite()) {
-    return;
+    return false;
   }
   if (flags.HasShader() && flags.getStyle() != cc::PaintFlags::kStroke_Style) {
     std::vector<uint8_t> shader_bytes = SerializeShaderBytes(flags);
@@ -1720,46 +1719,19 @@ void AppendSkRectOpWithFlags(
       AppendSkColor(exported, flags.getColor4f());
       exported.shader_bytes = std::move(shader_bytes);
       exported_draw_ops.push_back(std::move(exported));
-      return;
+      return true;
     }
-    const int bitmap_width = SkScalarCeilToInt(rect.width());
-    const int bitmap_height = SkScalarCeilToInt(rect.height());
-    if (bitmap_width > 0 && bitmap_height > 0) {
-      std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
-                                       static_cast<size_t>(bitmap_height) * 4u);
-      SkImageInfo info =
-          SkImageInfo::Make(bitmap_width, bitmap_height, kRGBA_8888_SkColorType,
-                            kPremul_SkAlphaType);
-      sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-          info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
-      if (surface) {
-        SkCanvas* canvas = surface->getCanvas();
-        canvas->clear(SK_ColorTRANSPARENT);
-        canvas->translate(-rect.x(), -rect.y());
-        canvas->drawRect(rect, flags.ToSkPaint());
-        LiveExportedDrawOp exported;
-        exported.type = 7;
-        exported.x = translate_x + rect.x();
-        exported.y = translate_y + rect.y();
-        exported.width = static_cast<float>(bitmap_width);
-        exported.height = static_cast<float>(bitmap_height);
-        exported.mask_width = bitmap_width;
-        exported.mask_height = bitmap_height;
-        exported.rgba_pixels = std::move(rgba_pixels);
-        exported.debug_label = "DrawRectOp shader";
-        exported_draw_ops.push_back(std::move(exported));
-        return;
-      }
-    }
+    return false;
   }
   if (flags.getStyle() == cc::PaintFlags::kStroke_Style) {
     AppendStrokeRectOp(translate_x + rect.x(), translate_y + rect.y(),
                        rect.width(), rect.height(), flags.getStrokeWidth(),
                        flags.getColor4f(), exported_draw_ops, &flags);
-    return;
+    return true;
   }
   AppendSkRectFillOp(rect, translate_x, translate_y, flags.getColor4f(),
                      exported_draw_ops);
+  return true;
 }
 
 void AppendSkIRectOpWithFlags(
@@ -1781,7 +1753,7 @@ void AppendSkIRectOpWithFlags(
                       exported_draw_ops, &flags);
 }
 
-void AppendSkRRectOpWithFlags(
+bool AppendSkRRectOpWithFlags(
     const SkRRect& rrect,
     float translate_x,
     float translate_y,
@@ -1789,7 +1761,7 @@ void AppendSkRRectOpWithFlags(
     std::vector<LiveExportedDrawOp>& exported_draw_ops) {
   const SkRect rect = rrect.rect();
   if (!rect.isFinite()) {
-    return;
+    return false;
   }
   if (flags.HasShader() && flags.getStyle() != cc::PaintFlags::kStroke_Style) {
     std::vector<uint8_t> shader_bytes = SerializeShaderBytes(flags);
@@ -1804,42 +1776,15 @@ void AppendSkRRectOpWithFlags(
       AppendSkColor(exported, flags.getColor4f());
       exported.shader_bytes = std::move(shader_bytes);
       exported_draw_ops.push_back(std::move(exported));
-      return;
+      return true;
     }
-    const int bitmap_width = SkScalarCeilToInt(rect.width());
-    const int bitmap_height = SkScalarCeilToInt(rect.height());
-    if (bitmap_width > 0 && bitmap_height > 0) {
-      std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
-                                       static_cast<size_t>(bitmap_height) * 4u);
-      SkImageInfo info =
-          SkImageInfo::Make(bitmap_width, bitmap_height, kRGBA_8888_SkColorType,
-                            kPremul_SkAlphaType);
-      sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-          info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
-      if (surface) {
-        SkCanvas* canvas = surface->getCanvas();
-        canvas->clear(SK_ColorTRANSPARENT);
-        canvas->translate(-rect.x(), -rect.y());
-        canvas->drawRRect(rrect, flags.ToSkPaint());
-        LiveExportedDrawOp exported;
-        exported.type = 7;
-        exported.x = translate_x + rect.x();
-        exported.y = translate_y + rect.y();
-        exported.width = static_cast<float>(bitmap_width);
-        exported.height = static_cast<float>(bitmap_height);
-        exported.mask_width = bitmap_width;
-        exported.mask_height = bitmap_height;
-        exported.rgba_pixels = std::move(rgba_pixels);
-        exported.debug_label = "DrawRRectOp shader";
-        exported_draw_ops.push_back(std::move(exported));
-        return;
-      }
-    }
+    return false;
   }
   AppendRRectOp(rrect, translate_x, translate_y, flags.getStrokeWidth(),
                 flags.getColor4f(),
                 flags.getStyle() == cc::PaintFlags::kStroke_Style,
                 exported_draw_ops, &flags);
+  return true;
 }
 
 void AppendSkPathOpWithFlags(
@@ -1881,14 +1826,14 @@ void AppendSkPathOpWithFlags(
 
   exported_draw_ops.push_back(std::move(exported));
 }
-void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
+bool AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
                       int fallback_x,
                       int fallback_y,
                       int fallback_width,
                       int fallback_height,
                       std::vector<LiveExportedDrawOp>& exported_draw_ops) {
   if (!text_op.blob) {
-    return;
+    return false;
   }
   {
     SkTextBlob::Iter iter(*text_op.blob);
@@ -1926,138 +1871,9 @@ void AppendTextBlobOp(const cc::DrawTextBlobOp& text_op,
         static_cast<const uint8_t*>(serialized_blob->data());
     exported.text_blob_bytes.assign(bytes, bytes + serialized_blob->size());
     exported_draw_ops.push_back(std::move(exported));
-    return;
+    return true;
   }
-  const float absolute_x = text_op.x;
-  const float absolute_y = text_op.y;
-  const SkRect bounds = text_op.blob->bounds().makeOffset(absolute_x,
-                                                          absolute_y);
-  SkIRect ibounds = bounds.roundOut();
-  if (ibounds.width() <= 0 || ibounds.height() <= 0) {
-    ibounds = SkIRect::MakeXYWH(fallback_x, fallback_y, fallback_width,
-                                fallback_height);
-  }
-  float export_offset_x = 0.0f;
-  float export_offset_y = 0.0f;
-  if (fallback_width > 0 && fallback_height > 0) {
-    const SkIRect fallback_bounds =
-        SkIRect::MakeXYWH(fallback_x, fallback_y, fallback_width,
-                          fallback_height);
-    SkIRect intersection;
-    if (!intersection.intersect(ibounds, fallback_bounds)) {
-      export_offset_x = static_cast<float>(fallback_x);
-      export_offset_y = static_cast<float>(fallback_y);
-    }
-  }
-  const int mask_width = std::max(0, ibounds.width());
-  const int mask_height = std::max(0, ibounds.height());
-  if (mask_width <= 0 || mask_height <= 0) {
-    return;
-  }
-
-  std::vector<uint8_t> rgba_pixels(static_cast<size_t>(mask_width) *
-                                   static_cast<size_t>(mask_height) * 4u,
-                                   0);
-  SkImageInfo mask_info = SkImageInfo::MakeN32Premul(mask_width, mask_height);
-  sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      mask_info, rgba_pixels.data(), static_cast<size_t>(mask_width) * 4u);
-  if (!surface) {
-    return;
-  }
-  SkCanvas* canvas = surface->getCanvas();
-  canvas->clear(SK_ColorTRANSPARENT);
-  canvas->translate(-static_cast<SkScalar>(ibounds.left()),
-                    -static_cast<SkScalar>(ibounds.top()));
-  text_op.Raster(canvas, cc::PlaybackParams());
-  int outline_path_count = 0;
-  int nonempty_outline_path_count = 0;
-
-  std::vector<uint8_t> mask_pixels(static_cast<size_t>(mask_width) *
-                                       static_cast<size_t>(mask_height),
-                                   0);
-  size_t nonzero_alpha_count = 0;
-  for (int row = 0; row < mask_height; ++row) {
-    for (int col = 0; col < mask_width; ++col) {
-      const size_t pixel_index =
-          static_cast<size_t>(row) * static_cast<size_t>(mask_width) +
-          static_cast<size_t>(col);
-      const size_t rgba_offset = pixel_index * 4u;
-      const uint8_t alpha = rgba_pixels[rgba_offset + 3u];
-      const uint8_t color_coverage =
-          std::max(rgba_pixels[rgba_offset + 0u],
-                   std::max(rgba_pixels[rgba_offset + 1u],
-                            rgba_pixels[rgba_offset + 2u]));
-      const uint8_t coverage = alpha != 0 ? alpha : color_coverage;
-      mask_pixels[pixel_index] = coverage;
-      if (coverage != 0) {
-        ++nonzero_alpha_count;
-      }
-    }
-  }
-
-  LiveExportedDrawOp bitmap_export;
-  bitmap_export.type = 7;
-  AppendSkColor(bitmap_export, text_op.flags.getColor4f());
-  bitmap_export.x = export_offset_x + static_cast<float>(ibounds.left());
-  bitmap_export.y = export_offset_y + static_cast<float>(ibounds.top());
-  bitmap_export.width = static_cast<float>(mask_width);
-  bitmap_export.height = static_cast<float>(mask_height);
-  bitmap_export.mask_width = mask_width;
-  bitmap_export.mask_height = mask_height;
-  bitmap_export.rgba_pixels = std::move(rgba_pixels);
-  bitmap_export.debug_label = "DrawTextBlobOp fallback";
-  exported_draw_ops.push_back(std::move(bitmap_export));
-}
-
-bool AppendPaintOpBitmapResource(
-    const cc::PaintOp& op,
-    SkRect bounds,
-    float translate_x,
-    float translate_y,
-    std::vector<LiveExportedDrawOp>& exported_draw_ops) {
-  if (!bounds.isFinite() || bounds.width() <= 0.0f ||
-      bounds.height() <= 0.0f) {
-    return false;
-  }
-  constexpr int kMaxOpBitmapPixels = 4 * 1024 * 1024;
-  bounds.roundOut(&bounds);
-  const int bitmap_width = SkScalarCeilToInt(bounds.width());
-  const int bitmap_height = SkScalarCeilToInt(bounds.height());
-  if (bitmap_width <= 0 || bitmap_height <= 0 ||
-      static_cast<int64_t>(bitmap_width) *
-              static_cast<int64_t>(bitmap_height) >
-          kMaxOpBitmapPixels) {
-    return false;
-  }
-
-  std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
-                                   static_cast<size_t>(bitmap_height) * 4u);
-  SkImageInfo info =
-      SkImageInfo::Make(bitmap_width, bitmap_height, kRGBA_8888_SkColorType,
-                        kPremul_SkAlphaType);
-  sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
-  if (!surface) {
-    return false;
-  }
-
-  SkCanvas* canvas = surface->getCanvas();
-  canvas->clear(SK_ColorTRANSPARENT);
-  canvas->translate(-bounds.x(), -bounds.y());
-  op.Raster(canvas, cc::PlaybackParams());
-
-  LiveExportedDrawOp exported;
-  exported.type = 7;
-  exported.x = translate_x + bounds.x();
-  exported.y = translate_y + bounds.y();
-  exported.width = static_cast<float>(bitmap_width);
-  exported.height = static_cast<float>(bitmap_height);
-  exported.mask_width = bitmap_width;
-  exported.mask_height = bitmap_height;
-  exported.rgba_pixels = std::move(rgba_pixels);
-  exported.debug_label = cc::PaintOpTypeToString(op.GetType());
-  exported_draw_ops.push_back(std::move(exported));
-  return true;
+  return false;
 }
 
 bool AppendPaintImageResourceOp(
@@ -2355,25 +2171,19 @@ bool AppendPaintRecordExtractedOps(
         break;
       }
       case cc::PaintOpType::kDrawRect:
-        AppendSkRectOpWithFlags(static_cast<const cc::DrawRectOp&>(op).rect,
-                                translate_x, translate_y,
-                                static_cast<const cc::DrawRectOp&>(op).flags,
-                                exported_draw_ops);
-        break;
-      case cc::PaintOpType::kDrawArc: {
-        const auto& arc_op = static_cast<const cc::DrawArcOp&>(op);
-        if (!AppendPaintOpBitmapResource(op, arc_op.oval, translate_x,
-                                         translate_y, exported_draw_ops)) {
+        if (!AppendSkRectOpWithFlags(
+                static_cast<const cc::DrawRectOp&>(op).rect, translate_x,
+                translate_y, static_cast<const cc::DrawRectOp&>(op).flags,
+                exported_draw_ops)) {
           mark_unsupported(op);
         }
+        break;
+      case cc::PaintOpType::kDrawArc: {
+        mark_unsupported(op);
         break;
       }
       case cc::PaintOpType::kDrawArcLite: {
-        const auto& arc_op = static_cast<const cc::DrawArcLiteOp&>(op);
-        if (!AppendPaintOpBitmapResource(op, arc_op.oval, translate_x,
-                                         translate_y, exported_draw_ops)) {
-          mark_unsupported(op);
-        }
+        mark_unsupported(op);
         break;
       }
       case cc::PaintOpType::kDrawLine: {
@@ -2401,10 +2211,12 @@ bool AppendPaintRecordExtractedOps(
         break;
       }
       case cc::PaintOpType::kDrawRRect:
-        AppendSkRRectOpWithFlags(
-            static_cast<const cc::DrawRRectOp&>(op).rrect, translate_x,
-            translate_y, static_cast<const cc::DrawRRectOp&>(op).flags,
-            exported_draw_ops);
+        if (!AppendSkRRectOpWithFlags(
+                static_cast<const cc::DrawRRectOp&>(op).rrect, translate_x,
+                translate_y, static_cast<const cc::DrawRRectOp&>(op).flags,
+                exported_draw_ops)) {
+          mark_unsupported(op);
+        }
         break;
       case cc::PaintOpType::kDrawOval: {
         const auto& oval_op = static_cast<const cc::DrawOvalOp&>(op);
@@ -2420,10 +2232,12 @@ bool AppendPaintRecordExtractedOps(
                                 exported_draw_ops);
         break;
       case cc::PaintOpType::kDrawTextBlob:
-        AppendTextBlobOp(static_cast<const cc::DrawTextBlobOp&>(op),
-                         static_cast<int>(translate_x),
-                         static_cast<int>(translate_y), fallback_width,
-                         fallback_height, exported_draw_ops);
+        if (!AppendTextBlobOp(static_cast<const cc::DrawTextBlobOp&>(op),
+                              static_cast<int>(translate_x),
+                              static_cast<int>(translate_y), fallback_width,
+                              fallback_height, exported_draw_ops)) {
+          mark_unsupported(op);
+        }
         break;
       case cc::PaintOpType::kDrawRecord:
         if (!AppendPaintRecordExtractedOps(
@@ -2549,132 +2363,6 @@ bool AppendPaintArtifactExtractedOps(
   return complete && !exported_draw_ops.empty();
 }
 
-bool AppendPaintArtifactOracleBitmapOp(
-    const PaintArtifact& artifact,
-    int viewport_width,
-    int viewport_height,
-    std::vector<LiveExportedDrawOp>& exported_draw_ops) {
-  if (viewport_width <= 0 || viewport_height <= 0) {
-    return false;
-  }
-  constexpr int kMaxBitmapExportDimension = 4096;
-  constexpr int kMaxBitmapExportPixels = 16 * 1024 * 1024;
-  const int bitmap_width =
-      std::min(viewport_width, kMaxBitmapExportDimension);
-  const int bitmap_height =
-      std::min(viewport_height, kMaxBitmapExportDimension);
-  if (bitmap_width <= 0 || bitmap_height <= 0 ||
-      static_cast<int64_t>(bitmap_width) *
-              static_cast<int64_t>(bitmap_height) >
-          kMaxBitmapExportPixels) {
-    return false;
-  }
-
-  std::vector<uint8_t> rgba_pixels(static_cast<size_t>(bitmap_width) *
-                                   static_cast<size_t>(bitmap_height) * 4u);
-  SkImageInfo info =
-      SkImageInfo::Make(bitmap_width, bitmap_height, kRGBA_8888_SkColorType,
-                        kPremul_SkAlphaType);
-  sk_sp<SkSurface> surface = SkSurfaces::WrapPixels(
-      info, rgba_pixels.data(), static_cast<size_t>(bitmap_width) * 4u);
-  if (!surface) {
-    return false;
-  }
-
-  SkCanvas* canvas = surface->getCanvas();
-  canvas->clear(SK_ColorTRANSPARENT);
-
-  const DisplayItemList& display_items = artifact.GetDisplayItemList();
-  const PaintChunks& chunks = artifact.GetPaintChunks();
-  const EffectPaintPropertyNode* active_opacity_effect = nullptr;
-  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
-       ++chunk_index) {
-    const PaintChunk& chunk = chunks[chunk_index];
-    const PropertyTreeState chunk_state = chunk.properties.Unalias();
-    const EffectPaintPropertyNode* chunk_effect = &chunk_state.Effect();
-    const float effect_opacity = chunk_effect->Opacity();
-    const bool needs_effect_opacity_layer =
-        effect_opacity >= 0.0f && effect_opacity < 1.0f;
-    if (active_opacity_effect &&
-        (!needs_effect_opacity_layer ||
-         chunk_effect != active_opacity_effect)) {
-      canvas->restore();
-      active_opacity_effect = nullptr;
-    }
-    if (needs_effect_opacity_layer && !active_opacity_effect) {
-      gfx::Rect opacity_layer_bounds = chunk.bounds;
-      for (wtf_size_t next_chunk_index = chunk_index + 1;
-           next_chunk_index < chunks.size(); ++next_chunk_index) {
-        const PaintChunk& next_chunk = chunks[next_chunk_index];
-        const PropertyTreeState next_chunk_state =
-            next_chunk.properties.Unalias();
-        const EffectPaintPropertyNode* next_effect =
-            &next_chunk_state.Effect();
-        if (next_effect != chunk_effect ||
-            next_effect->Opacity() != effect_opacity) {
-          break;
-        }
-        opacity_layer_bounds.Union(next_chunk.bounds);
-      }
-      SkPaint layer_paint;
-      layer_paint.setAlphaf(effect_opacity);
-      canvas->saveLayer(SkRectFromGfxRectForStandaloneRenderer(
-                            opacity_layer_bounds),
-                        &layer_paint);
-      active_opacity_effect = chunk_effect;
-    }
-    gfx::Transform projection;
-    if (!GeometryMapper::SourceToDestinationProjection(
-            chunk_state.Transform(), PropertyTreeState::Root().Transform(),
-            projection)) {
-      continue;
-    }
-
-    canvas->save();
-    const FloatClipRect clip = GeometryMapper::LocalToAncestorClipRect(
-        chunk_state, PropertyTreeState::Root());
-    if (!clip.IsInfinite()) {
-      const gfx::RectF& clip_rect = clip.Rect();
-      canvas->clipRect(
-          SkRect::MakeXYWH(clip_rect.x(), clip_rect.y(),
-                           clip_rect.width(), clip_rect.height()),
-          SkClipOp::kIntersect, true);
-    }
-    canvas->concat(gfx::TransformToSkM44(projection));
-    for (wtf_size_t item_index = chunk.begin_index;
-         item_index < chunk.end_index && item_index < display_items.size();
-         ++item_index) {
-      const DisplayItem& item = display_items[item_index];
-      const auto* drawing = DynamicTo<DrawingDisplayItem>(item);
-      const auto* scrollbar = DynamicTo<ScrollbarDisplayItem>(item);
-      if (!drawing && !scrollbar) {
-        continue;
-      }
-      if (drawing) {
-        drawing->GetPaintRecord().Playback(canvas);
-      } else {
-        scrollbar->Paint().Playback(canvas);
-      }
-    }
-    canvas->restore();
-  }
-  if (active_opacity_effect) {
-    canvas->restore();
-  }
-
-  LiveExportedDrawOp exported;
-  exported.type = 7;
-  exported.x = 0.0f;
-  exported.y = 0.0f;
-  exported.width = static_cast<float>(bitmap_width);
-  exported.height = static_cast<float>(bitmap_height);
-  exported.mask_width = bitmap_width;
-  exported.mask_height = bitmap_height;
-  exported.rgba_pixels = std::move(rgba_pixels);
-  exported_draw_ops.push_back(std::move(exported));
-  return true;
-}
-
 bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type) {
   switch (type) {
     case cc::PaintOpType::kSave:
@@ -2696,8 +2384,6 @@ bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type) {
     case cc::PaintOpType::kDrawRRect:
     case cc::PaintOpType::kDrawDRRect:
     case cc::PaintOpType::kDrawOval:
-    case cc::PaintOpType::kDrawArc:
-    case cc::PaintOpType::kDrawArcLite:
     case cc::PaintOpType::kDrawLine:
     case cc::PaintOpType::kDrawLineLite:
     case cc::PaintOpType::kDrawPath:
@@ -6287,13 +5973,11 @@ struct RawPaintRecordAudit {
   std::map<std::string, int> top_level_histogram;
   std::map<std::string, int> recursive_histogram;
   std::map<std::string, int> unsupported_histogram;
-  std::map<std::string, int> fallback_histogram;
   int paint_op_count = 0;
   int recursive_paint_op_count = 0;
   int visual_op_count = 0;
   int retained_supported_visual_op_count = 0;
   int retained_unsupported_visual_op_count = 0;
-  int diagnostic_bitmap_fallback_visual_op_count = 0;
   int text_blob_count = 0;
   int image_count = 0;
   int shader_count = 0;
@@ -6362,9 +6046,6 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
       ++audit.visual_op_count;
       if (!IsPaintOpCurrentlyExtracted(op.GetType())) {
         ++audit.retained_unsupported_visual_op_count;
-      } else if (op.GetType() == cc::PaintOpType::kDrawArc ||
-                 op.GetType() == cc::PaintOpType::kDrawArcLite) {
-        ++audit.diagnostic_bitmap_fallback_visual_op_count;
       } else {
         ++audit.retained_supported_visual_op_count;
       }
@@ -6383,10 +6064,6 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
     if (op.GetType() == cc::PaintOpType::kDrawPath ||
         op.GetType() == cc::PaintOpType::kClipPath) {
       ++audit.path_count;
-    }
-    if (op.GetType() == cc::PaintOpType::kDrawArc ||
-        op.GetType() == cc::PaintOpType::kDrawArcLite) {
-      ++audit.fallback_histogram[op_name];
     }
     if (op.GetType() == cc::PaintOpType::kSaveLayerAlpha) {
       const auto& layer = static_cast<const cc::SaveLayerAlphaOp&>(op);
@@ -6477,9 +6154,6 @@ void MergeRawPaintRecordAudit(RawPaintRecordAudit& target,
   for (const auto& [name, count] : source.unsupported_histogram) {
     target.unsupported_histogram[name] += count;
   }
-  for (const auto& [name, count] : source.fallback_histogram) {
-    target.fallback_histogram[name] += count;
-  }
   target.paint_op_count += source.paint_op_count;
   target.recursive_paint_op_count += source.recursive_paint_op_count;
   target.visual_op_count += source.visual_op_count;
@@ -6487,8 +6161,6 @@ void MergeRawPaintRecordAudit(RawPaintRecordAudit& target,
       source.retained_supported_visual_op_count;
   target.retained_unsupported_visual_op_count +=
       source.retained_unsupported_visual_op_count;
-  target.diagnostic_bitmap_fallback_visual_op_count +=
-      source.diagnostic_bitmap_fallback_visual_op_count;
   target.text_blob_count += source.text_blob_count;
   target.image_count += source.image_count;
   target.shader_count += source.shader_count;
@@ -8048,7 +7720,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
   std::map<std::string, int> total_op_histogram;
   std::map<std::string, int> total_recursive_op_histogram;
   std::map<std::string, int> total_unsupported_histogram;
-  std::map<std::string, int> total_fallback_histogram;
   int total_op_count = 0;
   int total_recursive_op_count = 0;
   int total_drawing_item_count = 0;
@@ -8106,7 +7777,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                   << "\"reason\":\"empty PaintChunk has no display item or "
                      "PaintOp evidence; chunk bounds remain exported\"}"
                   << ",\"op_histogram\":{},\"recursive_op_histogram\":{}"
-                  << ",\"unsupported_ops\":{},\"fallback_rasterized_ops\":{}"
+                  << ",\"unsupported_ops\":{},\"unsupported_retained_ops\":{}"
                   << ",\"finer_cache_unit_metadata\":"
                   << FinerCacheUnitMetadataJsonForStandaloneRenderer(
                          chunk_index, empty_stable_key, {})
@@ -8120,7 +7791,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     std::map<std::string, int> chunk_op_histogram;
     std::map<std::string, int> chunk_recursive_op_histogram;
     std::map<std::string, int> chunk_unsupported_histogram;
-    std::map<std::string, int> chunk_fallback_histogram;
     int chunk_op_count = 0;
     int chunk_recursive_op_count = 0;
     int drawing_item_count = 0;
@@ -8214,9 +7884,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
           for (const auto& [name, count] : item_audit.unsupported_histogram) {
             chunk_unsupported_histogram[name] += count;
           }
-          for (const auto& [name, count] : item_audit.fallback_histogram) {
-            chunk_fallback_histogram[name] += count;
-          }
           chunk_op_count += item_audit.paint_op_count;
           chunk_recursive_op_count += item_audit.recursive_paint_op_count;
           MergeRawPaintRecordAudit(chunk_raw_audit, item_audit);
@@ -8272,32 +7939,9 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       for (const auto& [name, count] : item_audit.unsupported_histogram) {
         chunk_unsupported_histogram[name] += count;
       }
-      for (const auto& [name, count] : item_audit.fallback_histogram) {
-        chunk_fallback_histogram[name] += count;
-      }
       chunk_op_count += item_audit.paint_op_count;
       chunk_recursive_op_count += item_audit.recursive_paint_op_count;
-      chunk_raw_audit.visual_op_count += item_audit.visual_op_count;
-      chunk_raw_audit.retained_supported_visual_op_count +=
-          item_audit.retained_supported_visual_op_count;
-      chunk_raw_audit.retained_unsupported_visual_op_count +=
-          item_audit.retained_unsupported_visual_op_count;
-      chunk_raw_audit.diagnostic_bitmap_fallback_visual_op_count +=
-          item_audit.diagnostic_bitmap_fallback_visual_op_count;
-      chunk_raw_audit.text_blob_count += item_audit.text_blob_count;
-      chunk_raw_audit.image_count += item_audit.image_count;
-      chunk_raw_audit.shader_count += item_audit.shader_count;
-      chunk_raw_audit.path_count += item_audit.path_count;
-      chunk_raw_audit.filter_count += item_audit.filter_count;
-      chunk_raw_audit.draw_looper_count += item_audit.draw_looper_count;
-      chunk_raw_audit.draw_looper_layer_count +=
-          item_audit.draw_looper_layer_count;
-      chunk_raw_audit.path_effect_count += item_audit.path_effect_count;
-      chunk_raw_audit.has_non_text_visual_paint |=
-          item_audit.has_non_text_visual_paint;
-      chunk_raw_audit.has_non_translation_transform |=
-          item_audit.has_non_translation_transform;
-      chunk_raw_audit.has_effect_opacity |= item_audit.has_effect_opacity;
+      MergeRawPaintRecordAudit(chunk_raw_audit, item_audit);
       AppendDisplayItemToFinerCacheUnits(
           finer_cache_units, item_index, item_client_id, item_id, item_type,
           item_visual_rect, item_is_drawing, item_is_scrollbar, item_audit);
@@ -8322,9 +7966,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     for (const auto& [name, count] : chunk_unsupported_histogram) {
       total_unsupported_histogram[name] += count;
     }
-    for (const auto& [name, count] : chunk_fallback_histogram) {
-      total_fallback_histogram[name] += count;
-    }
     total_op_count += chunk_op_count;
     total_recursive_op_count += chunk_recursive_op_count;
     total_drawing_item_count += drawing_item_count;
@@ -8334,8 +7975,6 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
         chunk_raw_audit.retained_supported_visual_op_count;
     total_raw_audit.retained_unsupported_visual_op_count +=
         chunk_raw_audit.retained_unsupported_visual_op_count;
-    total_raw_audit.diagnostic_bitmap_fallback_visual_op_count +=
-        chunk_raw_audit.diagnostic_bitmap_fallback_visual_op_count;
     total_raw_audit.text_blob_count += chunk_raw_audit.text_blob_count;
     total_raw_audit.image_count += chunk_raw_audit.image_count;
     total_raw_audit.shader_count += chunk_raw_audit.shader_count;
@@ -8535,8 +8174,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
         MapToJsonObject(chunk_recursive_op_histogram);
     const std::string chunk_unsupported_histogram_json =
         MapToJsonObject(chunk_unsupported_histogram);
-    const std::string chunk_fallback_histogram_json =
-        MapToJsonObject(chunk_fallback_histogram);
+    const std::string chunk_unsupported_retained_histogram_json =
+        MapToJsonObject(chunk_unsupported_histogram);
     const std::string display_items_json_string = display_items_json.str();
     const std::string finer_cache_unit_metadata_json =
         FinerCacheUnitMetadataJsonForStandaloneRenderer(
@@ -8609,8 +8248,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                 << chunk_recursive_op_histogram_json
                 << ",\"unsupported_ops\":"
                 << chunk_unsupported_histogram_json
-                << ",\"fallback_rasterized_ops\":"
-                << chunk_fallback_histogram_json
+                << ",\"unsupported_retained_ops\":"
+                << chunk_unsupported_retained_histogram_json
                 << ",\"finer_cache_unit_metadata\":"
                 << finer_cache_unit_metadata_json
                 << ",\"display_items\":" << display_items_json_string << "}";
@@ -8963,8 +8602,8 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << MapToJsonObject(total_recursive_op_histogram)
        << ",\"unsupported_raw_op_histogram\":"
        << MapToJsonObject(total_unsupported_histogram)
-       << ",\"fallback_rasterized_raw_op_histogram\":"
-       << MapToJsonObject(total_fallback_histogram)
+       << ",\"unsupported_retained_raw_op_histogram\":"
+       << MapToJsonObject(total_unsupported_histogram)
        << ",\"resource_summary\":{\"text_blob_count\":"
        << total_raw_audit.text_blob_count
        << ",\"image_count\":" << total_raw_audit.image_count
@@ -9441,25 +9080,18 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << total_raw_audit.retained_supported_visual_op_count
        << ",\"retained_unsupported_visual_op_count\":"
        << total_raw_audit.retained_unsupported_visual_op_count
-       << ",\"diagnostic_bitmap_fallback_visual_op_count\":"
-       << total_raw_audit.diagnostic_bitmap_fallback_visual_op_count
        << ",\"raw_ops_lost_during_retained_extraction\":";
   int visual_unsupported_ops = 0;
   for (const auto& [name, count] : total_unsupported_histogram) {
     visual_unsupported_ops += count;
   }
-  int fallback_ops = 0;
-  for (const auto& [name, count] : total_fallback_histogram) {
-    fallback_ops += count;
-  }
   const int raw_ops_lost =
       std::max(0, total_raw_audit.visual_op_count -
                       total_raw_audit.retained_supported_visual_op_count -
-                      total_raw_audit.retained_unsupported_visual_op_count -
-                      total_raw_audit.diagnostic_bitmap_fallback_visual_op_count);
+                      total_raw_audit.retained_unsupported_visual_op_count);
   json << raw_ops_lost
        << ",\"visual_unsupported_ops\":" << visual_unsupported_ops
-       << ",\"diagnostic_bitmap_fallback_ops\":" << fallback_ops << "}"
+       << ",\"unsupported_retained_ops\":" << visual_unsupported_ops << "}"
        << ",\"lost_raw_ops\":[]"
        << ",\"warnings\":[";
   for (size_t i = 0; i < warnings.size(); ++i) {
@@ -9586,20 +9218,6 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
     TraceLiveFrameProbeStage("export skipped retained extraction");
     return;
   }
-  if (cache.force_oracle_bitmap) {
-    cache.artifact_audit_lines.push_back(
-        "paint_op_extraction mode=skia_paint_record_oracle requested=true");
-    if (AppendPaintArtifactOracleBitmapOp(artifact, cache.viewport_width,
-                                          cache.viewport_height,
-                                          cache.exported_draw_ops)) {
-      TraceLiveFrameProbeStage("export requested oracle bitmap done");
-      return;
-    }
-    cache.artifact_audit_lines.push_back(
-        "paint_op_extraction mode=skia_paint_record_oracle failed");
-    TraceLiveFrameProbeStage("export requested oracle bitmap failed");
-    return;
-  }
   if (AppendPaintArtifactExtractedOps(artifact, cache.viewport_width,
                                       cache.viewport_height,
                                       cache.exported_draw_ops,
@@ -9617,16 +9235,11 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
                                     extraction_diagnostics.begin(),
                                     extraction_diagnostics.end());
   cache.artifact_audit_lines.push_back(
-      "paint_op_extraction mode=oracle_bitmap reason=incomplete");
-  if (AppendPaintArtifactOracleBitmapOp(artifact, cache.viewport_width,
-                                        cache.viewport_height,
-                                        cache.exported_draw_ops)) {
-    TraceLiveFrameProbeStage("export oracle bitmap done");
-    return;
-  }
-  TraceLiveFrameProbeStage("export oracle bitmap failed");
+      "paint_op_extraction unsupported_retained_ops reason=incomplete "
+      "requires=PaintArtifactCompositor/cc");
+  TraceLiveFrameProbeStage("export retained extraction incomplete");
   cache.exported_draw_ops.clear();
-cache.chunk_property_states.clear();
+  cache.chunk_property_states.clear();
 }
 
 void EnsureWtfInitializedForStandaloneRenderer() {
@@ -10454,17 +10067,6 @@ void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRendere
   cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
-}
-
-void StandaloneBlinkLiveFrameBridgeSetForceOracleBitmapForStandaloneRenderer(
-    int enabled) {
-  LiveFramePaintProbeCache& cache = ProbeCache();
-  const bool value = enabled != 0;
-  if (cache.force_oracle_bitmap == value) {
-    return;
-  }
-  cache.force_oracle_bitmap = value;
-  cache.initialized = false;
 }
 
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(

@@ -1416,7 +1416,7 @@ std::string SerializeRenderResultJson(const RenderResult& result) {
 std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
   std::map<std::string, int> command_histogram;
   std::map<std::string, int> unsupported_histogram;
-  std::map<std::string, int> fallback_histogram;
+  std::map<std::string, int> unsupported_retained_histogram;
   int text_blob_count = 0;
   int image_count = 0;
   int shader_count = 0;
@@ -1452,10 +1452,10 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     if (unsupported != std::string::npos) {
       ++unsupported_histogram[diagnostic.substr(unsupported + 15)];
     }
-    if (diagnostic.find("bitmap-backed PaintOp resource") !=
-            std::string::npos ||
-        diagnostic.find("diagnostic_bitmap_fallback") != std::string::npos) {
-      ++fallback_histogram["diagnostic_bitmap_fallback"];
+    const size_t unsupported_retained =
+        diagnostic.find("unsupported retained PaintOp");
+    if (unsupported_retained != std::string::npos) {
+      ++unsupported_retained_histogram["requires_PaintArtifactCompositor_cc"];
     }
     if (diagnostic.find("SaveLayerFilters") != std::string::npos ||
         diagnostic.find("filter") != std::string::npos) {
@@ -1602,8 +1602,8 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
   WriteStringIntMap(out, command_histogram);
   out << ",\"unsupported_op_histogram\":";
   WriteStringIntMap(out, unsupported_histogram);
-  out << ",\"fallback_rasterized_op_histogram\":";
-  WriteStringIntMap(out, fallback_histogram);
+  out << ",\"unsupported_retained_op_histogram\":";
+  WriteStringIntMap(out, unsupported_retained_histogram);
   out << ",\"resource_summary\":{\"text_blob_count\":" << text_blob_count
       << ",\"image_count\":" << image_count
       << ",\"shader_count\":" << shader_count
@@ -1642,7 +1642,7 @@ std::string SerializePaintArtifactAuditJson(const RenderResult& result) {
     WritePropertyState(out, chunk.property_state);
     out << ",\"op_histogram\":";
     WriteStringIntMap(out, chunk_histogram);
-    out << ",\"unsupported_ops\":[],\"fallback_rasterized_ops\":[]";
+    out << ",\"unsupported_ops\":[],\"unsupported_retained_ops\":[]";
     out << ",\"display_items\":[]";
     out << ",\"finer_cache_unit_descriptors\":";
     WriteFinerCacheUnitDescriptors(out, chunk.finer_cache_units);

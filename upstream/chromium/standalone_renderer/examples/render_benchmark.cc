@@ -816,7 +816,7 @@ bool WriteOracleProvenanceJson(
   file << "    \"uses_retained_draw_commands\": true,\n";
   file << "    \"uses_live_exported_draw_ops_for_paint_generation\": true,\n";
   file << "    \"uses_bitmap_transport_for_output\": false,\n";
-  file << "    \"uses_diagnostic_bitmap_fallback_as_rendering\": false,\n";
+  file << "    \"unsupported_retained_ops_require_chromium_compositor\": true,\n";
   file << "    \"retained_command_count_for_oracle_generation\": 0,\n";
   const std::string& raw_json = oracle_result.raw_paint_artifact_audit_json;
   const int draw_image_count = ExtractJsonHistogramCount(
@@ -2004,7 +2004,6 @@ int main(int argc, char** argv) {
       oracle_create_info.renderer = renderer_info_for_oracle;
       oracle_create_info.trace_stages = trace_stages;
       oracle_create_info.debug_text_blob_replay = debug_text_blob_replay;
-      oracle_create_info.force_paint_oracle_bitmap = false;
       std::unique_ptr<html_css_renderer::BlinkPageEmbedder> oracle_embedder =
           html_css_renderer::CreateLiveBlinkPageEmbedder(
               std::move(oracle_create_info));
