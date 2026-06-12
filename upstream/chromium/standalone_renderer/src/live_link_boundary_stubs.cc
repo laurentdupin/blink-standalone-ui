@@ -9325,43 +9325,86 @@ void PaintPropertyTreeBuilder::DirectlyUpdateTransformMatrix(
 #endif
 void PaintTimingDetector::NotifyPaintFinished() {}
 void PaintTiming::MarkPaintTiming() {}
+namespace {
+[[noreturn]] void FailStandalonePaintArtifactCompositorBoundary(
+    const char* method) {
+  std::cerr << "Standalone renderer reached " << method
+            << " without real Blink PaintArtifactCompositor/cc integration. "
+               "Wire the upstream PaintArtifactCompositor + cc layer tree "
+               "instead of relying on standalone compositor stubs.\n";
+  std::abort();
+}
+}  // namespace
+
 PaintArtifactCompositor::~PaintArtifactCompositor() = default;
-void PaintArtifactCompositor::SetLayerDebugInfoEnabled(bool) {}
-void PaintArtifactCompositor::SetTracksRasterInvalidations(bool) {}
-void PaintArtifactCompositor::WillBeRemovedFromFrame() {}
-void PaintArtifactCompositor::SetNeedsUpdateAfterRepaint(
-    const PaintArtifact&,
-    const PaintArtifact&) {}
-void PaintArtifactCompositor::SetNeedsUpdateInternal(UpdateType) {}
 PaintArtifactCompositor::PaintArtifactCompositor(
     base::WeakPtr<cc::ScrollCallbacks>) {}
-void PaintArtifactCompositor::SetLCDTextPreference(LCDTextPreference) {}
-bool PaintArtifactCompositor::SetScrollbarSolidColor(cc::ElementId, SkColor4f) {
-  return false;
+void PaintArtifactCompositor::Trace(Visitor*) const {}
+void PaintArtifactCompositor::SetLayerDebugInfoEnabled(bool) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetLayerDebugInfoEnabled");
+}
+void PaintArtifactCompositor::SetTracksRasterInvalidations(bool) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetTracksRasterInvalidations");
+}
+void PaintArtifactCompositor::WillBeRemovedFromFrame() {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::WillBeRemovedFromFrame");
+}
+void PaintArtifactCompositor::SetNeedsUpdateAfterRepaint(
+    const PaintArtifact&,
+    const PaintArtifact&) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetNeedsUpdateAfterRepaint");
+}
+void PaintArtifactCompositor::SetNeedsUpdateInternal(UpdateType) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetNeedsUpdateInternal");
+}
+void PaintArtifactCompositor::SetLCDTextPreference(LCDTextPreference) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetLCDTextPreference");
+}
+bool PaintArtifactCompositor::SetScrollbarSolidColor(cc::ElementId,
+                                                     SkColor4f) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetScrollbarSolidColor");
 }
 bool PaintArtifactCompositor::SetScrollbarNeedsDisplay(cc::ElementId) {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetScrollbarNeedsDisplay");
 }
-void PaintArtifactCompositor::SetDevicePixelRatio(float) {}
+void PaintArtifactCompositor::SetDevicePixelRatio(float) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::SetDevicePixelRatio");
+}
 bool PaintArtifactCompositor::TryFastPathUpdate(const PaintArtifact&) {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::TryFastPathUpdate");
 }
 void PaintArtifactCompositor::Update(
     const PaintArtifact&,
     const PaintArtifactCompositor::ViewportProperties&,
     const HeapVector<Member<const TransformPaintPropertyNode>, 32>&,
-    VectorOf<std::unique_ptr<cc::ViewTransitionRequest>>) {}
+    VectorOf<std::unique_ptr<cc::ViewTransitionRequest>>) {
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::Update");
+}
 std::unique_ptr<JSONObject> PaintArtifactCompositor::GetLayersAsJSON(
     LayerTreeFlags) const {
-  return nullptr;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::GetLayersAsJSON");
 }
 size_t PaintArtifactCompositor::ApproximateUnsharedMemoryUsage() const {
-  return 0;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::ApproximateUnsharedMemoryUsage");
 }
 MainThreadScrollingReasons
 PaintArtifactCompositor::GetMainThreadRepaintReasons(
     const ScrollPaintPropertyNode&) const {
-  return 0;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::GetMainThreadRepaintReasons");
 }
 void LinkHighlight::UpdateAfterPaint(const PaintArtifactCompositor*) {}
 ViewTransition* ViewTransitionSupplement::GetTransition() {
@@ -11141,7 +11184,6 @@ void WebPluginContainerImpl::Trace(Visitor*) const {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void TransformPaintPropertyNode::State::Trace(Visitor*) const {}
 #endif
-void PaintArtifactCompositor::Trace(Visitor*) const {}
 void MobileFriendlinessChecker::Trace(Visitor*) const {}
 void TapFriendlinessChecker::Trace(Visitor*) const {}
 void ScrollMarkerGroupPseudoElement::Trace(Visitor*) const {}
@@ -13715,15 +13757,18 @@ SynthesizedClip& PaintArtifactCompositor::CreateOrReuseSynthesizedClipLayer(
     bool,
     CompositorElementId&,
     CompositorElementId&) {
-  return *static_cast<SynthesizedClip*>(nullptr);
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::CreateOrReuseSynthesizedClipLayer");
 }
 bool PaintArtifactCompositor::NeedsCompositedScrolling(
     const TransformPaintPropertyNode&) const {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::NeedsCompositedScrolling");
 }
 bool PaintArtifactCompositor::ShouldForceMainThreadRepaint(
     const TransformPaintPropertyNode&) const {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::ShouldForceMainThreadRepaint");
 }
 ExceptionState::ExceptionState(DummyExceptionStateForTesting&)
     : context_(kEmptyContext), isolate_(nullptr) {}
@@ -21593,19 +21638,23 @@ bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
 }
 bool PaintArtifactCompositor::DirectlyUpdateScrollOffsetTransform(
     const TransformPaintPropertyNode&) {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::DirectlyUpdateScrollOffsetTransform");
 }
 bool PaintArtifactCompositor::UsesRasterInducingScroll(
     const ScrollPaintPropertyNode&) const {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::UsesRasterInducingScroll");
 }
 bool PaintArtifactCompositor::DirectlyUpdateTransform(
     const TransformPaintPropertyNode&) {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::DirectlyUpdateTransform");
 }
 bool PaintArtifactCompositor::DirectlyUpdateCompositedOpacityValue(
     const EffectPaintPropertyNode&) {
-  return false;
+  FailStandalonePaintArtifactCompositorBoundary(
+      "PaintArtifactCompositor::DirectlyUpdateCompositedOpacityValue");
 }
 float TargetScaleForPage(const PhysicalBoxFragment&) {
   return 1.0f;

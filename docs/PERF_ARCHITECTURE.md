@@ -24,7 +24,7 @@ Evidence:
 ## Inactive Or Non-Hot Paths
 
 - The old non-live snapshot renderer has been removed from the configured build. Public benchmark and viewer entrypoints require live Blink `PaintArtifact` extraction and should fail rather than synthesize standalone paint output when that bridge is unavailable.
-- Blink `PaintArtifactCompositor` is not active. The linked definitions in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` are stubs, and no active benchmark/viewer path builds a cc layer tree from `PaintArtifactCompositor`.
+- Blink `PaintArtifactCompositor` is not active. The linked definitions in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` are explicit fail-fast boundary stubs for compositor operations, and no active benchmark/viewer path builds a cc layer tree from `PaintArtifactCompositor`.
 - `PaintArtifact::GetPaintRecord` is not available as a real flattened Blink paint-record path. The benchmark documents that the standalone symbol resolves to the empty stub in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc`.
 
 ## Timing Boundaries
@@ -61,7 +61,19 @@ This is still the standalone retained `DrawCommandList` path. It is not Chromium
 
 The first pivot boundary is to stop exposing product-level renderer switches while the implementation still uses the transitional retained Skia CPU presenter. Public benchmark and SDL viewer entrypoints now use one path: live Blink `PaintArtifact` input, standalone retained `DrawCommandList` extraction, Skia CPU raster, and SDL/BMP presentation as appropriate.
 
-The long-term single rendering path should replace the standalone retained presenter with Chromium `PaintArtifactCompositor` and cc integration rather than extending local retained-renderer heuristics. Validation-only diagnostics may remain available when they inspect the active path, but they should not imply supported product fallbacks or alternate renderers.
+The long-term single rendering path should replace the standalone retained presenter with Chromium `PaintArtifactCompositor` and cc integration rather than extending local retained-renderer heuristics. Validation-only diagnostics may remain available when they inspect the active path, but they should not imply supported alternate renderers.
+
+## PaintArtifactCompositor Frontier
+
+The first source-list pivot attempted to replace the standalone `PaintArtifactCompositor` no-op definitions with the real upstream implementation:
+
+- `third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc`
+- adjacent Blink compositor files: `adjust_mask_layer_geometry.cc`, `content_layer_client_impl.cc`, `layers_as_json.cc`, `pending_layer.cc`, and `property_tree_manager.cc`
+- immediate supporting sources for the first link boundary: `cc/layers/layer.cc`, `cc/layers/picture_layer.cc`, `cc/trees/property_tree.cc`, Blink `logging_canvas.cc`, `raster_invalidation_tracking.cc`, and `raster_invalidator.cc`
+
+The Blink compositor files compiled, but `cc::PictureLayer` crossed the current standalone build boundary into the real cc host/resource stack. The next compile boundary required `cc::LayerTreeHostImpl`, viz transferable resources, GPU shared-image support, and the missing GPU command-buffer include `gpu/command_buffer/client/shared_image_interface.h`. That is the correct upstream dependency direction, but it is broader than a bounded first CL because it requires deciding the real cc layer-tree host, frame sink/output surface, resource provider, scheduling, and software/GPU presentation integration.
+
+This CL therefore does not add a local compositor replacement. It keeps the active retained Skia CPU presenter buildable while changing the `PaintArtifactCompositor` operational stubs from silent no-ops into explicit fail-fast diagnostics. Reaching those methods now reports that the standalone renderer needs real Blink `PaintArtifactCompositor` + cc integration instead of pretending compositor work succeeded.
 
 ## 49d Retained Cache Boundary
 
@@ -105,7 +117,7 @@ What remains missing is not another scalar diagnostic. The CPU replay path recei
 - Resource lifetime tracking for shader bytes, path bytes, image/text resources, decoded resource reuse, and invalidation when Blink resource state changes.
 - Ordered composition of cached and uncached content in scene order, including interactions between chunks that overlap the same damage region.
 
-Without that model, caching the 49d shadow/card work would have to guess at isolation, clip shape, resource lifetime, or composition ordering. The next standalone step should therefore be a disabled-by-default retained cache validation mode: build candidate surfaces from the existing metadata, composite them into a comparison output, and require pixel identity against the uncached replay before enabling any cached presentation. Initial candidates should be restricted to complete entry-state units with translation-only transforms, no save layer, no non-rect clip, no shader/path/filter/image/text dependency, and stable bounds. The 49d bottleneck would remain open until the cache model can represent rounded clips, save layers, shadow outsets, and resource dependencies.
+Without that model, caching the 49d shadow/card work would have to guess at isolation, clip shape, resource lifetime, or composition ordering. That retained-cache direction is no longer the product path. It may remain useful only as validation-only analysis, not as another renderer implementation. The next implementation step should instead wire the real Chromium `PaintArtifactCompositor`/cc route.
 
 The Chromium-parity path is broader: replace the custom retained replay boundary with a real `PaintArtifactCompositor`/cc layer-tree route. That requires turning the current linked compositor stubs into a working compositor integration, including cc layer tree creation, frame sink/output surface plumbing, resource providers, image/resource upload, scheduling, and software/GPU presentation. That is the correct long-term direction, but it is a separate integration seam from the current standalone `DrawCommandList` renderer.
 
