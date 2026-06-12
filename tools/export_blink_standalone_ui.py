@@ -109,6 +109,7 @@ ROOT_COPY_DIRS = (
     "components/subresource_filter/core/common",
     "components/shared_highlighting/core/common",
     "components/viz/common",
+    "cc/raster",
     "net/base",
     "net/cert",
     "net/cookies",
