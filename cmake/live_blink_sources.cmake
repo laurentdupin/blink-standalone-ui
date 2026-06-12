@@ -2128,6 +2128,41 @@ set_source_files_properties(
   PROPERTIES INCLUDE_DIRECTORIES
              "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/include")
 
+set(BLINK_STANDALONE_LIBYUV_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/compare.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/compare_common.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/convert.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/convert_argb.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/convert_from.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/convert_from_argb.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/convert_to_argb.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/convert_to_i420.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/cpu_id.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/planar_functions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/rotate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/rotate_any.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/rotate_argb.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/rotate_common.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/row_any.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/row_common.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/scale.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/scale_any.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/scale_argb.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/scale_common.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/scale_rgb.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/scale_uv.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/video_common.cc
+)
+
+set_source_files_properties(${BLINK_STANDALONE_LIBYUV_SOURCES}
+  PROPERTIES
+    INCLUDE_DIRECTORIES "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/include"
+    COMPILE_DEFINITIONS "CHROMIUM;LIBYUV_DISABLE_X86;LIBYUV_DISABLE_NEON;LIBYUV_DISABLE_SVE;LIBYUV_DISABLE_SME;LIBYUV_DISABLE_RVV;LIBYUV_DISABLE_LSX;LIBYUV_DISABLE_LASX")
+
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_LIBYUV_SOURCES}
+)
+
 list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_element.cc

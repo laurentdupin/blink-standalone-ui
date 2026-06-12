@@ -144,6 +144,7 @@ ROOT_COPY_DIRS = (
     "third_party/highway/src",
     "third_party/icu/source/common",
     "third_party/icu/source/i18n",
+    "third_party/libyuv",
     "third_party/liburlpattern",
     "third_party/libxml/src/include",
     "third_party/libxml/win32/include",

@@ -212,6 +212,7 @@ foreach(source IN LISTS BLINK_STANDALONE_LIVE_SOURCES)
     list(APPEND BLINK_STANDALONE_BOUNDARY_SOURCES ${source})
   elseif(source MATCHES "/third_party/skia/src/codec/" OR
          source MATCHES "/third_party/skia/third_party/externals/libpng/" OR
+         source MATCHES "/third_party/libyuv/" OR
          source MATCHES "/third_party/zlib/")
     list(APPEND BLINK_STANDALONE_CODEC_SOURCES ${source})
   else()
@@ -530,4 +531,3 @@ add_executable(blink_standalone_render_benchmark_skia
       dinput8.lib
     )
   endif()
-
