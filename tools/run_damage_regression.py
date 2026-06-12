@@ -184,6 +184,7 @@ def benchmark_command(
     time_ms: int | float | None = None,
     previous_time_ms: int | float | None = None,
     incremental: bool = False,
+    disable_damage_clip_grouping: bool = False,
 ) -> list[str]:
     cmd = [
         str(benchmark),
@@ -217,6 +218,8 @@ def benchmark_command(
         if previous_time_ms is not None:
             cmd.extend(["--previous-time-ms", str(previous_time_ms)])
         cmd.append("--incremental")
+    if disable_damage_clip_grouping:
+        cmd.append("--disable-damage-clip-grouping")
     return cmd
 
 
@@ -447,6 +450,7 @@ def run_case(
     benchmark: Path,
     out_dir: Path,
     timeout: int,
+    compare_ungrouped: bool,
 ) -> dict[str, Any]:
     name = case["name"]
     item_dir = out_dir / name
@@ -458,6 +462,9 @@ def run_case(
     incremental_bmp = item_dir / "incremental.bmp"
     incremental_json = item_dir / "incremental.json"
     compare_json = item_dir / "compare.json"
+    ungrouped_bmp = item_dir / "incremental-ungrouped.bmp"
+    ungrouped_json = item_dir / "incremental-ungrouped.json"
+    grouped_ungrouped_compare_json = item_dir / "compare-grouped-ungrouped.json"
 
     current_attrs = case.get("current_attrs")
     previous_attrs = case.get("previous_attrs")
@@ -512,6 +519,48 @@ def run_case(
     compare_cmd = compare_command(incremental_bmp, full_bmp, compare_json, item_dir / "compare-crops")
     compare_exit, compare_elapsed = run(compare_cmd, item_dir / "compare.log", timeout)
 
+    ungrouped_exit = 0
+    ungrouped_elapsed = 0.0
+    grouped_ungrouped_compare_exit = 0
+    grouped_ungrouped_compare: dict[str, Any] = {}
+    if compare_ungrouped:
+        ungrouped_cmd = benchmark_command(
+            benchmark,
+            html_path,
+            viewport,
+            ungrouped_bmp,
+            ungrouped_json,
+            attrs=current_attrs,
+            scroll=current_scroll,
+            element_scroll=current_element_scroll,
+            hover=current_hover,
+            active=current_active,
+            previous_attrs=previous_attrs,
+            previous_scroll=previous_scroll,
+            previous_element_scroll=previous_element_scroll,
+            previous_hover=previous_hover,
+            previous_active=previous_active,
+            time_ms=current_time_ms,
+            previous_time_ms=previous_time_ms,
+            incremental=True,
+            disable_damage_clip_grouping=True,
+        )
+        ungrouped_exit, ungrouped_elapsed = run(
+            ungrouped_cmd, item_dir / "incremental-ungrouped.log", timeout
+        )
+        grouped_ungrouped_compare_cmd = compare_command(
+            incremental_bmp,
+            ungrouped_bmp,
+            grouped_ungrouped_compare_json,
+            item_dir / "compare-grouped-ungrouped-crops",
+        )
+        grouped_ungrouped_compare_exit, _ = run(
+            grouped_ungrouped_compare_cmd,
+            item_dir / "compare-grouped-ungrouped.log",
+            timeout,
+        )
+        grouped_ungrouped_compare = read_json(grouped_ungrouped_compare_json)
+
     metrics = read_json(incremental_json)
     compare = read_json(compare_json)
     passed, failures, details = evaluate_damage(case.get("expected", {}), metrics, compare, viewport)
@@ -521,6 +570,16 @@ def run_case(
         failures.append(f"incremental benchmark exit={incremental_exit}")
     if compare_exit != 0:
         failures.append(f"compare exit={compare_exit}")
+    if compare_ungrouped:
+        if ungrouped_exit != 0:
+            failures.append(f"ungrouped benchmark exit={ungrouped_exit}")
+        if grouped_ungrouped_compare_exit != 0:
+            failures.append(f"grouped/ungrouped compare exit={grouped_ungrouped_compare_exit}")
+        if not grouped_ungrouped_compare.get("exact_pixel_identical", False):
+            failures.append(
+                "grouped/ungrouped exact_pixel_identical="
+                f"{grouped_ungrouped_compare.get('exact_pixel_identical')}"
+            )
     passed = passed and not failures
 
     return {
@@ -534,12 +593,20 @@ def run_case(
         "full_current_json": str(full_json),
         "incremental_json": str(incremental_json),
         "compare_json": str(compare_json),
+        "ungrouped_output": str(ungrouped_bmp) if compare_ungrouped else "",
+        "ungrouped_json": str(ungrouped_json) if compare_ungrouped else "",
+        "grouped_ungrouped_compare_json": str(grouped_ungrouped_compare_json) if compare_ungrouped else "",
         "full_exit": full_exit,
         "incremental_exit": incremental_exit,
         "compare_exit": compare_exit,
+        "ungrouped_exit": ungrouped_exit if compare_ungrouped else None,
+        "grouped_ungrouped_compare_exit": grouped_ungrouped_compare_exit if compare_ungrouped else None,
         "full_elapsed_seconds": round(full_elapsed, 3),
         "incremental_elapsed_seconds": round(incremental_elapsed, 3),
+        "ungrouped_elapsed_seconds": round(ungrouped_elapsed, 3) if compare_ungrouped else None,
         "compare_elapsed_seconds": round(compare_elapsed, 3),
+        "grouped_ungrouped_exact_pixel_identical": grouped_ungrouped_compare.get("exact_pixel_identical") if compare_ungrouped else None,
+        "damage_grouping_metrics": metrics.get("render_timing_diagnostics", {}),
         **details,
     }
 
@@ -551,6 +618,11 @@ def main() -> int:
     parser.add_argument("--case-set", default="damage")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "build" / "damage-regression" / "damage")
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument(
+        "--compare-ungrouped",
+        action="store_true",
+        help="also compare grouped incremental replay against ungrouped incremental replay",
+    )
     args = parser.parse_args()
 
     if not args.benchmark.exists():
@@ -565,7 +637,15 @@ def main() -> int:
     rows = []
     for index, name in enumerate(selected_names, 1):
         print(f"[{index}/{len(selected_names)}] {name}", flush=True)
-        rows.append(run_case(cases_by_name[name], args.benchmark, args.out_dir, args.timeout))
+        rows.append(
+            run_case(
+                cases_by_name[name],
+                args.benchmark,
+                args.out_dir,
+                args.timeout,
+                args.compare_ungrouped,
+            )
+        )
     write_report(args.out_dir, rows, args.case_set)
     failed = [row for row in rows if not row["passed"]]
     print(f"damage_regression passed={len(rows) - len(failed)} failed={len(failed)} out={args.out_dir}")

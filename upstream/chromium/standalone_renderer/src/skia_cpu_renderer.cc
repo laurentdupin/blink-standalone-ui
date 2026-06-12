@@ -380,6 +380,20 @@ uint64_t DamagePixelArea(const std::vector<Rect>& damage_rects,
   return pixels;
 }
 
+uint64_t RegionPixelArea(const std::vector<SkIRect>& clips) {
+  SkRegion region;
+  for (const SkIRect& clip : clips) {
+    if (!IsEmpty(clip)) {
+      region.op(clip, SkRegion::kUnion_Op);
+    }
+  }
+  uint64_t pixels = 0;
+  for (SkRegion::Iterator it(region); !it.done(); it.next()) {
+    pixels += PixelArea(it.rect());
+  }
+  return pixels;
+}
+
 std::array<float, 9> SnapshotMatrix(const SkMatrix& matrix) {
   std::array<float, 9> values = {};
   for (int i = 0; i < 9; ++i) {
@@ -1493,6 +1507,19 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       canvas->restore();
     }
   }
+  image.damage_clip_count = damage_clips.size();
+  for (const SkIRect& clip : damage_clips) {
+    image.raw_damage_area += PixelArea(clip);
+  }
+  image.coalesced_damage_area = RegionPixelArea(damage_clips);
+  if (damage_rects && !clear_before_render) {
+    image.command_replay_count_before_grouping =
+        static_cast<uint64_t>(commands.size()) *
+        static_cast<uint64_t>(damage_clips.size());
+  } else {
+    image.command_replay_count_before_grouping =
+        static_cast<uint64_t>(commands.size());
+  }
   int save_depth = 0;
   if (options.debug_command_coverage) {
     ResetCommandCoverageDiagnostics();
@@ -1503,6 +1530,10 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
     ResetCpuReplayCommandTimingDiagnostics();
   }
   auto replay_commands = [&](bool measure_coverage) {
+    const CpuReplayProfileClock::time_point replay_start =
+        CpuReplayProfileClock::now();
+    image.command_replay_count_after_grouping +=
+        static_cast<uint64_t>(commands.size());
     for (size_t command_index = 0; command_index < commands.size();
          ++command_index) {
       const DrawCommand& command = commands[command_index];
@@ -1547,9 +1578,15 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
         StoreCommandCoverage(std::move(coverage));
       }
     }
+    image.cpu_replay_ms += std::chrono::duration<double, std::milli>(
+                               CpuReplayProfileClock::now() - replay_start)
+                               .count();
   };
-  if (!damage_clips.empty() && !clear_before_render) {
+  if (damage_rects && !clear_before_render && damage_clips.empty()) {
+    image.raster_skipped = true;
+  } else if (!damage_clips.empty() && !clear_before_render) {
     if (damage_clips.size() == 1) {
+      image.replay_group_count = 1;
       canvas->save();
       canvas->clipIRect(damage_clips.front());
       replay_commands(options.debug_command_coverage);
@@ -1591,60 +1628,70 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
 
       // Reduce duplicate command replay for nearby disjoint damage clips without
       // changing the damage clips copied back into the retained frame.
+      const CpuReplayProfileClock::time_point grouping_start =
+          CpuReplayProfileClock::now();
       std::vector<ReplayClipGroup> replay_groups;
       replay_groups.reserve(damage_clips.size());
       for (const SkIRect& clip : damage_clips) {
         replay_groups.push_back(ReplayClipGroup{{clip}, clip, clip_area(clip)});
       }
-      bool merged_group = true;
-      while (merged_group) {
-        merged_group = false;
-        size_t best_i = 0;
-        size_t best_j = 0;
-        SkIRect best_bounds;
-        uint64_t best_added_pixels = 0;
-        bool have_best = false;
-        for (size_t i = 0; i < replay_groups.size(); ++i) {
-          for (size_t j = i + 1; j < replay_groups.size(); ++j) {
-            if (clips_overlap(replay_groups[i], replay_groups[j])) {
-              continue;
-            }
-            const SkIRect bounds =
-                union_clips(replay_groups[i].bounds, replay_groups[j].bounds);
-            const uint64_t damage_area =
-                replay_groups[i].pixel_area + replay_groups[j].pixel_area;
-            const uint64_t bounds_area = clip_area(bounds);
-            if (bounds_area < damage_area) {
-              continue;
-            }
-            const uint64_t added_pixels = bounds_area - damage_area;
-            if (added_pixels > max_added_group_pixels ||
-                static_cast<double>(bounds_area) >
-                    static_cast<double>(damage_area) *
-                        kMaxReplayGroupBoundsToDamageAreaRatio) {
-              continue;
-            }
-            if (!have_best || added_pixels < best_added_pixels) {
-              best_i = i;
-              best_j = j;
-              best_bounds = bounds;
-              best_added_pixels = added_pixels;
-              have_best = true;
+      if (!options.disable_damage_clip_grouping) {
+        bool merged_group = true;
+        while (merged_group) {
+          merged_group = false;
+          size_t best_i = 0;
+          size_t best_j = 0;
+          SkIRect best_bounds;
+          uint64_t best_added_pixels = 0;
+          bool have_best = false;
+          for (size_t i = 0; i < replay_groups.size(); ++i) {
+            for (size_t j = i + 1; j < replay_groups.size(); ++j) {
+              if (clips_overlap(replay_groups[i], replay_groups[j])) {
+                continue;
+              }
+              const SkIRect bounds =
+                  union_clips(replay_groups[i].bounds, replay_groups[j].bounds);
+              const uint64_t damage_area =
+                  replay_groups[i].pixel_area + replay_groups[j].pixel_area;
+              const uint64_t bounds_area = clip_area(bounds);
+              if (bounds_area < damage_area) {
+                continue;
+              }
+              const uint64_t added_pixels = bounds_area - damage_area;
+              if (added_pixels > max_added_group_pixels ||
+                  static_cast<double>(bounds_area) >
+                      static_cast<double>(damage_area) *
+                          kMaxReplayGroupBoundsToDamageAreaRatio) {
+                continue;
+              }
+              if (!have_best || added_pixels < best_added_pixels) {
+                best_i = i;
+                best_j = j;
+                best_bounds = bounds;
+                best_added_pixels = added_pixels;
+                have_best = true;
+              }
             }
           }
-        }
-        if (have_best) {
-          replay_groups[best_i].clips.insert(
-              replay_groups[best_i].clips.end(),
-              replay_groups[best_j].clips.begin(),
-              replay_groups[best_j].clips.end());
-          replay_groups[best_i].bounds = best_bounds;
-          replay_groups[best_i].pixel_area += replay_groups[best_j].pixel_area;
-          replay_groups.erase(replay_groups.begin() +
-                              static_cast<std::ptrdiff_t>(best_j));
-          merged_group = true;
+          if (have_best) {
+            replay_groups[best_i].clips.insert(
+                replay_groups[best_i].clips.end(),
+                replay_groups[best_j].clips.begin(),
+                replay_groups[best_j].clips.end());
+            replay_groups[best_i].bounds = best_bounds;
+            replay_groups[best_i].pixel_area +=
+                replay_groups[best_j].pixel_area;
+            replay_groups.erase(replay_groups.begin() +
+                                static_cast<std::ptrdiff_t>(best_j));
+            merged_group = true;
+          }
         }
       }
+      image.damage_grouping_ms =
+          std::chrono::duration<double, std::milli>(
+              CpuReplayProfileClock::now() - grouping_start)
+              .count();
+      image.replay_group_count = replay_groups.size();
 
       for (size_t group_index = 0; group_index < replay_groups.size();
            ++group_index) {
@@ -1653,11 +1700,17 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
         if (group.clips.size() == 1) {
           canvas->clipIRect(group.clips.front());
         } else {
+          const CpuReplayProfileClock::time_point region_start =
+              CpuReplayProfileClock::now();
           SkRegion damage_region;
           for (const SkIRect& clip : group.clips) {
             damage_region.op(clip, SkRegion::kUnion_Op);
           }
           canvas->clipRegion(damage_region);
+          image.skregion_clip_ms += std::chrono::duration<double, std::milli>(
+                                        CpuReplayProfileClock::now() -
+                                        region_start)
+                                        .count();
         }
         replay_commands(options.debug_command_coverage && group_index == 0);
         while (save_depth > 0) {
@@ -1668,6 +1721,7 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       }
     }
   } else {
+    image.replay_group_count = commands.empty() ? 0 : 1;
     replay_commands(options.debug_command_coverage);
   }
   while (save_depth > 0) {
@@ -1678,6 +1732,8 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
     StoreCpuReplayCommandTimings(command_timings);
   }
 
+  const CpuReplayProfileClock::time_point copyback_start =
+      CpuReplayProfileClock::now();
   if (damage_rects) {
     for (const SkIRect& clip : damage_clips) {
       CopySkiaPixelsToCpuImageRect(pixels, clip, image);
@@ -1692,6 +1748,9 @@ CpuImage RasterizeDrawCommandsWithSkiaCpuInternal(const DrawCommandList& command
       }
     }
   }
+  image.copyback_ms = std::chrono::duration<double, std::milli>(
+                          CpuReplayProfileClock::now() - copyback_start)
+                          .count();
   image.pixels_rgba_bytes = std::move(pixel_bytes);
 
   return image;
@@ -1766,6 +1825,16 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
     CpuImage image = *previous;
     image.raster_pixels_touched = 0;
     image.damage_pixels = 0;
+    image.raw_damage_area = 0;
+    image.coalesced_damage_area = 0;
+    image.command_replay_count_before_grouping = 0;
+    image.command_replay_count_after_grouping = 0;
+    image.damage_clip_count = 0;
+    image.replay_group_count = 0;
+    image.damage_grouping_ms = 0.0;
+    image.skregion_clip_ms = 0.0;
+    image.cpu_replay_ms = 0.0;
+    image.copyback_ms = 0.0;
     image.raster_skipped = true;
     image.partial_raster = false;
     return image;
@@ -1786,9 +1855,10 @@ CpuImage RasterizeRenderResultIncrementalWithSkiaCpu(
       DamagePixelArea(result.frame.damage_rects, image.width, image.height);
   image.raster_pixels_touched = image.damage_pixels;
   image.partial_raster =
+      image.damage_pixels > 0 &&
       image.damage_pixels <
       static_cast<uint64_t>(image.width) * static_cast<uint64_t>(image.height);
-  image.raster_skipped = false;
+  image.raster_skipped = image.raster_skipped || image.damage_pixels == 0;
   return image;
 }
 
@@ -1815,9 +1885,10 @@ CpuImage RasterizeRenderResultDamageWithSkiaCpu(
                                         height);
   image.raster_pixels_touched = image.damage_pixels;
   image.partial_raster =
+      image.damage_pixels > 0 &&
       image.damage_pixels <
       static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
-  image.raster_skipped = false;
+  image.raster_skipped = image.raster_skipped || image.damage_pixels == 0;
   return image;
 }
 

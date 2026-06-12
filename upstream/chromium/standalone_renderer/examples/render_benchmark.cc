@@ -86,6 +86,16 @@ struct BenchmarkTimingDiagnostics {
   int measured_lifecycle_count = 0;
   uint64_t raster_pixels_touched = 0;
   uint64_t damage_pixels = 0;
+  uint64_t raw_damage_area = 0;
+  uint64_t coalesced_damage_area = 0;
+  uint64_t command_replay_count_before_grouping = 0;
+  uint64_t command_replay_count_after_grouping = 0;
+  size_t damage_clip_count = 0;
+  size_t replay_group_count = 0;
+  double damage_grouping_ms = 0.0;
+  double skregion_clip_ms = 0.0;
+  double cpu_replay_ms = 0.0;
+  double copyback_ms = 0.0;
   bool partial_raster = false;
   bool used_blink = false;
   bool used_skia_cpu = false;
@@ -561,6 +571,20 @@ bool WriteJson(const std::string& path,
   file << "    \"raster_pixels_touched\": "
        << timing.raster_pixels_touched << ",\n";
   file << "    \"damage_pixels\": " << timing.damage_pixels << ",\n";
+  file << "    \"damage_clip_count\": " << timing.damage_clip_count << ",\n";
+  file << "    \"replay_group_count\": " << timing.replay_group_count << ",\n";
+  file << "    \"command_replay_count_before_grouping\": "
+       << timing.command_replay_count_before_grouping << ",\n";
+  file << "    \"command_replay_count_after_grouping\": "
+       << timing.command_replay_count_after_grouping << ",\n";
+  file << "    \"raw_damage_area\": " << timing.raw_damage_area << ",\n";
+  file << "    \"coalesced_damage_area\": "
+       << timing.coalesced_damage_area << ",\n";
+  file << "    \"damage_grouping_ms\": " << timing.damage_grouping_ms
+       << ",\n";
+  file << "    \"skregion_clip_ms\": " << timing.skregion_clip_ms << ",\n";
+  file << "    \"cpu_replay_ms\": " << timing.cpu_replay_ms << ",\n";
+  file << "    \"copyback_ms\": " << timing.copyback_ms << ",\n";
   file << "    \"partial_raster\": "
        << (timing.partial_raster ? "true" : "false") << ",\n";
   file << "    \"output_image_write_ms\": " << timing.output_image_write_ms
@@ -977,6 +1001,8 @@ void PrintUsage() {
                "[--retained-transform-mode=normal|record-only] "
                "[--debug-text-blob-replay] "
                "[--debug-command-coverage] "
+               "[--disable-damage-clip-grouping] "
+               "[--self-test-damage-grouping] "
                "[--strict-text-blob-typefaces] "
                "[--compat-text-blob-typefaces] "
                "[--font-file path]"
@@ -1034,6 +1060,204 @@ LONG WINAPI WriteBenchmarkCrashDump(EXCEPTION_POINTERS* exception_pointers) {
 }
 #endif
 
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+html_css_renderer::Rect BoundsForRects(
+    const std::vector<html_css_renderer::Rect>& rects) {
+  bool have_bounds = false;
+  html_css_renderer::Rect bounds;
+  for (const html_css_renderer::Rect& rect : rects) {
+    if (rect.width <= 0.0f || rect.height <= 0.0f) {
+      continue;
+    }
+    if (!have_bounds) {
+      bounds = rect;
+      have_bounds = true;
+      continue;
+    }
+    const float left = std::min(bounds.x, rect.x);
+    const float top = std::min(bounds.y, rect.y);
+    const float right =
+        std::max(bounds.x + bounds.width, rect.x + rect.width);
+    const float bottom =
+        std::max(bounds.y + bounds.height, rect.y + rect.height);
+    bounds = {left, top, right - left, bottom - top};
+  }
+  return have_bounds ? bounds : html_css_renderer::Rect{};
+}
+
+std::vector<html_css_renderer::SceneCommand> DamageGroupingSelfTestCommands() {
+  using html_css_renderer::Color;
+  using html_css_renderer::DrawCommand;
+  using html_css_renderer::DrawLooperLayer;
+  using html_css_renderer::FilterOperationKind;
+  using html_css_renderer::FilterOperationSnapshot;
+  using html_css_renderer::SceneCommand;
+
+  FilterOperationSnapshot blur;
+  blur.kind = FilterOperationKind::kBlur;
+  blur.amount = 1.25f;
+
+  DrawCommand shadow =
+      DrawCommand::FillRRect({24.0f, 24.0f, 132.0f, 84.0f}, 14.0f, 14.0f,
+                             Color::Rgba(0.22f, 0.45f, 0.78f, 0.96f));
+  DrawLooperLayer shadow_layer;
+  shadow_layer.offset_x = 3.0f;
+  shadow_layer.offset_y = 4.0f;
+  shadow_layer.blur_sigma = 3.0f;
+  shadow_layer.color = Color::Rgba(0.0f, 0.0f, 0.0f, 0.32f);
+  shadow.draw_looper_layers.push_back(shadow_layer);
+
+  return {
+      SceneCommand::Draw(
+          DrawCommand::FillRect({0.0f, 0.0f, 220.0f, 160.0f},
+                                Color::Rgba(0.98f, 0.98f, 0.96f, 1.0f))),
+      SceneCommand::Draw(DrawCommand::SaveLayer(
+          {12.0f, 12.0f, 176.0f, 116.0f}, 0.9f, "src_over", {blur})),
+      SceneCommand::Draw(DrawCommand::ClipRRect(
+          {18.0f, 18.0f, 164.0f, 102.0f}, 18.0f, 18.0f)),
+      SceneCommand::Draw(shadow),
+      SceneCommand::Draw(
+          DrawCommand::FillRect({40.0f, 40.0f, 36.0f, 34.0f},
+                                Color::Rgba(0.96f, 0.68f, 0.18f, 1.0f))),
+      SceneCommand::Draw(
+          DrawCommand::FillRect({104.0f, 52.0f, 42.0f, 38.0f},
+                                Color::Rgba(0.20f, 0.72f, 0.55f, 0.94f))),
+      SceneCommand::Draw(DrawCommand::Restore()),
+      SceneCommand::Draw(DrawCommand::Save()),
+      SceneCommand::Draw(
+          DrawCommand::ClipRect({20.0f, 118.0f, 180.0f, 24.0f})),
+      SceneCommand::Draw(
+          DrawCommand::FillRect({14.0f, 112.0f, 192.0f, 36.0f},
+                                Color::Rgba(0.42f, 0.24f, 0.78f, 0.82f))),
+      SceneCommand::Draw(DrawCommand::Restore()),
+  };
+}
+
+html_css_renderer::RenderResult DamageGroupingSelfTestResult(
+    const std::vector<html_css_renderer::Rect>& damage_rects,
+    bool full_redraw) {
+  html_css_renderer::RenderResult result;
+  const html_css_renderer::Size viewport{220.0f, 160.0f};
+  result.successor_snapshot.viewport = viewport;
+  result.frame.scene_commands = DamageGroupingSelfTestCommands();
+  result.frame.damage_rects = damage_rects;
+  result.frame.damage_bounds = BoundsForRects(damage_rects);
+  result.frame.requires_full_redraw = full_redraw;
+  result.requires_full_redraw = full_redraw;
+  result.damage_rects = damage_rects;
+  result.damage_bounds = result.frame.damage_bounds;
+  return result;
+}
+
+bool SamePixels(const html_css_renderer::CpuImage& a,
+                const html_css_renderer::CpuImage& b) {
+  return a.width == b.width && a.height == b.height &&
+         a.pixels_rgba == b.pixels_rgba;
+}
+
+int RunDamageGroupingSelfTest() {
+  struct SelfTestCase {
+    const char* name;
+    std::vector<html_css_renderer::Rect> damage_rects;
+    bool expect_skipped = false;
+    bool expect_grouped = false;
+  };
+  const std::vector<SelfTestCase> cases = {
+      {"empty_damage", {}, true, false},
+      {"outside_viewport_damage", {{260.0f, 180.0f, 20.0f, 20.0f}}, true,
+       false},
+      {"overlapping_damage",
+       {{20.0f, 20.0f, 42.0f, 42.0f}, {38.0f, 38.0f, 42.0f, 42.0f}},
+       false, false},
+      {"many_tiny_disjoint_damage",
+       {{22.0f, 24.0f, 10.0f, 10.0f},
+        {33.0f, 24.0f, 10.0f, 10.0f},
+        {44.0f, 24.0f, 10.0f, 10.0f},
+        {55.0f, 24.0f, 10.0f, 10.0f},
+        {66.0f, 24.0f, 10.0f, 10.0f},
+        {77.0f, 24.0f, 10.0f, 10.0f}},
+       false, true},
+      {"effect_rounded_shadow_disjoint_damage",
+       {{20.0f, 20.0f, 26.0f, 26.0f},
+        {70.0f, 28.0f, 26.0f, 26.0f},
+        {120.0f, 36.0f, 26.0f, 26.0f},
+        {24.0f, 120.0f, 26.0f, 18.0f},
+        {84.0f, 120.0f, 26.0f, 18.0f}},
+       false, false},
+  };
+
+  const html_css_renderer::RenderResult full_result =
+      DamageGroupingSelfTestResult({}, true);
+  html_css_renderer::CpuRenderOptions full_options;
+  const html_css_renderer::CpuImage previous =
+      html_css_renderer::RasterizeRenderResultWithSkiaCpu(full_result,
+                                                          full_options);
+
+  bool failed = false;
+  for (const SelfTestCase& test_case : cases) {
+    html_css_renderer::RenderResult result =
+        DamageGroupingSelfTestResult(test_case.damage_rects, false);
+    html_css_renderer::CpuRenderOptions grouped_options;
+    html_css_renderer::CpuRenderOptions ungrouped_options;
+    ungrouped_options.disable_damage_clip_grouping = true;
+    const html_css_renderer::CpuImage grouped =
+        html_css_renderer::RasterizeRenderResultIncrementalWithSkiaCpu(
+            result, &previous, grouped_options);
+    const html_css_renderer::CpuImage ungrouped =
+        html_css_renderer::RasterizeRenderResultIncrementalWithSkiaCpu(
+            result, &previous, ungrouped_options);
+
+    auto fail = [&](const char* reason) {
+      failed = true;
+      std::fprintf(stderr,
+                   "damage_grouping_self_test.%s failed: %s "
+                   "clips=%zu groups=%zu before=%llu after=%llu "
+                   "raw=%llu coalesced=%llu skipped=%d\n",
+                   test_case.name, reason, grouped.damage_clip_count,
+                   grouped.replay_group_count,
+                   static_cast<unsigned long long>(
+                       grouped.command_replay_count_before_grouping),
+                   static_cast<unsigned long long>(
+                       grouped.command_replay_count_after_grouping),
+                   static_cast<unsigned long long>(grouped.raw_damage_area),
+                   static_cast<unsigned long long>(
+                       grouped.coalesced_damage_area),
+                   grouped.raster_skipped ? 1 : 0);
+    };
+
+    if (!SamePixels(grouped, ungrouped)) {
+      fail("grouped_output_differs_from_ungrouped");
+    }
+    if (test_case.expect_skipped) {
+      if (!grouped.raster_skipped ||
+          grouped.command_replay_count_after_grouping != 0 ||
+          grouped.raw_damage_area != 0 || grouped.coalesced_damage_area != 0) {
+        fail("empty_or_outside_damage_did_not_skip_replay");
+      }
+    } else {
+      if (grouped.damage_pixels != grouped.raw_damage_area) {
+        fail("damage_pixels_do_not_match_raw_clamped_damage_area");
+      }
+      if (grouped.coalesced_damage_area > grouped.raw_damage_area) {
+        fail("coalesced_damage_area_exceeds_raw_damage_area");
+      }
+      if (grouped.command_replay_count_after_grouping >
+          grouped.command_replay_count_before_grouping) {
+        fail("grouping_increased_command_replay_count");
+      }
+    }
+    if (test_case.expect_grouped &&
+        grouped.replay_group_count >= grouped.damage_clip_count) {
+      fail("expected_damage_clips_to_be_grouped");
+    }
+  }
+  if (!failed) {
+    std::printf("damage_grouping_self_test passed cases=%zu\n", cases.size());
+  }
+  return failed ? 1 : 0;
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1076,6 +1300,8 @@ int main(int argc, char** argv) {
   bool trace_stages = false;
   bool debug_text_blob_replay = false;
   bool debug_command_coverage = false;
+  bool disable_damage_clip_grouping = false;
+  bool self_test_damage_grouping = false;
   bool strict_text_blob_typefaces = true;
   bool use_blink = true;
   bool incremental = false;
@@ -1410,6 +1636,10 @@ int main(int argc, char** argv) {
       debug_text_blob_replay = true;
     } else if (arg == "--debug-command-coverage") {
       debug_command_coverage = true;
+    } else if (arg == "--disable-damage-clip-grouping") {
+      disable_damage_clip_grouping = true;
+    } else if (arg == "--self-test-damage-grouping") {
+      self_test_damage_grouping = true;
     } else if (arg == "--strict-text-blob-typefaces") {
       strict_text_blob_typefaces = true;
     } else if (arg == "--compat-text-blob-typefaces") {
@@ -1479,6 +1709,15 @@ int main(int argc, char** argv) {
       ElapsedMs(input_setup_start, BenchmarkClock::now());
   timing.used_blink = use_blink;
   timing.used_skia_cpu = use_skia_cpu;
+
+  if (self_test_damage_grouping) {
+#if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
+    return RunDamageGroupingSelfTest();
+#else
+    std::fprintf(stderr, "damage grouping self-test requires Skia CPU\n");
+    return 2;
+#endif
+  }
 
   if (create_info.html.empty() || (out_path.empty() && !disable_skia_raster)) {
     PrintUsage();
@@ -1692,6 +1931,7 @@ int main(int argc, char** argv) {
   html_css_renderer::CpuRenderOptions cpu_options;
   cpu_options.strict_text_blob_typefaces = strict_text_blob_typefaces;
   cpu_options.debug_command_coverage = debug_command_coverage;
+  cpu_options.disable_damage_clip_grouping = disable_damage_clip_grouping;
   std::optional<html_css_renderer::CpuImage> previous_image;
   if (incremental && have_previous_result) {
 #if defined(HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER)
@@ -1733,6 +1973,8 @@ int main(int argc, char** argv) {
   }
   timing.cpu_raster_replay_ms =
       ElapsedMs(raster_start, BenchmarkClock::now());
+  timing.cpu_raster_replay_skipped =
+      timing.cpu_raster_replay_skipped || image.raster_skipped;
   timing.raster_pixels_touched =
       timing.cpu_raster_replay_skipped || image.raster_skipped
           ? 0
@@ -1741,6 +1983,30 @@ int main(int argc, char** argv) {
       timing.cpu_raster_replay_skipped || image.raster_skipped
           ? 0
           : image.damage_pixels;
+  timing.raw_damage_area =
+      timing.cpu_raster_replay_skipped ? 0 : image.raw_damage_area;
+  timing.coalesced_damage_area =
+      timing.cpu_raster_replay_skipped ? 0 : image.coalesced_damage_area;
+  timing.command_replay_count_before_grouping =
+      timing.cpu_raster_replay_skipped
+          ? 0
+          : image.command_replay_count_before_grouping;
+  timing.command_replay_count_after_grouping =
+      timing.cpu_raster_replay_skipped
+          ? 0
+          : image.command_replay_count_after_grouping;
+  timing.damage_clip_count =
+      timing.cpu_raster_replay_skipped ? 0 : image.damage_clip_count;
+  timing.replay_group_count =
+      timing.cpu_raster_replay_skipped ? 0 : image.replay_group_count;
+  timing.damage_grouping_ms =
+      timing.cpu_raster_replay_skipped ? 0.0 : image.damage_grouping_ms;
+  timing.skregion_clip_ms =
+      timing.cpu_raster_replay_skipped ? 0.0 : image.skregion_clip_ms;
+  timing.cpu_replay_ms =
+      timing.cpu_raster_replay_skipped ? 0.0 : image.cpu_replay_ms;
+  timing.copyback_ms =
+      timing.cpu_raster_replay_skipped ? 0.0 : image.copyback_ms;
   timing.partial_raster =
       !timing.cpu_raster_replay_skipped && image.partial_raster;
 

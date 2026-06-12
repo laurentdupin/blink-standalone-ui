@@ -651,7 +651,15 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "probe_total_ms": [],
         "warm_no_change_presented_frame_ms": [],
         "warm_scroll_presented_frame_ms": [],
+        "warm_scroll_cpu_replay_ms": [],
+        "warm_scroll_damage_grouping_ms": [],
+        "warm_scroll_skregion_clip_ms": [],
+        "warm_scroll_copyback_ms": [],
         "warm_attr_toggle_presented_frame_ms": [],
+        "warm_attr_toggle_cpu_replay_ms": [],
+        "warm_attr_toggle_damage_grouping_ms": [],
+        "warm_attr_toggle_skregion_clip_ms": [],
+        "warm_attr_toggle_copyback_ms": [],
     }
     for row in cold_rows:
         cold = row["cold"]
@@ -718,6 +726,23 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             mode = row.get(mode_key)
             if isinstance(mode, dict) and mode.get("presented_frame_ms") is not None:
                 values_by_key[stats_key].append(float(mode["presented_frame_ms"]))
+        for mode_key, stats_prefix in [
+            ("warm_scroll", "warm_scroll"),
+            ("warm_attr_toggle", "warm_attr_toggle"),
+        ]:
+            mode = row.get(mode_key)
+            if not isinstance(mode, dict):
+                continue
+            timing = mode.get("timing", {})
+            for source_key in [
+                "cpu_replay_ms",
+                "damage_grouping_ms",
+                "skregion_clip_ms",
+                "copyback_ms",
+            ]:
+                value = as_float(timing.get(source_key))
+                if value is not None:
+                    values_by_key[f"{stats_prefix}_{source_key}"].append(value)
     correctness_failures = [
         row
         for row in rows
@@ -887,6 +912,28 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         int(nested(mode, "timing", "damage_pixels", default=0) or 0)
         for mode in warm_attr_toggle_rows
     )
+    grouping_metric_keys = [
+        "damage_clip_count",
+        "replay_group_count",
+        "command_replay_count_before_grouping",
+        "command_replay_count_after_grouping",
+        "raw_damage_area",
+        "coalesced_damage_area",
+    ]
+
+    def grouping_stats(modes: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            key: stats(
+                [
+                    float(value)
+                    for mode in modes
+                    for value in [nested(mode, "timing", key)]
+                    if as_float(value) is not None
+                ]
+            )
+            for key in grouping_metric_keys
+        }
+
     return {
         "page_count": len(rows),
         "cold_success_count": len(cold_rows),
@@ -926,6 +973,10 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "warm_attr_toggle_raster_pixels_touched": warm_attr_toggle_raster_pixels_touched,
         "warm_attr_toggle_damage_pixels": warm_attr_toggle_damage_pixels,
         "warm_attr_toggle_partial_raster_count": warm_attr_toggle_partial_raster_count,
+        "damage_grouping_stats": {
+            "warm_scroll_presented_frame": grouping_stats(warm_scroll_rows),
+            "warm_attr_toggle_presented_frame": grouping_stats(warm_attr_toggle_rows),
+        },
         "stats": {key: stats(value) for key, value in values_by_key.items()},
         "slowest_20": [
             {
@@ -974,6 +1025,111 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 reverse=True,
             )[:20]
         ],
+        "slowest_warm_scroll_20": [
+            {
+                "name": row["name"],
+                "warm_scroll_presented_frame_ms": row.get("warm_scroll", {}).get(
+                    "presented_frame_ms"
+                ),
+                "cpu_replay_ms": nested(
+                    row.get("warm_scroll", {}), "timing", "cpu_replay_ms"
+                ),
+                "damage_clip_count": nested(
+                    row.get("warm_scroll", {}), "timing", "damage_clip_count"
+                ),
+                "replay_group_count": nested(
+                    row.get("warm_scroll", {}), "timing", "replay_group_count"
+                ),
+                "command_replay_count_before_grouping": nested(
+                    row.get("warm_scroll", {}),
+                    "timing",
+                    "command_replay_count_before_grouping",
+                ),
+                "command_replay_count_after_grouping": nested(
+                    row.get("warm_scroll", {}),
+                    "timing",
+                    "command_replay_count_after_grouping",
+                ),
+                "raw_damage_area": nested(
+                    row.get("warm_scroll", {}), "timing", "raw_damage_area"
+                ),
+                "coalesced_damage_area": nested(
+                    row.get("warm_scroll", {}),
+                    "timing",
+                    "coalesced_damage_area",
+                ),
+                "correctness": row.get("correctness", {}).get("diff_classification"),
+            }
+            for row in sorted(
+                [
+                    row
+                    for row in rows
+                    if isinstance(row.get("warm_scroll"), dict)
+                    and row.get("warm_scroll", {}).get("presented_frame_ms")
+                    is not None
+                ],
+                key=lambda item: float(
+                    item.get("warm_scroll", {}).get("presented_frame_ms") or -1
+                ),
+                reverse=True,
+            )[:20]
+        ],
+        "slowest_warm_attr_toggle_20": [
+            {
+                "name": row["name"],
+                "warm_attr_toggle_presented_frame_ms": row.get(
+                    "warm_attr_toggle", {}
+                ).get("presented_frame_ms"),
+                "cpu_replay_ms": nested(
+                    row.get("warm_attr_toggle", {}), "timing", "cpu_replay_ms"
+                ),
+                "damage_clip_count": nested(
+                    row.get("warm_attr_toggle", {}),
+                    "timing",
+                    "damage_clip_count",
+                ),
+                "replay_group_count": nested(
+                    row.get("warm_attr_toggle", {}),
+                    "timing",
+                    "replay_group_count",
+                ),
+                "command_replay_count_before_grouping": nested(
+                    row.get("warm_attr_toggle", {}),
+                    "timing",
+                    "command_replay_count_before_grouping",
+                ),
+                "command_replay_count_after_grouping": nested(
+                    row.get("warm_attr_toggle", {}),
+                    "timing",
+                    "command_replay_count_after_grouping",
+                ),
+                "raw_damage_area": nested(
+                    row.get("warm_attr_toggle", {}), "timing", "raw_damage_area"
+                ),
+                "coalesced_damage_area": nested(
+                    row.get("warm_attr_toggle", {}),
+                    "timing",
+                    "coalesced_damage_area",
+                ),
+                "correctness": row.get("correctness", {}).get("diff_classification"),
+            }
+            for row in sorted(
+                [
+                    row
+                    for row in rows
+                    if isinstance(row.get("warm_attr_toggle"), dict)
+                    and row.get("warm_attr_toggle", {}).get(
+                        "presented_frame_ms"
+                    )
+                    is not None
+                ],
+                key=lambda item: float(
+                    item.get("warm_attr_toggle", {}).get("presented_frame_ms")
+                    or -1
+                ),
+                reverse=True,
+            )[:20]
+        ],
     }
 
 
@@ -1013,6 +1169,27 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "warm_scroll_raster_pixels_touched",
         "warm_scroll_damage_pixels",
         "warm_scroll_partial_raster",
+        "warm_scroll_damage_clip_count",
+        "warm_scroll_replay_group_count",
+        "warm_scroll_command_replay_count_before_grouping",
+        "warm_scroll_command_replay_count_after_grouping",
+        "warm_scroll_raw_damage_area",
+        "warm_scroll_coalesced_damage_area",
+        "warm_scroll_damage_grouping_ms",
+        "warm_scroll_skregion_clip_ms",
+        "warm_scroll_cpu_replay_ms",
+        "warm_scroll_copyback_ms",
+        "warm_attr_toggle_presented_frame_ms",
+        "warm_attr_toggle_damage_clip_count",
+        "warm_attr_toggle_replay_group_count",
+        "warm_attr_toggle_command_replay_count_before_grouping",
+        "warm_attr_toggle_command_replay_count_after_grouping",
+        "warm_attr_toggle_raw_damage_area",
+        "warm_attr_toggle_coalesced_damage_area",
+        "warm_attr_toggle_damage_grouping_ms",
+        "warm_attr_toggle_skregion_clip_ms",
+        "warm_attr_toggle_cpu_replay_ms",
+        "warm_attr_toggle_copyback_ms",
         "document_max_scroll_y",
         "correctness_exit",
         "correctness_classification",
@@ -1029,6 +1206,9 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
             warm_scroll = row.get("warm_scroll", {})
             if not isinstance(warm_scroll, dict):
                 warm_scroll = {}
+            warm_attr_toggle = row.get("warm_attr_toggle", {})
+            if not isinstance(warm_attr_toggle, dict):
+                warm_attr_toggle = {}
             warm_no_change_lifecycle_count = lifecycle_count_from_frame_work(
                 warm_no_change.get("frame_work", {})
             )
@@ -1108,6 +1288,77 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                     ),
                     "warm_scroll_partial_raster": nested(
                         warm_scroll, "timing", "partial_raster"
+                    ),
+                    "warm_scroll_damage_clip_count": nested(
+                        warm_scroll, "timing", "damage_clip_count"
+                    ),
+                    "warm_scroll_replay_group_count": nested(
+                        warm_scroll, "timing", "replay_group_count"
+                    ),
+                    "warm_scroll_command_replay_count_before_grouping": nested(
+                        warm_scroll,
+                        "timing",
+                        "command_replay_count_before_grouping",
+                    ),
+                    "warm_scroll_command_replay_count_after_grouping": nested(
+                        warm_scroll,
+                        "timing",
+                        "command_replay_count_after_grouping",
+                    ),
+                    "warm_scroll_raw_damage_area": nested(
+                        warm_scroll, "timing", "raw_damage_area"
+                    ),
+                    "warm_scroll_coalesced_damage_area": nested(
+                        warm_scroll, "timing", "coalesced_damage_area"
+                    ),
+                    "warm_scroll_damage_grouping_ms": nested(
+                        warm_scroll, "timing", "damage_grouping_ms"
+                    ),
+                    "warm_scroll_skregion_clip_ms": nested(
+                        warm_scroll, "timing", "skregion_clip_ms"
+                    ),
+                    "warm_scroll_cpu_replay_ms": nested(
+                        warm_scroll, "timing", "cpu_replay_ms"
+                    ),
+                    "warm_scroll_copyback_ms": nested(
+                        warm_scroll, "timing", "copyback_ms"
+                    ),
+                    "warm_attr_toggle_presented_frame_ms": warm_attr_toggle.get(
+                        "presented_frame_ms"
+                    ),
+                    "warm_attr_toggle_damage_clip_count": nested(
+                        warm_attr_toggle, "timing", "damage_clip_count"
+                    ),
+                    "warm_attr_toggle_replay_group_count": nested(
+                        warm_attr_toggle, "timing", "replay_group_count"
+                    ),
+                    "warm_attr_toggle_command_replay_count_before_grouping": nested(
+                        warm_attr_toggle,
+                        "timing",
+                        "command_replay_count_before_grouping",
+                    ),
+                    "warm_attr_toggle_command_replay_count_after_grouping": nested(
+                        warm_attr_toggle,
+                        "timing",
+                        "command_replay_count_after_grouping",
+                    ),
+                    "warm_attr_toggle_raw_damage_area": nested(
+                        warm_attr_toggle, "timing", "raw_damage_area"
+                    ),
+                    "warm_attr_toggle_coalesced_damage_area": nested(
+                        warm_attr_toggle, "timing", "coalesced_damage_area"
+                    ),
+                    "warm_attr_toggle_damage_grouping_ms": nested(
+                        warm_attr_toggle, "timing", "damage_grouping_ms"
+                    ),
+                    "warm_attr_toggle_skregion_clip_ms": nested(
+                        warm_attr_toggle, "timing", "skregion_clip_ms"
+                    ),
+                    "warm_attr_toggle_cpu_replay_ms": nested(
+                        warm_attr_toggle, "timing", "cpu_replay_ms"
+                    ),
+                    "warm_attr_toggle_copyback_ms": nested(
+                        warm_attr_toggle, "timing", "copyback_ms"
                     ),
                     "document_max_scroll_y": row.get("document_max_scroll_y"),
                     "correctness_exit": row.get("correctness", {}).get("exit_code"),
@@ -1213,6 +1464,12 @@ def merge_reports(
     build_config = dict(first.get("build_config", {}))
     if build_config_name:
         build_config["name"] = build_config_name
+    playwright_status = first.get("playwright_status", "not_requested")
+    if playwright_status == "not_requested" and any(
+        isinstance(row.get("playwright"), dict) and row.get("playwright")
+        for row in pages
+    ):
+        playwright_status = "recorded_in_merged_inputs"
     report = {
         "schema_version": 1,
         "generated_at": generated,
@@ -1227,7 +1484,7 @@ def merge_reports(
         "merged_from": [rel(path) for path in inputs],
         "summary": summarize(pages),
         "pages": pages,
-        "playwright_status": first.get("playwright_status", "not_requested"),
+        "playwright_status": playwright_status,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     write_json(out_dir / "standalone_perf_results.json", report)
@@ -1384,6 +1641,59 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
             return "not measured"
         return "PASS" if value < limit_ms else "FAIL"
 
+    def grouping_stat(mode: str, metric: str, field: str) -> str:
+        value = (
+            summary.get("damage_grouping_stats", {})
+            .get(mode, {})
+            .get(metric, {})
+            .get(field)
+        )
+        if value is None:
+            return ""
+        return f"{float(value):.2f}"
+
+    def p95_ms(metric: str) -> float | None:
+        return as_float(stats_by_key.get(metric, {}).get("p95_ms"))
+
+    def max_ms(metric: str) -> float | None:
+        return as_float(stats_by_key.get(metric, {}).get("max_ms"))
+
+    def target_status(metric: str, limit_ms: float = 5.0) -> str:
+        value = p95_ms(metric)
+        if value is None:
+            return "not measured"
+        return "PASS" if value < limit_ms else "OPEN"
+
+    def fmt_ms_value(value: float | None) -> str:
+        return "" if value is None else f"{value:.2f}"
+
+    def dynamic_markdown_table(rows: list[dict[str, Any]], metric: str) -> str:
+        def fmt_value(value: Any) -> str:
+            number = as_float(value)
+            return "" if number is None else f"{number:.2f}"
+
+        lines = [
+            "| Page | Presented ms | CPU replay ms | Clips | Groups | Replay before | Replay after | Raw damage area | Coalesced area | Correctness |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        ]
+        if not rows:
+            lines.append("| none |  |  |  |  |  |  |  |  |  |")
+            return "\n".join(lines)
+        for row in rows:
+            lines.append(
+                f"| {row.get('name', '')} | "
+                f"{fmt_value(row.get(metric))} | "
+                f"{fmt_value(row.get('cpu_replay_ms'))} | "
+                f"{row.get('damage_clip_count', '')} | "
+                f"{row.get('replay_group_count', '')} | "
+                f"{row.get('command_replay_count_before_grouping', '')} | "
+                f"{row.get('command_replay_count_after_grouping', '')} | "
+                f"{row.get('raw_damage_area', '')} | "
+                f"{row.get('coalesced_damage_area', '')} | "
+                f"{row.get('correctness', '')} |"
+            )
+        return "\n".join(lines)
+
     lines = [
         "# Standalone Renderer Performance Baseline",
         "",
@@ -1458,6 +1768,49 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
     lines.extend(
         [
             "",
+            "## Warm Dynamic Target Status",
+            "",
+            "The current warm dynamic target is p95 below 5 ms. This post-`8382d99` corpus run does not meet that target for scroll or attribute-toggle frames; the remaining scroll outlier is dominated by real Skia CPU command replay, not damage grouping overhead.",
+            "",
+            "| Mode | p95 ms | max ms | Target status |",
+            "| --- | ---: | ---: | --- |",
+            (
+                f"| `warm_no_change_presented_frame_ms` | "
+                f"{fmt_ms_value(p95_ms('warm_no_change_presented_frame_ms'))} | "
+                f"{fmt_ms_value(max_ms('warm_no_change_presented_frame_ms'))} | "
+                f"{target_status('warm_no_change_presented_frame_ms')} |"
+            ),
+            (
+                f"| `warm_scroll_presented_frame_ms` | "
+                f"{fmt_ms_value(p95_ms('warm_scroll_presented_frame_ms'))} | "
+                f"{fmt_ms_value(max_ms('warm_scroll_presented_frame_ms'))} | "
+                f"{target_status('warm_scroll_presented_frame_ms')} |"
+            ),
+            (
+                f"| `warm_attr_toggle_presented_frame_ms` | "
+                f"{fmt_ms_value(p95_ms('warm_attr_toggle_presented_frame_ms'))} | "
+                f"{fmt_ms_value(max_ms('warm_attr_toggle_presented_frame_ms'))} | "
+                f"{target_status('warm_attr_toggle_presented_frame_ms')} |"
+            ),
+            "",
+            "### Slowest Warm Scroll Rows",
+            "",
+            dynamic_markdown_table(
+                summary.get("slowest_warm_scroll_20", [])[:10],
+                "warm_scroll_presented_frame_ms",
+            ),
+            "",
+            "### Slowest Warm Attr-Toggle Rows",
+            "",
+            dynamic_markdown_table(
+                summary.get("slowest_warm_attr_toggle_20", [])[:10],
+                "warm_attr_toggle_presented_frame_ms",
+            ),
+        ]
+    )
+    lines.extend(
+        [
+            "",
             "## Slowest 20 Command-Wall Rows",
             "",
             (
@@ -1512,6 +1865,43 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
             ),
             "",
             "`partial_redraw_count` is the count of frames reporting `partial_raster=true` in the benchmark timing diagnostics.",
+            "",
+            "## Damage Grouping Diagnostics",
+            "",
+            "The grouping counters are emitted by Skia CPU raster after damage rects are clamped to the viewport. `command_replay_count_before_grouping` is the command count the old per-clip replay path would have executed; `command_replay_count_after_grouping` is the actual grouped replay count. Copyback still uses the original clamped damage clips.",
+            "",
+            "| Mode | Metric | Count | p50 | p95 | max |",
+            "| --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for mode in [
+        "warm_scroll_presented_frame",
+        "warm_attr_toggle_presented_frame",
+    ]:
+        for metric in [
+            "damage_clip_count",
+            "replay_group_count",
+            "command_replay_count_before_grouping",
+            "command_replay_count_after_grouping",
+            "raw_damage_area",
+            "coalesced_damage_area",
+        ]:
+            count = (
+                summary.get("damage_grouping_stats", {})
+                .get(mode, {})
+                .get(metric, {})
+                .get("count", 0)
+            )
+            if not count:
+                continue
+            lines.append(
+                f"| `{mode}` | `{metric}` | {count} | "
+                f"{grouping_stat(mode, metric, 'p50_ms')} | "
+                f"{grouping_stat(mode, metric, 'p95_ms')} | "
+                f"{grouping_stat(mode, metric, 'max_ms')} |"
+            )
+    lines.extend(
+        [
             "",
         ]
     )

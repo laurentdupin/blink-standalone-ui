@@ -35,6 +35,18 @@
       "43x_mask_hover_none_to_card",
       "43y_svg_hover_none_to_card",
       "43y_svg_active_none_to_card"
+    ],
+    "damage_grouping": [
+      "43i_visibility_on_to_on",
+      "43l_opacity_low_to_high",
+      "43ae_visual_effects_flat_to_raised",
+      "43o_clip_path_png_wide_to_narrow",
+      "43q_clip_path_svg_background_wide_to_narrow",
+      "43r_mask_svg_background_wide_to_narrow",
+      "43s_rounded_svg_image_square_to_round",
+      "43v_sdl_resource_scroll_0_to_160",
+      "43y_svg_hover_none_to_card",
+      "43y_svg_active_none_to_card"
     ]
   },
   "cases": [

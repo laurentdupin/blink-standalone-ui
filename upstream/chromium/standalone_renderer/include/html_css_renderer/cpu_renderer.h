@@ -18,6 +18,16 @@ struct CpuImage {
   std::vector<uint8_t> pixels_rgba_bytes;
   uint64_t raster_pixels_touched = 0;
   uint64_t damage_pixels = 0;
+  uint64_t raw_damage_area = 0;
+  uint64_t coalesced_damage_area = 0;
+  uint64_t command_replay_count_before_grouping = 0;
+  uint64_t command_replay_count_after_grouping = 0;
+  size_t damage_clip_count = 0;
+  size_t replay_group_count = 0;
+  double damage_grouping_ms = 0.0;
+  double skregion_clip_ms = 0.0;
+  double cpu_replay_ms = 0.0;
+  double copyback_ms = 0.0;
   bool raster_skipped = false;
   bool partial_raster = false;
 };
@@ -27,6 +37,7 @@ struct CpuRenderOptions {
   bool strict_text_blob_typefaces = true;
   bool debug_command_coverage = false;
   bool profile_command_timings = false;
+  bool disable_damage_clip_grouping = false;
 };
 
 CpuImage RasterizeDrawCommands(const DrawCommandList& commands,
