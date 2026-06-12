@@ -29,7 +29,6 @@ REQUIRED_RUNTIME_POLICIES = {
 
 REQUIRED_PUBLIC_BOUNDARIES = {
     "RendererCreateInfo",
-    "RendererState",
     "FrameInput",
     "AssetProvider",
     "RenderResult",

@@ -2,7 +2,7 @@
 """Generate tiny standalone Mojom C++ stubs for the renderer cut.
 
 This does not replace Chromium's Mojom generator. It intentionally emits only
-the C++ surface needed to compile reduced Blink probe targets when a generated
+the C++ surface needed to compile diagnostic Blink probe targets when a generated
 Mojom header is included only for types, enum constants, or forward
 declarations. Runtime IPC bindings stay outside the standalone renderer cut.
 """

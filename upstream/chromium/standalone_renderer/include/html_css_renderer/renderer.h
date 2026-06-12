@@ -156,35 +156,6 @@ struct RenderResult {
   RendererSnapshot successor_snapshot;
 };
 
-class RendererState {
- public:
-  static std::unique_ptr<RendererState> Create(RendererCreateInfo create_info);
-  static std::unique_ptr<RendererState> Restore(RendererSnapshot snapshot,
-                                                AssetProvider* asset_provider);
-
-  RendererState(const RendererState&);
-  RendererState& operator=(const RendererState&);
-  RendererState(RendererState&&) noexcept;
-  RendererState& operator=(RendererState&&) noexcept;
-  ~RendererState();
-
-  std::unique_ptr<RendererState> Fork() const;
-  RendererSnapshot Snapshot() const;
-  RenderResult AdvanceAndRender(const FrameInput& input);
-  RenderResult AdvanceAndRenderIncremental(const FrameInput& input);
-
- private:
-  explicit RendererState(RendererCreateInfo create_info);
-
-  RendererCreateInfo create_info_;
-  double timeline_time_seconds_ = 0.0;
-  std::unordered_map<std::string, Point> scroll_offsets_by_element_id_;
-  std::string focused_element_id_;
-  std::string hovered_element_id_;
-  std::string active_element_id_;
-  std::unordered_map<std::string, std::string> form_values_by_element_id_;
-};
-
 }  // namespace html_css_renderer
 
 #endif  // STANDALONE_RENDERER_INCLUDE_HTML_CSS_RENDERER_RENDERER_H_

@@ -18,11 +18,9 @@ import relink_blink_tree_builder_probe as relink
 
 CLI_COMPILE_FILTERS = (
     "standalone_renderer/examples/render_blink_cli.cc",
-    "standalone_renderer/src/blink_lifecycle_shim.cc",
     "standalone_renderer/src/blink_page_embedder.cc",
     "standalone_renderer/src/blink_runtime_adapter.cc",
     "standalone_renderer/src/blink_runtime_environment.cc",
-    "standalone_renderer/src/standalone_frame.cc",
 )
 
 RENDERER_COMPILE_FILTERS = (
@@ -31,7 +29,6 @@ RENDERER_COMPILE_FILTERS = (
     "standalone_renderer/src/incremental_damage.cc",
     "standalone_renderer/src/paint_translator.cc",
     "standalone_renderer/src/render_frame.cc",
-    "standalone_renderer/src/renderer.cc",
     "standalone_renderer/src/retained_scene.cc",
 )
 

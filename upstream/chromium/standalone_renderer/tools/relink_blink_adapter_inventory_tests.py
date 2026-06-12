@@ -19,11 +19,9 @@ import relink_blink_tree_builder_probe as relink
 COMPILE_FILTERS = (
     "standalone_renderer/tests/blink_adapter_inventory_test.cc",
     "standalone_renderer/src/blink_adapter.cc",
-    "standalone_renderer/src/blink_lifecycle_shim.cc",
     "standalone_renderer/src/blink_page_embedder.cc",
     "standalone_renderer/src/blink_runtime_adapter.cc",
     "standalone_renderer/src/blink_runtime_environment.cc",
-    "standalone_renderer/src/standalone_frame.cc",
 )
 
 EXE_FILTERED_LINK_INPUT_SUBSTRINGS = relink.FILTERED_LINK_INPUT_SUBSTRINGS + (

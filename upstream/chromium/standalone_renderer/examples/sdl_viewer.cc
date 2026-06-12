@@ -1969,7 +1969,6 @@ int main(int argc, char** argv) {
       resource_base_path);
 
   std::unique_ptr<html_css_renderer::BlinkPageEmbedder> blink_embedder;
-  std::unique_ptr<html_css_renderer::RendererState> state;
   html_css_renderer::RenderResult result;
   SdlFrameProfiler profiler(profile_enabled, profile_summary_frames);
   SdlProfileFrame initial_profile;

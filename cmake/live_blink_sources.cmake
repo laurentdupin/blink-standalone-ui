@@ -122,7 +122,6 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_response.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/associated_interface_provider_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_adapter.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_lifecycle_shim.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_page_embedder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_runtime_adapter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_runtime_environment.cc
@@ -149,9 +148,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/paint_translator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/render_frame.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/render_policy.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/renderer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/retained_scene.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_frame.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/url_network_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_history_item_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/hardening.cc

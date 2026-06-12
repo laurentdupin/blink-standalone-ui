@@ -23,7 +23,7 @@ Evidence:
 
 ## Inactive Or Non-Hot Paths
 
-- `StandaloneFrame` is still present as a snapshot artifact implementation in `upstream/chromium/standalone_renderer/src/standalone_frame.cc`; its `CollectPaint` output is tagged as `BlinkPaintArtifactSource::kStandaloneSnapshot`. Public benchmark and viewer entrypoints no longer expose it as a product backend, and strict benchmark output rejects non-real-Blink output.
+- The old non-live snapshot renderer has been removed from the configured build. Public benchmark and viewer entrypoints require live Blink `PaintArtifact` extraction and should fail rather than synthesize standalone paint output when that bridge is unavailable.
 - Blink `PaintArtifactCompositor` is not active. The linked definitions in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` are stubs, and no active benchmark/viewer path builds a cc layer tree from `PaintArtifactCompositor`.
 - `PaintArtifact::GetPaintRecord` is not available as a real flattened Blink paint-record path. The benchmark documents that the standalone symbol resolves to the empty stub in `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc`.
 
@@ -127,5 +127,5 @@ The next performance architecture step should move toward Chromium/Blink/cc reus
 
 1. Preserve real Blink lifecycle and `PaintArtifact` correctness as the source of truth.
 2. Prefer enabling the real `PaintArtifactCompositor`/cc path and Skia-backed compositor primitives over expanding custom retained heuristics.
-3. Keep the existing retained DrawCommandList path as a measurable baseline and compatibility path until cc-backed output is correct.
+3. Keep the existing retained DrawCommandList path only as the current transitional presenter while it is being replaced; do not preserve it as a supported fallback once cc-backed output is correct.
 4. Improve instrumentation before optimization: isolate renderer create, page init, commit, style, layout, prepaint, paint, PaintArtifact extraction, translation/composition, raster, upload/present, and warm live-frame timing.

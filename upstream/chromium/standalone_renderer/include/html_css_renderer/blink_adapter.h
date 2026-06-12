@@ -109,51 +109,6 @@ struct BlinkLifecycleReport {
   std::vector<BlinkBoundaryReplacement> replacements;
 };
 
-struct BlinkLifecycleInput {
-  RendererCreateInfo renderer;
-  RendererSnapshot current_snapshot;
-  FrameInput frame_input;
-};
-
-enum class BlinkPaintArtifactSource {
-  kNone,
-  kStandaloneSnapshot,
-  kReducedBlinkExport,
-  kRealBlinkPaintArtifact,
-};
-
-struct BlinkLifecycleOutput {
-  RendererSnapshot next_snapshot;
-  PaintArtifact paint_artifact;
-  std::vector<PaintOp> paint_ops;
-  std::vector<PaintRecordOp> paint_record_ops;
-  BlinkPaintArtifactSource paint_source = BlinkPaintArtifactSource::kNone;
-  bool real_blink_paint_attempted = false;
-  bool real_blink_paint_available = false;
-  Rect damage_bounds;
-  std::vector<Rect> damage_rects;
-  bool requires_full_redraw = true;
-  std::vector<HitTestEntry> hit_test_entries;
-  std::vector<std::string> diagnostics;
-  std::vector<std::string> missing_resources;
-};
-
-class BlinkLifecycleShim {
- public:
-  virtual ~BlinkLifecycleShim() = default;
-
-  virtual BlinkLifecycleReport CreatePage(
-      const BlinkLifecycleInput& input) = 0;
-  virtual BlinkLifecycleReport CommitDocument(
-      const BlinkLifecycleInput& input) = 0;
-  virtual BlinkLifecycleReport UpdateStyle(
-      const BlinkLifecycleInput& input) = 0;
-  virtual BlinkLifecycleReport Layout(
-      const BlinkLifecycleInput& input) = 0;
-  virtual BlinkLifecycleOutput CollectPaint(
-      const BlinkLifecycleInput& input) = 0;
-};
-
 class BlinkPageEmbedder {
  public:
   virtual ~BlinkPageEmbedder() = default;
@@ -167,9 +122,6 @@ class BlinkPageEmbedder {
 
 std::vector<BlinkBoundaryReplacement> RequiredBlinkBoundaryReplacements();
 std::vector<BlinkRuntimeShim> RequiredBlinkRuntimeShims();
-std::unique_ptr<BlinkLifecycleShim> CreateNoOpBlinkLifecycleShim();
-std::unique_ptr<BlinkPageEmbedder> CreateNoOpBlinkPageEmbedder(
-    BlinkPageEmbedderCreateInfo create_info);
 std::unique_ptr<BlinkPageEmbedder> CreateLiveBlinkPageEmbedder(
     BlinkPageEmbedderCreateInfo create_info);
 
