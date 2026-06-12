@@ -125,6 +125,7 @@ ROOT_COPY_DIRS = (
     "services/viz/public/mojom",
     "device/base/synchronization",
     "gin",
+    "gpu/GLES2",
     "gpu/command_buffer/client",
     "gpu/command_buffer/common",
     "gpu/ipc/common",
