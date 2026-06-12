@@ -14766,9 +14766,6 @@ void* AlignedAlloc(size_t size, size_t alignment) {
   return allocator_shim::UncheckedAlignedAlloc(size, alignment);
 }
 namespace debug {
-bool DumpWithoutCrashing(const Location&, TimeDelta) {
-  return false;
-}
 }  // namespace debug
 namespace sequence_manager {
 TaskTimeObserver::~TaskTimeObserver() = default;
