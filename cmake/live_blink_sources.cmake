@@ -50,6 +50,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/region_capture_bounds.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
@@ -2116,6 +2117,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/shaders/SkLocalMatrixShader.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkMatrix22.cpp
 )
+
+set_source_files_properties(
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format_utils.cc
+  PROPERTIES INCLUDE_DIRECTORIES
+             "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/include")
 
 list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc

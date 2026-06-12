@@ -137,6 +137,7 @@ ROOT_COPY_DIRS = (
     "mojo/public/cpp",
     "mojo/public/mojom",
     "third_party/abseil-cpp/absl",
+    "third_party/angle/include",
     "third_party/boringssl/src/include",
     "third_party/boringssl/src/pki",
     "third_party/googletest/src/googletest/include",
