@@ -54,8 +54,6 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     float delta_x,
     float delta_y,
     int requested);
-void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
-    int disabled);
 void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
@@ -1625,9 +1623,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
     lifecycle_stop_ = create_info.lifecycle_stop;
     SetTextBlobReplayDiagnosticsEnabled(debug_text_blob_replay_);
     ::blink::standalone_renderer_probe::
-        StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
-            0);
-    ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
             enable_paint_artifact_audit_ ? 1 : 0);
     ::blink::standalone_renderer_probe::
@@ -2135,9 +2130,6 @@ class LiveBlinkPageEmbedder final : public BlinkPageEmbedder {
           0.0f, 0.0f, 0, 0, 0);
       last_pointer_pressed_ = false;
     }
-    live_probe::
-        StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
-            0);
     live_probe::
         StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
             enable_paint_artifact_audit_ ? 1 : 0);

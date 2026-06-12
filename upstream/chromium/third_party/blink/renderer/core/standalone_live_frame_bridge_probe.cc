@@ -642,7 +642,6 @@ struct LiveFramePaintProbeCache {
   double timing_paint_artifact_audit_ms = 0.0;
   double timing_paint_artifact_extraction_ms = 0.0;
   bool timing_cache_hit = false;
-  bool disable_retained_extraction = false;
   bool full_paint_artifact_audit = false;
   bool trace_stages = false;
   std::string lifecycle_stop;
@@ -9212,12 +9211,6 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   std::vector<std::string> extraction_diagnostics;
-  if (cache.disable_retained_extraction) {
-    cache.artifact_audit_lines.push_back(
-        "paint_op_extraction disabled reason=audit_only_or_disable_retained_extraction");
-    TraceLiveFrameProbeStage("export skipped retained extraction");
-    return;
-  }
   if (AppendPaintArtifactExtractedOps(artifact, cache.viewport_width,
                                       cache.viewport_height,
                                       cache.exported_draw_ops,
@@ -10026,27 +10019,6 @@ void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
   cache.finer_cache_units_by_chunk.clear();
-  cache.artifact_audit_lines.clear();
-  cache.raw_paint_artifact_audit_json.clear();
-}
-
-void StandaloneBlinkLiveFrameBridgeSetDisableRetainedExtractionForStandaloneRenderer(
-    int disabled) {
-  LiveFramePaintProbeCache& cache = ProbeCache();
-  const bool value = disabled != 0;
-  if (cache.disable_retained_extraction == value) {
-    return;
-  }
-  cache.disable_retained_extraction = value;
-  cache.initialized = false;
-  cache.body_html.clear();
-  cache.element_attributes_changed_since_probe = false;
-  cache.original_element_attribute_values.clear();
-  cache.applied_element_attributes_by_id_and_name.clear();
-  cache.exported_draw_ops.clear();
-  cache.chunk_property_states.clear();
-  cache.chunk_stable_keys.clear();
-  cache.chunk_id_strings.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }
