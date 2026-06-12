@@ -44,7 +44,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/snap_selection_strategy.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/touch_action_region.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/clip_node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/ip_address.cc
@@ -68,6 +72,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/linear_gradient.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/features/native_theme_features.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/native_theme/native_theme_aura.cc
