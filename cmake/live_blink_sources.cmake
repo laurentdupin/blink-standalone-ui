@@ -40,6 +40,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/value_iterators.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/values.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/hit_test_opaqueness.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/layer_selection_bound.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_snap_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/snap_selection_strategy.cc

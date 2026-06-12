@@ -21832,13 +21832,6 @@ void Layer::SetElementId(ElementId) {}
 void Layer::SetOffsetToTransformParent(gfx::Vector2dF) {}
 void ScrollTree::ClearScrollingContentsCullRect(ElementId) {}
 void ScrollTree::SetScrollingContentsCullRect(ElementId, const gfx::Rect&) {}
-LayerSelectionBound::LayerSelectionBound()
-    : type(gfx::SelectionBound::Type::EMPTY),
-      edge_start(),
-      edge_end(),
-      layer_id(0),
-      hidden(false) {}
-LayerSelectionBound::~LayerSelectionBound() = default;
 scoped_refptr<ScrollbarLayerBase> ScrollbarLayerBase::CreateOrReuse(
     scoped_refptr<Scrollbar>,
     ScrollbarLayerBase*) {
