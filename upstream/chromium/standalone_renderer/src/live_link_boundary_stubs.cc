@@ -20030,10 +20030,6 @@ MobileFriendlinessChecker* MobileFriendlinessChecker::From(const Document&) {
 void MobileFriendlinessChecker::NotifyPaintReplaced(
     const PhysicalRect&,
     const TransformPaintPropertyNodeOrAlias&) {}
-void RasterInvalidationTracking::CheckUnderInvalidations(
-    const String&,
-    PaintRecord,
-    const gfx::Rect&) {}
 void PaintTiming::NotifyPaint(bool, bool, bool) {}
 bool PaintTimingDetector::NotifyBackgroundImagePaint(
     const Node&,

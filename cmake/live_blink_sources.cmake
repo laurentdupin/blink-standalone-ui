@@ -1005,6 +1005,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/paint_record_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/paint_under_invalidation_checker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/property_tree_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/raster_invalidation_tracking.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/region_capture_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/scroll_paint_property_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/scrollbar_display_item.cc
