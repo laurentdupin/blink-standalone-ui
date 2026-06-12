@@ -44,7 +44,24 @@ Current gaps:
 
 - SDL presentation/upload is not measured by the benchmark executable. Benchmark output writes BMP files, while SDL viewer upload uses CPU raster plus `SDL_UpdateTexture`.
 - Warm incremental measurements create the previous frame inside the same benchmark process, then time only the measured incremental `AdvanceAndRender` call. Warm rows also report frame-work counters that show whether lifecycle, PaintArtifact translation, raster, and presentation work ran.
-- Process startup is estimated by subprocess wall time minus benchmark `process_elapsed_ms`; this includes Python orchestration overhead and is not as precise as an in-process launcher probe.
+- `cold_presented_frame_ms` is the renderer first-frame boundary: benchmark `advance_and_render_ms` plus CPU raster replay for the measured cold page.
+- `cold_process_elapsed_ms` is a conservative in-process document boundary. It starts at the first statement in benchmark `main` and includes argument/file/resource setup, Blink embedder creation and initialization, first-page load, first renderer frame, CPU raster, BMP/audit output, and local Skia PaintRecord oracle work.
+- `cold_command_wall_ms` is the Python command/process envelope around `subprocess.Popen(...).communicate()`. It includes Python orchestration, process creation, Windows executable image load, static initialization before benchmark `main`, benchmark work, stdout/stderr draining, and process exit/teardown.
+- `cold_command_process_envelope_overhead_ms` is `cold_command_wall_ms - cold_process_elapsed_ms`. The older JSON field `process_startup_overhead_ms` carries the same value for compatibility, but that value is broader than startup alone.
+- The post-`1640521e` 262-page baseline meets the 500 ms cold renderer/document boundary by both `cold_presented_frame_ms` (max 274.15 ms) and conservative `cold_process_elapsed_ms` (max 351.24 ms). The historical command/process envelope still fails as a process-envelope metric (max 1357.28 ms).
+- A persistent benchmark process was not added for this validation pass. The current one-process-per-page corpus keeps stronger page isolation, and the focused offender shard with launch/wait instrumentation showed the failure is outside the renderer timing boundary. A persistent worker should be a separate harness refactor with explicit state-leak checks, not part of the retained raster validation closure.
+
+## SDL Retained Upload Status
+
+The checked SDL viewer path at `build/cmake-live-image-png-ninja-vs18/blink_standalone_sdl_viewer_skia.exe` now has a focused profile gate in `tools/perf/run_sdl_profile_benchmark.py`.
+
+The post-`1640521e` SDL profile run used the dummy SDL video driver and recorded:
+
+- Static no-change frames: 5/5 with no lifecycle work, no PaintArtifact translation, `damage_pixels=0`, `raster_pixels=0`, `uploaded_pixels=0`, `texture_copy_pixels=0`, `texture_update_rects=0`, and `raster_skipped=1`.
+- Retained scroll frames: 5/5 with scroll reuse, partial redraw, `damage_pixels=176640`, `raster_pixels=176640`, `uploaded_pixels=176640`, `texture_copy_pixels=944640`, and two SDL texture update rects per measured frame.
+- SDL present timing is reported as `sdl_draw_present_ms`; the latest checked-viewer profile measured scroll p95 at 0.358 ms and static no-change p95 at 0.770 ms. End-to-end profiled frame p95 was 9.521 ms for scroll and 1.566 ms for static no-change.
+
+The SDL texture update control flow keeps the skipped-raster path separate from the incremental-update path. When CPU raster is skipped, the update rect list remains empty instead of falling back to a full texture rect.
 
 ## Intended Direction
 

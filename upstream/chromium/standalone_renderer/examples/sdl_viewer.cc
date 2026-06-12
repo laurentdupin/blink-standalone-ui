@@ -441,6 +441,7 @@ void PrintUsage() {
                "[--cpu] [--skia-cpu] [--direct-sdl]"
                " [--dump-paint-artifact path]"
                " [--profile] [--profile-summary-frames count]"
+               " [--profile-no-change-frames count]"
                " [--profile-auto-scroll-frames count]"
                " [--profile-auto-scroll-step px]"
                " [--profile-wheel-burst-events count]"
@@ -487,6 +488,7 @@ bool ParseArgs(int argc,
                float* scroll_step,
                bool* profile_enabled,
                uint64_t* profile_summary_frames,
+               uint64_t* profile_no_change_frames,
                uint64_t* profile_auto_scroll_frames,
                std::optional<float>* profile_auto_scroll_step,
                uint64_t* profile_wheel_burst_events,
@@ -673,6 +675,14 @@ bool ParseArgs(int argc,
         return false;
       }
       *profile_summary_frames = static_cast<uint64_t>(parsed);
+    } else if (arg == "--profile-no-change-frames") {
+      const char* value = next_value();
+      double parsed = 0.0;
+      if (!value || !ParseDouble(value, &parsed) || parsed < 0.0) {
+        return false;
+      }
+      *profile_no_change_frames = static_cast<uint64_t>(parsed);
+      *profile_enabled = true;
     } else if (arg == "--profile-auto-scroll-frames") {
       const char* value = next_value();
       double parsed = 0.0;
@@ -998,6 +1008,7 @@ struct SdlProfileFrame {
   uint64_t raster_pixels_touched = 0;
   uint64_t uploaded_pixels = 0;
   uint64_t texture_copy_pixels = 0;
+  size_t texture_update_rect_count = 0;
   bool raster_skipped = false;
   bool partial_redraw = false;
   double input_update_ms = 0.0;
@@ -1194,6 +1205,10 @@ class SdlFrameProfiler {
     PrintMetric("texture_upload", [](const SdlProfileFrame& frame) {
       return frame.texture_upload_ms;
     });
+    PrintMetric("texture_update_rect_count",
+                [](const SdlProfileFrame& frame) {
+                  return static_cast<double>(frame.texture_update_rect_count);
+                });
     PrintMetric("direct_render", [](const SdlProfileFrame& frame) {
       return frame.direct_render_ms;
     });
@@ -1215,7 +1230,8 @@ class SdlFrameProfiler {
         "full_redraw=%d scroll_reuse=%d no_change=%d damage_rects=%zu "
         "lifecycle_count=%d translation_count=%d retained_plan_count=%d "
         "damage_pixels=%llu raster_pixels=%llu uploaded_pixels=%llu "
-        "texture_copy_pixels=%llu raster_skipped=%d partial_redraw=%d "
+        "texture_copy_pixels=%llu texture_update_rects=%zu "
+        "raster_skipped=%d partial_redraw=%d "
         "input=%.3fms blink_init=%.3fms blink_export_retained=%.3fms "
         "probe_html=%.3fms probe_style=%.3fms probe_layout=%.3fms "
         "probe_prepaint_paint=%.3fms probe_artifact=%.3fms "
@@ -1232,7 +1248,8 @@ class SdlFrameProfiler {
         static_cast<unsigned long long>(frame.raster_pixels_touched),
         static_cast<unsigned long long>(frame.uploaded_pixels),
         static_cast<unsigned long long>(frame.texture_copy_pixels),
-        frame.raster_skipped ? 1 : 0, frame.partial_redraw ? 1 : 0,
+        frame.texture_update_rect_count, frame.raster_skipped ? 1 : 0,
+        frame.partial_redraw ? 1 : 0,
         frame.input_update_ms,
         frame.blink_initialize_ms, frame.blink_export_retained_ms,
         frame.probe_html_document_setup_ms, frame.probe_style_update_ms,
@@ -2353,6 +2370,7 @@ int main(int argc, char** argv) {
   float scroll_step = 80.0f;
   bool profile_enabled = false;
   uint64_t profile_summary_frames = 0;
+  uint64_t profile_no_change_frames = 0;
   uint64_t profile_auto_scroll_frames = 0;
   std::optional<float> profile_auto_scroll_step;
   uint64_t profile_wheel_burst_events = 0;
@@ -2378,6 +2396,7 @@ int main(int argc, char** argv) {
                              &resource_base_path,
                              &attribute_toggles, &scroll_step,
                              &profile_enabled, &profile_summary_frames,
+                             &profile_no_change_frames,
                              &profile_auto_scroll_frames,
                              &profile_auto_scroll_step,
                              &profile_wheel_burst_events,
@@ -2669,6 +2688,7 @@ int main(int argc, char** argv) {
           ElapsedProfileMs(texture_upload_start, ProfileClock::now());
       initial_profile.uploaded_pixels = uploaded_pixels;
       initial_profile.texture_copy_pixels = texture_copy_pixels;
+      initial_profile.texture_update_rect_count = 1;
     }
   } else {
     direct_renderer = std::make_unique<SdlFrameRenderer>(renderer);
@@ -2824,10 +2844,17 @@ int main(int argc, char** argv) {
       if (profile) {
         pixel_convert_start = ProfileClock::now();
       }
-      std::vector<SDL_Rect> texture_update_rects =
-          TextureUpdateRectsForFrame(next_result, image,
-                                     use_incremental && !texture_size_changed &&
-                                         !skip_cpu_raster);
+      std::vector<SDL_Rect> texture_update_rects;
+      if (!skip_cpu_raster) {
+        texture_update_rects = TextureUpdateRectsForFrame(
+            next_result, image, use_incremental && !texture_size_changed);
+      }
+      if (skip_cpu_raster && !texture_update_rects.empty()) {
+        std::fprintf(stderr,
+                     "internal error: skipped raster produced texture update "
+                     "rects\n");
+        return false;
+      }
       if (profile) {
         profile_frame.pixel_convert_ms =
             ElapsedProfileMs(pixel_convert_start, ProfileClock::now());
@@ -2850,6 +2877,7 @@ int main(int argc, char** argv) {
             ElapsedProfileMs(texture_upload_start, ProfileClock::now());
         profile_frame.uploaded_pixels = uploaded_pixels;
         profile_frame.texture_copy_pixels = texture_copy_pixels;
+        profile_frame.texture_update_rect_count = texture_update_rects.size();
       }
     } else if (direct_renderer) {
       ProfileClock::time_point direct_render_start;
@@ -2902,6 +2930,8 @@ int main(int argc, char** argv) {
 
   bool running = true;
   const uint64_t start_ms = SDL_GetTicks();
+  const bool profile_no_change_requested = profile_no_change_frames > 0;
+  uint64_t profile_no_change_remaining = profile_no_change_frames;
   const bool profile_auto_scroll_requested = profile_auto_scroll_frames > 0;
   uint64_t profile_auto_scroll_remaining = profile_auto_scroll_frames;
   const float profile_auto_scroll_delta =
@@ -3057,6 +3087,7 @@ int main(int argc, char** argv) {
             ElapsedProfileMs(texture_upload_start, ProfileClock::now());
         profile_frame.uploaded_pixels = uploaded_pixels;
         profile_frame.texture_copy_pixels = texture_copy_pixels;
+        profile_frame.texture_update_rect_count = 1;
       }
     } else if (direct_renderer) {
       const int next_frame_width = std::max(
@@ -3398,7 +3429,20 @@ int main(int argc, char** argv) {
         texture_dirty = true;
       }
     }
-    if (first_present_complete && profile_auto_scroll_remaining > 0) {
+    if (first_present_complete && profile_no_change_remaining > 0) {
+      const ProfileClock::time_point input_update_start = ProfileClock::now();
+      html_css_renderer::FrameInput next_input = input;
+      const double input_update_ms =
+          ElapsedProfileMs(input_update_start, ProfileClock::now());
+      if (!render_updated_input("profile-no-change", std::move(next_input),
+                                input_update_ms, input_update_start)) {
+        running = false;
+      }
+      texture_dirty = true;
+      --profile_no_change_remaining;
+    }
+    if (first_present_complete && profile_no_change_remaining == 0 &&
+        profile_auto_scroll_remaining > 0) {
       const ProfileClock::time_point input_update_start = ProfileClock::now();
       html_css_renderer::FrameInput next_input = input;
       if (ApplyDocumentScrollDeltaFromBlinkState(
@@ -3499,13 +3543,14 @@ int main(int argc, char** argv) {
       profiler.Record(std::move(pending_profile_frame->frame));
       pending_profile_frame.reset();
     }
-    if (profile_auto_scroll_requested && first_present_complete &&
+    if ((profile_no_change_requested || profile_auto_scroll_requested) &&
+        first_present_complete && profile_no_change_remaining == 0 &&
         profile_auto_scroll_remaining == 0 && quit_after_ms == 0) {
       running = false;
     }
     if (profile_resize_requested && first_present_complete &&
-        profile_resize_done && profile_auto_scroll_remaining == 0 &&
-        quit_after_ms == 0) {
+        profile_resize_done && profile_no_change_remaining == 0 &&
+        profile_auto_scroll_remaining == 0 && quit_after_ms == 0) {
       running = false;
     }
     first_present_complete = true;

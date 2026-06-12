@@ -41,6 +41,8 @@ PLAYWRIGHT_SCRIPT = ROOT / "tools" / "playwright_screenshot.cjs"
 class CommandResult:
     code: int
     wall_ms: float
+    launch_ms: float
+    wait_ms: float
     output: str
     timed_out: bool = False
     timeout_s: int | None = None
@@ -126,6 +128,17 @@ def build_config_metadata(
     }
 
 
+def measurement_caveats() -> list[str]:
+    return [
+        "cold_command_wall_ms is Python subprocess wall time around Popen(...).communicate(); it includes process launch, executable image load, benchmark work, stdout/stderr draining, and process teardown.",
+        "cold_command_process_envelope_overhead_ms is cold_command_wall_ms minus in-process cold_process_elapsed_ms when available.",
+        "cold_process_elapsed_ms starts at the top of benchmark main and excludes Python orchestration, process launch, executable image load, static initialization before main, and process teardown.",
+        "The suite passes --min-non-white 0 because paint_audit includes intentional all-white/transparent/broken-resource fixtures; retained-vs-oracle comparison is the correctness gate.",
+        "Warm incremental invocations create the previous frame in the same benchmark child, but reported warm timings start after that setup and cover only the measured incremental AdvanceAndRender frame.",
+        "Benchmark presentation is BMP output, not SDL/GPU upload/present.",
+    ]
+
+
 def terminate_process_tree(proc: subprocess.Popen[str], timeout: int = 10) -> tuple[str, str]:
     if proc.poll() is not None:
         return "", ""
@@ -174,6 +187,8 @@ def exit_status_name(code: int) -> str:
 def run_command(cmd: list[str], log_path: Path, timeout: int) -> CommandResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     start = time.perf_counter()
+    launch_ms = 0.0
+    wait_ms = 0.0
     timed_out = False
     kill_error = ""
     kill_output = ""
@@ -181,6 +196,7 @@ def run_command(cmd: list[str], log_path: Path, timeout: int) -> CommandResult:
     if sys.platform == "win32":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
     try:
+        launch_start = time.perf_counter()
         proc = subprocess.Popen(
             cmd,
             cwd=ROOT,
@@ -189,15 +205,20 @@ def run_command(cmd: list[str], log_path: Path, timeout: int) -> CommandResult:
             stderr=subprocess.STDOUT,
             creationflags=creationflags,
         )
+        launch_ms = (time.perf_counter() - launch_start) * 1000.0
         try:
+            wait_start = time.perf_counter()
             output, _ = proc.communicate(timeout=timeout)
+            wait_ms = (time.perf_counter() - wait_start) * 1000.0
             code = proc.returncode
         except subprocess.TimeoutExpired:
             timed_out = True
             code = 124
             kill_output, kill_error = terminate_process_tree(proc)
             try:
+                wait_start = time.perf_counter()
                 output, _ = proc.communicate(timeout=2)
+                wait_ms += (time.perf_counter() - wait_start) * 1000.0
             except subprocess.TimeoutExpired:
                 kill_error = kill_error or "process did not exit after kill"
                 output = ""
@@ -213,7 +234,8 @@ def run_command(cmd: list[str], log_path: Path, timeout: int) -> CommandResult:
     wall_ms = (time.perf_counter() - start) * 1000.0
     log_path.write_text(
         f"$ {' '.join(cmd)}\n"
-        f"exit={code} wall_ms={wall_ms:.3f} timed_out={str(timed_out).lower()} timeout_s={timeout}\n\n"
+        f"exit={code} wall_ms={wall_ms:.3f} launch_ms={launch_ms:.3f} "
+        f"wait_ms={wait_ms:.3f} timed_out={str(timed_out).lower()} timeout_s={timeout}\n\n"
         f"{output}",
         encoding="utf-8",
         errors="replace",
@@ -221,6 +243,8 @@ def run_command(cmd: list[str], log_path: Path, timeout: int) -> CommandResult:
     return CommandResult(
         code=code,
         wall_ms=wall_ms,
+        launch_ms=launch_ms,
+        wait_ms=wait_ms,
         output=output,
         timed_out=timed_out,
         timeout_s=timeout if timed_out else None,
@@ -314,11 +338,17 @@ def presented_frame_ms(metrics: dict[str, Any]) -> float | None:
     return advance + raster
 
 
-def process_startup_overhead_ms(wall_ms: float, metrics: dict[str, Any]) -> float | None:
+def command_process_envelope_overhead_ms(
+    wall_ms: float, metrics: dict[str, Any]
+) -> float | None:
     process_elapsed = as_float(timing_from_metrics(metrics).get("process_elapsed_ms"))
     if process_elapsed is None:
         return None
     return max(0.0, wall_ms - process_elapsed)
+
+
+def process_startup_overhead_ms(wall_ms: float, metrics: dict[str, Any]) -> float | None:
+    return command_process_envelope_overhead_ms(wall_ms, metrics)
 
 
 def command_count(metrics: dict[str, Any]) -> int:
@@ -480,6 +510,8 @@ def run_benchmark_case(
         "timed_out": result.timed_out,
         "timeout_s": result.timeout_s,
         "wall_ms": result.wall_ms,
+        "command_launch_ms": result.launch_ms,
+        "command_wait_ms": result.wait_ms,
         "log": rel(final_log_path),
         "image": rel(out_path) if out_path.exists() else "",
         "metrics_json": rel(json_path) if json_path.exists() else "",
@@ -490,6 +522,9 @@ def run_benchmark_case(
         "probe_timing": raw_probe_timing(metrics),
         "frame_work": frame_work(metrics),
         "presented_frame_ms": presented_frame_ms(metrics),
+        "command_process_envelope_overhead_ms": command_process_envelope_overhead_ms(
+            result.wall_ms, metrics
+        ),
         "process_startup_overhead_ms": process_startup_overhead_ms(result.wall_ms, metrics),
         "real_blink_paint": has_real_blink_paint(metrics),
         "missing_resource_count": metrics.get("missing_resource_count", None),
@@ -505,6 +540,8 @@ def run_benchmark_case(
                 "timed_out": attempt.timed_out,
                 "timeout_s": attempt.timeout_s,
                 "wall_ms": attempt.wall_ms,
+                "command_launch_ms": attempt.launch_ms,
+                "command_wait_ms": attempt.wait_ms,
                 "log": rel(case_dir / (f"{mode}.log" if index == 0 else f"{mode}-retry{index}.log")),
                 "kill_error": attempt.kill_error,
                 "kill_output": attempt.kill_output,
@@ -592,6 +629,9 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     cold_rows = [row for row in rows if row.get("cold", {}).get("exit_code") == 0]
     values_by_key: dict[str, list[float]] = {
         "cold_presented_frame_ms": [],
+        "cold_command_launch_ms": [],
+        "cold_command_wait_ms": [],
+        "cold_command_process_envelope_overhead_ms": [],
         "cold_process_startup_overhead_ms": [],
         "cold_process_elapsed_ms": [],
         "cold_command_wall_ms": [],
@@ -628,6 +668,22 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 values_by_key[metric_key].append(value)
         if cold.get("presented_frame_ms") is not None:
             values_by_key["cold_presented_frame_ms"].append(float(cold["presented_frame_ms"]))
+        for metric_key, source_key in [
+            ("cold_command_launch_ms", "command_launch_ms"),
+            ("cold_command_wait_ms", "command_wait_ms"),
+        ]:
+            value = as_float(cold.get(source_key))
+            if value is not None:
+                values_by_key[metric_key].append(value)
+        envelope_value = as_float(
+            cold.get("command_process_envelope_overhead_ms")
+        )
+        if envelope_value is None:
+            envelope_value = as_float(cold.get("process_startup_overhead_ms"))
+        if envelope_value is not None:
+            values_by_key["cold_command_process_envelope_overhead_ms"].append(
+                envelope_value
+            )
         if cold.get("process_startup_overhead_ms") is not None:
             values_by_key["cold_process_startup_overhead_ms"].append(
                 float(cold["process_startup_overhead_ms"])
@@ -706,6 +762,21 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for mode in warm_no_change_rows
         if nested(mode, "timing", "cpu_raster_replay_skipped", default=False)
     )
+    warm_no_change_full_redraw_count = sum(
+        1
+        for mode in warm_no_change_rows
+        if nested(mode, "metrics", "render_result", "requires_full_redraw", default=False)
+    )
+    warm_no_change_partial_raster_count = sum(
+        1
+        for mode in warm_no_change_rows
+        if nested(mode, "timing", "partial_raster", default=False)
+    )
+    warm_no_change_static_rows = [
+        mode
+        for mode in warm_no_change_rows
+        if not nested(mode, "frame_work", "needs_begin_frame", default=False)
+    ]
     warm_no_change_raster_pixels_touched = sum(
         int(nested(mode, "timing", "raster_pixels_touched", default=0) or 0)
         for mode in warm_no_change_rows
@@ -721,6 +792,29 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     warm_no_change_fast_path_damage_pixels = sum(
         int(nested(mode, "timing", "damage_pixels", default=0) or 0)
         for mode in warm_no_change_fast_path_rows
+    )
+    warm_no_change_static_raster_pixels_touched = sum(
+        int(nested(mode, "timing", "raster_pixels_touched", default=0) or 0)
+        for mode in warm_no_change_static_rows
+    )
+    warm_no_change_static_damage_pixels = sum(
+        int(nested(mode, "timing", "damage_pixels", default=0) or 0)
+        for mode in warm_no_change_static_rows
+    )
+    warm_no_change_static_raster_skipped_count = sum(
+        1
+        for mode in warm_no_change_static_rows
+        if nested(mode, "timing", "cpu_raster_replay_skipped", default=False)
+    )
+    warm_no_change_static_full_redraw_count = sum(
+        1
+        for mode in warm_no_change_static_rows
+        if nested(mode, "metrics", "render_result", "requires_full_redraw", default=False)
+    )
+    warm_no_change_static_partial_raster_count = sum(
+        1
+        for mode in warm_no_change_static_rows
+        if nested(mode, "timing", "partial_raster", default=False)
     )
     warm_scroll_rows = [
         row.get("warm_scroll")
@@ -769,6 +863,30 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         for mode in warm_scroll_rows
         if nested(mode, "timing", "partial_raster", default=False)
     )
+    warm_attr_toggle_rows = [
+        row.get("warm_attr_toggle")
+        for row in rows
+        if isinstance(row.get("warm_attr_toggle"), dict)
+        and row.get("warm_attr_toggle", {}).get("exit_code") == 0
+    ]
+    warm_attr_toggle_full_redraw_count = sum(
+        1
+        for mode in warm_attr_toggle_rows
+        if nested(mode, "metrics", "render_result", "requires_full_redraw", default=False)
+    )
+    warm_attr_toggle_partial_raster_count = sum(
+        1
+        for mode in warm_attr_toggle_rows
+        if nested(mode, "timing", "partial_raster", default=False)
+    )
+    warm_attr_toggle_raster_pixels_touched = sum(
+        int(nested(mode, "timing", "raster_pixels_touched", default=0) or 0)
+        for mode in warm_attr_toggle_rows
+    )
+    warm_attr_toggle_damage_pixels = sum(
+        int(nested(mode, "timing", "damage_pixels", default=0) or 0)
+        for mode in warm_attr_toggle_rows
+    )
     return {
         "page_count": len(rows),
         "cold_success_count": len(cold_rows),
@@ -782,10 +900,18 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "warm_no_change_paint_translation_count": warm_no_change_translation_count,
         "warm_no_change_lifecycle_count": warm_no_change_lifecycle_count,
         "warm_no_change_raster_skipped_count": warm_no_change_raster_skipped_count,
+        "warm_no_change_full_redraw_count": warm_no_change_full_redraw_count,
+        "warm_no_change_partial_raster_count": warm_no_change_partial_raster_count,
         "warm_no_change_raster_pixels_touched": warm_no_change_raster_pixels_touched,
         "warm_no_change_damage_pixels": warm_no_change_damage_pixels,
         "warm_no_change_fast_path_raster_pixels_touched": warm_no_change_fast_path_raster_pixels_touched,
         "warm_no_change_fast_path_damage_pixels": warm_no_change_fast_path_damage_pixels,
+        "warm_no_change_static_count": len(warm_no_change_static_rows),
+        "warm_no_change_static_raster_skipped_count": warm_no_change_static_raster_skipped_count,
+        "warm_no_change_static_full_redraw_count": warm_no_change_static_full_redraw_count,
+        "warm_no_change_static_partial_raster_count": warm_no_change_static_partial_raster_count,
+        "warm_no_change_static_raster_pixels_touched": warm_no_change_static_raster_pixels_touched,
+        "warm_no_change_static_damage_pixels": warm_no_change_static_damage_pixels,
         "warm_scroll_count": len(warm_scroll_rows),
         "warm_scroll_reuse_count": warm_scroll_reuse_count,
         "warm_scroll_full_redraw_count": warm_scroll_full_redraw_count,
@@ -795,6 +921,11 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "warm_scroll_raster_pixels_touched": warm_scroll_raster_pixels_touched,
         "warm_scroll_damage_pixels": warm_scroll_damage_pixels,
         "warm_scroll_partial_raster_count": warm_scroll_partial_raster_count,
+        "warm_attr_toggle_count": len(warm_attr_toggle_rows),
+        "warm_attr_toggle_full_redraw_count": warm_attr_toggle_full_redraw_count,
+        "warm_attr_toggle_raster_pixels_touched": warm_attr_toggle_raster_pixels_touched,
+        "warm_attr_toggle_damage_pixels": warm_attr_toggle_damage_pixels,
+        "warm_attr_toggle_partial_raster_count": warm_attr_toggle_partial_raster_count,
         "stats": {key: stats(value) for key, value in values_by_key.items()},
         "slowest_20": [
             {
@@ -817,6 +948,32 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 reverse=True,
             )[:20]
         ],
+        "slowest_command_wall_20": [
+            {
+                "name": row["name"],
+                "cold_command_wall_ms": row.get("cold", {}).get("wall_ms"),
+                "cold_process_elapsed_ms": nested(
+                    row.get("cold", {}), "timing", "process_elapsed_ms"
+                ),
+                "cold_command_process_envelope_overhead_ms": row.get(
+                    "cold", {}
+                ).get("command_process_envelope_overhead_ms")
+                or row.get("cold", {}).get("process_startup_overhead_ms"),
+                "cold_command_launch_ms": row.get("cold", {}).get(
+                    "command_launch_ms"
+                ),
+                "cold_command_wait_ms": row.get("cold", {}).get("command_wait_ms"),
+                "cold_presented_frame_ms": row.get("cold", {}).get(
+                    "presented_frame_ms"
+                ),
+                "correctness": row.get("correctness", {}).get("diff_classification"),
+            }
+            for row in sorted(
+                cold_rows,
+                key=lambda item: float(item.get("cold", {}).get("wall_ms") or -1),
+                reverse=True,
+            )[:20]
+        ],
     }
 
 
@@ -825,6 +982,10 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     fields = [
         "name",
         "cold_exit",
+        "cold_command_wall_ms",
+        "cold_command_launch_ms",
+        "cold_command_wait_ms",
+        "cold_command_process_envelope_overhead_ms",
         "cold_presented_frame_ms",
         "process_elapsed_ms",
         "advance_and_render_ms",
@@ -878,6 +1039,13 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
                 {
                     "name": row.get("name"),
                     "cold_exit": cold.get("exit_code"),
+                    "cold_command_wall_ms": cold.get("wall_ms"),
+                    "cold_command_launch_ms": cold.get("command_launch_ms"),
+                    "cold_command_wait_ms": cold.get("command_wait_ms"),
+                    "cold_command_process_envelope_overhead_ms": cold.get(
+                        "command_process_envelope_overhead_ms"
+                    )
+                    or cold.get("process_startup_overhead_ms"),
                     "cold_presented_frame_ms": cold.get("presented_frame_ms"),
                     "process_elapsed_ms": nested(cold, "timing", "process_elapsed_ms"),
                     "advance_and_render_ms": nested(cold, "timing", "advance_and_render_ms"),
@@ -1055,7 +1223,7 @@ def merge_reports(
         "viewport": first.get("viewport", ""),
         "device_scale_factor": first.get("device_scale_factor", 1),
         "resource_root_policy": first.get("resource_root_policy", ""),
-        "measurement_caveats": first.get("measurement_caveats", []),
+        "measurement_caveats": measurement_caveats(),
         "merged_from": [rel(path) for path in inputs],
         "summary": summarize(pages),
         "pages": pages,
@@ -1107,6 +1275,35 @@ def markdown_table(rows: list[dict[str, Any]]) -> str:
                     fmt(row.get("prepaint_paint_lifecycle_ms")),
                     fmt(row.get("paint_artifact_extraction_ms")),
                     str(row.get("retained_command_count", "")),
+                    str(row.get("correctness", "")),
+                ]
+            )
+            + " |"
+        )
+    return "\n".join(lines)
+
+
+def command_wall_markdown_table(rows: list[dict[str, Any]]) -> str:
+    lines = [
+        "| Page | Command wall ms | Process elapsed ms | Envelope overhead ms | Launch ms | Wait ms | Presented ms | Correctness |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for row in rows:
+        def fmt(value: Any) -> str:
+            number = as_float(value)
+            return "" if number is None else f"{number:.2f}"
+
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    str(row.get("name", "")),
+                    fmt(row.get("cold_command_wall_ms")),
+                    fmt(row.get("cold_process_elapsed_ms")),
+                    fmt(row.get("cold_command_process_envelope_overhead_ms")),
+                    fmt(row.get("cold_command_launch_ms")),
+                    fmt(row.get("cold_command_wait_ms")),
+                    fmt(row.get("cold_presented_frame_ms")),
                     str(row.get("correctness", "")),
                 ]
             )
@@ -1171,6 +1368,22 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
     summary = report["summary"]
     generated = report["generated_at"]
     rows = report["pages"]
+    stats_by_key = summary.get("stats", {})
+    cold_presented_max = as_float(
+        stats_by_key.get("cold_presented_frame_ms", {}).get("max_ms")
+    )
+    cold_process_elapsed_max = as_float(
+        stats_by_key.get("cold_process_elapsed_ms", {}).get("max_ms")
+    )
+    cold_command_wall_max = as_float(
+        stats_by_key.get("cold_command_wall_ms", {}).get("max_ms")
+    )
+
+    def boundary_status(value: float | None, limit_ms: float = 500.0) -> str:
+        if value is None:
+            return "not measured"
+        return "PASS" if value < limit_ms else "FAIL"
+
     lines = [
         "# Standalone Renderer Performance Baseline",
         "",
@@ -1202,18 +1415,106 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
         f"- Real Blink PaintArtifact successes: `{summary['real_blink_paint_count']}`",
         f"- Correctness failures against Skia PaintRecord oracle: `{summary['correctness_failure_count']}`",
         "",
+        "## Timing Boundaries",
+        "",
+        "`cold_presented_frame_ms` is the first presented renderer frame: benchmark `advance_and_render_ms` plus CPU raster replay for the measured cold page. It excludes BMP/JSON output, oracle output, Python orchestration, process launch, executable image load, static initialization before `main`, stdout/stderr draining, and process teardown.",
+        "",
+        "`cold_process_elapsed_ms` is a conservative in-process benchmark wall clock from the first statement in benchmark `main` to the final metrics point. It includes argument and file setup, resource setup, Blink embedder creation and initialization, first-page load, first renderer frame, CPU raster, BMP/audit output, and local Skia PaintRecord oracle work. It excludes Python orchestration, process launch, executable image load, static initialization before `main`, final metrics JSON write, stdout/stderr draining, and process teardown.",
+        "",
+        "`cold_command_wall_ms` is the Python harness wall clock around `subprocess.Popen(...).communicate()`. It includes Python orchestration, process creation, Windows executable image load, static initialization before benchmark `main`, benchmark work, stdout/stderr draining, and process exit/teardown. It is retained as a process-envelope metric and is not the renderer/document cold-load boundary.",
+        "",
+        "`cold_command_process_envelope_overhead_ms` is `cold_command_wall_ms - cold_process_elapsed_ms`. The legacy `process_startup_overhead_ms` JSON field carries the same value for older readers, but the overhead is broader than process startup alone.",
+        "",
+        (
+            f"- Renderer first-frame boundary: `{boundary_status(cold_presented_max)}` "
+            f"(max `cold_presented_frame_ms` "
+            f"{'' if cold_presented_max is None else f'{cold_presented_max:.2f} ms'})."
+        ),
+        (
+            f"- Conservative in-process document boundary: `{boundary_status(cold_process_elapsed_max)}` "
+            f"(max `cold_process_elapsed_ms` "
+            f"{'' if cold_process_elapsed_max is None else f'{cold_process_elapsed_max:.2f} ms'})."
+        ),
+        (
+            f"- Historical command/process envelope boundary: `{boundary_status(cold_command_wall_max)}` "
+            f"(max `cold_command_wall_ms` "
+            f"{'' if cold_command_wall_max is None else f'{cold_command_wall_max:.2f} ms'})."
+        ),
+        "",
         "## Aggregate Timings",
         "",
         "| Metric | Count | p50 ms | p95 ms | max ms |",
         "| --- | ---: | ---: | ---: | ---: |",
     ]
     for key, value in summary["stats"].items():
+        if value["count"] == 0:
+            continue
         p50 = "" if value["p50_ms"] is None else f"{value['p50_ms']:.2f}"
         p95 = "" if value["p95_ms"] is None else f"{value['p95_ms']:.2f}"
         max_value = "" if value["max_ms"] is None else f"{value['max_ms']:.2f}"
         lines.append(
             f"| `{key}` | {value['count']} | {p50} | {p95} | {max_value} |"
         )
+    lines.extend(
+        [
+            "",
+            "## Slowest 20 Command-Wall Rows",
+            "",
+            (
+                "Launch/wait columns are blank when the source result JSON predates command phase instrumentation."
+                if stats_by_key.get("cold_command_launch_ms", {}).get("count", 0) == 0
+                else "Launch time is the synchronous `Popen` call; wait time is `communicate()` after launch returns."
+            ),
+            "",
+            command_wall_markdown_table(summary.get("slowest_command_wall_20", [])),
+            "",
+            "## Retained Raster And Redraw Counters",
+            "",
+            "| Mode | Count | full_redraw_count | partial_redraw_count | raster_skipped_count | raster_pixels_touched | damage_pixels | Notes |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            (
+                f"| `warm_no_change_presented_frame` | "
+                f"{summary.get('warm_no_change_count', 0)} | "
+                f"{summary.get('warm_no_change_full_redraw_count', 0)} | "
+                f"{summary.get('warm_no_change_partial_raster_count', 0)} | "
+                f"{summary.get('warm_no_change_raster_skipped_count', 0)} | "
+                f"{summary.get('warm_no_change_raster_pixels_touched', 0)} | "
+                f"{summary.get('warm_no_change_damage_pixels', 0)} | "
+                "Includes active-animation pages with `needs_begin_frame=true`. |"
+            ),
+            (
+                f"| `warm_no_change_static_only` | "
+                f"{summary.get('warm_no_change_static_count', 0)} | "
+                f"{summary.get('warm_no_change_static_full_redraw_count', 0)} | "
+                f"{summary.get('warm_no_change_static_partial_raster_count', 0)} | "
+                f"{summary.get('warm_no_change_static_raster_skipped_count', 0)} | "
+                f"{summary.get('warm_no_change_static_raster_pixels_touched', 0)} | "
+                f"{summary.get('warm_no_change_static_damage_pixels', 0)} | "
+                "Rows with `needs_begin_frame=false`; this is the hard no-change gate. |"
+            ),
+            (
+                f"| `warm_scroll_presented_frame` | "
+                f"{summary.get('warm_scroll_count', 0)} | "
+                f"{summary.get('warm_scroll_full_redraw_count', 0)} | "
+                f"{summary.get('warm_scroll_partial_raster_count', 0)} | 0 | "
+                f"{summary.get('warm_scroll_raster_pixels_touched', 0)} | "
+                f"{summary.get('warm_scroll_damage_pixels', 0)} | "
+                f"Retained scroll reuse count: {summary.get('warm_scroll_reuse_count', 0)}. |"
+            ),
+            (
+                f"| `warm_attr_toggle_presented_frame` | "
+                f"{summary.get('warm_attr_toggle_count', 0)} | "
+                f"{summary.get('warm_attr_toggle_full_redraw_count', 0)} | "
+                f"{summary.get('warm_attr_toggle_partial_raster_count', 0)} | 0 | "
+                f"{summary.get('warm_attr_toggle_raster_pixels_touched', 0)} | "
+                f"{summary.get('warm_attr_toggle_damage_pixels', 0)} | "
+                "Attribute invalidation and partial raster coverage. |"
+            ),
+            "",
+            "`partial_redraw_count` is the count of frames reporting `partial_raster=true` in the benchmark timing diagnostics.",
+            "",
+        ]
+    )
     lines.extend(["", "## Slowest 20 Cold Presented Frames", "", markdown_table(summary["slowest_20"]), ""])
     lines.extend(
         [
@@ -1232,7 +1533,8 @@ def write_baseline_doc(path: Path, report: dict[str, Any]) -> None:
         ]
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n".join(lines))
 
 
 def make_row(
@@ -1493,12 +1795,7 @@ def main() -> int:
         "viewport": args.viewport,
         "device_scale_factor": 1,
         "resource_root_policy": "paint_audit root is passed as --resource-root for every page",
-        "measurement_caveats": [
-            "Benchmark process startup is measured as subprocess wall time minus in-process process_elapsed_ms when available.",
-            "The suite passes --min-non-white 0 because paint_audit includes intentional all-white/transparent/broken-resource fixtures; retained-vs-oracle comparison is the correctness gate.",
-            "Warm incremental invocations create the previous frame in the same benchmark child, but reported warm timings start after that setup and cover only the measured incremental AdvanceAndRender frame.",
-            "Benchmark presentation is BMP output, not SDL/GPU upload/present.",
-        ],
+        "measurement_caveats": measurement_caveats(),
         "summary": summary,
         "pages": rows,
     }

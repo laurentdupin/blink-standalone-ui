@@ -126,7 +126,9 @@ Known limitations:
 
 - Text draw payload extraction is not complete; the current SDL path uses live
   PaintArtifact metadata and a transitional text bridge.
-- Blink animation time is not wired to standalone `FrameInput` yet.
+- Blink animation time is wired through standalone `FrameInput` for
+  deterministic snapshots and SDL animation ticks, but this is still the
+  retained Skia CPU path rather than the Chromium compositor animation path.
 - The Blink target is still being reduced and may expose additional
   link blockers as more Blink paint/layout code is enabled.
 

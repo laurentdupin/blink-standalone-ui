@@ -31,6 +31,13 @@ The checked/current benchmark keeps the historical measurement-hostile defines:
 - CMake option: `BLINK_STANDALONE_PERF_BUILD=ON`
 - SDL viewer: disabled for this preset with `BLINK_STANDALONE_BUILD_SDL_VIEWER=OFF`
 
+Current post-`1640521e` cache check after the Release crash-boundary matrix:
+
+- `BLINK_STANDALONE_OPTIMIZE_CHROMIUM=ON`
+- `BLINK_STANDALONE_OPTIMIZE_CODECS=ON`
+- `BLINK_STANDALONE_OPTIMIZE_BOUNDARY=ON`
+- `BLINK_STANDALONE_OPTIMIZE_APP=ON`
+
 The perf preset removes these forced benchmark-hostile defines from the benchmark target:
 
 - `SK_ENABLE_OPTIMIZE_SIZE=1`
@@ -38,7 +45,7 @@ The perf preset removes these forced benchmark-hostile defines from the benchmar
 - `SKCMS_DISABLE_HSW=1`
 - `SKCMS_DISABLE_SKX=1`
 
-The perf preset still keeps `DCHECK_ALWAYS_ON=1`. A no-DCHECK build is not wired yet: testing the perf preset without that define in this workspace fails while compiling `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` because `base::subtle::RefCountedBase::CalledOnValidSequence` and the out-of-line `RefCountedBase` destructor no longer match declarations when debug-only declarations are compiled out. Removing that define safely requires a separate narrow compatibility pass, not broad Blink-core edits during this configuration milestone.
+The perf preset still keeps `DCHECK_ALWAYS_ON=1`. A no-DCHECK build is not wired yet: prior testing of the perf preset without that define in this workspace failed while compiling `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` because `base::subtle::RefCountedBase::CalledOnValidSequence` and the out-of-line `RefCountedBase` destructor no longer matched declarations when debug-only declarations were compiled out. This status was not changed during the post-`1640521e` validation pass; removing that define safely still requires a separate narrow compatibility pass, not broad Blink-core edits during this configuration milestone.
 
 ## Chromium Comparison Notes
 
@@ -59,8 +66,21 @@ The comparison below is based on the Chromium sources vendored under `upstream/c
 - The live Blink bridge invalidates its probe cache per render in `TryReplaceWithLivePaintArtifactScene`, so cold and warm timings include extra cache churn.
 - The benchmark performs a full lifecycle per render invocation. Warm incremental modes currently build the previous frame inside the same process before the measured frame.
 - Benchmark presentation writes BMP files, while SDL viewer presentation includes Skia CPU raster plus CPU texture upload through SDL.
-- Process startup in the perf suite is estimated from subprocess wall time minus in-process elapsed time and includes Python orchestration overhead.
+- `cold_command_wall_ms` is the Python command/process envelope around `subprocess.Popen(...).communicate()`. It includes process creation, Windows executable image load, static initialization before benchmark `main`, benchmark work, stdout/stderr draining, and process exit/teardown.
+- `cold_command_process_envelope_overhead_ms` is `cold_command_wall_ms - cold_process_elapsed_ms`. The legacy `process_startup_overhead_ms` JSON field carries the same value for older readers.
 - Resource-backed pages depend on the `--resource-root` path passed to the benchmark. The perf suite passes the paint audit root by default.
+- The post-`1640521e` validation pass found the cold renderer/document boundary below 500 ms across the 262-page corpus: max `cold_presented_frame_ms` 274.15 ms and max `cold_process_elapsed_ms` 351.24 ms. The historical command/process envelope still fails as a separate host-process metric: max `cold_command_wall_ms` 1357.28 ms.
+- A focused offender shard generated after command phase instrumentation showed launch/wait overhead outside the renderer path: 8 pages, max `cold_process_elapsed_ms` 259.60 ms, max `cold_command_launch_ms` 640.83 ms, max `cold_command_wait_ms` 725.12 ms, and max `cold_command_wall_ms` 1265.50 ms.
+
+## Diagnostic Optimization Matrix
+
+The Release crash-boundary validation temporarily rebuilt `x64-Perf` with one optimization group disabled at a time:
+
+- `BLINK_STANDALONE_OPTIMIZE_BOUNDARY=OFF`
+- `BLINK_STANDALONE_OPTIMIZE_CODECS=OFF`
+- `BLINK_STANDALONE_OPTIMIZE_CHROMIUM=OFF`
+
+Those `/Od` variants are diagnostic boundaries only. They are not accepted performance solutions and the primary `x64-Perf` build was restored to all optimization groups enabled after the matrix.
 
 ## Commands
 
