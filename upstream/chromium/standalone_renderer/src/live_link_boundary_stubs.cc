@@ -15790,10 +15790,6 @@ scoped_refptr<AnimationTimeline> AnimationTimeline::Create(int, bool) {
 }
 void AnimationTimeline::AttachAnimation(scoped_refptr<Animation>) {}
 void AnimationTimeline::DetachAnimation(scoped_refptr<Animation>) {}
-int AnimationIdProvider::NextTimelineId() {
-  static int next_timeline_id = 1;
-  return next_timeline_id++;
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 Region::Region() = default;
 Region::Region(const Region&) = default;
