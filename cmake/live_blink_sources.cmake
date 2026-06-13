@@ -1146,6 +1146,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/cubic_bezier.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/decomposed_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/insets_f.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/mask_filter_info.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/matrix44.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/point3_f.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/point_f.cc
