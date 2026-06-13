@@ -5,6 +5,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/alias.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/crash_logging.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/dump_without_crashing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/hash/hash.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/case_conversion.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/i18n_constants.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
@@ -31,6 +32,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/default_clock.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/cityhash/city.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum-dtoa.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/cached-powers.cc
@@ -39,6 +41,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/fixed-dtoa.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/string-to-double.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/strtod.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/superfasthash/superfasthash.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_usage_estimator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/value_iterators.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/values.cc

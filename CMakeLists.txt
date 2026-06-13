@@ -393,7 +393,7 @@ add_executable(blink_standalone_render_benchmark_skia
   if(MSVC)
     target_compile_options(blink_standalone_render_benchmark_skia PRIVATE
       /MP8
-      /FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h
+      "$<$<COMPILE_LANGUAGE:CXX>:/FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h>"
       /bigobj
       /permissive-
       /Zc:__cplusplus
@@ -503,7 +503,7 @@ add_executable(blink_standalone_render_benchmark_skia
 
     if(MSVC)
       target_compile_options(blink_standalone_sdl_viewer_skia PRIVATE
-        /FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h
+        "$<$<COMPILE_LANGUAGE:CXX>:/FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h>"
         /bigobj
         /MP8
         /permissive-

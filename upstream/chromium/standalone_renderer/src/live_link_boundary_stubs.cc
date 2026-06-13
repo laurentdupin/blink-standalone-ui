@@ -14748,20 +14748,6 @@ const UnguessableToken& UnguessableToken::Null() {
   static const UnguessableToken* token = new UnguessableToken();
   return *token;
 }
-uint64_t FastHash(span<const uint8_t>) {
-  return 0;
-}
-uint32_t PersistentHash(std::string_view value) {
-  uint32_t hash = 2166136261u;
-  for (char ch : value) {
-    hash ^= static_cast<unsigned char>(ch);
-    hash *= 16777619u;
-  }
-  return hash;
-}
-uint64_t HashInts64(uint64_t a, uint64_t b) {
-  return a ^ (b + 0x9e3779b97f4a7c15ull + (a << 6) + (a >> 2));
-}
 void* AlignedAlloc(size_t size, size_t alignment) {
   return allocator_shim::UncheckedAlignedAlloc(size, alignment);
 }
