@@ -319,6 +319,7 @@ add_executable(blink_standalone_render_benchmark_skia
   target_include_directories(blink_standalone_render_benchmark_skia PRIVATE
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
     ${BLINK_STANDALONE_CHROMIUM_ROOT}
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/overrides
@@ -429,6 +430,7 @@ add_executable(blink_standalone_render_benchmark_skia
     target_include_directories(blink_standalone_sdl_viewer_skia PRIVATE
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
       ${BLINK_STANDALONE_CHROMIUM_ROOT}
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/overrides
