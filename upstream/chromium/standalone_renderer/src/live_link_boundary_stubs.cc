@@ -14846,13 +14846,6 @@ LockImpl::~LockImpl() = default;
 void LockImpl::LockInternal() {
   ::AcquireSRWLockExclusive(&native_handle_);
 }
-BindStateHolder& BindStateHolder::operator=(const BindStateHolder& other) =
-    default;
-BindStateHolder::BindStateHolder(const BindStateHolder& other) = default;
-BindStateHolder::~BindStateHolder() = default;
-void BindStateHolder::Reset() {
-  bind_state_ = nullptr;
-}
 }  // namespace internal
 bool TimeTicks::IsHighResolution() {
   return false;
@@ -21781,35 +21774,6 @@ ScopedValidateSequenceChecker::ScopedValidateSequenceChecker(
 ScopedValidateSequenceChecker::~ScopedValidateSequenceChecker() = default;
 #endif
 }  // namespace base
-
-namespace base::internal {
-namespace {
-bool StandaloneQueryCancellationTraits(
-    const BindStateBase*,
-    BindStateBase::CancellationQueryMode mode) {
-  return std::to_underlying(mode);
-}
-}  // namespace
-BindStateBase::BindStateBase(InvokeFuncStorage invoke, DestructorPtr destructor)
-    : BindStateBase(invoke, destructor, &StandaloneQueryCancellationTraits) {}
-BindStateBase::BindStateBase(InvokeFuncStorage invoke,
-                             DestructorPtr destructor,
-                             QueryCancellationTraitsPtr query)
-    : polymorphic_invoke_(invoke),
-      destructor_(destructor),
-      query_cancellation_traits_(query) {}
-BindStateHolder& BindStateHolder::operator=(BindStateHolder&&) noexcept =
-    default;
-bool BindStateHolder::IsCancelled() const {
-  return bind_state_ && bind_state_->IsCancelled();
-}
-bool BindStateHolder::MaybeValid() const {
-  return bind_state_ && bind_state_->MaybeValid();
-}
-void BindStateBaseRefCountTraits::Destruct(const BindStateBase* state) {
-  delete state;
-}
-}  // namespace base::internal
 
 namespace base::trace_event {
 bool ConvertableToTraceFormat::AppendToProto(ProtoAppender*) const {
