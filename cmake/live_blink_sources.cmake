@@ -1177,6 +1177,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/transform_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/triangle_f.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/vector2d_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/vector2d_f.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/vector3d_f.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/lock.cc

@@ -14391,14 +14391,6 @@ std::string Vector2d::ToString() const {
 Vector2d operator-(const Vector2d& vector) {
   return Vector2d(-vector.x(), -vector.y());
 }
-Vector2d ToRoundedVector2d(const Vector2dF& vector) {
-  return Vector2d(static_cast<int>(std::round(vector.x())),
-                  static_cast<int>(std::round(vector.y())));
-}
-Vector2d ToFlooredVector2d(const Vector2dF& vector) {
-  return Vector2d(static_cast<int>(std::floor(vector.x())),
-                  static_cast<int>(std::floor(vector.y())));
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 Size ScaleToFlooredSize(const Size& size, float scale) {
   return Size(static_cast<int>(std::floor(size.width() * scale)),
