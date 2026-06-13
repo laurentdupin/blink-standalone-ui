@@ -85,6 +85,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/recording_source.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/touch_action_region.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/raster/raster_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/compositor_commit_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/clip_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/occlusion.cc
