@@ -14607,10 +14607,6 @@ std::string TracedValueJSON::ToFormattedJSON() const {
 }
 void ConvertableToTraceFormat::Add(
     perfetto::protos::pbzero::DebugAnnotation*) const {}
-uint64_t GetNextGlobalTraceId() {
-  static uint64_t next = 1;
-  return next++;
-}
 MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
     const std::string&) {
   return nullptr;
