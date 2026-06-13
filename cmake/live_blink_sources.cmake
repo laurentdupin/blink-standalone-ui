@@ -12,6 +12,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/string_escape.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/weak_ptr.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_internal.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_types.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pickle.cc

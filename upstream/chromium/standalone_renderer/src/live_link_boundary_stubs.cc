@@ -14849,34 +14849,6 @@ LockImpl::~LockImpl() = default;
 void LockImpl::LockInternal() {
   ::AcquireSRWLockExclusive(&native_handle_);
 }
-WeakReferenceOwner::WeakReferenceOwner() = default;
-WeakReferenceOwner::~WeakReferenceOwner() = default;
-WeakReference WeakReferenceOwner::GetRef() const {
-  return WeakReference();
-}
-WeakReference::WeakReference() = default;
-WeakReference::WeakReference(const WeakReference& other)
-    : flag_(other.flag_) {}
-WeakReference::WeakReference(WeakReference&& other) noexcept
-    : flag_(std::move(other.flag_)) {}
-WeakReference::~WeakReference() = default;
-WeakReference& WeakReference::operator=(WeakReference&& other) noexcept {
-  flag_ = std::move(other.flag_);
-  return *this;
-}
-void WeakReference::Reset() {
-  flag_ = nullptr;
-}
-bool WeakReference::IsValid() const {
-  return MaybeValid();
-}
-bool WeakReference::MaybeValid() const {
-  return !flag_ || flag_->MaybeValid();
-}
-bool WeakReference::Flag::MaybeValid() const {
-  return true;
-}
-WeakReference::Flag::~Flag() = default;
 BindStateHolder& BindStateHolder::operator=(const BindStateHolder& other) =
     default;
 BindStateHolder::BindStateHolder(const BindStateHolder& other) = default;
@@ -14884,8 +14856,6 @@ BindStateHolder::~BindStateHolder() = default;
 void BindStateHolder::Reset() {
   bind_state_ = nullptr;
 }
-WeakPtrFactoryBase::WeakPtrFactoryBase(uintptr_t ptr) : ptr_(ptr) {}
-WeakPtrFactoryBase::~WeakPtrFactoryBase() = default;
 }  // namespace internal
 bool TimeTicks::IsHighResolution() {
   return false;
