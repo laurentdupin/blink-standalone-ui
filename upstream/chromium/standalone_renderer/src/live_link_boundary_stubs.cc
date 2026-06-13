@@ -21605,15 +21605,6 @@ DiscardableMemoryAllocator::AllocateLockedDiscardableMemoryWithRetryOrDie(
 std::string CommandLine::GetSwitchValueASCII(std::string_view) const {
   return std::string();
 }
-void StringAppendV(std::string* dst, const char* format, va_list ap) {
-  if (!dst || !format)
-    return;
-  char buffer[2048];
-  int written = vsnprintf(buffer, sizeof(buffer), format, ap);
-  if (written > 0)
-    dst->append(buffer, static_cast<size_t>(
-                            std::min<int>(written, sizeof(buffer) - 1)));
-}
 }  // namespace base
 
 namespace base::trace_event {

@@ -19,9 +19,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pickle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/scoped_clear_last_error_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/simdutf_shim.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/escape.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/strcat.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/stringprintf.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_split.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_number_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_util.cc
