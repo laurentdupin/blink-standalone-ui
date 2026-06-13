@@ -88,6 +88,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/local_surface_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/region_capture_bounds.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/surface_id.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/surface_range.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/mailbox.cc
