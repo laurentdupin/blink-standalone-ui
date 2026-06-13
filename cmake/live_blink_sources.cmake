@@ -71,6 +71,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/values.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/animation/animation_id_provider.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/debug/debug_colors.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/debug/layer_tree_debug_state.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/hit_test_opaqueness.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/layer_selection_bound.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_snap_data.cc
