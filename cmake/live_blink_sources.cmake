@@ -1,6 +1,7 @@
 set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base64.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/dispatcher/reentry_guard.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_is_test.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_op.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/callback_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/containers/linked_list.cc
