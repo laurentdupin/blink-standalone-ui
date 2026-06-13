@@ -2049,6 +2049,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkResourceCache.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/image/SkSurface_Base.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkSpecialImage.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkEventTracer.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkNullCanvas.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkBitmapCache.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkIDChangeListener.cpp
