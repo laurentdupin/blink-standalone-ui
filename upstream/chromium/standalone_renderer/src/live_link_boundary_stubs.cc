@@ -14725,7 +14725,6 @@ std::ostream& operator<<(std::ostream& os, TimeTicks) {
 }
 ConditionVariable::ConditionVariable(Lock*) {}
 ConditionVariable::~ConditionVariable() = default;
-void Location::WriteIntoTrace(perfetto::TracedValue) const {}
 void UmaHistogramSparse(const char*, int) {}
 void UmaHistogramBoolean(const char*, bool) {}
 void UmaHistogramCounts100(const char*, int) {}
@@ -14794,8 +14793,6 @@ void LapTimer::NextLap() {}
 TimeDelta LapTimer::TimePerLap() const {
   return TimeDelta();
 }
-Location::Location() = default;
-Location::Location(const Location&) = default;
 Time Time::Now() {
   return Time();
 }
@@ -14871,9 +14868,6 @@ const CPU& CPU::GetInstanceNoAllocation() {
 }
 bool operator==(const UnguessableToken& lhs, const UnguessableToken& rhs) {
   return lhs.token_ == rhs.token_;
-}
-const void* GetProgramCounter() {
-  return nullptr;
 }
 ScopedUmaHistogramTimer::ScopedUmaHistogramTimer(
     std::string_view name,
@@ -21790,26 +21784,6 @@ bool DisallowGarbageCollectionScope::IsGarbageCollectionAllowed(
 }  // namespace cppgc::subtle
 
 namespace base {
-Location::Location(const char* file_name, const void* program_counter)
-    : file_name_(file_name), program_counter_(program_counter) {}
-Location::Location(const char* function_name,
-                   const char* file_name,
-                   int line_number,
-                   const void* program_counter)
-    : function_name_(function_name),
-      file_name_(file_name),
-      line_number_(line_number),
-      program_counter_(program_counter) {}
-Location& Location::operator=(const Location&) = default;
-Location Location::Current(const char* function_name,
-                           const char* file_name,
-                           int line_number) {
-  return Location(function_name, file_name, line_number, nullptr);
-}
-Location Location::CurrentWithoutFunctionName(const char* file_name,
-                                              int line_number) {
-  return Location(nullptr, file_name, line_number, nullptr);
-}
 #if DCHECK_IS_ON()
 ScopedValidateSequenceChecker::ScopedValidateSequenceChecker(
     const SequenceChecker&) {}
