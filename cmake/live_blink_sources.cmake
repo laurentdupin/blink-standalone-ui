@@ -77,6 +77,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_snap_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/scroll_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/snap_selection_strategy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/draw_properties.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/touch_action_region.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/clip_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
