@@ -84,6 +84,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/copy_output_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/frame_sink_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/region_capture_bounds.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/subtree_capture_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/view_transition_element_resource_id.cc
