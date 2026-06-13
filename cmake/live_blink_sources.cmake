@@ -82,6 +82,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/task_runner_provider.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/copy_output_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/debug_border_draw_quad.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/draw_quad.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/offset_tag.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/shared_quad_state.cc
