@@ -79,6 +79,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/clip_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/task_runner_provider.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/copy_output_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/shared_image_format.cc
