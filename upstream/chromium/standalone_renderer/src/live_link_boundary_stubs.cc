@@ -1712,53 +1712,6 @@ void StackTrace::SuppressStackTracesWithMessageForTesting(std::string) {}
 }  // namespace debug
 
 namespace internal {
-LinkNodeBase::LinkNodeBase() = default;
-LinkNodeBase::LinkNodeBase(LinkNodeBase* previous, LinkNodeBase* next)
-    : previous_(previous), next_(next) {}
-LinkNodeBase::LinkNodeBase(LinkNodeBase&& rhs)
-    : previous_(rhs.previous_), next_(rhs.next_) {
-  if (previous_) {
-    previous_->next_ = this;
-  }
-  if (next_) {
-    next_->previous_ = this;
-  }
-  rhs.previous_ = &rhs;
-  rhs.next_ = &rhs;
-}
-void LinkNodeBase::RemoveFromList() {
-  if (previous_) {
-    previous_->next_ = next_;
-  }
-  if (next_) {
-    next_->previous_ = previous_;
-  }
-  previous_ = nullptr;
-  next_ = nullptr;
-}
-void LinkNodeBase::InsertBeforeBase(LinkNodeBase* e) {
-  previous_ = e->previous_;
-  next_ = e;
-  e->previous_->next_ = this;
-  e->previous_ = this;
-}
-void LinkNodeBase::InsertAfterBase(LinkNodeBase* e) {
-  next_ = e->next_;
-  previous_ = e;
-  e->next_->previous_ = this;
-  e->next_ = this;
-}
-void LinkNodeBase::MakeSelfReferencingBase() {
-  previous_ = this;
-  next_ = this;
-}
-CheckedObserverAdapter::CheckedObserverAdapter(const CheckedObserver* observer)
-    : weak_ptr_(const_cast<CheckedObserver*>(observer)->factory_.GetWeakPtr()) {}
-CheckedObserverAdapter::CheckedObserverAdapter(CheckedObserverAdapter&& other) =
-    default;
-CheckedObserverAdapter& CheckedObserverAdapter::operator=(
-    CheckedObserverAdapter&& other) = default;
-CheckedObserverAdapter::~CheckedObserverAdapter() = default;
 }  // namespace internal
 
 TaskRunner::TaskRunner() = default;
@@ -14750,8 +14703,6 @@ namespace debug {
 namespace sequence_manager {
 TaskTimeObserver::~TaskTimeObserver() = default;
 }  // namespace sequence_manager
-CheckedObserver::CheckedObserver() = default;
-CheckedObserver::~CheckedObserver() = default;
 RefCountedString::RefCountedString(std::string value)
     : string_(std::move(value)) {}
 RefCountedString::~RefCountedString() = default;

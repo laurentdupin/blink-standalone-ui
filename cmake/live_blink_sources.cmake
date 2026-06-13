@@ -2,6 +2,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base64.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_op.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/callback_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/containers/linked_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/alias.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/crash_logging.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/dump_without_crashing.cc
@@ -11,6 +12,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/string_escape.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_types.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pickle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util_win.cc
