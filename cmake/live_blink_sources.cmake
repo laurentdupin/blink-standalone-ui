@@ -115,6 +115,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence_handle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/linear_gradient.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/hdr_static_metadata.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/skia_span_util.cc
