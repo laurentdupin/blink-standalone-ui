@@ -79,6 +79,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/touch_action_region.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/clip_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/effect_node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/occlusion.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/sticky_position_constraint.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/task_runner_provider.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/transform_node.cc
