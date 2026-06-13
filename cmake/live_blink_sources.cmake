@@ -1,5 +1,6 @@
 set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base64.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/dispatcher/reentry_guard.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check_op.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/callback_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/containers/linked_list.cc
@@ -21,6 +22,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pickle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/rand_util_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/sampling_heap_profiler/lock_free_address_hash_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/sampling_heap_profiler/poisson_allocation_sampler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/sequence_checker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/sequence_checker_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/sequence_token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/scoped_clear_last_error_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/simdutf_shim.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/escape.cc
@@ -40,6 +46,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/substring_set_matcher.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/delayed_task_handle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_local_storage.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_local_storage_win.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/default_clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/token.cc

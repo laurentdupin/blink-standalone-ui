@@ -14632,9 +14632,6 @@ PlatformThreadId PlatformThreadBase::CurrentId() {
 PlatformThreadRef PlatformThreadBase::CurrentRef() {
   return PlatformThreadRef(::GetCurrentThreadId());
 }
-SequenceCheckerImpl::SequenceCheckerImpl() = default;
-SequenceCheckerImpl::~SequenceCheckerImpl() = default;
-void SequenceCheckerImpl::DetachFromSequence() {}
 void DCheckAsserter::warn() {}
 bool FeatureList::IsEnabled(const Feature& feature) {
   return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
@@ -14685,12 +14682,6 @@ bool StringSearchIgnoringCaseAndAccents(std::u16string,
   return false;
 }
 }  // namespace i18n
-ThreadLocalStorage::Slot::Slot(TLSDestructorFunc) {}
-ThreadLocalStorage::Slot::~Slot() = default;
-void* ThreadLocalStorage::Slot::Get() const {
-  return nullptr;
-}
-void ThreadLocalStorage::Slot::Set(void*) {}
 const UnguessableToken& UnguessableToken::Null() {
   static const UnguessableToken* token = new UnguessableToken();
   return *token;
@@ -14945,10 +14936,6 @@ bool HandleTraits::CloseHandle(HANDLE handle) {
   return CloseHandle(handle) != 0;
 }
 }  // namespace win
-bool SequenceCheckerImpl::CalledOnValidSequence(
-    std::unique_ptr<debug::StackTrace>*) const {
-  return true;
-}
 // The standalone renderer runs Blink synchronously; no ambient task runner is
 // exposed through Chromium's task APIs.
 const scoped_refptr<SequencedTaskRunner>&
@@ -16100,22 +16087,9 @@ bool DiskAllocatorStubDispatch::AcceptWithResponder(
 }  // namespace blink::mojom::blink
 
 namespace base {
-void ThreadCheckerImpl::EnableStackLogging() {}
-ThreadCheckerImpl::ThreadCheckerImpl() = default;
-ThreadCheckerImpl::~ThreadCheckerImpl() = default;
-ThreadCheckerImpl::ThreadCheckerImpl(ThreadCheckerImpl&&) {}
-ThreadCheckerImpl& ThreadCheckerImpl::operator=(ThreadCheckerImpl&&) {
-  return *this;
-}
-bool ThreadCheckerImpl::CalledOnValidThread(
-    std::unique_ptr<debug::StackTrace>*) const {
-  return true;
-}
-void ThreadCheckerImpl::DetachFromThread() {}
 std::unique_ptr<debug::StackTrace> ThreadCheckerImpl::GetBoundAt() const {
   return nullptr;
 }
-void ThreadCheckerImpl::EnsureAssigned() const {}
 }  // namespace base
 
 namespace {
@@ -21768,11 +21742,6 @@ bool DisallowGarbageCollectionScope::IsGarbageCollectionAllowed(
 }  // namespace cppgc::subtle
 
 namespace base {
-#if DCHECK_IS_ON()
-ScopedValidateSequenceChecker::ScopedValidateSequenceChecker(
-    const SequenceChecker&) {}
-ScopedValidateSequenceChecker::~ScopedValidateSequenceChecker() = default;
-#endif
 }  // namespace base
 
 namespace base::trace_event {
