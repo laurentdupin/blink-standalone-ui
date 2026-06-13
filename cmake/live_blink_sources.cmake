@@ -33,6 +33,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/utf_string_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/matcher_string_pattern.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/substring_set_matcher/substring_set_matcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/delayed_task_handle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/default_clock.cc

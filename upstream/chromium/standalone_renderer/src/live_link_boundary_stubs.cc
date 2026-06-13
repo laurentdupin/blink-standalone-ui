@@ -21790,11 +21790,6 @@ bool DisallowGarbageCollectionScope::IsGarbageCollectionAllowed(
 }  // namespace cppgc::subtle
 
 namespace base {
-DelayedTaskHandle::DelayedTaskHandle() = default;
-DelayedTaskHandle::~DelayedTaskHandle() = default;
-bool DelayedTaskHandle::IsValid() const {
-  return false;
-}
 Location::Location(const char* file_name, const void* program_counter)
     : file_name_(file_name), program_counter_(program_counter) {}
 Location::Location(const char* function_name,
