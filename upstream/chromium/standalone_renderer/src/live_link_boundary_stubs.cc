@@ -14947,15 +14947,6 @@ SequencedTaskRunner::GetCurrentDefault() {
 bool TaskRunner::PostTask(const Location&, OnceClosure) {
   return false;
 }
-const DefaultTickClock* DefaultTickClock::GetInstance() {
-  static DefaultTickClock* clock = new DefaultTickClock();
-  return clock;
-}
-DefaultTickClock::~DefaultTickClock() = default;
-TimeTicks DefaultTickClock::NowTicks() const {
-  return TimeTicks::Now();
-}
-TickClock::~TickClock() = default;
 void TaskRunnerTraits::Destruct(const TaskRunner* task_runner) {
   task_runner->OnDestruct();
 }
