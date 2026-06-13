@@ -21811,18 +21811,6 @@ void BindStateBaseRefCountTraits::Destruct(const BindStateBase* state) {
 }
 }  // namespace base::internal
 
-namespace base::subtle {
-void RefCountedBase::AddRefImpl() const {}
-void RefCountedBase::ReleaseImpl() const {}
-bool RefCountedBase::CalledOnValidSequence() const {
-  return true;
-}
-bool RefCountedThreadSafeBase::HasOneRef() const {
-  return false;
-}
-RefCountedThreadSafeBase::~RefCountedThreadSafeBase() = default;
-}  // namespace base::subtle
-
 namespace base::trace_event {
 bool ConvertableToTraceFormat::AppendToProto(ProtoAppender*) const {
   return false;
