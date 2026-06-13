@@ -14738,12 +14738,6 @@ void* ThreadLocalStorage::Slot::Get() const {
   return nullptr;
 }
 void ThreadLocalStorage::Slot::Set(void*) {}
-size_t TokenHash::operator()(const Token& token) {
-  const uint64_t high = token.high();
-  const uint64_t low = token.low();
-  return static_cast<size_t>(high ^ (low + 0x9e3779b97f4a7c15ULL +
-                                     (high << 6) + (high >> 2)));
-}
 const UnguessableToken& UnguessableToken::Null() {
   static const UnguessableToken* token = new UnguessableToken();
   return *token;
@@ -14954,13 +14948,6 @@ const CPU& CPU::GetInstanceNoAllocation() {
   static CPU* cpu = new CPU();
   return *cpu;
 }
-std::string Token::ToString() const {
-  char buffer[33];
-  std::snprintf(buffer, sizeof(buffer), "%016llX%016llX",
-                static_cast<unsigned long long>(high()),
-                static_cast<unsigned long long>(low()));
-  return std::string(buffer);
-}
 bool operator==(const UnguessableToken& lhs, const UnguessableToken& rhs) {
   return lhs.token_ == rhs.token_;
 }
@@ -15076,15 +15063,6 @@ TimeTicks DefaultTickClock::NowTicks() const {
 TickClock::~TickClock() = default;
 void TaskRunnerTraits::Destruct(const TaskRunner* task_runner) {
   task_runner->OnDestruct();
-}
-Token Token::CreateRandom() {
-  static std::atomic<uint64_t> counter{1};
-  const uint64_t seq = counter.fetch_add(1, std::memory_order_relaxed);
-  const uint64_t salt =
-      reinterpret_cast<uintptr_t>(&counter) ^
-      reinterpret_cast<uintptr_t>(&Token::CreateRandom);
-  return Token(0xA5A5A5A5A5A5A5A5ULL ^ salt ^ (seq << 1),
-               0x5A5A5A5A5A5A5A5AULL ^ (salt << 1) ^ seq);
 }
 UnguessableToken::UnguessableToken(const Token& token) : token_(token) {}
 UnguessableToken UnguessableToken::Create() {

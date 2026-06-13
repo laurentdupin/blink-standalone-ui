@@ -32,6 +32,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_checker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/default_clock.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/cityhash/city.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum-dtoa.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum.cc
