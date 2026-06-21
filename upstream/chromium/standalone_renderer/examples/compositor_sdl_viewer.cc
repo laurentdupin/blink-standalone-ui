@@ -364,6 +364,56 @@ bool SamePointerState(const html_css_renderer::PointerState& lhs,
          lhs.pressed == rhs.pressed;
 }
 
+struct SyntheticWheelBurst {
+  int count = 0;
+  html_css_renderer::Point delta;
+};
+
+bool ParseWheelBurst(const std::string& value, SyntheticWheelBurst* burst) {
+  int count = 0;
+  float first = 0.0f;
+  float second = 0.0f;
+  if (std::sscanf(value.c_str(), "%d,%f,%f", &count, &first, &second) == 3) {
+    if (count <= 0)
+      return false;
+    burst->count = count;
+    burst->delta = html_css_renderer::Point{first, second};
+    return true;
+  }
+  if (std::sscanf(value.c_str(), "%d,%f", &count, &second) == 2) {
+    if (count <= 0)
+      return false;
+    burst->count = count;
+    burst->delta = html_css_renderer::Point{0.0f, second};
+    return true;
+  }
+  return false;
+}
+
+void AccumulateWheelInput(std::optional<html_css_renderer::WheelInput>* wheel,
+                          html_css_renderer::Point position,
+                          html_css_renderer::Point delta) {
+  if (wheel->has_value()) {
+    (*wheel)->position = position;
+    (*wheel)->delta.x += delta.x;
+    (*wheel)->delta.y += delta.y;
+    return;
+  }
+  *wheel = html_css_renderer::WheelInput{position, delta};
+}
+
+html_css_renderer::Point DocumentScrollForCompositorViewer(
+    const html_css_renderer::CompositorFrameResult& result) {
+  const auto& offsets = result.successor_snapshot.scroll_offsets_by_element_id;
+  const auto document = offsets.find("document");
+  if (document != offsets.end())
+    return document->second;
+  const auto body = offsets.find("body");
+  if (body != offsets.end())
+    return body->second;
+  return html_css_renderer::Point{0.0f, 0.0f};
+}
+
 void PrintUsage() {
   std::fprintf(
       stderr,
@@ -374,6 +424,7 @@ void PrintUsage() {
       "[--synthetic-input-smoke] [--synthetic-resize WxH] "
       "[--synthetic-click x,y] [--synthetic-navigation-smoke] "
       "[--synthetic-navigation-stress N] "
+      "[--synthetic-wheel-burst count,deltaY|count,deltaX,deltaY] "
       "[--trace-stages] [--full-frame-diagnostics]\n"
       "Launching without --html, --html-file, or --html-dir opens a native "
       "HTML directory picker on Windows and recursively lists HTML files. "
@@ -608,6 +659,7 @@ int main(int argc, char** argv) {
   bool synthetic_navigation_smoke = false;
   int synthetic_navigation_stress = 0;
   std::optional<html_css_renderer::Size> synthetic_resize;
+  std::optional<SyntheticWheelBurst> synthetic_wheel_burst;
   std::vector<html_css_renderer::Point> synthetic_click_points;
   bool html_input_provided = false;
   bool resource_root_explicit = false;
@@ -778,6 +830,21 @@ int main(int argc, char** argv) {
     } else if (arg.rfind("--synthetic-navigation-stress=", 0) == 0) {
       synthetic_navigation_stress =
           std::max(0, std::atoi(arg.substr(30).c_str()));
+    } else if (arg == "--synthetic-wheel-burst") {
+      const char* value = next_value();
+      SyntheticWheelBurst parsed_burst;
+      if (!value || !ParseWheelBurst(value, &parsed_burst)) {
+        std::fprintf(stderr, "invalid --synthetic-wheel-burst\n");
+        return 2;
+      }
+      synthetic_wheel_burst = parsed_burst;
+    } else if (arg.rfind("--synthetic-wheel-burst=", 0) == 0) {
+      SyntheticWheelBurst parsed_burst;
+      if (!ParseWheelBurst(arg.substr(24), &parsed_burst)) {
+        std::fprintf(stderr, "invalid --synthetic-wheel-burst\n");
+        return 2;
+      }
+      synthetic_wheel_burst = parsed_burst;
     } else if (arg == "--full-frame-diagnostics") {
       full_frame_diagnostics = true;
     } else if (arg == "--trace-stages") {
@@ -1102,8 +1169,8 @@ int main(int argc, char** argv) {
         return frame_and_present_succeeded(result, presentation);
       };
 
-  if (synthetic_input_smoke || synthetic_resize || synthetic_navigation_smoke ||
-      synthetic_navigation_stress > 0 ||
+  if (synthetic_input_smoke || synthetic_resize || synthetic_wheel_burst ||
+      synthetic_navigation_smoke || synthetic_navigation_stress > 0 ||
       !synthetic_click_points.empty()) {
     bool synthetic_ok = frame_and_present_succeeded(result, presentation);
     double synthetic_time = 1.0 / 60.0;
@@ -1189,6 +1256,28 @@ int main(int argc, char** argv) {
       if (capture_resized_screenshot && !write_current_screenshot()) {
         synthetic_ok = false;
       }
+      synthetic_time += 1.0 / 60.0;
+    }
+    if (synthetic_wheel_burst) {
+      html_css_renderer::FrameInput next_input = input;
+      const html_css_renderer::Point position{32.0f, 32.0f};
+      std::optional<html_css_renderer::WheelInput> wheel;
+      for (int i = 0; i < synthetic_wheel_burst->count; ++i) {
+        AccumulateWheelInput(&wheel, position, synthetic_wheel_burst->delta);
+      }
+      next_input.wheel = wheel;
+      synthetic_ok = run_update_frame("synthetic_wheel_burst",
+                                      std::move(next_input),
+                                      synthetic_time) &&
+                     synthetic_ok;
+      const html_css_renderer::Point scroll =
+          DocumentScrollForCompositorViewer(result);
+      std::fprintf(stderr,
+                   "synthetic_wheel_burst_result count=%d unit_delta=%.3f,%.3f "
+                   "document_scroll=%.3f,%.3f\n",
+                   synthetic_wheel_burst->count,
+                   synthetic_wheel_burst->delta.x,
+                   synthetic_wheel_burst->delta.y, scroll.x, scroll.y);
       synthetic_time += 1.0 / 60.0;
     }
     for (const html_css_renderer::Point& point : synthetic_click_points) {
@@ -1334,10 +1423,10 @@ int main(int argc, char** argv) {
         float mouse_x = 0.0f;
         float mouse_y = 0.0f;
         SDL_GetMouseState(&mouse_x, &mouse_y);
-        next_input.wheel = html_css_renderer::WheelInput{
-            html_css_renderer::Point{mouse_x, mouse_y},
+        AccumulateWheelInput(
+            &next_input.wheel, html_css_renderer::Point{mouse_x, mouse_y},
             html_css_renderer::Point{-event.wheel.x * 48.0f,
-                                     -event.wheel.y * 48.0f}};
+                                     -event.wheel.y * 48.0f});
         needs_frame = true;
       }
     };

@@ -12928,7 +12928,7 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     int requested) {
   LiveFramePaintProbeCache& cache = ProbeCache();
   const bool next_requested = requested != 0;
-  if (cache.requested_wheel_scroll == next_requested &&
+  if (!next_requested && !cache.requested_wheel_scroll &&
       std::abs(cache.requested_wheel_x - x) <= 0.001f &&
       std::abs(cache.requested_wheel_y - y) <= 0.001f &&
       std::abs(cache.requested_wheel_delta_x - delta_x) <= 0.001f &&
