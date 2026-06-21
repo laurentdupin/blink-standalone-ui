@@ -1,19 +1,9 @@
 #ifndef STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_SERVICE_WORKER_SERVICE_WORKER_REGISTRATION_MOJOM_SHARED_H_
 #define STANDALONE_RENDERER_STUBS_THIRD_PARTY_BLINK_PUBLIC_MOJOM_SERVICE_WORKER_SERVICE_WORKER_REGISTRATION_MOJOM_SHARED_H_
 
-namespace blink::mojom {
+#include "third_party/blink/public/mojom/script/script_type.mojom-shared.h"
 
-#if !defined(STANDALONE_RENDERER_SCRIPT_TYPE_DEFINED)
-#define STANDALONE_RENDERER_SCRIPT_TYPE_DEFINED
-enum class ScriptType {
-  kClassic,
-  kModule,
-  kImportMap,
-  kSpeculationRules,
-  kMinValue = kClassic,
-  kMaxValue = kSpeculationRules,
-};
-#endif
+namespace blink::mojom {
 
 enum class ServiceWorkerUpdateViaCache {
   kImports,

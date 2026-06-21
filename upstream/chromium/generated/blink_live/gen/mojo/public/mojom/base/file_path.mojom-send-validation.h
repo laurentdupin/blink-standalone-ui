@@ -26,28 +26,6 @@ struct SendValidationSerializer<::mojo_base::mojom::FilePathDataView, MaybeConst
     if (CallIsNullIfExists<Traits>(input))
       return;
     fragment.Allocate();
-
-      decltype(Traits::path(input)) in_path = Traits::path(input);
-      mojo::internal::MessageFragment<
-          typename decltype(fragment->path)::BaseType>
-          path_fragment(fragment.message());
-      constexpr const mojo::internal::ContainerValidateParams& path_validate_params =
-          mojo::internal::GetArrayValidator<0, false, nullptr>();
-      
-      mojo::internal::Serialize<mojo::ArrayDataView<uint16_t>, send_validation>(
-        in_path,
-        path_fragment,
-        &path_validate_params);
-
-      fragment->path.Set(
-          path_fragment.is_null() ? nullptr : path_fragment.data());
-
-      
-      MOJO_INTERNAL_CHECK_SERIALIZATION(
-        send_validation,
-        !(fragment->path.is_null()),
-        mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-        "null path in FilePath struct");
   }
 };
 
@@ -61,28 +39,6 @@ struct SendValidationSerializer<::mojo_base::mojom::RelativeFilePathDataView, Ma
     if (CallIsNullIfExists<Traits>(input))
       return;
     fragment.Allocate();
-
-      decltype(Traits::path(input)) in_path = Traits::path(input);
-      mojo::internal::MessageFragment<
-          typename decltype(fragment->path)::BaseType>
-          path_fragment(fragment.message());
-      constexpr const mojo::internal::ContainerValidateParams& path_validate_params =
-          mojo::internal::GetArrayValidator<0, false, nullptr>();
-      
-      mojo::internal::Serialize<mojo::ArrayDataView<uint16_t>, send_validation>(
-        in_path,
-        path_fragment,
-        &path_validate_params);
-
-      fragment->path.Set(
-          path_fragment.is_null() ? nullptr : path_fragment.data());
-
-      
-      MOJO_INTERNAL_CHECK_SERIALIZATION(
-        send_validation,
-        !(fragment->path.is_null()),
-        mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-        "null path in RelativeFilePath struct");
   }
 };
 

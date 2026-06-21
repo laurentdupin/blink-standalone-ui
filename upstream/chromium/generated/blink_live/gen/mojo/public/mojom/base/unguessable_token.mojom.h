@@ -32,7 +32,6 @@
 
 
 #include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -43,7 +42,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) UnguessableToken {
+class  UnguessableToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<UnguessableToken, T>::value>;
@@ -229,7 +228,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::UnguessableToken::DataView,
+struct  StructTraits<::mojo_base::mojom::UnguessableToken::DataView,
                                          ::mojo_base::mojom::UnguessableTokenPtr> {
   static bool IsNull(const ::mojo_base::mojom::UnguessableTokenPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::UnguessableTokenPtr* output) { output->reset(); }

@@ -25,6 +25,7 @@
 #include "mojo/public/mojom/base/file_info.mojom-blink-import-headers.h"
 #include "mojo/public/mojom/base/file_info.mojom-blink-test-utils.h"
 #include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 
 
 namespace mojo_base::mojom::blink {

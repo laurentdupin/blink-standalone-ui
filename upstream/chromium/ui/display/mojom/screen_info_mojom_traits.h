@@ -6,6 +6,7 @@
 #define UI_DISPLAY_MOJOM_SCREEN_INFO_MOJOM_TRAITS_H_
 
 #include "base/component_export.h"
+#include "ui/gfx/mojom/display_color_spaces_mojom_traits.h"
 #include "ui/display/mojom/screen_info.mojom-shared.h"
 #include "ui/display/mojom/screen_orientation.mojom-shared.h"
 #include "ui/display/screen_info.h"

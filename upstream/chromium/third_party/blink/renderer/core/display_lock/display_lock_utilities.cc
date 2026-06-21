@@ -240,6 +240,9 @@ Element* LockedInclusiveAncestorPreventingUpdate(const LayoutObject& object,
 
 bool DisplayLockUtilities::ActivateFindInPageMatchRangeIfNeeded(
     const EphemeralRangeInFlatTree& range) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   DCHECK(!range.IsNull());
   DCHECK(!range.IsCollapsed());
   if (!range.GetDocument()
@@ -263,10 +266,14 @@ bool DisplayLockUtilities::ActivateFindInPageMatchRangeIfNeeded(
   DCHECK(enclosing_block);
   return enclosing_block->ActivateDisplayLockIfNeeded(
       DisplayLockActivationReason::kFindInPage);
+#endif
 }
 
 bool DisplayLockUtilities::NeedsActivationForFindInPage(
     const EphemeralRangeInFlatTree& range) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   DisplayLockDocumentState& state =
       range.GetDocument().GetDisplayLockDocumentState();
   if (!state.HasActivatableLocks()) {
@@ -291,6 +298,7 @@ bool DisplayLockUtilities::NeedsActivationForFindInPage(
   }
 
   return false;
+#endif
 }
 
 const HeapVector<Member<Element>>
@@ -328,6 +336,9 @@ DisplayLockUtilities::ActivatableLockedInclusiveAncestors(
 VectorOf<Element> DisplayLockUtilities::InclusiveAncestorsOfRange(
     const Range& range) {
   VectorOf<Element> elements;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return elements;
+#else
   // Ranges use NodeTraversal::Next to go in between their start and end nodes,
   // and will access the layout information of each of those nodes. In order to
   // ensure that each of these nodes has unlocked layout information, we have to
@@ -355,6 +366,7 @@ VectorOf<Element> DisplayLockUtilities::InclusiveAncestorsOfRange(
     }
   }
   return elements;
+#endif
 }
 
 DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(
@@ -362,6 +374,12 @@ DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(
     DisplayLockContext::ForcedPhase phase,
     bool only_cv_auto,
     bool emit_warnings)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    : node_(nullptr),
+      phase_(phase),
+      only_cv_auto_(only_cv_auto),
+      emit_warnings_(emit_warnings) {}
+#else
     : node_(range->FirstNode()),
       phase_(phase),
       only_cv_auto_(only_cv_auto),
@@ -390,6 +408,7 @@ DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(
     }
   }
 }
+#endif
 
 DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(
     const Node* node,
@@ -459,6 +478,7 @@ void DisplayLockUtilities::ScopedForcedUpdate::Impl::Destroy() {
   node_->GetDocument().GetDisplayLockDocumentState().EndForcedScope(this);
   if (parent_frame_impl_)
     parent_frame_impl_->Destroy();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   HeapVector<Member<Element>> force_updated_roots;
   auto* document_rules =
       DocumentSpeculationRules::FromIfExists(node_->GetDocument());
@@ -471,6 +491,10 @@ void DisplayLockUtilities::ScopedForcedUpdate::Impl::Destroy() {
   if (document_rules) {
     document_rules->DisplayLockedRootsForceUpdateEnded(force_updated_roots);
   }
+#else
+  for (auto context : forced_context_set_)
+    context->NotifyForcedUpdateScopeEnded(phase_);
+#endif
 }
 
 void DisplayLockUtilities::ScopedForcedUpdate::Impl::
@@ -690,6 +714,9 @@ bool DisplayLockUtilities::IsInLockedSubtreeCrossingFrames(
 }
 
 void DisplayLockUtilities::ElementLostFocus(Element* element) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   if (element &&
       element->GetDocument().GetDisplayLockDocumentState().DisplayLockCount() ==
           0) {
@@ -703,8 +730,12 @@ void DisplayLockUtilities::ElementLostFocus(Element* element) {
       }
     }
   }
+#endif
 }
 void DisplayLockUtilities::ElementGainedFocus(Element* element) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   if (element &&
       element->GetDocument().GetDisplayLockDocumentState().DisplayLockCount() ==
           0) {
@@ -719,17 +750,25 @@ void DisplayLockUtilities::ElementGainedFocus(Element* element) {
       }
     }
   }
+#endif
 }
 
 // static
 bool DisplayLockUtilities::NeedsSelectionChangedUpdate(
     const Document& document) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   return document.GetDisplayLockDocumentState().DisplayLockCount() > 0;
+#endif
 }
 
 void DisplayLockUtilities::SelectionChanged(
     const EphemeralRangeInFlatTree& old_selection,
     const EphemeralRangeInFlatTree& new_selection) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   if ((!old_selection.IsNull() && old_selection.GetDocument()
                                           .GetDisplayLockDocumentState()
                                           .DisplayLockCount() == 0) ||
@@ -772,6 +811,7 @@ void DisplayLockUtilities::SelectionChanged(
   for (DisplayLockContext* context : gained_selection_contexts) {
     context->NotifySubtreeGainedSelection();
   }
+#endif
 }
 
 void DisplayLockUtilities::SelectionRemovedFromDocument(Document& document) {
@@ -882,6 +922,9 @@ namespace {
 // This method follows the old spec and will be removed, hence the "Legacy"
 // name.
 bool LegacyExpandDetailsAncestors(const Node& node) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   // Since setting the open attribute could fire synchronous events (e.g.
   // `blur`), which could mess with the FlatTreeTraversal iterator, we should
   // first iterate details elements and then open them all.
@@ -913,6 +956,7 @@ bool LegacyExpandDetailsAncestors(const Node& node) {
   }
 
   return details_to_open.size();
+#endif
 }
 
 // This method follows the old spec and will be removed, hence the "Legacy"
@@ -950,6 +994,9 @@ bool LegacyRevealHiddenUntilFoundAncestors(const Node& node) {
 // static
 DisplayLockUtilities::RevealResult
 DisplayLockUtilities::RevealAutoExpandableAncestors(const Node& target) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return RevealResult();
+#else
   if (!RuntimeEnabledFeatures::AncestorRevealingNewSpecEnabled()) {
     RevealResult reveal_result;
     reveal_result.revealed_details = LegacyExpandDetailsAncestors(target);
@@ -1019,6 +1066,7 @@ DisplayLockUtilities::RevealAutoExpandableAncestors(const Node& target) {
   }
 
   return reveal_result;
+#endif
 }
 
 static bool CheckSelf(const Node* node) {

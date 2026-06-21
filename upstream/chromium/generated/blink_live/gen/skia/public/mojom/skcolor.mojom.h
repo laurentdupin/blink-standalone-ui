@@ -92,6 +92,8 @@ class  SkColor {
   template <typename T, SkColor::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
 
+  size_t Hash(size_t seed) const;
+
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
     return mojo::internal::SerializeImpl<

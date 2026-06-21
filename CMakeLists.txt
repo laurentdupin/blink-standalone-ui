@@ -19,12 +19,79 @@ option(BLINK_STANDALONE_OPTIMIZE_BOUNDARY
 option(BLINK_STANDALONE_OPTIMIZE_APP
   "Compile standalone benchmark/presenter application sources with release optimization." ON)
 
+if(MSVC)
+  # The V8 monolith is built with Chromium's clang-cl /MT configuration. Keep
+  # standalone objects on the same CRT boundary instead of mixing /MDd with V8.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "" FORCE)
+endif()
+
 set(BLINK_STANDALONE_CHROMIUM_ROOT
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium
 )
 set(BLINK_STANDALONE_RENDERER_ROOT
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer
 )
+set(BLINK_STANDALONE_V8_MONOLITH_LIB
+  ${CMAKE_CURRENT_SOURCE_DIR}/build/v8_mono2/v8/out/chromium_static/obj/v8_monolith.lib
+)
+set(BLINK_STANDALONE_V8_BUILD_ROOT
+  ${CMAKE_CURRENT_SOURCE_DIR}/build/v8_mono2/v8
+)
+set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
+)
+set(BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/abseil-cpp
+)
+set(BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES
+  _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE
+  _LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS
+  _LIBCPP_INSTRUMENTED_WITH_ASAN=0
+  CR_LIBCXX_REVISION=5abc7f839700f0f17338434e1c1c6a8c87c00c11
+  ABSL_ALLOCATOR_NOTHROW=1
+  _HAS_NODISCARD
+)
+set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/out/chromium_static/obj/buildtools/third_party/libc++/libc++
+)
+set(BLINK_STANDALONE_V8_ABI_DEFINES
+  V8_COMPRESS_POINTERS
+  V8_COMPRESS_POINTERS_IN_SHARED_CAGE
+  V8_31BIT_SMIS_ON_64BIT_ARCH
+  V8_ENABLE_SANDBOX
+  V8_ENABLE_PARTITION_ALLOC
+  V8_STATIC_ROOTS
+  V8_USE_ZLIB
+  CPPGC_CAGED_HEAP
+  CPPGC_YOUNG_GENERATION
+  CPPGC_POINTER_COMPRESSION
+  CPPGC_ENABLE_LARGER_CAGE
+  CPPGC_SLIM_WRITE_BARRIER
+)
+
+if(MSVC)
+  if(NOT EXISTS "${BLINK_STANDALONE_V8_MONOLITH_LIB}")
+    message(FATAL_ERROR
+      "V8 monolith is missing. Build it first at: ${BLINK_STANDALONE_V8_MONOLITH_LIB}")
+  endif()
+  add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
+  set_target_properties(blink_standalone_v8_monolith PROPERTIES
+    IMPORTED_LOCATION "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
+    INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
+  )
+file(GLOB BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
+    "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}/*.obj"
+  )
+  if(NOT BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS)
+    message(FATAL_ERROR
+      "Chromium libc++ objects are missing. Build the V8 GN libc++ target first at: ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}")
+  endif()
+  add_library(blink_standalone_chromium_libcxx INTERFACE)
+  target_sources(blink_standalone_chromium_libcxx INTERFACE
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
+  )
+endif()
 
 set(BLINK_STANDALONE_FREETYPE_SOURCE
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/freetype/src
@@ -126,6 +193,7 @@ if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/angle_runtime.cmake)
 
 set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
@@ -195,13 +263,11 @@ if(BLINK_STANDALONE_PERF_BUILD)
 endif()
 
 set(BLINK_STANDALONE_APP_SOURCES
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/render_benchmark.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/compositor_benchmark.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
 )
 set(BLINK_STANDALONE_SDL_APP_SOURCES
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/sdl_viewer.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/skia_cpu_renderer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/compositor_sdl_viewer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
 )
 set(BLINK_STANDALONE_BOUNDARY_SOURCES)
@@ -222,6 +288,13 @@ endforeach()
 list(REMOVE_DUPLICATES BLINK_STANDALONE_CODEC_SOURCES)
 list(REMOVE_DUPLICATES BLINK_STANDALONE_BOUNDARY_SOURCES)
 list(REMOVE_DUPLICATES BLINK_STANDALONE_CHROMIUM_SOURCES)
+
+if(MSVC)
+  set_property(SOURCE ${BLINK_STANDALONE_BOUNDARY_SOURCES}
+    APPEND PROPERTY COMPILE_OPTIONS
+      /FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h
+  )
+endif()
 
 function(blink_standalone_apply_optimization_group group_name optimize)
   if(NOT MSVC OR NOT CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo)$")
@@ -315,14 +388,33 @@ add_executable(blink_standalone_render_benchmark_skia
   ${BLINK_STANDALONE_LIVE_SOURCES}
   ${BLINK_STANDALONE_LIVE_OBJECTS}
 )
+add_dependencies(blink_standalone_render_benchmark_skia
+  blink_angle_libEGL
+  blink_angle_libGLESv2
+)
 
+  target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+    ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
+  )
   target_include_directories(blink_standalone_render_benchmark_skia PRIVATE
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
     ${BLINK_STANDALONE_CHROMIUM_ROOT}
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/base
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/third_party/xxhash
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/dawn/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/khronos
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan-headers/src/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan_memory_allocator/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/flatbuffers/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/angle
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/v8/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/overrides
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/platform/default
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src
@@ -332,20 +424,25 @@ add_executable(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/build_config
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/harfbuzz/src/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/highway/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/common
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/i18n
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libwebm/source
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/win32/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/include/third_party/vulkan
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/libpng
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8/include
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/buildtools/third_party/libc++/src/include
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
     ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
   )
 
@@ -354,11 +451,18 @@ add_executable(blink_standalone_render_benchmark_skia
     BLINK_IMPLEMENTATION=1
     INSIDE_BLINK=1
     STANDALONE_RENDERER_GN_PROBE=1
+    STANDALONE_RENDERER_NO_RUST=1
     HTML_CSS_RENDERER_STANDALONE=1
     HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT=1
     HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL=1
     HTML_CSS_RENDERER_HAS_REDUCED_BLINK_PLATFORM=1
-    HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER=1
+    HTML_CSS_RENDERER_USE_CHROMIUM_COMPOSITOR=1
+    HTML_CSS_RENDERER_ENABLE_WEBGPU=0
+    SK_GANESH=1
+    SK_VULKAN=1
+    SK_GPU_WORKAROUNDS_HEADER=\"gpu/config/gpu_driver_bug_workaround_autogen.h\"
+    SK_USE_INTERNAL_VULKAN_HEADERS=1
+    VK_USE_PLATFORM_WIN32_KHR=1
     DCHECK_ALWAYS_ON=1
     WTF_IMPLEMENTATION=1
     USE_AURA=1
@@ -374,9 +478,15 @@ add_executable(blink_standalone_render_benchmark_skia
     U_I18N_IMPLEMENTATION
     U_COMMON_IMPLEMENTATION
     PNG_SET_OPTION_SUPPORTED=1
+    PNG_WRITE_SUPPORTED=1
+    PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1
     PNG_INTEL_SSE=1
     ZLIB_IMPLEMENTATION=1
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+    ${BLINK_STANDALONE_V8_ABI_DEFINES}
   )
+  set_property(TARGET blink_standalone_render_benchmark_skia PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded")
 
   if(NOT BLINK_STANDALONE_PERF_BUILD)
     target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
@@ -388,14 +498,37 @@ add_executable(blink_standalone_render_benchmark_skia
   endif()
 
   target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
+    blink_standalone_chromium_libcxx
+    blink_standalone_v8_monolith
+    d3d11
+    dcomp
+    dwmapi
+    dxcore
+    dxgi
+    kernel32
+    mincore
     ole32
+    oleaut32
+    propsys
+    runtimeobject
+    shell32
+    shcore
+    winmm
     windowscodecs
+    wbemuuid
+    advapi32
+    dbghelp
+    ntdll
+    psapi
+    setupapi
+    shlwapi
+    ws2_32
+    delayimp
   )
 
   if(MSVC)
     target_compile_options(blink_standalone_render_benchmark_skia PRIVATE
       /MP8
-      "$<$<COMPILE_LANGUAGE:CXX>:/FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h>"
       /bigobj
       /permissive-
       /Zc:__cplusplus
@@ -427,14 +560,33 @@ add_executable(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_LIVE_SOURCES}
       ${BLINK_STANDALONE_LIVE_OBJECTS}
     )
+    add_dependencies(blink_standalone_sdl_viewer_skia
+      blink_angle_libEGL
+      blink_angle_libGLESv2
+    )
 
+    target_include_directories(blink_standalone_sdl_viewer_skia BEFORE PRIVATE
+      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+      ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
+    )
     target_include_directories(blink_standalone_sdl_viewer_skia PRIVATE
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
       ${BLINK_STANDALONE_CHROMIUM_ROOT}
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/base
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/third_party/xxhash
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/dawn/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/ipcz/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/khronos
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan-headers/src/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan_memory_allocator/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/flatbuffers/src/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/angle
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/v8/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/overrides
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/platform/default
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src
@@ -444,20 +596,25 @@ add_executable(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/build_config
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/harfbuzz/src/src
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/highway/src
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/common
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/i18n
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libwebm/source
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/win32/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/include/third_party/vulkan
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/libpng
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8/include
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/buildtools/third_party/libc++/src/include
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
       ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
     )
 
@@ -466,11 +623,18 @@ add_executable(blink_standalone_render_benchmark_skia
       BLINK_IMPLEMENTATION=1
       INSIDE_BLINK=1
       STANDALONE_RENDERER_GN_PROBE=1
+      STANDALONE_RENDERER_NO_RUST=1
       HTML_CSS_RENDERER_STANDALONE=1
       HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT=1
       HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL=1
       HTML_CSS_RENDERER_HAS_REDUCED_BLINK_PLATFORM=1
-      HTML_CSS_RENDERER_USE_SKIA_CPU_RENDERER=1
+      HTML_CSS_RENDERER_USE_CHROMIUM_COMPOSITOR=1
+      HTML_CSS_RENDERER_ENABLE_WEBGPU=0
+      SK_GANESH=1
+      SK_VULKAN=1
+      SK_GPU_WORKAROUNDS_HEADER=\"gpu/config/gpu_driver_bug_workaround_autogen.h\"
+      SK_USE_INTERNAL_VULKAN_HEADERS=1
+      VK_USE_PLATFORM_WIN32_KHR=1
       DCHECK_ALWAYS_ON=1
       WTF_IMPLEMENTATION=1
       USE_AURA=1
@@ -486,10 +650,16 @@ add_executable(blink_standalone_render_benchmark_skia
       U_I18N_IMPLEMENTATION
       U_COMMON_IMPLEMENTATION
       PNG_SET_OPTION_SUPPORTED=1
+      PNG_WRITE_SUPPORTED=1
+      PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1
       PNG_INTEL_SSE=1
       ZLIB_IMPLEMENTATION=1
       SDL_STATIC_LIB=1
+      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+      ${BLINK_STANDALONE_V8_ABI_DEFINES}
     )
+    set_property(TARGET blink_standalone_sdl_viewer_skia PROPERTY
+      MSVC_RUNTIME_LIBRARY "MultiThreaded")
 
     if(NOT BLINK_STANDALONE_PERF_BUILD)
       target_compile_definitions(blink_standalone_sdl_viewer_skia PRIVATE
@@ -501,13 +671,25 @@ add_executable(blink_standalone_render_benchmark_skia
     endif()
 
     target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
+    blink_standalone_chromium_libcxx
+    blink_standalone_v8_monolith
+    d3d11
+    dcomp
+    dwmapi
+    dxcore
+    dxgi
+    mincore
       ole32
+      propsys
+      runtimeobject
+      shcore
       windowscodecs
+      wbemuuid
+      delayimp
     )
 
     if(MSVC)
       target_compile_options(blink_standalone_sdl_viewer_skia PRIVATE
-        "$<$<COMPILE_LANGUAGE:CXX>:/FI${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs/standalone_network_namespace_forwards.h>"
         /bigobj
         /MP8
         /permissive-
@@ -532,6 +714,6 @@ add_executable(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_SDL3_TARGET}
       kernel32.lib user32.lib gdi32.lib winmm.lib imm32.lib ole32.lib
       oleaut32.lib version.lib uuid.lib advapi32.lib setupapi.lib shell32.lib
-      dinput8.lib
+      dbghelp.lib dinput8.lib ntdll.lib psapi.lib shlwapi.lib ws2_32.lib
     )
   endif()

@@ -12,6 +12,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/display/mojom/screen_infos.mojom-params-data.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 namespace display {
 namespace mojom {
 

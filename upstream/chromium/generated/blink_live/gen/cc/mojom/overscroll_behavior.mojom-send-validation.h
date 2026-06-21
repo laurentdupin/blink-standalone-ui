@@ -13,8 +13,12 @@
 
 #include "mojo/public/cpp/bindings/lib/send_validation_type.h"
 #include "mojo/public/cpp/bindings/lib/send_validation.h"
+#include "mojo/public/cpp/bindings/lib/has_send_validation_helper.h"
 
 namespace mojo::internal {
+template <typename MaybeConstUserType>
+struct HasSendValidationSerialize<::cc::mojom::OverscrollBehaviorType, MaybeConstUserType>
+    : std::false_type {};
 
 template <typename MaybeConstUserType, mojo::internal::SendValidation send_validation>
 struct SendValidationSerializer<::cc::mojom::OverscrollBehaviorDataView, MaybeConstUserType, send_validation> {
@@ -26,6 +30,16 @@ struct SendValidationSerializer<::cc::mojom::OverscrollBehaviorDataView, MaybeCo
     if (CallIsNullIfExists<Traits>(input))
       return;
     fragment.Allocate();
+
+      
+      mojo::internal::Serialize<::cc::mojom::OverscrollBehaviorType>(
+        Traits::x(input),
+        &fragment->x);
+
+      
+      mojo::internal::Serialize<::cc::mojom::OverscrollBehaviorType>(
+        Traits::y(input),
+        &fragment->y);
   }
 };
 

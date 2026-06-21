@@ -57,6 +57,8 @@ constexpr auto kReasonDescriptionMap = std::to_array<ReasonAndDescription>({
      "offset."},
     {CompositingReason::kBackdropFilter, "Has a backdrop filter."},
     {CompositingReason::kBackdropFilterMask, "Is a mask for backdrop filter."},
+    {CompositingReason::kFixedBackdropInOverscrollAreaParent,
+     "Is a fixed backdrop inside an overscroll area parent scroller."},
     {CompositingReason::kRootScroller, "Is the document.rootScroller."},
     {CompositingReason::kViewport, "Is for the visual viewport."},
     {CompositingReason::kWillChangeTransform,
@@ -122,6 +124,7 @@ constexpr auto kReasonDescriptionMap = std::to_array<ReasonAndDescription>({
     {CompositingReason::kDevToolsOverlay, "Is DevTools overlay."},
     {CompositingReason::kViewTransitionContent,
      "The layer containing the contents of a view transition element."},
+    {CompositingReason::kUnboundedElement, "Is an active unbounded element."},
 });
 
 }  // anonymous namespace

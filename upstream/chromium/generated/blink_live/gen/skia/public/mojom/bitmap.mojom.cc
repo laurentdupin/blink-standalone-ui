@@ -24,6 +24,8 @@
 
 #include "skia/public/mojom/bitmap.mojom-import-headers.h"
 #include "skia/public/mojom/bitmap.mojom-test-utils.h"
+#include "mojo/public/cpp/base/big_buffer_mojom_traits.h"
+#include "skia/public/mojom/image_info_mojom_traits.h"
 
 
 namespace skia::mojom {

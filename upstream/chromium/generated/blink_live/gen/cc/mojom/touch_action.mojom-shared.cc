@@ -4,14 +4,42 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "cc/mojom/touch_action.mojom-shared.h"
+#include <utility>
+#include "mojo/public/cpp/bindings/lib/validate_params.h"
+#include "mojo/public/cpp/bindings/lib/validation_errors.h"
+#include "mojo/public/cpp/bindings/lib/validation_util.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
+#include "cc/mojom/touch_action.mojom-params-data.h"
 namespace cc {
 namespace mojom {
 
 namespace internal {
 
+
+// static
+bool TouchAction_Data::Validate(
+    const void* data,
+    mojo::internal::ValidationContext* validation_context) {
+  if (!data)
+    return true;
+  if (!ValidateUnversionedStructHeaderAndSizeAndClaimMemory(
+          data, 16, validation_context)) {
+    return false;
+  }
+
+  // NOTE: The memory backing |object| may be smaller than |sizeof(*object)| if
+  // the message comes from an older version.
+  [[maybe_unused]] const TouchAction_Data* object =
+      static_cast<const TouchAction_Data*>(data);
+
+  return true;
+}
+
+TouchAction_Data::TouchAction_Data()
+    : header_({sizeof(*this), 0}) {}
+
 }  // namespace internal
 }  // namespace mojom
 }  // namespace cc
-
-// Includes removed due to no code being generated.

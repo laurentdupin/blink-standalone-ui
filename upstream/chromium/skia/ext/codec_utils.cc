@@ -9,7 +9,7 @@
 #include "third_party/skia/include/codec/SkCodec.h"
 #include "third_party/skia/include/codec/SkPngRustDecoder.h"
 #include "third_party/skia/include/core/SkData.h"
-#include "third_party/skia/include/encode/SkPngRustEncoder.h"
+#include "third_party/skia/include/encode/SkPngEncoder.h"
 
 namespace skia {
 
@@ -18,28 +18,26 @@ namespace {
 sk_sp<SkData> EncodePngAsSkData(
     GrDirectContext* context,
     const SkImage* src,
-    SkPngRustEncoder::CompressionLevel compression_level) {
-  const SkPngRustEncoder::Options options = {.fCompressionLevel =
-                                                 compression_level};
-  return SkPngRustEncoder::Encode(context, src, options);
+    SkPngEncoder::FilterFlag filter_flags) {
+  SkPngEncoder::Options options;
+  options.fFilterFlags = filter_flags;
+  return SkPngEncoder::Encode(context, src, options);
 }
 
 }  // namespace
 
 sk_sp<SkData> EncodePngAsSkData(const SkPixmap& src) {
-  const SkPngRustEncoder::Options kDefaultOptions = {};
-  return SkPngRustEncoder::Encode(src, kDefaultOptions);
+  const SkPngEncoder::Options kDefaultOptions = {};
+  return SkPngEncoder::Encode(src, kDefaultOptions);
 }
 
 sk_sp<SkData> EncodePngAsSkData(GrDirectContext* context, const SkImage* src) {
-  return EncodePngAsSkData(context, src,
-                           SkPngRustEncoder::CompressionLevel::kMedium);
+  return EncodePngAsSkData(context, src, SkPngEncoder::FilterFlag::kAll);
 }
 
 sk_sp<SkData> FastEncodePngAsSkData(GrDirectContext* context,
                                     const SkImage* src) {
-  return EncodePngAsSkData(context, src,
-                           SkPngRustEncoder::CompressionLevel::kLow);
+  return EncodePngAsSkData(context, src, SkPngEncoder::FilterFlag::kNone);
 }
 
 std::string EncodePngAsDataUri(const SkPixmap& src) {

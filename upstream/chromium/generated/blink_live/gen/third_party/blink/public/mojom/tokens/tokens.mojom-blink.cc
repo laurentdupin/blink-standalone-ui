@@ -26,6 +26,9 @@
 #include "third_party/blink/public/mojom/tokens/tokens.mojom-blink-import-headers.h"
 #include "third_party/blink/public/mojom/tokens/tokens.mojom-blink-test-utils.h"
 #include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
+#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
+#include "third_party/blink/public/common/tokens/token_mojom_traits_helper.h"
+#include "third_party/blink/public/common/tokens/tokens_mojom_traits.h"
 
 
 namespace blink::mojom::blink {
@@ -557,6 +560,34 @@ void WebNNTensorToken::WriteIntoTrace(
 }
 
 bool WebNNTensorToken::Validate(
+    const void* data,
+    mojo::internal::ValidationContext* validation_context) {
+  return Data_::Validate(data, validation_context);
+}
+WebNNGraphToken::WebNNGraphToken()
+    : value() {}
+
+WebNNGraphToken::WebNNGraphToken(
+    const ::base::UnguessableToken& value_in)
+    : value(std::move(value_in)) {}
+
+WebNNGraphToken::~WebNNGraphToken() = default;
+
+void WebNNGraphToken::WriteIntoTrace(
+    perfetto::TracedValue traced_context) const {
+  [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();
+  perfetto::WriteIntoTracedValueWithFallback(
+    dict.AddItem(
+      "value"), this->value,
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+      "<value of type const ::base::UnguessableToken&>"
+#else
+      "<value>"
+#endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
+    );
+}
+
+bool WebNNGraphToken::Validate(
     const void* data,
     mojo::internal::ValidationContext* validation_context) {
   return Data_::Validate(data, validation_context);
@@ -1323,7 +1354,7 @@ bool ExecutionContextToken::Validate(
 }
 WebGPUExecutionContextTokenPtr
 WebGPUExecutionContextToken::NewDocumentToken(
-    const ::blink::DocumentToken& value) {
+    DocumentTokenPtr value) {
   return WebGPUExecutionContextTokenPtr(
       std::in_place,
       std::in_place_index<static_cast<size_t>(Tag::kDocumentToken)>,
@@ -1359,7 +1390,7 @@ WebGPUExecutionContextToken::NewServiceWorkerToken(
 
 WebGPUExecutionContextToken::WebGPUExecutionContextToken(
     std::in_place_index_t<static_cast<size_t>(Tag::kDocumentToken)>,
-    const ::blink::DocumentToken& value)
+    DocumentTokenPtr value)
     : tag_(Tag::kDocumentToken),
       data_(std::in_place_index<static_cast<size_t>(Tag::kDocumentToken)>,
             std::move(value)) {}
@@ -1388,13 +1419,13 @@ WebGPUExecutionContextToken::~WebGPUExecutionContextToken() {
   DestroyActive();
 }
 
-void WebGPUExecutionContextToken::set_document_token(const ::blink::DocumentToken& document_token) {
+void WebGPUExecutionContextToken::set_document_token(DocumentTokenPtr document_token) {
   if (tag_ == Tag::kDocumentToken) {
     data_.document_token = std::move(document_token);
   } else {
     DestroyActive();
     tag_ = Tag::kDocumentToken;
-    new (&data_.document_token) ::blink::DocumentToken(
+    new (&data_.document_token) DocumentTokenPtr(
         std::move(document_token));
   }
 }
@@ -1435,7 +1466,7 @@ void WebGPUExecutionContextToken::set_service_worker_token(const ::blink::Servic
 
 WebGPUExecutionContextToken::Union_::Union_(
     std::in_place_index_t<static_cast<size_t>(Tag::kDocumentToken)>,
-    const ::blink::DocumentToken& value)
+    DocumentTokenPtr value)
     : document_token(std::move(value)) {}
 
 WebGPUExecutionContextToken::Union_::Union_(
@@ -1749,6 +1780,20 @@ bool StructTraits<::blink::mojom::blink::WebNNTensorToken::DataView, ::blink::mo
   return success;
 }
 
+
+// static
+bool StructTraits<::blink::mojom::blink::WebNNGraphToken::DataView, ::blink::mojom::blink::WebNNGraphTokenPtr>::Read(
+    ::blink::mojom::blink::WebNNGraphToken::DataView input,
+    ::blink::mojom::blink::WebNNGraphTokenPtr* output) {
+  bool success = true;
+  ::blink::mojom::blink::WebNNGraphTokenPtr result(::blink::mojom::blink::WebNNGraphToken::New());
+  
+      if (success && !input.ReadValue(&result->value))
+        success = false;
+  *output = std::move(result);
+  return success;
+}
+
 // static
 bool UnionTraits<::blink::mojom::blink::FrameToken::DataView, ::blink::mojom::blink::FrameTokenPtr>::Read(
     ::blink::mojom::blink::FrameToken::DataView input,
@@ -1998,7 +2043,7 @@ bool UnionTraits<::blink::mojom::blink::WebGPUExecutionContextToken::DataView, :
 
   switch (input.tag()) {
     case Tag::kDocumentToken: {
-      ::blink::DocumentToken result_document_token{};
+      ::blink::mojom::blink::DocumentTokenPtr result_document_token{};
       if (!input.ReadDocumentToken(&result_document_token))
         return false;
 

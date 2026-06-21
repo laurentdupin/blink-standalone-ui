@@ -37,7 +37,7 @@
 
 #include "third_party/blink/public/common/tokens/token_mojom_traits_helper.h"
 #include "third_party/blink/public/common/tokens/tokens_mojom_traits.h"
-#include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -70,7 +70,8 @@ namespace blink::mojom::blink {
 
 
 
-class PLATFORM_EXPORT FrameToken {
+
+class BLINK_PLATFORM_EXPORT FrameToken {
  public:
   using DataView = FrameTokenDataView;
   using Data_ = internal::FrameToken_Data;
@@ -205,7 +206,7 @@ class PLATFORM_EXPORT FrameToken {
 
 
 
-class PLATFORM_EXPORT WorkerToken {
+class BLINK_PLATFORM_EXPORT WorkerToken {
  public:
   using DataView = WorkerTokenDataView;
   using Data_ = internal::WorkerToken_Data;
@@ -361,7 +362,7 @@ class PLATFORM_EXPORT WorkerToken {
 
 
 
-class PLATFORM_EXPORT WorkletToken {
+class BLINK_PLATFORM_EXPORT WorkletToken {
  public:
   using DataView = WorkletTokenDataView;
   using Data_ = internal::WorkletToken_Data;
@@ -559,7 +560,7 @@ class PLATFORM_EXPORT WorkletToken {
 
 
 
-class PLATFORM_EXPORT ExecutionContextToken {
+class BLINK_PLATFORM_EXPORT ExecutionContextToken {
  public:
   using DataView = ExecutionContextTokenDataView;
   using Data_ = internal::ExecutionContextToken_Data;
@@ -862,7 +863,7 @@ class PLATFORM_EXPORT ExecutionContextToken {
 
 
 
-class PLATFORM_EXPORT WebGPUExecutionContextToken {
+class BLINK_PLATFORM_EXPORT WebGPUExecutionContextToken {
  public:
   using DataView = WebGPUExecutionContextTokenDataView;
   using Data_ = internal::WebGPUExecutionContextToken_Data;
@@ -881,7 +882,7 @@ class PLATFORM_EXPORT WebGPUExecutionContextToken {
 
   // Construct an instance holding |document_token|.
   static WebGPUExecutionContextTokenPtr NewDocumentToken(
-      const ::blink::DocumentToken& value);
+      DocumentTokenPtr value);
   // Construct an instance holding |dedicated_worker_token|.
   static WebGPUExecutionContextTokenPtr NewDedicatedWorkerToken(
       const ::blink::DedicatedWorkerToken& value);
@@ -932,15 +933,15 @@ class PLATFORM_EXPORT WebGPUExecutionContextToken {
   }
 
   bool is_document_token() const { return tag_ == Tag::kDocumentToken; }
-  const ::blink::DocumentToken& get_document_token() const {
+  const DocumentTokenPtr& get_document_token() const {
     CHECK(tag_ == Tag::kDocumentToken);
     return data_.document_token;
   }
-  ::blink::DocumentToken& get_document_token() {
+  DocumentTokenPtr& get_document_token() {
     CHECK(tag_ == Tag::kDocumentToken);
     return data_.document_token;
   }
-  void set_document_token(const ::blink::DocumentToken& document_token);
+  void set_document_token(DocumentTokenPtr document_token);
 
   bool is_dedicated_worker_token() const { return tag_ == Tag::kDedicatedWorkerToken; }
   const ::blink::DedicatedWorkerToken& get_dedicated_worker_token() const {
@@ -997,7 +998,7 @@ class PLATFORM_EXPORT WebGPUExecutionContextToken {
   union Union_ {
     Union_(
         std::in_place_index_t<static_cast<size_t>(Tag::kDocumentToken)>,
-        const ::blink::DocumentToken& value);
+        DocumentTokenPtr value);
     Union_(
         std::in_place_index_t<static_cast<size_t>(Tag::kDedicatedWorkerToken)>,
         const ::blink::DedicatedWorkerToken& value);
@@ -1010,7 +1011,7 @@ class PLATFORM_EXPORT WebGPUExecutionContextToken {
     // The contents of the union are explicitly destroyed by `DestroyActive()`.
     ~Union_() {}
 
-    ::blink::DocumentToken document_token;
+    DocumentTokenPtr document_token;
     ::blink::DedicatedWorkerToken dedicated_worker_token;
     ::blink::SharedWorkerToken shared_worker_token;
     ::blink::ServiceWorkerToken service_worker_token;
@@ -1018,7 +1019,7 @@ class PLATFORM_EXPORT WebGPUExecutionContextToken {
 
   WebGPUExecutionContextToken(
       std::in_place_index_t<static_cast<size_t>(Tag::kDocumentToken)>,
-      const ::blink::DocumentToken& value);
+      DocumentTokenPtr value);
   WebGPUExecutionContextToken(
       std::in_place_index_t<static_cast<size_t>(Tag::kDedicatedWorkerToken)>,
       const ::blink::DedicatedWorkerToken& value);
@@ -1041,7 +1042,7 @@ class PLATFORM_EXPORT WebGPUExecutionContextToken {
 
 
 
-class PLATFORM_EXPORT DocumentToken {
+class BLINK_PLATFORM_EXPORT DocumentToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<DocumentToken, T>::value>;
@@ -1188,7 +1189,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT LocalFrameToken {
+class BLINK_PLATFORM_EXPORT LocalFrameToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<LocalFrameToken, T>::value>;
@@ -1335,7 +1336,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT RemoteFrameToken {
+class BLINK_PLATFORM_EXPORT RemoteFrameToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<RemoteFrameToken, T>::value>;
@@ -1482,7 +1483,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT DedicatedWorkerToken {
+class BLINK_PLATFORM_EXPORT DedicatedWorkerToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<DedicatedWorkerToken, T>::value>;
@@ -1629,7 +1630,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT ServiceWorkerToken {
+class BLINK_PLATFORM_EXPORT ServiceWorkerToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ServiceWorkerToken, T>::value>;
@@ -1776,7 +1777,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT SharedWorkerToken {
+class BLINK_PLATFORM_EXPORT SharedWorkerToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<SharedWorkerToken, T>::value>;
@@ -1923,7 +1924,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT AnimationWorkletToken {
+class BLINK_PLATFORM_EXPORT AnimationWorkletToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<AnimationWorkletToken, T>::value>;
@@ -2070,7 +2071,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT AudioWorkletToken {
+class BLINK_PLATFORM_EXPORT AudioWorkletToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<AudioWorkletToken, T>::value>;
@@ -2217,7 +2218,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT LayoutWorkletToken {
+class BLINK_PLATFORM_EXPORT LayoutWorkletToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<LayoutWorkletToken, T>::value>;
@@ -2364,7 +2365,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT PaintWorkletToken {
+class BLINK_PLATFORM_EXPORT PaintWorkletToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<PaintWorkletToken, T>::value>;
@@ -2511,7 +2512,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT SharedStorageWorkletToken {
+class BLINK_PLATFORM_EXPORT SharedStorageWorkletToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<SharedStorageWorkletToken, T>::value>;
@@ -2658,7 +2659,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT ShadowRealmToken {
+class BLINK_PLATFORM_EXPORT ShadowRealmToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ShadowRealmToken, T>::value>;
@@ -2805,7 +2806,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT AttributionSrcToken {
+class BLINK_PLATFORM_EXPORT AttributionSrcToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<AttributionSrcToken, T>::value>;
@@ -2952,7 +2953,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT SameDocNavigationScreenshotDestinationToken {
+class BLINK_PLATFORM_EXPORT SameDocNavigationScreenshotDestinationToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<SameDocNavigationScreenshotDestinationToken, T>::value>;
@@ -3099,7 +3100,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT V8ContextToken {
+class BLINK_PLATFORM_EXPORT V8ContextToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<V8ContextToken, T>::value>;
@@ -3246,7 +3247,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT ViewTransitionToken {
+class BLINK_PLATFORM_EXPORT ViewTransitionToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ViewTransitionToken, T>::value>;
@@ -3393,7 +3394,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT WebNNContextToken {
+class BLINK_PLATFORM_EXPORT WebNNContextToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<WebNNContextToken, T>::value>;
@@ -3540,7 +3541,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT WebNNPendingConstantToken {
+class BLINK_PLATFORM_EXPORT WebNNPendingConstantToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<WebNNPendingConstantToken, T>::value>;
@@ -3687,7 +3688,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class PLATFORM_EXPORT WebNNTensorToken {
+class BLINK_PLATFORM_EXPORT WebNNTensorToken {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<WebNNTensorToken, T>::value>;
@@ -3826,6 +3827,153 @@ bool operator>(const T& lhs, const T& rhs) {
 }
 
 template <typename T, WebNNTensorToken::EnableIfSame<T>* = nullptr>
+bool operator>=(const T& lhs, const T& rhs) {
+  return !(lhs < rhs);
+}
+
+
+
+
+
+class BLINK_PLATFORM_EXPORT WebNNGraphToken {
+ public:
+  template <typename T>
+  using EnableIfSame = std::enable_if_t<std::is_same<WebNNGraphToken, T>::value>;
+  using DataView = WebNNGraphTokenDataView;
+  using Data_ = internal::WebNNGraphToken_Data;
+
+  template <typename... Args>
+  static WebNNGraphTokenPtr New(Args&&... args) {
+    return WebNNGraphTokenPtr(
+        std::in_place, std::forward<Args>(args)...);
+  }
+
+  template <typename U>
+  static WebNNGraphTokenPtr From(const U& u) {
+    return mojo::TypeConverter<WebNNGraphTokenPtr, U>::Convert(u);
+  }
+
+  template <typename U>
+  U To() const {
+    return mojo::TypeConverter<U, WebNNGraphToken>::Convert(*this);
+  }
+
+
+  WebNNGraphToken();
+
+  explicit WebNNGraphToken(
+      const ::base::UnguessableToken& value);
+
+
+  ~WebNNGraphToken();
+
+  // Clone() is a template so it is only instantiated if it is used. Thus, the
+  // bindings generator does not need to know whether Clone() or copy
+  // constructor/assignment are available for members.
+  template <typename StructPtrType = WebNNGraphTokenPtr>
+  WebNNGraphTokenPtr Clone() const;
+
+  // Equals() is a template so it is only instantiated if it is used. Thus, the
+  // bindings generator does not need to know whether Equals() or == operator
+  // are available for members.
+  template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
+  bool Equals(const T& other) const;
+
+  template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
+  bool operator==(const T& rhs) const { return Equals(rhs); }
+
+  template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
+  bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  template <mojo::internal::SendValidation send_validation, typename UserType>
+  static ::blink::Vector<uint8_t> Serialize(UserType* input) {
+    return mojo::internal::SerializeImpl<
+        WebNNGraphToken::DataView, ::blink::Vector<uint8_t>, send_validation>(input);
+  }
+
+  template <typename UserType>
+  static ::blink::Vector<uint8_t> Serialize(UserType* input) {
+    return mojo::internal::SerializeImpl<
+        WebNNGraphToken::DataView, ::blink::Vector<uint8_t>>(input);
+  }
+
+  template <typename UserType>
+  static mojo::Message SerializeAsMessage(UserType* input) {
+    return mojo::internal::SerializeAsMessageImpl<
+        WebNNGraphToken::DataView>(input);
+  }
+
+  // The returned Message is serialized only if the message is moved
+  // cross-process or cross-language. Otherwise if the message is Deserialized
+  // as the same UserType |input| will just be moved to |output| in
+  // DeserializeFromMessage.
+  template <typename UserType>
+  static mojo::Message WrapAsMessage(UserType input) {
+    return mojo::Message(std::make_unique<
+        internal::WebNNGraphToken_UnserializedMessageContext<
+            UserType, WebNNGraphToken::DataView>>(0, 0, std::move(input)),
+        MOJO_CREATE_MESSAGE_FLAG_NONE);
+  }
+
+  template <typename UserType>
+  static bool Deserialize(const void* data,
+                          size_t data_num_bytes,
+                          UserType* output) {
+    mojo::Message message;
+    return mojo::internal::DeserializeImpl<WebNNGraphToken::DataView>(
+        message, data, data_num_bytes, output, Validate);
+  }
+
+  template <typename UserType>
+  static bool Deserialize(base::span<const uint8_t> input,
+                          UserType* output) {
+    return WebNNGraphToken::Deserialize(
+        input.empty() ? nullptr : input.data(), input.size(), output);
+  }
+
+  template <typename UserType>
+  static bool DeserializeFromMessage(mojo::Message input,
+                                     UserType* output) {
+    auto context = input.TakeUnserializedContext<
+        internal::WebNNGraphToken_UnserializedMessageContext<
+            UserType, WebNNGraphToken::DataView>>();
+    if (context) {
+      *output = std::move(context->TakeData());
+      return true;
+    }
+    input.SerializeIfNecessary();
+    return mojo::internal::DeserializeImpl<WebNNGraphToken::DataView>(
+        input, input.payload(), input.payload_num_bytes(), output, Validate);
+  }
+
+  
+  ::base::UnguessableToken value;
+
+  // Serialise this struct into a trace.
+  void WriteIntoTrace(perfetto::TracedValue traced_context) const;
+
+ private:
+  static bool Validate(const void* data,
+                       mojo::internal::ValidationContext* validation_context);
+};
+
+// The comparison operators are templates, so they are only instantiated if they
+// are used. Thus, the bindings generator does not need to know whether
+// comparison operators are available for members.
+template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
+bool operator<(const T& lhs, const T& rhs);
+
+template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
+bool operator<=(const T& lhs, const T& rhs) {
+  return !(rhs < lhs);
+}
+
+template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
+bool operator>(const T& lhs, const T& rhs) {
+  return rhs < lhs;
+}
+
+template <typename T, WebNNGraphToken::EnableIfSame<T>* = nullptr>
 bool operator>=(const T& lhs, const T& rhs) {
   return !(lhs < rhs);
 }
@@ -4463,6 +4611,28 @@ bool operator<(const T& lhs, const T& rhs) {
     return false;
   return false;
 }
+template <typename StructPtrType>
+WebNNGraphTokenPtr WebNNGraphToken::Clone() const {
+  return New(
+      mojo::Clone(value)
+  );
+}
+
+template <typename T, WebNNGraphToken::EnableIfSame<T>*>
+bool WebNNGraphToken::Equals(const T& other_struct) const {
+  if (!mojo::Equals(this->value, other_struct.value))
+    return false;
+  return true;
+}
+
+template <typename T, WebNNGraphToken::EnableIfSame<T>*>
+bool operator<(const T& lhs, const T& rhs) {
+  if (lhs.value < rhs.value)
+    return true;
+  if (rhs.value < lhs.value)
+    return false;
+  return false;
+}
 
 
 }  // blink::mojom::blink
@@ -4471,7 +4641,7 @@ namespace mojo {
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::DocumentToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::DocumentToken::DataView,
                                          ::blink::mojom::blink::DocumentTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::DocumentTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::DocumentTokenPtr* output) { output->reset(); }
@@ -4486,7 +4656,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::DocumentToken::DataVi
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::LocalFrameToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::LocalFrameToken::DataView,
                                          ::blink::mojom::blink::LocalFrameTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::LocalFrameTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::LocalFrameTokenPtr* output) { output->reset(); }
@@ -4501,7 +4671,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::LocalFrameToken::Data
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::RemoteFrameToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::RemoteFrameToken::DataView,
                                          ::blink::mojom::blink::RemoteFrameTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::RemoteFrameTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::RemoteFrameTokenPtr* output) { output->reset(); }
@@ -4516,7 +4686,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::RemoteFrameToken::Dat
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::DedicatedWorkerToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::DedicatedWorkerToken::DataView,
                                          ::blink::mojom::blink::DedicatedWorkerTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::DedicatedWorkerTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::DedicatedWorkerTokenPtr* output) { output->reset(); }
@@ -4531,7 +4701,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::DedicatedWorkerToken:
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ServiceWorkerToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ServiceWorkerToken::DataView,
                                          ::blink::mojom::blink::ServiceWorkerTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::ServiceWorkerTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::ServiceWorkerTokenPtr* output) { output->reset(); }
@@ -4546,7 +4716,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ServiceWorkerToken::D
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SharedWorkerToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SharedWorkerToken::DataView,
                                          ::blink::mojom::blink::SharedWorkerTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::SharedWorkerTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::SharedWorkerTokenPtr* output) { output->reset(); }
@@ -4561,7 +4731,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SharedWorkerToken::Da
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AnimationWorkletToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AnimationWorkletToken::DataView,
                                          ::blink::mojom::blink::AnimationWorkletTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::AnimationWorkletTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::AnimationWorkletTokenPtr* output) { output->reset(); }
@@ -4576,7 +4746,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AnimationWorkletToken
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AudioWorkletToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AudioWorkletToken::DataView,
                                          ::blink::mojom::blink::AudioWorkletTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::AudioWorkletTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::AudioWorkletTokenPtr* output) { output->reset(); }
@@ -4591,7 +4761,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AudioWorkletToken::Da
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::LayoutWorkletToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::LayoutWorkletToken::DataView,
                                          ::blink::mojom::blink::LayoutWorkletTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::LayoutWorkletTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::LayoutWorkletTokenPtr* output) { output->reset(); }
@@ -4606,7 +4776,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::LayoutWorkletToken::D
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::PaintWorkletToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::PaintWorkletToken::DataView,
                                          ::blink::mojom::blink::PaintWorkletTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::PaintWorkletTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::PaintWorkletTokenPtr* output) { output->reset(); }
@@ -4621,7 +4791,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::PaintWorkletToken::Da
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SharedStorageWorkletToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SharedStorageWorkletToken::DataView,
                                          ::blink::mojom::blink::SharedStorageWorkletTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::SharedStorageWorkletTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::SharedStorageWorkletTokenPtr* output) { output->reset(); }
@@ -4636,7 +4806,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SharedStorageWorkletT
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ShadowRealmToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ShadowRealmToken::DataView,
                                          ::blink::mojom::blink::ShadowRealmTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::ShadowRealmTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::ShadowRealmTokenPtr* output) { output->reset(); }
@@ -4651,7 +4821,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ShadowRealmToken::Dat
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AttributionSrcToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AttributionSrcToken::DataView,
                                          ::blink::mojom::blink::AttributionSrcTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::AttributionSrcTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::AttributionSrcTokenPtr* output) { output->reset(); }
@@ -4666,7 +4836,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::AttributionSrcToken::
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SameDocNavigationScreenshotDestinationToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SameDocNavigationScreenshotDestinationToken::DataView,
                                          ::blink::mojom::blink::SameDocNavigationScreenshotDestinationTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::SameDocNavigationScreenshotDestinationTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::SameDocNavigationScreenshotDestinationTokenPtr* output) { output->reset(); }
@@ -4681,7 +4851,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::SameDocNavigationScre
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::V8ContextToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::V8ContextToken::DataView,
                                          ::blink::mojom::blink::V8ContextTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::V8ContextTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::V8ContextTokenPtr* output) { output->reset(); }
@@ -4696,7 +4866,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::V8ContextToken::DataV
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ViewTransitionToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ViewTransitionToken::DataView,
                                          ::blink::mojom::blink::ViewTransitionTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::ViewTransitionTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::ViewTransitionTokenPtr* output) { output->reset(); }
@@ -4711,7 +4881,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::ViewTransitionToken::
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNContextToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNContextToken::DataView,
                                          ::blink::mojom::blink::WebNNContextTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::WebNNContextTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::WebNNContextTokenPtr* output) { output->reset(); }
@@ -4726,7 +4896,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNContextToken::Da
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNPendingConstantToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNPendingConstantToken::DataView,
                                          ::blink::mojom::blink::WebNNPendingConstantTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::WebNNPendingConstantTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::WebNNPendingConstantTokenPtr* output) { output->reset(); }
@@ -4741,7 +4911,7 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNPendingConstantT
 
 
 template <>
-struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNTensorToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNTensorToken::DataView,
                                          ::blink::mojom::blink::WebNNTensorTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::WebNNTensorTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::WebNNTensorTokenPtr* output) { output->reset(); }
@@ -4756,7 +4926,22 @@ struct PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNTensorToken::Dat
 
 
 template <>
-struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::FrameToken::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::blink::mojom::blink::WebNNGraphToken::DataView,
+                                         ::blink::mojom::blink::WebNNGraphTokenPtr> {
+  static bool IsNull(const ::blink::mojom::blink::WebNNGraphTokenPtr& input) { return !input; }
+  static void SetToNull(::blink::mojom::blink::WebNNGraphTokenPtr* output) { output->reset(); }
+
+  static const decltype(::blink::mojom::blink::WebNNGraphToken::value)& value(
+      const ::blink::mojom::blink::WebNNGraphTokenPtr& input) {
+    return input->value;
+  }
+
+  static bool Read(::blink::mojom::blink::WebNNGraphToken::DataView input, ::blink::mojom::blink::WebNNGraphTokenPtr* output);
+};
+
+
+template <>
+struct BLINK_PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::FrameToken::DataView,
                                         ::blink::mojom::blink::FrameTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::FrameTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::FrameTokenPtr* output) { output->reset(); }
@@ -4778,7 +4963,7 @@ struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::FrameToken::DataView,
 
 
 template <>
-struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WorkerToken::DataView,
+struct BLINK_PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WorkerToken::DataView,
                                         ::blink::mojom::blink::WorkerTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::WorkerTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::WorkerTokenPtr* output) { output->reset(); }
@@ -4804,7 +4989,7 @@ struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WorkerToken::DataView,
 
 
 template <>
-struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WorkletToken::DataView,
+struct BLINK_PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WorkletToken::DataView,
                                         ::blink::mojom::blink::WorkletTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::WorkletTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::WorkletTokenPtr* output) { output->reset(); }
@@ -4838,7 +5023,7 @@ struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WorkletToken::DataView
 
 
 template <>
-struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::ExecutionContextToken::DataView,
+struct BLINK_PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::ExecutionContextToken::DataView,
                                         ::blink::mojom::blink::ExecutionContextTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::ExecutionContextTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::ExecutionContextTokenPtr* output) { output->reset(); }
@@ -4892,7 +5077,7 @@ struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::ExecutionContextToken:
 
 
 template <>
-struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WebGPUExecutionContextToken::DataView,
+struct BLINK_PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WebGPUExecutionContextToken::DataView,
                                         ::blink::mojom::blink::WebGPUExecutionContextTokenPtr> {
   static bool IsNull(const ::blink::mojom::blink::WebGPUExecutionContextTokenPtr& input) { return !input; }
   static void SetToNull(::blink::mojom::blink::WebGPUExecutionContextTokenPtr* output) { output->reset(); }
@@ -4901,7 +5086,7 @@ struct PLATFORM_EXPORT UnionTraits<::blink::mojom::blink::WebGPUExecutionContext
     return input->which();
   }
 
-  static const ::blink::DocumentToken& document_token(const ::blink::mojom::blink::WebGPUExecutionContextTokenPtr& input) {
+  static const ::blink::mojom::blink::DocumentTokenPtr& document_token(const ::blink::mojom::blink::WebGPUExecutionContextTokenPtr& input) {
     return input->get_document_token();
   }
 

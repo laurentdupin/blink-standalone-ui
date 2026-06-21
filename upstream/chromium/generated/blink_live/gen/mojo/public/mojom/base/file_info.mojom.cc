@@ -24,6 +24,7 @@
 
 #include "mojo/public/mojom/base/file_info.mojom-import-headers.h"
 #include "mojo/public/mojom/base/file_info.mojom-test-utils.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 
 
 namespace mojo_base::mojom {

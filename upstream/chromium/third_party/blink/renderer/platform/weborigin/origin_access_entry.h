@@ -31,44 +31,12 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_ORIGIN_ACCESS_ENTRY_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_ORIGIN_ACCESS_ENTRY_H_
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "services/network/public/cpp/cors/origin_access_entry.h"
-#endif
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_CORS_ENUMS_DEFINED)
-#define BLINK_STANDALONE_CORS_ENUMS_DEFINED
-namespace network::mojom {
-enum class CorsDomainMatchMode {
-  kDisallowSubdomains,
-  kAllowSubdomains,
-  kAllowRegistrableDomains,
-};
-enum class CorsPortMatchMode {
-  kAllowOnlySpecifiedPort,
-  kAllowAnyPort,
-};
-enum class CorsOriginAccessMatchPriority {
-  kDefaultPriority,
-  kLowPriority,
-};
-}  // namespace network::mojom
-namespace network::cors {
-class OriginAccessEntry {
- public:
-  enum class MatchResult {
-    kDoesNotMatchOrigin,
-    kMatchesOrigin,
-    kMatchesOriginButIsPublicSuffix,
-  };
-};
-}  // namespace network::cors
-#endif
 
 class KURL;
 class SecurityOrigin;
@@ -83,41 +51,15 @@ class PLATFORM_EXPORT OriginAccessEntry {
   OriginAccessEntry(
       const SecurityOrigin& origin,
       network::mojom::CorsDomainMatchMode,
-#if defined(STANDALONE_RENDERER_GN_PROBE)
-      network::mojom::CorsOriginAccessMatchPriority priority =
-          network::mojom::CorsOriginAccessMatchPriority::kDefaultPriority) {}
-#else
       network::mojom::CorsOriginAccessMatchPriority priority =
           network::mojom::CorsOriginAccessMatchPriority::kDefaultPriority);
-#endif
   OriginAccessEntry(
       const KURL& url,
       network::mojom::CorsDomainMatchMode,
-#if defined(STANDALONE_RENDERER_GN_PROBE)
-      network::mojom::CorsOriginAccessMatchPriority priority =
-          network::mojom::CorsOriginAccessMatchPriority::kDefaultPriority) {}
-#else
       network::mojom::CorsOriginAccessMatchPriority priority =
           network::mojom::CorsOriginAccessMatchPriority::kDefaultPriority);
-#endif
   OriginAccessEntry(const OriginAccessEntry&) = delete;
   OriginAccessEntry& operator=(const OriginAccessEntry&) = delete;
-#if defined(STANDALONE_RENDERER_GN_PROBE)
-  OriginAccessEntry(OriginAccessEntry&&) = default;
-
-  network::cors::OriginAccessEntry::MatchResult MatchesOrigin(
-      const SecurityOrigin&) const {
-    return network::cors::OriginAccessEntry::MatchResult::kDoesNotMatchOrigin;
-  }
-  network::cors::OriginAccessEntry::MatchResult MatchesDomain(
-      const SecurityOrigin&) const {
-    return network::cors::OriginAccessEntry::MatchResult::kDoesNotMatchOrigin;
-  }
-
-  bool HostIsIPAddress() const { return false; }
-
-  String registrable_domain() const { return String(); }
-#else
   OriginAccessEntry(OriginAccessEntry&& from);
   // TODO: add operator=(OriginAccessEntry&&)?
 
@@ -132,7 +74,6 @@ class PLATFORM_EXPORT OriginAccessEntry {
 
  private:
   network::cors::OriginAccessEntry private_;
-#endif
 };
 
 }  // namespace blink

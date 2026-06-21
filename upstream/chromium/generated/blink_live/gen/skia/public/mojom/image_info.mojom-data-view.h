@@ -149,19 +149,11 @@ class ImageInfoDataView {
     return mojo::internal::Deserialize<::skia::mojom::ColorType>(
         data_value, output);
   }
-  ColorType color_type() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::skia::mojom::ColorType>(data_->color_type));
-  }
   template <typename UserType>
   [[nodiscard]] bool ReadAlphaType(UserType* output) const {
     auto data_value = data_->alpha_type;
     return mojo::internal::Deserialize<::skia::mojom::AlphaType>(
         data_value, output);
-  }
-  AlphaType alpha_type() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::skia::mojom::AlphaType>(data_->alpha_type));
   }
   uint32_t width() const {
     return data_->width;
@@ -230,10 +222,6 @@ class BitmapN32ImageInfoDataView {
     auto data_value = data_->alpha_type;
     return mojo::internal::Deserialize<::skia::mojom::AlphaType>(
         data_value, output);
-  }
-  AlphaType alpha_type() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::skia::mojom::AlphaType>(data_->alpha_type));
   }
   uint32_t width() const {
     return data_->width;

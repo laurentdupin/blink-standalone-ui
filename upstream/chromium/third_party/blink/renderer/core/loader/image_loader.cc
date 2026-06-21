@@ -22,7 +22,6 @@
 
 #include "third_party/blink/renderer/core/loader/image_loader.h"
 
-#include <cstdio>
 #include <memory>
 #include <utility>
 
@@ -213,8 +212,7 @@ void ImageLoader::DispatchDecodeRequestsIfComplete() {
                 image->PaintImageForCurrentFrame(),
                 /*use_dark_mode=*/false,
                 SkIRect::MakeWH(image->width(), image->height()),
-                cc::PaintFlags::FilterQuality::kNone, SkM44(),
-                PaintImage::kDefaultFrameIndex);
+                cc::PaintFlags::FilterQuality::kNone, SkM44());
             // ImageLoader should be kept alive when decode is still
             // pending. JS may invoke 'decode' without capturing the Image
             // object. If GC kicks in, ImageLoader will be destroyed,
@@ -433,8 +431,6 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
                                       const KURL* source_url,
                                       UpdateType update_type,
                                       bool force_blocking) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
   // FIXME: According to
   // http://www.whatwg.org/specs/web-apps/current-work/multipage/embedded-content.html#the-img-element:the-img-element-55
   // When "update image" is called due to environment changes and the load
@@ -449,6 +445,16 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
   load_delay_counter.swap(delay_until_do_update_from_element_);
 
   Document& document = element_->GetDocument();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const bool standalone_static_image_url =
+      source_url && !source_url->IsNull() && !source_url->IsEmpty() &&
+      (source_url->ProtocolIs("data") ||
+       (!source_url->ProtocolIs("http") && !source_url->ProtocolIs("https")));
+  if (!document.IsActive() && !standalone_static_image_url) {
+    ClearImage();
+    return;
+  }
+#else
   if (!document.IsActive()) {
     // Clear if the loader was moved into a not fully active document - or the
     // document was detached - after the microtask was queued. If moved into a
@@ -458,6 +464,7 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
     ClearImage();
     return;
   }
+#endif
 
   KURL url;
   AtomicString image_source_url = element_->ImageSourceURL();
@@ -467,9 +474,6 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
   } else {
     url = ImageSourceToKURL(image_source_url);
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::string url_utf8 = url.GetString().Utf8();
-#endif
   ImageResourceContent* new_image_content = nullptr;
   if (!url.IsNull() && !url.IsEmpty()) {
     // Unlike raw <img>, we block mixed content inside of <picture> or
@@ -654,10 +658,12 @@ void ImageLoader::DoUpdateFromElement(const DOMWrapperWorld* world,
 void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
                                     bool force_blocking) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  const bool allow_standalone_static_image_load = true;
+#else
+  const bool allow_standalone_static_image_load = false;
 #endif
-  if (!element_->GetDocument().IsActive()) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
+  if (!allow_standalone_static_image_load &&
+      !element_->GetDocument().IsActive()) {
     return;
   }
 
@@ -699,14 +705,16 @@ void ImageLoader::UpdateFromElement(UpdateFromElementBehavior update_behavior,
   if (update_behavior == kUpdateIgnorePreviousError) {
     SoftNavigationHeuristics::ModifiedNode(element_.Get());
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
 
   const KURL image_source_kurl = ImageSourceToKURL(image_source_url);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::string image_source_utf8 = image_source_kurl.GetString().Utf8();
-  const bool standalone_should_load_immediately =
-      ShouldLoadImmediately(image_source_kurl);
+  if (!image_source_kurl.IsNull() && !image_source_kurl.IsEmpty() &&
+      update_behavior != kUpdateFromMicrotask) {
+    DoUpdateFromElement(element_->GetExecutionContext()->GetCurrentWorld(),
+                        update_behavior, &image_source_kurl, UpdateType::kSync,
+                        force_blocking);
+    return;
+  }
 #endif
   if (ShouldLoadImmediately(image_source_kurl) &&
       update_behavior != kUpdateFromMicrotask) {
@@ -747,8 +755,10 @@ KURL ImageLoader::ImageSourceToKURL(AtomicString image_source_url) const {
   // Don't load images for inactive documents. We don't want to slow down the
   // raw HTML parsing case by loading images we don't intend to display.
   Document& document = element_->GetDocument();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!document.IsActive())
     return url;
+#endif
 
   // Do not load any image if the 'src' attribute is missing or if it is
   // an empty string.

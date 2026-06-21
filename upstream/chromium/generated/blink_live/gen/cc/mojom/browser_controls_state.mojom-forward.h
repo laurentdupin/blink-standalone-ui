@@ -17,13 +17,12 @@
 
 
 
-namespace mojo {
-enum class NativeEnum;
-}  // namespace mojo
+
 
 
 namespace cc::mojom {
-using BrowserControlsState = mojo::NativeEnum;
+
+enum class BrowserControlsState : int32_t;
 
 
 

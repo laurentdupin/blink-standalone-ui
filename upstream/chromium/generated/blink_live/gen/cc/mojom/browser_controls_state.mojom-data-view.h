@@ -38,7 +38,29 @@ namespace internal {
 
 
 namespace cc::mojom {
-using BrowserControlsState = mojo::NativeEnum;
+
+
+enum class BrowserControlsState : int32_t {
+  
+  kShown = 1,
+  
+  kHidden = 2,
+  
+  kBoth = 3,
+  kMinValue = 1,
+  kMaxValue = 3,
+};
+
+ std::ostream& operator<<(std::ostream& os, BrowserControlsState value);
+inline bool IsKnownEnumValue(BrowserControlsState value) {
+  return internal::BrowserControlsState_Data::IsKnownValue(
+      static_cast<int32_t>(value));
+}
+
+// Returns true if the enum has an infallible conversion from the mojom enum.
+consteval bool HasInfallibleConversion(BrowserControlsState) {
+  return true;
+}
 
 
 }  // cc::mojom

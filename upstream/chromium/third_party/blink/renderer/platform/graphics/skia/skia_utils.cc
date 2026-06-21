@@ -34,6 +34,10 @@
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #include "third_party/skia/modules/skcms/skcms.h"
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include <cstdlib>
+#endif
+
 namespace blink {
 
 bool ApproximatelyEqualSkColorSpaces(sk_sp<SkColorSpace> src_color_space,
@@ -50,16 +54,24 @@ bool ApproximatelyEqualSkColorSpaces(sk_sp<SkColorSpace> src_color_space,
 }
 
 sk_sp<SkData> TryAllocateSkData(size_t size) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void* buffer = std::calloc(1, size ? size : 1);
+#else
   void* buffer =
       Partitions::BufferPartition()
           ->AllocInline<partition_alloc::AllocFlags::kReturnNull |
                         partition_alloc::AllocFlags::kZeroFill>(size, "SkData");
+#endif
   if (!buffer)
     return nullptr;
   return SkData::MakeWithProc(
       buffer, size,
       [](const void* buffer, void* context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        std::free(const_cast<void*>(buffer));
+#else
         Partitions::BufferPartition()->Free(const_cast<void*>(buffer));
+#endif
       },
       /*context=*/nullptr);
 }

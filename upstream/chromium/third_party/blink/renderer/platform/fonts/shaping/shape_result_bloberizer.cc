@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_bloberizer.h"
 
 #include <hb.h>
+#include <unicode/utf8.h>
 
 #include <algorithm>
 

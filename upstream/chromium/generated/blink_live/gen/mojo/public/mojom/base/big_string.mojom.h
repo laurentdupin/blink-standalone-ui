@@ -33,8 +33,6 @@
 #include "mojo/public/cpp/bindings/raw_ptr_impl_ref_traits.h"
 
 
-#include "mojo/public/cpp/base/big_string_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -48,7 +46,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) BigString {
+class  BigString {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<BigString, T>::value>;
@@ -211,7 +209,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::BigString::DataView,
+struct  StructTraits<::mojo_base::mojom::BigString::DataView,
                                          ::mojo_base::mojom::BigStringPtr> {
   static bool IsNull(const ::mojo_base::mojom::BigStringPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::BigStringPtr* output) { output->reset(); }

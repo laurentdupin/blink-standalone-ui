@@ -19,6 +19,7 @@
 #include "net/cookies/site_for_cookies.h"
 #include "net/filter/source_stream_type.h"
 #include "net/http/http_request_headers.h"
+#include "net/http/http_response_headers.h"
 #include "net/log/net_log_source.h"
 #include "net/socket/socket_tag.h"
 #include "net/storage_access_api/status.h"

@@ -156,19 +156,6 @@ class SVGSVGElement final : public SVGViewportContainerElement,
   friend class SVGCurrentTranslateTearOff;
 };
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-template <>
-struct DowncastTraits<SVGSVGElement> {
-  static bool AllowFrom(const Element& element) {
-    return element.GetElementType() == ElementType::kSVGSVGElement;
-  }
-  static bool AllowFrom(const Node& node) {
-    auto* element = DynamicTo<Element>(node);
-    return element && AllowFrom(*element);
-  }
-};
-#endif  // defined(HTML_CSS_RENDERER_STANDALONE)
-
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_SVG_ELEMENT_H_

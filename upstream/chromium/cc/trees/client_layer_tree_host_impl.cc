@@ -16,7 +16,7 @@
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/metrics/frame_sequence_tracker.h"
 #include "cc/paint/paint_worklet_layer_painter.h"
-#include "cc/trees/layer_tree_host_impl_client.h"
+#include "cc/trees/layer_tree_host_impl_delegate.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/property_tree.h"
 #include "cc/trees/trace_utils.h"
@@ -42,7 +42,7 @@ const char* ClientNameForVerboseLog() {
 
 std::unique_ptr<ClientLayerTreeHostImpl> ClientLayerTreeHostImpl::Create(
     const LayerTreeSettings& settings,
-    LayerTreeHostImplClient* client,
+    LayerTreeHostImplDelegate* delegate,
     TaskRunnerProvider* task_runner_provider,
     RenderingStatsInstrumentation* rendering_stats_instrumentation,
     TaskGraphRunner* task_graph_runner,
@@ -50,12 +50,12 @@ std::unique_ptr<ClientLayerTreeHostImpl> ClientLayerTreeHostImpl::Create(
     RasterDarkModeFilter* dark_mode_filter,
     int id,
     scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
-    LayerTreeHostSchedulingClient* scheduling_client) {
+    LayerTreeHostSchedulingDelegate* scheduling_delegate) {
   CHECK(!settings.trees_in_viz_in_viz_process);
   return base::WrapUnique(new ClientLayerTreeHostImpl(
-      settings, client, task_runner_provider, rendering_stats_instrumentation,
+      settings, delegate, task_runner_provider, rendering_stats_instrumentation,
       task_graph_runner, std::move(mutator_host), dark_mode_filter, id,
-      std::move(image_worker_task_runner), scheduling_client));
+      std::move(image_worker_task_runner), scheduling_delegate));
 }
 
 ClientLayerTreeHostImpl::~ClientLayerTreeHostImpl() = default;
@@ -170,7 +170,6 @@ void ClientLayerTreeHostImpl::PullLayerTreeHostPropertiesFrom(
   set_viewport_mobile_optimized(commit_state.is_viewport_mobile_optimized);
   SetPrefersReducedMotion(commit_state.prefers_reduced_motion);
   SetMayThrottleIfUndrawnFrames(commit_state.may_throttle_if_undrawn_frames);
-  prefer_efficient_scheduling_ = commit_state.prefer_efficient_scheduling;
 }
 
 void ClientLayerTreeHostImpl::RecordGpuRasterizationHistogram() {
@@ -354,10 +353,9 @@ void ClientLayerTreeHostImpl::CreatePendingTree() {
   }
   pending_tree_fully_painted_ = false;
 
-  client_->OnCanDrawStateChanged(CanDraw());
+  delegate_->OnCanDrawStateChanged(CanDraw());
   TRACE_EVENT_BEGIN("cc", "PendingTree:waiting",
-                    perfetto::Track::FromPointer(pending_tree_.get()),
-                    "active_lsid",
+                    GetTracingTrack(pending_tree_.get()), "active_lsid",
                     active_tree()->local_surface_id_from_parent().ToString());
 }
 
@@ -402,7 +400,7 @@ void ClientLayerTreeHostImpl::
   }
 
   if (worklets_invalidated) {
-    client_->SetNeedsImplSideInvalidation(
+    delegate_->SetNeedsImplSideInvalidation(
         true /* needs_first_draw_on_activation */);
     if (sync_tree()->property_change_forces_commit_criteria() ==
         PropertyChangeForcesCommitCriteria::kAny) {
@@ -420,8 +418,11 @@ void ClientLayerTreeHostImpl::
   CHECK(!settings_.trees_in_viz_in_viz_process);
   CHECK(image_animation_controller_);
   const auto& animated_images = image_animation_controller_->AnimateForSyncTree(
-      CurrentBeginFrameArgs(), GatherImageAnimationState());
+      CurrentBeginFrameArgs(), GatherAnimatedImageDriverState());
   images_to_invalidate.insert(animated_images.begin(), animated_images.end());
+  if (image_animation_controller_->HasAdvancedAnimationClients()) {
+    SetNeedsCommit();
+  }
 
   images_to_invalidate.insert(dirty_paint_worklet_ids.begin(),
                               dirty_paint_worklet_ids.end());
@@ -454,7 +455,7 @@ void ClientLayerTreeHostImpl::
     return;
   }
 
-  client_->NotifyPaintWorkletStateChange(
+  delegate_->NotifyPaintWorkletStateChange(
       Scheduler::PaintWorkletState::PROCESSING);
   auto done_callback =
       base::BindOnce(&ClientLayerTreeHostImpl::OnPaintWorkletResultsReady,
@@ -496,7 +497,7 @@ void ClientLayerTreeHostImpl::OnPaintWorkletResultsReady(
   // Set the painted state before calling the scheduler, to ensure any callback
   // running as a result sees the correct painted state.
   pending_tree_fully_painted_ = true;
-  client_->NotifyPaintWorkletStateChange(Scheduler::PaintWorkletState::IDLE);
+  delegate_->NotifyPaintWorkletStateChange(Scheduler::PaintWorkletState::IDLE);
 
   // The pending tree may have been force activated from the signal to the
   // scheduler above, in which case there is no longer a tree to paint.

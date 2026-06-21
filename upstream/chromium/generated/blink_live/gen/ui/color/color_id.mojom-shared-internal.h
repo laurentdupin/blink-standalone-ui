@@ -94,6 +94,7 @@ struct RendererColorId_Data {
       case 63:
       case 64:
       case 65:
+      case 66:
         return true;
     }
     return false;

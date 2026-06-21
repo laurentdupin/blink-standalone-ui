@@ -97,17 +97,9 @@ class HTMLStackItem final : public GarbageCollected<HTMLStackItem> {
       ContainerNode* node,
       AtomicHTMLToken* token,
       const AtomicString& namespace_uri = html_names::xhtmlNamespaceURI) {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
-    void* storage = Partitions::FastMalloc(
-        sizeof(HTMLStackItem) + token->Attributes().size() * sizeof(Attribute),
-        WTF_HEAP_PROFILER_TYPE_NAME(HTMLStackItem));
-    return ::new (storage) HTMLStackItem(base::PassKey<HTMLStackItem>(), node,
-                                         token, namespace_uri);
-#else
     return MakeGarbageCollected<HTMLStackItem>(
         AdditionalBytes(token->Attributes().size() * sizeof(Attribute)),
         base::PassKey<HTMLStackItem>(), node, token, namespace_uri);
-#endif
   }
 
   Element* GetElement() const { return To<Element>(node_.Get()); }

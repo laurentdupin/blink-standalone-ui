@@ -8,6 +8,7 @@
 #define CC_MOJOM_LAYER_TREE_DEBUG_STATE_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/layer_tree_debug_state.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

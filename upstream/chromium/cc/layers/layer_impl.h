@@ -151,6 +151,8 @@ class CC_EXPORT LayerImpl {
                            AppendQuadsData* append_quads_data) {}
   virtual void DidDraw(viz::ClientResourceProvider* resource_provider) {}
 
+  virtual bool HasMissingTiles() const;
+
   virtual bool ComputeCheckerboardedNeedsRecord();
 
   // Verify that the resource ids in the quad are valid.
@@ -274,6 +276,7 @@ class CC_EXPORT LayerImpl {
     Region main_thread_scroll_hit_test_region;
     std::vector<ScrollHitTestRect> non_composited_scroll_hit_test_rects;
     Region wheel_event_handler_region;
+    ElementId canvas_child_id;
     PaintFlags::FilterQuality filter_quality = PaintFlags::FilterQuality::kLow;
     PaintFlags::DynamicRangeLimitMixture dynamic_range_limit{
         PaintFlags::DynamicRangeLimit::kHigh};
@@ -339,6 +342,11 @@ class CC_EXPORT LayerImpl {
   const viz::TrackedElementRects* tracked_element_rects() const {
     return rare_properties_ ? &rare_properties_->tracked_element_rects
                             : nullptr;
+  }
+
+  void SetCanvasChildId(ElementId id);
+  ElementId canvas_child_id() const {
+    return rare_properties_ ? rare_properties_->canvas_child_id : ElementId();
   }
 
   // Set or get the region that contains wheel event handler.
@@ -444,6 +452,7 @@ class CC_EXPORT LayerImpl {
   // pending tree while syncing layers from main thread, or when we recompute
   // visible layer properties on the pending tree.
   void SetNeedsPushProperties(uint8_t changed_props = kChangedGeneralProperty);
+  bool needs_push_properties() const { return needs_push_properties_; }
 
   virtual void RunMicroBenchmark(MicroBenchmarkImpl* benchmark);
 

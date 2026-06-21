@@ -22,7 +22,6 @@
 
 
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 
@@ -95,7 +94,7 @@ namespace blink::mojom {
 namespace perfetto {
 
 template <>
-struct COMPONENT_EXPORT(WEB_FEATURE_MOJO_BINDINGS_MOJOM_SHARED) TraceFormatTraits<::blink::mojom::WebFeature> {
+struct  TraceFormatTraits<::blink::mojom::WebFeature> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::blink::mojom::WebFeature value);
 };
 

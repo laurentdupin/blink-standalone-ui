@@ -25,7 +25,7 @@ bool FilePath_Data::Validate(
   if (!data)
     return true;
   if (!ValidateUnversionedStructHeaderAndSizeAndClaimMemory(
-          data, 16, validation_context)) {
+          data, 8, validation_context)) {
     return false;
   }
 
@@ -33,17 +33,6 @@ bool FilePath_Data::Validate(
   // the message comes from an older version.
   [[maybe_unused]] const FilePath_Data* object =
       static_cast<const FilePath_Data*>(data);
-
-  if (!mojo::internal::ValidatePointerNonNullable(
-          object->path, 1, validation_context)) {
-    return false;
-  }
-  constexpr const mojo::internal::ContainerValidateParams& path_validate_params =
-      mojo::internal::GetArrayValidator<0, false, nullptr>();
-  if (!mojo::internal::ValidateContainer(object->path, validation_context,
-                                         &path_validate_params)) {
-    return false;
-  }
 
   return true;
 }
@@ -59,7 +48,7 @@ bool RelativeFilePath_Data::Validate(
   if (!data)
     return true;
   if (!ValidateUnversionedStructHeaderAndSizeAndClaimMemory(
-          data, 16, validation_context)) {
+          data, 8, validation_context)) {
     return false;
   }
 
@@ -67,17 +56,6 @@ bool RelativeFilePath_Data::Validate(
   // the message comes from an older version.
   [[maybe_unused]] const RelativeFilePath_Data* object =
       static_cast<const RelativeFilePath_Data*>(data);
-
-  if (!mojo::internal::ValidatePointerNonNullable(
-          object->path, 1, validation_context)) {
-    return false;
-  }
-  constexpr const mojo::internal::ContainerValidateParams& path_validate_params =
-      mojo::internal::GetArrayValidator<0, false, nullptr>();
-  if (!mojo::internal::ValidateContainer(object->path, validation_context,
-                                         &path_validate_params)) {
-    return false;
-  }
 
   return true;
 }

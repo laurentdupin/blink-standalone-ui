@@ -6,5 +6,7 @@
 
 #ifndef CC_MOJOM_BROWSER_CONTROLS_STATE_MOJOM_IMPORT_HEADERS_H_
 #define CC_MOJOM_BROWSER_CONTROLS_STATE_MOJOM_IMPORT_HEADERS_H_
+#include "cc/input/browser_controls_state.h"
+#include "cc/mojom/browser_controls_state_mojom_traits.h"
 
 #endif  // CC_MOJOM_BROWSER_CONTROLS_STATE_MOJOM_IMPORT_HEADERS_H_

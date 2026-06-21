@@ -32,9 +32,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink.h"
-#endif
 #include "third_party/blink/renderer/platform/graphics/deferred_image_decoder.h"
 #include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"

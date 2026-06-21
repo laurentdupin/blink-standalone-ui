@@ -6,5 +6,7 @@
 
 #ifndef CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_BLINK_IMPORT_HEADERS_H_
 #define CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_BLINK_IMPORT_HEADERS_H_
+#include "cc/input/overscroll_behavior.h"
+#include "cc/mojom/overscroll_behavior_mojom_traits.h"
 
 #endif  // CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_BLINK_IMPORT_HEADERS_H_

@@ -16,6 +16,9 @@
 #include "mojo/public/cpp/bindings/lib/has_send_validation_helper.h"
 
 namespace mojo::internal {
+template <typename MaybeConstUserType>
+struct HasSendValidationSerialize<::cc::mojom::BrowserControlsState, MaybeConstUserType>
+    : std::false_type {};
 
 }  // namespace mojo::internal
 

@@ -32,9 +32,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom-blink-forward.h"
-#endif
 #include "third_party/blink/renderer/platform/graphics/graphics_context_types.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
 #include "third_party/blink/renderer/platform/graphics/image_orientation.h"
@@ -63,21 +61,6 @@ class RectF;
 }  // namespace gfx
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_IMAGE_ANIMATION_POLICY_DEFINED)
-#define BLINK_STANDALONE_IMAGE_ANIMATION_POLICY_DEFINED
-namespace mojom {
-enum class ImageAnimationPolicy {
-  kImageAnimationPolicyAllowed,
-  kImageAnimationPolicyAnimateOnce,
-  kImageAnimationPolicyNoAnimation,
-};
-namespace blink {
-using ImageAnimationPolicy = ::blink::mojom::ImageAnimationPolicy;
-}  // namespace blink
-}  // namespace mojom
-#endif
 
 class GraphicsContext;
 class Image;

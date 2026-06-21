@@ -32,7 +32,6 @@
 
 
 #include "mojo/public/cpp/base/read_only_buffer_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -46,7 +45,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) ReadOnlyBuffer {
+class  ReadOnlyBuffer {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ReadOnlyBuffer, T>::value>;
@@ -219,7 +218,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::ReadOnlyBuffer::DataView,
+struct  StructTraits<::mojo_base::mojom::ReadOnlyBuffer::DataView,
                                          ::mojo_base::mojom::ReadOnlyBufferPtr> {
   static bool IsNull(const ::mojo_base::mojom::ReadOnlyBufferPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::ReadOnlyBufferPtr* output) { output->reset(); }

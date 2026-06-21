@@ -28,7 +28,7 @@
 
 
 namespace cc::mojom {
-using OverscrollBehaviorDataView = mojo::native::NativeStructDataView;
+class OverscrollBehaviorDataView;
 
 
 
@@ -38,11 +38,78 @@ using OverscrollBehaviorDataView = mojo::native::NativeStructDataView;
 namespace mojo {
 namespace internal {
 
+template <>
+struct MojomTypeTraits<::cc::mojom::OverscrollBehaviorDataView> {
+  using Data = ::cc::mojom::internal::OverscrollBehavior_Data;
+  using DataAsArrayElement = Pointer<Data>;
+  static constexpr MojomTypeCategory category = MojomTypeCategory::kStruct;
+};
+
 }  // namespace internal
 }  // namespace mojo
 
 
 namespace cc::mojom {
+
+
+enum class OverscrollBehaviorType : int32_t {
+  
+  kNone = 0,
+  
+  kAuto = 1,
+  
+  kContain = 2,
+  
+  kChain = 3,
+  kMinValue = 0,
+  kMaxValue = 3,
+};
+
+ std::ostream& operator<<(std::ostream& os, OverscrollBehaviorType value);
+inline bool IsKnownEnumValue(OverscrollBehaviorType value) {
+  return internal::OverscrollBehaviorType_Data::IsKnownValue(
+      static_cast<int32_t>(value));
+}
+
+// Returns true if the enum has an infallible conversion from the mojom enum.
+consteval bool HasInfallibleConversion(OverscrollBehaviorType) {
+  return true;
+}
+
+
+class OverscrollBehaviorDataView {
+ public:
+  OverscrollBehaviorDataView() = default;
+
+  OverscrollBehaviorDataView(
+      internal::OverscrollBehavior_Data* data,
+      mojo::Message* message)
+      : data_(data) {}
+
+  bool is_null() const { return !data_; }
+  template <typename UserType>
+  [[nodiscard]] bool ReadX(UserType* output) const {
+    auto data_value = data_->x;
+    return mojo::internal::Deserialize<::cc::mojom::OverscrollBehaviorType>(
+        data_value, output);
+  }
+  OverscrollBehaviorType x() const {
+    return ::mojo::internal::ToKnownEnumValueHelper(
+          static_cast<::cc::mojom::OverscrollBehaviorType>(data_->x));
+  }
+  template <typename UserType>
+  [[nodiscard]] bool ReadY(UserType* output) const {
+    auto data_value = data_->y;
+    return mojo::internal::Deserialize<::cc::mojom::OverscrollBehaviorType>(
+        data_value, output);
+  }
+  OverscrollBehaviorType y() const {
+    return ::mojo::internal::ToKnownEnumValueHelper(
+          static_cast<::cc::mojom::OverscrollBehaviorType>(data_->y));
+  }
+ private:
+  internal::OverscrollBehavior_Data* data_ = nullptr;
+};
 
 
 }  // cc::mojom

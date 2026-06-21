@@ -24,8 +24,6 @@
 
 
 
-#include "mojo/public/cpp/bindings/native_enum.h"
-#include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
 
 #include "cc/mojom/overscroll_behavior.mojom-data-view.h"  // IWYU pragma: export
 
@@ -34,9 +32,96 @@
 
 namespace std {
 
+template <>
+struct hash<::cc::mojom::OverscrollBehaviorType>
+    : public mojo::internal::EnumHashImpl<::cc::mojom::OverscrollBehaviorType> {};
+
 }  // namespace std
 
 namespace mojo {
+
+
+namespace internal {
+
+template <typename MaybeConstUserType>
+struct Serializer<::cc::mojom::OverscrollBehaviorType, MaybeConstUserType> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = EnumTraits<::cc::mojom::OverscrollBehaviorType, UserType>;
+
+  static void Serialize(UserType input, int32_t* output) {
+    *output = static_cast<int32_t>(Traits::ToMojom(input));
+  }
+
+  static bool Deserialize(int32_t input, UserType* output) {
+    auto known_value = ::mojo::internal::ToKnownEnumValueHelper(
+        static_cast<::cc::mojom::OverscrollBehaviorType>(input));
+    if constexpr (requires {
+                    {
+                      Traits::FromMojom(known_value)
+                    } -> std::same_as<UserType>;
+                  }) {
+      static_assert(std::same_as<::cc::mojom::OverscrollBehaviorType, UserType> ||
+                        HasInfallibleConversion(::cc::mojom::OverscrollBehaviorType()),
+                    "::cc::mojom::OverscrollBehaviorType does not have an infallible conversion, "
+                    "use an optional return type.");
+      *output = Traits::FromMojom(known_value);
+      return true;
+    } else {
+      static_assert(
+          requires {
+            {
+              Traits::FromMojom(known_value)
+            } -> std::same_as<std::optional<UserType>>;
+          }, "FromMojom must return by value or optional.");
+      std::optional<UserType> from_mojom = Traits::FromMojom(known_value);
+      if (from_mojom) {
+        *output = *from_mojom;
+      }
+      return from_mojom.has_value();
+    }
+  }
+};
+
+}  // namespace internal
+
+
+namespace internal {
+
+template <typename MaybeConstUserType>
+struct Serializer<::cc::mojom::OverscrollBehaviorDataView, MaybeConstUserType> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = StructTraits<::cc::mojom::OverscrollBehaviorDataView, UserType>;
+
+  static void Serialize(
+      MaybeConstUserType& input,
+      mojo::internal::MessageFragment<::cc::mojom::internal::OverscrollBehavior_Data>& fragment) {
+    if (CallIsNullIfExists<Traits>(input))
+      return;
+    fragment.Allocate();
+
+    
+    mojo::internal::Serialize<::cc::mojom::OverscrollBehaviorType>(
+      Traits::x(input),
+      &fragment->x);
+
+    
+    mojo::internal::Serialize<::cc::mojom::OverscrollBehaviorType>(
+      Traits::y(input),
+      &fragment->y);
+  }
+
+  static bool Deserialize(::cc::mojom::internal::OverscrollBehavior_Data* input,
+                          UserType* output,
+                          Message* message) {
+    if (!input)
+      return CallSetToNullIfExists<Traits>(output);
+
+    ::cc::mojom::OverscrollBehaviorDataView data_view(input, message);
+    return Traits::Read(data_view, output);
+  }
+};
+
+}  // namespace internal
 
 }  // namespace mojo
 
@@ -44,9 +129,20 @@ namespace mojo {
 namespace cc::mojom {
 
 
+
+
 }  // cc::mojom
 
 // Declare TraceFormatTraits for enums, which should be defined in ::perfetto
 // namespace.
+
+namespace perfetto {
+
+template <>
+struct  TraceFormatTraits<::cc::mojom::OverscrollBehaviorType> {
+ static void WriteIntoTrace(perfetto::TracedValue context, ::cc::mojom::OverscrollBehaviorType value);
+};
+
+} // namespace perfetto
 
 #endif  // CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_SHARED_H_

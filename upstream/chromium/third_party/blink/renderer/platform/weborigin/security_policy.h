@@ -29,36 +29,14 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_SECURITY_POLICY_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_SECURITY_POLICY_H_
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "services/network/public/mojom/cors_origin_pattern.mojom-blink-forward.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
-#endif
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_CORS_ENUMS_DEFINED)
-#define BLINK_STANDALONE_CORS_ENUMS_DEFINED
-namespace network::mojom {
-enum class CorsDomainMatchMode {
-  kDisallowSubdomains,
-  kAllowSubdomains,
-  kAllowRegistrableDomains,
-};
-enum class CorsPortMatchMode {
-  kAllowOnlySpecifiedPort,
-  kAllowAnyPort,
-};
-enum class CorsOriginAccessMatchPriority {
-  kDefaultPriority,
-  kLowPriority,
-};
-}  // namespace network::mojom
-#endif
 
 class KURL;
 class SecurityOrigin;

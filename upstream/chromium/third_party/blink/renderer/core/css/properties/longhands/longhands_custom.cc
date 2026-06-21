@@ -6456,22 +6456,37 @@ const CSSValue* ListStyleType::CSSValueFromComputedStyleInternal(
 void ListStyleType::ApplyValue(StyleResolverState& state,
                                const CSSValue& value,
                                ValueModeFlags) const {
-  DCHECK(value.IsScopedValue());
+  const CSSValue* scoped_value = &value;
+  const TreeScope* standalone_tree_scope = nullptr;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  standalone_tree_scope = &state.GetElement().GetTreeScope();
+  if (const auto* list_value = DynamicTo<CSSValueList>(*scoped_value);
+      list_value && list_value->length() == 1) {
+    scoped_value = &list_value->First();
+  }
+  if (!scoped_value->IsScopedValue()) {
+    scoped_value = &scoped_value->EnsureScopedValue(standalone_tree_scope);
+  }
+#endif
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+  DCHECK(scoped_value->IsScopedValue());
+#endif
   ComputedStyleBuilder& builder = state.StyleBuilder();
-  if (const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+  if (const auto* identifier_value =
+          DynamicTo<CSSIdentifierValue>(*scoped_value)) {
     DCHECK_EQ(CSSValueID::kNone, identifier_value->GetValueID());
     builder.SetListStyleType(nullptr);
     return;
   }
 
-  if (const auto* string_value = DynamicTo<CSSStringValue>(value)) {
+  if (const auto* string_value = DynamicTo<CSSStringValue>(*scoped_value)) {
     builder.SetListStyleType(
         ListStyleTypeData::CreateString(AtomicString(string_value->Value())));
     return;
   }
 
-  DCHECK(value.IsCustomIdentValue());
-  const auto& custom_ident_value = To<CSSCustomIdentValue>(value);
+  DCHECK(scoped_value->IsScopedValue() || scoped_value->IsCustomIdentValue());
+  const auto& custom_ident_value = To<CSSCustomIdentValue>(*scoped_value);
   // 窶弋he non-overridable counter-style names are the keywords decimal,
   // disc, square, circle, disclosure-open, and disclosure-closed.窶・  //
   // NOTE: Keep in sync with ConsumeCounterStyleNameInPrelude().
@@ -6485,8 +6500,14 @@ void ListStyleType::ApplyValue(StyleResolverState& state,
       custom_ident_value.Value() != keywords::kDisclosureClosed) {
     state.SetHasTreeScopedReference();
   }
+  const TreeScope* tree_scope = custom_ident_value.GetTreeScope();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!tree_scope) {
+    tree_scope = standalone_tree_scope;
+  }
+#endif
   builder.SetListStyleType(ListStyleTypeData::CreateCounterStyle(
-      custom_ident_value.Value(), custom_ident_value.GetTreeScope()));
+      custom_ident_value.Value(), tree_scope));
 }
 
 bool MarginBlockEnd::IsLayoutDependent(const ComputedStyle* style,

@@ -1846,9 +1846,13 @@ StyleMedia* LocalDOMWindow::styleMedia() {
 CSSStyleDeclaration* LocalDOMWindow::getComputedStyle(
     Element* elt,
     const String& pseudo_elt) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   DCHECK(elt);
   return MakeGarbageCollected<CSSComputedStyleDeclaration>(elt, false,
                                                            pseudo_elt);
+#endif
 }
 
 double LocalDOMWindow::devicePixelRatio() const {

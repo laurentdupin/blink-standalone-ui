@@ -20,8 +20,6 @@
 
 
 
-#include "mojo/public/cpp/bindings/native_enum.h"
-#include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
 
 #include "cc/mojom/browser_controls_state.mojom-data-view.h"  // IWYU pragma: export
 
@@ -30,9 +28,57 @@
 
 namespace std {
 
+template <>
+struct hash<::cc::mojom::BrowserControlsState>
+    : public mojo::internal::EnumHashImpl<::cc::mojom::BrowserControlsState> {};
+
 }  // namespace std
 
 namespace mojo {
+
+
+namespace internal {
+
+template <typename MaybeConstUserType>
+struct Serializer<::cc::mojom::BrowserControlsState, MaybeConstUserType> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = EnumTraits<::cc::mojom::BrowserControlsState, UserType>;
+
+  static void Serialize(UserType input, int32_t* output) {
+    *output = static_cast<int32_t>(Traits::ToMojom(input));
+  }
+
+  static bool Deserialize(int32_t input, UserType* output) {
+    auto known_value = ::mojo::internal::ToKnownEnumValueHelper(
+        static_cast<::cc::mojom::BrowserControlsState>(input));
+    if constexpr (requires {
+                    {
+                      Traits::FromMojom(known_value)
+                    } -> std::same_as<UserType>;
+                  }) {
+      static_assert(std::same_as<::cc::mojom::BrowserControlsState, UserType> ||
+                        HasInfallibleConversion(::cc::mojom::BrowserControlsState()),
+                    "::cc::mojom::BrowserControlsState does not have an infallible conversion, "
+                    "use an optional return type.");
+      *output = Traits::FromMojom(known_value);
+      return true;
+    } else {
+      static_assert(
+          requires {
+            {
+              Traits::FromMojom(known_value)
+            } -> std::same_as<std::optional<UserType>>;
+          }, "FromMojom must return by value or optional.");
+      std::optional<UserType> from_mojom = Traits::FromMojom(known_value);
+      if (from_mojom) {
+        *output = *from_mojom;
+      }
+      return from_mojom.has_value();
+    }
+  }
+};
+
+}  // namespace internal
 
 }  // namespace mojo
 
@@ -44,5 +90,14 @@ namespace cc::mojom {
 
 // Declare TraceFormatTraits for enums, which should be defined in ::perfetto
 // namespace.
+
+namespace perfetto {
+
+template <>
+struct  TraceFormatTraits<::cc::mojom::BrowserControlsState> {
+ static void WriteIntoTrace(perfetto::TracedValue context, ::cc::mojom::BrowserControlsState value);
+};
+
+} // namespace perfetto
 
 #endif  // CC_MOJOM_BROWSER_CONTROLS_STATE_MOJOM_SHARED_H_

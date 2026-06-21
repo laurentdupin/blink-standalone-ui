@@ -11,7 +11,7 @@
 #include "gpu/config/gpu_blocklist.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_feature_info.h"
-#include "gpu/ipc/common/gpu_feature_info.mojom.h"
+#include "gpu/ipc/common/gpu_feature_info.mojom-shared.h"
 #include "gpu/ipc/common/gpu_ipc_common_export.h"
 
 namespace mojo {

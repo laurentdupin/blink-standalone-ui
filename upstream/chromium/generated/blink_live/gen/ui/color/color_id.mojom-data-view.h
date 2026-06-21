@@ -146,35 +146,37 @@ enum class RendererColorId : int32_t {
   
   kColorWebNativeControlScrollbarArrowForegroundDisabled = 51,
   
-  kColorWebNativeControlScrollbarArrowForegroundPressed = 52,
+  kColorWebNativeControlScrollbarArrowForegroundHovered = 52,
   
-  kColorWebNativeControlScrollbarCorner = 53,
+  kColorWebNativeControlScrollbarArrowForegroundPressed = 53,
   
-  kColorWebNativeControlScrollbarThumb = 54,
+  kColorWebNativeControlScrollbarCorner = 54,
   
-  kColorWebNativeControlScrollbarThumbHovered = 55,
+  kColorWebNativeControlScrollbarThumb = 55,
   
-  kColorWebNativeControlScrollbarThumbOverlayMinimalMode = 56,
+  kColorWebNativeControlScrollbarThumbHovered = 56,
   
-  kColorWebNativeControlScrollbarThumbPressed = 57,
+  kColorWebNativeControlScrollbarThumbOverlayMinimalMode = 57,
   
-  kColorWebNativeControlScrollbarTrack = 58,
+  kColorWebNativeControlScrollbarThumbPressed = 58,
   
-  kColorWebNativeControlSlider = 59,
+  kColorWebNativeControlScrollbarTrack = 59,
   
-  kColorWebNativeControlSliderBorder = 60,
+  kColorWebNativeControlSlider = 60,
   
-  kColorWebNativeControlSliderBorderHovered = 61,
+  kColorWebNativeControlSliderBorder = 61,
   
-  kColorWebNativeControlSliderBorderPressed = 62,
+  kColorWebNativeControlSliderBorderHovered = 62,
   
-  kColorWebNativeControlSliderDisabled = 63,
+  kColorWebNativeControlSliderBorderPressed = 63,
   
-  kColorWebNativeControlSliderHovered = 64,
+  kColorWebNativeControlSliderDisabled = 64,
   
-  kColorWebNativeControlSliderPressed = 65,
+  kColorWebNativeControlSliderHovered = 65,
+  
+  kColorWebNativeControlSliderPressed = 66,
   kMinValue = 0,
-  kMaxValue = 65,
+  kMaxValue = 66,
 };
 
  std::ostream& operator<<(std::ostream& os, RendererColorId value);

@@ -1090,6 +1090,7 @@ size_t VideoFrame::Columns(size_t plane, VideoPixelFormat format, int width) {
          sample_width;
 }
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 // static
 void VideoFrame::UpdateHashWithFrameForTesting(crypto::hash::Hasher& hasher,
                                                const VideoFrame& frame,
@@ -1116,6 +1117,7 @@ std::string VideoFrame::HexHashOfFrameForTesting(const VideoFrame& frame,
   hasher.Finish(hash);
   return base::HexEncodeLower(hash);
 }
+#endif
 
 void VideoFrame::BackWithSharedMemory(
     const base::ReadOnlySharedMemoryRegion* region) {

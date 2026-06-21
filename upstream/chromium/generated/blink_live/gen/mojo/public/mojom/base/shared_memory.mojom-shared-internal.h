@@ -12,7 +12,6 @@
 #include "mojo/public/cpp/bindings/lib/message_fragment.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -30,7 +29,7 @@ class WritableSharedMemoryRegion_Data;
 class UnsafeSharedMemoryRegion_Data;
 
 #pragma pack(push, 1)
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) ReadOnlySharedMemoryRegion_Data {
+class  ReadOnlySharedMemoryRegion_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -79,7 +78,7 @@ struct ReadOnlySharedMemoryRegion_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     ReadOnlySharedMemoryRegion_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) WritableSharedMemoryRegion_Data {
+class  WritableSharedMemoryRegion_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -128,7 +127,7 @@ struct WritableSharedMemoryRegion_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     WritableSharedMemoryRegion_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) UnsafeSharedMemoryRegion_Data {
+class  UnsafeSharedMemoryRegion_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

@@ -79,10 +79,6 @@ class LayerSelectionBoundDataView {
     return mojo::internal::Deserialize<::gfx::mojom::SelectionBoundType>(
         data_value, output);
   }
-  ::gfx::mojom::SelectionBoundType type() const {
-    return ::mojo::internal::ToKnownEnumValueHelper(
-          static_cast<::gfx::mojom::SelectionBoundType>(data_->type));
-  }
   inline void GetEdgeStartDataView(
       ::gfx::mojom::PointDataView* output);
 

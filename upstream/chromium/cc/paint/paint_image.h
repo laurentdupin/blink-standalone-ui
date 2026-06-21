@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "base/gtest_prod_util.h"
@@ -393,12 +394,7 @@ class CC_PAINT_EXPORT PaintImage {
     return gainmap_info_.value();
   }
 
-  gfx::HDRMetadata GetHDRMetadata() const {
-    if (const auto* image_metadata = GetImageHeaderMetadata()) {
-      return image_metadata->hdr_metadata;
-    }
-    return gfx::HDRMetadata();
-  }
+  const gfx::HDRMetadata& GetHDRMetadata() const { return hdr_metadata_; }
 
   std::string ToString() const;
 
@@ -505,6 +501,21 @@ class CC_PAINT_EXPORT PaintImage {
 
   // The input parameters that are needed to execute the JS paint callback.
   scoped_refptr<DeferredPaintRecord> deferred_paint_record_;
+};
+
+// Lookup table to get the animation frame to be used for rasterization.
+class CC_PAINT_EXPORT AnimatedImageFrameIndexMap
+    : public base::RefCounted<AnimatedImageFrameIndexMap>,
+      public base::flat_map<PaintImage::Id, size_t> {
+ public:
+  AnimatedImageFrameIndexMap();
+  AnimatedImageFrameIndexMap(
+      base::sorted_unique_t sorted_unique,
+      const std::vector<std::pair<PaintImage::Id, size_t>>& entries);
+
+ private:
+  friend class base::RefCounted<AnimatedImageFrameIndexMap>;
+  ~AnimatedImageFrameIndexMap();
 };
 
 }  // namespace cc

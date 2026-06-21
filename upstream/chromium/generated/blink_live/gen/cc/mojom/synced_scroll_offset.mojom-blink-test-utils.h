@@ -8,6 +8,7 @@
 #define CC_MOJOM_SYNCED_SCROLL_OFFSET_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/synced_scroll_offset.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

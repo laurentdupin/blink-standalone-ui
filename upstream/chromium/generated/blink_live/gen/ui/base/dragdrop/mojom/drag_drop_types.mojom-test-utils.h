@@ -8,7 +8,6 @@
 #define UI_BASE_DRAGDROP_MOJOM_DRAG_DROP_TYPES_MOJOM_TEST_UTILS_H_
 
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
-#include "base/component_export.h"
 
 
 namespace ui::mojom {

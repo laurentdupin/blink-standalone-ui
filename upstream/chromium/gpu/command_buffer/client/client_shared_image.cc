@@ -27,17 +27,20 @@
 #include "gpu/command_buffer/client/internal/mappable_buffer.h"
 #include "gpu/command_buffer/client/internal/mappable_buffer_shared_memory.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
-#include "gpu/command_buffer/client/webgpu_interface.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
-#include "third_party/dawn/include/dawn/wire/client/webgpu_cpp.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/buffer_usage_util.h"
 #include "ui/gfx/gpu_fence.h"
+
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#include "gpu/command_buffer/client/webgpu_interface.h"
+#include "third_party/dawn/include/dawn/wire/client/webgpu_cpp.h"
+#endif
 
 #if BUILDFLAG(IS_APPLE)
 #include "gpu/command_buffer/client/internal/mappable_buffer_io_surface.h"
@@ -49,7 +52,7 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "gpu/command_buffer/client/internal/mappable_buffer_dxgi.h"
 #endif
 
@@ -280,7 +283,7 @@ ClientSharedImage::CreateMappableBufferFromHandle(
           usage);
     }
 #endif
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_WIN) && !defined(HTML_CSS_RENDERER_STANDALONE)
     case gfx::DXGI_SHARED_HANDLE: {
       // DXGI handles require GPU roundtrip for mapping, so they will wait
       // for event to trigger in async callback.
@@ -915,6 +918,7 @@ void ClientSharedImage::RunOnTaskRunner(
                std::move(result_cb));
 }
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 std::unique_ptr<WebGPUTextureScopedAccess>
 ClientSharedImage::BeginWebGPUTextureAccess(
     webgpu::WebGPUInterface* webgpu,
@@ -931,6 +935,7 @@ ClientSharedImage::BeginWebGPUTextureAccess(
   return base::WrapUnique(new WebGPUTextureScopedAccess(
       webgpu, this, sync_token, device, desc, usage, mailbox_flags));
 }
+#endif
 
 ExportedSharedImage::ExportedSharedImage() = default;
 ExportedSharedImage::~ExportedSharedImage() = default;
@@ -1065,6 +1070,7 @@ SyncToken RasterScopedAccess::EndAccess(
   return sync_token;
 }
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 WebGPUTextureScopedAccess::WebGPUTextureScopedAccess(
     webgpu::WebGPUInterface* webgpu,
     ClientSharedImage* shared_image,
@@ -1216,5 +1222,6 @@ SyncToken WebGPUBufferScopedAccess::EndAccess(
 const wgpu::Buffer& WebGPUBufferScopedAccess::buffer() {
   return *buffer_.get();
 }
+#endif  // !defined(HTML_CSS_RENDERER_STANDALONE)
 
 }  // namespace gpu

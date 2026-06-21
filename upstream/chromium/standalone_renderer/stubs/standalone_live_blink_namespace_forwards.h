@@ -183,7 +183,7 @@ using URLLoaderFactory = ::network::mojom::URLLoaderFactory;
 }  // namespace blink::network::mojom::blink
 
 namespace blink {
-struct BlinkTransferableMessage {};
+struct BlinkTransferableMessage;
 class DocumentLoader;
 class Element;
 class Frame;

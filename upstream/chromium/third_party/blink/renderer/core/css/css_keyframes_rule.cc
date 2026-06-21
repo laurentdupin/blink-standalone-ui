@@ -48,6 +48,17 @@ StyleRuleKeyframes::StyleRuleKeyframes()
 
 StyleRuleKeyframes::StyleRuleKeyframes(const StyleRuleKeyframes& o) = default;
 
+StyleRuleKeyframes::StyleRuleKeyframes(
+    HeapVector<Member<StyleRuleKeyframe>>&& keyframes,
+    const AtomicString& name,
+    unsigned version,
+    bool is_vendor_prefixed)
+    : StyleRuleBase(kKeyframes),
+      keyframes_(std::move(keyframes)),
+      name_(name),
+      version_(version),
+      is_prefixed_(is_vendor_prefixed) {}
+
 StyleRuleKeyframes::~StyleRuleKeyframes() = default;
 
 void StyleRuleKeyframes::ParserAppendKeyframe(StyleRuleKeyframe* keyframe) {
@@ -191,6 +202,9 @@ unsigned CSSKeyframesRule::length() const {
 
 CSSKeyframeRule* CSSKeyframesRule::Item(unsigned index,
                                         bool trigger_use_counters) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   if (index >= length()) {
     return nullptr;
   }
@@ -205,6 +219,7 @@ CSSKeyframeRule* CSSKeyframesRule::Item(unsigned index,
   }
 
   return rule.Get();
+#endif
 }
 
 CSSKeyframeRule* CSSKeyframesRule::AnonymousIndexedGetter(
@@ -219,22 +234,38 @@ CSSKeyframeRule* CSSKeyframesRule::AnonymousIndexedGetter(
 }
 
 CSSRuleList* CSSKeyframesRule::cssRules() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   if (!rule_list_cssom_wrapper_) {
     rule_list_cssom_wrapper_ =
         MakeGarbageCollected<LiveCSSRuleList<CSSKeyframesRule>>(
             const_cast<CSSKeyframesRule*>(this));
   }
   return rule_list_cssom_wrapper_.Get();
+#endif
 }
 
 void CSSKeyframesRule::Reattach(StyleRuleBase* rule) {
   DCHECK(rule);
   keyframes_rule_ = To<StyleRuleKeyframes>(rule);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+  CHECK_EQ(child_rule_cssom_wrappers_.size(),
+           keyframes_rule_->Keyframes().size());
+  for (unsigned i = 0; i < child_rule_cssom_wrappers_.size(); ++i) {
+    if (child_rule_cssom_wrappers_[i]) {
+      child_rule_cssom_wrappers_[i]->Reattach(
+          keyframes_rule_->Keyframes()[i].Get());
+    }
+  }
+#endif
 }
 
 void CSSKeyframesRule::Trace(Visitor* visitor) const {
   CSSRule::Trace(visitor);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   visitor->Trace(child_rule_cssom_wrappers_);
+#endif
   visitor->Trace(keyframes_rule_);
   visitor->Trace(rule_list_cssom_wrapper_);
 }

@@ -1,4 +1,4 @@
-﻿// Copyright 2014 The Chromium Authors
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -10,10 +10,6 @@
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
 #include "third_party/blink/renderer/core/html/parser/input_stream_preprocessor.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_names.h"
-
-#if defined(HTML_CSS_RENDERER_STANDALONE) || defined(STANDALONE_RENDERER_GN_PROBE)
-#include <cstdio>
-#endif
 
 #ifdef __SSE2__
 #include <immintrin.h>
@@ -377,8 +373,6 @@ CSSParserToken CSSTokenizer::ConsumeNumericToken() {
 // https://drafts.csswg.org/css-syntax/#consume-ident-like-token
 CSSParserToken CSSTokenizer::ConsumeIdentLikeToken() {
   StringView name = ConsumeName();
-#if defined(HTML_CSS_RENDERER_STANDALONE) || defined(STANDALONE_RENDERER_GN_PROBE)
-#endif
   if (ConsumeIfNext('(')) {
     if (EqualIgnoringAsciiCase(name, "url")) {
       // The spec is slightly different so as to avoid dropping whitespace
@@ -599,8 +593,6 @@ bool CSSTokenizer::ConsumeIfNext(UChar character) {
 // to escape it (into a Unicode replacement character) if we should see it.
 StringView CSSTokenizer::ConsumeName() {
   StringView buffer = input_.Peek();
-#if defined(HTML_CSS_RENDERER_STANDALONE) || defined(STANDALONE_RENDERER_GN_PROBE)
-#endif
 
   unsigned size = 0;
 #if defined(__SSE2__) || defined(__ARM_NEON__)
@@ -683,18 +675,13 @@ StringView CSSTokenizer::ConsumeName() {
       } else {
         // Names without escapes get handled without allocations
         input_.Advance(size);
-        StringView result(buffer, 0, size);
-#if defined(HTML_CSS_RENDERER_STANDALONE) || defined(STANDALONE_RENDERER_GN_PROBE)
-#endif
-        return result;
+        return StringView(buffer, 0, size);
       }
     }
   }
 
   // The entire rest of the string is a name.
   input_.Advance(size);
-#if defined(HTML_CSS_RENDERER_STANDALONE) || defined(STANDALONE_RENDERER_GN_PROBE)
-#endif
   return buffer;
 }
 

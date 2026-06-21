@@ -25,6 +25,7 @@
 #include "ui/gfx/geometry/mojom/geometry.mojom-blink-import-headers.h"
 #include "ui/gfx/geometry/mojom/geometry.mojom-blink-test-utils.h"
 #include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 
 
 namespace gfx::mojom::blink {
@@ -79,6 +80,13 @@ PointF::PointF(
       y(std::move(y_in)) {}
 
 PointF::~PointF() = default;
+
+size_t PointF::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, this->x);
+  seed = mojo::internal::WTFHash(seed, this->y);
+  return seed;
+}
+
 
 void PointF::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
@@ -171,6 +179,13 @@ Size::Size(
       height(std::move(height_in)) {}
 
 Size::~Size() = default;
+
+size_t Size::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, this->width);
+  seed = mojo::internal::WTFHash(seed, this->height);
+  return seed;
+}
+
 
 void Size::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

@@ -32,7 +32,6 @@
 
 
 #include "mojo/public/cpp/base/time_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -43,7 +42,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Time {
+class  Time {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Time, T>::value>;
@@ -92,6 +91,8 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Time {
 
   template <typename T, Time::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -190,7 +191,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) JSTime {
+class  JSTime {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<JSTime, T>::value>;
@@ -337,7 +338,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) TimeDelta {
+class  TimeDelta {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<TimeDelta, T>::value>;
@@ -484,7 +485,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) TimeTicks {
+class  TimeTicks {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<TimeTicks, T>::value>;
@@ -533,6 +534,8 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) TimeTicks {
 
   template <typename T, TimeTicks::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -729,7 +732,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Time::DataView,
+struct  StructTraits<::mojo_base::mojom::Time::DataView,
                                          ::mojo_base::mojom::TimePtr> {
   static bool IsNull(const ::mojo_base::mojom::TimePtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::TimePtr* output) { output->reset(); }
@@ -744,7 +747,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Time::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::JSTime::DataView,
+struct  StructTraits<::mojo_base::mojom::JSTime::DataView,
                                          ::mojo_base::mojom::JSTimePtr> {
   static bool IsNull(const ::mojo_base::mojom::JSTimePtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::JSTimePtr* output) { output->reset(); }
@@ -759,7 +762,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::JSTime
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::TimeDelta::DataView,
+struct  StructTraits<::mojo_base::mojom::TimeDelta::DataView,
                                          ::mojo_base::mojom::TimeDeltaPtr> {
   static bool IsNull(const ::mojo_base::mojom::TimeDeltaPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::TimeDeltaPtr* output) { output->reset(); }
@@ -774,7 +777,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::TimeDe
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::TimeTicks::DataView,
+struct  StructTraits<::mojo_base::mojom::TimeTicks::DataView,
                                          ::mojo_base::mojom::TimeTicksPtr> {
   static bool IsNull(const ::mojo_base::mojom::TimeTicksPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::TimeTicksPtr* output) { output->reset(); }

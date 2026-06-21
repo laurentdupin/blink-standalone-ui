@@ -11,7 +11,7 @@
 #include "src/sksl/codegen/SkSLCodeGenTypes.h"
 #include "src/sksl/spirv.h"
 
-#ifdef SK_DEBUG
+#if defined(SK_DEBUG) && !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "src/gpu/graphite/Log.h"
 #include "src/sksl/SkSLCompiler.h"
 #include "src/sksl/codegen/SkSLSPIRVValidator.h"
@@ -505,7 +505,7 @@ SkSL::NativeShader TransformSPIRV(const SkSL::NativeShader& spirv,
     SpirvTransformer transformer(spirv.fBinary, options, &result.fBinary);
     transformer.transform();
 
-#ifdef SK_DEBUG
+#if defined(SK_DEBUG) && !defined(HTML_CSS_RENDERER_STANDALONE)
     // Validate the SPIR-V after performing any transformations. This is rather costly, so only
     // do this on debug builds.
     static SkSL::Compiler compiler;

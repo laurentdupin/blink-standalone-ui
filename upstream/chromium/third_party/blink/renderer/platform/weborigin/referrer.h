@@ -31,36 +31,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_REFERRER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WEBORIGIN_REFERRER_H_
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
-#endif
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_REFERRER_POLICY_ENUM_DEFINED)
-#define BLINK_STANDALONE_REFERRER_POLICY_ENUM_DEFINED
-namespace network::mojom {
-enum class ReferrerPolicy {
-  kAlways,
-  kDefault,
-  kNoReferrerWhenDowngrade,
-  kNever,
-  kOrigin,
-  kOriginWhenCrossOrigin,
-  kSameOrigin,
-  kStrictOrigin,
-  kStrictOriginWhenCrossOrigin,
-};
-namespace blink {
-using ReferrerPolicy = ::blink::network::mojom::ReferrerPolicy;
-}  // namespace blink
-}  // namespace network::mojom
-#endif
 
 struct PLATFORM_EXPORT Referrer {
   DISALLOW_NEW();

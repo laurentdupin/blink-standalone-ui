@@ -24,6 +24,7 @@
 
 #include "skia/public/mojom/image_info.mojom-import-headers.h"
 #include "skia/public/mojom/image_info.mojom-test-utils.h"
+#include "skia/public/mojom/image_info_mojom_traits.h"
 
 
 namespace skia::mojom {

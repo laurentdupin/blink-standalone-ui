@@ -4,10 +4,6 @@
 
 #include "third_party/blink/renderer/core/paint/paint_layer_painter.h"
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#include <cstdio>
-#endif
-
 #include <optional>
 
 #include "cc/layers/view_transition_content_layer.h"

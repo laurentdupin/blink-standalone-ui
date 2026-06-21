@@ -31,8 +31,6 @@
 
 
 
-#include "mojo/public/cpp/base/version_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -46,7 +44,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Version {
+class  Version {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Version, T>::value>;
@@ -219,7 +217,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Version::DataView,
+struct  StructTraits<::mojo_base::mojom::Version::DataView,
                                          ::mojo_base::mojom::VersionPtr> {
   static bool IsNull(const ::mojo_base::mojom::VersionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::VersionPtr* output) { output->reset(); }

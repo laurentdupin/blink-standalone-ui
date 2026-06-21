@@ -7,7 +7,7 @@
 #ifndef CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_BLINK_FORWARD_H_
 #define CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_BLINK_FORWARD_H_
 
-
+#include <stdint.h>
 
 #include "mojo/public/cpp/bindings/struct_forward.h"
 
@@ -22,13 +22,16 @@
 
 namespace cc::mojom {
 
+enum class OverscrollBehaviorType : int32_t;
+
 
 }  // cc::mojom
 
 
 namespace cc::mojom::blink {
-using OverscrollBehavior = mojo::native::NativeStruct;
-using OverscrollBehaviorPtr = mojo::native::NativeStructPtr;
+using OverscrollBehaviorType = OverscrollBehaviorType;
+class OverscrollBehavior;
+using OverscrollBehaviorPtr = mojo::InlinedStructPtr<OverscrollBehavior>;
 
 
 

@@ -38,7 +38,9 @@ DisplayLockDocumentState::DisplayLockDocumentState(Document* document)
 
 void DisplayLockDocumentState::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   visitor->Trace(intersection_observer_);
+#endif
   visitor->Trace(display_lock_contexts_);
   visitor->Trace(forced_node_infos_);
   visitor->Trace(forced_range_infos_);
@@ -99,15 +101,26 @@ base::TimeTicks DisplayLockDocumentState::GetLockUpdateTimestamp() {
 
 void DisplayLockDocumentState::RegisterDisplayLockActivationObservation(
     Element* element) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   EnsureIntersectionObserver().observe(element);
+#endif
 }
 
 void DisplayLockDocumentState::UnregisterDisplayLockActivationObservation(
     Element* element) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   EnsureIntersectionObserver().unobserve(element);
+#endif
 }
 
 IntersectionObserver& DisplayLockDocumentState::EnsureIntersectionObserver() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return *static_cast<IntersectionObserver*>(nullptr);
+#else
   if (!intersection_observer_) {
     // Use kDeliverDuringPostLayoutSteps method, since we will either notify the
     // display lock synchronously and re-run layout, or delay delivering the
@@ -135,10 +148,14 @@ IntersectionObserver& DisplayLockDocumentState::EnsureIntersectionObserver() {
         });
   }
   return *intersection_observer_;
+#endif
 }
 
 void DisplayLockDocumentState::ProcessDisplayLockActivationObservation(
     const HeapVector<Member<IntersectionObserverEntry>>& entries) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   DCHECK(document_);
   DCHECK(document_->View());
   bool had_asynchronous_notifications = false;
@@ -176,6 +193,7 @@ void DisplayLockDocumentState::ProcessDisplayLockActivationObservation(
                    BindOnce(&DisplayLockDocumentState::ScheduleAnimation,
                             WrapWeakPersistent(this)));
   }
+#endif
 }
 
 void DisplayLockDocumentState::ScheduleAnimation() {
@@ -276,6 +294,9 @@ void DisplayLockDocumentState::NotifyViewTransitionPseudoTreeChanged() {
 }
 
 void DisplayLockDocumentState::UpdateViewTransitionElementAncestorLocks() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   auto* transition = ViewTransitionUtils::GetTransition(*document_);
   if (!transition)
     return;
@@ -290,6 +311,7 @@ void DisplayLockDocumentState::UpdateViewTransitionElementAncestorLocks() {
         context->SetDescendantIsViewTransitionElement();
     }
   }
+#endif
 }
 
 void DisplayLockDocumentState::NotifySelectionRemoved() {

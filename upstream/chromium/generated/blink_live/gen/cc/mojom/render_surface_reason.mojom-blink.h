@@ -29,6 +29,8 @@
 
 
 
+#include "cc/mojom/render_surface_reason_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif

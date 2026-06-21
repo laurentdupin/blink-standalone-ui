@@ -6,6 +6,7 @@
 #define GPU_IPC_COMMON_COMMAND_BUFFER_MOJOM_TRAITS_H_
 
 #include "gpu/command_buffer/common/command_buffer.h"
+#include "gpu/ipc/common/constants_mojom_traits.h"
 #include "gpu/ipc/common/gpu_channel.mojom-shared.h"
 #include "gpu/ipc/common/gpu_ipc_common_export.h"
 

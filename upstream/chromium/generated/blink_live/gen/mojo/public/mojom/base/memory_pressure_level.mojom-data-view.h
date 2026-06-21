@@ -51,7 +51,7 @@ enum class MemoryPressureLevel : int32_t {
   kMaxValue = 2,
 };
 
-COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, MemoryPressureLevel value);
+ std::ostream& operator<<(std::ostream& os, MemoryPressureLevel value);
 inline bool IsKnownEnumValue(MemoryPressureLevel value) {
   return internal::MemoryPressureLevel_Data::IsKnownValue(
       static_cast<int32_t>(value));

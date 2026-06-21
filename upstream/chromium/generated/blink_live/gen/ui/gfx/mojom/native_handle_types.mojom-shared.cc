@@ -12,6 +12,9 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/gfx/mojom/native_handle_types.mojom-params-data.h"
+#include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
+#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
+#include "ui/gfx/mojom/native_handle_types_mojom_traits.h"
 namespace gfx {
 namespace mojom {
 

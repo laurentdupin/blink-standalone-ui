@@ -10,7 +10,7 @@ This document records the checked/current build and the dedicated perf benchmark
 - Benchmark: `build/cmake-live-image-png-ninja-vs18/blink_standalone_render_benchmark_skia.exe`
 - CMake cache observed in this workspace: `CMAKE_BUILD_TYPE=Debug`
 - Target: `blink_standalone_render_benchmark_skia`
-- Source: `upstream/chromium/standalone_renderer/examples/render_benchmark.cc`
+- Source: `upstream/chromium/standalone_renderer/examples/compositor_benchmark.cc`
 - Purpose: correctness and development checks.
 
 The checked/current benchmark keeps the historical measurement-hostile defines:
@@ -62,15 +62,14 @@ The comparison below is based on the Chromium sources vendored under `upstream/c
 - `DCHECK_ALWAYS_ON=1` remains active in both checked/current and perf builds, so assertion overhead can still perturb benchmark numbers.
 - The perf preset is optimized (`Release`, clang-cl `/O2`) but does not claim Chromium official-build parity: no PGO, no LTO audit, no component/official-build GN equivalence, and no full Chromium allocator/process configuration match.
 - The standalone CMake source manifest is still manually maintained rather than generated from GN target graphs.
-- The strict benchmark path always uses live Blink retained output plus Skia CPU raster; non-Skia retained replay is no longer exposed as a benchmark mode.
-- The live Blink bridge invalidates its probe cache per render in `TryReplaceWithLivePaintArtifactScene`, so cold and warm timings include extra cache churn.
-- The benchmark performs a full lifecycle per render invocation. Warm incremental modes currently build the previous frame inside the same process before the measured frame.
-- Benchmark presentation writes BMP files, while SDL viewer presentation includes Skia CPU raster plus CPU texture upload through SDL.
-- `cold_command_wall_ms` is the Python command/process envelope around `subprocess.Popen(...).communicate()`. It includes process creation, Windows executable image load, static initialization before benchmark `main`, benchmark work, stdout/stderr draining, and process exit/teardown.
-- `cold_command_process_envelope_overhead_ms` is `cold_command_wall_ms - cold_process_elapsed_ms`. The legacy `process_startup_overhead_ms` JSON field carries the same value for older readers.
+- The strict benchmark path uses the Chromium compositor runtime: Blink lifecycle, PaintArtifactCompositor, cc, GPU raster/shared image, and Viz submission.
+- The benchmark performs a full lifecycle and one compositor frame submission per invocation.
+- The benchmark has no HWND and therefore does not create a Viz Display. The SDL viewer presents through Viz Display/SkiaRenderer GPU and Vulkan using the SDL HWND; SDL texture upload is not part of the production path.
+- `wall_ms` is the Python command/process envelope around `subprocess.Popen(...).communicate()`. It includes process creation, Windows executable image load, static initialization before benchmark `main`, benchmark work, stdout/stderr draining, and process exit/teardown.
+- `process_elapsed_ms` starts at benchmark `main` and excludes Python orchestration.
+- `advance_frame_ms` covers the measured Chromium compositor `AdvanceFrame` call.
 - Resource-backed pages depend on the `--resource-root` path passed to the benchmark. The perf suite passes the paint audit root by default.
-- The post-`1640521e` validation pass found the cold renderer/document boundary below 500 ms across the 262-page corpus: max `cold_presented_frame_ms` 274.15 ms and max `cold_process_elapsed_ms` 351.24 ms. The historical command/process envelope still fails as a separate host-process metric: max `cold_command_wall_ms` 1357.28 ms.
-- A focused offender shard generated after command phase instrumentation showed launch/wait overhead outside the renderer path: 8 pages, max `cold_process_elapsed_ms` 259.60 ms, max `cold_command_launch_ms` 640.83 ms, max `cold_command_wait_ms` 725.12 ms, and max `cold_command_wall_ms` 1265.50 ms.
+- The retained-renderer corpus numbers that used `cold_presented_frame_ms` and CPU replay timings are historical only. The compositor corpus should be regenerated from `process_elapsed_ms` and `advance_frame_ms`.
 
 ## Diagnostic Optimization Matrix
 
@@ -103,13 +102,10 @@ Run the perf suite against the perf preset:
 python tools\perf\run_standalone_perf_suite.py --benchmark build\cmake-live-image-png-ninja-vs18-perf\blink_standalone_render_benchmark_skia.exe --out-dir build\perf\x64-Perf --build-config-name x64-Perf
 ```
 
-For long corpus runs under command time limits, run deterministic shards and merge the JSON reports:
+For long corpus runs under command time limits, run deterministic shards:
 
 ```powershell
-python tools\perf\run_standalone_perf_suite.py --benchmark build\cmake-live-image-png-ninja-vs18-perf\blink_standalone_render_benchmark_skia.exe --out-dir build\perf\x64-Perf-shard0 --build-config-name x64-Perf --shard-index 0 --shard-count 8 --skip-warm-modes --playwright-top 0 --retries 1 --no-docs
-python tools\perf\run_standalone_perf_suite.py --out-dir build\perf\x64-Perf-merged --merge-json build\perf\x64-Perf-shard0\standalone_perf_results.json --merge-json build\perf\x64-Perf-shard1\standalone_perf_results.json
+python tools\perf\run_standalone_perf_suite.py --benchmark build\cmake-live-image-png-ninja-vs18-perf\blink_standalone_render_benchmark_skia.exe --out-dir build\perf\x64-Perf-shard0 --build-config-name x64-Perf --shard-index 0 --shard-count 8
 ```
 
-`--retries` only retries benchmark child processes after a timeout. The JSON preserves per-attempt logs and marks recovered timeout cases as `flaky_timeout_recovered`; unrecovered timeouts remain failures.
-
-The suite writes JSON, CSV, page artifacts, and a generated `docs/PERF_BASELINE.md` summary for the selected benchmark path.
+The suite writes JSON, CSV, and per-page benchmark artifacts for the selected benchmark path. Use `--write-baseline-doc` only after running the intended baseline corpus; subset runs should stay in `build/perf/...`.

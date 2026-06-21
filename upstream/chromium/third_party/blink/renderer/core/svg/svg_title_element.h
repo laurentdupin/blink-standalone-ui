@@ -49,19 +49,6 @@ class SVGTitleElement final : public SVGElement {
   bool ignore_title_updates_when_children_change_;
 };
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-template <>
-struct DowncastTraits<SVGTitleElement> {
-  static bool AllowFrom(const Element& element) {
-    return element.GetElementType() == ElementType::kSVGTitleElement;
-  }
-  static bool AllowFrom(const Node& node) {
-    auto* element = DynamicTo<Element>(node);
-    return element && AllowFrom(*element);
-  }
-};
-#endif  // defined(HTML_CSS_RENDERER_STANDALONE)
-
 }  // namespace blink
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_CORE_SVG_SVG_TITLE_ELEMENT_H_

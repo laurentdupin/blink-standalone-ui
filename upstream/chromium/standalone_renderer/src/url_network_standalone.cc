@@ -4,14 +4,40 @@
 
 #include "net/base/schemeful_site.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_connection_info.h"
+#include "services/network/public/cpp/net_ipc_param_traits.h"
 #include "services/network/public/cpp/cors/cors.h"
-#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
-#include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
+#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "url/third_party/mozilla/url_parse.h"
 
+#include "base/pickle.h"
 #include "url/gurl.h"
+
+namespace IPC {
+
+void ParamTraits<net::HttpConnectionInfo>::Write(base::Pickle* m,
+                                                 const param_type& p) {
+  m->WriteInt(static_cast<int>(p));
+}
+
+bool ParamTraits<net::HttpConnectionInfo>::Read(const base::Pickle*,
+                                                base::PickleIterator* iter,
+                                                param_type* p) {
+  int value = 0;
+  if (!iter->ReadInt(&value)) {
+    return false;
+  }
+  if (value < static_cast<int>(net::HttpConnectionInfo::kUNKNOWN) ||
+      value > static_cast<int>(net::HttpConnectionInfo::kMaxValue)) {
+    return false;
+  }
+  *p = static_cast<net::HttpConnectionInfo>(value);
+  return true;
+}
+
+}  // namespace IPC
 
 namespace net {
 
@@ -130,93 +156,26 @@ bool IsCorsCrossOriginResponseType(mojom::FetchResponseType type) {
 
 }  // namespace cors
 
-OriginWithPossibleWildcards::OriginWithPossibleWildcards() = default;
-OriginWithPossibleWildcards::OriginWithPossibleWildcards(
-    const OriginWithPossibleWildcards&) = default;
-OriginWithPossibleWildcards& OriginWithPossibleWildcards::operator=(
-    const OriginWithPossibleWildcards&) = default;
-OriginWithPossibleWildcards::~OriginWithPossibleWildcards() = default;
-std::optional<OriginWithPossibleWildcards> OriginWithPossibleWildcards::FromOrigin(
-    const url::Origin&) {
-  return OriginWithPossibleWildcards();
-}
-std::optional<OriginWithPossibleWildcards>
-OriginWithPossibleWildcards::FromOriginAndWildcardsForTest(const url::Origin&,
-                                                           bool) {
-  return OriginWithPossibleWildcards();
-}
-std::optional<OriginWithPossibleWildcards> OriginWithPossibleWildcards::Parse(
-    const std::string&,
-    const NodeType) {
-  return OriginWithPossibleWildcards();
-}
-std::string OriginWithPossibleWildcards::Serialize() const {
-  return {};
-}
-bool OriginWithPossibleWildcards::DoesMatchOrigin(const url::Origin&) const {
-  return true;
-}
-bool operator==(const OriginWithPossibleWildcards&,
-                const OriginWithPossibleWildcards&) {
-  return true;
-}
-std::strong_ordering operator<=>(const OriginWithPossibleWildcards&,
-                                 const OriginWithPossibleWildcards&) {
-  return std::strong_ordering::equal;
-}
-
-bool PermissionsPolicy::IsFeatureEnabledForOrigin(
-    mojom::PermissionsPolicyFeature,
-    const url::Origin&,
-    bool) const {
-  return false;
-}
-
-ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration()
-    : feature(network::mojom::PermissionsPolicyFeature(0)) {}
-ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
-    network::mojom::PermissionsPolicyFeature input_feature)
-    : feature(input_feature) {}
-ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
-    network::mojom::PermissionsPolicyFeature input_feature,
-    const std::vector<network::OriginWithPossibleWildcards>&,
-    const std::optional<url::Origin>& input_self_if_matches,
-    bool input_matches_all_origins,
-    bool input_matches_opaque_src)
-    : feature(input_feature),
-      self_if_matches(input_self_if_matches),
-      matches_all_origins(input_matches_all_origins),
-      matches_opaque_src(input_matches_opaque_src) {}
-ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
-    const ParsedPermissionsPolicyDeclaration& rhs)
-    : feature(rhs.feature),
-      self_if_matches(rhs.self_if_matches),
-      matches_all_origins(rhs.matches_all_origins),
-      matches_opaque_src(rhs.matches_opaque_src),
-      reporting_endpoint(rhs.reporting_endpoint) {}
-ParsedPermissionsPolicyDeclaration& ParsedPermissionsPolicyDeclaration::
-operator=(const ParsedPermissionsPolicyDeclaration& rhs) {
-  feature = rhs.feature;
-  allowed_origins.clear();
-  self_if_matches = rhs.self_if_matches;
-  matches_all_origins = rhs.matches_all_origins;
-  matches_opaque_src = rhs.matches_opaque_src;
-  reporting_endpoint = rhs.reporting_endpoint;
-  return *this;
-}
-ParsedPermissionsPolicyDeclaration::ParsedPermissionsPolicyDeclaration(
-    ParsedPermissionsPolicyDeclaration&&) noexcept = default;
-ParsedPermissionsPolicyDeclaration& ParsedPermissionsPolicyDeclaration::
-operator=(ParsedPermissionsPolicyDeclaration&&) noexcept = default;
-ParsedPermissionsPolicyDeclaration::~ParsedPermissionsPolicyDeclaration() =
-    default;
-bool ParsedPermissionsPolicyDeclaration::Contains(const url::Origin&) const {
-  return matches_all_origins;
-}
-
 }  // namespace network
 
 namespace blink {
+
+bool SchemeRegistry::IsSpecialScheme(const String& scheme) {
+  return EqualIgnoringAsciiCase(scheme, "http") ||
+         EqualIgnoringAsciiCase(scheme, "https") ||
+         EqualIgnoringAsciiCase(scheme, "file") ||
+         EqualIgnoringAsciiCase(scheme, "ftp") ||
+         EqualIgnoringAsciiCase(scheme, "ws") ||
+         EqualIgnoringAsciiCase(scheme, "wss");
+}
+
+bool SchemeRegistry::ShouldTreatURLSchemeAsAllowedForReferrer(
+    const String& scheme) {
+  return EqualIgnoringAsciiCase(scheme, "http") ||
+         EqualIgnoringAsciiCase(scheme, "https") ||
+         EqualIgnoringAsciiCase(scheme, "file") ||
+         EqualIgnoringAsciiCase(scheme, "data");
+}
 
 WebSecurityOrigin WebSecurityOrigin::CreateFromString(const WebString&) {
   return WebSecurityOrigin();

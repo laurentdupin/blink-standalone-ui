@@ -9,27 +9,31 @@
 
 namespace blink::fetch_initiator_type_names {
 
-inline const AtomicString& kAttributionsrc = *new AtomicString("attributionsrc");
-inline const AtomicString& kAudio = *new AtomicString("audio");
-inline const AtomicString& kBeacon = *new AtomicString("beacon");
-inline const AtomicString& kCss = *new AtomicString("css");
-inline const AtomicString& kDocument = *new AtomicString("document");
-inline const AtomicString& kIcon = *new AtomicString("icon");
-inline const AtomicString& kInternal = *new AtomicString("internal");
-inline const AtomicString& kFetch = *new AtomicString("fetch");
-inline const AtomicString& kLink = *new AtomicString("link");
-inline const AtomicString& kOther = *new AtomicString("other");
-inline const AtomicString& kPing = *new AtomicString("ping");
-inline const AtomicString& kProcessinginstruction = *new AtomicString("processinginstruction");
-inline const AtomicString& kScript = *new AtomicString("script");
-inline const AtomicString& kTrack = *new AtomicString("track");
-inline const AtomicString& kUacss = *new AtomicString("uacss");
-inline const AtomicString& kUse = *new AtomicString("use");
-inline const AtomicString& kViolationreport = *new AtomicString("violationreport");
-inline const AtomicString& kVideo = *new AtomicString("video");
-inline const AtomicString& kXml = *new AtomicString("xml");
-inline const AtomicString& kXmlhttprequest = *new AtomicString("xmlhttprequest");
-inline constexpr unsigned kNamesCount = 20;
+extern const AtomicString& kAttributionsrc;
+extern const AtomicString& kAudio;
+extern const AtomicString& kBeacon;
+extern const AtomicString& kCss;
+extern const AtomicString& kCSS;
+extern const AtomicString& kDocument;
+extern const AtomicString& kIcon;
+extern const AtomicString& kInternal;
+extern const AtomicString& kFetch;
+extern const AtomicString& kLink;
+extern const AtomicString& kOther;
+extern const AtomicString& kPing;
+extern const AtomicString& kProcessinginstruction;
+extern const AtomicString& kScript;
+extern const AtomicString& kTrack;
+extern const AtomicString& kUacss;
+extern const AtomicString& kUse;
+extern const AtomicString& kViolationreport;
+extern const AtomicString& kVideo;
+extern const AtomicString& kXml;
+extern const AtomicString& kXmlhttprequest;
+
+constexpr unsigned kNamesCount = 20;
+
+void Init();
 
 }  // namespace blink::fetch_initiator_type_names
 

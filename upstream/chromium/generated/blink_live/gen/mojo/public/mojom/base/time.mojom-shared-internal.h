@@ -12,7 +12,6 @@
 #include "mojo/public/cpp/bindings/lib/message_fragment.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -31,7 +30,7 @@ class TimeDelta_Data;
 class TimeTicks_Data;
 
 #pragma pack(push, 1)
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) Time_Data {
+class  Time_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -79,7 +78,7 @@ struct Time_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     Time_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) JSTime_Data {
+class  JSTime_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -127,7 +126,7 @@ struct JSTime_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     JSTime_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) TimeDelta_Data {
+class  TimeDelta_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -175,7 +174,7 @@ struct TimeDelta_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     TimeDelta_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) TimeTicks_Data {
+class  TimeTicks_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

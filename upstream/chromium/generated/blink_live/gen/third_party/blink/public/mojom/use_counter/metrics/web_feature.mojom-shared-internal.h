@@ -9,7 +9,6 @@
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -5090,6 +5089,41 @@ struct WebFeature_Data {
       case 5882:
       case 5883:
       case 5884:
+      case 5885:
+      case 5886:
+      case 5887:
+      case 5888:
+      case 5889:
+      case 5890:
+      case 5891:
+      case 5892:
+      case 5893:
+      case 5894:
+      case 5895:
+      case 5896:
+      case 5897:
+      case 5898:
+      case 5899:
+      case 5900:
+      case 5901:
+      case 5902:
+      case 5903:
+      case 5904:
+      case 5905:
+      case 5906:
+      case 5907:
+      case 5908:
+      case 5909:
+      case 5910:
+      case 5911:
+      case 5912:
+      case 5913:
+      case 5914:
+      case 5915:
+      case 5916:
+      case 5917:
+      case 5918:
+      case 5919:
         return true;
     }
     return false;

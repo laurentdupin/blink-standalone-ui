@@ -25,6 +25,7 @@
 #include "cc/mojom/render_frame_metadata.mojom-features.h"  // IWYU pragma: export
 #include "cc/mojom/render_frame_metadata.mojom-shared.h"  // IWYU pragma: export
 #include "cc/mojom/render_frame_metadata.mojom-blink-forward.h"  // IWYU pragma: export
+#include "cc/mojom/render_frame_metadata.mojom-blink-import-headers.h"  // IWYU pragma: export
 #include "services/viz/public/mojom/compositing/local_surface_id.mojom-blink.h"
 #include "services/viz/public/mojom/compositing/selection.mojom-blink.h"
 #include "services/viz/public/mojom/compositing/tracked_element_rects.mojom-blink.h"

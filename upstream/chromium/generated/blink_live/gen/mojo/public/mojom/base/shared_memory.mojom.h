@@ -33,7 +33,6 @@
 
 
 #include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -49,7 +48,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) ReadOnlySharedMemoryRegion {
+class  ReadOnlySharedMemoryRegion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ReadOnlySharedMemoryRegion, T>::value>;
@@ -186,7 +185,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) WritableSharedMemoryRegion {
+class  WritableSharedMemoryRegion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<WritableSharedMemoryRegion, T>::value>;
@@ -323,7 +322,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) UnsafeSharedMemoryRegion {
+class  UnsafeSharedMemoryRegion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<UnsafeSharedMemoryRegion, T>::value>;
@@ -530,7 +529,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::ReadOnlySharedMemoryRegion::DataView,
+struct  StructTraits<::mojo_base::mojom::ReadOnlySharedMemoryRegion::DataView,
                                          ::mojo_base::mojom::ReadOnlySharedMemoryRegionPtr> {
   static bool IsNull(const ::mojo_base::mojom::ReadOnlySharedMemoryRegionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::ReadOnlySharedMemoryRegionPtr* output) { output->reset(); }
@@ -545,7 +544,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::ReadOn
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::WritableSharedMemoryRegion::DataView,
+struct  StructTraits<::mojo_base::mojom::WritableSharedMemoryRegion::DataView,
                                          ::mojo_base::mojom::WritableSharedMemoryRegionPtr> {
   static bool IsNull(const ::mojo_base::mojom::WritableSharedMemoryRegionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::WritableSharedMemoryRegionPtr* output) { output->reset(); }
@@ -560,7 +559,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Writab
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::UnsafeSharedMemoryRegion::DataView,
+struct  StructTraits<::mojo_base::mojom::UnsafeSharedMemoryRegion::DataView,
                                          ::mojo_base::mojom::UnsafeSharedMemoryRegionPtr> {
   static bool IsNull(const ::mojo_base::mojom::UnsafeSharedMemoryRegionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::UnsafeSharedMemoryRegionPtr* output) { output->reset(); }

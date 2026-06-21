@@ -7,29 +7,29 @@
 #ifndef CC_MOJOM_TOUCH_ACTION_MOJOM_BLINK_FORWARD_H_
 #define CC_MOJOM_TOUCH_ACTION_MOJOM_BLINK_FORWARD_H_
 
-#include <stdint.h>
+
+
+#include "mojo/public/cpp/bindings/struct_forward.h"
 
 
 
 
+#include "mojo/public/interfaces/bindings/native_struct.mojom-forward.h"
 
 
 
 
-
-namespace mojo {
-enum class NativeEnum;
-}  // namespace mojo
 
 namespace cc::mojom {
-using TouchAction = mojo::NativeEnum;
 
 
 }  // cc::mojom
 
 
 namespace cc::mojom::blink {
-using TouchAction = TouchAction;
+class TouchAction;
+using TouchActionPtr = mojo::InlinedStructPtr<TouchAction>;
+
 
 
 

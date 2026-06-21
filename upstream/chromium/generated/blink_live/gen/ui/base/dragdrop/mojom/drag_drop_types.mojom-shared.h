@@ -22,7 +22,6 @@
 
 
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 
@@ -143,7 +142,7 @@ namespace ui::mojom {
 namespace perfetto {
 
 template <>
-struct COMPONENT_EXPORT(UI_BASE_DRAGDROP_MOJOM_SHARED) TraceFormatTraits<::ui::mojom::DragEventSource> {
+struct  TraceFormatTraits<::ui::mojom::DragEventSource> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::ui::mojom::DragEventSource value);
 };
 
@@ -152,7 +151,7 @@ struct COMPONENT_EXPORT(UI_BASE_DRAGDROP_MOJOM_SHARED) TraceFormatTraits<::ui::m
 namespace perfetto {
 
 template <>
-struct COMPONENT_EXPORT(UI_BASE_DRAGDROP_MOJOM_SHARED) TraceFormatTraits<::ui::mojom::DragOperation> {
+struct  TraceFormatTraits<::ui::mojom::DragOperation> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::ui::mojom::DragOperation value);
 };
 

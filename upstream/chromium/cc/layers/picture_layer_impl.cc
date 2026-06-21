@@ -120,14 +120,14 @@ std::unique_ptr<LayerImpl> PictureLayerImpl::CreateLayerImpl(
 void PictureLayerImpl::CopyPropertiesTo(LayerImpl* base_layer) const {
   PictureLayerImpl* layer_impl = static_cast<PictureLayerImpl*>(base_layer);
 
-  layer_impl->has_animated_image_update_rect_ = has_animated_image_update_rect_;
-  layer_impl->has_non_animated_image_update_rect_ =
-      has_non_animated_image_update_rect_;
-
   LayerImpl::CopyPropertiesTo(base_layer);
 
   bool changed_other_props = GetChangeFlag(kChangedGeneralProperty);
   if (changed_other_props) {
+    layer_impl->has_animated_image_update_rect_ =
+        has_animated_image_update_rect_;
+    layer_impl->has_non_animated_image_update_rect_ =
+        has_non_animated_image_update_rect_;
     layer_impl->SetIsBackdropFilterMask(is_backdrop_filter_mask());
 
     // Solid color layers have no tilings.
@@ -272,17 +272,9 @@ bool PictureLayerImpl::ShouldUpdateApproximatedVisibleContentArea(
 
 bool PictureLayerImpl::ShouldReportTileAsMissing(
     const gfx::Rect& tile_geometry_rect,
-    AppendQuadsCustomSharedData* custom_data) const {
-  // By contract, this data will have been populated via a call to
-  // WillAppendQuads().
-  CHECK(custom_data);
-
-  auto* shared_data =
-      static_cast<AppendQuadsCustomSharedDataImpl*>(custom_data);
-
+    const gfx::Rect& scaled_viewport_for_tile_priority) const {
   // Only report the tile as missing if it's in the viewport.
-  return tile_geometry_rect.Intersects(
-      shared_data->scaled_viewport_for_tile_priority_);
+  return tile_geometry_rect.Intersects(scaled_viewport_for_tile_priority);
 }
 
 void PictureLayerImpl::DidAppendQuad(
@@ -375,15 +367,14 @@ bool PictureLayerImpl::ComputeCheckerboardedNeedsRecord() {
   return false;
 }
 
-std::unique_ptr<AppendQuadsCustomSharedData> PictureLayerImpl::WillAppendQuads(
-    float max_contents_scale) {
+void PictureLayerImpl::WillAppendQuads() {
   set_produced_tile_last_append_quads(false);
+}
 
-  auto custom_data = std::make_unique<AppendQuadsCustomSharedDataImpl>();
-  custom_data->scaled_viewport_for_tile_priority_ = gfx::ScaleToEnclosingRect(
+gfx::Rect PictureLayerImpl::GetScaledViewportForTilePriority(
+    float max_contents_scale) const {
+  return gfx::ScaleToEnclosingRect(
       viewport_rect_for_tile_priority_in_content_space_, max_contents_scale);
-
-  return std::move(custom_data);
 }
 
 bool PictureLayerImpl::UpdateTiles() {
@@ -471,15 +462,15 @@ bool PictureLayerImpl::HasAnimatedImages() const {
 }
 
 void PictureLayerImpl::AnnotateAnimatedImages(
-    base::flat_map<PaintImage::Id, bool>& image_map) const {
+    AnimatedImageDriverMap& driver_map) const {
   if (!discardable_image_map_) {
     return;
   }
   for (const auto& data : discardable_image_map_->animated_images_metadata()) {
-    if (ShouldAnimate(data.first)) {
-      image_map.insert_or_assign(data.first, true);
-    } else {
-      image_map.try_emplace(data.first, false);
+    auto& driver_state = driver_map[data.first];
+    driver_state.first |= ShouldAnimate(data.first);
+    if (canvas_child_id()) {
+      driver_state.second.push_back(canvas_child_id());
     }
   }
 }
@@ -706,10 +697,10 @@ void PictureLayerImpl::UpdateCanUseLCDText(
 }
 
 bool PictureLayerImpl::AffectedByWillChangeTransformHint() const {
-  TransformNode* transform_node =
-      GetTransformTree().Node(transform_tree_index());
-  return transform_node &&
-         transform_node->node_or_ancestors_will_change_transform;
+  return transform_tree_index() != kInvalidPropertyNodeId &&
+         GetTransformTree()
+             .Node(transform_tree_index())
+             .node_or_ancestors_will_change_transform;
 }
 
 LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
@@ -727,9 +718,9 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
     return LCDTextDisallowedReason::kSetting;
   }
 
-  TransformNode* transform_node =
+  const TransformNode& transform_node =
       GetTransformTree().Node(transform_tree_index());
-  if (transform_node->node_or_ancestors_will_change_transform) {
+  if (transform_node.node_or_ancestors_will_change_transform) {
     return LCDTextDisallowedReason::kWillChangeTransform;
   }
 
@@ -737,9 +728,9 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
     return LCDTextDisallowedReason::kTransformAnimation;
   }
 
-  EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
-  if (effect_node->lcd_text_disallowed_by_filter ||
-      effect_node->lcd_text_disallowed_by_backdrop_filter) {
+  const EffectNode& effect_node = GetEffectTree().Node(effect_tree_index());
+  if (effect_node.lcd_text_disallowed_by_filter ||
+      effect_node.lcd_text_disallowed_by_backdrop_filter) {
     return LCDTextDisallowedReason::kPixelOrColorEffect;
   }
 
@@ -938,12 +929,10 @@ ScrollOffsetMap PictureLayerImpl::GetRasterInducingScrollOffsets() const {
       // The transform node has the realized scroll offset and snap amount,
       // and should be used for rendering.
       const auto* scroll_node = scroll_tree.FindNodeFromElementId(element_id);
-      const auto* transform =
-          scroll_node ? transform_tree.Node(scroll_node->transform_id)
-                      : nullptr;
-      if (transform) {
+      if (scroll_node && scroll_node->transform_id != kInvalidPropertyNodeId) {
         map[element_id] = gfx::PointAtOffsetFromOrigin(
-            -transform->to_parent.To2dTranslation());
+            -transform_tree.Node(scroll_node->transform_id)
+                 .to_parent.To2dTranslation());
       } else {
         // Use the current scroll offset if the scroll node doesn't exist or
         // doesn't have a transform node. It doesn't matter because such a
@@ -979,14 +968,21 @@ bool PictureLayerImpl::ShouldAnimate(PaintImage::Id paint_image_id) const {
   //
   //  Additionally only animate images which are on-screen, animations are
   //  paused once they are not visible.
-  if (!HasValidTilePriorities())
+  //
+  // An exception to the above is animated images inside a <canvas>, which we
+  // animate to trigger a "paint" event when the animation advances.
+  if (!HasValidTilePriorities() && !canvas_child_id()) {
     return false;
+  }
 
   if (auto it = discardable_image_map_->animated_images_metadata().find(
           paint_image_id);
       it != discardable_image_map_->animated_images_metadata().end()) {
     if (it->second.repetition_count == kAnimationPaused) {
       return false;
+    }
+    if (canvas_child_id()) {
+      return true;
     }
   }
 
@@ -1012,6 +1008,18 @@ void PictureLayerImpl::UpdateDirectlyCompositedImageFromRasterSource() {
         GetPreferredRasterScale(info->default_raster_scale);
     new_nearest_neighbor = info->nearest_neighbor;
   }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The standalone embedder currently submits PaintArtifactCompositor picture
+  // layers through an in-process cc/Viz path without Chromium's full renderer
+  // layer geometry plumbing. The directly-composited-image shortcut can then
+  // treat a larger picture layer as if it were exactly the image rect, causing
+  // wrong tile transforms for scaled <img> content. Keep image content on the
+  // normal GPU raster/shared-image path until that shortcut has full geometry
+  // coverage in standalone.
+  new_default_raster_scale = 0;
+  new_nearest_neighbor = false;
+#endif
 
   directly_composited_image_default_raster_scale_changed_ =
       new_default_raster_scale !=
@@ -1904,8 +1912,11 @@ PictureLayerImpl::InvalidateRegionForImages(
   auto* controller = layer_tree_impl()->image_animation_controller();
   InvalidationRegion image_invalidation;
   for (auto image_id : images_to_invalidate) {
-    all_animated_image &= controller->IsRegistered(image_id);
     const auto& rects = discardable_image_map_->GetRectsForImage(image_id);
+    if (rects.empty()) {
+      continue;
+    }
+    all_animated_image &= controller->IsRegistered(image_id);
     for (const auto& r : rects) {
       image_invalidation.Union(r);
     }
@@ -1927,8 +1938,7 @@ PictureLayerImpl::InvalidateRegionForImages(
 
   invalidation_.Union(invalidation);
   tilings_->Invalidate(invalidation);
-  // TODO(crbug.com/40335690): SetNeedsPushProperties() would be needed here if
-  // PictureLayerImpl didn't always push properties every activation.
+  SetNeedsPushProperties(kChangedGeneralProperty);
   return ImageInvalidationResult::kInvalidated;
 }
 
@@ -1961,6 +1971,7 @@ void PictureLayerImpl::InvalidateRasterInducingScrolls(
     }
     invalidation_.Union(invalidation);
     tilings_->Invalidate(invalidation);
+    SetNeedsPushProperties(kChangedGeneralProperty);
   }
 }
 
@@ -2058,7 +2069,8 @@ PictureLayerImpl::TileUpdateSet PictureLayerImpl::TakeAllTiles() {
     PictureLayerTiling::TileIterator iter(tilings_->tiling_at(ii));
     for (; !iter.AtEnd(); iter.Next()) {
       Tile* tile = iter.GetCurrent();
-      // TODO(zmo): Should |update_damage| be faise here?
+      // During a full tree sync (e.g. context lost), layer-level update_rect is
+      // used for damage tracking, so tile-level damage tracking is not needed.
       updates[tile->contents_scale_key()].emplace(tile->tiling_i_index(),
                                                   tile->tiling_j_index(),
                                                   /*update_damage=*/false);

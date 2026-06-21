@@ -36,10 +36,6 @@ ElementId::ElementId(
     : id(std::move(id_in)) {}
 
 ElementId::~ElementId() = default;
-size_t ElementId::Hash(size_t seed) const {
-  seed = mojo::internal::WTFHash(seed, this->id);
-  return seed;
-}
 
 void ElementId::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

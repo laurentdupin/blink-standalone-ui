@@ -24,6 +24,8 @@
 
 #include "cc/mojom/layer_selection_bound.mojom-import-headers.h"
 #include "cc/mojom/layer_selection_bound.mojom-test-utils.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "ui/gfx/mojom/selection_bound_mojom_traits.h"
 
 
 namespace cc::mojom {

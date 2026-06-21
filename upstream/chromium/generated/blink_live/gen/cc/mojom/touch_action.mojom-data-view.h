@@ -20,11 +20,16 @@
 #include <iosfwd>
 #include <type_traits>
 #include <utility>
+#include "mojo/public/cpp/bindings/array_data_view.h"
+#include "mojo/public/cpp/bindings/string_data_view.h"
+#include "mojo/public/cpp/bindings/lib/serialization.h"
 
 #include "cc/mojom/touch_action.mojom-shared-internal.h"
 
 
 namespace cc::mojom {
+class TouchActionDataView;
+
 
 
 }  // cc::mojom
@@ -33,12 +38,36 @@ namespace cc::mojom {
 namespace mojo {
 namespace internal {
 
+template <>
+struct MojomTypeTraits<::cc::mojom::TouchActionDataView> {
+  using Data = ::cc::mojom::internal::TouchAction_Data;
+  using DataAsArrayElement = Pointer<Data>;
+  static constexpr MojomTypeCategory category = MojomTypeCategory::kStruct;
+};
+
 }  // namespace internal
 }  // namespace mojo
 
 
 namespace cc::mojom {
-using TouchAction = mojo::NativeEnum;
+
+
+class TouchActionDataView {
+ public:
+  TouchActionDataView() = default;
+
+  TouchActionDataView(
+      internal::TouchAction_Data* data,
+      mojo::Message* message)
+      : data_(data) {}
+
+  bool is_null() const { return !data_; }
+  uint32_t value() const {
+    return data_->value;
+  }
+ private:
+  internal::TouchAction_Data* data_ = nullptr;
+};
 
 
 }  // cc::mojom

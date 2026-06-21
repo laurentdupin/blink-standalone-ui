@@ -11,10 +11,16 @@
 #include "build/build_config.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_preferences.h"
-#include "gpu/ipc/common/gpu_info.mojom.h"
+#include "gpu/ipc/common/gpu_info.mojom-shared.h"
 #include "gpu/ipc/common/gpu_ipc_common_export.h"
+#include "gpu/ipc/common/luid_mojom_traits.h"
+#include "gpu/ipc/common/vulkan_info_mojom_traits.h"
+#include "gpu/vulkan/buildflags.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "ui/gl/mojom/gl_implementation_mojom_traits.h"
+#include "ui/gl/mojom/gpu_preference_mojom_traits.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/windows_types.h"

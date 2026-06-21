@@ -7,9 +7,11 @@
 #include <memory>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_elementimage.h"
@@ -58,74 +60,6 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 
 namespace blink {
-
-OffscreenCanvas::OffscreenCanvas(ExecutionContext* context, gfx::Size size)
-    : CanvasRenderingContextHost(
-          CanvasRenderingContextHost::HostType::kOffscreenCanvasHost,
-          size),
-      execution_context_(context) {
-  // Other code in Blink watches for destruction of the context; be
-  // robust here as well.
-  if (!context->IsContextDestroyed()) {
-    if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
-      // Snapshot the text direction. For a offscreen transferred from
-      // an element this will be over-written by the value from the element.
-      if (window->document()->documentElement()) {
-        text_direction_ =
-            window->document()->documentElement()->CachedDirectionality();
-      }
-      // If this OffscreenCanvas is being created in the context of a
-      // cross-origin iframe, it should prefer to use the low-power GPU.
-      LocalFrame* frame = window->GetFrame();
-      if (!(frame && frame->IsCrossOriginToOutermostMainFrame())) {
-        AllowHighPerformancePowerPreference();
-      }
-    } else if (context->IsDedicatedWorkerGlobalScope()) {
-      // Per spec, dedicated workers can only load same-origin top-level
-      // scripts, so grant them access to the high-performance GPU.
-      //
-      // TODO(crbug.com/1050739): refine this logic. If the worker was
-      // spawned from an iframe, keep track of whether that iframe was
-      // itself cross-origin.
-      AllowHighPerformancePowerPreference();
-    }
-  }
-
-  CanvasResourceTracker::For(context->GetIsolate())->Add(this, context);
-}
-
-OffscreenCanvas* OffscreenCanvas::Create(ScriptState* script_state,
-                                         unsigned width,
-                                         unsigned height) {
-  UMA_HISTOGRAM_BOOLEAN("Blink.OffscreenCanvas.NewOffscreenCanvas", true);
-  return MakeGarbageCollected<OffscreenCanvas>(
-      ExecutionContext::From(script_state),
-      gfx::Size(ClampTo<int>(width), ClampTo<int>(height)));
-}
-
-void OffscreenCanvas::Dispose() {
-  // We need to drop frame dispatcher, to prevent mojo calls from completing.
-  disposing_ = true;
-  frame_dispatcher_ = nullptr;
-  DiscardResources();
-
-  if (context_) {
-    context_->DetachHost();
-    context_ = nullptr;
-  }
-}
-
-void OffscreenCanvas::DeregisterFromAnimationFrameProvider() {
-  if (HasPlaceholderCanvas() && GetTopExecutionContext() &&
-      GetTopExecutionContext()->IsDedicatedWorkerGlobalScope()) {
-    WorkerAnimationFrameProvider* animation_frame_provider =
-        To<DedicatedWorkerGlobalScope>(GetTopExecutionContext())
-            ->GetAnimationFrameProvider();
-    if (animation_frame_provider)
-      animation_frame_provider->DeregisterOffscreenCanvas(this);
-  }
-}
-
 namespace {
 class OffscreenCanvasRegistry
     : public GarbageCollected<OffscreenCanvasRegistry>,
@@ -164,32 +98,103 @@ const char OffscreenCanvasRegistry::kSupplementName[] =
     "OffscreenCanvasRegistry";
 }  // namespace
 
+OffscreenCanvas::OffscreenCanvas(ExecutionContext* context,
+                                 gfx::Size size,
+                                 uint32_t client_id,
+                                 uint32_t sink_id,
+                                 DOMNodeId canvas_id)
+    : CanvasRenderingContextHost(
+          CanvasRenderingContextHost::HostType::kOffscreenCanvasHost,
+          size),
+      execution_context_(context),
+      placeholder_canvas_id_(canvas_id),
+      client_id_(client_id),
+      sink_id_(sink_id) {
+  // Other code in Blink watches for destruction of the context; be
+  // robust here as well.
+  if (!context->IsContextDestroyed()) {
+    if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+      // Snapshot the text direction. For a offscreen transferred from
+      // an element this will be over-written by the value from the element.
+      if (window->document()->documentElement()) {
+        text_direction_ =
+            window->document()->documentElement()->CachedDirectionality();
+      }
+      // If this OffscreenCanvas is being created in the context of a
+      // cross-origin iframe, it should prefer to use the low-power GPU.
+      LocalFrame* frame = window->GetFrame();
+      if (!(frame && frame->IsCrossOriginToOutermostMainFrame())) {
+        AllowHighPerformancePowerPreference();
+      }
+    } else if (context->IsDedicatedWorkerGlobalScope()) {
+      // Per spec, dedicated workers can only load same-origin top-level
+      // scripts, so grant them access to the high-performance GPU.
+      //
+      // TODO(crbug.com/40118181): refine this logic. If the worker was
+      // spawned from an iframe, keep track of whether that iframe was
+      // itself cross-origin.
+      AllowHighPerformancePowerPreference();
+    }
+  }
+
+  CanvasResourceTracker::For(context->GetIsolate())->Add(this, context);
+
+  OffscreenCanvasRegistry::From(execution_context_).Register(canvas_id, this);
+
+  if (HasPlaceholderCanvas() &&
+      execution_context_->IsDedicatedWorkerGlobalScope()) {
+    WorkerAnimationFrameProvider* animation_frame_provider =
+        To<DedicatedWorkerGlobalScope>(GetTopExecutionContext())
+            ->GetAnimationFrameProvider();
+    DCHECK(animation_frame_provider);
+    if (animation_frame_provider) {
+      animation_frame_provider->RegisterOffscreenCanvas(this);
+    }
+  }
+}
+
+OffscreenCanvas* OffscreenCanvas::Create(ScriptState* script_state,
+                                         unsigned width,
+                                         unsigned height,
+                                         uint32_t client_id,
+                                         uint32_t sink_id,
+                                         DOMNodeId canvas_id) {
+  UMA_HISTOGRAM_BOOLEAN("Blink.OffscreenCanvas.NewOffscreenCanvas", true);
+  return MakeGarbageCollected<OffscreenCanvas>(
+      ExecutionContext::From(script_state),
+      gfx::Size(ClampTo<int>(width), ClampTo<int>(height)), client_id, sink_id,
+      canvas_id);
+}
+
+void OffscreenCanvas::Dispose() {
+  // We need to drop frame dispatcher, to prevent mojo calls from completing.
+  disposing_ = true;
+  frame_dispatcher_ = nullptr;
+  DiscardResources();
+
+  if (context_) {
+    context_->DetachHost();
+    context_ = nullptr;
+  }
+}
+
+void OffscreenCanvas::DeregisterFromAnimationFrameProvider() {
+  if (HasPlaceholderCanvas() && GetTopExecutionContext() &&
+      GetTopExecutionContext()->IsDedicatedWorkerGlobalScope()) {
+    WorkerAnimationFrameProvider* animation_frame_provider =
+        To<DedicatedWorkerGlobalScope>(GetTopExecutionContext())
+            ->GetAnimationFrameProvider();
+    if (animation_frame_provider)
+      animation_frame_provider->DeregisterOffscreenCanvas(this);
+  }
+}
+
 OffscreenCanvas* OffscreenCanvas::FromPlaceholderId(ExecutionContext* context,
                                                     DOMNodeId canvas_id) {
   if (!context || canvas_id == kInvalidDOMNodeId) {
     return nullptr;
   }
   return OffscreenCanvasRegistry::From(context).Get(canvas_id);
-}
-
-void OffscreenCanvas::SetPlaceholderCanvasId(DOMNodeId canvas_id) {
-  placeholder_canvas_id_ = canvas_id;
-  if (GetExecutionContext()) {
-    OffscreenCanvasRegistry::From(GetExecutionContext())
-        .Register(canvas_id, this);
-  }
-  if (GetTopExecutionContext() &&
-      GetTopExecutionContext()->IsDedicatedWorkerGlobalScope()) {
-    WorkerAnimationFrameProvider* animation_frame_provider =
-        To<DedicatedWorkerGlobalScope>(GetTopExecutionContext())
-            ->GetAnimationFrameProvider();
-    DCHECK(animation_frame_provider);
-    if (animation_frame_provider)
-      animation_frame_provider->RegisterOffscreenCanvas(this);
-  }
-  if (frame_dispatcher_) {
-    frame_dispatcher_->SetPlaceholderCanvasDispatcher(placeholder_canvas_id_);
-  }
 }
 
 void OffscreenCanvas::setWidth(unsigned width) {
@@ -363,8 +368,17 @@ DOMMatrix* OffscreenCanvas::getElementTransform(
                                         "The ElementImage has been closed.");
       return nullptr;
     }
-    return MakeGarbageCollected<DOMMatrix>(GetElementTransform(
-        paint_record->paint_state, Size(), draw_transform->Matrix()));
+    if (paint_record->paint_state.canvas_node_id == kInvalidDOMNodeId ||
+        paint_record->paint_state.canvas_node_id != PlaceholderCanvasId()) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kInvalidStateError,
+          "The ElementImage was captured from a different canvas.");
+      return nullptr;
+    }
+    gfx::Transform transform = GetElementTransform(
+        paint_record->paint_state, Size(), draw_transform->Matrix());
+    return MakeGarbageCollected<DOMMatrix>(transform,
+                                           transform.Is2dTransform());
   }
 
   return DOMMatrix::Create();
@@ -438,7 +452,7 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
 }
 
 bool OffscreenCanvas::IsOpaque() const {
-  return context_ && !context_->CreationAttributes().alpha;
+  return RenderingContext() && RenderingContext()->IsOpaque();
 }
 
 CanvasRenderingContext* OffscreenCanvas::GetCanvasRenderingContext(
@@ -553,9 +567,6 @@ CanvasResourceDispatcher* OffscreenCanvas::GetOrCreateResourceDispatcher() {
         this, std::move(dispatcher_task_runner),
         std::move(agent_group_scheduler_compositor_task_runner), client_id_,
         sink_id_, placeholder_canvas_id_, Size());
-
-    if (HasPlaceholderCanvas())
-      frame_dispatcher_->SetPlaceholderCanvasDispatcher(placeholder_canvas_id_);
   }
   return frame_dispatcher_.get();
 }
@@ -583,7 +594,12 @@ bool OffscreenCanvas::BeginFrame() {
 
 bool OffscreenCanvas::PushFrameIfNeeded() {
   if (needs_push_frame_ && context_) {
-    return context_->PushFrame();
+    bool should_call_push_frame = false;
+    scoped_refptr<CanvasResource> canvas_resource =
+        context_->GetResourceForPushFrame(should_call_push_frame);
+    if (should_call_push_frame) {
+      return PushFrame(std::move(canvas_resource));
+    }
   }
   return false;
 }
@@ -671,6 +687,28 @@ UniqueFontSelector* OffscreenCanvas::GetFontSelector() {
       MakeGarbageCollected<UniqueFontSelector>(base_selector);
   unique_font_selector_ = unique_font_selector;
   return unique_font_selector;
+}
+
+bool OffscreenCanvas::IsPageVisible() const {
+  if (base::FeatureList::IsEnabled(
+          blink::features::kOffscreenCanvasPropagateVisibility)) {
+    return is_parent_visible_;
+  }
+  return true;
+}
+
+void OffscreenCanvas::SetParentVisibility(bool visible) {
+  if (!base::FeatureList::IsEnabled(
+          blink::features::kOffscreenCanvasPropagateVisibility)) {
+    return;
+  }
+  if (is_parent_visible_ == visible) {
+    return;
+  }
+  is_parent_visible_ = visible;
+  if (context_) {
+    context_->PageVisibilityChanged();
+  }
 }
 
 void OffscreenCanvas::Trace(Visitor* visitor) const {

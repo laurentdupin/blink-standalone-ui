@@ -23,6 +23,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
 #include "ui/gfx/mojom/dxgi_info.mojom-features.h"  // IWYU pragma: export
+#include "skia/public/mojom/skcolorspace_primaries_mojom_traits.h"
 #include "ui/gfx/mojom/dxgi_info.mojom-shared.h"  // IWYU pragma: export
 #include "ui/gfx/mojom/dxgi_info.mojom-forward.h"  // IWYU pragma: export
 #include "mojo/public/mojom/base/wstring.mojom.h"

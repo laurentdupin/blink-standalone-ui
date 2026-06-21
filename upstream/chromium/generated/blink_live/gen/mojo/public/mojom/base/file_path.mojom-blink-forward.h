@@ -28,10 +28,10 @@ namespace mojo_base::mojom {
 
 namespace mojo_base::mojom::blink {
 class FilePath;
-using FilePathPtr = mojo::StructPtr<FilePath>;
+using FilePathPtr = mojo::InlinedStructPtr<FilePath>;
 
 class RelativeFilePath;
-using RelativeFilePathPtr = mojo::StructPtr<RelativeFilePath>;
+using RelativeFilePathPtr = mojo::InlinedStructPtr<RelativeFilePath>;
 
 
 

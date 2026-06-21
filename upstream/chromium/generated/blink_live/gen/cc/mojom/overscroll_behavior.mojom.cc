@@ -27,12 +27,73 @@
 
 
 namespace cc::mojom {
+OverscrollBehavior::OverscrollBehavior()
+    : x(),
+      y() {}
+
+OverscrollBehavior::OverscrollBehavior(
+    OverscrollBehaviorType x_in,
+    OverscrollBehaviorType y_in)
+    : x(std::move(x_in)),
+      y(std::move(y_in)) {}
+
+OverscrollBehavior::~OverscrollBehavior() = default;
+size_t OverscrollBehavior::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->x);
+  seed = mojo::internal::Hash(seed, this->y);
+  return seed;
+}
+
+void OverscrollBehavior::WriteIntoTrace(
+    perfetto::TracedValue traced_context) const {
+  [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();
+  perfetto::WriteIntoTracedValueWithFallback(
+    dict.AddItem(
+      "x"), this->x,
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+      "<value of type OverscrollBehaviorType>"
+#else
+      "<value>"
+#endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
+    );
+  perfetto::WriteIntoTracedValueWithFallback(
+    dict.AddItem(
+      "y"), this->y,
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+      "<value of type OverscrollBehaviorType>"
+#else
+      "<value>"
+#endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
+    );
+}
+
+bool OverscrollBehavior::Validate(
+    const void* data,
+    mojo::internal::ValidationContext* validation_context) {
+  return Data_::Validate(data, validation_context);
+}
 
 
 }  // cc::mojom
 
 
 namespace mojo {
+
+
+// static
+bool StructTraits<::cc::mojom::OverscrollBehavior::DataView, ::cc::mojom::OverscrollBehaviorPtr>::Read(
+    ::cc::mojom::OverscrollBehavior::DataView input,
+    ::cc::mojom::OverscrollBehaviorPtr* output) {
+  bool success = true;
+  ::cc::mojom::OverscrollBehaviorPtr result(::cc::mojom::OverscrollBehavior::New());
+  
+      if (success && !input.ReadX(&result->x))
+        success = false;
+      if (success && !input.ReadY(&result->y))
+        success = false;
+  *output = std::move(result);
+  return success;
+}
 
 }  // namespace mojo
 

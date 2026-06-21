@@ -51,7 +51,7 @@ enum class TextDirection : int32_t {
   kMaxValue = 2,
 };
 
-COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, TextDirection value);
+ std::ostream& operator<<(std::ostream& os, TextDirection value);
 inline bool IsKnownEnumValue(TextDirection value) {
   return internal::TextDirection_Data::IsKnownValue(
       static_cast<int32_t>(value));

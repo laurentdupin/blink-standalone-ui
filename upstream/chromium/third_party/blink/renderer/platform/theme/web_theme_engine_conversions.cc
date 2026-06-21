@@ -5,10 +5,8 @@
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_conversions.h"
 
 #include "base/containers/fixed_flat_map.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/public/mojom/css/preferred_contrast.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-shared.h"
-#endif
 #include "ui/native_theme/native_theme.h"
 
 namespace blink {

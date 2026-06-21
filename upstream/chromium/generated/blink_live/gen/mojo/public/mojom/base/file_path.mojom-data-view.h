@@ -68,22 +68,11 @@ class FilePathDataView {
   FilePathDataView(
       internal::FilePath_Data* data,
       mojo::Message* message)
-      : data_(data), message_(message) {}
+      : data_(data) {}
 
   bool is_null() const { return !data_; }
-  inline void GetPathDataView(
-      mojo::ArrayDataView<uint16_t>* output);
-
-  template <typename UserType>
-  [[nodiscard]] bool ReadPath(UserType* output) {
-    
-    auto* pointer = data_->path.Get();
-    return mojo::internal::Deserialize<mojo::ArrayDataView<uint16_t>>(
-        pointer, output, message_);
-  }
  private:
   internal::FilePath_Data* data_ = nullptr;
-  mojo::Message* message_ = nullptr;
 };
 
 
@@ -94,22 +83,11 @@ class RelativeFilePathDataView {
   RelativeFilePathDataView(
       internal::RelativeFilePath_Data* data,
       mojo::Message* message)
-      : data_(data), message_(message) {}
+      : data_(data) {}
 
   bool is_null() const { return !data_; }
-  inline void GetPathDataView(
-      mojo::ArrayDataView<uint16_t>* output);
-
-  template <typename UserType>
-  [[nodiscard]] bool ReadPath(UserType* output) {
-    
-    auto* pointer = data_->path.Get();
-    return mojo::internal::Deserialize<mojo::ArrayDataView<uint16_t>>(
-        pointer, output, message_);
-  }
  private:
   internal::RelativeFilePath_Data* data_ = nullptr;
-  mojo::Message* message_ = nullptr;
 };
 
 

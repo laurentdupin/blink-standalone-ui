@@ -3,3 +3,98 @@
 // Copyright 2013 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-private-field"
+#endif
+
+#include "cc/mojom/touch_action.mojom.h"
+#include <stdint.h>
+#include <utility>
+#include "mojo/public/cpp/bindings/lib/default_construct_tag_internal.h"
+#include "mojo/public/cpp/bindings/lib/serialization.h"
+#include "mojo/public/cpp/bindings/lib/validate_params.h"
+#include "mojo/public/cpp/bindings/lib/validation_errors.h"
+#include "mojo/public/cpp/bindings/mojo_buildflags.h"
+#include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
+
+#include "cc/mojom/touch_action.mojom-params-data.h"
+#include "cc/mojom/touch_action.mojom-shared-message-ids.h"
+
+#include "cc/mojom/touch_action.mojom-import-headers.h"
+#include "cc/mojom/touch_action.mojom-test-utils.h"
+
+
+namespace cc::mojom {
+TouchAction::TouchAction()
+    : value() {}
+
+TouchAction::TouchAction(
+    uint32_t value_in)
+    : value(std::move(value_in)) {}
+
+TouchAction::~TouchAction() = default;
+size_t TouchAction::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->value);
+  return seed;
+}
+
+void TouchAction::WriteIntoTrace(
+    perfetto::TracedValue traced_context) const {
+  [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();
+  perfetto::WriteIntoTracedValueWithFallback(
+    dict.AddItem(
+      "value"), this->value,
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+      "<value of type uint32_t>"
+#else
+      "<value>"
+#endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
+    );
+}
+
+bool TouchAction::Validate(
+    const void* data,
+    mojo::internal::ValidationContext* validation_context) {
+  return Data_::Validate(data, validation_context);
+}
+
+
+}  // cc::mojom
+
+
+namespace mojo {
+
+
+// static
+bool StructTraits<::cc::mojom::TouchAction::DataView, ::cc::mojom::TouchActionPtr>::Read(
+    ::cc::mojom::TouchAction::DataView input,
+    ::cc::mojom::TouchActionPtr* output) {
+  bool success = true;
+  ::cc::mojom::TouchActionPtr result(::cc::mojom::TouchAction::New());
+  
+      if (success)
+        result->value = input.value();
+  *output = std::move(result);
+  return success;
+}
+
+}  // namespace mojo
+
+
+// Symbols declared in the -test-utils.h header are defined here instead of a
+// separate .cc file to save compile time.
+
+
+namespace cc::mojom {
+
+
+
+
+}  // cc::mojom
+
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif

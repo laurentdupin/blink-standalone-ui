@@ -34,6 +34,8 @@
 
 
 
+#include "cc/mojom/layer_tree_debug_state_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -50,7 +52,7 @@ namespace cc::mojom::blink {
 
 
 
-class  LayerTreeDebugState {
+class BLINK_PLATFORM_EXPORT LayerTreeDebugState {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<LayerTreeDebugState, T>::value>;
@@ -119,7 +121,6 @@ class  LayerTreeDebugState {
 
   template <typename T, LayerTreeDebugState::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
-  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -424,7 +425,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::cc::mojom::blink::LayerTreeDebugState::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::cc::mojom::blink::LayerTreeDebugState::DataView,
                                          ::cc::mojom::blink::LayerTreeDebugStatePtr> {
   static bool IsNull(const ::cc::mojom::blink::LayerTreeDebugStatePtr& input) { return !input; }
   static void SetToNull(::cc::mojom::blink::LayerTreeDebugStatePtr* output) { output->reset(); }

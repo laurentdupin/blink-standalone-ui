@@ -907,7 +907,7 @@ Chromium command-dump build with a focused CMake or Visual Studio build.
 
 Current pipeline:
 
-`HTML/CSS input -> live Blink DummyPageHolder/Document/style/layout/paint lifecycle -> PaintArtifact metadata -> retained draw commands -> SDL demo`
+`HTML/CSS input -> Blink lifecycle -> PaintArtifactCompositor -> cc -> GPU raster/shared image -> Viz Display/SkiaRenderer GPU -> Vulkan -> SDL HWND`
 
 Known limitations:
 

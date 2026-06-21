@@ -55,7 +55,7 @@ enum class ApplicationState : int32_t {
   kMaxValue = 4,
 };
 
-COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, ApplicationState value);
+ std::ostream& operator<<(std::ostream& os, ApplicationState value);
 inline bool IsKnownEnumValue(ApplicationState value) {
   return internal::ApplicationState_Data::IsKnownValue(
       static_cast<int32_t>(value));

@@ -6,7 +6,9 @@
 
 #ifndef MOJO_PUBLIC_MOJOM_BASE_STRING16_MOJOM_IMPORT_HEADERS_H_
 #define MOJO_PUBLIC_MOJOM_BASE_STRING16_MOJOM_IMPORT_HEADERS_H_
+#include "mojo/public/cpp/base/string16_mojom_traits.h"
 #include "mojo/public/mojom/base/big_buffer.mojom.h"
 #include "mojo/public/mojom/base/big_buffer.mojom-import-headers.h"
+#include "third_party/blink/renderer/platform/mojo/string16_mojom_traits.h"
 
 #endif  // MOJO_PUBLIC_MOJOM_BASE_STRING16_MOJOM_IMPORT_HEADERS_H_

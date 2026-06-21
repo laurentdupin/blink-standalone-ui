@@ -624,6 +624,38 @@ struct SendValidationSerializer<::blink::mojom::WebNNTensorTokenDataView, MaybeC
         "null value in WebNNTensorToken struct");
   }
 };
+
+template <typename MaybeConstUserType, mojo::internal::SendValidation send_validation>
+struct SendValidationSerializer<::blink::mojom::WebNNGraphTokenDataView, MaybeConstUserType, send_validation> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = StructTraits<::blink::mojom::WebNNGraphTokenDataView, UserType>;
+  static void Serialize(
+      MaybeConstUserType& input,
+      mojo::internal::MessageFragment<::blink::mojom::internal::WebNNGraphToken_Data>& fragment) {
+    if (CallIsNullIfExists<Traits>(input))
+      return;
+    fragment.Allocate();
+
+      decltype(Traits::value(input)) in_value = Traits::value(input);
+      mojo::internal::MessageFragment<
+          typename decltype(fragment->value)::BaseType> value_fragment(
+              fragment.message());
+      
+      mojo::internal::Serialize<::mojo_base::mojom::UnguessableTokenDataView, send_validation>(
+        in_value,
+        value_fragment);
+
+      fragment->value.Set(
+          value_fragment.is_null() ? nullptr : value_fragment.data());
+
+      
+      MOJO_INTERNAL_CHECK_SERIALIZATION(
+        send_validation,
+        !(fragment->value.is_null()),
+        mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
+        "null value in WebNNGraphToken struct");
+  }
+};
 template <typename MaybeConstUserType, SendValidation send_validation>
 struct SendValidationSerializer<::blink::mojom::FrameTokenDataView, MaybeConstUserType, send_validation> {
   using UserType = typename std::remove_const<MaybeConstUserType>::type;

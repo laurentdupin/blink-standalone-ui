@@ -148,7 +148,10 @@ TextDecorationInfo::TextDecorationInfo(
       // See LayoutSVGInlineText::ComputeNewScaledFontForStyle() for
       // a workaround that is needed due to that.
       use_decorating_box_(inline_context && !decoration_override_ &&
-                          !is_svg_text && ShouldUseDecoratingBox(target_style)),
+                          !is_svg_text &&
+                          inline_context->DecoratingBoxes().size() ==
+                              target_style.AppliedTextDecorations().size() &&
+                          ShouldUseDecoratingBox(target_style)),
       is_svg_text_(is_svg_text) {
   for (wtf_size_t i = 0; i < AppliedDecorationCount(); ++i) {
     const auto& decoration = AppliedDecoration(i);

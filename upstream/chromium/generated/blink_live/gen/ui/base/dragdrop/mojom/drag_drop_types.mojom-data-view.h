@@ -49,7 +49,7 @@ enum class DragEventSource : int32_t {
   kMaxValue = 1,
 };
 
-COMPONENT_EXPORT(UI_BASE_DRAGDROP_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, DragEventSource value);
+ std::ostream& operator<<(std::ostream& os, DragEventSource value);
 inline bool IsKnownEnumValue(DragEventSource value) {
   return internal::DragEventSource_Data::IsKnownValue(
       static_cast<int32_t>(value));
@@ -74,7 +74,7 @@ enum class DragOperation : int32_t {
   kMaxValue = 16,
 };
 
-COMPONENT_EXPORT(UI_BASE_DRAGDROP_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, DragOperation value);
+ std::ostream& operator<<(std::ostream& os, DragOperation value);
 inline bool IsKnownEnumValue(DragOperation value) {
   return internal::DragOperation_Data::IsKnownValue(
       static_cast<int32_t>(value));

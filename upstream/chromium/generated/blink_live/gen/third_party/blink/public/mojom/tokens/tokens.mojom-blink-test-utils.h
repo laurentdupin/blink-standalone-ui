@@ -8,7 +8,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_MOJOM_TOKENS_TOKENS_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "third_party/blink/public/mojom/tokens/tokens.mojom-blink.h"
-#include "third_party/blink/renderer/platform/platform_export.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace blink::mojom::blink {

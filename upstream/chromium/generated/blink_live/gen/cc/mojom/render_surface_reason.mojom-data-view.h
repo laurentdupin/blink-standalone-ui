@@ -90,9 +90,11 @@ enum class RenderSurfaceReason : int32_t {
   
   k2DScaleTransformWithCompositedDescendants = 23,
   
-  kTest = 24,
+  kUnboundedElement = 24,
+  
+  kTest = 25,
   kMinValue = 0,
-  kMaxValue = 24,
+  kMaxValue = 25,
 };
 
  std::ostream& operator<<(std::ostream& os, RenderSurfaceReason value);

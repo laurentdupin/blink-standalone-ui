@@ -14,6 +14,8 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/gfx/mojom/display_color_spaces.mojom-params-data.h"
+#include "skia/public/mojom/skcolorspace_primaries_mojom_traits.h"
+#include "ui/gfx/mojom/color_space_mojom_traits.h"
 namespace gfx {
 namespace mojom {
 

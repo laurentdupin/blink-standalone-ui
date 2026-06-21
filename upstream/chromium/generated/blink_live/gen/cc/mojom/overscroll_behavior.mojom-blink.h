@@ -25,6 +25,7 @@
 #include "cc/mojom/overscroll_behavior.mojom-features.h"  // IWYU pragma: export
 #include "cc/mojom/overscroll_behavior.mojom-shared.h"  // IWYU pragma: export
 #include "cc/mojom/overscroll_behavior.mojom-blink-forward.h"  // IWYU pragma: export
+#include "cc/mojom/overscroll_behavior.mojom-blink-import-headers.h"
 
 #include "mojo/public/cpp/bindings/lib/wtf_clone_equals_util.h"
 #include "mojo/public/cpp/bindings/lib/wtf_hash_util.h"

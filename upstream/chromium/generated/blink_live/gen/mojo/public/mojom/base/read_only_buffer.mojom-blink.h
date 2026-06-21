@@ -35,7 +35,6 @@
 
 
 #include "mojo/public/cpp/base/read_only_buffer_mojom_traits.h"
-#include "base/component_export.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -52,7 +51,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) ReadOnlyBuffer {
+class  ReadOnlyBuffer {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ReadOnlyBuffer, T>::value>;
@@ -225,7 +224,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::ReadOnlyBuffer::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::ReadOnlyBuffer::DataView,
                                          ::mojo_base::mojom::blink::ReadOnlyBufferPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::ReadOnlyBufferPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::ReadOnlyBufferPtr* output) { output->reset(); }

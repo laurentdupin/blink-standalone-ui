@@ -14,6 +14,8 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/gfx/mojom/selection_bound.mojom-params-data.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "ui/gfx/mojom/selection_bound_mojom_traits.h"
 namespace gfx {
 namespace mojom {
 

@@ -30,7 +30,9 @@
 #include "base/types/pass_key.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "crypto/hash.h"
+#endif
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "media/base/video_frame_layout.h"
 #include "media/base/video_frame_metadata.h"
@@ -422,6 +424,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Given a crypto/hash Hasher, hash in the pixels from a single VideoFrame.
   // If `visible_data_only` is true only the frame's visible area will be
   // hashed, if false then the entire coded frame area will be hashed.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   static void UpdateHashWithFrameForTesting(crypto::hash::Hasher& hasher,
                                             const VideoFrame& frame,
                                             bool visible_data_only = true);
@@ -430,6 +433,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // SHA-256 hash of a single video frame's pixels, as a lowercase hex string.
   static std::string HexHashOfFrameForTesting(const VideoFrame& frame,
                                               bool visible_data_only = true);
+#endif
 
   // Returns true if a VideoFrame backed by `storage_type` would allow direct
   // CPU access to the backing data in the VideoFrame memory space.

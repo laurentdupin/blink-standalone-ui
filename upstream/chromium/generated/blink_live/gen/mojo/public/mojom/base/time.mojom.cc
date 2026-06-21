@@ -36,6 +36,12 @@ Time::Time(
 
 Time::~Time() = default;
 
+size_t Time::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->internal_value);
+  return seed;
+}
+
+
 void Time::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
   [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();
@@ -119,6 +125,12 @@ TimeTicks::TimeTicks(
     : internal_value(std::move(internal_value_in)) {}
 
 TimeTicks::~TimeTicks() = default;
+
+size_t TimeTicks::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->internal_value);
+  return seed;
+}
+
 
 void TimeTicks::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

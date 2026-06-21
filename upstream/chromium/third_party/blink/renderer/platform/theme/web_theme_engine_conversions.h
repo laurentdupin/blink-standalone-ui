@@ -5,37 +5,13 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_THEME_WEB_THEME_ENGINE_CONVERSIONS_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_THEME_WEB_THEME_ENGINE_CONVERSIONS_H_
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/public/mojom/css/preferred_contrast.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-shared.h"
-#endif
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_default.h"
 #include "ui/native_theme/native_theme.h"
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_THEME_MOJOM_ENUMS_DEFINED)
-#define BLINK_STANDALONE_THEME_MOJOM_ENUMS_DEFINED
-namespace mojom::blink {
-enum class ColorScheme {
-  kLight,
-  kDark,
-};
-
-enum class PreferredContrast {
-  kNoPreference,
-  kMore,
-  kLess,
-  kCustom,
-};
-}  // namespace mojom::blink
-namespace mojom {
-using ColorScheme = ::blink::mojom::blink::ColorScheme;
-using PreferredContrast = ::blink::mojom::blink::PreferredContrast;
-}  // namespace mojom
-#endif
 
 PLATFORM_EXPORT ui::NativeTheme::Part NativeThemePart(
     WebThemeEngine::Part part);

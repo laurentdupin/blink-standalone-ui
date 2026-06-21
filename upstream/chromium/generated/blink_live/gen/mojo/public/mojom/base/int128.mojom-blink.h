@@ -34,8 +34,6 @@
 
 
 
-#include "mojo/public/cpp/base/int128_mojom_traits.h"
-#include "base/component_export.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -49,7 +47,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) Int128 {
+class  Int128 {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Int128, T>::value>;
@@ -99,6 +97,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) Int128 {
 
   template <typename T, Int128::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -199,7 +198,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) Uint128 {
+class  Uint128 {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Uint128, T>::value>;
@@ -249,6 +248,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) Uint128 {
 
   template <typename T, Uint128::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -415,7 +415,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::Int128::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::Int128::DataView,
                                          ::mojo_base::mojom::blink::Int128Ptr> {
   static bool IsNull(const ::mojo_base::mojom::blink::Int128Ptr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::Int128Ptr* output) { output->reset(); }
@@ -435,7 +435,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::Uint128::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::Uint128::DataView,
                                          ::mojo_base::mojom::blink::Uint128Ptr> {
   static bool IsNull(const ::mojo_base::mojom::blink::Uint128Ptr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::Uint128Ptr* output) { output->reset(); }

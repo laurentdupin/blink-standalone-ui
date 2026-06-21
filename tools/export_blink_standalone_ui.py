@@ -907,12 +907,12 @@ Chromium command-dump build with a focused CMake or Visual Studio build.
 
 Current pipeline:
 
-`HTML/CSS input -> live Blink DummyPageHolder/Document/style/layout/paint lifecycle -> PaintArtifact metadata -> retained draw commands -> SDL demo`
+`HTML/CSS input -> Blink lifecycle -> PaintArtifactCompositor -> cc -> GPU raster/shared image -> Viz Display/SkiaRenderer -> Vulkan -> SDL HWND`
 
 Known limitations:
 
-- Text draw payload extraction is not complete; the current SDL path uses live
-  PaintArtifact metadata and a transitional text bridge.
+- SDL is only the host shell boundary: window, input/event pump, frame timing,
+  and native surface lifetime.
 - Blink animation time is not wired to standalone `FrameInput` yet.
 - The CMake file is a skeleton. It records the intended target shape but does
   not yet replace the command-dump build.

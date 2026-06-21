@@ -65,12 +65,14 @@ class PaintArtifactCompositor::OldPendingLayerMatcher {
   PendingLayer* Find(const PendingLayer& new_layer) {
     if (pending_layers_.empty())
       return nullptr;
-    if (!new_layer.FirstPaintChunk().CanMatchOldChunk())
+    if (!new_layer.Chunks().HasValidFirstChunk() ||
+        !new_layer.FirstPaintChunk().CanMatchOldChunk())
       return nullptr;
     wtf_size_t i = next_index_;
     do {
       wtf_size_t next = (i + 1) % pending_layers_.size();
-      if (new_layer.Matches(pending_layers_[i])) {
+      if (pending_layers_[i].Chunks().HasValidFirstChunk() &&
+          new_layer.Matches(pending_layers_[i])) {
         next_index_ = next;
         return &pending_layers_[i];
       }
@@ -994,14 +996,21 @@ SynthesizedClip& PaintArtifactCompositor::CreateOrReuseSynthesizedClipLayer(
     bool needs_layer,
     CompositorElementId& mask_isolation_id,
     CompositorElementId& mask_effect_id) {
-  auto entry =
-      std::ranges::find_if(synthesized_clip_cache_, [&clip](const auto& entry) {
-        return entry.key == &clip && !entry.in_use;
-      });
-  if (entry == synthesized_clip_cache_.end()) {
+  SynthesizedClipEntry* entry = nullptr;
+  {
+    auto it = std::ranges::find_if(
+        synthesized_clip_cache_, [&clip, &transform](const auto& entry) {
+          return entry.clip_key == &clip && !entry.in_use &&
+                 entry.transform_key == &transform;
+        });
+    if (it != synthesized_clip_cache_.end()) {
+      entry = &*it;
+    }
+  }
+  if (!entry) {
     synthesized_clip_cache_.push_back(SynthesizedClipEntry{
-        &clip, std::make_unique<SynthesizedClip>(), false});
-    entry = UNSAFE_TODO(synthesized_clip_cache_.end() - 1);
+        &clip, std::make_unique<SynthesizedClip>(), false, &transform});
+    entry = &synthesized_clip_cache_.back();
   }
 
   entry->in_use = true;
@@ -1180,16 +1189,21 @@ void PaintArtifactCompositor::Update(
       static_cast<cc::PictureLayer&>(layer).SetIsBackdropFilterMask(true);
       layer.SetElementId(effect.GetCompositorElementId());
       auto& effect_tree = host->property_trees()->effect_tree_mutable();
-      auto* cc_node = effect_tree.Node(effect_id);
-      auto* parent_node = effect_tree.Node(cc_node->parent_id);
+      const auto& cc_node = effect_tree.Node(effect_id);
+      int parent_id = cc_node.parent_id;
+      if (parent_id != cc::kInvalidPropertyNodeId) {
+        auto& parent_node = effect_tree.MutableNode(parent_id);
 
-      // Only set backdrop_mask_element_id if the parent has backdrop_filters.
-      // When synthetic nodes are created for clipping (e.g., overflow:hidden +
-      // border-radius), the backdrop properties are transferred to the
-      // synthetic node, leaving the parent scope node without backdrop_filters.
-      // Setting the mask there causes double-masking. See crbug.com/40778541.
-      if (!parent_node->backdrop_filters.IsEmpty()) {
-        parent_node->backdrop_mask_element_id = effect.GetCompositorElementId();
+        // Only set backdrop_mask_element_id if the parent has backdrop_filters.
+        // When synthetic nodes are created for clipping (e.g., overflow:hidden
+        // + border-radius), the backdrop properties are transferred to the
+        // synthetic node, leaving the parent scope node without
+        // backdrop_filters. Setting the mask there causes double-masking. See
+        // crbug.com/40778541.
+        if (!parent_node.backdrop_filters.IsEmpty()) {
+          parent_node.backdrop_mask_element_id =
+              effect.GetCompositorElementId();
+        }
       }
     } else if (pending_layer.GetContentLayerClient() &&
                !effect.RequiresCompositingForBackdropFilterMask() &&
@@ -1222,6 +1236,10 @@ void PaintArtifactCompositor::Update(
       canvas_child_layer_map_.Set(effect.CanvasChildId(), i);
       layer.SetCanvasChildId(
           CompositorElementIdFromDOMNodeId(effect.CanvasChildId()));
+    } else {
+      // All layers under canvas children should be merged into the
+      // canvas child's layer.
+      CHECK(!effect.IsInCanvasSubtree());
     }
 
     if (layer.subtree_property_changed())

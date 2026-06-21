@@ -27,27 +27,16 @@
 
 
 namespace mojo_base::mojom {
-FilePath::FilePath()
-    : path() {}
-
-FilePath::FilePath(
-    std::vector<uint16_t> path_in)
-    : path(std::move(path_in)) {}
+FilePath::FilePath() {}
 
 FilePath::~FilePath() = default;
+size_t FilePath::Hash(size_t seed) const {
+  return seed;
+}
 
 void FilePath::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
   [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();
-  perfetto::WriteIntoTracedValueWithFallback(
-    dict.AddItem(
-      "path"), this->path,
-#if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type const std::vector<uint16_t>&>"
-#else
-      "<value>"
-#endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
-    );
 }
 
 bool FilePath::Validate(
@@ -55,27 +44,16 @@ bool FilePath::Validate(
     mojo::internal::ValidationContext* validation_context) {
   return Data_::Validate(data, validation_context);
 }
-RelativeFilePath::RelativeFilePath()
-    : path() {}
-
-RelativeFilePath::RelativeFilePath(
-    std::vector<uint16_t> path_in)
-    : path(std::move(path_in)) {}
+RelativeFilePath::RelativeFilePath() {}
 
 RelativeFilePath::~RelativeFilePath() = default;
+size_t RelativeFilePath::Hash(size_t seed) const {
+  return seed;
+}
 
 void RelativeFilePath::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
   [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();
-  perfetto::WriteIntoTracedValueWithFallback(
-    dict.AddItem(
-      "path"), this->path,
-#if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type const std::vector<uint16_t>&>"
-#else
-      "<value>"
-#endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
-    );
 }
 
 bool RelativeFilePath::Validate(
@@ -98,8 +76,6 @@ bool StructTraits<::mojo_base::mojom::FilePath::DataView, ::mojo_base::mojom::Fi
   bool success = true;
   ::mojo_base::mojom::FilePathPtr result(::mojo_base::mojom::FilePath::New());
   
-      if (success && !input.ReadPath(&result->path))
-        success = false;
   *output = std::move(result);
   return success;
 }
@@ -112,8 +88,6 @@ bool StructTraits<::mojo_base::mojom::RelativeFilePath::DataView, ::mojo_base::m
   bool success = true;
   ::mojo_base::mojom::RelativeFilePathPtr result(::mojo_base::mojom::RelativeFilePath::New());
   
-      if (success && !input.ReadPath(&result->path))
-        success = false;
   *output = std::move(result);
   return success;
 }

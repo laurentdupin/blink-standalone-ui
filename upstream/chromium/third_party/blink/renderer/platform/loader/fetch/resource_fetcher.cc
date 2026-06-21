@@ -28,6 +28,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 
 #include <algorithm>
+#include <cctype>
 #include <limits>
 #include <optional>
 #include <string>
@@ -110,6 +111,13 @@
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/perfetto/include/perfetto/tracing/track.h"
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "html_css_renderer/standalone_resource_provider.h"
+#include "third_party/skia/include/core/SkData.h"
+#include "third_party/skia/include/core/SkPixmap.h"
+#include "third_party/skia/include/encode/SkPngEncoder.h"
+#endif
+
 namespace blink {
 
 constexpr uint32_t ResourceFetcher::kKeepaliveInflightBytesQuota;
@@ -156,6 +164,138 @@ std::string_view ResourceTypeName(ResourceType type) {
     RESOURCE_TYPE_NAME(Dictionary)        // 15
   }
 }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool StandaloneMimeNeedsDecodedImageBridge(std::string_view mime_type) {
+  return mime_type == "image/jpeg" || mime_type == "image/pjpeg" ||
+         mime_type == "image/jpg" || mime_type == "image/bmp" ||
+         mime_type == "image/x-ms-bmp" || mime_type == "image/webp";
+}
+
+bool StandaloneDataImageNeedsDecodedImageBridge(const KURL& url) {
+  if (!url.ProtocolIsData()) {
+    return false;
+  }
+
+  std::string lower_url = url.GetString().Utf8();
+  std::transform(lower_url.begin(), lower_url.end(), lower_url.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return lower_url.rfind("data:image/jpeg", 0) == 0 ||
+         lower_url.rfind("data:image/pjpeg", 0) == 0 ||
+         lower_url.rfind("data:image/jpg", 0) == 0 ||
+         lower_url.rfind("data:image/bmp", 0) == 0 ||
+         lower_url.rfind("data:image/x-ms-bmp", 0) == 0 ||
+         lower_url.rfind("data:image/webp", 0) == 0;
+}
+
+bool ShouldTryStandaloneProviderImageResource(const FetchParameters& params,
+                                              const ResourceFactory& factory) {
+  if (factory.GetType() != ResourceType::kImage) {
+    return false;
+  }
+  if (!params.Url().ProtocolIsData()) {
+    return true;
+  }
+  return StandaloneDataImageNeedsDecodedImageBridge(params.Url());
+}
+
+std::optional<std::vector<uint8_t>> EncodeStandaloneDecodedImageAsPng(
+    const html_css_renderer::StandaloneResourceResult& result) {
+  if (!result.decoded_image ||
+      !StandaloneMimeNeedsDecodedImageBridge(result.mime_type)) {
+    return std::nullopt;
+  }
+
+  SkPixmap pixmap;
+  if (!result.decoded_image->peekPixels(&pixmap) || !pixmap.addr() ||
+      pixmap.width() <= 0 || pixmap.height() <= 0) {
+    return std::nullopt;
+  }
+
+  SkPngEncoder::Options options;
+  sk_sp<SkData> png_data = SkPngEncoder::Encode(pixmap, options);
+  if (!png_data || png_data->size() == 0) {
+    return std::nullopt;
+  }
+
+  const uint8_t* bytes = png_data->bytes();
+  return std::vector<uint8_t>(bytes, bytes + png_data->size());
+}
+
+Resource* CreateStandaloneProviderImageResource(
+    const FetchParameters& params,
+    const ResourceFactory& factory,
+    base::SingleThreadTaskRunner* task_runner) {
+  if (!ShouldTryStandaloneProviderImageResource(params, factory)) {
+    return nullptr;
+  }
+
+  html_css_renderer::StandaloneResourceRequest request;
+  request.url = params.Url().GetString().Utf8();
+  request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
+  request.accepted_mime_types.push_back("image/png");
+  request.accepted_mime_types.push_back("image/jpeg");
+  request.accepted_mime_types.push_back("image/bmp");
+  request.accepted_mime_types.push_back("image/webp");
+  request.accepted_mime_types.push_back("image/svg+xml");
+  if (params.Options().initiator_info.name == fetch_initiator_type_names::kCSS ||
+      params.Options().initiator_info.name == fetch_initiator_type_names::kUacss) {
+    request.initiator =
+        html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
+  } else {
+    request.initiator =
+        html_css_renderer::StandaloneResourceInitiator::kImgElement;
+  }
+
+  html_css_renderer::StandaloneResourceResult result =
+      html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
+          request);
+
+  std::string response_mime_type = result.mime_type;
+  if (result.status == html_css_renderer::StandaloneResourceStatus::kSuccess) {
+    if (std::optional<std::vector<uint8_t>> png_bytes =
+            EncodeStandaloneDecodedImageAsPng(result)) {
+      result.encoded_bytes = std::move(*png_bytes);
+      response_mime_type = "image/png";
+    }
+  }
+
+  Resource* resource = factory.Create(params.GetResourceRequest(),
+                                      params.Options(),
+                                      params.DecoderOptions());
+  if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess ||
+      result.encoded_bytes.empty()) {
+    resource->FinishAsError(ResourceError::CancelledError(params.Url()),
+                            task_runner);
+    return resource;
+  }
+
+  ResourceResponse response;
+  response.SetHttpStatusCode(200);
+  response.SetHttpStatusText(AtomicString("OK"));
+  response.SetCurrentRequestUrl(params.Url());
+  response.SetExpectedContentLength(
+      static_cast<int64_t>(result.encoded_bytes.size()));
+  response.SetTextEncodingName(g_empty_atom);
+  response.SetMimeType(AtomicString(response_mime_type.c_str()));
+  response.AddHttpHeaderField(http_names::kContentType, response.MimeType());
+
+  scoped_refptr<SharedBuffer> data = SharedBuffer::Create(
+      base::span<const uint8_t>(result.encoded_bytes.data(),
+                                result.encoded_bytes.size()));
+  resource->NotifyStartLoad();
+  resource->ResponseReceived(response);
+  resource->SetDataBufferingPolicy(kBufferData);
+  resource->SetResourceBuffer(data);
+  resource->SetCacheIdentifier(result.cache_key.empty()
+                                   ? params.Url().GetString()
+                                   : String(result.cache_key.c_str()));
+  resource->Finish(base::TimeTicks(), task_runner);
+  return resource;
+}
+#endif
 
 ResourceLoadPriority TypeToPriority(ResourceType type) {
   switch (type) {
@@ -872,6 +1012,15 @@ ResourceFetcher::IsControlledByServiceWorker() const {
 ResourceFetcher::DeferPolicy ResourceFetcher::GetDeferPolicy(
     ResourceType type,
     const FetchParameters& params) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Phase 1 supports local/static image data. Keep data: images on Blink's
+  // synchronous static-data path instead of routing them through the unsupported
+  // external ResourceLoader boundary.
+  if (type == ResourceType::kImage && params.Url().ProtocolIsData()) {
+    return DeferPolicy::kNoDefer;
+  }
+#endif
+
   // Defer a font load until it is actually needed unless this is a link
   // preload.
   if (type == ResourceType::kFont && !params.IsLinkPreload()) {
@@ -1048,9 +1197,15 @@ Resource* ResourceFetcher::CreateResourceForStaticData(
     // TODO(crbug.com/41496436): Revisit this.
   } else if (url.ProtocolIsData()) {
     int result;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    std::tie(result, response, data) = network_utils::ParseDataURL(
+        url, params.GetResourceRequest().HttpMethod(),
+        params.GetResourceRequest().GetUkmSourceId(), nullptr);
+#else
     std::tie(result, response, data) = network_utils::ParseDataURL(
         url, params.GetResourceRequest().HttpMethod(),
         params.GetResourceRequest().GetUkmSourceId(), UkmRecorder());
+#endif
     if (result != net::OK) {
       return nullptr;
     }
@@ -1355,6 +1510,17 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
 
   // If detached, we do very early return here to skip all processing below.
   if (properties_->IsDetached()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (Resource* resource = CreateStandaloneProviderImageResource(
+            params, factory, freezable_task_runner_.get())) {
+      return resource;
+    }
+    if (factory.GetType() == ResourceType::kImage && params.Url().ProtocolIsData()) {
+      if (Resource* resource = CreateResourceForStaticData(params, factory)) {
+        return resource;
+      }
+    }
+#endif
     return ResourceForBlockedRequest(
         params, factory, ResourceRequestBlockedReason::kOther, client);
   }
@@ -1404,6 +1570,12 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   }
 
   const ResourceType resource_type = factory.GetType();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (Resource* resource = CreateStandaloneProviderImageResource(
+          params, factory, freezable_task_runner_.get())) {
+    return resource;
+  }
+#endif
 
   WebScopedVirtualTimePauser pauser;
 

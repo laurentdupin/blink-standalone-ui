@@ -68,6 +68,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
+class AnimatedImageFrameIndexMap;
 class AnimationHost;
 class AnimationTimeline;
 class Layer;
@@ -831,6 +832,10 @@ class CORE_EXPORT LocalFrameView final
 
   void DidPaintCanvasChild(HTMLCanvasElement& canvas, Element& child);
   void RequestCanvasOnpaint(HTMLCanvasElement&);
+  scoped_refptr<const cc::AnimatedImageFrameIndexMap>
+  GetAnimatedImageFrameIndexes() const;
+  void SetAnimatedImageFrameIndexes(
+      scoped_refptr<const cc::AnimatedImageFrameIndexMap> indexes);
 
   bool HasDominantVideoElement() const;
 
@@ -1329,6 +1334,8 @@ class CORE_EXPORT LocalFrameView final
               Member<GCedHeapLinkedHashSet<Member<Element>>>>
       canvas_elements_needing_onpaint_;
   bool did_run_post_lifecycle_steps_before_commit_ = false;
+  scoped_refptr<const cc::AnimatedImageFrameIndexMap>
+      animated_image_frame_indexes_;
 
   HeapHashSet<WeakMember<HTMLVideoElement>> fullscreen_video_elements_;
 

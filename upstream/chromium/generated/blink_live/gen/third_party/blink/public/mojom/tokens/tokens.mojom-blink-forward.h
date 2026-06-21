@@ -84,6 +84,9 @@ using WebNNPendingConstantTokenPtr = mojo::StructPtr<WebNNPendingConstantToken>;
 class WebNNTensorToken;
 using WebNNTensorTokenPtr = mojo::StructPtr<WebNNTensorToken>;
 
+class WebNNGraphToken;
+using WebNNGraphTokenPtr = mojo::StructPtr<WebNNGraphToken>;
+
 class FrameToken;
 
 using FrameTokenPtr = mojo::StructPtr<FrameToken>;

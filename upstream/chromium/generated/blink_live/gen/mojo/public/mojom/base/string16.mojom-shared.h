@@ -28,7 +28,6 @@
 
 
 #include "mojo/public/mojom/base/string16.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 

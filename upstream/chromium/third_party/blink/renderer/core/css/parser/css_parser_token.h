@@ -1,4 +1,4 @@
-﻿// Copyright 2014 The Chromium Authors
+// Copyright 2014 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -15,9 +15,6 @@
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#include <cstdio>
-#endif
 
 namespace blink {
 
@@ -85,7 +82,7 @@ class CORE_EXPORT CSSParserToken {
   };
 
   // NOTE: There are some fields that we don't actually use (marked here
-  // as 窶廛on't care窶・, but we still set them explicitly, since otherwise,
+  // as “Don't care”), but we still set them explicitly, since otherwise,
   // Clang works really hard to preserve their contents.
   explicit CSSParserToken(CSSParserTokenType type,
                           BlockType block_type = kNotBlock)
@@ -107,8 +104,6 @@ class CORE_EXPORT CSSParserToken {
                  int id = -1)
       : type_(type), block_type_(block_type), id_(id) {
     InitValueFromStringView(value);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
   }
 
   CSSParserToken(CSSParserTokenType, UChar);  // for DelimiterToken
@@ -245,15 +240,17 @@ class CORE_EXPORT CSSParserToken {
   base::span<const LChar> Span8() const {
     DCHECK(value_is_8bit_);
     // SAFETY: InitValueFromStringView() ensures the expression is safe.
-    return UNSAFE_BUFFERS(
-        {static_cast<const LChar*>(ValueDataCharRaw()), value_length_});
+    return UNSAFE_BUFFERS({base::unchecked,
+                           static_cast<const LChar*>(ValueDataCharRaw()),
+                           value_length_});
   }
   base::span<const UChar> Span16() const {
     DCHECK(!value_is_8bit_);
     DCHECK(!value_is_inline_);
     // SAFETY: InitValueFromStringView() ensures the expression is safe.
-    return UNSAFE_BUFFERS(
-        {static_cast<const UChar*>(value_data_char_raw_), value_length_});
+    return UNSAFE_BUFFERS({base::unchecked,
+                           static_cast<const UChar*>(value_data_char_raw_),
+                           value_length_});
   }
 
   // Bitfields are all declared as type `unsigned` based on observation that
@@ -302,7 +299,7 @@ class CORE_EXPORT CSSParserToken {
     // NOTE: For DimensionToken, this value stores the numeric part,
     // value_data_char_raw_ (or value_data_char_inline_) stores the
     // unit as text, and unit_ stores the unit as enum (assuming it
-    // is a valid unit). So for e.g. 窶・00px窶・ numeric_value_ = 100.0,
+    // is a valid unit). So for e.g. “100px”, numeric_value_ = 100.0,
     // value_length_ = 2, value_data_char_inline_ = "px", and
     // unit_ = kPixels.
     double numeric_value_;

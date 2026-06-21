@@ -8,7 +8,6 @@
 #define MOJO_PUBLIC_MOJOM_BASE_READ_ONLY_BUFFER_MOJOM_TEST_UTILS_H_
 
 #include "mojo/public/mojom/base/read_only_buffer.mojom.h"
-#include "base/component_export.h"
 
 
 namespace mojo_base::mojom {

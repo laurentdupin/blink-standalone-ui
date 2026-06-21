@@ -30,9 +30,7 @@
 
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
-#endif
 
 namespace blink {
 

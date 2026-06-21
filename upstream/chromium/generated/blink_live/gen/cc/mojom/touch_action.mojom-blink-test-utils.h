@@ -8,7 +8,6 @@
 #define CC_MOJOM_TOUCH_ACTION_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/touch_action.mojom-blink.h"
-#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

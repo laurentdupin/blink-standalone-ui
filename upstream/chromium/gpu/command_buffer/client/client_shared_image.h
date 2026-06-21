@@ -53,6 +53,7 @@ struct ReturnedResource;
 struct ReturnedResourceViz;
 }  // namespace viz
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 namespace wgpu::dawn::wire::client {
 class Device;
 class Texture;
@@ -60,6 +61,7 @@ class Buffer;
 struct TextureDescriptor;
 struct BufferDescriptor;
 }  // namespace wgpu::dawn::wire::client
+#endif
 
 namespace gpu {
 
@@ -361,6 +363,7 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
       const SyncToken& sync_token,
       bool readonly);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   std::unique_ptr<WebGPUTextureScopedAccess> BeginWebGPUTextureAccess(
       webgpu::WebGPUInterface* webgpu,
       const SyncToken& sync_token,
@@ -376,6 +379,7 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
       const wgpu::dawn::wire::client::BufferDescriptor& desc,
       uint64_t usage,
       webgpu::MailboxFlags mailbox_flags);
+#endif
 
   // Pack the SharedImageExportResult.
   SharedImageExportResult EndImport(const SyncToken& sync_token) {
@@ -429,8 +433,10 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT ClientSharedImage
   friend class RasterScopedAccess;
   friend class TestSharedImageInterface;
   friend class media::VideoFrame;
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   friend class WebGPUTextureScopedAccess;
   friend class WebGPUBufferScopedAccess;
+#endif
 
   ClientSharedImage(const Mailbox& mailbox,
                     const SharedImageInfo& info,
@@ -654,6 +660,7 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT RasterScopedAccess {
   bool readonly_;
 };
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 class GPU_COMMAND_BUFFER_CLIENT_EXPORT WebGPUTextureScopedAccess {
  public:
   WebGPUTextureScopedAccess(const WebGPUTextureScopedAccess&) = delete;
@@ -728,6 +735,7 @@ class GPU_COMMAND_BUFFER_CLIENT_EXPORT WebGPUBufferScopedAccess {
   uint32_t buffer_id_ = 0;
   uint32_t buffer_generation_ = 0;
 };
+#endif  // !defined(HTML_CSS_RENDERER_STANDALONE)
 
 }  // namespace gpu
 

@@ -22,7 +22,6 @@
 
 
 #include "mojo/public/mojom/base/application_state.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 
@@ -95,7 +94,7 @@ namespace mojo_base::mojom {
 namespace perfetto {
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) TraceFormatTraits<::mojo_base::mojom::ApplicationState> {
+struct  TraceFormatTraits<::mojo_base::mojom::ApplicationState> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::mojo_base::mojom::ApplicationState value);
 };
 

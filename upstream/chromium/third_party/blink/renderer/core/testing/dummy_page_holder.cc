@@ -119,6 +119,9 @@ DummyPageHolder::DummyPageHolder(
   Settings& settings = page_->GetSettings();
   settings.SetDefaultFontSize(16);
   settings.SetDefaultFixedFontSize(13);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  settings.SetAcceleratedCompositingEnabled(true);
+#endif
   if (setting_overrider)
     std::move(setting_overrider).Run(settings);
   TraceStandaloneDummyPageHolderStage("after settings");

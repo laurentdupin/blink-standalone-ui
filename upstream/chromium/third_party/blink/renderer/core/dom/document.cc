@@ -31,6 +31,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -430,6 +431,40 @@ Persistent<Document> g_standalone_body_document;
 Persistent<HTMLElement> g_standalone_body_element;
 Persistent<StyleEngine> g_standalone_style_engine;
 StyleEngine* g_standalone_style_engine_raw = nullptr;
+
+void TraceStandaloneSvgCheckCompletedStage(const char* stage,
+                                           const Document* document) {
+  if (std::getenv("HTML_CSS_RENDERER_TRACE_IMAGE_PAINT") == nullptr) {
+    return;
+  }
+  std::fprintf(stderr,
+               "standalone_svg_check_completed.stage=%s document=%p "
+               "frame=%p load_event_finished=%d load_event_still_needed=%d "
+               "load_event_started=%d has_finished_parsing=%d "
+               "is_delaying_load_event=%d\n",
+               stage, static_cast<const void*>(document),
+               document ? static_cast<void*>(document->GetFrame()) : nullptr,
+               document ? static_cast<int>(document->LoadEventFinished()) : -1,
+               document ? static_cast<int>(document->LoadEventStillNeeded())
+                        : -1,
+               document ? static_cast<int>(document->LoadEventStarted()) : -1,
+               document ? static_cast<int>(document->HasFinishedParsing()) : -1,
+               document ? static_cast<int>(
+                              const_cast<Document*>(document)
+                                  ->IsDelayingLoadEvent())
+                        : -1);
+  std::fflush(stderr);
+}
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool IsStandaloneIsolatedSVGImageDocument(const Document& document) {
+  const LocalFrame* frame = document.GetFrame();
+  if (!frame || !frame->GetPage()) {
+    return false;
+  }
+  return frame->GetPage()->GetChromeClient().IsIsolatedSVGChromeClient();
+}
+#endif
 }  // namespace
 
 void SetStandaloneDocumentBodyForStandaloneRenderer(Document* document,
@@ -1894,7 +1929,9 @@ void Document::SetReadyState(DocumentReadyState ready_state) {
         document_timing_.MarkDomInteractive();
 
       if (frame && frame->IsMainFrame()) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
         frame->GetLocalFrameHostRemote().NotifyDocumentInteractive();
+#endif
       }
       break;
     case kComplete:
@@ -2194,7 +2231,9 @@ void Document::UpdateTitle(const String& title) {
 void Document::DispatchDidReceiveTitle() {
   if (IsInMainFrame()) {
     String shortened_title = title_.substr(0, mojom::blink::kMaxTitleChars);
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     GetFrame()->GetLocalFrameHostRemote().UpdateTitle(shortened_title);
+#endif
     GetFrame()->GetPage()->GetPageScheduler()->OnTitleOrFaviconUpdated();
   }
   GetFrame()->Client()->DispatchDidReceiveTitle(title_);
@@ -2863,7 +2902,15 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   UpdateOverscrollCommandTargets();
 #endif
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  style_engine.UpdateActiveStyle();
+  style_engine.UpdateCounterStyles();
+  style_engine.InvalidatePositionTryStyles();
+  style_engine.InvalidateViewportUnitStylesIfNeeded();
+  style_engine.InvalidateEnvDependentStylesIfNeeded();
+  InvalidateStyleAndLayoutForFontUpdates();
+  UpdateStyleInvalidationIfNeeded();
+#else
   style_engine.UpdateActiveStyle();
   style_engine.UpdateCounterStyles();
   style_engine.InvalidatePositionTryStyles();
@@ -4527,6 +4574,10 @@ bool NeedsStyleAndLayoutUpdateAtClose(Document& document) {
 }  // namespace
 
 void Document::DispatchLoadEventAndFinalize() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage("DispatchLoadEventAndFinalize begin",
+                                        this);
+#endif
   DCHECK(!InStyleRecalc());
 
   load_event_progress_ = kLoadEventInProgress;
@@ -4544,15 +4595,45 @@ void Document::DispatchLoadEventAndFinalize() {
   if (SvgExtensions())
     AccessSVGExtensions().DispatchSVGLoadEventToOutermostSVGElements();
 
-  if (domWindow())
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage(
+      "DispatchLoadEventAndFinalize before window load events", this);
+#endif
+  const bool skip_window_load_for_standalone_svg_image =
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      IsStandaloneIsolatedSVGImageDocument(*this);
+#else
+      false;
+#endif
+  if (!skip_window_load_for_standalone_svg_image && domWindow()) {
     domWindow()->DispatchLoadAndPageshowEvents();
+  }
 
-  if (GetFrame() && GetFrame()->IsMainFrame())
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (skip_window_load_for_standalone_svg_image) {
+    TraceStandaloneSvgCheckCompletedStage(
+        "DispatchLoadEventAndFinalize skipped isolated svg window load events",
+        this);
+  }
+  TraceStandaloneSvgCheckCompletedStage(
+      "DispatchLoadEventAndFinalize after window load events", this);
+#endif
+  if (!skip_window_load_for_standalone_svg_image && GetFrame() &&
+      GetFrame()->IsMainFrame()) {
     GetFrame()->GetLocalFrameHostRemote().DocumentOnLoadCompleted();
+  }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage(
+      "DispatchLoadEventAndFinalize before client onload handled", this);
+#endif
   if (GetFrame()) {
     GetFrame()->Client()->DispatchDidHandleOnloadEvents();
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage(
+      "DispatchLoadEventAndFinalize after client onload handled", this);
+#endif
 
   if (!GetFrame()) {
     load_event_progress_ = kLoadEventCompleted;
@@ -4575,15 +4656,36 @@ void Document::DispatchLoadEventAndFinalize() {
   // expensive layout thrashing of the embedding document. Since this is a
   // common scenario, special-casing it here, and avoiding that layout if
   // this is an initial-empty document in a subframe.
-  if (NeedsStyleAndLayoutUpdateAtClose(*this)) {
+  if (!skip_window_load_for_standalone_svg_image &&
+      NeedsStyleAndLayoutUpdateAtClose(*this)) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgCheckCompletedStage(
+        "DispatchLoadEventAndFinalize before close lifecycle update", this);
+#endif
     UpdateStyleAndLayout(DocumentUpdateReason::kUnknown);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgCheckCompletedStage(
+        "DispatchLoadEventAndFinalize after close lifecycle update", this);
+#endif
   }
 
   load_event_progress_ = kLoadEventCompleted;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage(
+      "DispatchLoadEventAndFinalize after load_event_completed", this);
+#endif
 
   if (GetFrame() && GetLayoutView()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgCheckCompletedStage(
+        "DispatchLoadEventAndFinalize before handle load complete", this);
+#endif
     DispatchHandleLoadComplete();
     FontFaceSetDocument::DidLayout(*this);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgCheckCompletedStage(
+        "DispatchLoadEventAndFinalize after handle load complete", this);
+#endif
   }
 
   if (SvgExtensions())
@@ -4622,11 +4724,31 @@ void Document::Abort() {
 }
 
 void Document::CheckCompleted() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage("CheckCompleted begin", this);
+#endif
   if (CheckCompletedInternal()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (IsStandaloneIsolatedSVGImageDocument(*this)) {
+      TraceStandaloneSvgCheckCompletedStage(
+          "CheckCompleted skipping isolated svg navigation finish", this);
+      return;
+    }
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompleted before DidFinishNavigation", this);
+#endif
     CHECK(GetFrame());
     GetFrame()->Loader().DidFinishNavigation(
         FrameLoader::NavigationFinishState::kSuccess);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgCheckCompletedStage("CheckCompleted after "
+                                          "DidFinishNavigation",
+                                          this);
+#endif
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgCheckCompletedStage("CheckCompleted end", this);
+#endif
 }
 
 void Document::FetchDictionaryFromLinkHeader() {
@@ -4639,11 +4761,21 @@ void Document::FetchDictionaryFromLinkHeader() {
 }
 
 bool Document::CheckCompletedInternal() {
-  if (!ShouldComplete())
+  TraceStandaloneSvgCheckCompletedStage("CheckCompletedInternal begin", this);
+  if (!ShouldComplete()) {
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompletedInternal ShouldComplete false", this);
     return false;
+  }
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal ShouldComplete true", this);
 
   if (GetFrame() && !UnloadStarted()) {
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompletedInternal before RunScriptsAtDocumentIdle", this);
     GetFrame()->Client()->RunScriptsAtDocumentIdle();
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompletedInternal after RunScriptsAtDocumentIdle", this);
 
     // Injected scripts may have disconnected this frame.
     if (!GetFrame())
@@ -4656,22 +4788,45 @@ bool Document::CheckCompletedInternal() {
   }
 
   // OK, completed. Fire load completion events as needed.
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal before SetReadyState complete", this);
   SetReadyState(kComplete);
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal after SetReadyState complete", this);
   const bool load_event_needed = LoadEventStillNeeded();
   if (load_event_needed) {
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompletedInternal before DispatchLoadEventAndFinalize", this);
     DispatchLoadEventAndFinalize();
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompletedInternal after DispatchLoadEventAndFinalize", this);
   }
 
   DCHECK(fetcher_);
 
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal before ScheduleWarnUnusedPreloads", this);
   fetcher_->ScheduleWarnUnusedPreloads(
       BindOnce(&Document::OnWarnUnusedPreloads, WrapWeakPersistent(this)));
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal after ScheduleWarnUnusedPreloads", this);
 
   // The readystatechanged or load event may have disconnected this frame.
   if (!GetFrame() || !GetFrame()->IsAttached())
     return false;
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal before View HandleLoadCompleted", this);
   http_refresh_scheduler_->MaybeStartTimer();
   View()->HandleLoadCompleted();
+  TraceStandaloneSvgCheckCompletedStage(
+      "CheckCompletedInternal after View HandleLoadCompleted", this);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (IsStandaloneIsolatedSVGImageDocument(*this)) {
+    TraceStandaloneSvgCheckCompletedStage(
+        "CheckCompletedInternal finished isolated svg image load", this);
+    return true;
+  }
+#endif
   // The document itself is complete, but if a child frame was restarted due to
   // an event, this document is still considered to be in progress.
   if (!AllDescendantsAreComplete(this))
@@ -8278,8 +8433,9 @@ void Document::FinishedParsing() {
   if (LocalFrame* frame = GetFrame()) {
     // Guarantee at least one call to the client specifying a title. (If
     // |title_| is not empty, then the title has already been dispatched.)
-    if (title_.empty())
+    if (title_.empty()) {
       DispatchDidReceiveTitle();
+    }
 
     // Don't update the layout tree if we haven't requested the main resource
     // yet to avoid adding extra latency. Note that the first layout tree update
@@ -8318,7 +8474,9 @@ void Document::FinishedParsing() {
 
     BeginLifecycleUpdatesIfRenderingReady();
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     frame->GetIdlenessDetector()->DomContentLoadedEventFired();
+#endif
 
     if (ShouldMarkFontPerformance()) {
       FontPerformance::MarkDomContentLoaded();
@@ -8333,7 +8491,9 @@ void Document::FinishedParsing() {
   // on cache access since that could lead to huge caches being kept alive
   // indefinitely by something innocuous like JS setting .innerHTML repeatedly
   // on a timer.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   element_data_cache_clear_timer_.StartOneShot(base::Seconds(10), FROM_HERE);
+#endif
 
   // Parser should have picked up all preloads by now
   fetcher_->ClearPreloads(ResourceFetcher::kClearSpeculativeMarkupPreloads);

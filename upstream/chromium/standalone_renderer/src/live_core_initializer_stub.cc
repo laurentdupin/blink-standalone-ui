@@ -15,9 +15,14 @@
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/core/event_target_names.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/css/media_feature_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_tokenizer_names.h"
+#include "third_party/blink/renderer/core/input_type_names.h"
 #include "third_party/blink/renderer/core/mathml_names.h"
+#include "third_party/blink/renderer/core/media_type_names.h"
+#include "third_party/blink/renderer/core/script_type_names.h"
 #include "third_party/blink/renderer/core/svg_names.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_names.h"
 #include "third_party/blink/renderer/core/xlink_names.h"
@@ -117,6 +122,9 @@ void CoreInitializer::Initialize() {
       kQualifiedNamesCount + event_target_names::kNamesCount +
       font_family_names::kNamesCount +
       event_type_names::kNamesCount + fetch_initiator_type_names::kNamesCount +
+      input_type_names::kNamesCount + media_feature_names::kNamesCount +
+      media_type_names::kNamesCount + script_type_names::kNamesCount +
+      shadow_element_names::kNamesCount +
       html_tokenizer_names::kNamesCount + http_names::kNamesCount +
       trusted_types_names::kNamesCount;
 
@@ -134,9 +142,15 @@ void CoreInitializer::Initialize() {
 
   event_target_names::Init();
   event_type_names::Init();
+  fetch_initiator_type_names::Init();
   font_family_names::Init();
   http_names::Init();
   html_tokenizer_names::Init();
+  input_type_names::Init();
+  media_feature_names::Init();
+  media_type_names::Init();
+  script_type_names::Init();
+  shadow_element_names::Init();
   trusted_types_names::Init();
 }
 

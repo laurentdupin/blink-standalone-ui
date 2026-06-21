@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 
 #include "base/auto_reset.h"
@@ -35,6 +37,14 @@
 namespace blink {
 
 namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool TraceStandaloneSvgImageLoadStagesForResourceContent() {
+  static const bool enabled =
+      std::getenv("HTML_CSS_RENDERER_TRACE_IMAGE_PAINT") != nullptr;
+  return enabled;
+}
+#endif
 
 class NullImageResourceInfo final
     : public GarbageCollected<NullImageResourceInfo>,
@@ -466,6 +476,19 @@ void ImageResourceContent::NotifyStartLoad() {
 }
 
 void ImageResourceContent::AsyncLoadCompleted(const blink::Image* image) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (TraceStandaloneSvgImageLoadStagesForResourceContent()) {
+    std::fprintf(stderr,
+                 "standalone_svg_resource.stage="
+                 "ImageResourceContent::AsyncLoadCompleted content=%p "
+                 "image=%p matches=%d size_available=%d status=%d\n",
+                 static_cast<void*>(this), static_cast<const void*>(image),
+                 static_cast<int>(image_ == image),
+                 static_cast<int>(size_available_),
+                 static_cast<int>(GetContentStatus()));
+    std::fflush(stderr);
+  }
+#endif
   if (image_ != image)
     return;
   CHECK_EQ(size_available_, Image::kSizeAvailableAndLoadingAsynchronously);
@@ -473,6 +496,14 @@ void ImageResourceContent::AsyncLoadCompleted(const blink::Image* image) {
   UpdateToLoadedContentStatus(ResourceStatus::kCached);
   NotifyObservers(kShouldNotifyFinish, CanDeferInvalidation::kNo);
 }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void ImageResourceContent::MaybeFinalizeStandaloneSvgImageForStaticRender() {
+  if (auto* svg_image = DynamicTo<SVGImage>(image_.get())) {
+    svg_image->MaybeFinalizeStandaloneAsyncLoadForStaticRender();
+  }
+}
+#endif
 
 ImageResourceContent::UpdateImageResult ImageResourceContent::UpdateImage(
     scoped_refptr<SharedBuffer> data,

@@ -34,6 +34,8 @@
 
 
 
+#include "cc/mojom/paint_flags_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -47,7 +49,7 @@ namespace cc::mojom::blink {
 
 
 
-class  DynamicRangeLimit {
+class BLINK_PLATFORM_EXPORT DynamicRangeLimit {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<DynamicRangeLimit, T>::value>;
@@ -97,7 +99,6 @@ class  DynamicRangeLimit {
 
   template <typename T, DynamicRangeLimit::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
-  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -234,7 +235,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::cc::mojom::blink::DynamicRangeLimit::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::cc::mojom::blink::DynamicRangeLimit::DataView,
                                          ::cc::mojom::blink::DynamicRangeLimitPtr> {
   static bool IsNull(const ::cc::mojom::blink::DynamicRangeLimitPtr& input) { return !input; }
   static void SetToNull(::cc::mojom::blink::DynamicRangeLimitPtr* output) { output->reset(); }

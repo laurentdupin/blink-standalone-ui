@@ -168,6 +168,8 @@ class PLATFORM_EXPORT EffectPaintPropertyNode final
 
     bool needs_effect_for_2d_scale_transform = false;
 
+    bool is_in_canvas_subtree = false;
+
     PaintPropertyChangeType ComputeChange(
         const State& other,
         const AnimationState& animation_state) const;
@@ -289,6 +291,10 @@ class PLATFORM_EXPORT EffectPaintPropertyNode final
   bool HasDirectCompositingReasons() const {
     return state_.direct_compositing_reasons != CompositingReason::kNone;
   }
+  bool RequiresCompositingForUnboundedElement() const {
+    return state_.direct_compositing_reasons &
+           CompositingReason::kUnboundedElement;
+  }
   bool RequiresCompositingForBackdropFilterMask() const {
     return state_.direct_compositing_reasons &
            CompositingReason::kBackdropFilterMask;
@@ -296,6 +302,8 @@ class PLATFORM_EXPORT EffectPaintPropertyNode final
   bool RequiresCompositingForCanvasChild() const {
     return state_.direct_compositing_reasons & CompositingReason::kCanvasChild;
   }
+
+  bool IsInCanvasSubtree() const { return state_.is_in_canvas_subtree; }
 
   bool FlattensAtLeafOf3DScene() const {
     return state_.direct_compositing_reasons &

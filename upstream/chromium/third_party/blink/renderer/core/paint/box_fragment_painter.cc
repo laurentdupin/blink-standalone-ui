@@ -4,10 +4,6 @@
 
 #include "third_party/blink/renderer/core/paint/box_fragment_painter.h"
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#include <cstdio>
-#endif
-
 #include <algorithm>
 #include <numeric>
 #include <vector>
@@ -88,19 +84,6 @@ void RecordStandaloneFragmentPaintProvenanceForProbe(
     bool fragment_can_traverse,
     float fragment_width = -1.0f,
     float fragment_height = -1.0f);
-}
-#endif
-
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-thread_local std::vector<PhysicalOffset>* g_standalone_fragment_offsets =
-    nullptr;
-
-std::optional<PhysicalOffset> StandaloneCurrentFragmentPaintOffsetOverride() {
-  if (!g_standalone_fragment_offsets ||
-      g_standalone_fragment_offsets->empty()) {
-    return std::nullopt;
-  }
-  return g_standalone_fragment_offsets->back();
 }
 #endif
 
@@ -630,10 +613,6 @@ void BoxFragmentPainter::PaintInternal(const PaintInfo& paint_info) {
 
   PaintInfo& info = paint_state.MutablePaintInfo();
   PhysicalOffset paint_offset = paint_state.PaintOffset();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (g_standalone_fragment_offsets && !g_standalone_fragment_offsets->empty())
-    paint_offset = g_standalone_fragment_offsets->back();
-#endif
   const PaintPhase original_phase = info.phase;
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
@@ -1211,60 +1190,11 @@ void BoxFragmentPainter::PaintBlockChild(
       return;
     }
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    if (paint_info_for_descendants.phase == PaintPhase::kForeground) {
-      BoxFragmentPainter child_painter(box_child_fragment);
-      const PhysicalOffset child_offset = paint_offset + child.offset;
-      if (box_child_fragment.IsPaintedAtomically()) {
-        PaintInfo local_paint_info(paint_info_for_descendants);
-        local_paint_info.phase = PaintPhase::kBlockBackground;
-        child_painter.PaintObject(local_paint_info, child_offset);
-        local_paint_info.phase = PaintPhase::kForcedColorsModeBackplate;
-        child_painter.PaintObject(local_paint_info, child_offset);
-        local_paint_info.phase = PaintPhase::kFloat;
-        child_painter.PaintObject(local_paint_info, child_offset);
-        local_paint_info.phase = PaintPhase::kForeground;
-        child_painter.PaintObject(local_paint_info, child_offset);
-        local_paint_info.phase = PaintPhase::kOutline;
-        child_painter.PaintObject(local_paint_info, child_offset);
-      } else {
-        child_painter.PaintObject(paint_info_for_descendants, child_offset);
-      }
-      return;
-    }
-#endif
-
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::vector<PhysicalOffset> local_offsets;
-    std::vector<PhysicalOffset>* previous_offsets =
-        g_standalone_fragment_offsets;
-    if (!g_standalone_fragment_offsets)
-      g_standalone_fragment_offsets = &local_offsets;
-    g_standalone_fragment_offsets->push_back(paint_offset + child.offset);
-#endif
     BoxFragmentPainter(box_child_fragment).Paint(paint_info_for_descendants);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    g_standalone_fragment_offsets->pop_back();
-    if (g_standalone_fragment_offsets == &local_offsets)
-      g_standalone_fragment_offsets = previous_offsets;
-#endif
     return;
   }
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::vector<PhysicalOffset> local_offsets;
-  std::vector<PhysicalOffset>* previous_offsets =
-      g_standalone_fragment_offsets;
-  if (!g_standalone_fragment_offsets)
-    g_standalone_fragment_offsets = &local_offsets;
-  g_standalone_fragment_offsets->push_back(paint_offset + child.offset);
-#endif
   PaintFragment(box_child_fragment, paint_info_for_descendants);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  g_standalone_fragment_offsets->pop_back();
-  if (g_standalone_fragment_offsets == &local_offsets)
-    g_standalone_fragment_offsets = previous_offsets;
-#endif
 }
 
 void BoxFragmentPainter::PaintFloatingItems(const PaintInfo& paint_info,
@@ -2340,21 +2270,7 @@ void BoxFragmentPainter::PaintBoxItem(const FragmentItem& item,
     // with the layout object.
     ScopedDisplayItemFragment display_item_fragment(paint_info.context,
                                                     item.FragmentId());
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    std::vector<PhysicalOffset> local_offsets;
-    std::vector<PhysicalOffset>* previous_offsets =
-        g_standalone_fragment_offsets;
-    if (!g_standalone_fragment_offsets)
-      g_standalone_fragment_offsets = &local_offsets;
-    g_standalone_fragment_offsets->push_back(paint_offset +
-                                             item.OffsetInContainerFragment());
-#endif
     PaintFragment(child_fragment, paint_info);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    g_standalone_fragment_offsets->pop_back();
-    if (g_standalone_fragment_offsets == &local_offsets)
-      g_standalone_fragment_offsets = previous_offsets;
-#endif
     return;
   }
 

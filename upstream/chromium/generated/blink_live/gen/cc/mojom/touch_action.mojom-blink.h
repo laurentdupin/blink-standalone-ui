@@ -13,7 +13,12 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
-#include "mojo/public/cpp/bindings/type_converter.h"
+#include "mojo/public/cpp/bindings/clone_traits.h"
+#include "mojo/public/cpp/bindings/equals_traits.h"
+#include "mojo/public/cpp/bindings/struct_ptr.h"
+#include "mojo/public/cpp/bindings/struct_traits.h"
+#include "mojo/public/cpp/bindings/union_traits.h"
+#include "mojo/public/cpp/bindings/lib/serialization.h"
 
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
@@ -29,10 +34,6 @@
 
 
 
-#include "mojo/public/cpp/bindings/lib/native_enum_serialization.h"
-#include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
-#include "cc/ipc/cc_param_traits_macros.h"
-#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -46,9 +47,195 @@ namespace cc::mojom::blink {
 
 
 
+class  TouchAction {
+ public:
+  template <typename T>
+  using EnableIfSame = std::enable_if_t<std::is_same<TouchAction, T>::value>;
+  using DataView = TouchActionDataView;
+  using Data_ = internal::TouchAction_Data;
+
+  template <typename... Args>
+  static TouchActionPtr New(Args&&... args) {
+    return TouchActionPtr(
+        std::in_place, std::forward<Args>(args)...);
+  }
+
+  template <typename U>
+  static TouchActionPtr From(const U& u) {
+    return mojo::TypeConverter<TouchActionPtr, U>::Convert(u);
+  }
+
+  template <typename U>
+  U To() const {
+    return mojo::TypeConverter<U, TouchAction>::Convert(*this);
+  }
+
+
+  TouchAction();
+
+  explicit TouchAction(
+      uint32_t value);
+
+
+  ~TouchAction();
+
+  // Clone() is a template so it is only instantiated if it is used. Thus, the
+  // bindings generator does not need to know whether Clone() or copy
+  // constructor/assignment are available for members.
+  template <typename StructPtrType = TouchActionPtr>
+  TouchActionPtr Clone() const;
+
+  // Equals() is a template so it is only instantiated if it is used. Thus, the
+  // bindings generator does not need to know whether Equals() or == operator
+  // are available for members.
+  template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+  bool Equals(const T& other) const;
+
+  template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+  bool operator==(const T& rhs) const { return Equals(rhs); }
+
+  template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+  bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
+
+  template <mojo::internal::SendValidation send_validation, typename UserType>
+  static ::blink::Vector<uint8_t> Serialize(UserType* input) {
+    return mojo::internal::SerializeImpl<
+        TouchAction::DataView, ::blink::Vector<uint8_t>, send_validation>(input);
+  }
+
+  template <typename UserType>
+  static ::blink::Vector<uint8_t> Serialize(UserType* input) {
+    return mojo::internal::SerializeImpl<
+        TouchAction::DataView, ::blink::Vector<uint8_t>>(input);
+  }
+
+  template <typename UserType>
+  static mojo::Message SerializeAsMessage(UserType* input) {
+    return mojo::internal::SerializeAsMessageImpl<
+        TouchAction::DataView>(input);
+  }
+
+  // The returned Message is serialized only if the message is moved
+  // cross-process or cross-language. Otherwise if the message is Deserialized
+  // as the same UserType |input| will just be moved to |output| in
+  // DeserializeFromMessage.
+  template <typename UserType>
+  static mojo::Message WrapAsMessage(UserType input) {
+    return mojo::Message(std::make_unique<
+        internal::TouchAction_UnserializedMessageContext<
+            UserType, TouchAction::DataView>>(0, 0, std::move(input)),
+        MOJO_CREATE_MESSAGE_FLAG_NONE);
+  }
+
+  template <typename UserType>
+  static bool Deserialize(const void* data,
+                          size_t data_num_bytes,
+                          UserType* output) {
+    mojo::Message message;
+    return mojo::internal::DeserializeImpl<TouchAction::DataView>(
+        message, data, data_num_bytes, output, Validate);
+  }
+
+  template <typename UserType>
+  static bool Deserialize(base::span<const uint8_t> input,
+                          UserType* output) {
+    return TouchAction::Deserialize(
+        input.empty() ? nullptr : input.data(), input.size(), output);
+  }
+
+  template <typename UserType>
+  static bool DeserializeFromMessage(mojo::Message input,
+                                     UserType* output) {
+    auto context = input.TakeUnserializedContext<
+        internal::TouchAction_UnserializedMessageContext<
+            UserType, TouchAction::DataView>>();
+    if (context) {
+      *output = std::move(context->TakeData());
+      return true;
+    }
+    input.SerializeIfNecessary();
+    return mojo::internal::DeserializeImpl<TouchAction::DataView>(
+        input, input.payload(), input.payload_num_bytes(), output, Validate);
+  }
+
+  
+  uint32_t value;
+
+  // Serialise this struct into a trace.
+  void WriteIntoTrace(perfetto::TracedValue traced_context) const;
+
+ private:
+  static bool Validate(const void* data,
+                       mojo::internal::ValidationContext* validation_context);
+};
+
+// The comparison operators are templates, so they are only instantiated if they
+// are used. Thus, the bindings generator does not need to know whether
+// comparison operators are available for members.
+template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+bool operator<(const T& lhs, const T& rhs);
+
+template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+bool operator<=(const T& lhs, const T& rhs) {
+  return !(rhs < lhs);
+}
+
+template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+bool operator>(const T& lhs, const T& rhs) {
+  return rhs < lhs;
+}
+
+template <typename T, TouchAction::EnableIfSame<T>* = nullptr>
+bool operator>=(const T& lhs, const T& rhs) {
+  return !(lhs < rhs);
+}
+
+
+
+
+template <typename StructPtrType>
+TouchActionPtr TouchAction::Clone() const {
+  return New(
+      mojo::Clone(value)
+  );
+}
+
+template <typename T, TouchAction::EnableIfSame<T>*>
+bool TouchAction::Equals(const T& other_struct) const {
+  if (!mojo::Equals(this->value, other_struct.value))
+    return false;
+  return true;
+}
+
+template <typename T, TouchAction::EnableIfSame<T>*>
+bool operator<(const T& lhs, const T& rhs) {
+  if (lhs.value < rhs.value)
+    return true;
+  if (rhs.value < lhs.value)
+    return false;
+  return false;
+}
+
+
 }  // cc::mojom::blink
 
 namespace mojo {
+
+
+template <>
+struct  StructTraits<::cc::mojom::blink::TouchAction::DataView,
+                                         ::cc::mojom::blink::TouchActionPtr> {
+  static bool IsNull(const ::cc::mojom::blink::TouchActionPtr& input) { return !input; }
+  static void SetToNull(::cc::mojom::blink::TouchActionPtr* output) { output->reset(); }
+
+  static decltype(::cc::mojom::blink::TouchAction::value) value(
+      const ::cc::mojom::blink::TouchActionPtr& input) {
+    return input->value;
+  }
+
+  static bool Read(::cc::mojom::blink::TouchAction::DataView input, ::cc::mojom::blink::TouchActionPtr* output);
+};
 
 }  // namespace mojo
 

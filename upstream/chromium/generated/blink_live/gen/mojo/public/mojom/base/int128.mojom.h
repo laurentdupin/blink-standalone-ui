@@ -31,8 +31,6 @@
 
 
 
-#include "mojo/public/cpp/base/int128_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -43,7 +41,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Int128 {
+class  Int128 {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Int128, T>::value>;
@@ -93,6 +91,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Int128 {
 
   template <typename T, Int128::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -193,7 +192,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Uint128 {
+class  Uint128 {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Uint128, T>::value>;
@@ -243,6 +242,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Uint128 {
 
   template <typename T, Uint128::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -409,7 +409,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Int128::DataView,
+struct  StructTraits<::mojo_base::mojom::Int128::DataView,
                                          ::mojo_base::mojom::Int128Ptr> {
   static bool IsNull(const ::mojo_base::mojom::Int128Ptr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::Int128Ptr* output) { output->reset(); }
@@ -429,7 +429,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Int128
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Uint128::DataView,
+struct  StructTraits<::mojo_base::mojom::Uint128::DataView,
                                          ::mojo_base::mojom::Uint128Ptr> {
   static bool IsNull(const ::mojo_base::mojom::Uint128Ptr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::Uint128Ptr* output) { output->reset(); }

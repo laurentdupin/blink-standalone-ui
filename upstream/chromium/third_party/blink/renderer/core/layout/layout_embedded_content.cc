@@ -32,14 +32,18 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/frame/remote_frame_view.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
+#endif
 #include "third_party/blink/renderer/core/html/html_frame_element_base.h"
 #include "third_party/blink/renderer/core/html/html_plugin_element.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_replaced.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/paint/embedded_content_painter.h"
+#endif
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -97,11 +101,15 @@ EmbeddedContentView* LayoutEmbeddedContent::GetEmbeddedContentView() const {
 const std::optional<PhysicalSize> LayoutEmbeddedContent::FrozenFrameSize()
     const {
   NOT_DESTROYED();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return std::nullopt;
+#else
   // The `<fencedframe>` element can freeze the child frame size when navigated.
   if (const auto* fenced_frame = DynamicTo<HTMLFencedFrameElement>(GetNode()))
     return fenced_frame->FrozenFrameSize();
 
   return std::nullopt;
+#endif
 }
 
 PhysicalNaturalSizingInfo LayoutEmbeddedContent::GetNaturalDimensions() const {
@@ -172,6 +180,9 @@ bool LayoutEmbeddedContent::PointOverResizer(
     const HitTestLocation& location,
     const PhysicalOffset& accumulated_offset) const {
   NOT_DESTROYED();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   if (const auto* scrollable_area = GetScrollableArea()) {
     const HitTestRequest::HitTestRequestType hit_type =
         result.GetHitTestRequest().GetType();
@@ -182,17 +193,24 @@ bool LayoutEmbeddedContent::PointOverResizer(
         ToRoundedPoint(location.Point() - accumulated_offset), resizer_type);
   }
   return false;
+#endif
 }
 
 void LayoutEmbeddedContent::PropagateZoomFactor(double zoom_factor) {
   NOT_DESTROYED();
   if (GetDocument().StandardizedBrowserZoomEnabled()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (auto* embedded_content_view = GetEmbeddedContentView()) {
+      embedded_content_view->ZoomFactorChanged(zoom_factor);
+    }
+#else
     const auto* fenced_frame = DynamicTo<HTMLFencedFrameElement>(GetNode());
     if (!fenced_frame) {
       if (auto* embedded_content_view = GetEmbeddedContentView()) {
         embedded_content_view->ZoomFactorChanged(zoom_factor);
       }
     }
+#endif
   }
 }
 
@@ -331,7 +349,9 @@ void LayoutEmbeddedContent::StyleDidChange(
 
   if (old_style &&
       new_style.UsedColorScheme() != old_style->UsedColorScheme()) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     frame_owner->SetColorScheme(new_style.UsedColorScheme());
+#endif
   }
   if (!old_style || new_style.EffectiveZoom() != old_style->EffectiveZoom()) {
     PropagateZoomFactor(new_style.EffectiveZoom());
@@ -352,8 +372,12 @@ void LayoutEmbeddedContent::PaintReplaced(
   NOT_DESTROYED();
   if (ChildPaintBlockedByDisplayLock())
     return;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   CountSvgFilterPaint();
   EmbeddedContentPainter(*this).PaintReplaced(paint_info, paint_offset);
+#endif
 }
 
 CursorDirective LayoutEmbeddedContent::GetCursor(const PhysicalOffset& point,

@@ -70,6 +70,18 @@ class IsolatedSVGDocumentHost final
 
   bool IsLoaded() const { return load_state_ == kCompleted; }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  enum class LoadStateForStandaloneTrace {
+    kNotStarted,
+    kPending,
+    kWaitingForAsyncLoadCompletion,
+    kCompleted,
+  };
+  LoadStateForStandaloneTrace LoadStateForStandaloneTraceForDiagnostics()
+      const;
+  void MaybeFinalizeStandaloneSynchronousLoad();
+#endif
+
   void Trace(Visitor* visitor) const;
 
  private:
@@ -77,6 +89,9 @@ class IsolatedSVGDocumentHost final
                                const Settings& inherited_settings);
   void LoadCompleted();
   void AsyncLoadCompleted();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void ScheduleStandaloneLoadCompletionCheck();
+#endif
 
   class LocalFrameClient;
 
@@ -84,6 +99,9 @@ class IsolatedSVGDocumentHost final
   Member<LocalFrameClient> frame_client_;
   base::OnceClosure async_load_callback_;
   TaskHandle async_load_task_handle_;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TaskHandle standalone_load_completion_task_handle_;
+#endif
 
   enum LoadState {
     kNotStarted,

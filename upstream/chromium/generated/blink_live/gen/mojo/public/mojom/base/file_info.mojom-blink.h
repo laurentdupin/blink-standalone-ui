@@ -35,8 +35,6 @@
 
 
 
-#include "mojo/public/cpp/base/file_info_mojom_traits.h"
-#include "base/component_export.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -53,7 +51,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) FileInfo {
+class  FileInfo {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<FileInfo, T>::value>;
@@ -276,7 +274,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::FileInfo::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::FileInfo::DataView,
                                          ::mojo_base::mojom::blink::FileInfoPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::FileInfoPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::FileInfoPtr* output) { output->reset(); }

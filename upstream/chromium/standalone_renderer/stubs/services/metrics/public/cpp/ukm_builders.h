@@ -1,6 +1,8 @@
 #ifndef STANDALONE_RENDERER_STUBS_SERVICES_METRICS_PUBLIC_CPP_UKM_BUILDERS_H_
 #define STANDALONE_RENDERER_STUBS_SERVICES_METRICS_PUBLIC_CPP_UKM_BUILDERS_H_
 
+#include <cstdint>
+
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace ukm::builders {
@@ -26,6 +28,15 @@ class Blink_SVGImage {
   explicit Blink_SVGImage(SourceId) {}
   Blink_SVGImage& SetCount(int64_t) { return *this; }
   Blink_SVGImage& SetTotalTime(int64_t) { return *this; }
+  void Record(UkmRecorder*) {}
+};
+
+class Blink_Preloading_ByLinkHeader {
+ public:
+  explicit Blink_Preloading_ByLinkHeader(SourceId) {}
+  Blink_Preloading_ByLinkHeader& SetOriginStatusOnSubresource(int64_t) {
+    return *this;
+  }
   void Record(UkmRecorder*) {}
 };
 

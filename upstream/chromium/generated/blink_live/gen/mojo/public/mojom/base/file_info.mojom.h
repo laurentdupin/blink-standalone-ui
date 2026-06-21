@@ -32,8 +32,6 @@
 
 
 
-#include "mojo/public/cpp/base/file_info_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -47,7 +45,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) FileInfo {
+class  FileInfo {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<FileInfo, T>::value>;
@@ -270,7 +268,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::FileInfo::DataView,
+struct  StructTraits<::mojo_base::mojom::FileInfo::DataView,
                                          ::mojo_base::mojom::FileInfoPtr> {
   static bool IsNull(const ::mojo_base::mojom::FileInfoPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::FileInfoPtr* output) { output->reset(); }

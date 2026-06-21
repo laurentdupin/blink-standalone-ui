@@ -29,9 +29,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
 #include "third_party/blink/renderer/platform/wtf/text/case_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_impl.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
-#endif
 
 namespace blink {
 
@@ -47,8 +45,8 @@ AtomicString::AtomicString(base::span<const UChar> chars,
 AtomicString::AtomicString(const UChar* chars)
     : string_(AtomicStringTable::Instance().Add(
           // SAFETY: safe when `chars` points to a null-terminated cstring.
-          UNSAFE_BUFFERS(
-              {chars, chars ? LengthOfNullTerminatedString(chars) : 0}),
+          UNSAFE_BUFFERS({base::unchecked, chars,
+                          chars ? LengthOfNullTerminatedString(chars) : 0}),
           AtomicStringUCharEncoding::kUnknown)) {}
 
 AtomicString::AtomicString(const StringView& string_view)
@@ -114,11 +112,9 @@ std::ostream& operator<<(std::ostream& out, const AtomicString& s) {
   return out << s.GetString();
 }
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 void AtomicString::WriteIntoTrace(perfetto::TracedValue context) const {
   perfetto::WriteIntoTracedValue(std::move(context), GetString());
 }
-#endif
 
 #ifndef NDEBUG
 void AtomicString::Show() const {

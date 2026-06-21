@@ -5,7 +5,7 @@
 // Generated from template:
 //   templates/settings_base.h.tmpl
 // and input files:
-//   ../../third_party/blink/renderer/core/frame/settings.json5
+//   third_party/blink/renderer/core/frame/settings.json5
 
 
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SETTINGS_BASE_H_
@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/html/parser/parser_scripting_flag_policy.h"
 #include "third_party/blink/renderer/core/html/track/text_track_kind_user_preference.h"
 #include "third_party/blink/renderer/platform/graphics/lcd_text_preference.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/mojom/window_show_state.mojom-blink.h"
 #include "ui/base/pointer/pointer_device.h"
 
@@ -65,6 +66,7 @@ class CORE_EXPORT SettingsBase {
   int GetAvailableHoverTypes() const { return available_hover_types_; }
   int GetAvailablePointerTypes() const { return available_pointer_types_; }
   bool GetBarrelButtonForDragEnabled() const { return barrel_button_for_drag_enabled_; }
+  bool GetBatterySaverEnabled() const { return battery_saver_enabled_; }
   bool GetBypassCSP() const { return bypass_csp_; }
   bool GetCaretBrowsingEnabled() const { return caret_browsing_enabled_; }
   bool GetCookieEnabled() const { return cookie_enabled_; }
@@ -152,13 +154,13 @@ class CORE_EXPORT SettingsBase {
   bool GetPrefersDefaultScrollbarStyles() const { return prefers_default_scrollbar_styles_; }
   bool GetPrefersReducedMotion() const { return prefers_reduced_motion_; }
   bool GetPrefersReducedTransparency() const { return prefers_reduced_transparency_; }
+  bool GetPreloadingDisabled() const { return preloading_disabled_; }
   bool GetPresentationReceiver() const { return presentation_receiver_; }
   bool GetPresentationRequiresUserGesture() const { return presentation_requires_user_gesture_; }
   mojom::blink::HoverType GetPrimaryHoverType() const { return primary_hover_type_; }
   blink::mojom::PointerType GetPrimaryPointerType() const { return primary_pointer_type_; }
   float GetPrintingMaximumShrinkFactor() const { return printing_maximum_shrink_factor_; }
   bool GetReportScreenSizeInPhysicalPixelsQuirk() const { return report_screen_size_in_physical_pixels_quirk_; }
-  bool GetRequireTransientActivationAndAuthorizationForSubAppsAPI() const { return require_transient_activation_and_authorization_for_sub_apps_api_; }
   bool GetRequireTransientActivationForGetDisplayMedia() const { return require_transient_activation_for_get_display_media_; }
   bool GetRequireTransientActivationForShowFileOrDirectoryPicker() const { return require_transient_activation_for_show_file_or_directory_picker_; }
   bool GetResizable() const { return resizable_; }
@@ -252,6 +254,7 @@ class CORE_EXPORT SettingsBase {
   void SetAvailableHoverTypes(int available_hover_types);
   void SetAvailablePointerTypes(int available_pointer_types);
   void SetBarrelButtonForDragEnabled(bool barrel_button_for_drag_enabled);
+  void SetBatterySaverEnabled(bool battery_saver_enabled);
   void SetBypassCSP(bool bypass_csp);
   void SetCaretBrowsingEnabled(bool caret_browsing_enabled);
   void SetCookieEnabled(bool cookie_enabled);
@@ -339,13 +342,13 @@ class CORE_EXPORT SettingsBase {
   void SetPrefersDefaultScrollbarStyles(bool prefers_default_scrollbar_styles);
   void SetPrefersReducedMotion(bool prefers_reduced_motion);
   void SetPrefersReducedTransparency(bool prefers_reduced_transparency);
+  void SetPreloadingDisabled(bool preloading_disabled);
   void SetPresentationReceiver(bool presentation_receiver);
   void SetPresentationRequiresUserGesture(bool presentation_requires_user_gesture);
   void SetPrimaryHoverType(mojom::blink::HoverType primary_hover_type);
   void SetPrimaryPointerType(blink::mojom::PointerType primary_pointer_type);
   void SetPrintingMaximumShrinkFactor(float printing_maximum_shrink_factor);
   void SetReportScreenSizeInPhysicalPixelsQuirk(bool report_screen_size_in_physical_pixels_quirk);
-  void SetRequireTransientActivationAndAuthorizationForSubAppsAPI(bool require_transient_activation_and_authorization_for_sub_apps_api);
   void SetRequireTransientActivationForGetDisplayMedia(bool require_transient_activation_for_get_display_media);
   void SetRequireTransientActivationForShowFileOrDirectoryPicker(bool require_transient_activation_for_show_file_or_directory_picker);
   void SetResizable(bool resizable);
@@ -503,6 +506,7 @@ class CORE_EXPORT SettingsBase {
   bool antialiased_clips_2d_canvas_enabled_ : 1;
   bool aria_modal_prunes_ax_tree_ : 1;
   bool barrel_button_for_drag_enabled_ : 1;
+  bool battery_saver_enabled_ : 1;
   bool bypass_csp_ : 1;
   bool caret_browsing_enabled_ : 1;
   bool cookie_enabled_ : 1;
@@ -558,10 +562,10 @@ class CORE_EXPORT SettingsBase {
   bool prefers_default_scrollbar_styles_ : 1;
   bool prefers_reduced_motion_ : 1;
   bool prefers_reduced_transparency_ : 1;
+  bool preloading_disabled_ : 1;
   bool presentation_receiver_ : 1;
   bool presentation_requires_user_gesture_ : 1;
   bool report_screen_size_in_physical_pixels_quirk_ : 1;
-  bool require_transient_activation_and_authorization_for_sub_apps_api_ : 1;
   bool require_transient_activation_for_get_display_media_ : 1;
   bool require_transient_activation_for_show_file_or_directory_picker_ : 1;
   bool resizable_ : 1;

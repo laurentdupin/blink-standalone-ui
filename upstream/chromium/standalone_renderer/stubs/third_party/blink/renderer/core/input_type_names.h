@@ -8,30 +8,34 @@
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink::input_type_names {
+extern const AtomicString& kButton;
+extern const AtomicString& kCheckbox;
+extern const AtomicString& kColor;
+extern const AtomicString& kDate;
+extern const AtomicString& kDatetime;
+extern const AtomicString& kDatetimeLocal;
+extern const AtomicString& kEmail;
+extern const AtomicString& kImage;
+extern const AtomicString& kFile;
+extern const AtomicString& kHidden;
+extern const AtomicString& kMonth;
+extern const AtomicString& kNumber;
+extern const AtomicString& kPassword;
+extern const AtomicString& kRadio;
+extern const AtomicString& kRange;
+extern const AtomicString& kReset;
+extern const AtomicString& kSearch;
+extern const AtomicString& kSubmit;
+extern const AtomicString& kTel;
+extern const AtomicString& kText;
+extern const AtomicString& kTime;
+extern const AtomicString& kUrl;
+extern const AtomicString& kWeek;
 
-inline const AtomicString& kButton = *new AtomicString("button");
-inline const AtomicString& kCheckbox = *new AtomicString("checkbox");
-inline const AtomicString& kColor = *new AtomicString("color");
-inline const AtomicString& kDate = *new AtomicString("date");
-inline const AtomicString& kDatetime = *new AtomicString("datetime");
-inline const AtomicString& kDatetimeLocal = *new AtomicString("datetime-local");
-inline const AtomicString& kEmail = *new AtomicString("email");
-inline const AtomicString& kImage = *new AtomicString("image");
-inline const AtomicString& kFile = *new AtomicString("file");
-inline const AtomicString& kHidden = *new AtomicString("hidden");
-inline const AtomicString& kMonth = *new AtomicString("month");
-inline const AtomicString& kNumber = *new AtomicString("number");
-inline const AtomicString& kPassword = *new AtomicString("password");
-inline const AtomicString& kRadio = *new AtomicString("radio");
-inline const AtomicString& kRange = *new AtomicString("range");
-inline const AtomicString& kReset = *new AtomicString("reset");
-inline const AtomicString& kSearch = *new AtomicString("search");
-inline const AtomicString& kSubmit = *new AtomicString("submit");
-inline const AtomicString& kTel = *new AtomicString("tel");
-inline const AtomicString& kText = *new AtomicString("text");
-inline const AtomicString& kTime = *new AtomicString("time");
-inline const AtomicString& kUrl = *new AtomicString("url");
-inline const AtomicString& kWeek = *new AtomicString("week");
+constexpr unsigned kNamesCount = 23;
+
+void Init();
+
 
 }  // namespace blink::input_type_names
 

@@ -125,7 +125,7 @@ class PLATFORM_EXPORT CanvasResource : public gpu::ClientImage {
                                     const gpu::SyncToken& sync_token,
                                     bool lost_resource);
 
-  virtual gfx::HDRMetadata GetHDRMetadata() const { return gfx::HDRMetadata(); }
+  virtual const gfx::HDRMetadata& GetHdrMetadata() const = 0;
   virtual viz::TransferableResource::ResourceSource
   GetTransferableResourceSource() const {
     return viz::TransferableResource::ResourceSource::kCanvas;
@@ -134,7 +134,10 @@ class PLATFORM_EXPORT CanvasResource : public gpu::ClientImage {
   gpu::InterfaceBase* InterfaceBase() const;
   gpu::gles2::GLES2Interface* ContextGL() const;
   gpu::raster::RasterInterface* RasterInterface() const;
+#if !defined(HTML_CSS_RENDERER_ENABLE_WEBGPU) || \
+    HTML_CSS_RENDERER_ENABLE_WEBGPU
   gpu::webgpu::WebGPUInterface* WebGPUInterface() const;
+#endif
   virtual base::WeakPtr<WebGraphicsContext3DProviderWrapper>
   ContextProviderWrapper() const = 0;
 
@@ -186,10 +189,12 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
 
   void InitializeSoftware(base::WeakPtr<Client> client,
                           base::WeakPtr<WebGraphicsSharedImageInterfaceProvider>
-                              shared_image_interface_provider);
+                              shared_image_interface_provider,
+                          const gfx::HDRMetadata& hdr_metadata);
   void Initialize(base::WeakPtr<Client> client,
                   base::WeakPtr<WebGraphicsContext3DProviderWrapper>
                       context_provider_wrapper,
+                  const gfx::HDRMetadata& hdr_metadata,
                   bool is_accelerated);
   bool IsInitialized() const { return is_initialized_; }
 
@@ -199,6 +204,7 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   void OnRefReturned(scoped_refptr<CanvasResource>&& resource) final;
   bool IsValid() const final;
   scoped_refptr<StaticBitmapImage> Bitmap() final;
+  const gfx::HDRMetadata& GetHdrMetadata() const final { return hdr_metadata_; }
   void Transfer() final;
 
   // Save (and wait on) this sync token on the context used by this resource for
@@ -235,7 +241,8 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   void PrepareForWebGPUDummyMailbox();
 
  private:
-  friend class CanvasResourceProviderSharedImage;
+  friend class Canvas2DResourceProviderSharedImage;
+  friend class CanvasNon2DResourceProviderSharedImage;
 
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper()
       const override;
@@ -261,6 +268,7 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   bool is_accelerated_ = false;
   bool is_initialized_ = false;
   const SkAlphaType alpha_type_;
+  gfx::HDRMetadata hdr_metadata_;
   base::WeakPtr<Client> client_;
 };
 
@@ -273,7 +281,7 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
       scoped_refptr<gpu::ClientSharedImage> client_si,
       const gpu::SyncToken& sync_token,
       viz::TransferableResource::ResourceSource resource_source,
-      gfx::HDRMetadata hdr_metadata,
+      const gfx::HDRMetadata& hdr_metadata,
       viz::ReleaseCallback release_callback,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>);
 
@@ -284,9 +292,11 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
   void ProduceSyncToken();
 
   scoped_refptr<StaticBitmapImage> Bitmap() override;
+  const gfx::HDRMetadata& GetHdrMetadata() const override {
+    return hdr_metadata_;
+  }
 
  private:
-  gfx::HDRMetadata GetHDRMetadata() const final { return hdr_metadata_; }
   viz::TransferableResource::ResourceSource GetTransferableResourceSource()
       const final {
     return resource_source_;
@@ -300,17 +310,15 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
       scoped_refptr<gpu::ClientSharedImage> client_si,
       const gpu::SyncToken& sync_token,
       viz::TransferableResource::ResourceSource resource_source,
-      gfx::HDRMetadata hdr_metadata,
+      const gfx::HDRMetadata& hdr_metadata,
       viz::ReleaseCallback out_callback,
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>);
   ~ExternalCanvasResource() override;
 
-  SkAlphaType GetAlphaType() const { return alpha_type_; }
-
   const base::WeakPtr<WebGraphicsContext3DProviderWrapper>
       context_provider_wrapper_;
   viz::TransferableResource::ResourceSource resource_source_;
-  gfx::HDRMetadata hdr_metadata_;
+  const gfx::HDRMetadata hdr_metadata_;
   viz::ReleaseCallback release_callback_;
   bool resource_is_lost_ = false;
   const SkAlphaType alpha_type_;

@@ -96,30 +96,6 @@ LayerTreeDebugState::LayerTreeDebugState(
       record_rendering_stats(std::move(record_rendering_stats_in)) {}
 
 LayerTreeDebugState::~LayerTreeDebugState() = default;
-size_t LayerTreeDebugState::Hash(size_t seed) const {
-  seed = mojo::internal::WTFHash(seed, this->debugger_paused);
-  seed = mojo::internal::WTFHash(seed, this->show_fps_counter);
-  seed = mojo::internal::WTFHash(seed, this->show_render_pass_borders);
-  seed = mojo::internal::WTFHash(seed, this->show_surface_borders);
-  seed = mojo::internal::WTFHash(seed, this->show_layer_borders);
-  seed = mojo::internal::WTFHash(seed, this->show_layout_shift_regions);
-  seed = mojo::internal::WTFHash(seed, this->show_paint_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_contentful_paint_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_property_changed_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_surface_damage_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_screen_space_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_touch_event_handler_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_wheel_event_handler_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_scroll_event_handler_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_main_thread_scroll_hit_test_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_main_thread_scroll_repaint_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_raster_inducing_scroll_rects);
-  seed = mojo::internal::WTFHash(seed, this->show_layer_animation_bounds_rects);
-  seed = mojo::internal::WTFHash(seed, this->slow_down_raster_scale_factor);
-  seed = mojo::internal::WTFHash(seed, this->rasterize_only_visible_content);
-  seed = mojo::internal::WTFHash(seed, this->record_rendering_stats);
-  return seed;
-}
 
 void LayerTreeDebugState::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

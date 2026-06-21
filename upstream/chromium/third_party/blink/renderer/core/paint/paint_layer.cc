@@ -531,13 +531,6 @@ void PaintLayer::UpdateDescendantDependentFlags() {
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    // Standalone v1 does not yet run Blink's full visual-overflow invalidation
-    // machinery. Layout has already produced fragment geometry for the current
-    // frame; defer this maintenance recalc until the browser/compositor-facing
-    // invalidation path is part of the cut.
-    needs_visual_overflow_recalc_ = false;
-#else
     if (IsSelfPaintingLayer() && needs_visual_overflow_recalc_) {
       if (GetLayoutObject().ChildPrePaintBlockedByDisplayLock()) {
         GetLayoutObject()
@@ -554,7 +547,6 @@ void PaintLayer::UpdateDescendantDependentFlags() {
       }
     }
     needs_visual_overflow_recalc_ = false;
-#endif
   }
 }
 

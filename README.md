@@ -78,31 +78,14 @@ build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --htm
 
 Render deterministic snapshots for the SDL resource demos:
 
-```powershell
-python tools\run_sdl_demo_snapshots.py --out-dir build\sdl-demo-snapshots
-```
-
-Open `build\sdl-demo-snapshots\index.html` to compare the initial, toggled,
-and scrolled states produced by the same standalone render path that the SDL
-viewer drives.
-
-Profile the SDL viewer render path by adding `--profile`. Use a viewport of at
-least `1280x720` for representative timing runs. The viewer prints a per-frame
-line and an exit summary with min/avg/p95/max timings. Use
-`--profile-summary-frames` to also print interval summaries. For scroll
-profiling without a live manual run, add `--profile-auto-scroll-frames`.
-The SDL window starts at the requested `--viewport` size by default; resizing
-the window updates the real Blink viewport and recreates the render surface
-instead of stretching the old texture.
+Run the compositor benchmark and SDL presentation validation with:
 
 ```powershell
-build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43u_sdl_resource_toggle_demo.html --viewport 1280x720 --toggle-attr png-card:data-state=off,on --toggle-attr svg-card:data-state=off,on --toggle-attr mask-card:data-state=off,on --profile --profile-summary-frames 60
+python tools\perf\run_standalone_perf_suite.py --limit 8 --out-dir build\perf\compositor-smoke
 
-build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43aa_incremental_element_scroll_panel_basic.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 1280x720 --scroll-step 80 --profile --profile-summary-frames 60 --profile-auto-scroll-frames 120
+python tools\perf\run_sdl_profile_benchmark.py --out-dir build\perf\sdl-compositor-smoke
 
-build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\49a_ui_visual_effects_resource_cards.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 1280x720 --scroll-step 80 --profile --profile-summary-frames 60 --profile-auto-scroll-frames 120
-
-build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\43u_sdl_resource_toggle_demo.html --viewport 1280x720 --profile --profile-summary-frames 2 --profile-resize-to 1440x810
+build\cmake-live-image-png-ninja-vs18\blink_standalone_sdl_viewer_skia.exe --html-file upstream\chromium\standalone_renderer\testdata\paint_audit\00_text_only.html --resource-root upstream\chromium\standalone_renderer\testdata\paint_audit --viewport 320x200 --quit-after-ms 1500
 ```
 
 Controls:
@@ -120,15 +103,15 @@ Controls:
 
 Current pipeline:
 
-`HTML/CSS input -> live Blink DummyPageHolder/Document/style/layout/paint lifecycle -> PaintArtifact metadata -> retained draw commands -> SDL demo`
+`HTML/CSS input -> Blink lifecycle -> PaintArtifactCompositor -> cc -> GPU raster/shared image -> Viz Display/SkiaRenderer GPU -> Vulkan -> SDL HWND`
 
 Known limitations:
 
-- Text draw payload extraction is not complete; the current SDL path uses live
-  PaintArtifact metadata and a transitional text bridge.
-- Blink animation time is wired through standalone `FrameInput` for
-  deterministic snapshots and SDL animation ticks, but this is still the
-  retained Skia CPU path rather than the Chromium compositor animation path.
+- The SDL viewer is host-only: it owns the window, native HWND, input/event
+  pump, resize events, and frame scheduling. It does not upload or present
+  rendered pixels through SDL textures.
+- Benchmark no-HWND mode can exercise Blink, cc, GPU raster, and Viz submit
+  diagnostics, but full Viz Display/Skia GPU presentation requires the SDL HWND.
 - The Blink target is still being reduced and may expose additional
   link blockers as more Blink paint/layout code is enabled.
 

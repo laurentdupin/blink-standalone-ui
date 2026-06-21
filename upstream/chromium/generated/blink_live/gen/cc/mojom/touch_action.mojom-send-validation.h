@@ -13,9 +13,23 @@
 
 #include "mojo/public/cpp/bindings/lib/send_validation_type.h"
 #include "mojo/public/cpp/bindings/lib/send_validation.h"
-#include "mojo/public/cpp/bindings/lib/has_send_validation_helper.h"
 
 namespace mojo::internal {
+
+template <typename MaybeConstUserType, mojo::internal::SendValidation send_validation>
+struct SendValidationSerializer<::cc::mojom::TouchActionDataView, MaybeConstUserType, send_validation> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = StructTraits<::cc::mojom::TouchActionDataView, UserType>;
+  static void Serialize(
+      MaybeConstUserType& input,
+      mojo::internal::MessageFragment<::cc::mojom::internal::TouchAction_Data>& fragment) {
+    if (CallIsNullIfExists<Traits>(input))
+      return;
+    fragment.Allocate();
+
+      fragment->value = Traits::value(input);
+  }
+};
 
 }  // namespace mojo::internal
 

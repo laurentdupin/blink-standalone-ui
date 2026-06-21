@@ -8,6 +8,7 @@
 #define CC_MOJOM_HIT_TEST_OPAQUENESS_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/hit_test_opaqueness.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

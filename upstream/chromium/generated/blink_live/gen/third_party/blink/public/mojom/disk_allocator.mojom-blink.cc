@@ -40,6 +40,7 @@
 #include "third_party/blink/public/mojom/disk_allocator.mojom-blink-import-headers.h"
 #include "third_party/blink/public/mojom/disk_allocator.mojom-blink-test-utils.h"
 #include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
+#include "mojo/public/cpp/base/file_mojom_traits.h"
 
 
 namespace blink::mojom::blink {

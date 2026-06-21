@@ -36,6 +36,12 @@ SkColor::SkColor(
 
 SkColor::~SkColor() = default;
 
+size_t SkColor::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->value);
+  return seed;
+}
+
+
 void SkColor::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
   [[maybe_unused]] auto dict = std::move(traced_context).WriteDictionary();

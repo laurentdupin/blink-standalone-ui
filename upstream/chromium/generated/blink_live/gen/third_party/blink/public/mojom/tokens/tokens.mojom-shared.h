@@ -27,7 +27,6 @@
 
 
 #include "third_party/blink/public/mojom/tokens/tokens.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 
@@ -954,6 +953,54 @@ struct Serializer<::blink::mojom::WebNNTensorTokenDataView, MaybeConstUserType> 
 namespace internal {
 
 template <typename MaybeConstUserType>
+struct Serializer<::blink::mojom::WebNNGraphTokenDataView, MaybeConstUserType> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = StructTraits<::blink::mojom::WebNNGraphTokenDataView, UserType>;
+
+  static void Serialize(
+      MaybeConstUserType& input,
+      mojo::internal::MessageFragment<::blink::mojom::internal::WebNNGraphToken_Data>& fragment) {
+    if (CallIsNullIfExists<Traits>(input))
+      return;
+    fragment.Allocate();
+
+    decltype(Traits::value(input)) in_value = Traits::value(input);
+    mojo::internal::MessageFragment<
+        typename decltype(fragment->value)::BaseType> value_fragment(
+            fragment.message());
+    
+    mojo::internal::Serialize<::mojo_base::mojom::UnguessableTokenDataView>(
+      in_value,
+      value_fragment);
+
+    fragment->value.Set(
+        value_fragment.is_null() ? nullptr : value_fragment.data());
+
+    
+    MOJO_INTERNAL_CHECK_SERIALIZATION(
+      mojo::internal::SendValidation::kDefault,
+      !(fragment->value.is_null()),
+      mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
+      "null value in WebNNGraphToken struct");
+  }
+
+  static bool Deserialize(::blink::mojom::internal::WebNNGraphToken_Data* input,
+                          UserType* output,
+                          Message* message) {
+    if (!input)
+      return CallSetToNullIfExists<Traits>(output);
+
+    ::blink::mojom::WebNNGraphTokenDataView data_view(input, message);
+    return Traits::Read(data_view, output);
+  }
+};
+
+}  // namespace internal
+
+
+namespace internal {
+
+template <typename MaybeConstUserType>
 struct Serializer<::blink::mojom::FrameTokenDataView, MaybeConstUserType> {
   using UserType = typename std::remove_const<MaybeConstUserType>::type;
   using Traits = UnionTraits<::blink::mojom::FrameTokenDataView, UserType>;
@@ -1772,6 +1819,13 @@ inline void WebNNPendingConstantTokenDataView::GetValueDataView(
 
 
 inline void WebNNTensorTokenDataView::GetValueDataView(
+    ::mojo_base::mojom::UnguessableTokenDataView* output) {
+  auto pointer = data_->value.Get();
+  *output = ::mojo_base::mojom::UnguessableTokenDataView(pointer, message_);
+}
+
+
+inline void WebNNGraphTokenDataView::GetValueDataView(
     ::mojo_base::mojom::UnguessableTokenDataView* output) {
   auto pointer = data_->value.Get();
   *output = ::mojo_base::mojom::UnguessableTokenDataView(pointer, message_);

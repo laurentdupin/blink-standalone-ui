@@ -14,7 +14,6 @@
 #include "mojo/public/mojom/base/unguessable_token.mojom-shared-internal.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -46,6 +45,7 @@ class ViewTransitionToken_Data;
 class WebNNContextToken_Data;
 class WebNNPendingConstantToken_Data;
 class WebNNTensorToken_Data;
+class WebNNGraphToken_Data;
 class FrameToken_Data;
 class WorkerToken_Data;
 class WorkletToken_Data;
@@ -55,7 +55,7 @@ class WebGPUExecutionContextToken_Data;
 #pragma pack(push, 1)
 
 
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) FrameToken_Data {
+class  FrameToken_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -107,7 +107,7 @@ static_assert(sizeof(FrameToken_Data) == mojo::internal::kUnionDataSize,
               "Bad sizeof(FrameToken_Data)");
 
 
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WorkerToken_Data {
+class  WorkerToken_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -162,7 +162,7 @@ static_assert(sizeof(WorkerToken_Data) == mojo::internal::kUnionDataSize,
               "Bad sizeof(WorkerToken_Data)");
 
 
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WorkletToken_Data {
+class  WorkletToken_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -223,7 +223,7 @@ static_assert(sizeof(WorkletToken_Data) == mojo::internal::kUnionDataSize,
               "Bad sizeof(WorkletToken_Data)");
 
 
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) ExecutionContextToken_Data {
+class  ExecutionContextToken_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -299,7 +299,7 @@ static_assert(sizeof(ExecutionContextToken_Data) == mojo::internal::kUnionDataSi
               "Bad sizeof(ExecutionContextToken_Data)");
 
 
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WebGPUExecutionContextToken_Data {
+class  WebGPUExecutionContextToken_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -355,7 +355,7 @@ class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WebGPUExecutionContextToken_Data {
 };
 static_assert(sizeof(WebGPUExecutionContextToken_Data) == mojo::internal::kUnionDataSize,
               "Bad sizeof(WebGPUExecutionContextToken_Data)");
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) DocumentToken_Data {
+class  DocumentToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -403,7 +403,7 @@ struct DocumentToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     DocumentToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) LocalFrameToken_Data {
+class  LocalFrameToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -451,7 +451,7 @@ struct LocalFrameToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     LocalFrameToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) RemoteFrameToken_Data {
+class  RemoteFrameToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -499,7 +499,7 @@ struct RemoteFrameToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     RemoteFrameToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) DedicatedWorkerToken_Data {
+class  DedicatedWorkerToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -547,7 +547,7 @@ struct DedicatedWorkerToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     DedicatedWorkerToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) ServiceWorkerToken_Data {
+class  ServiceWorkerToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -595,7 +595,7 @@ struct ServiceWorkerToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     ServiceWorkerToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) SharedWorkerToken_Data {
+class  SharedWorkerToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -643,7 +643,7 @@ struct SharedWorkerToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     SharedWorkerToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) AnimationWorkletToken_Data {
+class  AnimationWorkletToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -691,7 +691,7 @@ struct AnimationWorkletToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     AnimationWorkletToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) AudioWorkletToken_Data {
+class  AudioWorkletToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -739,7 +739,7 @@ struct AudioWorkletToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     AudioWorkletToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) LayoutWorkletToken_Data {
+class  LayoutWorkletToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -787,7 +787,7 @@ struct LayoutWorkletToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     LayoutWorkletToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) PaintWorkletToken_Data {
+class  PaintWorkletToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -835,7 +835,7 @@ struct PaintWorkletToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     PaintWorkletToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) SharedStorageWorkletToken_Data {
+class  SharedStorageWorkletToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -883,7 +883,7 @@ struct SharedStorageWorkletToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     SharedStorageWorkletToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) ShadowRealmToken_Data {
+class  ShadowRealmToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -931,7 +931,7 @@ struct ShadowRealmToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     ShadowRealmToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) AttributionSrcToken_Data {
+class  AttributionSrcToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -979,7 +979,7 @@ struct AttributionSrcToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     AttributionSrcToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) SameDocNavigationScreenshotDestinationToken_Data {
+class  SameDocNavigationScreenshotDestinationToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1027,7 +1027,7 @@ struct SameDocNavigationScreenshotDestinationToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     SameDocNavigationScreenshotDestinationToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) V8ContextToken_Data {
+class  V8ContextToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1075,7 +1075,7 @@ struct V8ContextToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     V8ContextToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) ViewTransitionToken_Data {
+class  ViewTransitionToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1123,7 +1123,7 @@ struct ViewTransitionToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     ViewTransitionToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WebNNContextToken_Data {
+class  WebNNContextToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1171,7 +1171,7 @@ struct WebNNContextToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     WebNNContextToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WebNNPendingConstantToken_Data {
+class  WebNNPendingConstantToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1219,7 +1219,7 @@ struct WebNNPendingConstantToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     WebNNPendingConstantToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(TOKENS_MOJOM_SHARED) WebNNTensorToken_Data {
+class  WebNNTensorToken_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -1267,6 +1267,54 @@ struct WebNNTensorToken_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     WebNNTensorToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
+class  WebNNGraphToken_Data {
+ public:
+  static bool Validate(const void* data,
+                       mojo::internal::ValidationContext* validation_context);
+
+  mojo::internal::StructHeader header_;
+  mojo::internal::Pointer<::mojo_base::mojom::internal::UnguessableToken_Data> value;
+
+ private:
+  friend class mojo::internal::MessageFragment<WebNNGraphToken_Data>;
+
+  WebNNGraphToken_Data();
+  ~WebNNGraphToken_Data() = delete;
+};
+static_assert(sizeof(WebNNGraphToken_Data) == 16,
+              "Bad sizeof(WebNNGraphToken_Data)");
+// Used by WebNNGraphToken::WrapAsMessage to lazily serialize the struct.
+template <typename UserType, typename DataView>
+struct WebNNGraphToken_UnserializedMessageContext
+    : public mojo::internal::UnserializedMessageContext {
+ public:
+  static const mojo::internal::UnserializedMessageContext::Tag kMessageTag;
+
+  WebNNGraphToken_UnserializedMessageContext(
+    uint32_t message_name,
+    uint32_t message_flags,
+    UserType input)
+      : mojo::internal::UnserializedMessageContext(&kMessageTag, message_name, message_flags)
+      , user_data_(std::move(input)) {}
+  ~WebNNGraphToken_UnserializedMessageContext() override = default;
+
+  UserType TakeData() {
+    return std::move(user_data_);
+  }
+
+ private:
+  // mojo::internal::UnserializedMessageContext:
+  void Serialize(mojo::Message& message) override {
+    mojo::internal::MessageFragment<WebNNGraphToken_Data> fragment(message);
+    mojo::internal::Serialize<DataView>(user_data_, fragment);
+  }
+
+  UserType user_data_;
+};
+
+template <typename UserType, typename DataView>
+const mojo::internal::UnserializedMessageContext::Tag
+    WebNNGraphToken_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
 
 #pragma pack(pop)
 

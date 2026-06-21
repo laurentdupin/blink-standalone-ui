@@ -24,6 +24,7 @@
 
 #include "mojo/public/mojom/base/big_string.mojom-import-headers.h"
 #include "mojo/public/mojom/base/big_string.mojom-test-utils.h"
+#include "mojo/public/cpp/base/big_buffer_mojom_traits.h"
 
 
 namespace mojo_base::mojom {

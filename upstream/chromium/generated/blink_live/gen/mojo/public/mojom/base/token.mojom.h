@@ -32,7 +32,6 @@
 
 
 #include "mojo/public/cpp/base/token_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -43,7 +42,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) Token {
+class  Token {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Token, T>::value>;
@@ -229,7 +228,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::Token::DataView,
+struct  StructTraits<::mojo_base::mojom::Token::DataView,
                                          ::mojo_base::mojom::TokenPtr> {
   static bool IsNull(const ::mojo_base::mojom::TokenPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::TokenPtr* output) { output->reset(); }

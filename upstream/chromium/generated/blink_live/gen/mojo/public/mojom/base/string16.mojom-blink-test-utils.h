@@ -8,7 +8,6 @@
 #define MOJO_PUBLIC_MOJOM_BASE_STRING16_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "mojo/public/mojom/base/string16.mojom-blink.h"
-#include "base/component_export.h"
 
 
 namespace mojo_base::mojom::blink {

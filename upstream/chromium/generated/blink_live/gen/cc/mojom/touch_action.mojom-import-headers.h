@@ -6,5 +6,7 @@
 
 #ifndef CC_MOJOM_TOUCH_ACTION_MOJOM_IMPORT_HEADERS_H_
 #define CC_MOJOM_TOUCH_ACTION_MOJOM_IMPORT_HEADERS_H_
+#include "cc/input/touch_action.h"
+#include "cc/mojom/touch_action_mojom_traits.h"
 
 #endif  // CC_MOJOM_TOUCH_ACTION_MOJOM_IMPORT_HEADERS_H_

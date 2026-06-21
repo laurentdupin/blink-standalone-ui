@@ -12,7 +12,6 @@
 #include "mojo/public/cpp/bindings/lib/message_fragment.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -29,13 +28,12 @@ class FilePath_Data;
 class RelativeFilePath_Data;
 
 #pragma pack(push, 1)
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) FilePath_Data {
+class  FilePath_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
 
   mojo::internal::StructHeader header_;
-  mojo::internal::Pointer<mojo::internal::Array_Data<uint16_t>> path;
 
  private:
   friend class mojo::internal::MessageFragment<FilePath_Data>;
@@ -43,7 +41,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) FilePath_Data {
   FilePath_Data();
   ~FilePath_Data() = delete;
 };
-static_assert(sizeof(FilePath_Data) == 16,
+static_assert(sizeof(FilePath_Data) == 8,
               "Bad sizeof(FilePath_Data)");
 // Used by FilePath::WrapAsMessage to lazily serialize the struct.
 template <typename UserType, typename DataView>
@@ -77,13 +75,12 @@ struct FilePath_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     FilePath_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) RelativeFilePath_Data {
+class  RelativeFilePath_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
 
   mojo::internal::StructHeader header_;
-  mojo::internal::Pointer<mojo::internal::Array_Data<uint16_t>> path;
 
  private:
   friend class mojo::internal::MessageFragment<RelativeFilePath_Data>;
@@ -91,7 +88,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) RelativeFilePath_Data {
   RelativeFilePath_Data();
   ~RelativeFilePath_Data() = delete;
 };
-static_assert(sizeof(RelativeFilePath_Data) == 16,
+static_assert(sizeof(RelativeFilePath_Data) == 8,
               "Bad sizeof(RelativeFilePath_Data)");
 // Used by RelativeFilePath::WrapAsMessage to lazily serialize the struct.
 template <typename UserType, typename DataView>

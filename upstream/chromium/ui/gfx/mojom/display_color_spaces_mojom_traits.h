@@ -8,6 +8,7 @@
 #include "base/component_export.h"
 #include "base/containers/span.h"
 #include "services/viz/public/cpp/compositing/shared_image_format_mojom_traits.h"
+#include "skia/public/mojom/skcolorspace_primaries_mojom_traits.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "ui/gfx/display_color_spaces.h"
 #include "ui/gfx/mojom/buffer_types_mojom_traits.h"

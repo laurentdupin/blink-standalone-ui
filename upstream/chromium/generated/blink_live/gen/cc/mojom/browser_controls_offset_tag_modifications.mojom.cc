@@ -24,6 +24,9 @@
 
 #include "cc/mojom/browser_controls_offset_tag_modifications.mojom-import-headers.h"
 #include "cc/mojom/browser_controls_offset_tag_modifications.mojom-test-utils.h"
+#include "cc/mojom/browser_controls_offset_tag_modifications_mojom_traits.h"
+#include "mojo/public/cpp/base/token_mojom_traits.h"
+#include "services/viz/public/cpp/compositing/offset_tag_mojom_traits.h"
 
 
 namespace cc::mojom {

@@ -5,10 +5,8 @@
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 
 #include "base/numerics/checked_math.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
-#endif
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/image_observer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
@@ -33,10 +31,11 @@ scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
 scoped_refptr<StaticBitmapImage> StaticBitmapImage::Create(
     sk_sp<SkData> data,
     const SkImageInfo& info,
+    const gfx::HDRMetadata& hdr_metadata,
     ImageOrientation orientation) {
   return UnacceleratedStaticBitmapImage::Create(
       SkImages::RasterFromData(info, std::move(data), info.minRowBytes()),
-      orientation);
+      orientation, hdr_metadata);
 }
 
 gfx::Size StaticBitmapImage::SizeWithConfig(SizeConfig config) const {

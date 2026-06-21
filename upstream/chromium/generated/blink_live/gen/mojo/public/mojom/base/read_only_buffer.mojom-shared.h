@@ -26,7 +26,6 @@
 
 
 #include "mojo/public/mojom/base/read_only_buffer.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 

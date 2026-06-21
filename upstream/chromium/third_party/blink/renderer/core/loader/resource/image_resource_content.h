@@ -237,6 +237,10 @@ class CORE_EXPORT ImageResourceContent final
   // |use_counter| may be a null pointer.
   void RecordDecodedImageC2PA(UseCounter* use_counter);
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void MaybeFinalizeStandaloneSvgImageForStaticRender();
+#endif
+
  private:
   using CanDeferInvalidation = ImageResourceObserver::CanDeferInvalidation;
 

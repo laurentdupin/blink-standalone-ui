@@ -203,6 +203,11 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
   // dangling after drawing completes.
   placeholder_quad_ = nullptr;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // HUD texture upload depends on GPU/shared-image raster access. The HUD is a
+  // debug overlay and is unsupported in this standalone renderer phase.
+  return;
+#else
   if (draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     return;
   }
@@ -412,6 +417,7 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
       break;
     }
   }
+#endif
 }
 
 void HeadsUpDisplayLayerImpl::ReleaseResources() {

@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <utility>
 
@@ -102,6 +103,22 @@ namespace blink {
 
 #if defined(STANDALONE_RENDERER_GN_PROBE)
 namespace {
+
+bool StandaloneDomTraceEnabledForConstructionSite() {
+  const char* value = std::getenv("HTML_CSS_RENDERER_TRACE_DOM");
+  return value && value[0] && value[0] != '0';
+}
+
+void TraceStandaloneConstructionSite(const char* stage,
+                                     ContainerNode* parent = nullptr,
+                                     Node* child = nullptr) {
+  if (!StandaloneDomTraceEnabledForConstructionSite()) {
+    return;
+  }
+  std::fprintf(stderr, "standalone_dom.construction.%s parent=%p child=%p\n",
+               stage, parent, child);
+  std::fflush(stderr);
+}
 
 template <typename T, typename... Args>
 T* StandaloneAllocateTreeBuilderNode(Args&&... args) {
@@ -391,13 +408,20 @@ void HTMLConstructionSite::FlushPendingText() {
     return;
 
 #if defined(STANDALONE_RENDERER_GN_PROBE)
+  TraceStandaloneConstructionSite("FlushPendingText.before",
+                                  pending_text_.parent,
+                                  pending_text_.next_child);
   String text = pending_text_.string_builder.ToString();
   HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kInsertText);
   task.parent = pending_text_.parent;
   task.next_child = pending_text_.next_child;
   task.child = Text::Create(*document_, std::move(text));
+  TraceStandaloneConstructionSite("FlushPendingText.before_queue",
+                                  task.parent, task.child.Get());
   QueueTask(task, false);
   pending_text_.Discard();
+  TraceStandaloneConstructionSite("FlushPendingText.after",
+                                  task.parent, task.child.Get());
   return;
 #else
   // Splitting text nodes into smaller chunks contradicts HTML5 spec, but is
@@ -452,14 +476,22 @@ void HTMLConstructionSite::FlushPendingText() {
 void HTMLConstructionSite::QueueTask(HTMLConstructionSiteTask& task,
                                      bool flush_pending_text) {
 #if defined(STANDALONE_RENDERER_GN_PROBE)
+  TraceStandaloneConstructionSite("QueueTask.before", task.parent,
+                                  task.child.Get());
   if (task.parent && task.child) {
     if (task.operation == HTMLConstructionSiteTask::kInsert ||
         task.operation == HTMLConstructionSiteTask::kInsertText ||
         task.operation == HTMLConstructionSiteTask::kInsertAlreadyParsedChild ||
         task.operation == HTMLConstructionSiteTask::kReparent) {
+      TraceStandaloneConstructionSite("QueueTask.before_append", task.parent,
+                                      task.child.Get());
       task.parent->ParserAppendChild(task.child.Get());
+      TraceStandaloneConstructionSite("QueueTask.after_append", task.parent,
+                                      task.child.Get());
     }
   }
+  TraceStandaloneConstructionSite("QueueTask.after", task.parent,
+                                  task.child.Get());
   return;
 #else
   if (flush_pending_text)
@@ -485,12 +517,14 @@ void HTMLConstructionSite::AttachLater(InsertionLocation location,
                                        Node* child,
                                        bool self_closing) {
 #if defined(STANDALONE_RENDERER_GN_PROBE)
+  TraceStandaloneConstructionSite("AttachLater.before", location.parent, child);
   HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kInsert);
   task.parent = location.parent;
   task.next_child = location.next_child;
   task.child = child;
   task.self_closing = self_closing;
   QueueTask(task, false);
+  TraceStandaloneConstructionSite("AttachLater.after", location.parent, child);
   return;
 #else
   auto* element = DynamicTo<Element>(child);
@@ -1119,9 +1153,18 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
 }
 
 void HTMLConstructionSite::InsertHTMLElement(AtomicHTMLToken* token) {
+  TraceStandaloneConstructionSite("InsertHTMLElement.before_create");
   Element* element = CreateElement(token, html_names::xhtmlNamespaceURI);
+  TraceStandaloneConstructionSite("InsertHTMLElement.after_create", nullptr,
+                                  element);
+  TraceStandaloneConstructionSite("InsertHTMLElement.before_location", nullptr,
+                                  element);
   AttachLater(CurrentInsertionLocation(), element);
+  TraceStandaloneConstructionSite("InsertHTMLElement.after_attach", nullptr,
+                                  element);
   open_elements_.Push(HTMLStackItem::Create(element, token));
+  TraceStandaloneConstructionSite("InsertHTMLElement.after_push", nullptr,
+                                  element);
 }
 
 void HTMLConstructionSite::InsertSelfClosingHTMLElementDestroyingToken(
@@ -1204,13 +1247,20 @@ void HTMLConstructionSite::InsertForeignElement(
 
 void HTMLConstructionSite::InsertTextNode(const StringView& string,
                                           WhitespaceMode whitespace_mode) {
+  TraceStandaloneConstructionSite("InsertTextNode.before_current");
   HTMLConstructionSiteTask dummy_task(HTMLConstructionSiteTask::kInsert);
   dummy_task.parent = CurrentNode();
+  TraceStandaloneConstructionSite("InsertTextNode.after_current",
+                                  dummy_task.parent);
 
   if (ShouldFosterParent())
     FindFosterSite(dummy_task);
 
+  TraceStandaloneConstructionSite("InsertTextNode.before_adjust",
+                                  dummy_task.parent);
   AdjustInsertionLocation(dummy_task);
+  TraceStandaloneConstructionSite("InsertTextNode.after_adjust",
+                                  dummy_task.parent, dummy_task.next_child);
   if (auto* template_element =
           DynamicTo<HTMLTemplateElement>(*dummy_task.parent)) {
     // If the Document was detached in the middle of parsing, the template
@@ -1234,10 +1284,18 @@ void HTMLConstructionSite::InsertTextNode(const StringView& string,
   // pending text into the task queue before making more.
   if (!pending_text_.IsEmpty() &&
       (pending_text_.parent != dummy_task.parent ||
-       pending_text_.next_child != dummy_task.next_child))
+       pending_text_.next_child != dummy_task.next_child)) {
+    TraceStandaloneConstructionSite("InsertTextNode.before_flush",
+                                    dummy_task.parent,
+                                    dummy_task.next_child);
     FlushPendingText();
+  }
+  TraceStandaloneConstructionSite("InsertTextNode.before_append_pending",
+                                  dummy_task.parent, dummy_task.next_child);
   pending_text_.Append(dummy_task.parent, dummy_task.next_child, string,
                        whitespace_mode);
+  TraceStandaloneConstructionSite("InsertTextNode.after_append_pending",
+                                  dummy_task.parent, dummy_task.next_child);
 }
 
 void HTMLConstructionSite::Reparent(HTMLStackItem* new_parent,

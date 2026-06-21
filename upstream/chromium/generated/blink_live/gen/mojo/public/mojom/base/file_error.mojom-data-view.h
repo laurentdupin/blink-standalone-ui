@@ -79,7 +79,7 @@ enum class FileError : int32_t {
   kMaxValue = 0,
 };
 
-COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, FileError value);
+ std::ostream& operator<<(std::ostream& os, FileError value);
 inline bool IsKnownEnumValue(FileError value) {
   return internal::FileError_Data::IsKnownValue(
       static_cast<int32_t>(value));

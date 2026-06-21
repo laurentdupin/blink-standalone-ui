@@ -138,6 +138,10 @@ class CORE_EXPORT SVGImage final : public Image {
   // Introspective service hatch for mask-image. Don't abuse for anything else.
   Element* GetResourceElement(const AtomicString& id) const;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void MaybeFinalizeStandaloneAsyncLoadForStaticRender();
+#endif
+
  protected:
   // Whether or not size is available yet.
   bool IsSizeAvailable() override;

@@ -9,6 +9,7 @@
 #include "third_party/blink/public/mojom/frame/policy_container.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_string.h"
+#include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
 namespace blink {
 
@@ -23,13 +24,24 @@ WebCSPSource ConvertSource(const network::mojom::blink::CSPSourcePtr& source) {
           source->is_port_wildcard};
 }
 
+network::IntegrityMetadata ConvertIntegrityMetadata(
+    const network::mojom::blink::IntegrityMetadataPtr& metadata) {
+  if (!metadata) {
+    return network::IntegrityMetadata();
+  }
+  return network::IntegrityMetadata(
+      metadata->algorithm,
+      base::span<const uint8_t>(metadata->value.data(),
+                                metadata->value.size()));
+}
+
 WebCSPSourceList ConvertSourceList(
     const network::mojom::blink::CSPSourceListPtr& source_list) {
   return {base::ToVector(source_list->sources, ConvertSource),
           base::ToVector(source_list->nonces, ToWebString),
-          base::ToVector(source_list->hashes),
-          base::ToVector(source_list->url_hashes),
-          base::ToVector(source_list->eval_hashes),
+          base::ToVector(source_list->hashes, ConvertIntegrityMetadata),
+          base::ToVector(source_list->url_hashes, ConvertIntegrityMetadata),
+          base::ToVector(source_list->eval_hashes, ConvertIntegrityMetadata),
           source_list->allow_self,
           source_list->allow_star,
           source_list->allow_inline,
@@ -54,6 +66,68 @@ std::optional<WebCSPTrustedTypes> ConvertTrustedTypes(
                             trusted_types->allow_any,
                             trusted_types->allow_duplicates};
 }
+
+std::optional<network::ConnectionAllowlist> ConvertConnectionAllowlist(
+    const network::mojom::blink::ConnectionAllowlistPtr& allowlist) {
+  if (!allowlist) {
+    return std::nullopt;
+  }
+
+  network::ConnectionAllowlist converted;
+  converted.allowlist = base::ToVector(
+      allowlist->allowlist,
+      [](const String& item) { return std::string(item.Utf8()); });
+  if (!allowlist->reporting_endpoint.empty()) {
+    converted.reporting_endpoint =
+        std::string(allowlist->reporting_endpoint.Utf8());
+  }
+  converted.issues = base::ToVector(allowlist->issues);
+  converted.redirect_behavior =
+      allowlist->redirect_behavior == network::mojom::RedirectBehavior::kAllow
+          ? network::ConnectionAllowlist::RedirectBehavior::kAllow
+          : network::ConnectionAllowlist::RedirectBehavior::kBlock;
+  converted.webrtc_behavior =
+      allowlist->webrtc_behavior == network::mojom::WebRtcBehavior::kAllow
+          ? network::ConnectionAllowlist::WebRtcBehavior::kAllow
+          : network::ConnectionAllowlist::WebRtcBehavior::kBlock;
+  return converted;
+}
+
+network::ConnectionAllowlists ConvertConnectionAllowlists(
+    const network::mojom::blink::ConnectionAllowlistsPtr& allowlists) {
+  network::ConnectionAllowlists converted;
+  if (!allowlists) {
+    return converted;
+  }
+  converted.response_url = static_cast<GURL>(allowlists->response_url);
+  converted.enforced = ConvertConnectionAllowlist(allowlists->enforced);
+  converted.report_only = ConvertConnectionAllowlist(allowlists->report_only);
+  converted.reporting_source = allowlists->reporting_source;
+  return converted;
+}
+
+network::IntegrityPolicy ConvertIntegrityPolicy(
+    const network::mojom::blink::IntegrityPolicyPtr& policy) {
+  network::IntegrityPolicy converted;
+  if (!policy) {
+    return converted;
+  }
+  converted.blocked_destinations = base::ToVector(policy->blocked_destinations);
+  converted.sources = base::ToVector(policy->sources);
+  converted.endpoints = base::ToVector(
+      policy->endpoints,
+      [](const String& endpoint) { return std::string(endpoint.Utf8()); });
+  converted.parsing_errors = base::ToVector(
+      policy->parsing_errors,
+      [](const String& error) { return std::string(error.Utf8()); });
+  return converted;
+}
+
+network::mojom::blink::ConnectionAllowlistsPtr
+ConvertConnectionAllowlistsToMojoBlink(
+    const network::ConnectionAllowlists& allowlists);
+network::mojom::blink::IntegrityPolicyPtr ConvertIntegrityPolicyToMojoBlink(
+    const network::IntegrityPolicy& policy);
 
 }  // namespace
 
@@ -86,12 +160,16 @@ WebContentSecurityPolicy ToWebContentSecurityPolicy(
 WebPolicyContainerPolicies ToWebPolicyContainerPolicies(
     const mojom::blink::PolicyContainerPolicies& policies) {
   WebPolicyContainerPolicies web_policies;
-  web_policies.connection_allowlists = policies.connection_allowlists;
-  web_policies.cross_origin_embedder_policy =
-      policies.cross_origin_embedder_policy.value;
-  web_policies.integrity_policy = policies.integrity_policy;
+  web_policies.connection_allowlists =
+      ConvertConnectionAllowlists(policies.connection_allowlists);
+  if (policies.cross_origin_embedder_policy) {
+    web_policies.cross_origin_embedder_policy =
+        policies.cross_origin_embedder_policy->value;
+  }
+  web_policies.integrity_policy =
+      ConvertIntegrityPolicy(policies.integrity_policy);
   web_policies.integrity_policy_report_only =
-      policies.integrity_policy_report_only;
+      ConvertIntegrityPolicy(policies.integrity_policy_report_only);
   web_policies.referrer_policy = policies.referrer_policy;
   web_policies.content_security_policies = base::ToVector(
       policies.content_security_policies,
@@ -110,11 +188,13 @@ WebPolicyContainerPolicies ToWebPolicyContainerPolicies(
 
 mojom::blink::PolicyContainerPoliciesPtr FromWebPolicyContainerPolicies(
     const WebPolicyContainerPolicies& policies) {
-  network::CrossOriginEmbedderPolicy cross_origin_embedder_policy;
-  cross_origin_embedder_policy.value = policies.cross_origin_embedder_policy;
   return mojom::blink::PolicyContainerPolicies::New(
-      policies.connection_allowlists, cross_origin_embedder_policy,
-      policies.integrity_policy, policies.integrity_policy_report_only,
+      ConvertConnectionAllowlistsToMojoBlink(policies.connection_allowlists),
+      network::mojom::blink::CrossOriginEmbedderPolicy::New(
+          policies.cross_origin_embedder_policy, String(),
+          network::mojom::CrossOriginEmbedderPolicyValue::kNone, String()),
+      ConvertIntegrityPolicyToMojoBlink(policies.integrity_policy),
+      ConvertIntegrityPolicyToMojoBlink(policies.integrity_policy_report_only),
       policies.referrer_policy,
       ToVector(policies.content_security_policies,
                FromWebContentSecurityPolicy),
@@ -132,14 +212,68 @@ network::mojom::blink::CSPSourcePtr ConvertSourceToMojoBlink(
       source.is_host_wildcard, source.is_port_wildcard);
 }
 
+network::mojom::blink::IntegrityMetadataPtr ConvertIntegrityMetadataToMojoBlink(
+    const network::IntegrityMetadata& metadata) {
+  return network::mojom::blink::IntegrityMetadata::New(
+      metadata.algorithm,
+      Vector<uint8_t>(base::span<const uint8_t>(metadata.value.data(),
+                                                metadata.value.size())));
+}
+
+network::mojom::blink::ConnectionAllowlistPtr
+ConvertConnectionAllowlistToMojoBlink(
+    const std::optional<network::ConnectionAllowlist>& allowlist) {
+  if (!allowlist) {
+    return nullptr;
+  }
+  return network::mojom::blink::ConnectionAllowlist::New(
+      ToVector(allowlist->allowlist,
+               [](const std::string& item) { return String::FromUtf8(item); }),
+      allowlist->reporting_endpoint
+          ? String::FromUtf8(*allowlist->reporting_endpoint)
+          : String(),
+      ToVector(allowlist->issues),
+      allowlist->redirect_behavior ==
+              network::ConnectionAllowlist::RedirectBehavior::kAllow
+          ? network::mojom::RedirectBehavior::kAllow
+          : network::mojom::RedirectBehavior::kBlock,
+      allowlist->webrtc_behavior ==
+              network::ConnectionAllowlist::WebRtcBehavior::kAllow
+          ? network::mojom::WebRtcBehavior::kAllow
+          : network::mojom::WebRtcBehavior::kBlock);
+}
+
+network::mojom::blink::ConnectionAllowlistsPtr
+ConvertConnectionAllowlistsToMojoBlink(
+    const network::ConnectionAllowlists& allowlists) {
+  return network::mojom::blink::ConnectionAllowlists::New(
+      KURL(allowlists.response_url),
+      ConvertConnectionAllowlistToMojoBlink(allowlists.enforced),
+      ConvertConnectionAllowlistToMojoBlink(allowlists.report_only),
+      allowlists.reporting_source);
+}
+
+network::mojom::blink::IntegrityPolicyPtr ConvertIntegrityPolicyToMojoBlink(
+    const network::IntegrityPolicy& policy) {
+  return network::mojom::blink::IntegrityPolicy::New(
+      ToVector(policy.blocked_destinations),
+      ToVector(policy.sources),
+      ToVector(policy.endpoints, [](const std::string& endpoint) {
+        return String::FromUtf8(endpoint);
+      }),
+      ToVector(policy.parsing_errors, [](const std::string& error) {
+        return String::FromUtf8(error);
+      }));
+}
+
 network::mojom::blink::CSPSourceListPtr ConvertSourceListToMojoBlink(
     const WebCSPSourceList& source_list) {
   return network::mojom::blink::CSPSourceList::New(
       ToVector(source_list.sources, ConvertSourceToMojoBlink),
       Vector<String>(source_list.nonces),
-      Vector<network::IntegrityMetadata>(source_list.hashes),
-      Vector<network::IntegrityMetadata>(source_list.url_hashes),
-      Vector<network::IntegrityMetadata>(source_list.eval_hashes),
+      ToVector(source_list.hashes, ConvertIntegrityMetadataToMojoBlink),
+      ToVector(source_list.url_hashes, ConvertIntegrityMetadataToMojoBlink),
+      ToVector(source_list.eval_hashes, ConvertIntegrityMetadataToMojoBlink),
       source_list.allow_self, source_list.allow_star, source_list.allow_inline,
       source_list.allow_inline_speculation_rules, source_list.allow_eval,
       source_list.allow_wasm_eval, source_list.allow_wasm_unsafe_eval,

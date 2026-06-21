@@ -53,7 +53,7 @@ enum class MessagePumpType : int32_t {
   kMaxValue = 3,
 };
 
-COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, MessagePumpType value);
+ std::ostream& operator<<(std::ostream& os, MessagePumpType value);
 inline bool IsKnownEnumValue(MessagePumpType value) {
   return internal::MessagePumpType_Data::IsKnownValue(
       static_cast<int32_t>(value));

@@ -25,6 +25,7 @@
 #include "cc/mojom/render_frame_metadata.mojom-features.h"  // IWYU pragma: export
 #include "cc/mojom/render_frame_metadata.mojom-shared.h"  // IWYU pragma: export
 #include "cc/mojom/render_frame_metadata.mojom-forward.h"  // IWYU pragma: export
+#include "cc/mojom/render_frame_metadata.mojom-import-headers.h"
 #include "services/viz/public/mojom/compositing/local_surface_id.mojom.h"
 #include "services/viz/public/mojom/compositing/selection.mojom.h"
 #include "services/viz/public/mojom/compositing/tracked_element_rects.mojom.h"

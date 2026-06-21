@@ -2,6 +2,8 @@
 /build/
 /out/
 /cmake-build-*/
+/dist/
+/npm-cache/
 /.vs/
 /.vscode/
 
@@ -30,13 +32,36 @@
 *.ipdb
 *.iobj
 
+# Downloaded archives and generated media artifacts
+*.zip
+*.7z
+*.tar
+*.tgz
+*.gz
+*.png
+*.webp
+*.mp4
+
 # Generated local scratch files
 *.log
 *.tmp
+*.i
 *.rsp
 !upstream/chromium/generated/blink_live/*.rsp
 *.commands.txt
 !upstream/chromium/generated/blink_live/*.commands.txt
+
+# Validation/perf comparison output directories
+screenshots/
+snapshots/
+perf-output/
+perf_outputs/
+perf-artifacts/
+perf_artifacts/
+comparison-output/
+comparison_outputs/
+comparison-results/
+comparison_results/
 
 # Python/tool caches
 __pycache__/
@@ -44,6 +69,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 node_modules/
+/.tools/gn/
 
 # Editor/OS noise
 .DS_Store

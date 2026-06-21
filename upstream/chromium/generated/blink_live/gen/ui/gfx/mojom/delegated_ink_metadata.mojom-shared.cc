@@ -12,6 +12,9 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/gfx/mojom/delegated_ink_metadata.mojom-params-data.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
+#include "skia/public/mojom/skcolor_mojom_traits.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 namespace gfx {
 namespace mojom {
 

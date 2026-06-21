@@ -9,6 +9,7 @@
 
 #include "base/check_op.h"
 #include "base/containers/flat_map.h"
+#include "services/viz/public/cpp/compositing/view_transition_element_resource_id_mojom_traits.h"
 #include "services/viz/public/mojom/compositing/view_transition_element_resource_id.mojom.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/frame/view_transition_state.h"

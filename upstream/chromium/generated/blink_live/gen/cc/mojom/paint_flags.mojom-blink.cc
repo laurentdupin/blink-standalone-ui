@@ -39,11 +39,6 @@ DynamicRangeLimit::DynamicRangeLimit(
       constrained_high_mix(std::move(constrained_high_mix_in)) {}
 
 DynamicRangeLimit::~DynamicRangeLimit() = default;
-size_t DynamicRangeLimit::Hash(size_t seed) const {
-  seed = mojo::internal::WTFHash(seed, this->standard_mix);
-  seed = mojo::internal::WTFHash(seed, this->constrained_high_mix);
-  return seed;
-}
 
 void DynamicRangeLimit::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

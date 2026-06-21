@@ -8,7 +8,7 @@
 #define MOJO_PUBLIC_MOJOM_BASE_UNGUESSABLE_TOKEN_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "mojo/public/mojom/base/unguessable_token.mojom-blink.h"
-#include "base/component_export.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace mojo_base::mojom::blink {

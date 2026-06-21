@@ -26,7 +26,6 @@
 
 
 #include "mojo/public/mojom/base/version.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 

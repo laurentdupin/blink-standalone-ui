@@ -67,6 +67,8 @@ class WebNNPendingConstantTokenDataView;
 
 class WebNNTensorTokenDataView;
 
+class WebNNGraphTokenDataView;
+
 class FrameTokenDataView;
 class WorkerTokenDataView;
 class WorkletTokenDataView;
@@ -209,6 +211,13 @@ struct MojomTypeTraits<::blink::mojom::WebNNPendingConstantTokenDataView> {
 template <>
 struct MojomTypeTraits<::blink::mojom::WebNNTensorTokenDataView> {
   using Data = ::blink::mojom::internal::WebNNTensorToken_Data;
+  using DataAsArrayElement = Pointer<Data>;
+  static constexpr MojomTypeCategory category = MojomTypeCategory::kStruct;
+};
+
+template <>
+struct MojomTypeTraits<::blink::mojom::WebNNGraphTokenDataView> {
+  using Data = ::blink::mojom::internal::WebNNGraphToken_Data;
   using DataAsArrayElement = Pointer<Data>;
   static constexpr MojomTypeCategory category = MojomTypeCategory::kStruct;
 };
@@ -745,6 +754,32 @@ class WebNNTensorTokenDataView {
   }
  private:
   internal::WebNNTensorToken_Data* data_ = nullptr;
+  mojo::Message* message_ = nullptr;
+};
+
+
+class WebNNGraphTokenDataView {
+ public:
+  WebNNGraphTokenDataView() = default;
+
+  WebNNGraphTokenDataView(
+      internal::WebNNGraphToken_Data* data,
+      mojo::Message* message)
+      : data_(data), message_(message) {}
+
+  bool is_null() const { return !data_; }
+  inline void GetValueDataView(
+      ::mojo_base::mojom::UnguessableTokenDataView* output);
+
+  template <typename UserType>
+  [[nodiscard]] bool ReadValue(UserType* output) {
+    
+    auto* pointer = data_->value.Get();
+    return mojo::internal::Deserialize<::mojo_base::mojom::UnguessableTokenDataView>(
+        pointer, output, message_);
+  }
+ private:
+  internal::WebNNGraphToken_Data* data_ = nullptr;
   mojo::Message* message_ = nullptr;
 };
 

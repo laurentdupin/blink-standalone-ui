@@ -23,8 +23,6 @@
 
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 
-#include <cstdio>
-
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/lcp_critical_path_predictor_util.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
@@ -81,6 +79,10 @@
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" bool StandaloneRendererDeferImageAttributeLoads();
+#endif
 
 class HTMLImageElement::ViewportChangeListener final
     : public MediaQueryListListener {
@@ -327,12 +329,6 @@ void HTMLImageElement::SetBestFitURLAndDPRFromImageCandidate(
 void HTMLImageElement::ParseAttribute(
     const AttributeModificationParams& params) {
   const QualifiedName& name = params.name;
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (name == html_names::kSrcAttr || name == html_names::kSrcsetAttr ||
-      name == html_names::kSizesAttr) {
-    std::string value = params.new_value.GetString().Utf8();
-  }
-#endif
   if (name == html_names::kAltAttr || name == html_names::kTitleAttr) {
     if (UserAgentShadowRoot()) {
       Element* text =
@@ -343,6 +339,11 @@ void HTMLImageElement::ParseAttribute(
     }
   } else if (name == html_names::kSrcAttr || name == html_names::kSrcsetAttr ||
              name == html_names::kSizesAttr) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (StandaloneRendererDeferImageAttributeLoads()) {
+      return;
+    }
+#endif
     SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
   } else if (name == html_names::kUsemapAttr) {
     SetIsLink(!params.new_value.IsNull());
@@ -1020,15 +1021,27 @@ float HTMLImageElement::SourceSize(Element& element) {
 }
 
 void HTMLImageElement::ForceReload() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  GetImageLoader().UpdateFromElement(ImageLoader::kUpdateIgnorePreviousError);
+#else
   GetImageLoader().UpdateFromElement(ImageLoader::kUpdateForcedReload);
+#endif
 }
 
 void HTMLImageElement::SelectSourceURL(
     ImageLoader::UpdateFromElementBehavior behavior) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
+  const bool allow_standalone_static_image_selection =
+      !FastGetAttribute(html_names::kSrcAttr).IsNull() ||
+      !FastGetAttribute(html_names::kSrcsetAttr).IsNull();
+  if (!GetDocument().IsActive() &&
+      !allow_standalone_static_image_selection) {
+    return;
+  }
+#else
   if (!GetDocument().IsActive())
     return;
+#endif
 
   HTMLSourceElement* old_source = source_;
   ImageCandidate candidate = FindBestFitImageFromPictureParent();
@@ -1040,9 +1053,6 @@ void HTMLImageElement::SelectSourceURL(
         FastGetAttribute(html_names::kSrcAttr),
         FastGetAttribute(html_names::kSrcsetAttr), &GetDocument());
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  std::string candidate_url = candidate.Url().GetString().Utf8();
-#endif
   if (old_source != source_)
     InvalidateAttributeMapping();
   AtomicString old_url = best_fit_image_url_;

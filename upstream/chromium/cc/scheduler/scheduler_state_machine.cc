@@ -52,8 +52,22 @@ bool ShouldThrottleMainFrameRate(const SchedulerSettings& settings) {
                    features::kThrottleMainFrameTo60HzWebView)
              : base::FeatureList::IsEnabled(features::kThrottleMainFrameTo60Hz);
 #else
+  // The browser compositor drives the application UI animations, which we want
+  // to be running at the nominal framerate.
+  bool is_browser_compositor =
+      settings.commit_to_active_tree || settings.single_threaded_proxy;
+  if (is_browser_compositor) {
+    return false;
+  }
+
   return base::FeatureList::IsEnabled(features::kThrottleMainFrameTo60Hz);
 #endif  // BUILDFLAG(IS_ANDROID)
+}
+
+perfetto::NamedTrack GetTracingTrack(
+    const SchedulerStateMachine* state_machine) {
+  return perfetto::NamedTrack::FromPointer("cc::SchedulerStateMachine",
+                                           state_machine);
 }
 
 }  // namespace
@@ -509,8 +523,10 @@ bool SchedulerStateMachine::ShouldSendBeginMainFrame() const {
     return false;
 
   // Do not send more than one begin main frame in a begin frame.
-  if (did_send_begin_main_frame_for_current_frame_)
+  if (did_send_begin_main_frame_for_current_frame_ &&
+      !urgent_begin_main_frame_pending_) {
     return false;
+  }
 
   // Only send BeginMainFrame when there isn't another commit pending already.
   // Other parts of the state machine indirectly defer the BeginMainFrame
@@ -556,7 +572,8 @@ bool SchedulerStateMachine::ShouldSendBeginMainFrame() const {
   // might have new user input arriving soon.
   // TODO(brianderson): Allow sending BeginMainFrame while idle when the main
   // thread isn't consuming user input for non-synchronous compositor.
-  if (ShouldBlockBeginMainFrameWhenIdle()) {
+  if (ShouldBlockBeginMainFrameWhenIdle() &&
+      !urgent_begin_main_frame_pending_) {
     return false;
   }
 
@@ -599,6 +616,13 @@ bool SchedulerStateMachine::ShouldSendBeginMainFrame() const {
 bool SchedulerStateMachine::ShouldThrottleSendBeginMainFrame() const {
   bool result = false;
   auto throttled_interval = MainFrameThrottledInterval();
+
+  if (base::FeatureList::IsEnabled(features::kThrottleRepeatedNoDamageFrames)) {
+    throttled_interval =
+        std::max(throttled_interval,
+                 main_frame_consecutive_no_damage_throttled_interval_);
+  }
+
   if (throttled_interval.is_positive() &&
       last_begin_impl_frame_time_ - last_sent_begin_main_frame_time_ <
           throttled_interval) {
@@ -847,7 +871,8 @@ void SchedulerStateMachine::WillSendBeginMainFrame() {
          current_pending_tree_is_impl_side_);
   DCHECK(visible_);
   DCHECK(!begin_frame_source_paused_);
-  DCHECK(!did_send_begin_main_frame_for_current_frame_);
+  DCHECK(!did_send_begin_main_frame_for_current_frame_ ||
+         urgent_begin_main_frame_pending_);
   if (begin_main_frame_state_ == BeginMainFrameState::IDLE) {
     begin_main_frame_state_ = BeginMainFrameState::SENT;
   } else {
@@ -866,6 +891,7 @@ void SchedulerStateMachine::WillSendBeginMainFrame() {
   // in order to avoid the effects of delay in-between BeginImplFrame and
   // SendBeginMainFrame(), that might lead to frame pacing issues.
   last_sent_begin_main_frame_time_ = last_begin_impl_frame_time_;
+  urgent_begin_main_frame_pending_ = false;
 }
 
 bool SchedulerStateMachine::CheckWillCommit() const {
@@ -873,6 +899,13 @@ bool SchedulerStateMachine::CheckWillCommit() const {
 }
 
 void SchedulerStateMachine::WillCommit(bool commit_has_no_updates) {
+  if (commit_has_no_updates) {
+    consecutive_no_damage_main_frames_++;
+  } else {
+    consecutive_no_damage_main_frames_ = 0;
+  }
+  UpdateConsecutiveNoDamageThrottlingInterval();
+
   bool can_have_pending_tree =
       commit_has_no_updates &&
       (settings_.main_frame_before_activation_enabled ||
@@ -1508,7 +1541,7 @@ void SchedulerStateMachine::SetNeedsPrepareTiles() {
 void SchedulerStateMachine::DidSubmitCompositorFrame() {
   if (!base::FeatureList::IsEnabled(features::kNoCompositorFrameAcks)) {
     TRACE_EVENT_BEGIN("cc", "Scheduler:pending_submit_frames",
-                      perfetto::Track::FromPointer(this), "pending_frames",
+                      GetTracingTrack(this), "pending_frames",
                       pending_submit_frames_);
 
     // If we are running with no frame rate limits, the GPU process can submit
@@ -1538,7 +1571,7 @@ void SchedulerStateMachine::DidReceiveCompositorFrameAck() {
     NOTREACHED();
   } else {
     TRACE_EVENT_END("cc", /*"Scheduler:pending_submit_frames"*/
-                    perfetto::Track::FromPointer(this), "pending_frames",
+                    GetTracingTrack(this), "pending_frames",
                     pending_submit_frames_);
     pending_submit_frames_--;
   }
@@ -1575,6 +1608,11 @@ void SchedulerStateMachine::SetNeedsBeginMainFrame(bool now) {
   if (now) {
     last_sent_begin_main_frame_time_ = base::TimeTicks();
   }
+}
+
+void SchedulerStateMachine::SetUrgentBeginMainFramePending() {
+  urgent_begin_main_frame_pending_ = true;
+  SetNeedsBeginMainFrame(true);
 }
 
 void SchedulerStateMachine::SetNeedsOneBeginImplFrame() {
@@ -1739,6 +1777,31 @@ void SchedulerStateMachine::SetShouldThrottleFrameRate(bool flag) {
   if (base::FeatureList::IsEnabled(features::kRenderThrottleFrameRate)) {
     throttle_frame_rate_ = flag;
   }
+}
+
+void SchedulerStateMachine::UpdateConsecutiveNoDamageThrottlingInterval() {
+  if (!base::FeatureList::IsEnabled(
+          features::kThrottleRepeatedNoDamageFrames)) {
+    return;
+  }
+
+  // TODO(thiabaud): Figure out better constants, these ones are just arbitrary.
+  // Maybe make this a Finch parameter?
+  const int count = consecutive_no_damage_main_frames_;
+  base::TimeDelta interval;
+  if (count >= 105) {
+    interval = base::Seconds(1);
+  } else if (count >= 100) {
+    interval = base::Milliseconds(500);
+  } else if (count >= 90) {
+    interval = base::Milliseconds(100);
+  } else if (count >= 60) {
+    interval = base::Milliseconds(32);
+  } else {
+    interval = base::TimeDelta();
+  }
+
+  main_frame_consecutive_no_damage_throttled_interval_ = interval;
 }
 
 void SchedulerStateMachine::SetRequestHighFramerate(bool flag) {

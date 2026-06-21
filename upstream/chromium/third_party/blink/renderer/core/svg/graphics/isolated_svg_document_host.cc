@@ -28,10 +28,11 @@
 #include "third_party/blink/renderer/core/svg/graphics/isolated_svg_document_host.h"
 
 #include "base/notreached.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include <cstdio>
 #include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatch_forbidden_scope.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -41,8 +42,86 @@
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
+
+#include <cstdio>
+#include <cstdlib>
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+IsolatedSVGDocumentHost::LoadStateForStandaloneTrace
+IsolatedSVGDocumentHost::LoadStateForStandaloneTraceForDiagnostics() const {
+  switch (load_state_) {
+    case kNotStarted:
+      return LoadStateForStandaloneTrace::kNotStarted;
+    case kPending:
+      return LoadStateForStandaloneTrace::kPending;
+    case kWaitingForAsyncLoadCompletion:
+      return LoadStateForStandaloneTrace::kWaitingForAsyncLoadCompletion;
+    case kCompleted:
+      return LoadStateForStandaloneTrace::kCompleted;
+  }
+  return LoadStateForStandaloneTrace::kNotStarted;
+}
+#endif
+
+namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool TraceStandaloneSvgImageLoadStages() {
+  static const bool enabled =
+      std::getenv("HTML_CSS_RENDERER_TRACE_IMAGE_PAINT") != nullptr;
+  return enabled;
+}
+
+const char* StandaloneSvgLoadStateName(
+    IsolatedSVGDocumentHost::LoadStateForStandaloneTrace state) {
+  switch (state) {
+    case IsolatedSVGDocumentHost::LoadStateForStandaloneTrace::kNotStarted:
+      return "not_started";
+    case IsolatedSVGDocumentHost::LoadStateForStandaloneTrace::kPending:
+      return "pending";
+    case IsolatedSVGDocumentHost::LoadStateForStandaloneTrace::
+        kWaitingForAsyncLoadCompletion:
+      return "waiting_for_async_load_completion";
+    case IsolatedSVGDocumentHost::LoadStateForStandaloneTrace::kCompleted:
+      return "completed";
+  }
+  return "unknown";
+}
+
+void TraceStandaloneSvgImageLoadStage(
+    const char* stage,
+    IsolatedSVGDocumentHost::LoadStateForStandaloneTrace state,
+    LocalFrame* frame) {
+  if (!TraceStandaloneSvgImageLoadStages()) {
+    return;
+  }
+  Document* document = frame ? frame->GetDocument() : nullptr;
+  std::fprintf(
+      stderr,
+      "standalone_svg_load.stage=%s state=%s frame=%p document=%p "
+      "load_event_finished=%d load_event_still_needed=%d "
+      "is_delaying_load_event=%d has_finished_parsing=%d "
+      "blocking_request_count=%d is_in_request_resource=%d\n",
+      stage, StandaloneSvgLoadStateName(state), static_cast<void*>(frame),
+      static_cast<void*>(document),
+      document ? static_cast<int>(document->LoadEventFinished()) : -1,
+      document ? static_cast<int>(document->LoadEventStillNeeded()) : -1,
+      document ? static_cast<int>(document->IsDelayingLoadEvent()) : -1,
+      document ? static_cast<int>(document->HasFinishedParsing()) : -1,
+      document && document->Fetcher()
+          ? document->Fetcher()->BlockingRequestCount()
+          : -1,
+      document && document->Fetcher()
+          ? static_cast<int>(document->Fetcher()->IsInRequestResource())
+          : -1);
+  std::fflush(stderr);
+}
+#endif
+
+}  // namespace
 
 // IsolatedSVGDocumentHost::LocalFrameClient is used to wait until the SVG
 // document's load event is fired in the case where there are subresources
@@ -73,6 +152,14 @@ class IsolatedSVGDocumentHost::LocalFrameClient : public EmptyLocalFrameClient {
   }
 
   void DispatchDidHandleOnloadEvents() override {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageLoadStage(
+        "LocalFrameClient::DispatchDidHandleOnloadEvents",
+        host_ ? host_->LoadStateForStandaloneTraceForDiagnostics()
+              : IsolatedSVGDocumentHost::LoadStateForStandaloneTrace::
+                    kNotStarted,
+        host_ ? host_->GetFrame() : nullptr);
+#endif
     if (host_) {
       host_->LoadCompleted();
     }
@@ -91,6 +178,11 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     ProcessingMode processing_mode)
     : async_load_callback_(std::move(async_load_callback)) {
   TRACE_EVENT("blink", "IsolatedSVGDocumentHost::IsolatedSVGDocumentHost");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageLoadStage("constructor begin",
+                                   LoadStateForStandaloneTraceForDiagnostics(),
+                                   nullptr);
+#endif
 
   // The isolated document will fire events (and the default C++ handlers run)
   // but doesn't actually allow scripts to run so it's fine to call into it. We
@@ -154,6 +246,11 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
                 "IsolatedSVGDocumentHost::IsolatedSVGDocumentHost::load");
     frame->ForceSynchronousDocumentInstall(AtomicString("image/svg+xml"),
                                            *data);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageLoadStage("after ForceSynchronousDocumentInstall",
+                                     LoadStateForStandaloneTraceForDiagnostics(),
+                                     frame);
+#endif
   }
 
   // Set up our Page reference after installing our document. This avoids
@@ -164,6 +261,11 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
   // Intrinsic sizing relies on computed style (e.g. font-size and
   // writing-mode).
   frame->GetDocument()->UpdateStyleAndLayoutTree();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageLoadStage("after UpdateStyleAndLayoutTree",
+                                   LoadStateForStandaloneTraceForDiagnostics(),
+                                   frame);
+#endif
 
   switch (load_state_) {
     case kPending:
@@ -174,6 +276,11 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     case kCompleted:
       if (!frame->GetDocument()->LoadEventFinished()) {
         load_state_ = kWaitingForAsyncLoadCompletion;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneSvgImageLoadStage(
+            "constructor posting AsyncLoadCompleted",
+            LoadStateForStandaloneTraceForDiagnostics(), frame);
+#endif
         async_load_task_handle_ = PostCancellableTask(
             *frame->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
             BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
@@ -183,6 +290,12 @@ IsolatedSVGDocumentHost::IsolatedSVGDocumentHost(
     case kNotStarted:
       NOTREACHED();
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  ScheduleStandaloneLoadCompletionCheck();
+  TraceStandaloneSvgImageLoadStage("constructor end",
+                                   LoadStateForStandaloneTraceForDiagnostics(),
+                                   frame);
+#endif
 }
 
 void IsolatedSVGDocumentHost::CopySettingsFrom(
@@ -223,12 +336,27 @@ SVGSVGElement* IsolatedSVGDocumentHost::RootElement() {
 }
 
 void IsolatedSVGDocumentHost::LoadCompleted() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageLoadStage("LoadCompleted begin",
+                                   LoadStateForStandaloneTraceForDiagnostics(),
+                                   GetFrame());
+#endif
   switch (load_state_) {
     case kPending:
       if (GetFrame()->GetDocument()->LoadEventFinished()) {
         load_state_ = kCompleted;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneSvgImageLoadStage(
+            "LoadCompleted marked completed",
+            LoadStateForStandaloneTraceForDiagnostics(), GetFrame());
+#endif
       } else {
         load_state_ = kWaitingForAsyncLoadCompletion;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneSvgImageLoadStage(
+            "LoadCompleted posting AsyncLoadCompleted from pending",
+            LoadStateForStandaloneTraceForDiagnostics(), GetFrame());
+#endif
         async_load_task_handle_ = PostCancellableTask(
             *GetFrame()->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
             BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
@@ -242,6 +370,11 @@ void IsolatedSVGDocumentHost::LoadCompleted() {
       // to avoid potential bugs and timing dependencies around
       // DispatchLoadEventAndFinalize() and to make LoadEventFinished() true
       // when AsyncLoadCompleted() is called.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneSvgImageLoadStage(
+          "LoadCompleted posting AsyncLoadCompleted from waiting",
+          LoadStateForStandaloneTraceForDiagnostics(), GetFrame());
+#endif
       async_load_task_handle_ = PostCancellableTask(
           *GetFrame()->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
           BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
@@ -255,7 +388,17 @@ void IsolatedSVGDocumentHost::LoadCompleted() {
 }
 
 void IsolatedSVGDocumentHost::AsyncLoadCompleted() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageLoadStage("AsyncLoadCompleted begin",
+                                   LoadStateForStandaloneTraceForDiagnostics(),
+                                   GetFrame());
+#endif
   if (!GetFrame()->GetDocument()->LoadEventFinished()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageLoadStage(
+        "AsyncLoadCompleted reposting because load event unfinished",
+        LoadStateForStandaloneTraceForDiagnostics(), GetFrame());
+#endif
     async_load_task_handle_ = PostCancellableTask(
         *GetFrame()->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
         BindOnce(&IsolatedSVGDocumentHost::AsyncLoadCompleted,
@@ -264,8 +407,71 @@ void IsolatedSVGDocumentHost::AsyncLoadCompleted() {
   }
 
   load_state_ = kCompleted;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageLoadStage("AsyncLoadCompleted running callback",
+                                   LoadStateForStandaloneTraceForDiagnostics(),
+                                   GetFrame());
+#endif
   std::move(async_load_callback_).Run();
 }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void IsolatedSVGDocumentHost::ScheduleStandaloneLoadCompletionCheck() {
+  if (load_state_ != kWaitingForAsyncLoadCompletion || !GetFrame()) {
+    return;
+  }
+  TraceStandaloneSvgImageLoadStage(
+      "posting standalone load completion check",
+      LoadStateForStandaloneTraceForDiagnostics(), GetFrame());
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      base::SingleThreadTaskRunner::HasCurrentDefault()
+          ? base::SingleThreadTaskRunner::GetCurrentDefault()
+          : GetFrame()->GetTaskRunner(TaskType::kInternalLoading);
+  standalone_load_completion_task_handle_ = PostCancellableTask(
+      *task_runner, FROM_HERE,
+      BindOnce(&IsolatedSVGDocumentHost::MaybeFinalizeStandaloneSynchronousLoad,
+               WrapPersistent(this)));
+}
+
+void IsolatedSVGDocumentHost::MaybeFinalizeStandaloneSynchronousLoad() {
+  LocalFrame* frame = GetFrame();
+  Document* document = frame ? frame->GetDocument() : nullptr;
+  TraceStandaloneSvgImageLoadStage(
+      "standalone load completion check begin",
+      LoadStateForStandaloneTraceForDiagnostics(), frame);
+  if (!document || document->LoadEventFinished() ||
+      load_state_ != kWaitingForAsyncLoadCompletion) {
+    return;
+  }
+  ResourceFetcher* fetcher = document->Fetcher();
+  if (!document->HasFinishedParsing() || document->IsDelayingLoadEvent() ||
+      (fetcher && (fetcher->BlockingRequestCount() ||
+                   fetcher->IsInRequestResource()))) {
+    TraceStandaloneSvgImageLoadStage(
+        "standalone load completion check deferred",
+        LoadStateForStandaloneTraceForDiagnostics(), frame);
+    ScheduleStandaloneLoadCompletionCheck();
+    return;
+  }
+
+  TraceStandaloneSvgImageLoadStage(
+      "standalone load completion check before CheckCompleted",
+      LoadStateForStandaloneTraceForDiagnostics(), frame);
+  EventDispatchForbiddenScope::AllowUserAgentEvents allow_events;
+  document->CheckCompleted();
+  TraceStandaloneSvgImageLoadStage(
+      "standalone load completion check after CheckCompleted",
+      LoadStateForStandaloneTraceForDiagnostics(), frame);
+  if (load_state_ == kWaitingForAsyncLoadCompletion &&
+      document->LoadEventFinished()) {
+    async_load_task_handle_.Cancel();
+    TraceStandaloneSvgImageLoadStage(
+        "standalone load completion check running AsyncLoadCompleted directly",
+        LoadStateForStandaloneTraceForDiagnostics(), frame);
+    AsyncLoadCompleted();
+  }
+}
+#endif
 
 void IsolatedSVGDocumentHost::Shutdown() {
   AllowDestroyingLayoutObjectInFinalizerScope scope;
@@ -281,6 +487,9 @@ void IsolatedSVGDocumentHost::Shutdown() {
 
   // Cancel any in-flight async load task.
   async_load_task_handle_.Cancel();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  standalone_load_completion_task_handle_.Cancel();
+#endif
 
   // It is safe to allow UA events within this scope, because event
   // dispatching inside the isolated document doesn't trigger JavaScript

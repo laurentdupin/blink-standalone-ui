@@ -13,12 +13,6 @@
 
 namespace blink {
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-// BoxFragmentPainter computes the correct physical-fragment paint offset for
-// legacy descendants that cannot be painted by fragment traversal.
-std::optional<PhysicalOffset> StandaloneCurrentFragmentPaintOffsetOverride();
-#endif
-
 ScopedPaintState::ScopedPaintState(const LayoutObject& object,
                                    const PaintInfo& paint_info,
                                    const FragmentData* fragment_data)
@@ -33,14 +27,6 @@ ScopedPaintState::ScopedPaintState(const LayoutObject& object,
   }
 
   paint_offset_ = fragment_to_paint_->PaintOffset();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (!object.IsSVGChild()) {
-    if (std::optional<PhysicalOffset> standalone_paint_offset =
-            StandaloneCurrentFragmentPaintOffsetOverride()) {
-      paint_offset_ = *standalone_paint_offset;
-    }
-  }
-#endif
   if (paint_info.phase == PaintPhase::kOverlayOverflowControls ||
       (object.HasLayer() &&
        To<LayoutBoxModelObject>(object).HasSelfPaintingLayer())) {
@@ -196,8 +182,9 @@ void ScopedBoxContentsPaintState::AdjustForBoxContents(const LayoutBox& box) {
         // boxes because they don't scroll in the viewport.
         if (const auto* properties = fragment_to_paint_->PaintProperties()) {
           if (const auto* translation = properties->PaintOffsetTranslation()) {
-            if (translation->ScrollTranslationForFixed())
+            if (translation->ScrollParentScrollTranslation()) {
               mf_ignore_scope_.emplace(*mf_checker);
+            }
           }
         }
       }

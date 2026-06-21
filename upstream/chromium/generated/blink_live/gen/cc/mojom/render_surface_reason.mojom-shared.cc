@@ -68,6 +68,8 @@ NOINLINE static const char* RenderSurfaceReasonToStringHelper(RenderSurfaceReaso
       return "kGradientMask";
     case RenderSurfaceReason::k2DScaleTransformWithCompositedDescendants:
       return "k2DScaleTransformWithCompositedDescendants";
+    case RenderSurfaceReason::kUnboundedElement:
+      return "kUnboundedElement";
     case RenderSurfaceReason::kTest:
       return "kTest";
     default:

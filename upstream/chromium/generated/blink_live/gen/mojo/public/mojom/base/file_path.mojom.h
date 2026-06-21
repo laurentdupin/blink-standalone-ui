@@ -31,8 +31,6 @@
 
 
 
-#include "mojo/public/cpp/base/file_path_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -43,11 +41,7 @@ namespace mojo_base::mojom {
 
 
 
-
-
-
-
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) FilePath {
+class  FilePath {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<FilePath, T>::value>;
@@ -73,9 +67,6 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) FilePath {
 
   FilePath();
 
-  explicit FilePath(
-      std::vector<uint16_t> path);
-
 
   ~FilePath();
 
@@ -96,6 +87,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) FilePath {
 
   template <typename T, FilePath::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -158,8 +150,6 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) FilePath {
         input, input.payload(), input.payload_num_bytes(), output, Validate);
   }
 
-  
-  std::vector<uint16_t> path;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -194,7 +184,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) RelativeFilePath {
+class  RelativeFilePath {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<RelativeFilePath, T>::value>;
@@ -220,9 +210,6 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) RelativeFilePath {
 
   RelativeFilePath();
 
-  explicit RelativeFilePath(
-      std::vector<uint16_t> path);
-
 
   ~RelativeFilePath();
 
@@ -243,6 +230,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) RelativeFilePath {
 
   template <typename T, RelativeFilePath::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -305,8 +293,6 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) RelativeFilePath {
         input, input.payload(), input.payload_num_bytes(), output, Validate);
   }
 
-  
-  std::vector<uint16_t> path;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -337,48 +323,38 @@ bool operator>=(const T& lhs, const T& rhs) {
   return !(lhs < rhs);
 }
 
+
+
+
+
 template <typename StructPtrType>
 FilePathPtr FilePath::Clone() const {
   return New(
-      mojo::Clone(path)
   );
 }
 
 template <typename T, FilePath::EnableIfSame<T>*>
 bool FilePath::Equals(const T& other_struct) const {
-  if (!mojo::Equals(this->path, other_struct.path))
-    return false;
   return true;
 }
 
 template <typename T, FilePath::EnableIfSame<T>*>
 bool operator<(const T& lhs, const T& rhs) {
-  if (lhs.path < rhs.path)
-    return true;
-  if (rhs.path < lhs.path)
-    return false;
   return false;
 }
 template <typename StructPtrType>
 RelativeFilePathPtr RelativeFilePath::Clone() const {
   return New(
-      mojo::Clone(path)
   );
 }
 
 template <typename T, RelativeFilePath::EnableIfSame<T>*>
 bool RelativeFilePath::Equals(const T& other_struct) const {
-  if (!mojo::Equals(this->path, other_struct.path))
-    return false;
   return true;
 }
 
 template <typename T, RelativeFilePath::EnableIfSame<T>*>
 bool operator<(const T& lhs, const T& rhs) {
-  if (lhs.path < rhs.path)
-    return true;
-  if (rhs.path < lhs.path)
-    return false;
   return false;
 }
 
@@ -389,30 +365,20 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::FilePath::DataView,
+struct  StructTraits<::mojo_base::mojom::FilePath::DataView,
                                          ::mojo_base::mojom::FilePathPtr> {
   static bool IsNull(const ::mojo_base::mojom::FilePathPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::FilePathPtr* output) { output->reset(); }
-
-  static const decltype(::mojo_base::mojom::FilePath::path)& path(
-      const ::mojo_base::mojom::FilePathPtr& input) {
-    return input->path;
-  }
 
   static bool Read(::mojo_base::mojom::FilePath::DataView input, ::mojo_base::mojom::FilePathPtr* output);
 };
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::RelativeFilePath::DataView,
+struct  StructTraits<::mojo_base::mojom::RelativeFilePath::DataView,
                                          ::mojo_base::mojom::RelativeFilePathPtr> {
   static bool IsNull(const ::mojo_base::mojom::RelativeFilePathPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::RelativeFilePathPtr* output) { output->reset(); }
-
-  static const decltype(::mojo_base::mojom::RelativeFilePath::path)& path(
-      const ::mojo_base::mojom::RelativeFilePathPtr& input) {
-    return input->path;
-  }
 
   static bool Read(::mojo_base::mojom::RelativeFilePath::DataView input, ::mojo_base::mojom::RelativeFilePathPtr* output);
 };

@@ -16,7 +16,11 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColorType.h"
 #include "third_party/skia/include/core/SkUnPreMultiply.h"
+#if defined(STANDALONE_RENDERER_NO_RUST)
+#include "third_party/skia/include/encode/SkPngEncoder.h"
+#else
 #include "third_party/skia/include/encode/SkPngRustEncoder.h"
+#endif
 #include "ui/gfx/codec/vector_wstream.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -170,8 +174,37 @@ SkBitmap PNGCodec::Decode(base::span<const uint8_t> input) {
 
 namespace {
 
+#if defined(STANDALONE_RENDERER_NO_RUST)
+using PngCompressionLevel = int;
+constexpr PngCompressionLevel kPngCompressionLow = 1;
+constexpr PngCompressionLevel kPngCompressionMedium = 6;
+
+bool EncodePng(SkWStream* dst,
+               const SkPixmap& src,
+               const SkPngEncoder::Options& options) {
+  return SkPngEncoder::Encode(dst, src, options);
+}
+#else
+using PngCompressionLevel = SkPngRustEncoder::CompressionLevel;
+constexpr PngCompressionLevel kPngCompressionLow =
+    SkPngRustEncoder::CompressionLevel::kLow;
+constexpr PngCompressionLevel kPngCompressionMedium =
+    SkPngRustEncoder::CompressionLevel::kMedium;
+
+bool EncodePng(SkWStream* dst,
+               const SkPixmap& src,
+               const SkPngRustEncoder::Options& options) {
+  return SkPngRustEncoder::Encode(dst, src, options);
+}
+#endif
+
+#if defined(STANDALONE_RENDERER_NO_RUST)
+void AddComments(SkPngEncoder::Options& options,
+                 const std::vector<PNGCodec::Comment>& comments) {
+#else
 void AddComments(SkPngRustEncoder::Options& options,
                  const std::vector<PNGCodec::Comment>& comments) {
+#endif
   std::vector<const char*> comment_pointers;
   std::vector<size_t> comment_sizes;
   for (const auto& comment : comments) {
@@ -188,14 +221,20 @@ void AddComments(SkPngRustEncoder::Options& options,
 std::optional<std::vector<uint8_t>> EncodeSkPixmap(
     const SkPixmap& src,
     const std::vector<PNGCodec::Comment>& comments,
-    SkPngRustEncoder::CompressionLevel compression_level) {
+    PngCompressionLevel compression_level) {
   std::vector<uint8_t> output;
   VectorWStream dst(&output);
 
+#if defined(STANDALONE_RENDERER_NO_RUST)
+  SkPngEncoder::Options options;
+  AddComments(options, comments);
+  options.fZLibLevel = compression_level;
+#else
   SkPngRustEncoder::Options options;
   AddComments(options, comments);
   options.fCompressionLevel = compression_level;
-  if (!SkPngRustEncoder::Encode(&dst, src, options)) {
+#endif
+  if (!EncodePng(&dst, src, options)) {
     return std::nullopt;
   }
 
@@ -206,7 +245,7 @@ std::optional<std::vector<uint8_t>> EncodeSkPixmap(
     const SkPixmap& src,
     bool discard_transparency,
     const std::vector<PNGCodec::Comment>& comments,
-    SkPngRustEncoder::CompressionLevel compression_level) {
+    PngCompressionLevel compression_level) {
   if (discard_transparency) {
     SkImageInfo opaque_info = src.info().makeAlphaType(kOpaque_SkAlphaType);
     SkBitmap copy;
@@ -241,7 +280,7 @@ std::optional<std::vector<uint8_t>> EncodeSkPixmap(
 std::optional<std::vector<uint8_t>> EncodeSkBitmap(
     const SkBitmap& input,
     bool discard_transparency,
-    SkPngRustEncoder::CompressionLevel compression_level) {
+    PngCompressionLevel compression_level) {
   SkPixmap src;
   if (!input.peekPixels(&src)) {
     return std::nullopt;
@@ -278,21 +317,20 @@ std::optional<std::vector<uint8_t>> PNGCodec::Encode(
       SkImageInfo::Make(size.width(), size.height(), colorType, alphaType);
   SkPixmap src(info, input, row_byte_width);
   return EncodeSkPixmap(src, discard_transparency, comments,
-                        SkPngRustEncoder::CompressionLevel::kMedium);
+                        kPngCompressionMedium);
 }
 
 std::optional<std::vector<uint8_t>> PNGCodec::EncodeBGRASkBitmap(
     const SkBitmap& input,
     bool discard_transparency) {
   return EncodeSkBitmap(input, discard_transparency,
-                        SkPngRustEncoder::CompressionLevel::kMedium);
+                        kPngCompressionMedium);
 }
 
 std::optional<std::vector<uint8_t>> PNGCodec::FastEncodeBGRASkBitmap(
     const SkBitmap& input,
     bool discard_transparency) {
-  return EncodeSkBitmap(input, discard_transparency,
-                        SkPngRustEncoder::CompressionLevel::kLow);
+  return EncodeSkBitmap(input, discard_transparency, kPngCompressionLow);
 }
 
 PNGCodec::Comment::Comment(const std::string& k, const std::string& t)

@@ -27,10 +27,10 @@ class FilePathDataView;
 class RelativeFilePathDataView;
 
 class FilePath;
-using FilePathPtr = mojo::StructPtr<FilePath>;
+using FilePathPtr = mojo::InlinedStructPtr<FilePath>;
 
 class RelativeFilePath;
-using RelativeFilePathPtr = mojo::StructPtr<RelativeFilePath>;
+using RelativeFilePathPtr = mojo::InlinedStructPtr<RelativeFilePath>;
 
 
 

@@ -6834,8 +6834,8 @@ NOINLINE static const char* WebFeatureToStringHelper(WebFeature value) {
       return "kOBSOLETE_FedCmLogoutRps";
     case WebFeature::kV8Navigator_DeprecatedReplaceInURN_Method:
       return "kV8Navigator_DeprecatedReplaceInURN_Method";
-    case WebFeature::kWebAppBorderless:
-      return "kWebAppBorderless";
+    case WebFeature::kOBSOLETE_WebAppBorderless:
+      return "kOBSOLETE_WebAppBorderless";
     case WebFeature::kPaymentInstruments:
       return "kPaymentInstruments";
     case WebFeature::kV8PaymentInstruments_Clear_Method:
@@ -6866,18 +6866,18 @@ NOINLINE static const char* WebFeatureToStringHelper(WebFeature value) {
       return "kScriptSchedulingType_Async";
     case WebFeature::kFocusgroup:
       return "kFocusgroup";
-    case WebFeature::kV8HTMLElement_Focusgroup_AttributeGetter:
-      return "kV8HTMLElement_Focusgroup_AttributeGetter";
-    case WebFeature::kV8HTMLElement_Focusgroup_AttributeSetter:
-      return "kV8HTMLElement_Focusgroup_AttributeSetter";
-    case WebFeature::kV8MathMLElement_Focusgroup_AttributeGetter:
-      return "kV8MathMLElement_Focusgroup_AttributeGetter";
-    case WebFeature::kV8MathMLElement_Focusgroup_AttributeSetter:
-      return "kV8MathMLElement_Focusgroup_AttributeSetter";
-    case WebFeature::kV8SVGElement_Focusgroup_AttributeGetter:
-      return "kV8SVGElement_Focusgroup_AttributeGetter";
-    case WebFeature::kV8SVGElement_Focusgroup_AttributeSetter:
-      return "kV8SVGElement_Focusgroup_AttributeSetter";
+    case WebFeature::kV8HTMLElement_FocusGroup_AttributeGetter:
+      return "kV8HTMLElement_FocusGroup_AttributeGetter";
+    case WebFeature::kV8HTMLElement_FocusGroup_AttributeSetter:
+      return "kV8HTMLElement_FocusGroup_AttributeSetter";
+    case WebFeature::kV8MathMLElement_FocusGroup_AttributeGetter:
+      return "kV8MathMLElement_FocusGroup_AttributeGetter";
+    case WebFeature::kV8MathMLElement_FocusGroup_AttributeSetter:
+      return "kV8MathMLElement_FocusGroup_AttributeSetter";
+    case WebFeature::kV8SVGElement_FocusGroup_AttributeGetter:
+      return "kV8SVGElement_FocusGroup_AttributeGetter";
+    case WebFeature::kV8SVGElement_FocusGroup_AttributeSetter:
+      return "kV8SVGElement_FocusGroup_AttributeSetter";
     case WebFeature::kCSSLegacyPerspectiveOrigin:
       return "kCSSLegacyPerspectiveOrigin";
     case WebFeature::kCSSLegacyTransformOrigin:
@@ -10016,8 +10016,8 @@ NOINLINE static const char* WebFeatureToStringHelper(WebFeature value) {
       return "kSynthesizedMiddleClickArea";
     case WebFeature::kSynthesizedMiddleClickSVGAnchor:
       return "kSynthesizedMiddleClickSVGAnchor";
-    case WebFeature::kWebAuthenticationCspDisallowsRpId:
-      return "kWebAuthenticationCspDisallowsRpId";
+    case WebFeature::kOBSOLETE_WebAuthenticationCspDisallowsRpId:
+      return "kOBSOLETE_WebAuthenticationCspDisallowsRpId";
     case WebFeature::kHistoryGoBackWouldSkipAd:
       return "kHistoryGoBackWouldSkipAd";
     case WebFeature::kHistoryGoForwardWouldSkipAd:
@@ -10142,6 +10142,76 @@ NOINLINE static const char* WebFeatureToStringHelper(WebFeature value) {
       return "kCSSURLRequestModifierReferrerPolicy";
     case WebFeature::kPreventSvgFilterPaint:
       return "kPreventSvgFilterPaint";
+    case WebFeature::kLanguageModel_Prompt_ResponseConstraint:
+      return "kLanguageModel_Prompt_ResponseConstraint";
+    case WebFeature::kLanguageModel_Prompt_Prefix:
+      return "kLanguageModel_Prompt_Prefix";
+    case WebFeature::kCapabilityElementIsValid:
+      return "kCapabilityElementIsValid";
+    case WebFeature::kCapabilityElementInvalidReason:
+      return "kCapabilityElementInvalidReason";
+    case WebFeature::kCapabilityElementInitialPermissionStatus:
+      return "kCapabilityElementInitialPermissionStatus";
+    case WebFeature::kCapabilityElementPermissionStatus:
+      return "kCapabilityElementPermissionStatus";
+    case WebFeature::kCapabilityElementOnPromptAction:
+      return "kCapabilityElementOnPromptAction";
+    case WebFeature::kCapabilityElementOnPromptDismiss:
+      return "kCapabilityElementOnPromptDismiss";
+    case WebFeature::kCapabilityElementOnValidationStatusChange:
+      return "kCapabilityElementOnValidationStatusChange";
+    case WebFeature::kInputParsedParentSelectNoOptions:
+      return "kInputParsedParentSelectNoOptions";
+    case WebFeature::kFocusGroupStart:
+      return "kFocusGroupStart";
+    case WebFeature::kWebAuthenticationRemoteCspDisallowsRpId:
+      return "kWebAuthenticationRemoteCspDisallowsRpId";
+    case WebFeature::kSpeculationMeasurement:
+      return "kSpeculationMeasurement";
+    case WebFeature::kCryptoAlgorithmMlKem768X25519:
+      return "kCryptoAlgorithmMlKem768X25519";
+    case WebFeature::kGeolocationAccuracyModeApproximate:
+      return "kGeolocationAccuracyModeApproximate";
+    case WebFeature::kSVGAnimVal:
+      return "kSVGAnimVal";
+    case WebFeature::kSubtleCryptoGetPublicKey:
+      return "kSubtleCryptoGetPublicKey";
+    case WebFeature::kCapabilityDelegationOfDigitalCredentialsCreate:
+      return "kCapabilityDelegationOfDigitalCredentialsCreate";
+    case WebFeature::kCapabilityDelegationOfDigitalCredentialsGet:
+      return "kCapabilityDelegationOfDigitalCredentialsGet";
+    case WebFeature::kModelContextGetTools:
+      return "kModelContextGetTools";
+    case WebFeature::kWebSpeechSttAvailable:
+      return "kWebSpeechSttAvailable";
+    case WebFeature::kWebSpeechSttStart:
+      return "kWebSpeechSttStart";
+    case WebFeature::kWebSpeechSttResultRetrieved:
+      return "kWebSpeechSttResultRetrieved";
+    case WebFeature::kWebSpeechSttError:
+      return "kWebSpeechSttError";
+    case WebFeature::kWebSpeechTtsSynthesize:
+      return "kWebSpeechTtsSynthesize";
+    case WebFeature::kWebSpeechTtsSuccess:
+      return "kWebSpeechTtsSuccess";
+    case WebFeature::kWebSpeechTtsError:
+      return "kWebSpeechTtsError";
+    case WebFeature::kSemanticEmbedder_Availability:
+      return "kSemanticEmbedder_Availability";
+    case WebFeature::kSemanticEmbedder_Create:
+      return "kSemanticEmbedder_Create";
+    case WebFeature::kSemanticEmbedder_Embed:
+      return "kSemanticEmbedder_Embed";
+    case WebFeature::kSemanticEmbedder_Destroy:
+      return "kSemanticEmbedder_Destroy";
+    case WebFeature::kEmailVerificationProtocol:
+      return "kEmailVerificationProtocol";
+    case WebFeature::kWebTransportDatagramDuplexStreamIncomingHighWaterMark:
+      return "kWebTransportDatagramDuplexStreamIncomingHighWaterMark";
+    case WebFeature::kWebTransportDatagramDuplexStreamOutgoingHighWaterMark:
+      return "kWebTransportDatagramDuplexStreamOutgoingHighWaterMark";
+    case WebFeature::kHistoryGoBackWouldSkipSameOriginAd:
+      return "kHistoryGoBackWouldSkipSameOriginAd";
     default:
       return nullptr;
   }

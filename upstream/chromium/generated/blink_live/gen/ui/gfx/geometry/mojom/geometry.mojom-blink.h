@@ -35,6 +35,7 @@
 
 
 #include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -48,7 +49,7 @@ namespace gfx::mojom::blink {
 
 
 
-class  Point {
+class BLINK_PLATFORM_EXPORT Point {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Point, T>::value>;
@@ -198,7 +199,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  PointF {
+class BLINK_PLATFORM_EXPORT PointF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<PointF, T>::value>;
@@ -248,6 +249,8 @@ class  PointF {
 
   template <typename T, PointF::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -348,7 +351,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Point3F {
+class BLINK_PLATFORM_EXPORT Point3F {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Point3F, T>::value>;
@@ -501,7 +504,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Size {
+class BLINK_PLATFORM_EXPORT Size {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Size, T>::value>;
@@ -551,6 +554,8 @@ class  Size {
 
   template <typename T, Size::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -651,7 +656,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  SizeF {
+class BLINK_PLATFORM_EXPORT SizeF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<SizeF, T>::value>;
@@ -801,7 +806,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Rect {
+class BLINK_PLATFORM_EXPORT Rect {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Rect, T>::value>;
@@ -957,7 +962,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  RectF {
+class BLINK_PLATFORM_EXPORT RectF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<RectF, T>::value>;
@@ -1113,7 +1118,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Insets {
+class BLINK_PLATFORM_EXPORT Insets {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Insets, T>::value>;
@@ -1269,7 +1274,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  InsetsF {
+class BLINK_PLATFORM_EXPORT InsetsF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<InsetsF, T>::value>;
@@ -1425,7 +1430,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Vector2d {
+class BLINK_PLATFORM_EXPORT Vector2d {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Vector2d, T>::value>;
@@ -1575,7 +1580,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Vector2dF {
+class BLINK_PLATFORM_EXPORT Vector2dF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Vector2dF, T>::value>;
@@ -1725,7 +1730,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Vector3dF {
+class BLINK_PLATFORM_EXPORT Vector3dF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Vector3dF, T>::value>;
@@ -1878,7 +1883,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  Quaternion {
+class BLINK_PLATFORM_EXPORT Quaternion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Quaternion, T>::value>;
@@ -2051,7 +2056,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  QuadF {
+class BLINK_PLATFORM_EXPORT QuadF {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<QuadF, T>::value>;
@@ -2207,7 +2212,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  AxisTransform2d {
+class BLINK_PLATFORM_EXPORT AxisTransform2d {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<AxisTransform2d, T>::value>;
@@ -2894,7 +2899,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Point::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Point::DataView,
                                          ::gfx::mojom::blink::PointPtr> {
   static bool IsNull(const ::gfx::mojom::blink::PointPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::PointPtr* output) { output->reset(); }
@@ -2914,7 +2919,7 @@ struct  StructTraits<::gfx::mojom::blink::Point::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::PointF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::PointF::DataView,
                                          ::gfx::mojom::blink::PointFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::PointFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::PointFPtr* output) { output->reset(); }
@@ -2934,7 +2939,7 @@ struct  StructTraits<::gfx::mojom::blink::PointF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Point3F::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Point3F::DataView,
                                          ::gfx::mojom::blink::Point3FPtr> {
   static bool IsNull(const ::gfx::mojom::blink::Point3FPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::Point3FPtr* output) { output->reset(); }
@@ -2959,7 +2964,7 @@ struct  StructTraits<::gfx::mojom::blink::Point3F::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Size::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Size::DataView,
                                          ::gfx::mojom::blink::SizePtr> {
   static bool IsNull(const ::gfx::mojom::blink::SizePtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::SizePtr* output) { output->reset(); }
@@ -2979,7 +2984,7 @@ struct  StructTraits<::gfx::mojom::blink::Size::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::SizeF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::SizeF::DataView,
                                          ::gfx::mojom::blink::SizeFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::SizeFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::SizeFPtr* output) { output->reset(); }
@@ -2999,7 +3004,7 @@ struct  StructTraits<::gfx::mojom::blink::SizeF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Rect::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Rect::DataView,
                                          ::gfx::mojom::blink::RectPtr> {
   static bool IsNull(const ::gfx::mojom::blink::RectPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::RectPtr* output) { output->reset(); }
@@ -3029,7 +3034,7 @@ struct  StructTraits<::gfx::mojom::blink::Rect::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::RectF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::RectF::DataView,
                                          ::gfx::mojom::blink::RectFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::RectFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::RectFPtr* output) { output->reset(); }
@@ -3059,7 +3064,7 @@ struct  StructTraits<::gfx::mojom::blink::RectF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Insets::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Insets::DataView,
                                          ::gfx::mojom::blink::InsetsPtr> {
   static bool IsNull(const ::gfx::mojom::blink::InsetsPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::InsetsPtr* output) { output->reset(); }
@@ -3089,7 +3094,7 @@ struct  StructTraits<::gfx::mojom::blink::Insets::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::InsetsF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::InsetsF::DataView,
                                          ::gfx::mojom::blink::InsetsFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::InsetsFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::InsetsFPtr* output) { output->reset(); }
@@ -3119,7 +3124,7 @@ struct  StructTraits<::gfx::mojom::blink::InsetsF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Vector2d::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Vector2d::DataView,
                                          ::gfx::mojom::blink::Vector2dPtr> {
   static bool IsNull(const ::gfx::mojom::blink::Vector2dPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::Vector2dPtr* output) { output->reset(); }
@@ -3139,7 +3144,7 @@ struct  StructTraits<::gfx::mojom::blink::Vector2d::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Vector2dF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Vector2dF::DataView,
                                          ::gfx::mojom::blink::Vector2dFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::Vector2dFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::Vector2dFPtr* output) { output->reset(); }
@@ -3159,7 +3164,7 @@ struct  StructTraits<::gfx::mojom::blink::Vector2dF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Vector3dF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Vector3dF::DataView,
                                          ::gfx::mojom::blink::Vector3dFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::Vector3dFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::Vector3dFPtr* output) { output->reset(); }
@@ -3184,7 +3189,7 @@ struct  StructTraits<::gfx::mojom::blink::Vector3dF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::Quaternion::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::Quaternion::DataView,
                                          ::gfx::mojom::blink::QuaternionPtr> {
   static bool IsNull(const ::gfx::mojom::blink::QuaternionPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::QuaternionPtr* output) { output->reset(); }
@@ -3214,7 +3219,7 @@ struct  StructTraits<::gfx::mojom::blink::Quaternion::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::QuadF::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::QuadF::DataView,
                                          ::gfx::mojom::blink::QuadFPtr> {
   static bool IsNull(const ::gfx::mojom::blink::QuadFPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::QuadFPtr* output) { output->reset(); }
@@ -3244,7 +3249,7 @@ struct  StructTraits<::gfx::mojom::blink::QuadF::DataView,
 
 
 template <>
-struct  StructTraits<::gfx::mojom::blink::AxisTransform2d::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::gfx::mojom::blink::AxisTransform2d::DataView,
                                          ::gfx::mojom::blink::AxisTransform2dPtr> {
   static bool IsNull(const ::gfx::mojom::blink::AxisTransform2dPtr& input) { return !input; }
   static void SetToNull(::gfx::mojom::blink::AxisTransform2dPtr* output) { output->reset(); }

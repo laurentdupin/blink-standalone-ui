@@ -12,6 +12,8 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "skia/public/mojom/hdr_metadata.mojom-params-data.h"
+#include "skia/public/mojom/hdr_metadata_mojom_traits.h"
+#include "skia/public/mojom/skcolorspace_primaries_mojom_traits.h"
 namespace skia {
 namespace mojom {
 

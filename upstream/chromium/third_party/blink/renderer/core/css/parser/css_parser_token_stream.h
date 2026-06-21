@@ -1,4 +1,4 @@
-﻿// Copyright 2017 The Chromium Authors
+// Copyright 2017 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -31,7 +31,7 @@
 // consume.) Once the BlockGuard goes out of scope, the stream fast-forwards to
 // the end of the block and past the block-end token. Abstractly, the stream
 // ends at either EOF or the beginning/end of a block. Internally, the stream
-// keeps a 窶彙lock stack窶・to know which end-of-block tokens actually correspond
+// keeps a “block stack” to know which end-of-block tokens actually correspond
 // to blocks we have descended into.
 
 #include <memory>
@@ -44,9 +44,6 @@
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#include <cstdio>
-#endif
 
 namespace blink {
 
@@ -193,12 +190,6 @@ class CORE_EXPORT CSSParserTokenStream {
   inline void LookAhead() {
     DCHECK(!HasLookAhead());
     next_ = tokenizer_.TokenizeSingle();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-    if (next_.GetType() == kIdentToken) {
-      StringView value = next_.Value();
-    } else {
-    }
-#endif
 #if DCHECK_IS_ON()
     peeked_at_next_ = false;
 #endif
@@ -217,7 +208,7 @@ class CORE_EXPORT CSSParserTokenStream {
   // (because the only caller in question wants it so).
   //
   // See FindLengthOfDeclarationList() for how to get a value for
-  // 窶彙ytes窶・quickly.
+  // “bytes” quickly.
   inline void SkipToEndOfBlock(wtf_size_t bytes) {
     DCHECK(HasLookAhead());
     DCHECK_EQ(next_.GetBlockType(), CSSParserToken::BlockType::kBlockStart);
@@ -319,7 +310,8 @@ class CORE_EXPORT CSSParserTokenStream {
   //
   // The tokens that we consume are discarded. So e.g., if we ask
   // to stop at semicolons, and the rest of the input looks like
-  // 窶・foo { color; } bar ; baz窶・ we would skip 窶・foo { color; } bar 窶・  // and stop there (the semicolon would remain in the lookahead slot).
+  // “.foo { color; } bar ; baz”, we would skip “.foo { color; } bar ”
+  // and stop there (the semicolon would remain in the lookahead slot).
   template <CSSParserTokenType... Types>
   void SkipUntilPeekedTypeIs() {
     EnsureLookAhead();

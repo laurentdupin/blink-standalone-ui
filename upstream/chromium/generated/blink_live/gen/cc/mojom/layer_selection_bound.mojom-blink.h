@@ -36,6 +36,8 @@
 
 
 
+#include "cc/mojom/layer_selection_bound_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -53,7 +55,7 @@ namespace cc::mojom::blink {
 
 
 
-class  LayerSelectionBound {
+class BLINK_PLATFORM_EXPORT LayerSelectionBound {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<LayerSelectionBound, T>::value>;
@@ -212,7 +214,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class  LayerSelection {
+class BLINK_PLATFORM_EXPORT LayerSelection {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<LayerSelection, T>::value>;
@@ -239,11 +241,9 @@ class  LayerSelection {
   LayerSelection();
 
   LayerSelection(
-      LayerSelectionBoundPtr start,
-      LayerSelectionBoundPtr end);
+      const ::cc::LayerSelectionBound& start,
+      const ::cc::LayerSelectionBound& end);
 
-LayerSelection(const LayerSelection&) = delete;
-LayerSelection& operator=(const LayerSelection&) = delete;
 
   ~LayerSelection();
 
@@ -327,9 +327,9 @@ LayerSelection& operator=(const LayerSelection&) = delete;
   }
 
   
-  LayerSelectionBoundPtr start;
+  ::cc::LayerSelectionBound start;
   
-  LayerSelectionBoundPtr end;
+  ::cc::LayerSelectionBound end;
 
   // Serialise this struct into a trace.
   void WriteIntoTrace(perfetto::TracedValue traced_context) const;
@@ -447,7 +447,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::cc::mojom::blink::LayerSelectionBound::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::cc::mojom::blink::LayerSelectionBound::DataView,
                                          ::cc::mojom::blink::LayerSelectionBoundPtr> {
   static bool IsNull(const ::cc::mojom::blink::LayerSelectionBoundPtr& input) { return !input; }
   static void SetToNull(::cc::mojom::blink::LayerSelectionBoundPtr* output) { output->reset(); }
@@ -482,7 +482,7 @@ struct  StructTraits<::cc::mojom::blink::LayerSelectionBound::DataView,
 
 
 template <>
-struct  StructTraits<::cc::mojom::blink::LayerSelection::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::cc::mojom::blink::LayerSelection::DataView,
                                          ::cc::mojom::blink::LayerSelectionPtr> {
   static bool IsNull(const ::cc::mojom::blink::LayerSelectionPtr& input) { return !input; }
   static void SetToNull(::cc::mojom::blink::LayerSelectionPtr* output) { output->reset(); }

@@ -1229,6 +1229,9 @@ void ElementRuleCollector::CollectMatchingPartPseudoRules(
 template <class CSSRuleCollection>
 static CSSRule* FindStyleRule(CSSRuleCollection* css_rules,
                               const StyleRule* style_rule) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   if (!css_rules) {
     return nullptr;
   }
@@ -1263,12 +1266,16 @@ static CSSRule* FindStyleRule(CSSRuleCollection* css_rules,
     }
   }
   return nullptr;
+#endif
 }
 
 void ElementRuleCollector::AppendCSSOMWrapperForRule(
     const TreeScope* tree_scope_containing_rule,
     const MatchedRule& matched_rule,
     wtf_size_t position) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#endif
   // For :visited/:link rules, the question of whether or not a selector
   // matches is delayed until cascade-time (see CascadeExpansion), hence such
   // rules may appear to match from ElementRuleCollector's output. This behavior

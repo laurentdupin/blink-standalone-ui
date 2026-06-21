@@ -45,6 +45,7 @@
 #include "cc/base/features.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/picture_layer.h"
+#include "cc/paint/paint_image.h"
 #include "cc/tiles/frame_viewer_instrumentation.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/view_transition/view_transition_request.h"
@@ -236,7 +237,12 @@ namespace {
 
 void TraceStandaloneLocalFrameViewStage(const char* stage) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  (void)stage;
+  if (!standalone_renderer_probe::
+          StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer()) {
+    return;
+  }
+  std::fprintf(stderr, "local_frame_view.stage=%s\n", stage ? stage : "(null)");
+  std::fflush(stderr);
 #endif
 }
 
@@ -3192,6 +3198,7 @@ void LocalFrameView::RunPaintLifecyclePhase(PaintBenchmarkMode benchmark_mode) {
   TraceStandaloneLocalFrameViewStage("RunPaint begin standalone");
   std::optional<PaintController> paint_controller;
   PaintTree(benchmark_mode, paint_controller);
+  PushPaintArtifactToCompositor(paint_controller.has_value());
   TraceStandaloneLocalFrameViewStage("RunPaint done standalone");
   return;
 #endif
@@ -3540,8 +3547,11 @@ const cc::Layer* LocalFrameView::RootCcLayer() const {
 }
 
 void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
+  TraceStandaloneLocalFrameViewStage("PushPaintArtifactToCompositor begin");
   TRACE_EVENT0("blink", "LocalFrameView::pushPaintArtifactToCompositor");
   if (!frame_->GetSettings()->GetAcceleratedCompositingEnabled()) {
+    TraceStandaloneLocalFrameViewStage(
+        "PushPaintArtifactToCompositor accelerated compositing disabled");
     if (paint_artifact_compositor_) {
       paint_artifact_compositor_->WillBeRemovedFromFrame();
       paint_artifact_compositor_ = nullptr;
@@ -3550,35 +3560,62 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
   }
 
   Page* page = GetFrame().GetPage();
-  if (!page)
+  if (!page) {
+    TraceStandaloneLocalFrameViewStage("PushPaintArtifactToCompositor no page");
     return;
-
-  if (!paint_artifact_compositor_) {
-    paint_artifact_compositor_ = MakeGarbageCollected<PaintArtifactCompositor>(
-        page->GetScrollingCoordinator()->GetScrollCallbacks());
-    page->GetChromeClient().AttachRootLayer(
-        paint_artifact_compositor_->RootLayer(), &GetFrame());
   }
 
+  if (!paint_artifact_compositor_) {
+    TraceStandaloneLocalFrameViewStage(
+        "PushPaintArtifactToCompositor before compositor create");
+    paint_artifact_compositor_ = MakeGarbageCollected<PaintArtifactCompositor>(
+        page->GetScrollingCoordinator()->GetScrollCallbacks());
+    TraceStandaloneLocalFrameViewStage(
+        "PushPaintArtifactToCompositor after compositor create");
+    TraceStandaloneLocalFrameViewStage(
+        "PushPaintArtifactToCompositor before AttachRootLayer");
+    page->GetChromeClient().AttachRootLayer(
+        paint_artifact_compositor_->RootLayer(), &GetFrame());
+    TraceStandaloneLocalFrameViewStage(
+        "PushPaintArtifactToCompositor after AttachRootLayer");
+  }
+
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor before preferences");
   paint_artifact_compositor_->SetLCDTextPreference(
       page->GetSettings().GetLCDTextPreference());
   paint_artifact_compositor_->SetDevicePixelRatio(
       frame_->GetDocument()->DevicePixelRatio());
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor after preferences");
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   SCOPED_UMA_AND_UKM_TIMER(GetUkmAggregator(),
                            LocalFrameUkmAggregator::kCompositingCommit);
   DEVTOOLS_TIMELINE_TRACE_EVENT("Layerize", inspector_layerize_event::Data,
                                 frame_.Get());
+#else
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor skipping browser instrumentation");
+#endif
 
   // Skip updating property trees, pushing cc::Layers, and issuing raster
   // invalidations if possible.
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor before fast path");
   if (paint_artifact_compositor_->TryFastPathUpdate(
           paint_controller_persistent_data_->GetPaintArtifact())) {
     // TODO(pdr): Should we clear the property tree state change bits (
     // |PaintArtifactCompositor::ClearPropertyTreeChangedState|)?
+    TraceStandaloneLocalFrameViewStage(
+        "PushPaintArtifactToCompositor fast path updated");
     return;
   }
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor after fast path");
 
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor before viewport properties");
   paint_artifact_compositor_->SetLayerDebugInfoEnabled(
       paint_debug_info_enabled_);
 
@@ -3607,6 +3644,8 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
   }
 
   StackScrollTranslationVector scroll_translation_nodes;
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor before scroll nodes");
   ForAllNonThrottledLocalFrameViews([&scroll_translation_nodes](
                                         LocalFrameView& frame_view) {
     // Skip scroll nodes from detached frames, or any subframe of a detached
@@ -3615,16 +3654,35 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
       return false;
     }
     for (const auto& area : frame_view.scrollable_areas_with_scroll_node_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      const auto* layout_box = area->GetLayoutBox();
+      if (!layout_box)
+        continue;
+      const auto* paint_properties =
+          layout_box->FirstFragment().PaintProperties();
+      if (!paint_properties || !paint_properties->Scroll() ||
+          !paint_properties->ScrollTranslation()) {
+        continue;
+      }
+      scroll_translation_nodes.push_back(paint_properties->ScrollTranslation());
+#else
       const auto* paint_properties =
           area->GetLayoutBox()->FirstFragment().PaintProperties();
       CHECK(paint_properties && paint_properties->Scroll());
       scroll_translation_nodes.push_back(paint_properties->ScrollTranslation());
+#endif
     }
     return true;
   });
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor after scroll nodes");
 
   Vector<std::unique_ptr<ViewTransitionRequest>> view_transition_requests;
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor before view transition requests");
   AppendViewTransitionRequests(view_transition_requests);
+  TraceStandaloneLocalFrameViewStage(
+      "PushPaintArtifactToCompositor after view transition requests");
 
 #if BUILDFLAG(IS_ANDROID)
   if (blink::features::IsXrDevice()) {
@@ -3632,10 +3690,12 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
   }
 #endif
 
+  TraceStandaloneLocalFrameViewStage("PushPaintArtifactToCompositor before Update");
   paint_artifact_compositor_->Update(
       paint_controller_persistent_data_->GetPaintArtifact(),
       viewport_properties, scroll_translation_nodes,
       std::move(view_transition_requests));
+  TraceStandaloneLocalFrameViewStage("PushPaintArtifactToCompositor done");
 }
 
 void LocalFrameView::AppendViewTransitionRequests(
@@ -4404,7 +4464,9 @@ void LocalFrameView::PropagateFrameRects() {
   gfx::Size frame_size = FrameRect().size();
   if (!frame_size_ || *frame_size_ != frame_size) {
     frame_size_ = frame_size;
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     GetFrame().GetLocalFrameHostRemote().FrameSizeChanged(frame_size);
+#endif
   }
 }
 
@@ -5544,6 +5606,17 @@ void LocalFrameView::RequestCanvasOnpaint(HTMLCanvasElement& canvas) {
   }
   ScheduleAnimation();
 #endif
+}
+
+scoped_refptr<const cc::AnimatedImageFrameIndexMap>
+LocalFrameView::GetAnimatedImageFrameIndexes() const {
+  return GetFrame().LocalFrameRoot().View()->animated_image_frame_indexes_;
+}
+
+void LocalFrameView::SetAnimatedImageFrameIndexes(
+    scoped_refptr<const cc::AnimatedImageFrameIndexMap> indexes) {
+  CHECK(GetFrame().IsLocalRoot());
+  animated_image_frame_indexes_ = indexes;
 }
 
 #if DCHECK_IS_ON()

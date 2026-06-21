@@ -25,6 +25,7 @@
 #include "cc/mojom/synced_scroll_offset.mojom-blink-import-headers.h"
 #include "cc/mojom/synced_scroll_offset.mojom-blink-test-utils.h"
 #include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 
 
 namespace cc::mojom::blink {

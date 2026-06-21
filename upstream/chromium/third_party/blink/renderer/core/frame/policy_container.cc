@@ -20,6 +20,11 @@ PolicyContainer::PolicyContainer(
 
 // static
 std::unique_ptr<PolicyContainer> PolicyContainer::CreateEmpty() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return std::make_unique<PolicyContainer>(
+      mojo::PendingAssociatedRemote<mojom::blink::PolicyContainerHost>(),
+      mojom::blink::PolicyContainerPolicies::New());
+#else
   // Create a dummy PolicyContainerHost remote. All the messages will be
   // ignored.
   mojo::AssociatedRemote<mojom::blink::PolicyContainerHost> dummy_host;
@@ -27,6 +32,7 @@ std::unique_ptr<PolicyContainer> PolicyContainer::CreateEmpty() {
 
   return std::make_unique<PolicyContainer>(
       dummy_host.Unbind(), mojom::blink::PolicyContainerPolicies::New());
+#endif
 }
 
 // static
@@ -48,6 +54,11 @@ network::mojom::blink::ReferrerPolicy PolicyContainer::GetReferrerPolicy()
 void PolicyContainer::UpdateReferrerPolicy(
     network::mojom::blink::ReferrerPolicy policy) {
   policies_->referrer_policy = policy;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!policy_container_host_remote_) {
+    return;
+  }
+#endif
   policy_container_host_remote_->SetReferrerPolicy(policy);
 }
 
@@ -61,6 +72,11 @@ void PolicyContainer::AddContentSecurityPolicies(
   for (const auto& policy : policies) {
     policies_->content_security_policies.push_back(policy->Clone());
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!policy_container_host_remote_) {
+    return;
+  }
+#endif
   policy_container_host_remote_->AddContentSecurityPolicies(
       std::move(policies));
 }

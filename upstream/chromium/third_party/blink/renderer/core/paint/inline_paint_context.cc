@@ -27,6 +27,17 @@ InlinePaintContext::ScopedInlineItem::ScopedInlineItem(
   last_decorations_ = inline_context->last_decorations_;
   push_count_ =
       inline_context->SyncDecoratingBox(item, saved_decorating_boxes_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const AppliedTextDecorationVector& standalone_decorations =
+      item.Style().AppliedTextDecorations();
+  while (inline_context->decorating_boxes_.size() <
+         standalone_decorations.size()) {
+    inline_context->PushDecoratingBox(item.ContentOffsetInContainerFragment(),
+                                      item.Style(), item.GetUsedFont(),
+                                      &standalone_decorations);
+    ++push_count_;
+  }
+#endif
   DCHECK_EQ(inline_context->decorating_boxes_.size(),
             item.Style().AppliedTextDecorations().size());
 }

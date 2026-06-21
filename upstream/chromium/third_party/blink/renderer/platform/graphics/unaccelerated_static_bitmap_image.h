@@ -21,7 +21,8 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
   // The ImageOrientation should be derived from the source of the image data.
   static scoped_refptr<UnacceleratedStaticBitmapImage> Create(
       sk_sp<SkImage>,
-      ImageOrientation orientation = ImageOrientationEnum::kDefault);
+      ImageOrientation orientation = ImageOrientationEnum::kDefault,
+      const gfx::HDRMetadata& hdr_metadata = {});
   static scoped_refptr<UnacceleratedStaticBitmapImage> Create(
       PaintImage,
       ImageOrientation orientation = ImageOrientationEnum::kDefault);
@@ -48,15 +49,19 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
   gfx::ColorSpace GetColorSpace() const override {
     return SkColorSpaceToGfxColorSpace(GetSkImageInfo().refColorSpace());
   }
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
   viz::SharedImageFormat GetSharedImageFormat() const override {
     return viz::SkColorTypeToSinglePlaneSharedImageFormat(
         GetSkImageInfo().colorType());
   }
-#endif
+
+  const gfx::HDRMetadata& GetHdrMetadata() const override {
+    return paint_image_.GetHDRMetadata();
+  }
 
  private:
-  UnacceleratedStaticBitmapImage(sk_sp<SkImage>, ImageOrientation);
+  UnacceleratedStaticBitmapImage(sk_sp<SkImage>,
+                                 ImageOrientation,
+                                 const gfx::HDRMetadata&);
   UnacceleratedStaticBitmapImage(PaintImage, ImageOrientation);
 
   PaintImage paint_image_;

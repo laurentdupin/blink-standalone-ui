@@ -25,6 +25,7 @@
 #include "mojo/public/mojom/base/byte_size.mojom-features.h"  // IWYU pragma: export
 #include "mojo/public/mojom/base/byte_size.mojom-shared.h"  // IWYU pragma: export
 #include "mojo/public/mojom/base/byte_size.mojom-blink-forward.h"  // IWYU pragma: export
+#include "mojo/public/mojom/base/byte_size.mojom-blink-import-headers.h"
 
 #include "mojo/public/cpp/bindings/lib/wtf_clone_equals_util.h"
 #include "mojo/public/cpp/bindings/lib/wtf_hash_util.h"
@@ -34,8 +35,6 @@
 
 
 
-#include "mojo/public/cpp/base/byte_size_mojom_traits.h"
-#include "base/component_export.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -49,7 +48,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) ByteSize {
+class  ByteSize {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ByteSize, T>::value>;
@@ -98,6 +97,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) ByteSize {
 
   template <typename T, ByteSize::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -196,7 +196,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) ByteSizeDelta {
+class  ByteSizeDelta {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ByteSizeDelta, T>::value>;
@@ -245,6 +245,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) ByteSizeDelta {
 
   template <typename T, ByteSizeDelta::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -395,7 +396,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::ByteSize::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::ByteSize::DataView,
                                          ::mojo_base::mojom::blink::ByteSizePtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::ByteSizePtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::ByteSizePtr* output) { output->reset(); }
@@ -410,7 +411,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::ByteSizeDelta::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::ByteSizeDelta::DataView,
                                          ::mojo_base::mojom::blink::ByteSizeDeltaPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::ByteSizeDeltaPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::ByteSizeDeltaPtr* output) { output->reset(); }

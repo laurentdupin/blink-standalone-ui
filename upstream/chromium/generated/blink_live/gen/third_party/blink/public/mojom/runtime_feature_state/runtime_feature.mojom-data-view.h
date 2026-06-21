@@ -61,7 +61,7 @@ enum class RuntimeFeature : int32_t {
   kMaxValue = 7,
 };
 
-COMPONENT_EXPORT(MOJOM_SHARED_BLINK_COMMON_EXPORT) std::ostream& operator<<(std::ostream& os, RuntimeFeature value);
+ std::ostream& operator<<(std::ostream& os, RuntimeFeature value);
 inline bool IsKnownEnumValue(RuntimeFeature value) {
   return internal::RuntimeFeature_Data::IsKnownValue(
       static_cast<int32_t>(value));

@@ -12,6 +12,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "cc/mojom/synced_scroll_offset.mojom-params-data.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 namespace cc {
 namespace mojom {
 

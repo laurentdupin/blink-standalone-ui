@@ -8,7 +8,6 @@
 #define MOJO_PUBLIC_MOJOM_BASE_TIME_MOJOM_TEST_UTILS_H_
 
 #include "mojo/public/mojom/base/time.mojom.h"
-#include "base/component_export.h"
 
 
 namespace mojo_base::mojom {

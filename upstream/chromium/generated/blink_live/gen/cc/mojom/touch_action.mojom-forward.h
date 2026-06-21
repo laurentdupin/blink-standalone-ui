@@ -7,23 +7,26 @@
 #ifndef CC_MOJOM_TOUCH_ACTION_MOJOM_FORWARD_H_
 #define CC_MOJOM_TOUCH_ACTION_MOJOM_FORWARD_H_
 
-#include <stdint.h>
+
+
+#include "mojo/public/cpp/bindings/struct_forward.h"
 
 
 
 
+#include "mojo/public/interfaces/bindings/native_struct.mojom-forward.h"
 
 
 
 
-
-namespace mojo {
-enum class NativeEnum;
-}  // namespace mojo
 
 
 namespace cc::mojom {
-using TouchAction = mojo::NativeEnum;
+class TouchActionDataView;
+
+class TouchAction;
+using TouchActionPtr = mojo::InlinedStructPtr<TouchAction>;
+
 
 
 

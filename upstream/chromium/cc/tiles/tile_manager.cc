@@ -56,6 +56,10 @@
 namespace cc {
 namespace {
 
+perfetto::NamedTrack GetTracingTrack(const TileManager* tile_manager) {
+  return perfetto::NamedTrack::FromPointer("cc::TileManager", tile_manager);
+}
+
 // Flag to indicate whether we should try and detect that
 // a tile is of solid color.
 const bool kUseColorEstimator = true;
@@ -415,20 +419,20 @@ TileManager::~TileManager() {
 }
 
 void TileManager::FinishTasksAndCleanUp() {
-  if (!tile_task_manager_)
-    return;
+  if (tile_task_manager_) {
+    global_state_ = GlobalStateThatImpactsTilePriority();
 
-  global_state_ = GlobalStateThatImpactsTilePriority();
+    // This cancels tasks if possible, finishes pending tasks, and release any
+    // uninitialized resources.
+    tile_task_manager_->Shutdown();
 
-  // This cancels tasks if possible, finishes pending tasks, and release any
-  // uninitialized resources.
-  tile_task_manager_->Shutdown();
+    raster_buffer_provider_->Shutdown();
 
-  raster_buffer_provider_->Shutdown();
+    tile_task_manager_->CheckForCompletedTasks();
 
-  tile_task_manager_->CheckForCompletedTasks();
+    tile_task_manager_ = nullptr;
+  }
 
-  tile_task_manager_ = nullptr;
   resource_pool_ = nullptr;
   pending_raster_queries_ = nullptr;
   more_tiles_need_prepare_check_notifier_.Cancel();
@@ -599,9 +603,8 @@ void TileManager::Release(Tile* tile) {
 void TileManager::DidFinishRunningTileTasksRequiredForActivation() {
   TRACE_EVENT0("cc",
                "TileManager::DidFinishRunningTileTasksRequiredForActivation");
-  TRACE_EVENT_INSTANT("cc", "ScheduledTasksState",
-                      perfetto::Track::FromPointer(this), "state",
-                      ScheduledTasksStateAsValue());
+  TRACE_EVENT_INSTANT("cc", "ScheduledTasksState", GetTracingTrack(this),
+                      "state", ScheduledTasksStateAsValue());
   // TODO(vmpstr): Temporary check to debug crbug.com/642927.
   CHECK(tile_task_manager_);
   signals_.activate_tile_tasks_completed = true;
@@ -610,9 +613,8 @@ void TileManager::DidFinishRunningTileTasksRequiredForActivation() {
 
 void TileManager::DidFinishRunningTileTasksRequiredForDraw() {
   TRACE_EVENT0("cc", "TileManager::DidFinishRunningTileTasksRequiredForDraw");
-  TRACE_EVENT_INSTANT("cc", "ScheduledTasksState",
-                      perfetto::Track::FromPointer(this), "state",
-                      ScheduledTasksStateAsValue());
+  TRACE_EVENT_INSTANT("cc", "ScheduledTasksState", GetTracingTrack(this),
+                      "state", ScheduledTasksStateAsValue());
   // TODO(vmpstr): Temporary check to debug crbug.com/642927.
   CHECK(tile_task_manager_);
   signals_.draw_tile_tasks_completed = true;
@@ -622,8 +624,7 @@ void TileManager::DidFinishRunningTileTasksRequiredForDraw() {
 void TileManager::DidFinishRunningAllTileTasks(base::TimeTicks start_time,
                                                bool has_pending_queries) {
   TRACE_EVENT0("cc", "TileManager::DidFinishRunningAllTileTasks");
-  TRACE_EVENT_END("cc",
-                  /*"ScheduledTasks"*/ perfetto::Track::FromPointer(this));
+  TRACE_EVENT_END("cc", /*"ScheduledTasks"*/ GetTracingTrack(this));
   DCHECK(resource_pool_);
   DCHECK(tile_task_manager_);
 
@@ -671,6 +672,7 @@ void TileManager::ExternalDependencyCompletedForRasterTask(
 
 bool TileManager::PrepareTiles(
     const GlobalStateThatImpactsTilePriority& state) {
+  TRACE_EVENT("cc", __PRETTY_FUNCTION__);
   ++prepare_tiles_count_;
   last_active_time_ = NowWithOverride();
   ScheduleReduceTileMemoryWhenIdle(base::TimeDelta());
@@ -685,6 +687,10 @@ bool TileManager::PrepareTiles(
   }
 
   signals_ = Signals();
+  if (global_state_.viewport_size != state.viewport_size) {
+    resource_pool_->NotifyOfViewportSizeChange(global_state_.viewport_size,
+                                               state.viewport_size);
+  }
   global_state_ = state;
 
   // Ensure that we don't schedule any decode work for checkered images until
@@ -1087,19 +1093,33 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
 
   did_oom_on_last_assign_ = !had_enough_memory_to_schedule_tiles_needed_now;
   // Since this is recorded once per frame, subsample these metrics.
-  if (metrics_sub_sampler_.ShouldSample(metrics_sampling_rate_)) {
+  if (base::ShouldRecordSubsampledMetric(metrics_sampling_rate_)) {
     if (!running_on_renderer_process_) {
       UMA_HISTOGRAM_BOOLEAN("Compositing.TileManager.EnoughMemory.Browser",
                             had_enough_memory_to_schedule_tiles_needed_now);
       if (had_enough_memory_to_schedule_tiles_needed_now) {
         UMA_HISTOGRAM_MEMORY_MEDIUM_MB(
-            "Compositing.TileManager.MemoryUsageWhenEnoughMemory",
+            "Compositing.TileManager.MemoryUsageWhenEnoughMemory.Browser",
             memory_usage.memory_bytes() / (1024 * 1024));
       }
       if (did_oom_on_last_assign_) {
         auto memory_limit = hard_memory_limit.memory_bytes() / (1024 * 1024);
         UMA_HISTOGRAM_MEMORY_MEDIUM_MB(
             "Compositing.TileManager.LimitWhenNotEnoughMemory.Browser",
+            memory_limit);
+      }
+    } else {
+      UMA_HISTOGRAM_BOOLEAN("Compositing.TileManager.EnoughMemory.Renderer",
+                            had_enough_memory_to_schedule_tiles_needed_now);
+      if (had_enough_memory_to_schedule_tiles_needed_now) {
+        UMA_HISTOGRAM_MEMORY_MEDIUM_MB(
+            "Compositing.TileManager.MemoryUsageWhenEnoughMemory.Renderer",
+            memory_usage.memory_bytes() / (1024 * 1024));
+      }
+      if (did_oom_on_last_assign_) {
+        auto memory_limit = hard_memory_limit.memory_bytes() / (1024 * 1024);
+        UMA_HISTOGRAM_MEMORY_MEDIUM_MB(
+            "Compositing.TileManager.LimitWhenNotEnoughMemory.Renderer",
             memory_limit);
       }
     }
@@ -1164,7 +1184,7 @@ void TileManager::PartitionImagesForCheckering(
     std::vector<DrawImage>* sync_decoded_images,
     std::vector<PaintImage>* checkered_images,
     const gfx::Rect* invalidated_rect,
-    base::flat_map<PaintImage::Id, size_t>* image_to_frame_index) {
+    scoped_refptr<AnimatedImageFrameIndexMap> image_to_frame_index) {
   Tile* tile = prioritized_tile.tile();
   gfx::Rect enclosing_rect = tile->enclosing_layer_rect();
   if (invalidated_rect) {
@@ -1213,7 +1233,7 @@ void TileManager::AddCheckeredImagesToDecodeQueue(
 }
 
 void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
-  auto start_time = metrics_sub_sampler_.ShouldSample(metrics_sampling_rate_)
+  auto start_time = base::ShouldRecordSubsampledMetric(metrics_sampling_rate_)
                         ? base::TimeTicks::Now()
                         : base::TimeTicks();
 
@@ -1225,8 +1245,7 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
   DCHECK(did_check_for_completed_tasks_since_last_schedule_tasks_);
 
   if (!has_scheduled_tile_tasks_) {
-    TRACE_EVENT_BEGIN("cc", "ScheduledTasks",
-                      perfetto::Track::FromPointer(this));
+    TRACE_EVENT_BEGIN("cc", "ScheduledTasks", GetTracingTrack(this));
   }
 
   // Cancel existing OnTaskSetFinished callbacks.
@@ -1420,9 +1439,8 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
 
   did_check_for_completed_tasks_since_last_schedule_tasks_ = false;
 
-  TRACE_EVENT_INSTANT("cc", "ScheduledTasksState",
-                      perfetto::Track::FromPointer(this), "state",
-                      ScheduledTasksStateAsValue());
+  TRACE_EVENT_INSTANT("cc", "ScheduledTasksState", GetTracingTrack(this),
+                      "state", ScheduledTasksStateAsValue());
 }
 
 scoped_refptr<TileTask> TileManager::CreateRasterTask(
@@ -1461,7 +1479,7 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
         &invalidated_rect, target_color_params.color_space, debug_name);
 
     constexpr double kLogProbability = 0.001;
-    if (metrics_sub_sampler_.ShouldSample(kLogProbability)) {
+    if (base::ShouldRecordSubsampledMetric(kLogProbability)) {
       // Note this minimum area needs to be above zero to avoid division by zero
       // error.
       constexpr uint64_t kMinAreaForReporting = 256 * 256;
@@ -1505,11 +1523,12 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
       scheduled_draw_images_[tile->id()];
   sync_decoded_images.clear();
   std::vector<PaintImage> checkered_images;
-  base::flat_map<PaintImage::Id, size_t> image_id_to_current_frame_index;
+  scoped_refptr<AnimatedImageFrameIndexMap> image_id_to_current_frame_index =
+      base::MakeRefCounted<AnimatedImageFrameIndexMap>();
   PartitionImagesForCheckering(
       prioritized_tile, target_color_params, &sync_decoded_images,
       &checkered_images, partial_tile_decode ? &invalidated_rect : nullptr,
-      &image_id_to_current_frame_index);
+      image_id_to_current_frame_index);
 
   // Get the tasks for the required images.
   ImageDecodeCache::TracingInfo tracing_info(

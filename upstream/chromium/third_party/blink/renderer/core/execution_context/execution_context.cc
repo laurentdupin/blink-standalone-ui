@@ -522,9 +522,11 @@ void ExecutionContext::SetPolicyContainer(
       policy_container_->GetPolicies();
   security_context_.SetSandboxFlags(policies.sandbox_flags);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   IntegrityPolicy::LogParsingErrorsIfAny(this, policies.integrity_policy);
   IntegrityPolicy::LogParsingErrorsIfAny(this,
                                          policies.integrity_policy_report_only);
+#endif
 }
 
 std::unique_ptr<PolicyContainer> ExecutionContext::TakePolicyContainer() {

@@ -14,6 +14,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "skia/public/mojom/image_info.mojom-params-data.h"
+#include "skia/public/mojom/image_info_mojom_traits.h"
 namespace skia {
 namespace mojom {
 

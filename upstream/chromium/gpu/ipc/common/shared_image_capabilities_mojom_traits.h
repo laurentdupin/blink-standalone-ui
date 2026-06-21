@@ -8,7 +8,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/shared_image_capabilities.h"
 #include "gpu/ipc/common/gpu_ipc_common_export.h"
-#include "gpu/ipc/common/shared_image_capabilities.mojom.h"
+#include "gpu/ipc/common/shared_image_capabilities.mojom-shared.h"
 
 namespace mojo {
 

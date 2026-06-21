@@ -30,7 +30,6 @@
 
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 
-#include <cstdio>
 #include <cstdint>
 #include <limits>
 #include <memory>

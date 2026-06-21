@@ -35,6 +35,8 @@
 
 
 
+#include "cc/mojom/synced_scroll_offset_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -51,7 +53,7 @@ namespace cc::mojom::blink {
 
 
 
-class  SyncedScrollOffset {
+class BLINK_PLATFORM_EXPORT SyncedScrollOffset {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<SyncedScrollOffset, T>::value>;
@@ -224,7 +226,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::cc::mojom::blink::SyncedScrollOffset::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::cc::mojom::blink::SyncedScrollOffset::DataView,
                                          ::cc::mojom::blink::SyncedScrollOffsetPtr> {
   static bool IsNull(const ::cc::mojom::blink::SyncedScrollOffsetPtr& input) { return !input; }
   static void SetToNull(::cc::mojom::blink::SyncedScrollOffsetPtr* output) { output->reset(); }

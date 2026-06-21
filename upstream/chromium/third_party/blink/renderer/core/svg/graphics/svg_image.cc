@@ -28,7 +28,6 @@
 #include "third_party/blink/renderer/core/svg/graphics/svg_image.h"
 
 #include "base/memory/scoped_refptr.h"
-#include <cstdio>
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
@@ -61,6 +60,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_shader.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -69,9 +69,60 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 
+#include <cstdlib>
+#include <cstdio>
+
 namespace blink {
 
 namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool TraceStandaloneSvgImageStages() {
+  static const bool enabled =
+      std::getenv("HTML_CSS_RENDERER_TRACE_IMAGE_PAINT") != nullptr;
+  return enabled;
+}
+
+void TraceStandaloneSvgImageStage(const char* stage) {
+  if (!TraceStandaloneSvgImageStages()) {
+    return;
+  }
+  std::fprintf(stderr, "standalone_svg_image.stage=%s\n", stage);
+  std::fflush(stderr);
+}
+
+void TraceStandaloneSvgImageState(const char* stage,
+                                  bool all_data_received,
+                                  SVGImage* image,
+                                  IsolatedSVGDocumentHost* host) {
+  if (!TraceStandaloneSvgImageStages()) {
+    return;
+  }
+  LocalFrame* frame = host ? host->GetFrame() : nullptr;
+  Document* document = frame ? frame->GetDocument() : nullptr;
+  std::fprintf(
+      stderr,
+      "standalone_svg_image.stage=%s all_data_received=%d image=%p host=%p "
+      "frame=%p document=%p host_loaded=%d load_event_finished=%d "
+      "load_event_still_needed=%d is_delaying_load_event=%d "
+      "has_finished_parsing=%d blocking_request_count=%d "
+      "is_in_request_resource=%d\n",
+      stage, static_cast<int>(all_data_received), static_cast<void*>(image),
+      static_cast<void*>(host), static_cast<void*>(frame),
+      static_cast<void*>(document), host ? static_cast<int>(host->IsLoaded()) : -1,
+      document ? static_cast<int>(document->LoadEventFinished()) : -1,
+      document ? static_cast<int>(document->LoadEventStillNeeded()) : -1,
+      document ? static_cast<int>(document->IsDelayingLoadEvent()) : -1,
+      document ? static_cast<int>(document->HasFinishedParsing()) : -1,
+      document && document->Fetcher()
+          ? document->Fetcher()->BlockingRequestCount()
+          : -1,
+      document && document->Fetcher()
+          ? static_cast<int>(document->Fetcher()->IsInRequestResource())
+          : -1);
+  std::fflush(stderr);
+}
+#endif
 
 bool HasSmilAnimations(const Document& document) {
   const SVGDocumentExtensions* extensions = document.SvgExtensions();
@@ -423,34 +474,64 @@ void SVGImage::Draw(cc::PaintCanvas* canvas,
                     const gfx::RectF& dst_rect,
                     const gfx::RectF& src_rect,
                     const ImageDrawOptions& draw_options) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("Draw begin");
+#endif
   const DrawInfo draw_info(gfx::SizeF(intrinsic_size_), 1, nullptr,
                            draw_options.apply_dark_mode);
   DrawInternal(draw_info, canvas, flags, dst_rect, src_rect);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("Draw end");
+#endif
 }
 
 std::optional<PaintRecord> SVGImage::PaintRecordForCurrentFrame(
     const DrawInfo& draw_info,
     const gfx::Rect* cull_rect) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord begin");
+#endif
   if (!document_host_) {
     return std::nullopt;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after document_host check");
+#endif
   // Temporarily disable the image observer to prevent ChangeInRect() calls due
   // re-laying out the image.
   ImageObserverDisabler disable_image_observer(this);
 
   if (LayoutSVGRoot* layout_root = LayoutRoot()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageStage("PaintRecord before SetContainerSize");
+#endif
     layout_root->SetContainerSize(
         PhysicalSize::FromSizeFFloor(draw_info.ContainerSize()));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageStage("PaintRecord after SetContainerSize");
+#endif
   }
   LocalFrame* frame = GetFrame();
   LocalFrameView* view = frame->View();
   const gfx::Size rounded_container_size = draw_info.RoundedContainerSize();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord before view Resize");
+#endif
   view->Resize(rounded_container_size);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after view Resize");
+#endif
   frame->GetPage()->GetVisualViewport().SetSize(rounded_container_size);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after visual viewport size");
+#endif
 
   // Always call ApplyViewInfo, even if there's no view specification, because
   // there may have been a previous view info that needs to be reset.
   ApplyViewInfo(draw_info.View());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after ApplyViewInfo");
+#endif
 
   // If the image was reset, we need to rewind the timeline back to 0. This
   // needs to be done before painting, or else we wouldn't get the correct
@@ -458,11 +539,20 @@ std::optional<PaintRecord> SVGImage::PaintRecordForCurrentFrame(
   // time=0.) The reason we do this here and not in resetAnimation() is to
   // avoid setting timers from the latter.
   FlushPendingTimelineRewind();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after timeline rewind");
+#endif
 
   frame->GetPage()->GetSettings().SetForceDarkModeEnabled(
       draw_info.IsDarkModeEnabled());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord before lifecycle");
+#endif
 
   view->UpdateAllLifecyclePhases(DocumentUpdateReason::kSVGImage);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after lifecycle");
+#endif
 
   const gfx::Rect* record_cull_rect = cull_rect;
 #if defined(HTML_CSS_RENDERER_STANDALONE)
@@ -470,6 +560,7 @@ std::optional<PaintRecord> SVGImage::PaintRecordForCurrentFrame(
 #endif
   PaintRecord record = view->GetPaintRecord(record_cull_rect);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("PaintRecord after GetPaintRecord");
 #endif
   return record;
 }
@@ -491,13 +582,22 @@ void SVGImage::DrawInternal(const DrawInfo& draw_info,
                             const cc::PaintFlags& flags,
                             const gfx::RectF& dst_rect,
                             const gfx::RectF& unzoomed_src_rect) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("DrawInternal begin");
+#endif
   const gfx::Rect cull_rect(gfx::ToEnclosingRect(unzoomed_src_rect));
   std::optional<PaintRecord> record =
       PaintRecordForCurrentFrame(draw_info, &cull_rect);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageStage("DrawInternal after PaintRecord");
+#endif
   if (!record)
     return;
 
   {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageStage("DrawInternal before drawPicture");
+#endif
     PaintCanvasAutoRestore ar(canvas, false);
     if (DrawNeedsLayer(flags)) {
       SkRect layer_rect = gfx::RectFToSkRect(dst_rect);
@@ -511,6 +611,9 @@ void SVGImage::DrawInternal(const DrawInfo& draw_info,
     canvas->concat(SkM44::RectToRect(gfx::RectFToSkRect(unzoomed_src_rect),
                                      gfx::RectFToSkRect(dst_rect)));
     canvas->drawPicture(std::move(*record));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageStage("DrawInternal after drawPicture");
+#endif
     canvas->restore();
   }
 
@@ -691,12 +794,30 @@ Element* SVGImage::GetResourceElement(const AtomicString& id) const {
 }
 
 void SVGImage::NotifyAsyncLoadCompleted() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageState("NotifyAsyncLoadCompleted", true, this,
+                               document_host_.Get());
+#endif
   if (GetImageObserver())
     GetImageObserver()->AsyncLoadCompleted(this);
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void SVGImage::MaybeFinalizeStandaloneAsyncLoadForStaticRender() {
+  TraceStandaloneSvgImageState("MaybeFinalizeStandaloneAsyncLoadForStaticRender",
+                               true, this, document_host_.Get());
+  if (document_host_) {
+    document_host_->MaybeFinalizeStandaloneSynchronousLoad();
+  }
+}
+#endif
+
 Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
   TRACE_EVENT("blink", "SVGImage::DataChanged");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageState("DataChanged begin", all_data_received, this,
+                               document_host_.Get());
+#endif
 
   // Don't do anything if is an empty image.
   if (!DataSize())
@@ -735,9 +856,18 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
                       weak_ptr_factory_.GetWeakPtr()),
       settings_to_use, color_maps,
       IsolatedSVGDocumentHost::ProcessingMode::kAnimated);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageState("DataChanged after document host", all_data_received,
+                               this, document_host_.Get());
+#endif
 
   const SVGSVGElement* root_element = RootElement();
   if (!root_element) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageState("DataChanged no root element",
+                                 all_data_received, this,
+                                 document_host_.Get());
+#endif
     return kSizeUnavailable;
   }
 
@@ -749,8 +879,17 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
   data_change_elapsed_time_ += elapsed_timer.Elapsed();
 
   if (!document_host_->IsLoaded()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSvgImageState("DataChanged async loading",
+                                 all_data_received, this,
+                                 document_host_.Get());
+#endif
     return kSizeAvailableAndLoadingAsynchronously;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSvgImageState("DataChanged size available", all_data_received,
+                               this, document_host_.Get());
+#endif
   return kSizeAvailable;
 }
 

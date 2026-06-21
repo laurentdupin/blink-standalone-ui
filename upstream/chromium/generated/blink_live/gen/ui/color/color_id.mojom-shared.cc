@@ -124,6 +124,8 @@ NOINLINE static const char* RendererColorIdToStringHelper(RendererColorId value)
       return "kColorWebNativeControlScrollbarArrowForeground";
     case RendererColorId::kColorWebNativeControlScrollbarArrowForegroundDisabled:
       return "kColorWebNativeControlScrollbarArrowForegroundDisabled";
+    case RendererColorId::kColorWebNativeControlScrollbarArrowForegroundHovered:
+      return "kColorWebNativeControlScrollbarArrowForegroundHovered";
     case RendererColorId::kColorWebNativeControlScrollbarArrowForegroundPressed:
       return "kColorWebNativeControlScrollbarArrowForegroundPressed";
     case RendererColorId::kColorWebNativeControlScrollbarCorner:

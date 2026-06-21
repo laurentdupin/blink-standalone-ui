@@ -52,6 +52,8 @@
 #include "v8/include/cppgc/object-size-trait.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <new>
 #include <string>
@@ -61,6 +63,25 @@
 namespace blink {
 
 namespace {
+
+std::string StandaloneNodeName(const Node& node);
+
+bool StandaloneDomTraceEnabled() {
+  const char* value = std::getenv("HTML_CSS_RENDERER_TRACE_DOM");
+  return value && value[0] && value[0] != '0';
+}
+
+void TraceStandaloneDomShim(const char* stage,
+                            const Node* parent,
+                            const Node* child = nullptr) {
+  if (!StandaloneDomTraceEnabled()) {
+    return;
+  }
+  std::fprintf(stderr, "standalone_dom.%s parent=%s child=%s\n", stage,
+               parent ? StandaloneNodeName(*parent).c_str() : "(null)",
+               child ? StandaloneNodeName(*child).c_str() : "(null)");
+  std::fflush(stderr);
+}
 
 template <typename T, typename... Args>
 T* StandaloneAllocateNode(Args&&... args) {
@@ -1499,6 +1520,7 @@ Node* CharacterData::Clone(Document& factory,
 
 void ContainerNode::ParserAppendChild(Node* child) {
   if (child) {
+    TraceStandaloneDomShim("ParserAppendChild.before", this, child);
     if (child->parentNode() != this) {
       child->SetParentNode(this);
       child->SetNextSibling(nullptr);
@@ -1511,7 +1533,9 @@ void ContainerNode::ParserAppendChild(Node* child) {
         SetFirstChild(child);
       }
     }
+    TraceStandaloneDomShim("ParserAppendChild.before_record", this, child);
     RecordStandaloneParserInsert(*this, *child);
+    TraceStandaloneDomShim("ParserAppendChild.after", this, child);
   }
 }
 
@@ -1540,7 +1564,14 @@ void Element::StripScriptingAttributes(
     Vector<Attribute, kAttributePrealloc>&) const {}
 
 void Element::ParserSetAttributes(
-    const Vector<Attribute, kAttributePrealloc>&) {}
+    const Vector<Attribute, kAttributePrealloc>& attributes) {
+  if (!StandaloneDomTraceEnabled()) {
+    return;
+  }
+  std::fprintf(stderr, "standalone_dom.ParserSetAttributes element=%s count=%u\n",
+               StandaloneNodeName(*this).c_str(), attributes.size());
+  std::fflush(stderr);
+}
 
 void Element::SetAttributeWithoutValidation(const QualifiedName&,
                                             const AtomicString&) {}

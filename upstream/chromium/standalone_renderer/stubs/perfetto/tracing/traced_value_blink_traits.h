@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 #include "third_party/blink/renderer/core/css/invalidation/invalidation_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"

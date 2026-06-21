@@ -35,7 +35,7 @@
 
 
 #include "mojo/public/cpp/base/time_mojom_traits.h"
-#include "base/component_export.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -49,7 +49,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) Time {
+class BLINK_PLATFORM_EXPORT Time {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<Time, T>::value>;
@@ -98,6 +98,8 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) Time {
 
   template <typename T, Time::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -196,7 +198,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) JSTime {
+class BLINK_PLATFORM_EXPORT JSTime {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<JSTime, T>::value>;
@@ -343,7 +345,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) TimeDelta {
+class BLINK_PLATFORM_EXPORT TimeDelta {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<TimeDelta, T>::value>;
@@ -490,7 +492,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) TimeTicks {
+class BLINK_PLATFORM_EXPORT TimeTicks {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<TimeTicks, T>::value>;
@@ -539,6 +541,8 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) TimeTicks {
 
   template <typename T, TimeTicks::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -735,7 +739,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::Time::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::Time::DataView,
                                          ::mojo_base::mojom::blink::TimePtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::TimePtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::TimePtr* output) { output->reset(); }
@@ -750,7 +754,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::JSTime::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::JSTime::DataView,
                                          ::mojo_base::mojom::blink::JSTimePtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::JSTimePtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::JSTimePtr* output) { output->reset(); }
@@ -765,7 +769,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::TimeDelta::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::TimeDelta::DataView,
                                          ::mojo_base::mojom::blink::TimeDeltaPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::TimeDeltaPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::TimeDeltaPtr* output) { output->reset(); }
@@ -780,7 +784,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::TimeTicks::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::TimeTicks::DataView,
                                          ::mojo_base::mojom::blink::TimeTicksPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::TimeTicksPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::TimeTicksPtr* output) { output->reset(); }

@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "html_css_renderer/renderer.h"
+#include "html_css_renderer/compositor_types.h"
 
 namespace html_css_renderer {
 

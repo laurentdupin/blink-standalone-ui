@@ -7,25 +7,20 @@
 
 #include "base/byte_size.h"
 #include "base/notreached.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#endif
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/khronos/GLES2/gl2.h"
-#endif
 #include "third_party/skia/include/core/SkRefCnt.h"
+#include "ui/gfx/hdr_metadata.h"
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
 }  // namespace gpu
-#endif
 
 namespace blink {
 
@@ -38,6 +33,7 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   static scoped_refptr<StaticBitmapImage> Create(
       sk_sp<SkData> data,
       const SkImageInfo&,
+      const gfx::HDRMetadata&,
       ImageOrientation = ImageOrientationEnum::kDefault);
 
   StaticBitmapImage(ImageOrientation orientation) : orientation_(orientation) {}
@@ -65,7 +61,6 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   // Methods overridden by AcceleratedStaticBitmapImage only
   // Assumes the destination texture has already been allocated.
   // `src_rect` is always in top-left coordinate space.
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
   virtual bool CopyToTexture(gpu::gles2::GLES2Interface* dest_gl,
                              GLenum dest_target,
                              GLuint dest_texture_id,
@@ -85,7 +80,6 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
     NOTREACHED();
   }
   virtual void UpdateSyncToken(const gpu::SyncToken&) { NOTREACHED(); }
-#endif
 
   bool IsPremultiplied() const {
     return GetAlphaType() == SkAlphaType::kPremul_SkAlphaType;
@@ -115,16 +109,12 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   virtual gfx::Size GetSize() const = 0;
   virtual SkAlphaType GetAlphaType() const = 0;
   virtual gfx::ColorSpace GetColorSpace() const = 0;
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
   virtual viz::SharedImageFormat GetSharedImageFormat() const = 0;
-#endif
+  virtual const gfx::HDRMetadata& GetHdrMetadata() const = 0;
+
   base::ByteSize EstimatedSizeInBytes() const {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
-    return base::ByteSize(GetSize().GetArea() * 4u);
-#else
     return base::ByteSize(
         GetSharedImageFormat().EstimatedSizeInBytes(GetSize()));
-#endif
   }
 
  protected:

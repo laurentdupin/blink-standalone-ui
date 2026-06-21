@@ -28,7 +28,7 @@ using crdtp::cbor::EncodeTrue;
 InspectorSessionState::InspectorSessionState(
     mojom::blink::DevToolsSessionStatePtr reattach)
     : reattach_state_(std::move(reattach)),
-      updates_(mojom::blink::DevToolsSessionState::New()) {}
+      updates_(mojom::blink::RendererOriginatingSessionState::New()) {}
 
 const mojom::blink::DevToolsSessionState* InspectorSessionState::ReattachState()
     const {
@@ -42,12 +42,14 @@ void InspectorSessionState::EnqueueUpdate(const String& key,
     Vector<uint8_t> payload(*value);
     updated_value = std::move(payload);
   }
+  CHECK(updates_);
   updates_->entries.Set(key, std::move(updated_value));
 }
 
-mojom::blink::DevToolsSessionStatePtr InspectorSessionState::TakeUpdates() {
+mojom::blink::RendererOriginatingSessionStatePtr
+InspectorSessionState::TakeUpdates() {
   auto updates = std::move(updates_);
-  updates_ = mojom::blink::DevToolsSessionState::New();
+  updates_ = mojom::blink::RendererOriginatingSessionState::New();
   return updates;
 }
 
@@ -128,8 +130,9 @@ bool InspectorAgentState::Deserialize(span<uint8_t> in, blink::String* v) {
   if (tokenizer.TokenTag() == CBORTokenTag::STRING16) {
     const crdtp::span<uint8_t> data = tokenizer.GetString16WireRep();
     // SAFETY: GetString16WireRep guarantees `data` is safe.
-    *v = blink::String(UNSAFE_BUFFERS(base::span(
-        reinterpret_cast<const UChar*>(data.data()), data.size() / 2)));
+    *v = blink::String(UNSAFE_BUFFERS(
+        base::span(base::unchecked, reinterpret_cast<const UChar*>(data.data()),
+                   data.size() / 2)));
     return true;
   }
   return false;

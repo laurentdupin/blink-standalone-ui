@@ -25,14 +25,13 @@
 #include "mojo/public/mojom/base/byte_size.mojom-features.h"  // IWYU pragma: export
 #include "mojo/public/mojom/base/byte_size.mojom-shared.h"  // IWYU pragma: export
 #include "mojo/public/mojom/base/byte_size.mojom-forward.h"  // IWYU pragma: export
+#include "mojo/public/mojom/base/byte_size.mojom-import-headers.h"
 #include <string>
 #include <vector>
 
 
 
 
-#include "mojo/public/cpp/base/byte_size_mojom_traits.h"
-#include "base/component_export.h"
 
 
 
@@ -43,7 +42,7 @@ namespace mojo_base::mojom {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) ByteSize {
+class  ByteSize {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ByteSize, T>::value>;
@@ -92,6 +91,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) ByteSize {
 
   template <typename T, ByteSize::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -190,7 +190,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM) ByteSizeDelta {
+class  ByteSizeDelta {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ByteSizeDelta, T>::value>;
@@ -239,6 +239,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM) ByteSizeDelta {
 
   template <typename T, ByteSizeDelta::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
@@ -389,7 +390,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::ByteSize::DataView,
+struct  StructTraits<::mojo_base::mojom::ByteSize::DataView,
                                          ::mojo_base::mojom::ByteSizePtr> {
   static bool IsNull(const ::mojo_base::mojom::ByteSizePtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::ByteSizePtr* output) { output->reset(); }
@@ -404,7 +405,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::ByteSi
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM) StructTraits<::mojo_base::mojom::ByteSizeDelta::DataView,
+struct  StructTraits<::mojo_base::mojom::ByteSizeDelta::DataView,
                                          ::mojo_base::mojom::ByteSizeDeltaPtr> {
   static bool IsNull(const ::mojo_base::mojom::ByteSizeDeltaPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::ByteSizeDeltaPtr* output) { output->reset(); }

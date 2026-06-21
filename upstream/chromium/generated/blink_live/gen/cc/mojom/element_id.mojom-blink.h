@@ -34,6 +34,9 @@
 
 
 
+#include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
+#include "cc/mojom/element_id_mojom_traits.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -47,7 +50,7 @@ namespace cc::mojom::blink {
 
 
 
-class  ElementId {
+class BLINK_PLATFORM_EXPORT ElementId {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ElementId, T>::value>;
@@ -96,7 +99,6 @@ class  ElementId {
 
   template <typename T, ElementId::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
-  size_t Hash(size_t seed) const;
 
   template <mojo::internal::SendValidation send_validation, typename UserType>
   static ::blink::Vector<uint8_t> Serialize(UserType* input) {
@@ -224,7 +226,7 @@ namespace mojo {
 
 
 template <>
-struct  StructTraits<::cc::mojom::blink::ElementId::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::cc::mojom::blink::ElementId::DataView,
                                          ::cc::mojom::blink::ElementIdPtr> {
   static bool IsNull(const ::cc::mojom::blink::ElementIdPtr& input) { return !input; }
   static void SetToNull(::cc::mojom::blink::ElementIdPtr* output) { output->reset(); }

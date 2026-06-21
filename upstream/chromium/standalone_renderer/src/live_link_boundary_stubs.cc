@@ -25,6 +25,7 @@
 #include "base/json/json_reader.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/shim/allocator_shim.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/synchronization/lock.h"
 #include "base/task/task_traits.h"
@@ -40,6 +41,7 @@
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
 #include "cc/animation/animation_id_provider.h"
+#include "skia/ext/font_utils.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkPngRustDecoder.h"
 #include "src/codec/SkPngCodec.h"
@@ -52,9 +54,12 @@
 #include "third_party/blink/public/common/frame/delegated_capability_request_token.h"
 #include "third_party/blink/public/common/permissions_policy/document_policy.h"
 #include "third_party/blink/public/common/permissions_policy/policy_value.h"
+#include "third_party/blink/public/resources/grit/blink_image_resources.h"
 #include "third_party/blink/public/resources/grit/blink_resources.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+#include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
@@ -66,6 +71,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_selected_content_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/dom/opaque_range.h"
+#include "third_party/blink/renderer/core/html/html_base_element.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
@@ -77,6 +83,10 @@
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/events/animation_playback_event.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
+#include "third_party/blink/renderer/platform/heap/custom_spaces.h"
+#include "v8/include/cppgc/platform.h"
+#include "v8/include/v8-platform.h"
+
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_picture_element.h"
@@ -130,6 +140,7 @@
 #include "third_party/blink/renderer/core/svg/svg_number_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_point_tear_off.h"
 #include "third_party/blink/renderer/core/svg/svg_preserve_aspect_ratio_tear_off.h"
+#include "third_party/blink/renderer/platform/graphics/compositor_element_id.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_text_element.h"
 #include "third_party/blink/renderer/core/svg/svg_title_element.h"
@@ -229,6 +240,15 @@ __declspec(dllimport) void* __stdcall LoadLibraryW(const wchar_t*);
 __declspec(dllimport) void* __stdcall GetProcAddress(void*, const char*);
 __declspec(dllimport) unsigned long __stdcall GetCurrentThreadId();
 __declspec(dllimport) void __stdcall AcquireSRWLockExclusive(void*);
+__declspec(dllimport) void* __stdcall VirtualAlloc(void*,
+                                                   size_t,
+                                                   unsigned long,
+                                                   unsigned long);
+__declspec(dllimport) int __stdcall VirtualFree(void*, size_t, unsigned long);
+__declspec(dllimport) int __stdcall VirtualProtect(void*,
+                                                   size_t,
+                                                   unsigned long,
+                                                   unsigned long*);
 }
 
 extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
@@ -1005,6 +1025,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/platform/fonts/plain_text_painter.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_image_cache.h"
+#include "third_party/blink/renderer/platform/graphics/bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/generated_image.h"
 #include "third_party/blink/renderer/platform/graphics/gradient.h"
 #include "third_party/blink/renderer/platform/graphics/gradient_generated_image.h"
@@ -1371,127 +1392,6 @@ void sk_fflush(FILE*) {}
 void SkPath::dump(SkWStream*, bool) const {}
 #endif
 
-namespace v8 {
-namespace internal {
-class SharedObjectConveyorHandles {};
-void MoveTracedReference(Address**, Address**) {}
-}  // namespace internal
-
-bool Value::IsPromise() const {
-  return false;
-}
-
-Maybe<bool> Promise::Resolver::Resolve(Local<Context>, Local<Value>) {
-  return Just(false);
-}
-
-MaybeLocal<Promise::Resolver> Promise::Resolver::New(Local<Context>) {
-  return MaybeLocal<Promise::Resolver>();
-}
-
-Maybe<bool> Promise::Resolver::Reject(Local<Context>, Local<Value>) {
-  return Just(false);
-}
-
-void Promise::MarkAsHandled() {}
-
-MaybeLocal<Array> Array::New(Local<Context>,
-                             size_t,
-                             std::function<MaybeLocal<Value>()>) {
-  return MaybeLocal<Array>();
-}
-
-SharedValueConveyor::~SharedValueConveyor() = default;
-
-namespace api_internal {
-void ToLocalEmpty() {}
-}  // namespace api_internal
-}  // namespace v8
-
-namespace perfetto {
-TracedValue::~TracedValue() = default;
-TracedValue::TracedValue(TracedValue&&) = default;
-TracedValue TracedValue::CreateFromProto(
-    protos::pbzero::DebugAnnotation* annotation,
-    EventContext* event_context) {
-  return TracedValue(annotation, event_context, nullptr);
-}
-EventContext::~EventContext() = default;
-protos::pbzero::DebugAnnotation* EventContext::AddDebugAnnotation(
-    const char*) {
-  return nullptr;
-}
-namespace internal {
-void DataSourceType::PopulateTlsInst(DataSourceInstanceThreadLocalState*,
-                                     DataSourceState*,
-                                     uint32_t) {}
-void DataSourceType::ClearIncrementalState(
-    DataSourceInstanceThreadLocalState*,
-    uint32_t,
-    uint32_t) {}
-TraceTimestamp TrackEventInternal::GetTraceTime() {
-  return TraceTimestamp{0, 0};
-}
-void TrackEventInternal::ResetIncrementalState(
-    TraceWriterBase*,
-    TrackEventIncrementalState*,
-    const TrackEventTlsState&,
-    const TraceTimestamp&) {}
-EventContext TrackEventInternal::WriteEvent(
-    TraceWriterBase*,
-    TrackEventIncrementalState*,
-    TrackEventTlsState&,
-    const Category*,
-    protos::pbzero::TrackEvent::Type,
-    const TraceTimestamp&,
-    bool) {
-  return EventContext(static_cast<protos::pbzero::TrackEvent*>(nullptr));
-}
-void TrackEventInternal::WriteEventName(StaticString,
-                                        EventContext&,
-                                        const TrackEventTlsState&) {}
-protozero::MessageHandle<protos::pbzero::TracePacket>
-TrackEventInternal::NewTracePacket(TraceWriterBase*,
-                                   TrackEventIncrementalState*,
-                                   const TrackEventTlsState&,
-                                   TraceTimestamp,
-                                   uint32_t) {
-  return protozero::MessageHandle<protos::pbzero::TracePacket>();
-}
-TrackRegistry* TrackRegistry::instance_ = nullptr;
-void TrackRegistry::WriteTrackDescriptor(
-    const std::string&,
-    protozero::MessageHandle<protos::pbzero::TracePacket>) {}
-TracedValue CreateTracedValueFromProto(protos::pbzero::DebugAnnotation*,
-                                       EventContext*) {
-  return TracedValue::CreateFromProto(nullptr);
-}
-}  // namespace internal
-void Track::Serialize(protos::pbzero::TrackDescriptor*) const {}
-}  // namespace perfetto
-
-namespace protozero {
-void Message::EndNestedMessage() {}
-Message* Message::BeginNestedMessageInternal(uint32_t) {
-  return nullptr;
-}
-uint32_t Message::Finalize() {
-  return 0;
-}
-void ScatteredStreamWriter::WriteBytesSlowPath(const uint8_t*, size_t) {}
-}  // namespace protozero
-
-namespace v8 {
-TryCatch::TryCatch(Isolate*) {}
-TryCatch::~TryCatch() {}
-bool TryCatch::HasCaught() const {
-  return false;
-}
-Local<Value> TryCatch::ReThrow() {
-  return Local<Value>();
-}
-}  // namespace v8
-
 namespace SkPngRustDecoder {
 bool IsPng(const void* data, size_t len) {
   return SkPngCodec::IsPng(data, len);
@@ -1507,17 +1407,6 @@ std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
   return SkPngCodec::MakeFromStream(std::move(stream), result);
 }
 }  // namespace SkPngRustDecoder
-
-extern "C" void png_save_uint_32(unsigned char* buf, unsigned int i) {
-  buf[0] = static_cast<unsigned char>((i >> 24) & 0xffU);
-  buf[1] = static_cast<unsigned char>((i >> 16) & 0xffU);
-  buf[2] = static_cast<unsigned char>((i >> 8) & 0xffU);
-  buf[3] = static_cast<unsigned char>(i & 0xffU);
-}
-
-bool SkGainmapInfo::Parse(const SkData*, SkGainmapInfo&) {
-  return false;
-}
 
 namespace blink {
 CEReactionsScope* CEReactionsScope::top_of_stack_ = nullptr;
@@ -1538,7 +1427,6 @@ void MutationObserver::CancelInspectorAsyncTasks() {}
 }  // namespace blink
 
 namespace cppgc::internal {
-PrefinalizerRegistration::PrefinalizerRegistration(void*, Callback) {}
 PersistentRegion& StandalonePersistentRegion() {
   static HeapBase* heap = reinterpret_cast<HeapBase*>(1);
   static FatalOutOfMemoryHandler* oom =
@@ -1676,92 +1564,32 @@ SingleRequestURLLoaderFactory::Clone() {
   return std::make_unique<PendingFactory>(state_);
 }
 
-ConnectionAllowlist::~ConnectionAllowlist() = default;
-ConnectionAllowlists::ConnectionAllowlists() = default;
-ConnectionAllowlists::~ConnectionAllowlists() = default;
-IntegrityPolicy::~IntegrityPolicy() = default;
-PermissionsPolicy::Allowlist::~Allowlist() = default;
-PermissionsPolicy::~PermissionsPolicy() = default;
 PermissionsPolicyFeaturesBitset::~PermissionsPolicyFeaturesBitset() = default;
 }  // namespace network
 
 namespace base {
-namespace debug {
-StackTrace::StackTrace() = default;
-StackTrace::StackTrace(size_t) {}
-StackTrace::StackTrace(span<const void* const>) {}
-#if BUILDFLAG(IS_WIN)
-StackTrace::StackTrace(_EXCEPTION_POINTERS*) {}
-StackTrace::StackTrace(const _CONTEXT*) {}
-#endif
-bool StackTrace::WillSymbolizeToStreamForTesting() {
-  return false;
-}
-void StackTrace::InitializeFeatures() {}
-void StackTrace::Print() const {}
-void StackTrace::PrintWithPrefix(cstring_view) const {}
-void StackTrace::OutputToStream(std::ostream*) const {}
-void StackTrace::OutputToStreamWithPrefix(std::ostream*, cstring_view) const {}
-std::string StackTrace::ToString() const {
-  return std::string();
-}
-std::string StackTrace::ToStringWithPrefix(cstring_view) const {
-  return std::string();
-}
-void StackTrace::SuppressStackTracesWithMessageForTesting(std::string) {}
-}  // namespace debug
-
 namespace internal {
 }  // namespace internal
-
-TaskRunner::TaskRunner() = default;
-TaskRunner::~TaskRunner() = default;
-void TaskRunner::OnDestruct() const {
-  delete this;
-}
-DelayedTaskHandle SequencedTaskRunner::PostCancelableDelayedTask(
-    subtle::PostDelayedTaskPassKey,
-    const Location&,
-    OnceClosure,
-    TimeDelta) {
-  return DelayedTaskHandle();
-}
-DelayedTaskHandle SequencedTaskRunner::PostCancelableDelayedTaskAt(
-    subtle::PostDelayedTaskPassKey,
-    const Location&,
-    OnceClosure,
-    TimeTicks,
-    subtle::DelayPolicy) {
-  return DelayedTaskHandle();
-}
-bool SequencedTaskRunner::PostDelayedTaskAt(subtle::PostDelayedTaskPassKey,
-                                           const Location&,
-                                           OnceClosure,
-                                           TimeTicks,
-                                           subtle::DelayPolicy) {
-  return true;
-}
-bool SequencedTaskRunner::RunOrPostTask(subtle::RunOrPostTaskPassKey,
-                                        const Location&,
-                                        OnceClosure task) {
-  if (task) {
-    std::move(task).Run();
-  }
-  return true;
-}
-bool SequencedTaskRunner::DeleteOrReleaseSoonInternal(
-    const Location&,
-    void (*deleter)(const void*),
-    const void* object) {
-  if (deleter && object) {
-    deleter(object);
-  }
-  return true;
-}
-bool SingleThreadTaskRunner::BelongsToCurrentThread() const {
-  return RunsTasksInCurrentSequence();
-}
 }  // namespace base
+
+namespace blink::scheduler {
+WebThreadScheduler::~WebThreadScheduler() = default;
+
+scoped_refptr<base::SingleThreadTaskRunner>
+WebThreadScheduler::DeprecatedDefaultTaskRunner() {
+  return base::SingleThreadTaskRunner::GetCurrentDefault();
+}
+
+std::unique_ptr<blink::MainThread> WebThreadScheduler::CreateMainThread() {
+  return nullptr;
+}
+
+void WebThreadScheduler::SetRendererBackgrounded(bool) {}
+
+void WebThreadScheduler::OnUrgentMessageReceived() {}
+
+void WebThreadScheduler::OnUrgentMessageProcessed() {}
+}  // namespace blink::scheduler
 
 namespace blink {
 extern "C" bool g_standalone_blink_saw_font_draw_text = false;
@@ -1904,11 +1732,11 @@ std::string StandaloneMediaQueryActualValue(const String& feature) {
   }
   if (feature == media_feature_names::kHoverMediaFeature ||
       feature == media_feature_names::kAnyHoverMediaFeature) {
-    return "none";
+    return "hover";
   }
   if (feature == media_feature_names::kPointerMediaFeature ||
       feature == media_feature_names::kAnyPointerMediaFeature) {
-    return "none";
+    return "fine";
   }
   if (feature == media_feature_names::kPrefersColorSchemeMediaFeature) {
     return "light";
@@ -2238,29 +2066,6 @@ extern "C" int StandaloneRendererImageResourceContentFetchLastUrl(char* out,
   return copied;
 }
 
-bool RuntimeEnabledFeaturesBase::is_selectedcontentelement_attribute_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_selectedcontent_multiple_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_selectedcontent_spec_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_customizable_select_multiple_popup_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_select_remove_overflow_hidden_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_image_srcset_reselection_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_text_area_scroll_top_preview_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_checkable_input_type_layout_inline_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_css_user_valid_and_user_invalid_for_radio_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_shared_storage_api_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_lazy_image_conformant_load_event_timing_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_html_image_element_actual_natural_size_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_topics_api_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_all_images_painted_sent_to_element_timing_enabled_ = false;
 
 void SetStandaloneDocumentBodyForStandaloneRenderer(Document*, HTMLElement*);
 
@@ -2296,7 +2101,7 @@ Agent::Agent(v8::Isolate* isolate,
              const AgentClusterKey& agent_cluster_key,
              AgentType agent_type)
     : isolate_(isolate),
-      event_loop_(nullptr),
+      event_loop_(base::AdoptRef(new scheduler::EventLoop(this, isolate, nullptr))),
       cluster_id_(cluster_id),
       agent_cluster_key_(agent_cluster_key),
       agent_type_(agent_type) {}
@@ -2543,8 +2348,9 @@ class StandaloneNoopPageScheduler final : public PageScheduler {
 
 class StandaloneNoopAgentGroupScheduler final : public AgentGroupScheduler {
  public:
-  StandaloneNoopAgentGroupScheduler() {
-  }
+  explicit StandaloneNoopAgentGroupScheduler(
+      scheduler::WebThreadScheduler& main_thread_scheduler)
+      : main_thread_scheduler_(&main_thread_scheduler) {}
   std::unique_ptr<PageScheduler> CreatePageScheduler(
       PageScheduler::Delegate*) override {
     return std::make_unique<StandaloneNoopPageScheduler>(this);
@@ -2557,14 +2363,19 @@ class StandaloneNoopAgentGroupScheduler final : public AgentGroupScheduler {
     return StandaloneNoopTaskRunner();
   }
   scheduler::WebThreadScheduler& GetMainThreadScheduler() override {
-    return *reinterpret_cast<scheduler::WebThreadScheduler*>(1);
+    return *main_thread_scheduler_;
   }
   v8::Isolate* Isolate() override { return nullptr; }
   void OnUrgentMessageReceived() override {}
   void OnUrgentMessageProcessed() override {}
+
+ private:
+  raw_ptr<scheduler::WebThreadScheduler> main_thread_scheduler_;
 };
 
-class StandaloneNoopMainThreadScheduler final : public MainThreadScheduler {
+class StandaloneNoopMainThreadScheduler final
+    : public MainThreadScheduler,
+      public scheduler::WebThreadScheduler {
  public:
   class PauseHandle final : public RendererPauseHandle {};
 
@@ -2583,14 +2394,18 @@ class StandaloneNoopMainThreadScheduler final : public MainThreadScheduler {
   scoped_refptr<base::SingleThreadTaskRunner> CleanupTaskRunner() override {
     return StandaloneNoopTaskRunner();
   }
+  scoped_refptr<base::SingleThreadTaskRunner> DeprecatedDefaultTaskRunner()
+      override {
+    return StandaloneNoopTaskRunner();
+  }
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override {
     return base::TimeTicks::Now();
   }
   void AddTaskObserver(base::TaskObserver*) override {}
   void RemoveTaskObserver(base::TaskObserver*) override {}
   void SetV8Isolate(v8::Isolate*) override {}
-  MainThreadScheduler* ToMainThreadScheduler() override {
-    return this;
+  blink::MainThreadScheduler* ToMainThreadScheduler() override {
+    return static_cast<blink::MainThreadScheduler*>(this);
   }
   std::unique_ptr<RendererPauseHandle> PauseScheduler() override {
     return std::make_unique<PauseHandle>();
@@ -2599,11 +2414,16 @@ class StandaloneNoopMainThreadScheduler final : public MainThreadScheduler {
     return StandaloneNoopTaskRunner();
   }
   AgentGroupScheduler* CreateAgentGroupScheduler() override {
-    alignas(StandaloneNoopAgentGroupScheduler) static unsigned char storage
-        [sizeof(StandaloneNoopAgentGroupScheduler)];
-    static StandaloneNoopAgentGroupScheduler* scheduler =
-        ::new (storage) StandaloneNoopAgentGroupScheduler();
-    return scheduler;
+    static Persistent<StandaloneNoopAgentGroupScheduler> scheduler;
+    if (!scheduler) {
+      scheduler = MakeGarbageCollected<StandaloneNoopAgentGroupScheduler>(
+          static_cast<scheduler::WebThreadScheduler&>(*this));
+    }
+    return scheduler.Get();
+  }
+  std::unique_ptr<scheduler::WebAgentGroupScheduler>
+  CreateWebAgentGroupScheduler() override {
+    return nullptr;
   }
   AgentGroupScheduler* GetCurrentAgentGroupScheduler() override {
     return nullptr;
@@ -2625,7 +2445,7 @@ class StandaloneNoopMainThreadScheduler final : public MainThreadScheduler {
  private:
   v8::Isolate* Isolate() override { return nullptr; }
   scheduler::WebThreadScheduler* ToWebMainThreadScheduler() override {
-    return nullptr;
+    return this;
   }
 };
 
@@ -2688,121 +2508,6 @@ const AtomicString kTransitionEvent("TransitionEvent");
 const AtomicString kBeforeUnloadEvent("BeforeUnloadEvent");
 }
 
-namespace features {
-BASE_FEATURE(kCSSFontComparisonFix,
-             "CSSFontComparisonFix",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kCapStringBuilderLengthTo1GiB,
-             "CapStringBuilderLengthTo1GiB",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(bool,
-                   kThrottleFrameRateOnInitialization,
-                   &kCSSFontComparisonFix,
-                   "throttle-frame-rate-on-initialization",
-                   false);
-const base::FeatureParam<DelayAsyncScriptDelayType>::Option
-    kStandaloneDelayAsyncScriptDelayTypeOptions[] = {
-        {DelayAsyncScriptDelayType::kFinishedParsing, "finished_parsing"},
-        {DelayAsyncScriptDelayType::kFirstPaintOrFinishedParsing,
-         "first_paint_or_finished_parsing"},
-        {DelayAsyncScriptDelayType::kTillFirstLcpCandidate,
-         "till_first_lcp_candidate"}};
-BASE_FEATURE_ENUM_PARAM(DelayAsyncScriptDelayType,
-                        kDelayAsyncScriptExecutionDelayParam,
-                        &kCSSFontComparisonFix,
-                        "delay_async_script_execution_delay",
-                        DelayAsyncScriptDelayType::kFinishedParsing,
-                        &kStandaloneDelayAsyncScriptDelayTypeOptions);
-BASE_FEATURE(kPrerender2EarlyDocumentLifecycleUpdate,
-             "Prerender2EarlyDocumentLifecycleUpdate",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kDelayAsyncScriptExecution,
-             "DelayAsyncScriptExecution",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(bool,
-                   kDelayAsyncScriptExecutionDelayByDefaultParam,
-                   &kDelayAsyncScriptExecution,
-                   "delay-by-default",
-                   false);
-BASE_FEATURE(kThreadedPreloadScanner,
-             "ThreadedPreloadScanner",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kPrecompileInlineScripts,
-             "PrecompileInlineScripts",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kProcessHtmlDataImmediately,
-             "ProcessHtmlDataImmediately",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(bool,
-                   kProcessHtmlDataImmediatelyChildFrame,
-                   &kProcessHtmlDataImmediately,
-                   "child-frame",
-                   false);
-BASE_FEATURE_PARAM(bool,
-                   kProcessHtmlDataImmediatelyFirstChunk,
-                   &kProcessHtmlDataImmediately,
-                   "first-chunk",
-                   false);
-BASE_FEATURE_PARAM(bool,
-                   kProcessHtmlDataImmediatelyMainFrame,
-                   &kProcessHtmlDataImmediately,
-                   "main-frame",
-                   false);
-BASE_FEATURE_PARAM(bool,
-                   kProcessHtmlDataImmediatelySubsequentChunks,
-                   &kProcessHtmlDataImmediately,
-                   "subsequent-chunks",
-                   false);
-BASE_FEATURE(kDeferTreeBuilderFlush,
-             "DeferTreeBuilderFlush",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(base::TimeDelta,
-                   kDeferTreeBuilderFlushInitialInterval,
-                   &kDeferTreeBuilderFlush,
-                   "initial-interval",
-                   base::Milliseconds(0));
-BASE_FEATURE_PARAM(base::TimeDelta,
-                   kDeferTreeBuilderFlushMaxInterval,
-                   &kDeferTreeBuilderFlush,
-                   "max-interval",
-                   base::Milliseconds(0));
-BASE_FEATURE_PARAM(double,
-                   kDeferTreeBuilderFlushMultiplier,
-                   &kDeferTreeBuilderFlush,
-                   "multiplier",
-                   1.0);
-BASE_FEATURE_PARAM(bool,
-                   kDelayAsyncScriptExecutionWhenLcpFoundInHtml,
-                   &kCSSFontComparisonFix,
-                   "delay-when-lcp-found-in-html",
-                   false);
-BASE_FEATURE(kLCPPFontURLPredictor,
-             "LCPPFontURLPredictor",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kLowPriorityAsyncScriptExecution,
-             "LowPriorityAsyncScriptExecution",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(bool,
-                   kLowPriorityAsyncScriptExecutionDisableWhenLcpNotInHtmlParam,
-                   &kLowPriorityAsyncScriptExecution,
-                   "disable-when-lcp-not-in-html",
-                   false);
-BASE_FEATURE(kHTMLParserYieldByUserTiming,
-             "HTMLParserYieldByUserTiming",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kOptimizeHTMLElementUrls,
-             "OptimizeHTMLElementUrls",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kDevToolsAllowPopoverForcing,
-             "DevToolsAllowPopoverForcing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(size_t,
-                   kDocumentURLCacheSize,
-                   &kOptimizeHTMLElementUrls,
-                   "document-url-cache-size",
-                   0u);
-}  // namespace features
-
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const QualifiedName& g_any_name =
     *new QualifiedName(g_null_atom, AtomicString("*"), g_null_atom);
@@ -2813,11 +2518,6 @@ void QualifiedNameWithHash::CreateStatic(void*,
                                          StringImpl*,
                                          const AtomicString&) {}
 #endif
-
-namespace probe {
-AsyncTaskContext::~AsyncTaskContext() = default;
-void AsyncTaskContext::Cancel() {}
-}  // namespace probe
 
 #if !defined(STANDALONE_RENDERER_GN_PROBE)
 void String::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -2977,10 +2677,6 @@ void JSEventListener::InvokeInternal(EventTarget&,
                                      Event&,
                                      v8::Local<v8::Value>) {}
 
-ScriptState* ToScriptStateForMainWorld(LocalFrame*) {
-  return nullptr;
-}
-
 Modulator* Modulator::From(ScriptState*) {
   return nullptr;
 }
@@ -3011,10 +2707,6 @@ void AbortSignalRegistry::RegisterAbortAlgorithm(
     EventListener*,
     AbortSignal::AlgorithmHandle*) {}
 
-bool RuntimeEnabledFeaturesBase::DeprecateUnloadOptOutEnabled(
-    const FeatureContext*) {
-  return false;
-}
 
 AbortSignal* Subscriber::signal() const {
   return nullptr;
@@ -3054,229 +2746,12 @@ void DatasetDOMStringMap::Trace(Visitor* visitor) const {
   visitor->Trace(element_);
 }
 
-bool RuntimeEnabledFeaturesBase::is_css_resource_integrity_enforcement_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_at_rule_counter_style_image_symbols_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_svg_ignore_negative_ellipse_radii_enabled_ =
-    true;
-bool RuntimeEnabledFeaturesBase::
-    is_table_border_color_no_implicit_border_enabled_ = true;
-bool RuntimeEnabledFeaturesBase::
-    is_table_default_border_color_current_color_enabled_ = true;
-bool RuntimeEnabledFeaturesBase::is_table_is_auto_fixed_layout_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_mobile_layout_theme_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_base_appearance_inline_sizing_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_html_input_element_drop_webkit_clear_button_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_fix_marker_suppression_for_appearance_auto_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_active_caption_maps_to_canvas_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_input_multiple_fields_ui_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_html_command_actions_v_2_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_popover_hint_new_behavior_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_access_key_label_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_list_counter_accounting_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_about_blank_page_respects_dark_mode_on_user_action_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scopeified_parent_pseudo_class_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_improved_source_retargeting_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_composed_path_return_target_being_dispatched_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_animation_iteration_composite_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_compositing_decision_at_animation_phase_boundaries_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_timeline_scope_all_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_timeline_scope_global_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_off_main_thread_css_paint_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_propagate_overscroll_behavior_from_root_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_smaller_viewport_units_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_argument_grammar_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_icu_capitalization_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_text_emphasis_punctuation_exceptions_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_script_based_on_unicode_block_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_media_query_navigation_controls_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_device_posture_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_inverted_colors_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_desktop_pw_as_additional_windowing_controls_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_inherit_function_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_shadow_contour_follows_border_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_parser_ignore_charset_for_urls_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_cssom_get_computed_style_pseudo_element_requires_colon_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_logical_combination_pseudo_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_lang_extended_ranges_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_marker_nested_pseudo_element_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_nested_pseudo_elements_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_element_backdrop_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_element_view_transitions_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_pseudo_elements_hit_testable_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_pseudo_elements_hoverable_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_two_phase_view_transition_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_prefer_default_scrollbar_styles_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_inherit_user_modify_without_contenteditable_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_font_variation_settings_descriptor_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_video_dynamic_range_media_queries_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_prefers_reduced_data_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_container_name_only_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_comma_separated_container_queries_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_supports_for_import_rules_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scope_import_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_supports_at_rule_function_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_supports_named_feature_function_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_custom_media_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_container_style_queries_range_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_mixins_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_clear_current_target_after_dispatch_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_orientation_event_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_capability_delegation_display_capture_request_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_window_default_status_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_fractional_scroll_offsets_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_skip_event_capture_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scrolled_container_queries_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_at_rule_counter_style_speak_as_descriptor_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_playing_paused_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scroll_marker_target_before_after_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_scroll_buttons_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_column_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_filterable_select_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_has_slotted_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_case_sensitive_selector_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_style_sheet_init_base_url_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_dom_activate_bubbles_inheritance_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_middle_click_autoscroll_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_selection_collapsed_direction_none_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_selection_set_base_and_extent_non_null_node_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_use_selection_in_dom_tree_anchor_in_extend_selection_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_selection_remove_range_not_found_error_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_delegates_focus_text_control_input_fix_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_dispatch_selectionchange_event_per_element_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_html_parser_yield_and_delay_often_for_testing_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_html_processing_instruction_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_input_in_select_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_html_adoption_algorithm_new_steps_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_allow_preloading_with_csp_meta_tag_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_document_open_sandbox_inheritance_removal_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_document_open_origin_alias_removal_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_avoid_forced_layout_on_invisible_document_close_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_document_open_iframe_unload_events_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_scroll_top_left_interop_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_standardized_browser_zoom_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_experimental_policies_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_time_zone_change_event_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_scroll_into_view_root_frame_viewport_bug_fix_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_raster_inducing_scroll_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_author_specified_layout_scroll_snap_behavior_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scroll_snap_change_event_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_scroll_snap_changing_event_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_partition_svg_document_resources_in_memory_cache_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_allow_svg_use_to_reference_external_document_root_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_dispatch_hidden_visibility_transitions_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_web_preferences_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_scroll_anchor_priority_candidate_subtree_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_scroll_anchor_serialization_use_parent_for_text_node_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_css_ch_unit_spec_compliant_fallback_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_mathml_operator_rtl_mirroring_enabled_ =
-    false;
-
-namespace features {
-BASE_FEATURE(kPausePagesPerBrowsingContextGroup,
-             "PausePagesPerBrowsingContextGroup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kCompositedAnimationsForceMainFrames,
-             "CompositedAnimationsForceMainFrames",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<bool> kForceMainFramesForIntersectionObserver{
-    &kCompositedAnimationsForceMainFrames, "intersection-observer", false};
-const base::FeatureParam<bool> kForceMainFramesForAnchorTransform{
-    &kCompositedAnimationsForceMainFrames, "anchor-transform", false};
-BASE_FEATURE(kVisualRectMappingApplyLocalVisualViewportTransform,
-             "VisualRectMappingApplyLocalVisualViewportTransform",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kCaptureJSExecutionLocation,
-             "CaptureJSExecutionLocation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kSpeculativeImageDecodes,
-             "SpeculativeImageDecodes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kReleaseResourceDecodedDataOnMemoryPressure,
-             "ReleaseResourceDecodedDataOnMemoryPressure",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kMemoryCacheStrongReference,
-             "MemoryCacheStrongReference",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<double> kMemoryCacheDecayRate{
-    &kMemoryCacheStrongReference, "memory-cache-decay-rate", 0.0};
-BASE_FEATURE(kLCPCriticalPathPredictor,
-             "LCPCriticalPathPredictor",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<bool>
-    kLCPCriticalPathPredictorImageLoadPriorityEnabledForHTMLImageElement{
-        &kLCPCriticalPathPredictor, "image-load-priority-for-html-image",
-        false};
-BASE_FEATURE(kBackForwardCacheDWCOnJavaScriptExecution,
-             "BackForwardCacheDWCOnJavaScriptExecution",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kBackForwardCachePauseMicrotasks,
-             "BackForwardCachePauseMicrotasks",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kEnableLazyLoadImageForInvisiblePage,
-             "EnableLazyLoadImageForInvisiblePage",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kThrottleUnimportantFrameTimers,
-             "ThrottleUnimportantFrameTimers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kWebFontsCacheAwareTimeoutAdaption,
-             "WebFontsCacheAwareTimeoutAdaption",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kEnforceNoopenerOnBlobURLNavigation,
-             "EnforceNoopenerOnBlobURLNavigation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<EnableLazyLoadImageForInvisiblePageType>::Option
-    kStandaloneEnableLazyLoadImageForInvisiblePageTypeOptions[] = {
-        {EnableLazyLoadImageForInvisiblePageType::kAllInvisiblePage,
-         "all_invisible_page"},
-        {EnableLazyLoadImageForInvisiblePageType::kPrerenderPage,
-         "prerender_page"}};
-BASE_FEATURE_ENUM_PARAM(
-    EnableLazyLoadImageForInvisiblePageType,
-    kEnableLazyLoadImageForInvisiblePageTypeParam,
-    &kEnableLazyLoadImageForInvisiblePage,
-    "enabled_page_type",
-    EnableLazyLoadImageForInvisiblePageType::kAllInvisiblePage,
-    &kStandaloneEnableLazyLoadImageForInvisiblePageTypeOptions);
-BASE_FEATURE_PARAM(int,
-                   kLargeFrameSizePercentThreshold,
-                   &kThrottleUnimportantFrameTimers,
-                   "large_frame_size_percent_threshold",
-                   75);
-bool IsUnloadBlocklisted() {
-  return true;
-}
-bool IsAllowURNsInIframeEnabled() {
-  return false;
-}
-}  // namespace features
 
 namespace switches {
 extern const char kDisableBlobUrlPartitioning[] =
     "disable-blob-url-partitioning";
 }  // namespace switches
 
-bool RuntimeEnabledFeaturesBase::IsFeatureEnabledFromString(
-    const std::string&) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::StandardizedBrowserZoomOptOutEnabled(
-    const FeatureContext*) {
-  return false;
-}
 
 namespace {
 const WrapperTypeInfo& StandaloneWrapperTypeInfo(const char* name) {
@@ -3381,6 +2856,8 @@ const WrapperTypeInfo& TrustedScriptURL::wrapper_type_info_ =
 
 const WrapperTypeInfo& HTMLBRElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBRElement");
+const WrapperTypeInfo& HTMLBaseElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLBaseElement");
 const WrapperTypeInfo& HTMLBodyElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBodyElement");
 const WrapperTypeInfo& HTMLDivElement::wrapper_type_info_ =
@@ -3443,8 +2920,6 @@ const WrapperTypeInfo& HTMLTableSectionElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLTableSectionElement");
 const WrapperTypeInfo& MediaList::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("MediaList");
-const WrapperTypeInfo& EventTarget::wrapper_type_info_ =
-    StandaloneWrapperTypeInfo("EventTarget");
 const WrapperTypeInfo& Element::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("Element");
 const WrapperTypeInfo& HTMLElement::wrapper_type_info_ =
@@ -3467,8 +2942,6 @@ const WrapperTypeInfo& CSSPositionTryDescriptors::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("CSSPositionTryDescriptors");
 const WrapperTypeInfo& StyleSheetList::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("StyleSheetList");
-const WrapperTypeInfo& Node::wrapper_type_info_ =
-    StandaloneWrapperTypeInfo("Node");
 const WrapperTypeInfo& Text::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("Text");
 const WrapperTypeInfo& CharacterData::wrapper_type_info_ =
@@ -3585,105 +3058,200 @@ const char* const V8DocumentReadyState::string_table_[] = {"loading",
                                                            "complete"};
 const char* const V8VisibilityState::string_table_[] = {"visible", "hidden"};
 
+bool StandaloneDomTraceEnabled() {
+  const char* value = std::getenv("HTML_CSS_RENDERER_TRACE_DOM");
+  return value && value[0] && value[0] != '0';
+}
+
+void TraceStandaloneHtmlFactory(const AtomicString& local_name,
+                                const char* stage) {
+  if (!StandaloneDomTraceEnabled()) {
+    return;
+  }
+  std::fprintf(stderr, "standalone_dom.factory.%s=%s\n", stage,
+               local_name.GetString().Utf8().c_str());
+  std::fflush(stderr);
+}
+
 extern "C" int g_standalone_html_factory_create_html_count;
 extern "C" int g_standalone_html_factory_create_body_count;
 
 HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
                                         Document& document,
-                                        const CreateElementFlags) {
+                                        const CreateElementFlags flags) {
+  TraceStandaloneHtmlFactory(local_name, "before");
   if (local_name == html_names::kHTMLTag.LocalName()) {
     ++g_standalone_html_factory_create_html_count;
-    return MakeGarbageCollected<HTMLHtmlElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLHtmlElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
-  if (local_name == html_names::kHeadTag.LocalName())
-    return MakeGarbageCollected<HTMLHeadElement>(document);
+  if (local_name == html_names::kHeadTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLHeadElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
   if (local_name == html_names::kBodyTag.LocalName()) {
     ++g_standalone_html_factory_create_body_count;
-    return MakeGarbageCollected<HTMLBodyElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLBodyElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kImgTag.LocalName()) {
-    return MakeGarbageCollected<HTMLImageElement>(document);
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLImageElement>(document, flags);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kFormTag.LocalName()) {
-    return MakeGarbageCollected<HTMLFormElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLFormElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
 #if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
   if (local_name == html_names::kInputTag.LocalName()) {
-    return MakeGarbageCollected<HTMLInputElement>(document,
-                                                  CreateElementFlags());
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLInputElement>(document, flags);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kTextareaTag.LocalName()) {
-    return MakeGarbageCollected<HTMLTextAreaElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLTextAreaElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
 #endif
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
   if (local_name == html_names::kSelectTag.LocalName()) {
-    return MakeGarbageCollected<HTMLSelectElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLSelectElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kOptionTag.LocalName()) {
-    return MakeGarbageCollected<HTMLOptionElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLOptionElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kOptgroupTag.LocalName()) {
-    return MakeGarbageCollected<HTMLOptGroupElement>(document);
+    HTMLElement* element = MakeGarbageCollected<HTMLOptGroupElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
 #endif
-  if (local_name == html_names::kTitleTag.LocalName())
-    return MakeGarbageCollected<HTMLTitleElement>(document);
-  if (local_name == html_names::kBrTag.LocalName())
-    return MakeGarbageCollected<HTMLBRElement>(document);
-  if (local_name == html_names::kDivTag.LocalName())
-    return MakeGarbageCollected<HTMLDivElement>(document);
+  if (local_name == html_names::kTitleTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLTitleElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kBrTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLBRElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kDivTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLDivElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
   if (local_name == html_names::kH1Tag.LocalName() ||
       local_name == html_names::kH2Tag.LocalName() ||
       local_name == html_names::kH3Tag.LocalName() ||
       local_name == html_names::kH4Tag.LocalName() ||
       local_name == html_names::kH5Tag.LocalName() ||
-      local_name == html_names::kH6Tag.LocalName())
-    return MakeGarbageCollected<HTMLHeadingElement>(
+      local_name == html_names::kH6Tag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLHeadingElement>(
         QualifiedName(g_null_atom, local_name, html_names::xhtmlNamespaceURI),
         document);
-  if (local_name == html_names::kLiTag.LocalName())
-    return MakeGarbageCollected<HTMLLIElement>(document);
-  if (local_name == html_names::kOlTag.LocalName())
-    return MakeGarbageCollected<HTMLOListElement>(document);
-  if (local_name == html_names::kPTag.LocalName())
-    return MakeGarbageCollected<HTMLParagraphElement>(document);
-  if (local_name == html_names::kUlTag.LocalName())
-    return MakeGarbageCollected<HTMLUListElement>(document);
-  if (local_name == html_names::kTableTag.LocalName())
-    return MakeGarbageCollected<HTMLTableElement>(document);
-  if (local_name == html_names::kCaptionTag.LocalName())
-    return MakeGarbageCollected<HTMLTableCaptionElement>(document);
-  if (local_name == html_names::kColTag.LocalName())
-    return MakeGarbageCollected<HTMLTableColElement>(html_names::kColTag,
-                                                     document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kLiTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLLIElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kOlTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLOListElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kPTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLParagraphElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kUlTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLUListElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kTableTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLTableElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kCaptionTag.LocalName()) {
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLTableCaptionElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kColTag.LocalName()) {
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLTableColElement>(html_names::kColTag,
+                                                  document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
   if (local_name == html_names::kColgroupTag.LocalName()) {
-    return MakeGarbageCollected<HTMLTableColElement>(html_names::kColgroupTag,
-                                                     document);
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLTableColElement>(html_names::kColgroupTag,
+                                                  document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kTbodyTag.LocalName()) {
-    return MakeGarbageCollected<HTMLTableSectionElement>(
+    HTMLElement* element = MakeGarbageCollected<HTMLTableSectionElement>(
         html_names::kTbodyTag, document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kTheadTag.LocalName()) {
-    return MakeGarbageCollected<HTMLTableSectionElement>(
+    HTMLElement* element = MakeGarbageCollected<HTMLTableSectionElement>(
         html_names::kTheadTag, document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
   if (local_name == html_names::kTfootTag.LocalName()) {
-    return MakeGarbageCollected<HTMLTableSectionElement>(
+    HTMLElement* element = MakeGarbageCollected<HTMLTableSectionElement>(
         html_names::kTfootTag, document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
   }
-  if (local_name == html_names::kTrTag.LocalName())
-    return MakeGarbageCollected<HTMLTableRowElement>(document);
-  if (local_name == html_names::kTdTag.LocalName())
-    return MakeGarbageCollected<HTMLTableCellElement>(html_names::kTdTag,
-                                                      document);
-  if (local_name == html_names::kThTag.LocalName())
-    return MakeGarbageCollected<HTMLTableCellElement>(html_names::kThTag,
-                                                      document);
+  if (local_name == html_names::kTrTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLTableRowElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kTdTag.LocalName()) {
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLTableCellElement>(html_names::kTdTag,
+                                                   document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kThTag.LocalName()) {
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLTableCellElement>(html_names::kThTag,
+                                                   document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
   QualifiedName tag_name(g_null_atom, local_name,
                          html_names::xhtmlNamespaceURI);
-  return MakeGarbageCollected<HTMLElement>(tag_name, document);
+  HTMLElement* element = MakeGarbageCollected<HTMLElement>(tag_name, document);
+  TraceStandaloneHtmlFactory(local_name, "after");
+  return element;
 }
 
 SVGElement* SVGElementFactory::Create(const AtomicString& local_name,
@@ -3769,19 +3337,11 @@ ContentType::ContentType(const String& type) : type_(type) {}
 String ContentType::GetType() const {
   return type_;
 }
-bool MIMETypeRegistry::IsSupportedImagePrefixedMIMEType(const String& type) {
-  return type.StartsWithIgnoringAsciiCase("image/");
-}
 bool HTMLSourceElement::MediaQueryMatches() const {
   return false;
 }
 void HTMLPictureElement::AddListenerToSourceChildren() {}
 void HTMLPictureElement::RemoveListenerFromSourceChildren() {}
-
-bool LCPCriticalPathPredictor::IsElementMatchingLocator(
-    const Element& element) {
-  return false;
-}
 
 void HTMLFormElement::DidAssociateByParser() {}
 
@@ -3838,11 +3398,6 @@ void ImageReplacement::CreateImageReplacementShadowTree(
 bool ImageReplacement::ResumeReplacementAfterImageLoad() {
   return false;
 }
-
-void HTMLImageFallbackHelper::CreateAltTextShadowTree(Element&) {}
-
-void HTMLImageFallbackHelper::AdjustHostStyle(HTMLElement&,
-                                              ComputedStyleBuilder&) {}
 
 MediaQueryListListener::MediaQueryListListener() = default;
 
@@ -3930,15 +3485,6 @@ void HTMLObjectElement::RenderFallbackContent(
     HTMLObjectElement::ErrorEventPolicy) {}
 
 void ScriptPromiseResolverBase::Reject(DOMException*) {}
-
-int IdentifiersFactory::IntIdForNode(Node*) {
-  return 0;
-}
-
-const String& IdentifiersFactory::FrameId(Frame*) {
-  static String* id = new String("standalone-frame");
-  return *id;
-}
 
 void ImageElementTiming::NotifyImagePainted(
     const LayoutObject&,
@@ -4044,15 +3590,6 @@ FrameLoadRequest::FrameLoadRequest(LocalDOMWindow* origin_window,
       should_send_referrer_(kMaybeSendReferrer),
       creation_time_(base::TimeTicks::Now()) {}
 
-FetchParameters::FetchParameters(ResourceRequest resource_request,
-                                 ResourceLoaderOptions options)
-    : resource_request_(std::move(resource_request)),
-      decoder_options_(TextResourceDecoderOptions::kPlainTextContent),
-      options_(std::move(options)) {}
-
-FetchParameters::FetchParameters(FetchParameters&&) = default;
-FetchParameters::~FetchParameters() = default;
-
 ScriptFetchOptions::ScriptFetchOptions()
     : nonce_(),
       integrity_metadata_(),
@@ -4081,15 +3618,6 @@ ScriptFetchOptions::ScriptFetchOptions(
       render_blocking_behavior_(render_blocking_behavior) {}
 
 ScriptFetchOptions::~ScriptFetchOptions() = default;
-
-void FetchParameters::SetCrossOriginAccessControl(const SecurityOrigin*,
-                                                  CrossOriginAttributeValue value) {
-  cross_origin_attribute_value_ = value;
-}
-
-void FetchParameters::SetCrossOriginAccessControl(
-    const SecurityOrigin*,
-    network::mojom::CredentialsMode) {}
 
 void ResourceClient::Trace(Visitor* visitor) const {
   visitor->Trace(resource_);
@@ -4602,22 +4130,235 @@ const LayoutLocale* LayoutLocale::Get(const AtomicString&) {
   return nullptr;
 }
 #endif
-bool IsOnStack(void*) {
-  return false;
-}
-namespace internal {
-uintptr_t g_main_thread_stack_start = 0;
-uintptr_t g_main_thread_underestimated_stack_size = 0;
-size_t ThreadStackSize() {
-  return 0;
-}
-void InitializeMainThreadStackEstimate() {}
-}  // namespace internal
 ThreadStateStorage ThreadStateStorage::main_thread_state_storage_;
 constinit thread_local ThreadStateStorage* g_thread_specific_
     __attribute__((tls_model(BLINK_HEAP_THREAD_LOCAL_MODEL))) = nullptr;
 
 namespace {
+constexpr unsigned long kStandaloneMemCommit = 0x1000;
+constexpr unsigned long kStandaloneMemReserve = 0x2000;
+constexpr unsigned long kStandaloneMemDecommit = 0x4000;
+constexpr unsigned long kStandaloneMemRelease = 0x8000;
+constexpr unsigned long kStandaloneMemReset = 0x80000;
+constexpr unsigned long kStandalonePageNoAccess = 0x01;
+constexpr unsigned long kStandalonePageReadonly = 0x02;
+constexpr unsigned long kStandalonePageReadwrite = 0x04;
+constexpr unsigned long kStandalonePageExecuteRead = 0x20;
+constexpr unsigned long kStandalonePageExecuteReadwrite = 0x40;
+
+unsigned long StandalonePageProtection(
+    v8::PageAllocator::Permission permission) {
+  switch (permission) {
+    case v8::PageAllocator::kNoAccess:
+    case v8::PageAllocator::kNoAccessWillJitLater:
+      return kStandalonePageNoAccess;
+    case v8::PageAllocator::kRead:
+      return kStandalonePageReadonly;
+    case v8::PageAllocator::kReadWrite:
+      return kStandalonePageReadwrite;
+    case v8::PageAllocator::kReadWriteExecute:
+      return kStandalonePageExecuteReadwrite;
+    case v8::PageAllocator::kReadExecute:
+      return kStandalonePageExecuteRead;
+  }
+}
+
+bool StandaloneNoAccessPermission(v8::PageAllocator::Permission permission) {
+  return permission == v8::PageAllocator::kNoAccess ||
+         permission == v8::PageAllocator::kNoAccessWillJitLater;
+}
+
+void* StandaloneTryAlignedReserve(size_t length, size_t alignment) {
+  if (alignment <= 65536) {
+    return nullptr;
+  }
+  if (length > std::numeric_limits<size_t>::max() - alignment) {
+    return nullptr;
+  }
+
+  const size_t reserve_length = length + alignment;
+  for (int attempt = 0; attempt < 8; ++attempt) {
+    void* raw = VirtualAlloc(nullptr, reserve_length, kStandaloneMemReserve,
+                             kStandalonePageNoAccess);
+    if (!raw) {
+      continue;
+    }
+    const uintptr_t raw_address = reinterpret_cast<uintptr_t>(raw);
+    const uintptr_t aligned_address =
+        (raw_address + alignment - 1) & ~(alignment - 1);
+    VirtualFree(raw, 0, kStandaloneMemRelease);
+
+    void* aligned = reinterpret_cast<void*>(aligned_address);
+    if (VirtualAlloc(aligned, length, kStandaloneMemReserve,
+                     kStandalonePageNoAccess) == aligned) {
+      return aligned;
+    }
+  }
+  return nullptr;
+}
+
+class StandaloneV8PageAllocator final : public v8::PageAllocator {
+ public:
+  StandaloneV8PageAllocator() = default;
+
+  size_t AllocatePageSize() override { return allocation_granularity_; }
+  size_t CommitPageSize() override { return page_size_; }
+  void SetRandomMmapSeed(int64_t) override {}
+  void* GetRandomMmapAddr() override { return nullptr; }
+
+  void* AllocatePages(void* address,
+                      size_t length,
+                      size_t alignment,
+                      Permission permissions) override {
+    const unsigned long allocation_type =
+        kStandaloneMemReserve |
+        (StandaloneNoAccessPermission(permissions) ? 0 : kStandaloneMemCommit);
+    if (!address && alignment > allocation_granularity_) {
+      void* reserved = StandaloneTryAlignedReserve(length, alignment);
+      if (!reserved) {
+        return nullptr;
+      }
+      if (StandaloneNoAccessPermission(permissions)) {
+        return reserved;
+      }
+      if (VirtualAlloc(reserved, length, kStandaloneMemCommit,
+                       StandalonePageProtection(permissions)) == reserved) {
+        return reserved;
+      }
+      VirtualFree(reserved, 0, kStandaloneMemRelease);
+      return nullptr;
+    }
+    return VirtualAlloc(address, length, allocation_type,
+                        StandalonePageProtection(permissions));
+  }
+
+  bool FreePages(void* address, size_t) override {
+    return !!VirtualFree(address, 0, kStandaloneMemRelease);
+  }
+
+  bool ReleasePages(void* address, size_t length, size_t new_length) override {
+    if (new_length >= length) {
+      return true;
+    }
+    if (new_length == 0) {
+      return FreePages(address, length);
+    }
+    auto* release_start = static_cast<uint8_t*>(address) + new_length;
+    return !!VirtualFree(release_start, length - new_length,
+                         kStandaloneMemDecommit);
+  }
+
+  bool SetPermissions(void* address,
+                      size_t length,
+                      Permission permissions) override {
+    if (!StandaloneNoAccessPermission(permissions) &&
+        VirtualAlloc(address, length, kStandaloneMemCommit,
+                     StandalonePageProtection(permissions)) != address) {
+      return false;
+    }
+    unsigned long old_protect = 0;
+    return !!VirtualProtect(address, length, StandalonePageProtection(permissions),
+                            &old_protect);
+  }
+
+  bool RecommitPages(void* address,
+                     size_t length,
+                     Permission permissions) override {
+    return VirtualAlloc(address, length, kStandaloneMemCommit,
+                        StandalonePageProtection(permissions)) == address;
+  }
+
+  bool DiscardSystemPages(void* address, size_t size) override {
+    return !!VirtualAlloc(address, size, kStandaloneMemReset,
+                          kStandalonePageReadwrite);
+  }
+
+  bool DecommitPages(void* address, size_t size) override {
+    return !!VirtualFree(address, size, kStandaloneMemDecommit);
+  }
+
+ private:
+  size_t page_size_ = 4096;
+  size_t allocation_granularity_ = 65536;
+};
+
+class StandaloneV8TaskRunner final : public v8::TaskRunner {
+ public:
+  bool IdleTasksEnabled() override { return false; }
+  bool NonNestableTasksEnabled() const override { return true; }
+};
+
+class StandaloneV8JobHandle final : public v8::JobHandle {
+ public:
+  void NotifyConcurrencyIncrease() override {}
+  void Join() override {}
+  void Cancel() override {}
+  void CancelAndDetach() override {}
+  bool IsActive() override { return false; }
+  bool IsValid() override { return false; }
+};
+
+class StandaloneV8Platform final : public v8::Platform {
+ public:
+  v8::PageAllocator* GetPageAllocator() override { return &page_allocator_; }
+
+  int NumberOfWorkerThreads() override { return 0; }
+
+  std::shared_ptr<v8::TaskRunner> GetForegroundTaskRunner(
+      v8::Isolate*,
+      v8::TaskPriority) override {
+    static auto runner = std::make_shared<StandaloneV8TaskRunner>();
+    return runner;
+  }
+
+  double MonotonicallyIncreasingTime() override {
+    return base::TimeTicks::Now().since_origin().InSecondsF();
+  }
+
+  double CurrentClockTimeMillis() override {
+    return base::Time::Now().InMillisecondsFSinceUnixEpoch();
+  }
+
+  v8::TracingController* GetTracingController() override {
+    return &tracing_controller_;
+  }
+
+ protected:
+  std::unique_ptr<v8::JobHandle> CreateJobImpl(
+      v8::TaskPriority,
+      std::unique_ptr<v8::JobTask>,
+      const v8::SourceLocation&) override {
+    return std::make_unique<StandaloneV8JobHandle>();
+  }
+
+  void PostTaskOnWorkerThreadImpl(v8::TaskPriority,
+                                  std::unique_ptr<v8::Task>,
+                                  const v8::SourceLocation&) override {}
+
+  void PostDelayedTaskOnWorkerThreadImpl(v8::TaskPriority,
+                                         std::unique_ptr<v8::Task>,
+                                         double,
+                                         const v8::SourceLocation&) override {}
+
+ private:
+  StandaloneV8PageAllocator page_allocator_;
+  v8::TracingController tracing_controller_;
+};
+
+StandaloneV8Platform& StandaloneCppgcPlatform() {
+  static StandaloneV8Platform platform;
+  return platform;
+}
+
+v8::Platform* StandaloneInitializedCppgcPlatform(v8::Platform* platform) {
+  v8::Platform* effective_platform =
+      platform ? platform : &StandaloneCppgcPlatform();
+  if (!cppgc::IsInitialized()) {
+    cppgc::InitializeProcess(effective_platform->GetPageAllocator());
+  }
+  return effective_platform;
+}
+
 cppgc::AllocationHandle& StandaloneAllocationHandle() {
   alignas(std::max_align_t) static unsigned char allocation_handle[64] = {};
   return *reinterpret_cast<cppgc::AllocationHandle*>(allocation_handle);
@@ -4672,29 +4413,31 @@ ThreadStateStorage* ThreadStateStorage::Current() {
 
 ThreadState* ThreadState::AttachMainThread(
     std::optional<cppgc::StackStartMarker>) {
-  auto* thread_state = new ThreadState(nullptr);
-  ThreadStateStorage::AttachMainThread(*thread_state,
-                                       StandaloneAllocationHandle(),
-                                       StandaloneHeapHandle());
+  auto* thread_state = new ThreadState(&StandaloneCppgcPlatform());
+  ThreadStateStorage::AttachMainThread(
+      *thread_state, thread_state->cpp_heap().GetAllocationHandle(),
+      thread_state->cpp_heap().GetHeapHandle());
   return thread_state;
 }
 
 ThreadState* ThreadState::AttachCurrentThread() {
-  auto* thread_state = new ThreadState(nullptr);
-  ThreadStateStorage::AttachNonMainThread(*thread_state,
-                                          StandaloneAllocationHandle(),
-                                          StandaloneHeapHandle());
+  auto* thread_state = new ThreadState(&StandaloneCppgcPlatform());
+  ThreadStateStorage::AttachNonMainThread(
+      *thread_state, thread_state->cpp_heap().GetAllocationHandle(),
+      thread_state->cpp_heap().GetHeapHandle());
   return thread_state;
 }
 
 void ThreadState::DetachCurrentThread() {}
 
 ThreadState::ThreadState(
-    v8::Platform*,
+    v8::Platform* platform,
     std::optional<cppgc::StackStartMarker>)
-    : owning_cpp_heap_(v8::CppHeap::Create(nullptr, v8::CppHeapCreateParams({}))),
+    : owning_cpp_heap_(v8::CppHeap::Create(
+          StandaloneInitializedCppgcPlatform(platform),
+          v8::CppHeapCreateParams(CustomSpaces::CreateCustomSpaces()))),
       cpp_heap_(owning_cpp_heap_.get()),
-      heap_handle_(StandaloneHeapHandle()),
+      heap_handle_(cpp_heap_->GetHeapHandle()),
       thread_id_(CurrentThread()) {}
 
 ThreadState::~ThreadState() = default;
@@ -4758,24 +4501,6 @@ int ItalicMathVariant(int character) {
 const char* const Partitions::kAllocatedObjectPoolName =
     "blink_gc/allocated_objects";
 
-KURL MemoryCache::RemoveFragmentIdentifierIfNeeded(const KURL& url) {
-  return url;
-}
-MemoryCache* MemoryCache::Get() {
-  return reinterpret_cast<MemoryCache*>(1);
-}
-Resource* MemoryCache::ResourceForURL(const KURL&, const String&) const {
-  return nullptr;
-}
-String MemoryCache::DefaultCacheIdentifier() {
-  return String();
-}
-void MemoryCache::Remove(Resource*) {}
-bool MemoryCache::Contains(const Resource*) const {
-  return false;
-}
-void MemoryCache::Update(Resource*, size_t, size_t) {}
-
 namespace {
 class StandaloneDecodedImage final : public Image {
  public:
@@ -4826,6 +4551,7 @@ scoped_refptr<Image> LoadStandaloneDecodedImage(
   request.accepted_mime_types.push_back("image/png");
   request.accepted_mime_types.push_back("image/jpeg");
   request.accepted_mime_types.push_back("image/bmp");
+  request.accepted_mime_types.push_back("image/webp");
   request.accepted_mime_types.push_back("image/svg+xml");
   html_css_renderer::StandaloneResourceResult result =
       html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
@@ -4862,6 +4588,7 @@ html_css_renderer::StandaloneResourceResult LoadStandaloneEncodedImageResource(
   request.accepted_mime_types.push_back("image/png");
   request.accepted_mime_types.push_back("image/jpeg");
   request.accepted_mime_types.push_back("image/bmp");
+  request.accepted_mime_types.push_back("image/webp");
   request.accepted_mime_types.push_back("image/svg+xml");
   return html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
       request);
@@ -4869,7 +4596,9 @@ html_css_renderer::StandaloneResourceResult LoadStandaloneEncodedImageResource(
 
 bool ShouldUseStandaloneDecodedImageResource(
     const html_css_renderer::StandaloneResourceResult& result) {
-  return (result.mime_type == "image/jpeg" || result.mime_type == "image/bmp") &&
+  return (result.mime_type == "image/jpeg" ||
+          result.mime_type == "image/bmp" ||
+          result.mime_type == "image/webp") &&
          result.decoded_image;
 }
 
@@ -5012,56 +4741,6 @@ String SubresourceIntegrity::GetSubresourceIntegrityHash(
     const SegmentedBuffer*,
     HashAlgorithm) {
   return String();
-}
-
-FetchContext& ResourceFetcher::Context() const {
-  return FetchContext::NullInstance();
-}
-
-Resource* ResourceFetcher::CreateResourceForStaticData(
-    const FetchParameters& params,
-    const ResourceFactory& factory) {
-  return CreateStandaloneProviderBackedResource(
-      params, factory, freezable_task_runner_.get());
-}
-
-Resource* ResourceFetcher::RequestResource(FetchParameters& params,
-                                           const ResourceFactory& factory,
-                                           ResourceClient* client) {
-  Resource* resource = CreateStandaloneProviderBackedResource(
-      params, factory, freezable_task_runner_.get());
-  if (resource) {
-    if (client) {
-      client->SetResource(resource, freezable_task_runner_.get());
-    }
-    return resource;
-  }
-
-  resource = factory.Create(params.GetResourceRequest(), params.Options(),
-                            params.DecoderOptions());
-  if (client) {
-    client->SetResource(resource, freezable_task_runner_.get());
-  }
-  resource->FinishAsError(ResourceError::CancelledError(params.Url()),
-                          freezable_task_runner_.get());
-  return resource;
-}
-
-bool ResourceFetcher::ShouldDeferImageLoad(const KURL& url) const {
-  if (url.ProtocolIsData() || url.ProtocolIs("file") || !url.Protocol()) {
-    return false;
-  }
-  return true;
-}
-
-bool ResourceFetcher::StartLoad(Resource* resource,
-                                bool) {
-  if (!resource) {
-    return false;
-  }
-  resource->FinishAsError(ResourceError::CancelledError(resource->Url()),
-                          freezable_task_runner_.get());
-  return false;
 }
 
 FetchContext& ResourceLoader::Context() const {
@@ -5217,40 +4896,6 @@ void CSSStyleSheetInit::Trace(Visitor* visitor) const {
 }
 
 StyleSheet::~StyleSheet() = default;
-
-CSSKeyframeRule::CSSKeyframeRule(StyleRuleKeyframe* rule,
-                                 CSSKeyframesRule* parent)
-    : CSSRule(parent ? parent->parentStyleSheet() : nullptr),
-      keyframe_(rule) {
-  SetParentRule(parent);
-}
-
-CSSKeyframeRule::~CSSKeyframeRule() = default;
-
-void CSSKeyframeRule::Reattach(StyleRuleBase* rule) {
-  keyframe_ = DynamicTo<StyleRuleKeyframe>(rule);
-}
-
-void CSSKeyframeRule::Trace(Visitor* visitor) const {
-  CSSRule::Trace(visitor);
-  visitor->Trace(keyframe_);
-}
-
-CSSStyleDeclaration* CSSKeyframeRule::style() const {
-  return nullptr;
-}
-
-CSSStyleSheet* CSSImportRule::styleSheet() const {
-  return nullptr;
-}
-
-CSSRuleList* CSSStyleRule::cssRules() const {
-  return nullptr;
-}
-
-CSSRule* CSSNestedDeclarationsRule::InnerCSSStyleRule() const {
-  return nullptr;
-}
 
 CSSPositionTryDescriptors::CSSPositionTryDescriptors(
     MutableCSSPropertyValueSet& property_set,
@@ -5458,17 +5103,21 @@ int MediaValuesDynamic::ColorBitsPerComponent() const { return 24; }
 int MediaValuesDynamic::MonochromeBitsPerComponent() const { return 0; }
 bool MediaValuesDynamic::InvertedColors() const { return false; }
 mojom::blink::PointerType MediaValuesDynamic::PrimaryPointerType() const {
-  return mojom::blink::PointerType::kPointerNone;
+  return mojom::blink::PointerType::kPointerFineType;
 }
-int MediaValuesDynamic::AvailablePointerTypes() const { return 0; }
+int MediaValuesDynamic::AvailablePointerTypes() const {
+  return static_cast<int>(mojom::blink::PointerType::kPointerFineType);
+}
 mojom::blink::HoverType MediaValuesDynamic::PrimaryHoverType() const {
-  return mojom::blink::HoverType::kHoverNone;
+  return mojom::blink::HoverType::kHoverHoverType;
 }
 mojom::blink::OutputDeviceUpdateAbilityType
 MediaValuesDynamic::OutputDeviceUpdateAbilityType() const {
   return mojom::blink::OutputDeviceUpdateAbilityType::kFastType;
 }
-int MediaValuesDynamic::AvailableHoverTypes() const { return 0; }
+int MediaValuesDynamic::AvailableHoverTypes() const {
+  return static_cast<int>(mojom::blink::HoverType::kHoverHoverType);
+}
 bool MediaValuesDynamic::ThreeDEnabled() const { return false; }
 bool MediaValuesDynamic::StrictMode() const { return true; }
 const String MediaValuesDynamic::MediaType() const { return AtomicString("screen"); }
@@ -5567,95 +5216,6 @@ PostLayoutSnapshotClient::PostLayoutSnapshotClient(LocalFrame*) {}
 void PostLayoutSnapshotClient::UpdateSnapshotForServiceAnimations() {
   UpdateSnapshot();
 }
-
-MediaValuesCached::MediaValuesCached() = default;
-MediaValuesCached::MediaValuesCached(Document& document) {
-  LocalFrame* frame = document.GetFrame();
-  const double width =
-      frame && frame->View() ? frame->View()->GetLayoutSize().width() : 800;
-  const double height =
-      frame && frame->View() ? frame->View()->GetLayoutSize().height() : 600;
-  data_.viewport_width = width;
-  data_.viewport_height = height;
-  data_.small_viewport_width = width;
-  data_.small_viewport_height = height;
-  data_.large_viewport_width = width;
-  data_.large_viewport_height = height;
-  data_.dynamic_viewport_width = width;
-  data_.dynamic_viewport_height = height;
-  data_.device_width = static_cast<int>(width);
-  data_.device_height = static_cast<int>(height);
-  data_.device_pixel_ratio = 1.0f;
-  data_.media_type = AtomicString("screen");
-  data_.strict_mode = true;
-  data_.resizable = true;
-}
-MediaValuesCached::MediaValuesCached(const MediaValuesCachedData& data)
-    : data_(data) {}
-MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData() = default;
-MediaValues* MediaValuesCached::Copy() const {
-  return MakeGarbageCollected<MediaValuesCached>(data_);
-}
-void MediaValuesCached::OverrideViewportDimensions(double width, double height) {
-  data_.viewport_width = width;
-  data_.viewport_height = height;
-}
-int MediaValuesCached::DeviceWidth() const { return data_.device_width; }
-int MediaValuesCached::DeviceHeight() const { return data_.device_height; }
-float MediaValuesCached::DevicePixelRatio() const { return data_.device_pixel_ratio; }
-bool MediaValuesCached::DeviceSupportsHDR() const { return data_.device_supports_hdr; }
-int MediaValuesCached::ColorBitsPerComponent() const { return data_.color_bits_per_component; }
-int MediaValuesCached::MonochromeBitsPerComponent() const { return data_.monochrome_bits_per_component; }
-bool MediaValuesCached::InvertedColors() const { return data_.inverted_colors; }
-mojom::blink::PointerType MediaValuesCached::PrimaryPointerType() const { return data_.primary_pointer_type; }
-int MediaValuesCached::AvailablePointerTypes() const { return data_.available_pointer_types; }
-mojom::blink::HoverType MediaValuesCached::PrimaryHoverType() const { return data_.primary_hover_type; }
-mojom::blink::OutputDeviceUpdateAbilityType MediaValuesCached::OutputDeviceUpdateAbilityType() const { return data_.output_device_update_ability_type; }
-int MediaValuesCached::AvailableHoverTypes() const { return data_.available_hover_types; }
-bool MediaValuesCached::ThreeDEnabled() const { return data_.three_d_enabled; }
-bool MediaValuesCached::StrictMode() const { return data_.strict_mode; }
-Document* MediaValuesCached::GetDocument() const { return nullptr; }
-bool MediaValuesCached::HasValues() const { return true; }
-const String MediaValuesCached::MediaType() const { return data_.media_type; }
-blink::mojom::DisplayMode MediaValuesCached::DisplayMode() const { return data_.display_mode; }
-ui::mojom::blink::WindowShowState MediaValuesCached::WindowShowState() const { return data_.window_show_state; }
-bool MediaValuesCached::Resizable() const { return data_.resizable; }
-ColorSpaceGamut MediaValuesCached::ColorGamut() const { return data_.color_gamut; }
-mojom::blink::PreferredColorScheme MediaValuesCached::GetPreferredColorScheme() const { return data_.preferred_color_scheme; }
-mojom::blink::PreferredContrast MediaValuesCached::GetPreferredContrast() const { return data_.preferred_contrast; }
-bool MediaValuesCached::PrefersReducedMotion() const { return data_.prefers_reduced_motion; }
-bool MediaValuesCached::PrefersReducedData() const { return data_.prefers_reduced_data; }
-bool MediaValuesCached::PrefersReducedTransparency() const { return data_.prefers_reduced_transparency; }
-ForcedColors MediaValuesCached::GetForcedColors() const { return data_.forced_colors; }
-NavigationControls MediaValuesCached::GetNavigationControls() const { return data_.navigation_controls; }
-int MediaValuesCached::GetHorizontalViewportSegments() const { return data_.horizontal_viewport_segments; }
-int MediaValuesCached::GetVerticalViewportSegments() const { return data_.vertical_viewport_segments; }
-mojom::blink::DevicePostureType MediaValuesCached::GetDevicePosture() const { return data_.device_posture; }
-Scripting MediaValuesCached::GetScripting() const { return data_.scripting; }
-float MediaValuesCached::EmFontSize(float) const { return data_.em_size; }
-float MediaValuesCached::RemFontSize(float) const { return data_.em_size; }
-float MediaValuesCached::ExFontSize(float) const { return data_.ex_size; }
-float MediaValuesCached::RexFontSize(float) const { return data_.ex_size; }
-float MediaValuesCached::ChFontSize(float) const { return data_.ch_size; }
-float MediaValuesCached::RchFontSize(float) const { return data_.ch_size; }
-float MediaValuesCached::IcFontSize(float) const { return data_.ic_size; }
-float MediaValuesCached::RicFontSize(float) const { return data_.ic_size; }
-float MediaValuesCached::LineHeight(float) const { return data_.line_height; }
-float MediaValuesCached::RootLineHeight(float) const { return data_.line_height; }
-float MediaValuesCached::CapFontSize(float) const { return data_.cap_size; }
-float MediaValuesCached::RcapFontSize(float) const { return data_.cap_size; }
-double MediaValuesCached::ViewportWidth() const { return data_.viewport_width; }
-double MediaValuesCached::ViewportHeight() const { return data_.viewport_height; }
-double MediaValuesCached::SmallViewportWidth() const { return data_.small_viewport_width; }
-double MediaValuesCached::SmallViewportHeight() const { return data_.small_viewport_height; }
-double MediaValuesCached::LargeViewportWidth() const { return data_.large_viewport_width; }
-double MediaValuesCached::LargeViewportHeight() const { return data_.large_viewport_height; }
-double MediaValuesCached::DynamicViewportWidth() const { return data_.dynamic_viewport_width; }
-double MediaValuesCached::DynamicViewportHeight() const { return data_.dynamic_viewport_height; }
-double MediaValuesCached::ContainerWidth() const { return 0; }
-double MediaValuesCached::ContainerHeight() const { return 0; }
-double MediaValuesCached::ContainerWidth(const ScopedCSSName&) const { return 0; }
-double MediaValuesCached::ContainerHeight(const ScopedCSSName&) const { return 0; }
 
 const AtomicString& HTMLAnchorElementBase::GetName() const {
   return g_null_atom;
@@ -6736,29 +6296,6 @@ void MediaQueryFeatureExpNode::SerializeTo(StringBuilder& builder) const {
   builder.Append(exp_.Serialize());
 }
 
-std::optional<double> MediaValues::InlineSize() const {
-  return Width();
-}
-
-std::optional<double> MediaValues::BlockSize() const {
-  return Height();
-}
-
-bool MediaValues::SnappedBlock() const {
-  return false;
-}
-
-bool MediaValues::SnappedInline() const {
-  return false;
-}
-
-MediaValues* MediaValues::CreateDynamicIfFrameExists(LocalFrame* frame) {
-  if (!frame) {
-    return nullptr;
-  }
-  return MediaValuesDynamic::Create(frame);
-}
-
 const unsigned char* SelectorStatisticsFlag::GetCategoryGroupEnabled() {
   static const unsigned char disabled = 0;
   return &disabled;
@@ -6767,46 +6304,6 @@ const unsigned char* SelectorStatisticsFlag::GetCategoryGroupEnabled() {
 void SelectorStatisticsCollector::ReserveCapacity(wtf_size_t) {}
 void SelectorStatisticsCollector::BeginCollectionForRule(const RuleData*) {}
 void SelectorStatisticsCollector::EndCollectionForCurrentRule() {}
-
-String IdentifiersFactory::IdForCSSStyleSheet(const CSSStyleSheet*) {
-  return String();
-}
-
-const StyleSheetContents*
-InvalidationSetToSelectorMap::LookupStyleSheetContentsForRule(
-    const StyleRule*) {
-  return nullptr;
-}
-
-void InvalidationSetToSelectorMap::RemoveEntriesForInvalidationSet(
-    const InvalidationSet*) {}
-
-InvalidationSetToSelectorMap::CombineScope::CombineScope(
-    const InvalidationSet*,
-    const InvalidationSet*) {}
-InvalidationSetToSelectorMap::CombineScope::~CombineScope() = default;
-
-InvalidationSetToSelectorMap::SelectorScope::SelectorScope(StyleRule*,
-                                                           unsigned) {}
-InvalidationSetToSelectorMap::SelectorScope::~SelectorScope() = default;
-
-InvalidationSetToSelectorMap::StyleSheetContentsScope::StyleSheetContentsScope(
-    const StyleSheetContents*) {}
-InvalidationSetToSelectorMap::StyleSheetContentsScope::~StyleSheetContentsScope() =
-    default;
-
-void InvalidationSetToSelectorMap::RecordInvalidationSetEntry(
-    const InvalidationSet*,
-    SelectorFeatureType,
-    const AtomicString&) {}
-
-void InvalidationSetToSelectorMap::StartOrStopTrackingIfNeeded(
-    const TreeScope&,
-    const StyleEngine&) {}
-
-String DescendantInvalidationSetToIdString(const InvalidationSet&) {
-  return String();
-}
 
 RuleInvalidationDataTracer::RuleInvalidationDataTracer(
     const RuleInvalidationData& data)
@@ -6861,46 +6358,19 @@ DocumentSpeculationRules& DocumentSpeculationRules::From(Document&) {
   return *rules;
 }
 
-bool AdTracker::IsAdScriptExecutingInDocument(Document*, StackType) {
-  return false;
-}
-AdTracker::AdTracker(LocalFrame* frame) : local_root_(frame) {}
-AdTracker::~AdTracker() = default;
-void AdTracker::Trace(Visitor*) const {}
-std::optional<AdProvenance> AdTracker::CalculateIfAdSubresource(
-    ExecutionContext*,
-    const KURL&,
-    ResourceType,
-    const FetchInitiatorInfo&,
-    std::optional<AdProvenance> known_ad_provenance,
-    bool) {
-  return known_ad_provenance;
-}
-bool AdTracker::IsAdScriptInStack(StackType,
-                                  MonkeyPatchableApi,
-                                  AdScriptAncestry*) {
-  return false;
-}
-void AdTracker::Shutdown() {}
-
 LinkStyle* HTMLLinkElement::GetLinkStyle() const {
   return nullptr;
 }
 
 Referrer::Referrer()
-    : referrer(ClientReferrerString()),
-      referrer_policy(network::mojom::ReferrerPolicy::kDefault) {}
+    : referrer_policy(network::mojom::ReferrerPolicy::kDefault) {}
 
 const AtomicString& Referrer::ClientReferrerString() {
-  static const AtomicString* client = new AtomicString("client");
+  static const AtomicString* client = new AtomicString("about:client");
   return *client;
 }
 
 
-Element* DisplayLockUtilities::LockedInclusiveAncestorPreventingStyleWithinTreeScope(
-    const Node&) {
-  return nullptr;
-}
 unsigned FirstLetterPseudoElement::FirstLetterLength(
     const String& string,
     bool,
@@ -6945,10 +6415,6 @@ void ListedElement::UpdateWillValidateCache(WillValidateReason) {}
 
 void FontCache::PrewarmFamily(const AtomicString&) {}
 
-bool RuntimeEnabledFeaturesBase::OpaqueRangeEnabled(
-    const FeatureContext*) {
-  return false;
-}
 
 void HTMLFormElement::InvalidateDefaultButtonStyle() const {}
 
@@ -7030,8 +6496,6 @@ FormControlState ElementInternals::SaveFormControlState() const {
   return FormControlState();
 }
 void ElementInternals::RestoreFormControlState(const FormControlState&) {}
-
-DisplayLockContext::DisplayLockContext(Element* element) : element_(element) {}
 
 void CSSPseudoElementsCacheData::CacheCSSPseudoElement(
     PseudoId pseudo_id,
@@ -7179,10 +6643,6 @@ void DocumentMarkerController::RemoveMarkersForNode(
     const Text&,
     DocumentMarker::MarkerTypes) {}
 
-WebPluginContainerImpl* LayoutEmbeddedContent::Plugin() const {
-  return nullptr;
-}
-
 void HTMLQuoteElement::AdjustPseudoStyleLocale(ComputedStyleBuilder&) {}
 
 bool HTMLMenuItemElement::IsCheckable() const {
@@ -7220,19 +6680,6 @@ void PointerLockController::RequestPointerLock(
     ScriptPromiseResolver<IDLUndefined>*,
     Element*,
     const PointerLockOptions*) {}
-
-DOMException::DOMException(DOMExceptionCode code,
-                           const char* name,
-                           const char* message)
-    : legacy_code_(static_cast<uint16_t>(code)),
-      name_(name ? name : ""),
-      sanitized_message_(message ? message : ""),
-      unsanitized_message_(message ? message : "") {}
-
-void DisplayLockContext::DidMoveToNewDocument(Document& document) {
-  document_ = &document;
-}
-
 
 Attr::Attr(Element& element, const QualifiedName& name)
     : Node(&element.GetTreeScope(), kCreateAttribute),
@@ -7279,49 +6726,14 @@ bool IsActualFocusgroup(const FocusgroupData&) {
 }
 }  // namespace focusgroup
 
-bool RuntimeEnabledFeaturesBase::is_check_visibility_extra_properties_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_customizable_combobox_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_edit_context_assignment_as_per_spec_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_element_capture_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_element_internals_behaviors_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_remove_visible_selection_in_dom_selection_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_spat_nav_uses_cursor_inheritance_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_get_computed_style_outside_flat_tree_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_element_interface_enabled_ = false;
 
-bool RuntimeEnabledFeaturesBase::ShadowRootAdoptedStyleSheetEnabled(
-    const FeatureContext*) {
-  return false;
-}
 
-bool RuntimeEnabledFeaturesBase::ContainerTimingEnabled(
-    const FeatureContext*) {
-  return false;
-}
 
 void ScrollMarkerGroupData::ClearFocusGroup() {
   focus_group_.clear();
 }
 
 void ScrollMarkerGroupData::ClearScrollableAreaSubscriptions() {}
-
-Element* DisplayLockUtilities::LockedAncestorPreventingPaint(const Node&) {
-  return nullptr;
-}
-
-Element* DisplayLockUtilities::LockedAncestorPreventingPaint(
-    const LayoutObject&) {
-  return nullptr;
-}
-
-bool DisplayLockUtilities::IsDisplayLockedPreventingPaint(const Node*, bool) {
-  return false;
-}
 
 void EditContext::AttachElement(HTMLElement*) {}
 
@@ -7355,10 +6767,6 @@ void Attr::AttachToElement(Element* element, const AtomicString& local_name) {
 MutationRecord* MutationRecord::CreateAttributes(Node*,
                                                  const QualifiedName&,
                                                  const AtomicString&) {
-  return nullptr;
-}
-
-LocalDOMWindow* IncumbentDOMWindow(v8::Isolate*) {
   return nullptr;
 }
 
@@ -7518,10 +6926,6 @@ void AnchorPositionScrollData::Trace(Visitor* visitor) const {
   visitor->Trace(anchored_element_);
 }
 
-void DisplayLockContext::WillStartLifecycleUpdate(const LocalFrameView&) {}
-
-void DisplayLockContext::DidFinishLayout() {}
-
 bool AnchorPositionScrollData::UpdateSnapshot() {
   return false;
 }
@@ -7569,8 +6973,6 @@ CSSSelectorWatch& CSSSelectorWatch::From(Document& document) {
 void CSSSelectorWatch::UpdateSelectorMatches(const Vector<String>&,
                                              const Vector<String>&) {}
 
-void DisplayLockContext::DetachLayoutTree() {}
-
 void DocumentSpeculationRules::LinkGainedOrLostComputedStyle(
     HTMLAnchorElementBase*) {}
 void DocumentSpeculationRules::LinkMatchedSelectorsUpdated(
@@ -7578,33 +6980,14 @@ void DocumentSpeculationRules::LinkMatchedSelectorsUpdated(
 void DocumentSpeculationRules::ChildStyleRecalcBlocked(Element*) {}
 void DocumentSpeculationRules::DidStyleChildren(Element*) {}
 
-void DisplayLockContext::SetRequestedState(EContentVisibility state) {
-  state_ = state;
-}
-
-const ComputedStyle* DisplayLockContext::AdjustElementStyle(
-    const ComputedStyle* style) const {
-  return style;
-}
-
 bool HTMLMenuItemElement::ShouldHaveExpandIcon() const {
   return false;
 }
-
-bool RuntimeEnabledFeaturesBase::
-    is_html_interest_for_interest_button_pseudo_enabled_ = false;
-
-void DisplayLockContext::DidStyleSelf() {}
-void DisplayLockContext::DidStyleChildren() {}
 
 ViewTransition* ViewTransitionUtils::GetTransition(const Element&) {
   return nullptr;
 }
 #endif
-
-int DisplayLockDocumentState::LockedDisplayLockCount() const {
-  return 0;
-}
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
 CSSSelectorWatch& CSSSelectorWatch::From(Document&) {
@@ -7792,10 +7175,6 @@ PaintLayerScrollableAreaRareData::PaintLayerScrollableAreaRareData() = default;
 
 void PaintLayerScrollableAreaRareData::Trace(Visitor*) const {}
 
-int InstanceCounters::node_counter_ = 0;
-
-unsigned DOMWrapperWorld::number_of_non_main_worlds_in_main_thread_ = 0;
-
 V8ObservableArrayCSSStyleSheet::V8ObservableArrayCSSStyleSheet(
     GarbageCollectedMixin* platform_object,
     SetAlgorithmCallback set_algorithm_callback,
@@ -7904,12 +7283,6 @@ std::optional<CSSSyntaxDefinition> CSSSyntaxStringParser::Parse() {
   return std::nullopt;
 }
 
-FontFace* FontFace::Create(Document*,
-                           const CascadeLayered<const StyleRuleFontFace>&,
-                           bool) {
-  return nullptr;
-}
-
 void FontFaceCache::Add(const StyleRuleFontFace*, FontFace*) {}
 
 EInsideLink VisitedLinkState::DetermineLinkStateSlowCase(const Element&) {
@@ -7954,49 +7327,6 @@ URLPattern* URLPattern::Create(v8::Isolate*,
                                ExceptionState&) {
   return nullptr;
 }
-
-namespace inspector_style_resolver_resolve_style_event {
-void Data(perfetto::TracedValue, Element*, PseudoId) {}
-}  // namespace inspector_style_resolver_resolve_style_event
-
-namespace inspector_style_invalidator_invalidate_event {
-const char kInvalidationSetInvalidatesSubtree[] = "subtree";
-const char kInvalidationSetMatchedTagName[] = "tag";
-const char kInvalidationSetMatchedId[] = "id";
-const char kInvalidationSetMatchedClass[] = "class";
-const char kInvalidationSetMatchedCustomPseudoName[] = "pseudo";
-const char kInvalidationSetMatchedAttribute[] = "attr";
-const char kInvalidationSetMatchedPart[] = "part";
-const char kInvalidationSetInvalidatesTreeCounting[] = "tree-counting";
-const char kInvalidationSetInvalidatesSelf[] = "self";
-void SelectorPart(perfetto::TracedValue,
-                  Element&,
-                  const char*,
-                  const InvalidationSet&,
-                  const AtomicString&) {}
-void InvalidationList(perfetto::TracedValue,
-                      ContainerNode&,
-                      const Vector<scoped_refptr<InvalidationSet>>&) {}
-}  // namespace inspector_style_invalidator_invalidate_event
-
-namespace inspector_schedule_style_invalidation_tracking_event {
-void ClassChange(perfetto::TracedValue,
-                 Element&,
-                 const InvalidationSet&,
-                 const AtomicString&) {}
-void IdChange(perfetto::TracedValue,
-              Element&,
-              const InvalidationSet&,
-              const AtomicString&) {}
-void AttributeChange(perfetto::TracedValue,
-                     Element&,
-                     const InvalidationSet&,
-                     const QualifiedName&) {}
-void PseudoChange(perfetto::TracedValue,
-                  Element&,
-                  const InvalidationSet&,
-                  CSSSelector::PseudoType) {}
-}  // namespace inspector_schedule_style_invalidation_tracking_event
 
 #if 0
 V8UnionCSSNumericValueOrDouble* Animation::currentTime() const {
@@ -8829,192 +8159,7 @@ const unsigned char* InvalidationTracingFlag::GetCategoryGroupEnabled() {
   return &disabled;
 }
 
-bool RuntimeEnabledFeaturesBase::is_reading_flow_with_slots_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_blink_runtime_call_stats_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_heading_offset_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_shadow_root_reference_target_aria_owns_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_html_command_for_scroll_commands_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_clip_element_visible_bounds_in_local_root_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_trusted_types_html_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_inner_html_parser_fastpath_log_failure_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_page_reveal_event_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_page_popup_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_page_popup_copy_paste_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_ad_tagging_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_programmatic_scroll_promise_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_coalesce_selectionchange_event_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_aria_notify_v_2_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_aria_notify_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_back_forward_cache_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_viewport_segments_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_text_scale_meta_tag_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_force_reduce_motion_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_light_dismiss_from_click_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_lang_attribute_aware_form_control_ui_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_clear_focus_within_on_subtree_removal_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_omit_blur_event_on_element_removal_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_user_action_pseudos_stop_at_top_layer_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_scroll_marker_group_modes_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_desktop_pw_as_additional_windowing_controls_on_move_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_origin_isolation_header_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_recheck_parent_during_node_vector_insertion_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_send_slot_change_signal_after_node_inserted_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_remove_children_in_replace_children_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_snapshot_scroll_timelines_post_layout_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_record_same_document_presentation_time_once_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_run_snapshot_post_layout_state_steps_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_implicit_root_scroller_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_quote_first_line_style_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_display_contents_focusable_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_correct_template_form_parsing_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_streaming_sanitizer_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_set_html_can_run_scripts_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_sanitizer_api_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_trusted_types_create_parser_options_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_new_html_setting_methods_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_document_patching_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_scoped_custom_element_registry_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_custom_elements_disable_formatting_fixups_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_html_command_element_removal_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_position_sticky_static_scroll_position_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_html_printing_artifact_annotations_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_blink_geometry_mapper_viewport_fast_path_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_fix_visual_rect_remote_viewport_transform_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_line_clamp_line_breaking_ellipsis_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_search_text_highlight_pseudo_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_corners_shorthand_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_text_spacing_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_ruby_overhang_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scroll_initial_target_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_scroll_target_group_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_scrollbar_width_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_background_clip_text_decoration_enabled_ = true;
-bool RuntimeEnabledFeaturesBase::is_css_text_decoration_skip_spaces_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_text_fit_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_scoped_view_transitions_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_css_letter_and_word_spacing_percentage_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_decouple_resolved_column_rule_width_from_style_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_outline_draw_auto_style_zero_width_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_disable_anchor_center_on_align_justify_items_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_side_relative_background_position_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_decouple_computed_border_width_from_style_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_alt_counter_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_counter_reset_reversed_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_layout_api_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_view_transition_auto_name_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_css_shape_outside_path_and_shape_support_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_css_shape_outside_rect_and_xywh_support_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_text_indent_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_text_indent_as_primitive_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_font_style_oblique_zero_degree_as_normal_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_ident_function_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_revert_rule_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_url_request_modifiers_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_alpha_color_function_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_contrast_color_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_accent_color_keyword_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_light_dark_image_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_cross_fade_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_non_standard_appearance_value_slider_vertical_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_font_family_serialization_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_background_clip_border_area_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_font_format_avar_2_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_polygon_rounding_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_text_transform_full_size_kana_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_text_transform_full_width_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_text_transform_multi_keyword_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_text_overflow_string_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_paint_api_arguments_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_overscroll_behavior_chain_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_text_align_match_parent_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_appearance_base_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_user_select_contain_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_resize_auto_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_typed_arithmetic_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_progress_notation_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_random_function_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_media_progress_notation_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_container_progress_notation_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::WebMCPEnabled(const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::BlockingFocusWithoutUserActivationEnabled(
-    const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::FocusgroupEnabled(const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::ShadowRootReferenceTargetEnabled(
-    const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::CanvasDrawElementEnabled(
-    const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::TouchEventFeatureDetectionEnabled(
-    const FeatureContext*) {
-  return false;
-}
 
-bool DisplayLockUtilities::IsInUnlockedOrActivatableSubtree(
-    const Node&,
-    DisplayLockActivationReason) {
-  return true;
-}
-Element* DisplayLockUtilities::LockedAncestorPreventingPrePaint(
-    const LayoutObject&) {
-  return nullptr;
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 ViewTransition* ViewTransitionUtils::GetTransition(const Document&) {
   return nullptr;
@@ -9229,13 +8374,6 @@ HTMLMenuListElement* HTMLMenuItemElement::GetInvokedSubmenu() const {
   return nullptr;
 }
 
-bool DisplayLockDocumentState::HasActivatableLocks() const { return false; }
-bool DisplayLockContext::ShouldCommitForActivation(
-    DisplayLockActivationReason) const {
-  return false;
-}
-void DisplayLockContext::CommitForActivation(DisplayLockActivationReason) {}
-
 gfx::Size PaintLayerScrollableArea::ContentsSize() const {
   LayoutBox* box = GetLayoutBox();
   return PixelSnappedContentsSize(
@@ -9268,7 +8406,8 @@ void PaintLayerScrollableArea::Trace(Visitor* visitor) const {
   ScrollableArea::Trace(visitor);
 }
 CompositorElementId PaintLayerScrollableArea::GetScrollElementId() const {
-  return CompositorElementId();
+  return CompositorElementIdFromUniqueObjectId(
+      GetLayoutBox()->UniqueId(), CompositorElementIdNamespace::kScroll);
 }
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void PaintPropertyTreeBuilder::DirectlyUpdateOpacityValue(
@@ -9278,87 +8417,6 @@ void PaintPropertyTreeBuilder::DirectlyUpdateTransformMatrix(
 #endif
 void PaintTimingDetector::NotifyPaintFinished() {}
 void PaintTiming::MarkPaintTiming() {}
-namespace {
-[[noreturn]] void FailStandalonePaintArtifactCompositorBoundary(
-    const char* method) {
-  std::cerr << "Standalone renderer reached " << method
-            << " without real Blink PaintArtifactCompositor/cc integration. "
-               "Wire the upstream PaintArtifactCompositor + cc layer tree "
-               "instead of relying on standalone compositor stubs.\n";
-  std::abort();
-}
-}  // namespace
-
-PaintArtifactCompositor::~PaintArtifactCompositor() = default;
-PaintArtifactCompositor::PaintArtifactCompositor(
-    base::WeakPtr<cc::ScrollCallbacks>) {}
-void PaintArtifactCompositor::Trace(Visitor*) const {}
-void PaintArtifactCompositor::SetLayerDebugInfoEnabled(bool) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetLayerDebugInfoEnabled");
-}
-void PaintArtifactCompositor::SetTracksRasterInvalidations(bool) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetTracksRasterInvalidations");
-}
-void PaintArtifactCompositor::WillBeRemovedFromFrame() {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::WillBeRemovedFromFrame");
-}
-void PaintArtifactCompositor::SetNeedsUpdateAfterRepaint(
-    const PaintArtifact&,
-    const PaintArtifact&) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetNeedsUpdateAfterRepaint");
-}
-void PaintArtifactCompositor::SetNeedsUpdateInternal(UpdateType) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetNeedsUpdateInternal");
-}
-void PaintArtifactCompositor::SetLCDTextPreference(LCDTextPreference) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetLCDTextPreference");
-}
-bool PaintArtifactCompositor::SetScrollbarSolidColor(cc::ElementId,
-                                                     SkColor4f) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetScrollbarSolidColor");
-}
-bool PaintArtifactCompositor::SetScrollbarNeedsDisplay(cc::ElementId) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetScrollbarNeedsDisplay");
-}
-void PaintArtifactCompositor::SetDevicePixelRatio(float) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::SetDevicePixelRatio");
-}
-bool PaintArtifactCompositor::TryFastPathUpdate(const PaintArtifact&) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::TryFastPathUpdate");
-}
-void PaintArtifactCompositor::Update(
-    const PaintArtifact&,
-    const PaintArtifactCompositor::ViewportProperties&,
-    const HeapVector<Member<const TransformPaintPropertyNode>, 32>&,
-    VectorOf<std::unique_ptr<cc::ViewTransitionRequest>>) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::Update");
-}
-std::unique_ptr<JSONObject> PaintArtifactCompositor::GetLayersAsJSON(
-    LayerTreeFlags) const {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::GetLayersAsJSON");
-}
-size_t PaintArtifactCompositor::ApproximateUnsharedMemoryUsage() const {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::ApproximateUnsharedMemoryUsage");
-}
-MainThreadScrollingReasons
-PaintArtifactCompositor::GetMainThreadRepaintReasons(
-    const ScrollPaintPropertyNode&) const {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::GetMainThreadRepaintReasons");
-}
 void LinkHighlight::UpdateAfterPaint(const PaintArtifactCompositor*) {}
 ViewTransition* ViewTransitionSupplement::GetTransition() {
   return nullptr;
@@ -9405,165 +8463,6 @@ FrameView::FrameView(const gfx::Rect& frame_rect)
     : EmbeddedContentView(frame_rect) {}
 void RemoteFrameView::UpdateCompositingScaleFactor() {}
 void RemoteFrameView::UpdateCompositingRect() {}
-VisualViewport::VisualViewport(Page& page)
-    : ScrollableArea(nullptr),
-      page_(&page),
-      scale_(1),
-      is_pinch_gesture_active_(false),
-      browser_controls_adjustment_(0),
-      needs_paint_property_update_(false),
-      overscroll_type_(OverscrollType::kNone) {}
-const TransformPaintPropertyNode*
-VisualViewport::GetOverscrollElasticityTransformNode() const {
-  return nullptr;
-}
-const TransformPaintPropertyNode* VisualViewport::GetPageScaleNode() const {
-  return nullptr;
-}
-const TransformPaintPropertyNode* VisualViewport::GetScrollTranslationNode()
-    const {
-  return nullptr;
-}
-VisualViewport::~VisualViewport() = default;
-void VisualViewport::Trace(Visitor* visitor) const {
-  visitor->Trace(page_);
-  ScrollableArea::Trace(visitor);
-}
-ChromeClient* VisualViewport::GetChromeClient() const {
-  return nullptr;
-}
-PhysicalRect VisualViewport::ScrollIntoView(
-    const PhysicalRect& rect,
-    const PhysicalBoxStrut&,
-    const mojom::blink::ScrollIntoViewParamsPtr&,
-    std::unique_ptr<ScrollPromiseResolver::ActiveScrollTracker>) {
-  return rect;
-}
-PhysicalOffset VisualViewport::LocalToScrollOriginOffset() const {
-  return PhysicalOffset();
-}
-cc::AnimationHost* VisualViewport::GetCompositorAnimationHost() const {
-  return nullptr;
-}
-cc::AnimationTimeline* VisualViewport::GetCompositorAnimationTimeline() const {
-  return nullptr;
-}
-int VisualViewport::ScrollSize(ScrollbarOrientation) const {
-  return 0;
-}
-gfx::Vector2d VisualViewport::MinimumScrollOffsetInt() const {
-  return gfx::Vector2d();
-}
-gfx::Vector2d VisualViewport::MaximumScrollOffsetInt() const {
-  return gfx::Vector2d();
-}
-ScrollOffset VisualViewport::MaximumScrollOffset() const {
-  return ScrollOffset();
-}
-gfx::Rect VisualViewport::VisibleContentRect(IncludeScrollbarsInRect) const {
-  return gfx::Rect(size_);
-}
-gfx::Size VisualViewport::ContentsSize() const {
-  return size_;
-}
-CompositorElementId VisualViewport::GetScrollElementId() const {
-  return scroll_element_id_;
-}
-bool VisualViewport::ScrollAnimatorEnabled() const {
-  return false;
-}
-bool VisualViewport::ScheduleAnimation() {
-  return false;
-}
-bool VisualViewport::UserInputScrollable(ScrollbarOrientation) const {
-  return false;
-}
-cc::Layer* VisualViewport::LayerForHorizontalScrollbar() const {
-  return nullptr;
-}
-cc::Layer* VisualViewport::LayerForVerticalScrollbar() const {
-  return nullptr;
-}
-void VisualViewport::DisposeImpl() {}
-mojom::blink::ColorScheme VisualViewport::UsedColorSchemeScrollbars() const {
-  return mojom::blink::ColorScheme::kLight;
-}
-bool VisualViewport::VisualViewportSuppliesScrollbars() const {
-  return false;
-}
-scoped_refptr<base::SingleThreadTaskRunner> VisualViewport::GetTimerTaskRunner()
-    const {
-  return nullptr;
-}
-ScrollbarTheme& VisualViewport::GetPageScrollbarTheme() const {
-  class StandaloneScrollbarTheme final : public ScrollbarTheme {
-   public:
-    bool NativeThemeHasButtons() const override { return false; }
-    bool HasThumb(const Scrollbar&) const override { return false; }
-    gfx::Rect BackButtonRect(const Scrollbar&) const override { return gfx::Rect(); }
-    gfx::Rect ForwardButtonRect(const Scrollbar&) const override { return gfx::Rect(); }
-    gfx::Rect TrackRect(const Scrollbar&) const override { return gfx::Rect(); }
-    int MinimumThumbLength(const Scrollbar&) const override { return 0; }
-  };
-  static StandaloneScrollbarTheme theme;
-  return theme;
-}
-void VisualViewport::DropCompositorScrollDeltaNextCommit() {}
-bool VisualViewport::SetScrollOffsetInternal(
-    const ScrollOffset& offset,
-    mojom::blink::ScrollType,
-    cc::ScrollSourceType,
-    mojom::blink::ScrollBehavior,
-    bool,
-    std::unique_ptr<ScrollPromiseResolver::ActiveScrollTracker>) {
-  offset_ = offset;
-  return true;
-}
-const Document* VisualViewport::GetDocument() const {
-  return nullptr;
-}
-void VisualViewport::UpdateScrollOffset(const ScrollOffset& offset,
-                                        mojom::blink::ScrollType,
-                                        cc::ScrollSourceType) {
-  offset_ = offset;
-}
-gfx::PointF VisualViewport::ViewportCSSPixelsToRootFrame(
-    const gfx::PointF& point) const {
-  return point;
-}
-gfx::PointF VisualViewport::ViewportToRootFrame(const gfx::PointF& point) const {
-  return point;
-}
-void VisualViewport::SetLocation(const gfx::PointF&) {}
-void VisualViewport::SetScale(float) {}
-void VisualViewport::SetScaleAndLocation(float, bool, const gfx::PointF&) {}
-gfx::RectF VisualViewport::RootFrameToViewport(const gfx::RectF& rect) const {
-  return rect;
-}
-gfx::Rect VisualViewport::ViewportToRootFrame(const gfx::Rect& rect) const {
-  return rect;
-}
-gfx::Rect VisualViewport::RootFrameToViewport(const gfx::Rect& rect) const {
-  return rect;
-}
-gfx::Point VisualViewport::RootFrameToViewport(const gfx::Point& point) const {
-  return point;
-}
-gfx::Point VisualViewport::ViewportToRootFrame(const gfx::Point& point) const {
-  return point;
-}
-gfx::PointF VisualViewport::RootFrameToViewport(const gfx::PointF& point) const {
-  return point;
-}
-void VisualViewport::UsedColorSchemeChanged() {}
-void VisualViewport::ScrollbarColorChanged() {}
-std::optional<blink::Color> VisualViewport::CSSScrollbarThumbColor() const {
-  return std::nullopt;
-}
-bool VisualViewport::IsActiveViewport() const {
-  return false;
-}
-void VisualViewport::InitializeScrollbars() {}
 PhysicalSize CalculateInitialContainingBlockSizeForPagination(Document&) {
   return PhysicalSize();
 }
@@ -9599,9 +8498,6 @@ cc::PaintRecord PaintArtifact::GetPaintRecord(const PropertyTreeState&,
   return cc::PaintRecord();
 }
 #endif
-base::TimeDelta TimerBase::NextFireInterval() const {
-  return base::TimeDelta();
-}
 void TapFriendlinessChecker::RegisterTapEvent(Element*) {}
 void FontPerformance::MarkFirstContentfulPaint() {}
 void LocalFrameUkmAggregator::DidReachFirstContentfulPaint() {}
@@ -9616,13 +8512,6 @@ size_t PaintControllerPersistentData::ApproximateUnsharedMemoryUsage() const {
   return 0;
 }
 #endif
-void ScrollingCoordinator::DidCompositorScroll(
-    CompositorElementId,
-    const gfx::PointF&,
-    cc::ScrollSourceType,
-    const std::optional<cc::TargetSnapAreaElementIds>&) {}
-void ScrollingCoordinator::DidChangeScrollbarsHidden(CompositorElementId,
-                                                     bool) {}
 Node* TopDocumentRootScrollerController::GlobalRootScroller() const {
   return nullptr;
 }
@@ -9653,18 +8542,6 @@ BoxShadowPaintImageGenerator* BoxShadowPaintImageGenerator::Create(
 ClipPathPaintImageGenerator* ClipPathPaintImageGenerator::Create(LocalFrame&) {
   return nullptr;
 }
-gfx::Rect LayoutEmbeddedContent::BorderBoxFromEmbeddedContent(
-    const gfx::Rect& rect) const {
-  return rect;
-}
-PhysicalOffset LayoutEmbeddedContent::BorderBoxFromEmbeddedContent(
-    const PhysicalOffset& offset) const {
-  return offset;
-}
-gfx::PointF LayoutEmbeddedContent::EmbeddedContentFromBorderBox(
-    const gfx::PointF& point) const {
-  return point;
-}
 void PageAnimator::SetHasSmilAnimation() {}
 void PageAnimator::ScheduleVisualUpdate(LocalFrame*) {}
 void FrameView::UpdateRenderThrottlingStatus(bool, bool, bool, bool) {}
@@ -9681,7 +8558,6 @@ PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
 }
 #endif
-void LayoutEmbeddedContent::UpdateGeometry(EmbeddedContentView&) {}
 bool MouseEventManager::IsMousePositionUnknown() {
   return true;
 }
@@ -9691,21 +8567,6 @@ FragmentAnchor* FragmentAnchor::TryCreate(const KURL&, LocalFrame&, bool) {
 void HTMLPlugInElement::UpdatePlugin() {}
 WebPluginContainerImpl* PluginDocument::GetPluginView() {
   return nullptr;
-}
-void ResourceFetcher::UpdateImagePrioritiesAndSpeculativeDecodes() {}
-void ResourceFetcher::StartSpeculativeImageDecodes() {}
-void ResourceFetcher::SetDefersLoading(LoaderFreezeMode) {}
-String ResourceFetcher::GetCacheIdentifier(const KURL&, bool) const {
-  return String();
-}
-void FetchParameters::SetLazyImageDeferred() {
-  image_request_behavior_ = ImageRequestBehavior::kDeferImageLoad;
-}
-void FetchParameters::SetLazyImageNonBlocking() {
-  image_request_behavior_ = ImageRequestBehavior::kNonBlockingImage;
-}
-void FetchParameters::SetResourceWidth(const std::optional<float> width) {
-  resource_width_ = width;
 }
 HTMLFormElement* FrameLoadRequest::Form() const {
   return nullptr;
@@ -9964,25 +8825,13 @@ void ContextLifecycleObserver::SetContextLifecycleNotifier(
 bool ContextLifecycleNotifier::IsContextDestroyed() const {
   return false;
 }
+void ContextLifecycleNotifier::NotifyContextDestroyed() {}
 void WindowPerformance::ClearForWindowReuse(LocalDOMWindow&) {}
-const base::UnguessableToken& ExecutionContext::GetAgentClusterID() const {
-  return base::UnguessableToken::Null();
-}
-v8::Local<v8::Context> ToV8ContextMaybeEmpty(LocalFrame*,
-                                             DOMWrapperWorld&) {
-  return v8::Local<v8::Context>();
-}
 v8::Local<v8::Value> ScriptWrappable::ToV8(ScriptState*) {
   return v8::Local<v8::Value>();
 }
 TrustedTypePolicyFactory::TrustedTypePolicyFactory(ExecutionContext* context)
     : ExecutionContextClient(context) {}
-const SecurityOrigin* ExecutionContext::GetSecurityOrigin() const {
-  return nullptr;
-}
-SecurityOrigin* ExecutionContext::GetMutableSecurityOrigin() {
-  return nullptr;
-}
 void TextFragmentHandler::Trace(Visitor*) const {}
 void TextFragmentHandler::DidDetachDocumentOrFrame() {}
 void TextFragmentHandler::BindTextFragmentReceiver(
@@ -10053,20 +8902,6 @@ std::optional<Impression> AttributionSrcLoader::RegisterNavigation(
     network::mojom::ReferrerPolicy) {
   return std::nullopt;
 }
-IdlenessDetector::IdlenessDetector(LocalFrame* frame, const base::TickClock* clock)
-    : local_frame_(frame),
-      task_observer_added_(false),
-      clock_(clock),
-      network_quiet_timer_(frame ? frame->GetTaskRunner(TaskType::kInternalLoading)
-                                 : nullptr,
-                           this,
-                           &IdlenessDetector::NetworkQuietTimerFired) {}
-void IdlenessDetector::Trace(Visitor*) const {}
-void IdlenessDetector::Shutdown() {}
-void IdlenessDetector::StartIfNeeded() {}
-void IdlenessDetector::NetworkQuietTimerFired(TimerBase*) {}
-void IdlenessDetector::WillProcessTask(base::TimeTicks) {}
-void IdlenessDetector::DidProcessTask(base::TimeTicks, base::TimeTicks) {}
 void FontFaceSetDocument::DidLayout(Document&) {}
 void EventHandler::MarkHoverStateDirty() {}
 void PaintLayerScrollableArea::UpdateAllStickyConstraints() {
@@ -10323,7 +9158,6 @@ PaintResult PaintLayerPainter::Paint(GraphicsContext&, PaintFlags) {
 }
 void FramePainter::Paint(GraphicsContext&, PaintFlags) {}
 #endif
-void VisualViewport::Paint(GraphicsContext&) const {}
 void LinkHighlight::Paint(GraphicsContext&) const {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const PaintArtifact& PaintController::CommitNewDisplayItems() {
@@ -10344,10 +9178,6 @@ bool ResizeObserverController::SkippedObservations() {
 }
 void ResizeObserverController::ClearObservations() {}
 void ResizeObserverController::DeliverObservations() {}
-void ExecutionContext::DispatchErrorEvent(ErrorEvent*, SanitizeScriptErrors) {}
-PublicURLManager& ExecutionContext::GetPublicURLManager() {
-  return *static_cast<PublicURLManager*>(nullptr);
-}
 void PublicURLManager::ResolveAsBlobURLToken(
     const KURL&,
     mojo::PendingReceiver<mojom::blink::BlobURLToken>,
@@ -10416,9 +9246,6 @@ ScopedEventQueue* ScopedEventQueue::Instance() {
   return nullptr;
 }
 void Performance::NotifyNavigationTimingToObservers() {}
-namespace probe {
-void LoadEventFired(LocalFrame*) {}
-}
 void SoftNavigationHeuristics::ModifiedAttribute(Element*,
                                                  const QualifiedName&) {}
 SoftNavigationHeuristics* SoftNavigationHeuristics::CreateIfNeeded(
@@ -10436,7 +9263,6 @@ FocusgroupData ParseFocusgroup(const Element*, const AtomicString&) {
   return FocusgroupData();
 }
 }  // namespace focusgroup
-bool ProtocolIsJavaScript(const StringView&) { return false; }
 unsigned ScriptForbiddenScope::g_main_thread_counter_ = 0;
 unsigned ScriptForbiddenScope::g_blink_lifecycle_counter_ = 0;
 unsigned& ScriptForbiddenScope::GetMutableCounter() {
@@ -10467,7 +9293,6 @@ FirstMeaningfulPaintDetector::FirstMeaningfulPaintDetector(PaintTiming* timing)
     : paint_timing_(timing) {}
 void FirstMeaningfulPaintDetector::Trace(Visitor*) const {}
 void PageAnimator::Trace(Visitor*) const {}
-void PageVisibilityObserver::ObserverSetWillBeCleared() {}
 bool ScopedBrowsingContextGroupPauser::IsActive(Page&) {
   return false;
 }
@@ -10611,10 +9436,6 @@ v8_compile_hints::V8CrowdsourcedCompileHintsProducer::
     V8CrowdsourcedCompileHintsProducer(Page* page)
     : page_(page) {}
 void v8_compile_hints::V8CrowdsourcedCompileHintsProducer::ClearData() {}
-ScrollingCoordinator::~ScrollingCoordinator() = default;
-ScrollingCoordinator::ScrollingCoordinator(Page* page) : page_(page) {}
-void ScrollingCoordinator::Trace(Visitor*) const {}
-void ScrollingCoordinator::WillBeDestroyed() {}
 void PointerLockController::DocumentDetached(Document*) {}
 SpatialNavigationController::SpatialNavigationController(Page& page)
     : page_(&page) {}
@@ -10638,100 +9459,12 @@ void PluginData::UpdatePluginList() {}
 void PluginData::ResetPluginData() {}
 FeatureAndJSLocationBlockingBFCache::~FeatureAndJSLocationBlockingBFCache() =
     default;
-DisplayLockDocumentState::ScopedForceActivatableDisplayLocks
-DisplayLockDocumentState::GetScopedForceActivatableLocks() {
-  return ScopedForceActivatableDisplayLocks(nullptr);
-}
-DisplayLockDocumentState::ScopedForceActivatableDisplayLocks::
-    ScopedForceActivatableDisplayLocks(DisplayLockDocumentState* state)
-    : state_(state) {}
-DisplayLockDocumentState::ScopedForceActivatableDisplayLocks::
-    ~ScopedForceActivatableDisplayLocks() = default;
 bool Editor::FindString(LocalFrame&, const String&, FindOptions) {
   return false;
 }
 void SyncScrollAttemptHeuristic::DidAccessScrollOffset() {}
 void SyncScrollAttemptHeuristic::DidSetScrollOffset() {}
 void SyncScrollAttemptHeuristic::DidRequestAnimationFrame() {}
-CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(Element* element,
-                                                         bool,
-                                                         const String&)
-    : CSSStyleDeclaration(nullptr),
-      element_(element),
-      pseudo_element_specifier_(kPseudoIdNone),
-      allow_visited_style_(false),
-      guaranteed_style_clean_(false) {}
-CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration() = default;
-void CSSComputedStyleDeclaration::Trace(Visitor* visitor) const {
-  visitor->Trace(element_);
-  CSSStyleDeclaration::Trace(visitor);
-}
-CSSRule* CSSComputedStyleDeclaration::parentRule() const {
-  return nullptr;
-}
-String CSSComputedStyleDeclaration::cssText() const {
-  return String();
-}
-void CSSComputedStyleDeclaration::setCSSText(const ExecutionContext*,
-                                             const String&,
-                                             ExceptionState&) {}
-unsigned CSSComputedStyleDeclaration::length() const {
-  return 0;
-}
-String CSSComputedStyleDeclaration::item(unsigned) const {
-  return String();
-}
-String CSSComputedStyleDeclaration::getPropertyValue(const String&) {
-  return String();
-}
-String CSSComputedStyleDeclaration::getPropertyPriority(const String&) {
-  return String();
-}
-String CSSComputedStyleDeclaration::GetPropertyShorthand(const String&) {
-  return String();
-}
-bool CSSComputedStyleDeclaration::IsPropertyImplicit(const String&) {
-  return false;
-}
-void CSSComputedStyleDeclaration::setProperty(const ExecutionContext*,
-                                              const String&,
-                                              const String&,
-                                              const String&,
-                                              ExceptionState&) {}
-String CSSComputedStyleDeclaration::removeProperty(const String&,
-                                                   ExceptionState&) {
-  return String();
-}
-void CSSComputedStyleDeclaration::QuietlyRemoveProperty(const String&) {}
-const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValueInternal(
-    const AtomicString&) {
-  return nullptr;
-}
-const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValueInternal(
-    CSSPropertyID) {
-  return nullptr;
-}
-String CSSComputedStyleDeclaration::GetPropertyValueInternal(CSSPropertyID) {
-  return String();
-}
-String CSSComputedStyleDeclaration::GetPropertyValueWithHint(const String&,
-                                                             unsigned) {
-  return String();
-}
-String CSSComputedStyleDeclaration::GetPropertyPriorityWithHint(const String&,
-                                                                unsigned) {
-  return String();
-}
-void CSSComputedStyleDeclaration::SetPropertyInternal(CSSPropertyID,
-                                                      const String&,
-                                                      StringView,
-                                                      bool,
-                                                      SecureContextMode,
-                                                      ExceptionState&) {}
-bool CSSComputedStyleDeclaration::CssPropertyMatches(CSSPropertyID,
-                                                     const CSSValue&) const {
-  return false;
-}
 ScrollToOptions::ScrollToOptions() = default;
 void ScrollToOptions::Trace(Visitor*) const {}
 V8FrameCallback::V8FrameCallback(V8FrameRequestCallback*) {}
@@ -10739,12 +9472,6 @@ void V8FrameCallback::Trace(Visitor*) const {}
 void V8FrameCallback::Invoke(double) {}
 CustomElementRegistry::CustomElementRegistry(const LocalDOMWindow*) {}
 void CustomElementRegistry::AssociatedWith(Document&) {}
-LocalDOMWindow* EnteredDOMWindow(v8::Isolate*) {
-  return nullptr;
-}
-LocalDOMWindow* ToLocalDOMWindow(const ScriptState*) {
-  return nullptr;
-}
 bool BindingSecurity::ShouldAllowAccessTo(const LocalDOMWindow*,
                                           const DOMWindow*) {
   return true;
@@ -10791,8 +9518,6 @@ void ParkableStringImpl::ReleaseAndRemoveIfNeeded() const {}
 
 void ElementIntersectionObserverData::TrackWithController(
     IntersectionObserverController&) {}
-void DisplayLockContext::ElementConnected() {}
-void DisplayLockContext::ElementDisconnected() {}
 void DisplayAdElementMonitor::EnsureStarted() {}
 void DisplayAdElementMonitor::OnElementRemoved() {}
 void CustomElement::EnqueueConnectedMoveCallback(Element&) {}
@@ -10912,62 +9637,6 @@ ExecutionContext* ScriptPromiseResolverBase::GetExecutionContext() {
   return nullptr;
 }
 void ScriptPromiseResolverBase::NotifyResolveOrReject() {}
-KURL::KURL()
-    : is_valid_(false),
-      protocol_is_in_http_family_(false),
-      parsed_(),
-      string_(g_empty_atom) {}
-KURL::KURL(const StringView& string)
-    : is_valid_(!string.IsNull()),
-      protocol_is_in_http_family_(false),
-      parsed_(),
-      string_(AtomicString(string.ToString())) {
-  std::string value = string_.GetString().Utf8();
-  const size_t colon = value.find(':');
-  if (colon != std::string::npos) {
-    protocol_ = AtomicString(value.substr(0, colon).c_str());
-    protocol_is_in_http_family_ =
-        protocol_ == "http" || protocol_ == "https";
-  }
-}
-KURL::KURL(const GURL& url) : KURL(String(url.spec().c_str())) {}
-KURL::KURL(const KURL& other)
-    : is_valid_(other.is_valid_),
-      protocol_is_in_http_family_(other.protocol_is_in_http_family_),
-      protocol_(other.protocol_),
-      parsed_(other.parsed_),
-      string_(other.string_) {
-  if (other.inner_url_) {
-    inner_url_ = std::make_unique<KURL>(*other.inner_url_);
-  }
-}
-KURL::~KURL() = default;
-KURL& KURL::operator=(const KURL& other) {
-  if (this == &other) {
-    return *this;
-  }
-  is_valid_ = other.is_valid_;
-  protocol_is_in_http_family_ = other.protocol_is_in_http_family_;
-  protocol_ = other.protocol_;
-  parsed_ = other.parsed_;
-  string_ = other.string_;
-  inner_url_.reset();
-  if (other.inner_url_) {
-    inner_url_ = std::make_unique<KURL>(*other.inner_url_);
-  }
-  return *this;
-}
-KURL::KURL(const KURL&, const StringView& relative, const TextEncoding&)
-    : KURL(relative) {
-  std::string value = GetString().Utf8();
-  const size_t colon = value.find(':');
-  if (colon != std::string::npos) {
-    protocol_ = AtomicString(value.substr(0, colon).c_str());
-    protocol_is_in_http_family_ =
-        protocol_ == "http" || protocol_ == "https";
-  }
-}
-void KURL::WriteIntoTrace(perfetto::TracedValue) const {}
 const AtomicString& HTMLLinkElement::GetType() const {
   return g_empty_atom;
 }
@@ -11010,11 +9679,8 @@ WebFrame* WebFrame::FromCoreFrame(Frame*) {
   return nullptr;
 }
 void ModelContext::DidFinishParsing() {}
-void IdlenessDetector::DomContentLoadedEventFired() {}
 void FontPerformance::MarkDomContentLoaded() {}
 void FrameLoader::FinishedParsing() {}
-void ResourceFetcher::ClearPreloads(ClearPreloadsPolicy) {}
-void DocumentLoader::ReportTotalTakenTimeToUpdateSubresourceLoadMetrics() {}
 IconURL IconURL::DefaultFavicon(const KURL&) {
   return IconURL(KURL(), Vector<gfx::Size>(), String(),
                  mojom::blink::FaviconIconType::kFavicon);
@@ -11029,16 +9695,6 @@ const Vector<gfx::Size>& HTMLLinkElement::IconSizes() const {
   static const Vector<gfx::Size> sizes;
   return sizes;
 }
-const AtomicString& HTMLMetaElement::Media() const {
-  return g_empty_atom;
-}
-const AtomicString& HTMLMetaElement::Content() const {
-  return g_empty_atom;
-}
-ContentSecurityPolicy*
-ExecutionContext::GetContentSecurityPolicyForCurrentWorld() {
-  return GetContentSecurityPolicy();
-}
 IntersectionObserverController::IntersectionObserverController(
     ExecutionContext* context)
     : ExecutionContextClient(context) {}
@@ -11046,8 +9702,6 @@ ElementIntersectionObserverData::ElementIntersectionObserverData() = default;
 ScriptRegexp* EmailInputType::CreateEmailRegexp(v8::Isolate*) {
   return nullptr;
 }
-void DisplayLockDocumentState::ElementAddedToTopLayer(Element*) {}
-void DisplayLockDocumentState::ElementRemovedFromTopLayer(Element*) {}
 void PointerLockController::ExitPointerLock() {}
 bool PointerLockController::LockPending() const {
   return false;
@@ -11085,8 +9739,6 @@ void BeforeUnloadEventListener::Trace(Visitor* visitor) const {
   visitor->Trace(doc_);
 }
 void BeforeUnloadEventListener::Invoke(ExecutionContext*, Event*) {}
-void DocumentLoader::NotifyPrerenderingDocumentActivated(
-    const mojom::blink::PrerenderPageActivationParams&) {}
 void HTMLDialogElement::Trace(Visitor* visitor) const {
   HTMLElement::Trace(visitor);
 }
@@ -11097,37 +9749,11 @@ Vector<AtomicString>& CustomElement::EmbedderCustomElementNames() {
 bool CustomElement::IsHyphenatedSpecElementName(const AtomicString&) {
   return false;
 }
-namespace inspector_recalculate_styles_event {
-void Data(perfetto::TracedValue, LocalFrame*) {}
-}  // namespace inspector_recalculate_styles_event
-namespace inspector_invalidate_layout_event {
-void Data(perfetto::TracedValue, LocalFrame*, int) {}
-}  // namespace inspector_invalidate_layout_event
-namespace inspector_layout_event {
-void BeginData(perfetto::TracedValue, LocalFrameView*) {}
-void EndData(perfetto::TracedValue,
-             const HeapVector<LayoutObjectWithDepth>&) {}
-}  // namespace inspector_layout_event
-namespace inspector_pre_paint_event {
-void Data(perfetto::TracedValue, LocalFrame*) {}
-}  // namespace inspector_pre_paint_event
-namespace inspector_layerize_event {
-void Data(perfetto::TracedValue, LocalFrame*) {}
-}  // namespace inspector_layerize_event
-namespace inspector_set_layer_tree_id {
-void Data(perfetto::TracedValue, LocalFrame*) {}
-}  // namespace inspector_set_layer_tree_id
-namespace inspector_dom_stats {
-void Data(perfetto::TracedValue, LocalFrame*) {}
-}  // namespace inspector_dom_stats
-
 VisitedLinkState::VisitedLinkState(const Document& document)
     : document_(document) {}
 void VisitedLinkState::Trace(Visitor* visitor) const {
   visitor->Trace(document_);
 }
-void DisplayLockContext::Trace(Visitor*) const {}
-void DisplayLockContext::NotifyWillDisconnect() {}
 void FrameViewAutoSizeInfo::Trace(Visitor*) const {}
 bool FrameViewAutoSizeInfo::AutoSizeIfNeeded() {
   return false;
@@ -11147,11 +9773,8 @@ void HttpRefreshScheduler::Trace(Visitor*) const {}
 void DocumentMarkerController::Trace(Visitor*) const {}
 void ScriptRunner::Trace(Visitor*) const {}
 void ScriptRunnerDelayer::Trace(Visitor*) const {}
-void DisplayLockDocumentState::Trace(Visitor*) const {}
 void RenderBlockingResourceManager::Trace(Visitor*) const {}
 void CookieJar::Trace(Visitor*) const {}
-ResourceFetcher::~ResourceFetcher() = default;
-void ResourceFetcher::Trace(Visitor*) const {}
 void RootScrollerController::Trace(Visitor*) const {}
 void RootScrollerController::ElementRemoved(const Element&) {}
 MediaQueryMatcher::~MediaQueryMatcher() = default;
@@ -11233,56 +9856,6 @@ void IntersectionObserverController::UpdateIntersectionObserverStatus() {}
 void DOMFeaturePolicy::Trace(Visitor* visitor) const {
 }
 void MediaQueryMatcher::MediaFeaturesChanged() {}
-HTMLResourcePreloader::HTMLResourcePreloader(Document& document)
-    : document_(document) {}
-void HTMLResourcePreloader::Trace(Visitor* visitor) const {
-  visitor->Trace(document_);
-}
-bool HTMLResourcePreloader::ShouldPreload(
-    const Document*,
-    ResourceType,
-    bool,
-    FetchParameters::DeferOption,
-    mojom::blink::FetchPriorityHint) {
-  return false;
-}
-void HTMLResourcePreloader::Preload(std::unique_ptr<PreloadRequest>) {}
-void ResourcePreloader::TakeAndPreload(PreloadRequestStream& requests) {
-  requests.clear();
-}
-std::unique_ptr<HTMLPreloadScanner> HTMLPreloadScanner::Create(
-    Document&,
-    HTMLParserOptions,
-    TokenPreloadScanner::ScannerType) {
-  return std::unique_ptr<HTMLPreloadScanner>(new HTMLPreloadScanner());
-}
-HTMLPreloadScanner::BackgroundPtr HTMLPreloadScanner::CreateBackground(
-    HTMLDocumentParser*,
-    HTMLParserOptions,
-    scoped_refptr<base::SequencedTaskRunner> task_runner,
-    TakePreloadFn) {
-  return BackgroundPtr(nullptr, Deleter{std::move(task_runner)});
-}
-std::unique_ptr<BackgroundHTMLScanner::ScriptTokenScanner>
-BackgroundHTMLScanner::ScriptTokenScanner::Create(ScriptableDocumentParser*) {
-  return nullptr;
-}
-SequenceBound<BackgroundHTMLScanner> BackgroundHTMLScanner::Create(
-    const HTMLParserOptions&,
-    ScriptableDocumentParser*) {
-  return SequenceBound<BackgroundHTMLScanner>();
-}
-BackgroundHTMLScanner::~BackgroundHTMLScanner() = default;
-void BackgroundHTMLScanner::Scan(const String&) {}
-HTMLPreloadScanner::~HTMLPreloadScanner() = default;
-void HTMLPreloadScanner::AppendToEnd(const SegmentedString&) {}
-std::unique_ptr<PendingPreloadData> HTMLPreloadScanner::Scan(const KURL&) {
-  return std::make_unique<PendingPreloadData>();
-}
-void HTMLPreloadScanner::ScanInBackground(const String&, const KURL&) {}
-base::WeakPtr<HTMLPreloadScanner> HTMLPreloadScanner::AsWeakPtr() {
-  return weak_ptr_factory_.GetWeakPtr();
-}
 HTMLParserScriptRunner::HTMLParserScriptRunner(
     HTMLParserReentryPermit* reentry_permit,
     Document* document,
@@ -11334,32 +9907,6 @@ Document* HTMLDocument::CloneDocumentWithoutChildren() const {
           .WithAgent(GetAgent())
           .WithURL(Url()));
 }
-DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(
-    const Node* node,
-    DisplayLockContext::ForcedPhase phase,
-    bool,
-    bool only_cv_auto,
-    bool emit_warnings)
-    : node_(node),
-      phase_(phase),
-      only_cv_auto_(only_cv_auto),
-      emit_warnings_(emit_warnings) {}
-DisplayLockUtilities::ScopedForcedUpdate::Impl::Impl(
-    const Range* range,
-    DisplayLockContext::ForcedPhase phase,
-    bool only_cv_auto,
-    bool emit_warnings)
-    : node_(range ? &range->OwnerDocument() : nullptr),
-      phase_(phase),
-      only_cv_auto_(only_cv_auto),
-      emit_warnings_(emit_warnings) {}
-void DisplayLockUtilities::ScopedForcedUpdate::Impl::
-    AddForcedUpdateScopeForContext(DisplayLockContext*) {}
-void DisplayLockUtilities::ScopedForcedUpdate::Impl::EnsureMinimumForcedPhase(
-    DisplayLockContext::ForcedPhase phase) {
-  phase_ = phase;
-}
-void DisplayLockUtilities::ScopedForcedUpdate::Impl::Destroy() {}
 HTMLParserMetrics::HTMLParserMetrics(int64_t source_id, ukm::UkmRecorder* recorder)
     : source_id_(source_id), recorder_(recorder) {}
 void HTMLParserMetrics::AddChunk(base::TimeDelta, unsigned tokens_parsed) {
@@ -11390,31 +9937,10 @@ void HTMLParserMetrics::AddScanTime(int64_t elapsed_time) {
 }
 void HTMLParserMetrics::ReportMetricsAtParseEnd() {}
 void HTMLParserMetrics::ReportUMAs() {}
-bool ExecutionContext::IsFeatureEnabled(
-    mojom::blink::DocumentPolicyFeature) const {
-  return false;
-}
-void DocumentLoader::DidObserveLoadingBehavior(LoadingBehaviorFlag) {}
-void DocumentLoader::DispatchLcppFontPreloads(
-    const ViewportDescription*,
-    PreloadHelper::LoadLinksFromHeaderMode) {}
-PrefetchedSignedExchangeManager*
-DocumentLoader::GetPrefetchedSignedExchangeManager() const {
-  return nullptr;
-}
-void HTMLMetaElement::ProcessMetaCH(Document&,
-                                    const AtomicString&,
-                                    network::MetaCHType,
-                                    bool,
-                                    bool) {}
 const Vector<network::mojom::blink::ContentSecurityPolicyPtr>&
 ContentSecurityPolicy::GetParsedPolicies() const {
   static const Vector<network::mojom::blink::ContentSecurityPolicyPtr> policies;
   return policies;
-}
-InlineScriptStreamer* InlineScriptStreamer::From(
-    scoped_refptr<BackgroundInlineScriptStreamer>) {
-  return nullptr;
 }
 ThreadCreationParams::ThreadCreationParams(ThreadType type)
     : thread_type(type), name(nullptr), frame_or_worker_scheduler(nullptr) {}
@@ -11428,9 +9954,6 @@ std::unique_ptr<NonMainThread> NonMainThread::CreateThread(
 }
 Thread* Thread::Current() {
   return &StandaloneMainThread();
-}
-bool KURL::IsLocalFile() const {
-  return false;
 }
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 gfx::RectF InlineCursorPosition::ObjectBoundingBox(
@@ -11446,18 +9969,7 @@ PhysicalOffset FragmentItem::MapPointInContainer(
 #endif
 void EventHandlerRegistry::DocumentDetached(Document&) {}
 void FrameSelection::ContextDestroyed() {}
-void ResourceFetcher::ClearContext() {}
-int ResourceFetcher::BlockingRequestCount() const {
-  return 0;
-}
-void ResourceFetcher::ScheduleWarnUnusedPreloads(
-    base::OnceCallback<void(Vector<KURL>)>) {}
-void ResourceFetcher::MaybeRecordLCPPSubresourceMetrics(const KURL&) {}
 void MediaQueryMatcher::DocumentDetached() {}
-bool RuntimeEnabledFeaturesBase::AutofillEventEnabled(
-    const FeatureContext*) {
-  return false;
-}
 AXObjectCache* AXObjectCache::Create(Document&, const ui::AXMode&) {
   return nullptr;
 }
@@ -11470,14 +9982,7 @@ void LazyImageHelper::StopMonitoring(Element*) {}
 bool LazyImageHelper::ShouldDeferImageLoad(LocalFrame&, HTMLImageElement*) {
   return false;
 }
-void DisplayLockDocumentState::NotifyPrintingOrPreviewChanged() {}
 void CookieJar::InvalidateCache() {}
-void KURL::SetFragmentIdentifier(const String&) {}
-void DocumentLoader::DidOpenDocumentInputStream(const KURL&) {}
-network::mojom::blink::WebSandboxFlags ExecutionContext::GetSandboxFlags()
-    const {
-  return network::mojom::blink::WebSandboxFlags::kNone;
-}
 void SecurityContext::SetSandboxFlags(
     network::mojom::blink::WebSandboxFlags) {}
 void SecurityContext::SetSecurityOrigin(scoped_refptr<SecurityOrigin>) {}
@@ -11504,16 +10009,7 @@ void ViewTransitionSupplement::WillInsertBody() {}
 void RenderBlockingResourceManager::WillInsertDocumentBody() {}
 void FrameLoader::DidFinishNavigation(FrameLoader::NavigationFinishState) {}
 void HttpRefreshScheduler::MaybeStartTimer() {}
-void ViewportDescription::ReportMobilePageStats(const LocalFrame*) const {}
-const KURL& DocumentLoader::Url() const {
-  return BlankUrl();
-}
 void DetectJavascriptFrameworksOnLoad(Document&) {}
-void LCPCriticalPathPredictor::OnOutermostMainFrameDocumentLoad() {}
-void DocumentLoader::DispatchLinkHeaderPreloads(
-    const ViewportDescription*,
-    PreloadHelper::LoadLinksFromHeaderMode) {}
-void LCPCriticalPathPredictor::OnWarnedUnusedPreloads(const Vector<KURL>&) {}
 bool EventListenerMap::Contains(const AtomicString&) const {
   return false;
 }
@@ -11537,8 +10033,6 @@ VisualViewportScrollEndEvent::~VisualViewportScrollEndEvent() = default;
 void VisualViewportScrollEndEvent::DoneDispatchingEventAtCurrentTarget() {}
 void EventHandler::ScheduleHoverStateUpdate() {}
 NodeChildRemovalTracker* NodeChildRemovalTracker::last_ = nullptr;
-void DisplayLockUtilities::ElementLostFocus(Element*) {}
-void DisplayLockUtilities::ElementGainedFocus(Element*) {}
 void EditContext::Blur() {}
 void EditContext::Focus() {}
 bool IsRootEditableElement(const Node&) {
@@ -11658,9 +10152,6 @@ bool CookieJar::CookiesEnabled() {
 }
 void CookieJar::SetCookieManager(
     mojo::PendingRemote<network::mojom::blink::RestrictedCookieManager>) {}
-const AtomicString& DocumentLoader::GetReferrer() const {
-  return g_empty_atom;
-}
 void ExceptionState::ThrowSecurityError(const String&, const String&) {
   had_exception_ = true;
 }
@@ -11857,25 +10348,11 @@ void Animation::OnPaintWorkletImageCreated() {}
 #endif
 
 void FrameSelection::MarkCacheDirty() {}
-void DisplayLockDocumentState::EnsureMinimumForcedPhase(
-    DisplayLockContext::ForcedPhase) {}
-base::TimeTicks DisplayLockDocumentState::GetLockUpdateTimestamp() {
-  return base::TimeTicks();
-}
-bool RuntimeEnabledFeaturesBase::is_update_complex_safa_area_constraints_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_composited_animations_cancelled_asynchronously_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_endpoint_inclusive_commit_styles_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_html_interest_for_interest_button_pseudo_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_root_scrollbar_follows_browser_theme_enabled_ =
-    false;
 unsigned FontPerformance::in_style_ = 0;
 void DocumentSpeculationRules::DocumentStyleUpdated() {}
 void DocumentSpeculationRules::DocumentBaseTargetChanged() {}
 void DocumentSpeculationRules::DocumentBaseURLChanged() {}
+void DocumentSpeculationRules::DocumentReferrerPolicyChanged() {}
 void DocumentSpeculationRules::LinkGainedOrLostComputedStyle(
     HTMLAnchorElementBase*) {}
 void DocumentSpeculationRules::LinkMatchedSelectorsUpdated(
@@ -11883,29 +10360,12 @@ void DocumentSpeculationRules::LinkMatchedSelectorsUpdated(
 void DocumentSpeculationRules::ChildStyleRecalcBlocked(Element*) {}
 void DocumentSpeculationRules::DidStyleChildren(Element*) {}
 void ScriptLoader::DocumentBaseURLChanged() {}
-const AtomicString& HTMLMetaElement::GetName() const {
-  return g_null_atom;
-}
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 ShadowRoot* HTMLInputElement::EnsureShadowSubtree() {
   return nullptr;
 }
 void HTMLInputElement::EndEditing() {}
 #endif
-Element* DisplayLockUtilities::LockedAncestorPreventingStyle(const Node&) {
-  return nullptr;
-}
-bool DisplayLockUtilities::IsUnlockedQuickCheck(const Node&) {
-  return true;
-}
-void DisplayLockContext::DetachLayoutTree() {}
-void DisplayLockContext::SetRequestedState(EContentVisibility) {}
-const ComputedStyle* DisplayLockContext::AdjustElementStyle(
-    const ComputedStyle* style) const {
-  return style;
-}
-void DisplayLockContext::DidStyleSelf() {}
-void DisplayLockContext::DidStyleChildren() {}
 bool HTMLMenuItemElement::ShouldHaveExpandIcon() const {
   return false;
 }
@@ -12012,8 +10472,6 @@ FragmentDirective::~FragmentDirective() = default;
 KURL FragmentDirective::ConsumeFragmentDirective(const KURL& url) {
   return url;
 }
-DisplayLockDocumentState::DisplayLockDocumentState(Document* document)
-    : document_(document) {}
 RenderBlockingResourceManager::RenderBlockingResourceManager(Document& document)
     : element_render_blocking_links_(MakeGarbageCollected<
           RenderBlockingElementLinkMap>(
@@ -12334,48 +10792,6 @@ void NullResourceFetcherProperties::Trace(Visitor* visitor) const {
   visitor->Trace(fetch_client_settings_object_);
   ResourceFetcherProperties::Trace(visitor);
 }
-ResourceFetcherInit::ResourceFetcherInit(
-    DetachableResourceFetcherProperties& properties_in,
-    FetchContext* context_in,
-    scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner_in,
-    scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner_in,
-    ResourceFetcher::LoaderFactory* loader_factory_in,
-    ContextLifecycleNotifier* context_lifecycle_notifier_in,
-    BackForwardCacheLoaderHelper* back_forward_cache_loader_helper_in)
-    : properties(&properties_in),
-      context(context_in),
-      freezable_task_runner(std::move(freezable_task_runner_in)),
-      unfreezable_task_runner(std::move(unfreezable_task_runner_in)),
-      loader_factory(loader_factory_in),
-      context_lifecycle_notifier(context_lifecycle_notifier_in),
-      back_forward_cache_loader_helper(back_forward_cache_loader_helper_in) {}
-ResourceFetcher::ResourceFetcher(const ResourceFetcherInit& init)
-    : properties_(init.properties),
-      context_(init.context),
-      freezable_task_runner_(init.freezable_task_runner),
-      unfreezable_task_runner_(init.unfreezable_task_runner),
-      loader_factory_(init.loader_factory),
-      back_forward_cache_loader_helper_(init.back_forward_cache_loader_helper),
-      resource_timing_report_timer_(init.freezable_task_runner, this,
-                                    &ResourceFetcher::ResourceTimingReportTimerFired),
-      blob_registry_remote_(init.context_lifecycle_notifier),
-      context_lifecycle_notifier_(init.context_lifecycle_notifier),
-      auto_load_images_(true),
-      allow_stale_resources_(false),
-      image_fetched_(false),
-      stale_while_revalidate_enabled_(false) {}
-void ResourceFetcher::ResourceTimingReportTimerFired(TimerBase*) {}
-void ResourceFetcher::ReloadImagesIfNotDeferred() {}
-void ResourceFetcher::SetAutoLoadImages(bool value) {
-  auto_load_images_ = value;
-}
-bool ExecutionContext::IsFeatureEnabled(
-    network::mojom::PermissionsPolicyFeature,
-    ReportOptions,
-    const String&) {
-  return false;
-}
-void ExecutionContext::SetLifecycleState(mojom::blink::FrameLifecycleState) {}
 bool SecurityContext::IsSandboxed(
     network::mojom::blink::WebSandboxFlags) const {
   return false;
@@ -12447,124 +10863,11 @@ bool SchemeRegistry::ShouldTreatURLAsFirstPartyWhenTopLevelEmbeddingSecure(
     const String&) {
   return false;
 }
-bool KURL::ProtocolIsInHttpFamily() const {
-  return protocol_is_in_http_family_;
-}
-bool KURL::ProtocolIsJavaScript() const {
-  return false;
-}
-String KURL::ElidedString() const {
-  return GetString();
-}
-String KURL::StrippedForUseAsReferrer() const {
-  return GetString();
-}
-StringView KURL::Host() const {
-  return StringView();
-}
-String KURL::Protocol() const {
-  return protocol_;
-}
-KURL::operator GURL() const {
-  return GURL(GetString().Utf8());
-}
-bool KURL::SetProtocol(const StringView& protocol) {
-  std::string protocol_text = protocol.ToString().Utf8();
-  std::string value = GetString().Utf8();
-  const size_t colon = value.find(':');
-  if (colon == std::string::npos) {
-    value = protocol_text + "://" + value;
-  } else {
-    value.replace(0, colon, protocol_text);
-  }
-  *this = KURL(String(value.c_str()));
-  return true;
-}
-void KURL::SetHost(const String& host) {
-  std::string value = GetString().Utf8();
-  std::string host_text = host.Utf8();
-  size_t host_start = value.find("://");
-  if (host_start == std::string::npos) {
-    value = "://" + host_text + value;
-  } else {
-    host_start += 3;
-    size_t host_end = value.find_first_of("/:?#", host_start);
-    if (host_end == std::string::npos) {
-      host_end = value.size();
-    }
-    value.replace(host_start, host_end - host_start, host_text);
-  }
-  *this = KURL(String(value.c_str()));
-}
-void KURL::SetPort(uint16_t port) {
-  std::string value = GetString().Utf8();
-  size_t host_start = value.find("://");
-  host_start = host_start == std::string::npos ? 0 : host_start + 3;
-  size_t port_start = value.find(':', host_start);
-  size_t host_end = value.find_first_of("/?#", host_start);
-  if (host_end == std::string::npos) {
-    host_end = value.size();
-  }
-  const std::string port_text = ":" + std::to_string(port);
-  if (port_start != std::string::npos && port_start < host_end) {
-    value.replace(port_start, host_end - port_start, port_text);
-  } else {
-    value.insert(host_end, port_text);
-  }
-  *this = KURL(String(value.c_str()));
-}
-bool operator==(const KURL& a, const KURL& b) {
-  return a.GetString() == b.GetString();
-}
-bool operator==(const String& a, const KURL& b) {
-  return a == b.GetString();
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const AtomicString& QualifiedName::LocalNameUpperSlow() const {
   return LocalName();
 }
 #endif
-KURL::KURL(const KURL&, const StringView& relative) : KURL(relative) {
-  std::string value = GetString().Utf8();
-  const size_t colon = value.find(':');
-  if (colon != std::string::npos) {
-    protocol_ = AtomicString(value.substr(0, colon).c_str());
-    protocol_is_in_http_family_ =
-        protocol_ == "http" || protocol_ == "https";
-  }
-}
-bool KURL::IsAboutBlankUrl() const {
-  return false;
-}
-bool KURL::IsNull() const {
-  return false;
-}
-bool KURL::IsValid() const {
-  return is_valid_;
-}
-StringView KURL::FragmentIdentifier() const {
-  return StringView();
-}
-bool KURL::IsAboutSrcdocUrl() const {
-  return false;
-}
-const KURL& BlankUrl() {
-  static KURL* url = new KURL(StringView("about:blank"));
-  return *url;
-}
-const KURL& NullUrl() {
-  static KURL* url = new KURL();
-  return *url;
-}
-bool ProtocolIs(const StringView&, const char*) {
-  return false;
-}
-String DecodeUrlEscapeSequences(const StringView&, url::DecodeUrlMode) {
-  return String();
-}
-bool EqualIgnoringFragmentIdentifier(const KURL&, const KURL&) {
-  return false;
-}
 std::optional<base::Time> ParseDate(const String&) {
   return std::nullopt;
 }
@@ -12717,289 +11020,6 @@ TransformSource::~TransformSource() = default;
 MediaQueryMatcher::MediaQueryMatcher(Document& document) : document_(document) {}
 void VisitedLinkState::InvalidateStyleForAllLinks(bool) {}
 void VisitedLinkState::InvalidateStyleForLink(uint64_t) {}
-SettingsBase::SettingsBase()
-    : delegate_(nullptr),
-      lcd_text_preference_(LCDTextPreference::kStronglyPreferred),
-      network_quiet_timeout_(0.5),
-      accelerated_2d_canvas_msaa_sample_count_(0),
-      accessibility_font_scale_factor_(1.0),
-      accessibility_font_weight_adjustment_(0),
-      accessibility_text_size_contrast_factor_(0),
-      autoplay_policy_(AutoplayPolicy::Type::kNoUserGestureRequired),
-      available_hover_types_(ui::HOVER_TYPE_NONE),
-      available_pointer_types_(ui::POINTER_TYPE_NONE),
-      default_fixed_font_size_(0),
-      default_font_size_(0),
-      display_mode_override_(blink::mojom::DisplayMode::kUndefined),
-#if BUILDFLAG(IS_ANDROID)
-      editing_behavior_type_(mojom::blink::EditingBehavior::kEditingAndroidBehavior),
-#elif BUILDFLAG(IS_CHROMEOS)
-      editing_behavior_type_(mojom::blink::EditingBehavior::kEditingChromeOSBehavior),
-#elif BUILDFLAG(IS_MAC)
-      editing_behavior_type_(mojom::blink::EditingBehavior::kEditingMacBehavior),
-#elif BUILDFLAG(IS_WIN)
-      editing_behavior_type_(mojom::blink::EditingBehavior::kEditingWindowsBehavior),
-#else
-      editing_behavior_type_(mojom::blink::EditingBehavior::kEditingUnixBehavior),
-#endif
-      image_animation_policy_(mojom::blink::ImageAnimationPolicy::kImageAnimationPolicyAllowed),
-      lazy_loading_frame_margin_px_2_g_(6000),
-      lazy_loading_frame_margin_px_3_g_(3500),
-      lazy_loading_frame_margin_px_4_g_(2500),
-      lazy_loading_frame_margin_px_offline_(8000),
-      lazy_loading_frame_margin_px_slow_2_g_(8000),
-      lazy_loading_frame_margin_px_unknown_(4000),
-      lazy_loading_image_margin_px_2_g_(6000),
-      lazy_loading_image_margin_px_3_g_(2500),
-      lazy_loading_image_margin_px_4_g_(1250),
-      lazy_loading_image_margin_px_offline_(8000),
-      lazy_loading_image_margin_px_slow_2_g_(8000),
-      lazy_loading_image_margin_px_unknown_(3000),
-      low_priority_iframes_threshold_(WebEffectiveConnectionType::kTypeUnknown),
-      max_touch_points_(0),
-      media_type_override_(""),
-      minimum_font_size_(0),
-      minimum_logical_font_size_(0),
-      navigation_controls_(NavigationControls::kNone),
-      output_device_update_ability_type_(mojom::blink::OutputDeviceUpdateAbilityType::kFastType),
-      parser_scripting_flag_policy_(ParserScriptingFlagPolicy::kOnlyIfScriptIsEnabled),
-      password_echo_duration_in_seconds_(1),
-      preferred_color_scheme_(mojom::blink::PreferredColorScheme::kLight),
-      preferred_contrast_(mojom::blink::PreferredContrast::kNoPreference),
-      preferred_root_scrollbar_color_scheme_(mojom::blink::PreferredColorScheme::kLight),
-      primary_hover_type_(mojom::blink::HoverType::kHoverNone),
-      primary_pointer_type_(mojom::blink::PointerType::kPointerNone),
-      printing_maximum_shrink_factor_(1.5),
-      root_scrollbar_theme_color_(std::nullopt),
-      selection_strategy_(SelectionStrategy::kCharacter),
-      text_track_kind_user_preference_(TextTrackKindUserPreference::kDefault),
-      text_track_margin_percentage_(0),
-      v8_cache_options_(mojom::blink::V8CacheOptions::kDefault),
-      validation_message_timer_magnification_(50),
-      viewport_style_(mojom::blink::ViewportStyle::kDefault),
-      window_show_state_(ui::mojom::blink::WindowShowState::kDefault),
-      dom_paste_allowed_(false),
-      dont_send_key_events_to_javascript_(false),
-      highlight_ads_(false),
-      inspector_highlight_ads_(false),
-      web_xr_immersive_ar_allowed_(true),
-      accelerated_compositing_enabled_(false),
-      accessibility_always_show_focus_(false),
-      accessibility_include_svg_g_element_(false),
-      accessibility_password_values_enabled_(false),
-      allow_custom_scrollbar_in_main_frame_(true),
-      allow_file_access_from_file_urls_(true),
-      allow_geolocation_on_insecure_origins_(false),
-      allow_running_of_insecure_content_(true),
-      allow_scripts_to_close_windows_(false),
-      allow_universal_access_from_file_urls_(true),
-      allow_unrestricted_window_focus_(false),
-      always_show_context_menu_on_touch_(true),
-      antialiased_2d_canvas_enabled_(true),
-      antialiased_clips_2d_canvas_enabled_(true),
-      aria_modal_prunes_ax_tree_(false),
-      barrel_button_for_drag_enabled_(false),
-      bypass_csp_(false),
-      caret_browsing_enabled_(false),
-      cookie_enabled_(true),
-      disable_reading_from_canvas_(false),
-      disallow_fetch_for_doc_written_scripts_in_main_frame_(false),
-      disallow_fetch_for_doc_written_scripts_in_main_frame_if_effectively_2_g_(false),
-      disallow_fetch_for_doc_written_scripts_in_main_frame_on_slow_connections_(true),
-      dns_prefetching_enabled_(false),
-      do_html_preload_scanning_(true),
-      do_not_update_selection_on_mutating_selection_range_(false),
-      downloadable_binary_fonts_enabled_(true),
-      dynamic_safe_area_insets_enabled_(false),
-      embedded_media_experience_enabled_(false),
-      force_android_overlay_scrollbar_(false),
-      force_dark_mode_enabled_(false),
-      force_main_world_initialization_(false),
-      force_touch_event_feature_detection_for_inspector_(false),
-      force_zero_layout_height_(false),
-      fullscreen_supported_(true),
-      hide_download_ui_(false),
-      hide_scrollbars_(false),
-      hyperlink_auditing_enabled_(false),
-      ignore_main_frame_overflow_hidden_quirk_(false),
-      ignore_permission_for_device_changed_event_(false),
-      images_enabled_(true),
-      immersive_mode_enabled_(false),
-      immersive_video_playback_enabled_(false),
-      in_forced_colors_(false),
-      inverted_colors_(false),
-      is_forced_colors_disabled_(false),
-      is_initial_profile_(false),
-      java_script_can_access_clipboard_(false),
-      lazy_load_enabled_(true),
-      load_with_overview_mode_(true),
-      loads_images_automatically_(false),
-      local_storage_enabled_(false),
-      log_dns_prefetch_and_preconnect_(false),
-      log_preload_(false),
-      main_frame_clips_content_(true),
-      main_frame_resizes_are_orientation_changes_(false),
-      media_controls_enabled_(true),
-      middle_click_paste_allowed_(true),
-      mock_gesture_tap_highlights_enabled_(false),
-      modal_context_menu_(true),
-      multi_target_tap_notification_enabled_(true),
-      navigate_on_drag_drop_(true),
-      password_echo_enabled_physical_(false),
-      password_echo_enabled_touch_(false),
-      picture_in_picture_enabled_(true),
-      place_rtl_scrollbars_on_left_side_in_main_frame_(false),
-      plugins_enabled_(false),
-      prefer_hidden_volume_controls_(false),
-      prefers_default_scrollbar_styles_(false),
-      prefers_reduced_motion_(false),
-      prefers_reduced_transparency_(false),
-      presentation_receiver_(false),
-      presentation_requires_user_gesture_(true),
-      report_screen_size_in_physical_pixels_quirk_(false),
-      require_transient_activation_and_authorization_for_sub_apps_api_(true),
-      require_transient_activation_for_get_display_media_(true),
-      require_transient_activation_for_show_file_or_directory_picker_(true),
-      resizable_(true),
-      rubber_banding_on_compositor_thread_(false),
-      scale_all_fonts_if_no_meta_text_scale_tag_(false),
-      script_enabled_(false),
-      scroll_animator_enabled_(true),
-#if BUILDFLAG(IS_WIN)
-      select_trailing_whitespace_enabled_(true),
-#else
-      select_trailing_whitespace_enabled_(false),
-#endif
-      selection_clipboard_buffer_available_(false),
-      selection_includes_alt_image_text_(false),
-      should_clear_document_background_(true),
-      should_print_backgrounds_(false),
-      should_protect_against_ipc_flooding_(true),
-      should_reuse_global_for_unowned_main_frame_(false),
-      show_context_menu_on_mouse_up_(false),
-      shrinks_viewport_content_to_fit_(false),
-      smart_insert_delete_enabled_(false),
-      smooth_scroll_for_find_enabled_(false),
-      spatial_navigation_enabled_(false),
-      spell_check_enabled_by_default_(true),
-      strict_mixed_content_checking_(false),
-      strict_mixed_content_checking_for_plugin_(false),
-      strict_powerful_feature_restrictions_(false),
-      strictly_block_blockable_mixed_content_(false),
-      supports_multiple_windows_(true),
-      sync_xhr_in_documents_enabled_(true),
-      target_blank_implies_no_opener_enabled_will_be_removed_(true),
-      text_areas_are_resizable_(false),
-      text_size_adjust_enabled_(false),
-      touch_drag_drop_enabled_(false),
-      touch_drag_end_context_menu_(false),
-      touch_editing_enabled_(false),
-      use_ax_menu_list_(true),
-      use_wide_viewport_(true),
-      viewport_enabled_(false),
-      viewport_meta_enabled_(false),
-      viewport_meta_merge_content_quirk_(false),
-      viewport_meta_zero_values_quirk_(false),
-      web_gl_1_enabled_(true),
-      webgl2_enabled_(true),
-      web_gl_errors_to_console_enabled_(true),
-      web_security_enabled_(true),
-      wide_viewport_quirk_enabled_(false) {}
-void SettingsBase::SetLCDTextPreference(LCDTextPreference preference) {
-  lcd_text_preference_ = preference;
-}
-void SettingsBase::Invalidate(SettingsDelegate::ChangeType) {
-  if (delegate_) {
-    delegate_->SettingsChanged(SettingsDelegate::ChangeType::kStyle);
-  }
-}
-void SettingsBase::SetDefaultFontSize(int default_font_size) {
-  if (default_font_size_ == default_font_size) {
-    return;
-  }
-  default_font_size_ = default_font_size;
-  Invalidate(SettingsDelegate::ChangeType::kStyle);
-  Invalidate(SettingsDelegate::ChangeType::kFontScaleFactor);
-}
-void SettingsBase::SetDefaultFixedFontSize(int default_fixed_font_size) {
-  if (default_fixed_font_size_ == default_fixed_font_size) {
-    return;
-  }
-  default_fixed_font_size_ = default_fixed_font_size;
-  Invalidate(SettingsDelegate::ChangeType::kStyle);
-}
-void SettingsBase::SetAcceptLanguages(const String& accept_languages) {
-  if (accept_languages_ == accept_languages) {
-    return;
-  }
-  accept_languages_ = accept_languages;
-  Invalidate(SettingsDelegate::ChangeType::kAcceptLanguages);
-}
-void SettingsBase::SetForceDarkModeEnabled(bool force_dark_mode_enabled) {
-  if (force_dark_mode_enabled_ == force_dark_mode_enabled) {
-    return;
-  }
-  force_dark_mode_enabled_ = force_dark_mode_enabled;
-  Invalidate(SettingsDelegate::ChangeType::kColorScheme);
-  Invalidate(SettingsDelegate::ChangeType::kStyle);
-  Invalidate(SettingsDelegate::ChangeType::kPaint);
-}
-void SettingsBase::SetImageAnimationPolicy(
-    mojom::blink::ImageAnimationPolicy image_animation_policy) {
-  if (image_animation_policy_ == image_animation_policy) {
-    return;
-  }
-  image_animation_policy_ = image_animation_policy;
-}
-void SettingsBase::SetInForcedColors(bool in_forced_colors) {
-  if (in_forced_colors_ == in_forced_colors) {
-    return;
-  }
-  in_forced_colors_ = in_forced_colors;
-}
-void SettingsBase::SetMinimumFontSize(int minimum_font_size) {
-  if (minimum_font_size_ == minimum_font_size) {
-    return;
-  }
-  minimum_font_size_ = minimum_font_size;
-  Invalidate(SettingsDelegate::ChangeType::kStyle);
-}
-void SettingsBase::SetMinimumLogicalFontSize(int minimum_logical_font_size) {
-  if (minimum_logical_font_size_ == minimum_logical_font_size) {
-    return;
-  }
-  minimum_logical_font_size_ = minimum_logical_font_size;
-  Invalidate(SettingsDelegate::ChangeType::kStyle);
-}
-void SettingsBase::SetPluginsEnabled(bool plugins_enabled) {
-  if (plugins_enabled_ == plugins_enabled) {
-    return;
-  }
-  plugins_enabled_ = plugins_enabled;
-  Invalidate(SettingsDelegate::ChangeType::kPlugins);
-}
-void SettingsBase::SetPreferredColorScheme(
-    mojom::blink::PreferredColorScheme preferred_color_scheme) {
-  if (preferred_color_scheme_ == preferred_color_scheme) {
-    return;
-  }
-  preferred_color_scheme_ = preferred_color_scheme;
-  Invalidate(SettingsDelegate::ChangeType::kColorScheme);
-}
-void SettingsBase::SetPrefersReducedMotion(bool prefers_reduced_motion) {
-  if (prefers_reduced_motion_ == prefers_reduced_motion) {
-    return;
-  }
-  prefers_reduced_motion_ = prefers_reduced_motion;
-  Invalidate(SettingsDelegate::ChangeType::kMediaQuery);
-}
-void SettingsBase::SetScriptEnabled(bool script_enabled) {
-  if (script_enabled_ == script_enabled) {
-    return;
-  }
-  script_enabled_ = script_enabled;
-  Invalidate(SettingsDelegate::ChangeType::kMediaQuery);
-}
 SettingsDelegate::SettingsDelegate(std::unique_ptr<Settings> settings)
     : settings_(std::move(settings)) {}
 SettingsDelegate::~SettingsDelegate() = default;
@@ -13034,28 +11054,6 @@ v8::Local<v8::Value> DOMWindow::Wrap(ScriptState*) {
   return v8::Local<v8::Value>();
 }
 void UniversalGlobalScope::Trace(Visitor*) const {}
-ExecutionContext::~ExecutionContext() = default;
-void ExecutionContext::NotifyContextDestroyed() {}
-bool ExecutionContext::IsContextPaused() const {
-  return false;
-}
-bool ExecutionContext::IsSameAgentCluster(const base::UnguessableToken&) const {
-  return false;
-}
-void ExecutionContext::CountDeprecation(mojom::WebFeature) {}
-ExecutionContext* ExecutionContext::From(const ScriptState*) {
-  return nullptr;
-}
-ContentSecurityPolicy* ExecutionContext::GetContentSecurityPolicyForWorld(
-    const DOMWrapperWorld*) {
-  return nullptr;
-}
-mojom::blink::V8CacheOptions ExecutionContext::GetV8CacheOptions() const {
-  return mojom::blink::V8CacheOptions::kDefault;
-}
-String ExecutionContext::OutgoingReferrer() const {
-  return String();
-}
 DOMWindow::~DOMWindow() = default;
 void DOMWindow::Trace(Visitor*) const {}
 bool DOMWindow::IsCurrentlyDisplayedInFrame() const {
@@ -13063,18 +11061,6 @@ bool DOMWindow::IsCurrentlyDisplayedInFrame() const {
 }
 DOMWindow* DOMWindow::top() const {
   return const_cast<DOMWindow*>(this);
-}
-ExecutionContext::ExecutionContext(v8::Isolate* isolate,
-                                   Agent* agent,
-                                   bool)
-    : isolate_(isolate),
-      security_context_(this),
-      agent_(agent),
-      circular_sequential_id_(0),
-      in_dispatch_error_event_(false),
-      lifecycle_state_(mojom::FrameLifecycleState::kRunning),
-      csp_delegate_(nullptr),
-      window_interaction_tokens_(0) {
 }
 History::History(LocalDOMWindow* window) : ExecutionContextClient(window) {}
 Screen::Screen(LocalDOMWindow* window, int64_t display_id)
@@ -13204,13 +11190,6 @@ bool MessageEvent::IsLockedToAgentCluster() const {
 bool MessageEvent::CanDeserializeIn(ExecutionContext*) const {
   return true;
 }
-class MessagePortChannel::State
-    : public base::RefCountedThreadSafe<MessagePortChannel::State> {
- private:
-  friend class base::RefCountedThreadSafe<MessagePortChannel::State>;
-  ~State() = default;
-};
-MessagePortChannel::~MessagePortChannel() = default;
 PageTransitionEvent::PageTransitionEvent(const AtomicString& type,
                                          bool persisted)
     : Event(type, Bubbles::kNo, Cancelable::kNo),
@@ -13236,64 +11215,9 @@ EventTiming::~EventTiming() = default;
 SerializedScriptValue::~SerializedScriptValue() = default;
 ArrayBufferContents::~ArrayBufferContents() = default;
 BlobDataHandle::~BlobDataHandle() = default;
-void inspector_handle_post_message_event::Data(perfetto::TracedValue,
-                                               ExecutionContext*,
-                                               const MessageEvent&) {}
-void inspector_schedule_post_message_event::Data(perfetto::TracedValue,
-                                                 ExecutionContext*,
-                                                 uint64_t) {}
-void inspector_event_dispatch_event::Data(perfetto::TracedValue,
-                                          const Event&,
-                                          v8::Isolate*) {}
-void inspector_mark_load_event::Data(perfetto::TracedValue, LocalFrame*) {}
-v8::MicrotaskQueue* ToMicrotaskQueue(ExecutionContext*) {
-  return nullptr;
-}
-v8::MicrotaskQueue* ToMicrotaskQueue(ScriptState*) {
-  return nullptr;
-}
 v8::Local<v8::Value> bindings::DictionaryBase::ToV8(ScriptState*) const {
   return v8::Local<v8::Value>();
 }
-void ExecutionContext::RemoveURLFromMemoryCache(const KURL&) {}
-void ExecutionContext::Trace(Visitor*) const {}
-ContentSecurityPolicy* ExecutionContext::GetContentSecurityPolicy() const {
-  return content_security_policy_.Get();
-}
-ContentSecurityPolicyDelegate&
-ExecutionContext::GetContentSecurityPolicyDelegate() {
-  return *csp_delegate_;
-}
-network::mojom::ReferrerPolicy ExecutionContext::GetReferrerPolicy() const {
-  return network::mojom::ReferrerPolicy::kDefault;
-}
-bool ExecutionContext::IsFeatureEnabled(
-    network::mojom::PermissionsPolicyFeature) const {
-  return false;
-}
-bool ExecutionContext::IsSandboxed(
-    network::mojom::blink::WebSandboxFlags) const {
-  return false;
-}
-void ExecutionContext::SetIsInBackForwardCache(bool) {}
-const DOMWrapperWorld* ExecutionContext::GetCurrentWorld() const {
-  return nullptr;
-}
-DOMWrapperWorld& DOMWrapperWorld::MainWorld(v8::Isolate*) {
-  return *static_cast<DOMWrapperWorld*>(nullptr);
-}
-NetworkStateNotifier& GetNetworkStateNotifier() {
-  static NetworkStateNotifier* notifier = new NetworkStateNotifier();
-  return *notifier;
-}
-std::unique_ptr<NetworkStateNotifier::NetworkStateObserverHandle>
-NetworkStateNotifier::AddOnLineObserver(
-    NetworkStateObserver*,
-    scoped_refptr<base::SingleThreadTaskRunner>) {
-  return nullptr;
-}
-NetworkStateNotifier::NetworkStateObserverHandle::~NetworkStateObserverHandle() =
-    default;
 DelegatedCapabilityRequestToken::DelegatedCapabilityRequestToken() = default;
 void DelegatedCapabilityRequestToken::Activate() {}
 bool DelegatedCapabilityRequestToken::IsActive() const {
@@ -13324,9 +11248,6 @@ const std::optional<std::string> DocumentPolicy::GetFeatureEndpoint(
   return std::nullopt;
 }
 void ViewTransitionSupplement::SendOptInStatusToHost() {}
-bool ExecutionContext::RequireTrustedTypes() const {
-  return false;
-}
 std::unique_ptr<mojom::blink::PolicyContainerPolicies>
 FromWebPolicyContainerPolicies(const WebPolicyContainerPolicies&) {
   return nullptr;
@@ -13378,13 +11299,6 @@ void InspectorIssueStorage::Clear() {}
 ReportingContext* ReportingContext::From(ExecutionContext*) {
   return nullptr;
 }
-namespace probe {
-void AsyncTaskContext::Schedule(ExecutionContext*,
-                                const StringView&,
-                                ScanForAds) {}
-AsyncTask::AsyncTask(ExecutionContext*, AsyncTaskContext*, const char*, bool) {}
-AsyncTask::~AsyncTask() = default;
-}  // namespace probe
 String ExceptionMessages::FailedToExecute(const String&,
                                           const char*,
                                           const String&) {
@@ -13398,62 +11312,12 @@ void AuditsIssue::ReportPartitioningBlobURLIssue(
     LocalDOMWindow*,
     String,
     mojom::blink::PartitioningBlobURLInfo) {}
-SourceLocation::~SourceLocation() = default;
-SourceLocation::SourceLocation(
-    const String& url,
-    const String& function,
-    unsigned line_number,
-    unsigned column_number,
-    std::unique_ptr<v8_inspector::V8StackTrace> stack_trace,
-    int script_id)
-    : url_(url),
-      function_(function),
-      line_number_(line_number),
-      column_number_(column_number),
-      char_position_(0),
-      stack_trace_(std::move(stack_trace)),
-      script_id_(script_id) {}
-SourceLocation* CaptureSourceLocation(ExecutionContext*) {
-  return MakeGarbageCollected<SourceLocation>(String(), String(), 0, 0,
-                                              nullptr, 0);
-}
-SourceLocation* CaptureSourceLocation() {
-  return MakeGarbageCollected<SourceLocation>(String(), String(), 0, 0,
-                                              nullptr, 0);
-}
 void Deprecation::CountDeprecation(ExecutionContext*, mojom::WebFeature) {}
-namespace mojom {
-std::ostream& operator<<(std::ostream& os, WebFeature feature) {
-  return os << static_cast<int>(feature);
-}
-}  // namespace mojom
-void ExecutionContext::AddConsoleMessageImpl(
-    mojom::blink::ConsoleMessageSource,
-    mojom::blink::ConsoleMessageLevel,
-    const String&,
-    bool,
-    std::optional<mojom::blink::ConsoleMessageCategory>) {}
-bool ExecutionContext::FeatureEnabled(mojom::OriginTrialFeature) const {
-  return false;
-}
 void ScriptController::DiscardFrame() {}
 void ScriptController::Trace(Visitor*) const {}
 void ScriptController::ExecuteJavaScriptURL(const KURL&,
                                             network::mojom::CSPDisposition,
                                             const DOMWrapperWorld*) {}
-v8::Isolate* ToIsolate(const LocalFrame*) {
-  return nullptr;
-}
-DOMWrapperWorld* DOMWrapperWorld::EnsureIsolatedWorld(v8::Isolate*, int) {
-  return nullptr;
-}
-void DOMWrapperWorld::Trace(Visitor*) const {}
-ScriptState* ToScriptState(LocalFrame*, DOMWrapperWorld&) {
-  return nullptr;
-}
-ScriptState* ToScriptState(ExecutionContext*, DOMWrapperWorld&) {
-  return nullptr;
-}
 void PausableScriptExecutor::CreateAndRun(
     ScriptState*,
     Vector<WebScriptSource>,
@@ -13483,15 +11347,6 @@ FrameOrWorkerScheduler::SchedulingAffectingFeatureHandle::operator=(
   scheduler_ = std::move(other.scheduler_);
   return *this;
 }
-const AtomicString& DocumentLoader::MimeType() const {
-  return g_empty_atom;
-}
-const mojom::RendererContentSettingsPtr&
-DocumentLoader::GetContentSettings() {
-  static const mojom::RendererContentSettingsPtr* settings =
-      new mojom::RendererContentSettingsPtr();
-  return *settings;
-}
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 Vector<String> HTMLInputElement::FilesFromFileInputFormControlState(
     const FormControlState&) {
@@ -13513,15 +11368,6 @@ void AutofillEvent::Trace(Visitor* visitor) const {
 }
 const AtomicString& AutofillEvent::InterfaceName() const {
   return event_interface_names::kEvent;
-}
-void KURL::SetQuery(const String&) {}
-void KURL::SetUser(const String&) {}
-void KURL::SetPass(const String&) {}
-bool KURL::IsEmpty() const {
-  return string_.empty();
-}
-bool KURL::ProtocolIs(StringView protocol) const {
-  return protocol_ == protocol;
 }
 const HeapVector<Member<ListedElement>>&
 HTMLFormElement::CollectAndCacheListedElements(bool) const {
@@ -13553,14 +11399,6 @@ void PaintLayerScrollableArea::SetHasVerticalScrollbar(bool has_scrollbar) {
 }
 gfx::Point EmbeddedContentView::Location() const {
   return gfx::Point();
-}
-void VisualViewport::MainFrameDidChangeSize() {}
-Element* DisplayLockUtilities::LockedAncestorPreventingLayout(
-    const LayoutObject&) {
-  return nullptr;
-}
-bool DisplayLockUtilities::IsAutoWithoutLayout(const LayoutObject&) {
-  return false;
 }
 void FirstMeaningfulPaintDetector::MarkNextPaintAsMeaningfulIfNeeded(
     const LayoutObjectCounter&,
@@ -13603,10 +11441,6 @@ void FrameSelection::CommitAppearanceIfNeeded() {}
 void LayoutListItem::UpdateCounterStyle() {}
 void LayoutInlineListItem::UpdateCounterStyle() {}
 #endif
-void inspector_hit_test_event::EndData(perfetto::TracedValue,
-                                       const HitTestRequest&,
-                                       const HitTestLocation&,
-                                       const HitTestResult&) {}
 void AnchorElementViewportPositionTracker::OnScrollEnd() {}
 ScrollAnimatorCompositorCoordinator::ScrollAnimatorCompositorCoordinator()
     : element_id_(CompositorElementId()),
@@ -13704,25 +11538,6 @@ void ProgrammaticScrollAnimator::Trace(Visitor* visitor) const {
 ScrollAnimatorBase* ScrollAnimatorBase::Create(ScrollableArea* scrollable_area) {
   return MakeGarbageCollected<ScrollAnimatorBase>(scrollable_area);
 }
-SynthesizedClip& PaintArtifactCompositor::CreateOrReuseSynthesizedClipLayer(
-    const ClipPaintPropertyNode&,
-    const TransformPaintPropertyNode&,
-    bool,
-    CompositorElementId&,
-    CompositorElementId&) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::CreateOrReuseSynthesizedClipLayer");
-}
-bool PaintArtifactCompositor::NeedsCompositedScrolling(
-    const TransformPaintPropertyNode&) const {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::NeedsCompositedScrolling");
-}
-bool PaintArtifactCompositor::ShouldForceMainThreadRepaint(
-    const TransformPaintPropertyNode&) const {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::ShouldForceMainThreadRepaint");
-}
 ExceptionState::ExceptionState(DummyExceptionStateForTesting&)
     : context_(kEmptyContext), isolate_(nullptr) {}
 void ExceptionState::RethrowV8Exception(v8::TryCatch&) {
@@ -13786,7 +11601,10 @@ GetDocumentPolicyFeatureInfoMap() {
   static base::flat_map<mojom::blink::DocumentPolicyFeature,
                         DocumentPolicyFeatureInfo>* map =
       new base::flat_map<mojom::blink::DocumentPolicyFeature,
-                         DocumentPolicyFeatureInfo>();
+                         DocumentPolicyFeatureInfo>({
+          {mojom::blink::DocumentPolicyFeature::kExpectNoLinkedResources,
+           {"expect-no-linked-resources", PolicyValue::CreateBool(false)}},
+      });
   return *map;
 }
 void HighlightRegistry::ValidateHighlightMarkers() {}
@@ -13854,7 +11672,6 @@ const LayoutObject* AnchorMap::AnchorLayoutObject(
   return nullptr;
 }
 #endif
-void DisplayLockContext::SetAnchorPositioningRenderStateMayHaveChanged() {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void ShapeOutsideInfo::Trace(Visitor*) const {}
 #endif
@@ -13919,19 +11736,6 @@ void PaintLayer::SetNeedsRepaint() {}
 bool Font::IsFallbackValid() const {
   return true;
 }
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
-HarfBuzzFace* FontPlatformData::GetHarfBuzzFace() const {
-  return nullptr;
-}
-#endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-HarfBuzzFace* FontPlatformData::GetHarfBuzzFace() const {
-  if (!harfbuzz_face_) {
-    harfbuzz_face_ = MakeGarbageCollected<HarfBuzzFace>(this, UniqueID());
-  }
-  return harfbuzz_face_.Get();
-}
-#endif
 bool OpenTypeMathSupport::HasMathData(const HarfBuzzFace*) {
   return false;
 }
@@ -14092,19 +11896,14 @@ std::unique_ptr<WebNavigationParams>
 WebNavigationParams::CreateWithEmptyHTMLForTesting(const WebURL&) {
   return nullptr;
 }
-FramePolicy::~FramePolicy() = default;
 void WebHTTPBody::Reset() {}
 void FrameLoader::CommitNavigation(
     std::unique_ptr<WebNavigationParams>,
     std::unique_ptr<WebDocumentLoader::ExtraData>,
     CommitReason) {}
-void DocumentLoader::DisableCodeCacheForTesting() {}
 void test::RunPendingTasks() {}
 MainThread* Thread::MainThread() {
   return &StandaloneMainThread();
-}
-void VisualViewport::SetSize(const gfx::Size& size) {
-  size_ = size;
 }
 URLLoaderMockFactory* URLLoaderMockFactory::GetSingletonInstance() {
   return nullptr;
@@ -14126,10 +11925,6 @@ WindowPerformance* DOMWindowPerformance::performance(LocalDOMWindow&) {
   return nullptr;
 }
 void WindowPerformance::WillShowModalDialog() {}
-namespace probe {
-void WillRunJavaScriptDialog(LocalFrame*) {}
-void DidRunJavaScriptDialog(LocalFrame*) {}
-}  // namespace probe
 void ActiveScriptWrappableBase::RegisterActiveScriptWrappable() {}
 WorkletAnimationController::~WorkletAnimationController() = default;
 void WorkletAnimationController::SynchronizeAnimatorName(const String&) {}
@@ -14166,6 +11961,12 @@ const AtomicString event_interface_names::kWheelEvent("WheelEvent");
 }  // namespace blink
 
 namespace blink::scheduler {
+EventLoop::EventLoop(Delegate* delegate,
+                     v8::Isolate* isolate,
+                     std::unique_ptr<v8::MicrotaskQueue> microtask_queue)
+    : delegate_(delegate),
+      isolate_(isolate),
+      microtask_queue_(std::move(microtask_queue)) {}
 EventLoop::~EventLoop() = default;
 void EventLoop::EnqueueMicrotask(base::OnceCallback<void()>) {}
 std::unique_ptr<FrameScheduler> CreateDummyFrameScheduler(v8::Isolate*) {
@@ -14174,8 +11975,6 @@ std::unique_ptr<FrameScheduler> CreateDummyFrameScheduler(v8::Isolate*) {
 }  // namespace blink::scheduler
 
 namespace cc {
-ViewTransitionRequest::~ViewTransitionRequest() = default;
-ScopedRequestHighFramerate::~ScopedRequestHighFramerate() = default;
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PaintOpBuffer::PaintOpBuffer() = default;
 PaintOpBuffer::~PaintOpBuffer() = default;
@@ -14188,9 +11987,6 @@ PaintImage::~PaintImage() = default;
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 SkottieTextPropertyValue::~SkottieTextPropertyValue() = default;
 #endif
-std::string MainThreadScrollingReason::AsText(uint32_t) {
-  return std::string();
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PaintRecord::PaintRecord() = default;
 RecordPaintCanvas::RecordPaintCanvas() = default;
@@ -14331,13 +12127,6 @@ void RecordPaintCanvas::Annotate(AnnotationType,
 void RecordPaintCanvas::recordCustomData(uint32_t) {}
 void RecordPaintCanvas::setNodeId(int) {}
 #endif
-void AnimationHost::SetAnimationCounts(size_t) {}
-bool Layer::IsMainThread() const {
-  return true;
-}
-bool LayerTreeHost::IsMainThread() const {
-  return true;
-}
 }  // namespace cc
 
 namespace gfx {
@@ -14408,10 +12197,6 @@ Point ToFlooredPoint(const PointF& point) {
                static_cast<int>(std::floor(point.y())));
 }
 #endif
-DisplayColorSpaces::DisplayColorSpaces() = default;
-DisplayColorSpaces::DisplayColorSpaces(const DisplayColorSpaces&) = default;
-ColorSpace::ColorSpace(const SkColorSpace&, bool)
-    : ColorSpace(ColorSpace::CreateSRGB()) {}
 Quaternion Quaternion::FromAxisAngle(double x, double y, double z, double w) {
   return Quaternion(x, y, z, w);
 }
@@ -14458,15 +12243,6 @@ const ScreenInfo& ScreenInfos::current() const {
 
 namespace v8::internal {
 class EmbedderState {};
-void CopyTracedReference(const Address* const*, Address**) {}
-void DisposeTracedReference(Address*) {}
-Address* GlobalizeTracedReference(Isolate*,
-                                  Address,
-                                  Address* slot,
-                                  TracedReferenceStoreMode,
-                                  TracedReferenceHandling) {
-  return slot;
-}
 }  // namespace v8::internal
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -14495,167 +12271,7 @@ void SkTextBlob::operator delete(void* ptr) {
 }
 #endif
 
-namespace v8 {
-EmbedderStateScope::EmbedderStateScope(Isolate*,
-                                       Local<v8::Context>,
-                                       EmbedderStateTag) {}
-EmbedderStateScope::~EmbedderStateScope() = default;
-void Context::Enter() {}
-void Context::Exit() {}
-void Context::SetMicrotaskQueue(MicrotaskQueue*) {}
-Local<Context> Isolate::GetCurrentContext() {
-  return Local<Context>();
-}
-bool Value::IsObject() const {
-  return false;
-}
-void* Object::GetAlignedPointerFromEmbedderDataInCreationContext(
-    Isolate*,
-    int,
-    EmbedderDataTypeTag) {
-  return nullptr;
-}
-internal::ExternalPointerTag ToExternalPointerTag(EmbedderDataTypeTag) {
-  return internal::kExternalPointerNullTag;
-}
-MicrotasksScope::MicrotasksScope(Isolate*, MicrotaskQueue*, Type)
-    : i_isolate_(nullptr), microtask_queue_(nullptr), run_(false) {}
-MicrotasksScope::~MicrotasksScope() = default;
-bool MicrotasksScope::IsRunningMicrotasks(Isolate*) {
-  return false;
-}
-Local<Promise> Promise::Resolver::GetPromise() {
-  return Local<Promise>();
-}
-internal::Address* HandleScope::Extend(Isolate*) {
-  return nullptr;
-}
-void HandleScope::DeleteExtensions(Isolate*) {}
-}  // namespace v8
-
-namespace perfetto::internal {
-protos::pbzero::DebugAnnotation* TrackEventInternal::AddDebugAnnotation(
-    perfetto::EventContext*,
-    const char*) {
-  return nullptr;
-}
-const Track TrackEventInternal::kDefaultTrack{};
-TracingMuxer* TracingMuxer::instance_ = nullptr;
-}  // namespace perfetto::internal
-
-namespace perfetto {
-template <>
-internal::DataSourceType&
-DataSourceHelper<internal::TrackEventDataSource,
-                 internal::TrackEventDataSourceTraits>::type() {
-  static internal::DataSourceType* type = new internal::DataSourceType();
-  return *type;
-}
-}  // namespace perfetto
-
-namespace perfetto::legacy {
-template <>
-ThreadTrack ConvertThreadId(const PerfettoLegacyCurrentThreadId&) {
-  return ThreadTrack::Current();
-}
-}  // namespace perfetto::legacy
-
-namespace perfetto::internal {
-}  // namespace perfetto::internal
-
-namespace perfetto {
-uint64_t Platform::process_id_ = 0;
-ThreadTrack ThreadTrack::Current() {
-  return ThreadTrack(0, false);
-}
-TracedDictionary::TracedDictionary(TracedValue value)
-    : message_(nullptr),
-      field_id_(0),
-      event_context_(nullptr),
-      checked_scope_(nullptr) {}
-void TracedValue::WriteDouble(double) && {}
-void TracedValue::WritePointer(const void*) && {}
-}  // namespace perfetto
-
-namespace base::trace_event {
-TracedValue::TracedValue(uint64_t) {}
-TracedValue::TracedValue(uint64_t, bool) {}
-void TracedValue::BeginDictionary() {}
-void TracedValue::BeginDictionary(const char*) {}
-void TracedValue::EndDictionary() {}
-void TracedValue::BeginArray(const char*) {}
-void TracedValue::EndArray() {}
-void TracedValue::SetInteger(const char*, int) {}
-void TracedValue::SetDouble(const char*, double) {}
-void TracedValue::SetBoolean(const char*, bool) {}
-void TracedValue::SetString(const char*, std::string_view) {}
-void TracedValue::AppendInteger(int) {}
-void TracedValue::AppendDouble(double) {}
-std::string TracedValueJSON::ToJSON() const {
-  return std::string();
-}
-std::string TracedValueJSON::ToFormattedJSON() const {
-  return std::string();
-}
-void ConvertableToTraceFormat::Add(
-    perfetto::protos::pbzero::DebugAnnotation*) const {}
-MemoryAllocatorDump* ProcessMemoryDump::CreateAllocatorDump(
-    const std::string&) {
-  return nullptr;
-}
-void MemoryAllocatorDump::AddScalar(const char*, const char*, uint64_t) {}
-}  // namespace base::trace_event
-
-namespace base::perfetto_track_event::internal {
-extern const ::perfetto::internal::TrackEventCategoryRegistry kCategoryRegistry(
-    0,
-    nullptr,
-    nullptr);
-}  // namespace base::perfetto_track_event::internal
-
 namespace base {
-PlatformThreadId PlatformThreadBase::CurrentId() {
-  return PlatformThreadId(::GetCurrentThreadId());
-}
-PlatformThreadRef PlatformThreadBase::CurrentRef() {
-  return PlatformThreadRef(::GetCurrentThreadId());
-}
-void DCheckAsserter::warn() {}
-bool FeatureList::IsEnabled(const Feature& feature) {
-  return feature.default_state == FEATURE_ENABLED_BY_DEFAULT;
-}
-FeatureList* FeatureList::GetInstance() {
-  return nullptr;
-}
-namespace internal {
-bool IsFeatureParamWithCacheEnabled() {
-  return false;
-}
-}  // namespace internal
-template <>
-bool FeatureParam<bool>::GetWithoutCache() const {
-  return default_value;
-}
-template <>
-int FeatureParam<int>::GetWithoutCache() const {
-  return default_value;
-}
-template <>
-size_t FeatureParam<size_t>::GetWithoutCache() const {
-  return default_value;
-}
-template <>
-double FeatureParam<double>::GetWithoutCache() const {
-  return default_value;
-}
-template <>
-std::string FeatureParam<std::string>::GetWithoutCache() const {
-  return default_value;
-}
-template <>
-TimeDelta FeatureParam<TimeDelta>::GetWithoutCache() const {
-  return default_value;
-}
 namespace i18n {
 bool StringSearchIgnoringCaseAndAccents(std::u16string,
                                         std::u16string_view,
@@ -14670,92 +12286,10 @@ bool StringSearchIgnoringCaseAndAccents(std::u16string,
   return false;
 }
 }  // namespace i18n
-const UnguessableToken& UnguessableToken::Null() {
-  static const UnguessableToken* token = new UnguessableToken();
-  return *token;
-}
-void* AlignedAlloc(size_t size, size_t alignment) {
-  return allocator_shim::UncheckedAlignedAlloc(size, alignment);
-}
 namespace debug {
 }  // namespace debug
 namespace sequence_manager {
-TaskTimeObserver::~TaskTimeObserver() = default;
 }  // namespace sequence_manager
-RefCountedString::RefCountedString(std::string value)
-    : string_(std::move(value)) {}
-RefCountedString::~RefCountedString() = default;
-span<const uint8_t> RefCountedString::AsSpan() const {
-  return as_byte_span(string_);
-}
-std::optional<DictValue> JSONReader::ReadDict(std::string_view,
-                                              int,
-                                              size_t) {
-  return std::nullopt;
-}
-bool Time::FromStringInternal(const char*, bool, Time*) {
-  return false;
-}
-std::ostream& operator<<(std::ostream& os, TimeDelta time_delta) {
-  return os << time_delta.InMicroseconds() << " us";
-}
-std::ostream& operator<<(std::ostream& os, TimeTicks) {
-  return os << "TimeTicks()";
-}
-ConditionVariable::ConditionVariable(Lock*) {}
-ConditionVariable::~ConditionVariable() = default;
-void UmaHistogramSparse(const char*, int) {}
-void UmaHistogramBoolean(const char*, bool) {}
-void UmaHistogramCounts100(const char*, int) {}
-void UmaHistogramCounts1000(const char*, int) {}
-void UmaHistogramCounts10000(const char*, int) {}
-void UmaHistogramCounts100000(const char*, int) {}
-void UmaHistogramExactLinear(const char*, int, int) {}
-void UmaHistogramCustomTimes(const char*,
-                             TimeDelta,
-                             TimeDelta,
-                             TimeDelta,
-                             uint64_t) {}
-void UmaHistogramCustomMicrosecondsTimes(const char*,
-                                         TimeDelta,
-                                         TimeDelta,
-                                         TimeDelta,
-                                         uint64_t) {}
-void UmaHistogramTimes(const char*, TimeDelta) {}
-void UmaHistogramTimes(const std::string&, TimeDelta) {}
-void UmaHistogramMicrosecondsTimes(const char*, TimeDelta) {}
-void UmaHistogramMicrosecondsTimes(const std::string&, TimeDelta) {}
-std::string GetFieldTrialParamValueByFeature(const Feature&,
-                                             const std::string&) {
-  return std::string();
-}
-void LogInvalidEnumValue(const Feature&,
-                         const std::string&,
-                         const std::string&,
-                         int) {}
-HistogramBase* Histogram::FactoryGet(const char*, int, int, uint64_t, int) {
-  return nullptr;
-}
-HistogramBase* LinearHistogram::FactoryGet(const char*,
-                                           int,
-                                           int,
-                                           uint64_t,
-                                           int) {
-  return nullptr;
-}
-HistogramBase* Histogram::FactoryTimeGet(const char*,
-                                         TimeDelta,
-                                         TimeDelta,
-                                         uint64_t,
-                                         int) {
-  return nullptr;
-}
-void HistogramBase::AddTimeMillisecondsGranularity(const TimeDelta&) {}
-void HistogramBase::AddTimeMicrosecondsGranularity(const TimeDelta&) {}
-TimeDelta ElapsedTimer::Elapsed() const {
-  return TimeDelta();
-}
-ElapsedTimer::ElapsedTimer() = default;
 LapTimer::LapTimer(int warmup_laps,
                    TimeDelta time_limit,
                    int check_interval,
@@ -14772,52 +12306,10 @@ void LapTimer::NextLap() {}
 TimeDelta LapTimer::TimePerLap() const {
   return TimeDelta();
 }
-Time Time::Now() {
-  return Time();
-}
-void Time::Explode(bool is_local, Exploded* exploded) const {
-  *exploded = Exploded();
-  int64_t micros = ToInternalValue();
-  int64_t seconds = micros / kMicrosecondsPerSecond;
-  int64_t micros_remainder = micros % kMicrosecondsPerSecond;
-  if (micros_remainder < 0) {
-    micros_remainder += kMicrosecondsPerSecond;
-    --seconds;
-  }
-
-  constexpr int64_t kWindowsToUnixEpochSeconds = 11644473600LL;
-  seconds -= kWindowsToUnixEpochSeconds;
-
-  std::time_t time_seconds = static_cast<std::time_t>(seconds);
-  std::tm time_parts = {};
-  errno_t result = is_local ? localtime_s(&time_parts, &time_seconds)
-                            : gmtime_s(&time_parts, &time_seconds);
-  if (result != 0) {
-    return;
-  }
-
-  exploded->year = time_parts.tm_year + 1900;
-  exploded->month = time_parts.tm_mon + 1;
-  exploded->day_of_week = time_parts.tm_wday;
-  exploded->day_of_month = time_parts.tm_mday;
-  exploded->hour = time_parts.tm_hour;
-  exploded->minute = time_parts.tm_min;
-  exploded->second = time_parts.tm_sec;
-  exploded->millisecond =
-      static_cast<int>(micros_remainder / kMicrosecondsPerMillisecond);
-}
 std::string UnlocalizedTimeFormatWithPattern(const Time&,
                                              std::string_view,
                                              const icu::TimeZone*) {
   return std::string();
-}
-WaitableEvent::~WaitableEvent() = default;
-RunLoop::RunLoop(Type type)
-    : delegate_(nullptr), type_(type), origin_task_runner_(nullptr) {}
-RunLoop::~RunLoop() = default;
-void RunLoop::Run(const Location&) {}
-RepeatingClosure RunLoop::QuitClosure() & {
-  return RepeatingClosure();
 }
 namespace internal {
 LockImpl::LockImpl() : native_handle_({0}) {}
@@ -14826,143 +12318,15 @@ void LockImpl::LockInternal() {
   ::AcquireSRWLockExclusive(&native_handle_);
 }
 }  // namespace internal
-bool TimeTicks::IsHighResolution() {
-  return false;
-}
-TimeTicks TimeTicks::Now() {
-  return TimeTicks();
-}
 CPU::CPU() = default;
 CPU::CPU(CPU&&) = default;
 const CPU& CPU::GetInstanceNoAllocation() {
   static CPU* cpu = new CPU();
   return *cpu;
 }
-bool operator==(const UnguessableToken& lhs, const UnguessableToken& rhs) {
-  return lhs.token_ == rhs.token_;
-}
-ScopedUmaHistogramTimer::ScopedUmaHistogramTimer(
-    std::string_view name,
-    ScopedHistogramTiming timing)
-    : constructed_(TimeTicks::Now()), timing_(timing), name_(name) {}
-ScopedUmaHistogramTimer::~ScopedUmaHistogramTimer() = default;
-SharedMemoryMapping::SharedMemoryMapping() = default;
-SharedMemoryMapping::~SharedMemoryMapping() = default;
-WritableSharedMemoryMapping::WritableSharedMemoryMapping() = default;
-MemoryMappedFile::~MemoryMappedFile() = default;
-File::File() = default;
-File::File(File&&) = default;
-File::~File() = default;
-File& File::operator=(File&&) = default;
-FileTracing::ScopedEnabler::ScopedEnabler() = default;
-FileTracing::ScopedEnabler::~ScopedEnabler() = default;
-FilePath::FilePath() = default;
-FilePath::FilePath(const FilePath& that) = default;
-FilePath::FilePath(StringViewType path) : path_(path) {}
-FilePath::FilePath(FilePath&& that) noexcept = default;
-FilePath::~FilePath() = default;
-FilePath& FilePath::operator=(const FilePath& that) = default;
-FilePath& FilePath::operator=(FilePath&& that) noexcept = default;
-FilePath FilePath::FromASCII(std::string_view ascii) {
-  StringType path;
-  path.reserve(ascii.size());
-  for (char ch : ascii) {
-    path.push_back(static_cast<CharType>(ch));
-  }
-  return FilePath(path);
-}
-bool FilePath::IsAbsolute() const {
-  return false;
-}
-FilePath FilePath::Append(const FilePath& component) const {
-  FilePath result(*this);
-  if (!result.path_.empty()) {
-    result.path_.push_back(kSeparators[0]);
-  }
-  result.path_.append(component.path_);
-  return result;
-}
-FilePath::StringType FilePath::Extension() const {
-  const StringType::size_type last_separator = path_.find_last_of(
-      kSeparators, StringType::npos, kSeparatorsLength - 1);
-  const StringType::size_type base_start =
-      last_separator == StringType::npos ? 0 : last_separator + 1;
-  if (base_start >= path_.size()) {
-    return StringType();
-  }
-
-  const StringType base_name = path_.substr(base_start);
-  if (base_name == kCurrentDirectory || base_name == kParentDirectory) {
-    return StringType();
-  }
-
-  const StringType::size_type dot = base_name.rfind(kExtensionSeparator);
-  if (dot == StringType::npos || dot == 0) {
-    return StringType();
-  }
-  return base_name.substr(dot);
-}
-std::string FilePath::AsUTF8Unsafe() const {
-#if BUILDFLAG(IS_WIN)
-  return WideToUTF8(path_);
-#else
-  return path_;
-#endif
-}
-CommandLine::CommandLine(NoProgram) : argv_(1) {}
-CommandLine* CommandLine::ForCurrentProcess() {
-  static CommandLine* command_line = new CommandLine(NO_PROGRAM);
-  return command_line;
-}
-bool CommandLine::HasSwitch(const char* const) const {
-  return false;
-}
 namespace win {
-void VerifierTraits::StartTracking(void*, const void*, const void*, const void*) {}
-void VerifierTraits::StopTracking(void*, const void*, const void*, const void*) {}
-bool HandleTraits::CloseHandle(HANDLE handle) {
-  return CloseHandle(handle) != 0;
-}
 }  // namespace win
-// The standalone renderer runs Blink synchronously; no ambient task runner is
-// exposed through Chromium's task APIs.
-const scoped_refptr<SequencedTaskRunner>&
-SequencedTaskRunner::GetCurrentDefault() {
-  static scoped_refptr<SequencedTaskRunner>* runner =
-      new scoped_refptr<SequencedTaskRunner>();
-  return *runner;
-}
-bool TaskRunner::PostTask(const Location&, OnceClosure) {
-  return false;
-}
-void TaskRunnerTraits::Destruct(const TaskRunner* task_runner) {
-  task_runner->OnDestruct();
-}
-UnguessableToken::UnguessableToken(const Token& token) : token_(token) {}
-UnguessableToken UnguessableToken::Create() {
-  return UnguessableToken(Token::CreateRandom());
-}
-std::ostream& operator<<(std::ostream& out, const UnguessableToken& token) {
-  return out << token.ToString();
-}
-MemoryPressureListener::MemoryPressureListener() = default;
-class AsyncMemoryPressureListenerRegistration::MainThread {};
-AsyncMemoryPressureListenerRegistration::
-    AsyncMemoryPressureListenerRegistration(const Location&,
-                                            MemoryPressureListenerTag,
-                                            MemoryPressureListener*,
-                                            bool) {}
-AsyncMemoryPressureListenerRegistration::
-    ~AsyncMemoryPressureListenerRegistration() = default;
 }  // namespace base
-
-namespace base::features {
-
-BASE_FEATURE(kSimdutfBase64Encode,
-             "SimdutfBase64Encode",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-}  // namespace base::features
 
 namespace net {
 
@@ -15035,16 +12399,6 @@ sk_sp<DataURIResourceProviderProxy> DataURIResourceProviderProxy::Make(
 }  // namespace skresources
 
 namespace skia {
-sk_sp<SkFontMgr> DefaultFontMgr() {
-  static SkFontMgr* font_manager = []() -> SkFontMgr* {
-    sk_sp<SkFontMgr> windows_fonts = SkFontMgr_New_DirectWrite();
-    if (windows_fonts && windows_fonts->countFamilies() > 0) {
-      return windows_fonts.release();
-    }
-    return SkFontMgr::RefEmpty().release();
-  }();
-  return sk_ref_sp(font_manager);
-}
 void DrawGainmapImage(SkCanvas*,
                       sk_sp<SkImage>,
                       sk_sp<SkImage>,
@@ -15073,22 +12427,6 @@ sk_sp<SkImage> DeferredFromEncodedData(sk_sp<const SkData>,
 }  // namespace SkImages
 
 namespace sktext::gpu {
-void Slug::draw(SkCanvas*, const SkPaint&) const {}
-sk_sp<SkData> Slug::serialize() const {
-  return nullptr;
-}
-size_t Slug::serialize(void*, size_t) const {
-  return 0;
-}
-sk_sp<Slug> Slug::ConvertBlob(SkCanvas*,
-                              const SkTextBlob&,
-                              SkPoint,
-                              const SkPaint&) {
-  return nullptr;
-}
-sk_sp<Slug> Slug::Deserialize(const void*, size_t, const SkStrikeClient*) {
-  return nullptr;
-}
 }  // namespace sktext::gpu
 
 namespace skottie {
@@ -15167,58 +12505,6 @@ PropertyHandle<TransformPropertyValue, internal::TransformAdapter2D>::
 }  // namespace skottie
 
 namespace mojo {
-Message::Message() = default;
-Message::Message(uint32_t,
-                 uint32_t,
-                 size_t,
-                 size_t,
-                 MojoCreateMessageFlags,
-                 std::vector<ScopedHandle>*,
-                 size_t) {}
-Message::~Message() = default;
-void Message::SerializeHandles(AssociatedGroupController*) {}
-uint32_t Message::payload_num_bytes() const {
-  return 0;
-}
-const uint8_t* Message::payload() const {
-  return nullptr;
-}
-class ScopedInterfaceEndpointHandle::State
-    : public base::RefCountedThreadSafe<State> {
- private:
-  friend class base::RefCountedThreadSafe<State>;
-  ~State() = default;
-};
-ScopedInterfaceEndpointHandle::ScopedInterfaceEndpointHandle() = default;
-ScopedInterfaceEndpointHandle::ScopedInterfaceEndpointHandle(
-    ScopedInterfaceEndpointHandle&& other) {
-  state_.swap(other.state_);
-}
-ScopedInterfaceEndpointHandle::~ScopedInterfaceEndpointHandle() = default;
-ScopedInterfaceEndpointHandle& ScopedInterfaceEndpointHandle::operator=(
-    ScopedInterfaceEndpointHandle&& other) {
-  state_.swap(other.state_);
-  return *this;
-}
-void ScopedInterfaceEndpointHandle::CreatePairPendingAssociation(
-    ScopedInterfaceEndpointHandle* handle0,
-    ScopedInterfaceEndpointHandle* handle1) {
-  if (handle0)
-    handle0->reset();
-  if (handle1)
-    handle1->reset();
-}
-void ScopedInterfaceEndpointHandle::reset() {}
-bool ScopedInterfaceEndpointHandle::is_valid() const {
-  return false;
-}
-bool MessageReceiver::PrefersSerializedMessages() {
-  return false;
-}
-SharedMemoryVersionClient::~SharedMemoryVersionClient() = default;
-GenericPendingReceiver::~GenericPendingReceiver() = default;
-GenericPendingReceiver::GenericPendingReceiver(std::string_view,
-                                               ScopedMessagePipeHandle) {}
 ReceiverSetState::ReceiverSetState() = default;
 ReceiverSetState::~ReceiverSetState() = default;
 ReceiverSetState::Entry::Entry(ReceiverSetState& state,
@@ -15231,99 +12517,17 @@ ReceiverId ReceiverSetState::Add(std::unique_ptr<ReceiverState>,
                                  std::unique_ptr<MessageFilter>) {
   return 0;
 }
-PassThroughFilter::PassThroughFilter() = default;
-PassThroughFilter::~PassThroughFilter() = default;
-bool PassThroughFilter::Accept(Message*) {
-  return true;
-}
 namespace internal {
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 size_t Buffer::Allocate(size_t) {
   return 0;
 }
 #endif
-ArrayIndexError MakeMessageWithArrayIndex(const char* message,
-                                          size_t index,
-                                          size_t size) {
-  return {message, size, index};
-}
-ArrayExpectedSizeError MakeMessageWithExpectedArraySize(
-    const char* message,
-    size_t size,
-    size_t expected_size) {
-  return {message, size, expected_size};
-}
-void HandleSerializationWarning(ValidationError, const char*) {}
-void HandleSerializationWarning(ValidationError, const ArrayIndexError&) {}
-void HandleSerializationWarning(ValidationError,
-                                const ArrayExpectedSizeError&) {}
-ValidationContext::ValidationContext(const void*,
-                                     size_t,
-                                     size_t,
-                                     size_t,
-                                     Message*,
-                                     const char*,
-                                     int,
-                                     ValidatorType)
-    : message_(nullptr),
-      description_(""),
-      validator_type_(kUnspecifiedValidator),
-      data_begin_(0),
-      data_end_(0),
-      handle_begin_(0),
-      handle_end_(0),
-      associated_endpoint_handle_begin_(0),
-      associated_endpoint_handle_end_(0),
-      stack_depth_(0) {}
-ValidationContext::ValidationContext(Message*,
-                                     const char*,
-                                     ValidatorType)
-    : message_(nullptr),
-      description_(""),
-      validator_type_(kUnspecifiedValidator),
-      data_begin_(0),
-      data_end_(0),
-      handle_begin_(0),
-      handle_end_(0),
-      associated_endpoint_handle_begin_(0),
-      associated_endpoint_handle_end_(0),
-      stack_depth_(0) {}
-ValidationContext::~ValidationContext() = default;
-AssociatedInterfacePtrStateBase::AssociatedInterfacePtrStateBase() = default;
-AssociatedInterfacePtrStateBase::~AssociatedInterfacePtrStateBase() = default;
-BindingStateBase::BindingStateBase() = default;
-BindingStateBase::~BindingStateBase() = default;
-AssociatedReceiverBase::AssociatedReceiverBase() = default;
-AssociatedReceiverBase::~AssociatedReceiverBase() = default;
-void AssociatedReceiverBase::reset() {}
-void BindingStateBase::SetFilter(std::unique_ptr<MessageFilter>) {}
-void BindingStateBase::FlushForTesting() {}
-void BindingStateBase::CloseWithReason(uint32_t, std::string_view) {}
-void BindingStateBase::Close() {}
-void BindingStateBase::BindInternal(
-    PendingReceiverState*,
-    scoped_refptr<base::SequencedTaskRunner>,
-    const char*,
-    std::unique_ptr<MessageReceiver>,
-    bool,
-    base::span<const uint32_t>,
-    MessageReceiverWithResponderStatus*,
-    uint32_t,
-    MessageToMethodInfoCallback,
-    MessageToMethodNameCallback) {}
 InterfacePtrStateBase::InterfacePtrStateBase() = default;
 InterfacePtrStateBase::~InterfacePtrStateBase() = default;
 void InterfacePtrStateBase::Bind(
     PendingRemoteState*,
     scoped_refptr<base::SequencedTaskRunner>) {}
-void AssociatedInterfacePtrStateBase::Bind(
-    ScopedInterfaceEndpointHandle,
-    uint32_t,
-    std::unique_ptr<MessageReceiver>,
-    scoped_refptr<base::SequencedTaskRunner>,
-    const char*,
-    MessageToMethodInfoCallback,
-    MessageToMethodNameCallback) {}
 bool InterfacePtrStateBase::InitializeEndpointClient(
     bool,
     bool,
@@ -15338,77 +12542,8 @@ PendingRemoteState InterfacePtrStateBase::Unbind() {
   return PendingRemoteState();
 }
 void InterfacePtrStateBase::Swap(InterfacePtrStateBase*) {}
-void AssociatedInterfacePtrStateBase::Swap(AssociatedInterfacePtrStateBase*) {}
-ScopedInterfaceEndpointHandle AssociatedInterfacePtrStateBase::PassHandle() {
-  return ScopedInterfaceEndpointHandle();
-}
-scoped_refptr<MultiplexRouter> MultiplexRouter::CreateAndStartReceiving(
-    ScopedMessagePipeHandle,
-    Config,
-    bool,
-    scoped_refptr<base::SequencedTaskRunner>,
-    const char*) {
-  return nullptr;
-}
 }  // namespace internal
 }  // namespace mojo
-
-namespace gfx::mojom::internal {
-HdrMetadataExtendedRange_Data::HdrMetadataExtendedRange_Data()
-    : header_({sizeof(*this), 0}), current_headroom(1.0f), desired_headroom(1.0f) {}
-HDRMetadata_Data::HDRMetadata_Data()
-    : header_({sizeof(*this), 0}),
-      ndwl_$flag(false),
-      pad2_{0, 0, 0},
-      ndwl_$value(0.0f) {}
-}  // namespace gfx::mojom::internal
-
-namespace skia::mojom::internal {
-SkHdrContentLightLevelInformation_Data::
-    SkHdrContentLightLevelInformation_Data()
-    : header_({sizeof(*this), 0}), max_cll(0.0f), max_fall(0.0f) {}
-SkHdrMasteringDisplayColorVolume_Data::
-    SkHdrMasteringDisplayColorVolume_Data()
-    : header_({sizeof(*this), 0}), max_luminance(0.0f), min_luminance(0.0f) {}
-SkHdrAgtmGainCurveControlPoint_Data::
-    SkHdrAgtmGainCurveControlPoint_Data()
-    : header_({sizeof(*this), 0}), x(0.0f), y(0.0f), m(0.0f), padfinal_{0, 0, 0, 0} {}
-SkHdrAgtmGainCurve_Data::SkHdrAgtmGainCurve_Data()
-    : header_({sizeof(*this), 0}) {}
-SkHdrAgtmComponentMixingFunction_Data::
-    SkHdrAgtmComponentMixingFunction_Data()
-    : header_({sizeof(*this), 0}) {}
-SkHdrAgtmColorGainFunction_Data::SkHdrAgtmColorGainFunction_Data()
-    : header_({sizeof(*this), 0}) {}
-SkHdrAgtmAlternateImage_Data::SkHdrAgtmAlternateImage_Data()
-    : header_({sizeof(*this), 0}) {}
-SkHdrAgtmHeadroomAdaptiveToneMap_Data::
-    SkHdrAgtmHeadroomAdaptiveToneMap_Data()
-    : header_({sizeof(*this), 0}) {}
-SkHdrAdaptiveGlobalToneMap_Data::SkHdrAdaptiveGlobalToneMap_Data()
-    : header_({sizeof(*this), 0}) {}
-}  // namespace skia::mojom::internal
-
-extern "C" MojoResult MojoCreateMessagePipe(
-    const MojoCreateMessagePipeOptions*,
-    MojoHandle* message_pipe_handle0,
-    MojoHandle* message_pipe_handle1) {
-  if (message_pipe_handle0)
-    *message_pipe_handle0 = MOJO_HANDLE_INVALID;
-  if (message_pipe_handle1)
-    *message_pipe_handle1 = MOJO_HANDLE_INVALID;
-  return MOJO_RESULT_OK;
-}
-extern "C" MojoResult MojoClose(MojoHandle) {
-  return MOJO_RESULT_OK;
-}
-
-namespace mojo_base {
-namespace internal {
-BigBufferSharedMemoryRegion::~BigBufferSharedMemoryRegion() = default;
-}  // namespace internal
-BigBuffer::~BigBuffer() = default;
-}  // namespace mojo_base
 
 namespace ukm::mojom {
 UkmRecorderFactory::IPCStableHashFunction
@@ -15426,15 +12561,6 @@ void UkmRecorderFactoryProxy::CreateUkmRecorder(
     mojo::PendingRemote<UkmRecorderClientInterface>) {}
 }  // namespace ukm::mojom
 
-namespace subresource_filter {
-ScopedRule::ScopedRule() : ruleset_(nullptr), rule_(nullptr) {}
-ScopedRule::ScopedRule(ScopedRule&& other)
-    : ruleset_(std::move(other.ruleset_)),
-      rule_(other.rule_) {}
-ScopedRule& ScopedRule::operator=(ScopedRule&& other) = default;
-ScopedRule::~ScopedRule() = default;
-}  // namespace subresource_filter
-
 namespace absl::container_internal {
 HashtablezInfoHandle ForcedTrySample(size_t, size_t, size_t, uint16_t) {
   return HashtablezInfoHandle(nullptr);
@@ -15443,59 +12569,6 @@ HashtablezInfoHandle ForcedTrySample(size_t, size_t, size_t, uint16_t) {
 
 extern "C" bool AbslContainerInternalSampleEverything() {
   return false;
-}
-
-namespace allocator_shim {
-void* UncheckedAlloc(size_t size) {
-  return std::malloc(size ? size : 1);
-}
-void UncheckedFree(void* ptr) {
-  std::free(ptr);
-}
-void* UncheckedRealloc(void* ptr, size_t size) {
-  return std::realloc(ptr, size ? size : 1);
-}
-void* UncheckedAlignedAlloc(size_t size, size_t alignment) {
-  size_t adjusted_alignment = std::max(alignment, sizeof(void*));
-  return _aligned_malloc(size ? size : 1, adjusted_alignment);
-}
-void UncheckedAlignedFree(void* ptr) {
-  _aligned_free(ptr);
-}
-void* UncheckedAlignedRealloc(void* ptr, size_t size, size_t alignment) {
-  return _aligned_realloc(ptr, size ? size : 1, std::max(alignment, sizeof(void*)));
-}
-}  // namespace allocator_shim
-
-namespace rust_allocator_internal {
-unsigned char* alloc(size_t size, size_t align) {
-  return static_cast<unsigned char*>(
-      allocator_shim::UncheckedAlignedAlloc(size, align));
-}
-void dealloc(unsigned char* ptr, size_t, size_t) {
-  allocator_shim::UncheckedAlignedFree(ptr);
-}
-unsigned char* realloc(unsigned char* ptr,
-                       size_t,
-                       size_t align,
-                       size_t new_size) {
-  return static_cast<unsigned char*>(
-      allocator_shim::UncheckedAlignedRealloc(ptr, new_size, align));
-}
-unsigned char* alloc_zeroed(size_t size, size_t align) {
-  unsigned char* ptr = alloc(size, align);
-  if (ptr) {
-    std::memset(ptr, 0, size);
-  }
-  return ptr;
-}
-void alloc_error_handler_impl() {
-  std::abort();
-}
-}  // namespace rust_allocator_internal
-
-extern "C" MojoResult MojoUnmapBuffer(void*) {
-  return MOJO_RESULT_OK;
 }
 
 namespace cppgc::internal {
@@ -15520,16 +12593,6 @@ TraceDescriptor TraceTraitFromInnerAddressImpl::GetTraceDescriptor(
   return {nullptr, nullptr};
 }
 
-void* StandaloneCppgcAllocatePayload(size_t size) {
-  // cppgc::MakeGarbageCollected writes construction metadata immediately before
-  // the returned payload. The standalone shim does not provide a real cppgc heap
-  // header yet, but it must still reserve prefix space to keep those writes from
-  // corrupting the C allocator's bookkeeping.
-  constexpr size_t kHeaderPadding = 64;
-  void* base = std::calloc(1, (size ? size : 1) + kHeaderPadding);
-  return static_cast<char*>(base) + kHeaderPadding;
-}
-
 PersistentRegion& StrongPersistentPolicy::GetPersistentRegion(const void*) {
   return StandalonePersistentRegion();
 }
@@ -15552,42 +12615,10 @@ PersistentNode* PersistentRegionBase::RefillFreeListAndAllocateNode(
   return allocated;
 }
 void FatalImpl(const char*, SourceLocation) {}
-void* MakeGarbageCollectedTraitInternal::Allocate(AllocationHandle&,
-                                                  size_t size,
-                                                  GCInfoIndex,
-                                                  CustomSpaceIndex) {
-  return StandaloneCppgcAllocatePayload(size);
-}
-void* MakeGarbageCollectedTraitInternal::Allocate(AllocationHandle&,
-                                                  size_t size,
-                                                  GCInfoIndex) {
-  return StandaloneCppgcAllocatePayload(size);
-}
-void* MakeGarbageCollectedTraitInternal::Allocate(AllocationHandle&,
-                                                  size_t size,
-                                                  AlignVal,
-                                                  GCInfoIndex) {
-  return StandaloneCppgcAllocatePayload(size);
-}
-void* MakeGarbageCollectedTraitInternal::Allocate(AllocationHandle&,
-                                                  size_t size,
-                                                  AlignVal,
-                                                  GCInfoIndex,
-                                                  CustomSpaceIndex) {
-  return StandaloneCppgcAllocatePayload(size);
-}
 void ExplicitManagementImpl::FreeUnreferencedObject(HeapHandle&, void*) {}
 bool ExplicitManagementImpl::Resize(void*, size_t) {
   return false;
 }
-void WriteBarrier::DijkstraMarkingBarrierRangeSlow(HeapHandle&,
-                                                   const void*,
-                                                   size_t,
-                                                   size_t,
-                                                   TraceCallback) {}
-void WriteBarrier::SteeleMarkingBarrierSlowWithSentinelCheck(const void*) {}
-void WriteBarrier::DijkstraMarkingBarrierSlowWithSentinelCheck(const void*) {}
-AtomicEntryFlag WriteBarrier::write_barrier_enabled_;
 size_t BaseObjectSizeTrait::GetObjectSizeForGarbageCollected(const void*) {
   return 0;
 }
@@ -15619,24 +12650,12 @@ void CrossThreadPersistentRegion::ClearAllUsedNodes() {
 }  // namespace cppgc::internal
 
 namespace cc {
-void PictureDebugUtil::SerializeAsBase64(const SkPicture*, std::string*) {}
-void AnimationHost::AddAnimationTimeline(scoped_refptr<AnimationTimeline>) {}
-void AnimationHost::DetachAnimationTimeline(scoped_refptr<AnimationTimeline>) {}
-void AnimationHost::DetachTrigger(scoped_refptr<AnimationTrigger>) {}
-scoped_refptr<AnimationTimeline> AnimationTimeline::Create(int, bool) {
-  return nullptr;
-}
-void AnimationTimeline::AttachAnimation(scoped_refptr<Animation>) {}
-void AnimationTimeline::DetachAnimation(scoped_refptr<Animation>) {}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 Region::Region() = default;
 Region::Region(const Region&) = default;
 Region::~Region() = default;
 void Region::Union(const gfx::Rect&) {}
 #endif
-AnimationWorkletOutput::AnimationWorkletOutput() = default;
-AnimationWorkletOutput::~AnimationWorkletOutput() = default;
-AnimationWorkletOutput::AnimationState::~AnimationState() = default;
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 SnapContainerData::~SnapContainerData() = default;
 SnapContainerData::SnapContainerData(const SnapContainerData&) = default;
@@ -15673,9 +12692,6 @@ bool PaintFlags::getFillPath(const SkPath& src,
   return true;
 }
 #endif
-void ScrollTimeline::UpdateScrollerIdAndScrollOffsets(
-    std::optional<ElementId>,
-    std::optional<ScrollOffsets>) {}
 }  // namespace cc
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
@@ -15686,69 +12702,12 @@ SkRegion::~SkRegion() = default;
 
 namespace perfetto {
 namespace base {
-void LogMessage(LogLev, const char*, int, const char*, ...) {}
 }  // namespace base
-uint64_t Track::process_uuid = 0;
-TracedArray::TracedArray(TracedValue value)
-    : TracedArray(std::move(value).WriteArray()) {}
-
-TracedArray TracedDictionary::AddArray(StaticString) {
-  return TracedArray(TracedValue(
-      static_cast<perfetto::protos::pbzero::DebugAnnotation*>(nullptr),
-      event_context_,
-      &checked_scope_));
-}
-
-TracedValue TracedArray::AppendItem() {
-  return TracedValue(annotation_, event_context_, &checked_scope_);
-}
-
-TracedDictionary TracedArray::AppendDictionary() {
-  return TracedDictionary(
-      TracedValue(annotation_, event_context_, &checked_scope_));
-}
-
-TracedArray TracedValue::WriteArray() && {
-  return TracedArray(annotation_, event_context_, &checked_scope_);
-}
-TracedDictionary TracedValue::WriteDictionary() && {
-  return TracedDictionary(
-      TracedValue(annotation_, event_context_, &checked_scope_));
-}
-TracedValue TracedDictionary::AddItem(StaticString) {
-  return TracedValue(
-      static_cast<perfetto::protos::pbzero::DebugAnnotation*>(nullptr),
-      event_context_, &checked_scope_);
-}
-TracedValue TracedDictionary::AddItem(DynamicString) {
-  return TracedValue(
-      static_cast<perfetto::protos::pbzero::DebugAnnotation*>(nullptr),
-      event_context_, &checked_scope_);
-}
-
-void TracedValue::WriteUInt64(uint64_t) && {}
-void TracedValue::WriteInt64(int64_t) && {}
-void TracedValue::WriteString(const char*) && {}
-void TracedValue::WriteString(const std::string&) && {}
-void TracedValue::WriteString(std::string_view) && {}
-void TracedValue::WriteBoolean(bool) && {}
 }  // namespace perfetto
 
 namespace subresource_filter {
 MemoryMappedRuleset::~MemoryMappedRuleset() = default;
-ScopedRule::ScopedRule(const ScopedRule&) = default;
-ScopedRule& ScopedRule::operator=(const ScopedRule&) = default;
 }  // namespace subresource_filter
-
-namespace partition_alloc {
-ScopedAllowAllocations::ScopedAllowAllocations() = default;
-ScopedAllowAllocations::~ScopedAllowAllocations() = default;
-namespace internal {
-[[noreturn]] void OnNoMemory(size_t) {
-  std::abort();
-}
-}  // namespace internal
-}  // namespace partition_alloc
 
 namespace ukm {
 SourceId UkmRecorder::GetNewSourceID() {
@@ -15769,40 +12728,6 @@ void DelegatingUkmRecorder::RemoveDelegate(UkmRecorder*) {}
 }  // namespace ukm
 
 namespace gfx {
-HDRMetadata::HDRMetadata(const HDRMetadata& rhs) = default;
-HDRMetadata& HDRMetadata::operator=(const HDRMetadata& rhs) = default;
-HDRMetadata::HDRMetadata(const skhdr::Metadata& sk_hdr_metadata) {
-  skhdr::ContentLightLevelInformation clli;
-  if (sk_hdr_metadata.getContentLightLevelInformation(&clli)) {
-    clli_ = clli;
-  }
-
-  skhdr::MasteringDisplayColorVolume mdcv;
-  if (sk_hdr_metadata.getMasteringDisplayColorVolume(&mdcv)) {
-    mdcv_ = mdcv;
-  }
-}
-bool HdrMetadataAgtm::IsEnabled() {
-  return false;
-}
-bool ColorSpace::operator==(const ColorSpace&) const {
-  return false;
-}
-float Tween::FloatValueBetween(double value, float start, float target) {
-  return start + static_cast<float>(value) * (target - start);
-}
-int Tween::LinearIntValueBetween(double value, int start, int target) {
-  return start + static_cast<int>(value * (target - start));
-}
-SkColor4f Tween::ColorValueBetween(double value,
-                                   SkColor4f start,
-                                   SkColor4f target) {
-  return {FloatValueBetween(value, start.fR, target.fR),
-          FloatValueBetween(value, start.fG, target.fG),
-          FloatValueBetween(value, start.fB, target.fB),
-          FloatValueBetween(value, start.fA, target.fA)};
-}
-
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 Point ToRoundedPoint(const PointF& point) {
   return Point(static_cast<int>(std::round(point.x())),
@@ -15818,9 +12743,6 @@ bool Rect::Contains(int point_x, int point_y) const {
 }  // namespace gfx
 
 namespace gfx {
-HDRMetadata::HDRMetadata() = default;
-HDRMetadata::~HDRMetadata() = default;
-
 std::tuple<float, float, float> LabToXYZD50(float l, float a, float b) {
   return {l, a, b};
 }
@@ -15906,78 +12828,9 @@ bool SkColorSpacePrimaries::toXYZD50(skcms_Matrix3x3* toXYZD50) const {
 }
 #endif
 
-namespace v8::internal {
-struct ScriptStreamingData {};
-}  // namespace v8::internal
-
-namespace v8 {
-std::unique_ptr<CppHeap> CppHeap::Create(v8::Platform*,
-                                         const CppHeapCreateParams&) {
-  return std::unique_ptr<CppHeap>(new CppHeap());
-}
-
-cppgc::AllocationHandle& CppHeap::GetAllocationHandle() {
-  return blink::StandaloneAllocationHandle();
-}
-
-cppgc::HeapHandle& CppHeap::GetHeapHandle() {
-  return blink::StandaloneHeapHandle();
-}
-
-void CppHeap::Terminate() {}
-
-cppgc::HeapStatistics CppHeap::CollectStatistics(
-    cppgc::HeapStatistics::DetailLevel detail_level) {
-  cppgc::HeapStatistics statistics;
-  statistics.detail_level = detail_level;
-  return statistics;
-}
-
-void CppHeap::CollectCustomSpaceStatisticsAtLastGC(
-    std::vector<cppgc::CustomSpaceIndex>,
-    std::unique_ptr<CustomSpaceStatisticsReceiver>) {}
-
-void CppHeap::EnableDetachedGarbageCollectionsForTesting() {}
-
-void CppHeap::CollectGarbageForTesting(cppgc::EmbedderStackState) {}
-
-void CppHeap::CollectGarbageInYoungGenerationForTesting(
-    cppgc::EmbedderStackState) {}
-
-ScriptCompiler::StreamedSource::~StreamedSource() = default;
-ExternalMemoryAccounter::~ExternalMemoryAccounter() = default;
-void ExternalMemoryAccounter::Increase(Isolate*, size_t) {}
-void ExternalMemoryAccounter::Decrease(Isolate*, size_t) {}
-Isolate* Isolate::GetCurrent() {
-  return nullptr;
-}
-Isolate* Isolate::TryGetCurrent() {
-  return nullptr;
-}
-bool Isolate::HasPendingException() {
-  return false;
-}
-}  // namespace v8
-
 namespace blink {
 size_t Platform::GetMaxDecodedImageBytes() {
   return kNoDecodedImageByteLimit;
-}
-
-bool ApproximatelyEqualSkColorSpaces(sk_sp<SkColorSpace> src_color_space,
-                                     sk_sp<SkColorSpace> dst_color_space) {
-  if ((!src_color_space && dst_color_space) ||
-      (src_color_space && !dst_color_space)) {
-    return false;
-  }
-  if (!src_color_space && !dst_color_space) {
-    return true;
-  }
-  skcms_ICCProfile src_profile;
-  skcms_ICCProfile dst_profile;
-  src_color_space->toProfile(&src_profile);
-  dst_color_space->toProfile(&dst_profile);
-  return skcms_ApproximatelyEqualProfiles(&src_profile, &dst_profile);
 }
 
 DiskDataAllocator::DiskDataAllocator() = default;
@@ -16045,25 +12898,7 @@ ThreadScheduler* ThreadScheduler::Current() {
   return nullptr;
 }
 
-namespace worker_pool {
-void PostTask(const base::Location&, CrossThreadOnceClosure) {}
-void PostTask(const base::Location&,
-              const base::TaskTraits&,
-              CrossThreadOnceClosure) {}
-}  // namespace worker_pool
 }  // namespace blink
-
-namespace blink::mojom::blink {
-bool DiskAllocatorStubDispatch::Accept(DiskAllocator*, mojo::Message*) {
-  return false;
-}
-bool DiskAllocatorStubDispatch::AcceptWithResponder(
-    DiskAllocator*,
-    mojo::Message*,
-    std::unique_ptr<mojo::MessageReceiverWithStatus>) {
-  return false;
-}
-}  // namespace blink::mojom::blink
 
 namespace base {
 std::unique_ptr<debug::StackTrace> ThreadCheckerImpl::GetBoundAt() const {
@@ -16254,9 +13089,6 @@ extern "C" int StandaloneRendererFontResolutionDiagnosticJsonAt(
 }
 
 namespace blink {
-std::array<std::atomic_int, InstanceCounters::kCounterTypeLength>
-    InstanceCounters::counters_;
-
 ScopedPaintTimingDetectorBlockPaintHook*
     ScopedPaintTimingDetectorBlockPaintHook::top_ = nullptr;
 void ScopedPaintTimingDetectorBlockPaintHook::EmplaceIfNeeded(
@@ -16436,168 +13268,8 @@ void Data(perfetto::TracedValue,
           CSSStyleSheetResource*,
           const String&,
           const CSSParserContext*) {}
-
-void Data(perfetto::TracedValue, const CSSStyleSheetResource*) {}
 }  // namespace inspector_parse_author_style_sheet_event
 
-namespace inspector_style_recalc_invalidation_tracking_event {
-void Data(perfetto::TracedValue,
-          Node*,
-          StyleChangeType,
-          const StyleChangeReasonForTracing&) {}
-}  // namespace inspector_style_recalc_invalidation_tracking_event
-
-namespace inspector_layout_invalidation_tracking_event {
-void Data(perfetto::TracedValue,
-          const LayoutObject*,
-          LayoutInvalidationReasonForTracing) {}
-}  // namespace inspector_layout_invalidation_tracking_event
-
-bool RuntimeEnabledFeaturesBase::is_css_caret_animation_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_caret_shape_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_dynamic_range_limit_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_responsive_iframes_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_hanging_punctuation_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_image_animation_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_overscroll_gestures_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_margin_trim_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_hex_alpha_color_enabled_ = true;
-bool RuntimeEnabledFeaturesBase::is_overlay_property_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_safe_printable_inset_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_svg_path_length_css_property_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_functions_enabled_ = true;
-bool RuntimeEnabledFeaturesBase::is_first_line_on_list_item_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_grid_gap_suppression_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_gap_decoration_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_multicol_column_wrapping_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_font_size_adjust_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_font_language_override_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_line_clamp_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_flex_wrap_balance_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_grid_lanes_layout_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_pseudo_scroll_markers_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_pseudo_elements_focusable_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_scrollbar_color_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_text_overflow_clip_with_selection_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_disable_ellipsis_when_scrolled_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_fed_cm_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_login_element_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_fenced_frames_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_geolocation_element_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_menu_elements_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::InstallElementEnabled(const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::UserMediaElementEnabled(
-    const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::OriginTrialsSampleAPIEnabled(
-    const FeatureContext*) {
-  return false;
-}
-bool RuntimeEnabledFeaturesBase::
-    is_scroll_timeline_named_range_scroll_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_layout_box_rect_getters_use_fragments_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_visual_rect_mapping_fix_for_expansion_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_offset_path_transform_update_fix_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_css_shape_ellipse_circle_position_serialization_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_color_space_rec_2100_linear_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_stacking_context_is_not_stacked_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_single_axis_scroll_containers_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_layout_ignore_margins_for_sticky_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_sticky_position_has_overflow_per_axis_enabled_ =
-    true;
-bool RuntimeEnabledFeaturesBase::is_css_anchor_with_transforms_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_composite_bg_color_animation_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_css_text_decoration_skip_ink_all_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_forced_colors_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_event_trigger_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_animation_trigger_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_route_matching_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_border_shape_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_use_original_dom_offsets_for_offset_map_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_color_space_display_p_3_linear_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_timeline_trigger_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_composite_clip_path_animation_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_clip_path_nested_raster_optimization_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_text_emphasis_position_auto_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_overlay_global_rule_removal_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_text_emphasis_with_ruby_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_system_accent_color_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_web_app_scope_system_accent_color_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_tab_size_with_spacing_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_font_fallback_for_tab_size_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_text_spacing_trim_fallback_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_system_fallback_emoji_vs_support_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_text_spacing_trim_fallback_2_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_text_spacing_trim_fallback_chws_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_text_spacing_trim_yu_gothic_ui_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_text_emphasis_letter_spacing_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_ignore_letter_spacing_in_cursive_scripts_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_extended_shape_cache_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_word_spacing_white_space_pre_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_memory_consumer_for_ng_shape_cache_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_tab_size_ancestor_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_collapse_zero_width_space_when_reuse_item_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_skip_oof_item_for_break_candidate_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_first_line_text_metrics_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_bidi_caret_affinity_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_svg_length_resolve_unparsed_value_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_length_list_clear_on_parsing_failure_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_number_list_clear_on_parsing_failure_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_css_line_clamp_lines_and_height_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_layout_table_cell_alignment_safe_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_layout_image_empty_natural_size_before_size_available_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_list_owner_must_have_css_box_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_fragmented_oof_in_cb_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_use_position_for_point_in_flexible_box_with_single_child_element_enabled_ =
-    false;
-
-namespace features {
-extern constinit const base::Feature kBakedGamutMapping(
-    "BakedGamutMapping",
-    base::FEATURE_DISABLED_BY_DEFAULT,
-    base::internal::FeatureMacroHandshake::kSecret);
-}  // namespace features
 
 String ToString(unsigned value) {
   return String::Number(value);
@@ -16950,9 +13622,11 @@ void ReferenceFilterOperation::AddClient(SVGResourceClient&) {}
 void ReferenceFilterOperation::RemoveClient(SVGResourceClient&) {}
 #endif
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 bool IsSupportedImageMimeType(std::string_view) {
   return false;
 }
+#endif
 
 ColorChannelKeyword CSSValueIDToColorChannelKeyword(CSSValueID) {
   return static_cast<ColorChannelKeyword>(0);
@@ -17038,21 +13712,6 @@ void Font::DrawEmphasisMarks(cc::PaintCanvas*,
                              const cc::PaintFlags&) const {}
 int Font::EmphasisMarkHeight(const AtomicString&) const {
   return 0;
-}
-PlainTextPainter& PlainTextPainter::Shared() {
-  alignas(PlainTextPainter) static unsigned char storage[sizeof(PlainTextPainter)];
-  return *reinterpret_cast<PlainTextPainter*>(storage);
-}
-bool PlainTextPainter::DrawWithBidiReorder(const TextRun&,
-                                           unsigned,
-                                           unsigned,
-                                           const Font&,
-                                           Font::CustomFontNotReadyAction,
-                                           cc::PaintCanvas&,
-                                           const gfx::PointF&,
-                                           const cc::PaintFlags&,
-                                           Font::DrawType) {
-  return false;
 }
 FontFallbackList::FontFallbackList(FontSelector* font_selector)
     : font_selector_(font_selector) {}
@@ -17252,43 +13911,14 @@ const SimpleFontData* FontCache::GetFontData(
   StandaloneRecordFontResolutionDiagnostic(std::move(diagnostic));
   *platform_data = MakeGarbageCollected<FontPlatformData>(
       std::move(typeface), std::string(), computed_size, synthetic_bold,
-      synthetic_italic, TextRenderingMode::kAutoTextRendering,
-      ResolvedFontFeatures{});
+      synthetic_italic, font_description.TextRendering(),
+      font_description.ResolveFontFeatures(), font_description.Orientation());
   auto* simple_font_data = new Persistent<SimpleFontData>();
   *simple_font_data =
       MakeGarbageCollected<SimpleFontData>(platform_data->Get(), nullptr);
   platform_data_by_key[cache_key] = platform_data;
   simple_font_data_by_key[cache_key] = simple_font_data;
   return simple_font_data->Get();
-}
-
-TimerBase::TimerBase(scoped_refptr<base::SingleThreadTaskRunner> task_runner)
-    : web_task_runner_(std::move(task_runner)) {}
-TimerBase::~TimerBase() = default;
-void TimerBase::Start(base::TimeDelta,
-                      std::optional<base::TimeDelta>,
-                      const base::Location& location,
-                      bool) {
-  location_ = location;
-}
-void TimerBase::Stop() {
-  next_fire_time_ = base::TimeTicks::Max();
-}
-void TimerBase::RunInternal() {}
-base::TimeTicks TimerBase::TimerCurrentTimeTicks() const {
-  return base::TimeTicks();
-}
-void TimerBase::SetNextFireTime(base::TimeTicks next_fire_time) {
-  next_fire_time_ = next_fire_time;
-}
-void TimerBase::MoveToNewTaskRunner(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  web_task_runner_ = std::move(task_runner);
-}
-void TimerBase::SetTaskRunnerForTesting(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    const base::TickClock*) {
-  web_task_runner_ = std::move(task_runner);
 }
 
 AbstractInlineTextBox* AbstractInlineTextBox::GetOrCreate(
@@ -17490,11 +14120,6 @@ FontResource* FontResource::Fetch(FetchParameters&,
 void FontResource::Trace(Visitor* visitor) const {
   Resource::Trace(visitor);
 }
-void ResourceFetcher::EmulateLoadStartedForInspector(
-    Resource*,
-    mojom::blink::RequestContextType,
-    network::mojom::RequestDestination,
-    const AtomicString&) {}
 CSSPaintImageGenerator* CSSPaintImageGenerator::Create(const String&,
                                                        const Document&,
                                                        Observer*) {
@@ -18117,16 +14742,6 @@ gfx::Transform PaintLayer::CurrentTransform() const {
 void PrepopulatedComputedStylePropertyMap::UpdateStyle(
     const Document&,
     const ComputedStyle&) {}
-void DisplayLockContext::DidLayoutChildren() {}
-bool DisplayLockContext::ActivatableDisplayLocksForced() const {
-  return false;
-}
-bool DisplayLockContext::IsScreenReaderActive() const {
-  return false;
-}
-bool DisplayLockContext::ShouldActivateForScreenReader() const {
-  return false;
-}
 bool Frame::IsMainFrame() const {
   return true;
 }
@@ -19138,22 +15753,54 @@ void OutOfFlowLayoutPart::Run() {
     const std::optional<LayoutUnit> block_end_offset =
         ResolveStandaloneInset(block_end, containing_size.block_size);
 
-    LogicalSize available_size = parent_space.AvailableSize();
+    LogicalSize available_size = containing_size;
+    if (!style.LogicalWidth().IsFixed()) {
+      if (inline_start_offset && !inline_end_offset) {
+        available_size.inline_size =
+            (containing_size.inline_size - *inline_start_offset)
+                .ClampNegativeToZero();
+      } else if (!inline_start_offset && inline_end_offset) {
+        available_size.inline_size =
+            (containing_size.inline_size - *inline_end_offset)
+                .ClampNegativeToZero();
+      }
+    }
+    if (!style.LogicalHeight().IsFixed()) {
+      if (block_start_offset && !block_end_offset) {
+        available_size.block_size =
+            (containing_size.block_size - *block_start_offset)
+                .ClampNegativeToZero();
+      } else if (!block_start_offset && block_end_offset) {
+        available_size.block_size =
+            (containing_size.block_size - *block_end_offset)
+                .ClampNegativeToZero();
+      }
+    }
     bool is_fixed_inline_size = false;
     bool is_fixed_block_size = false;
+    const bool inline_auto_should_fit_content = style.LogicalWidth().HasAuto();
+    const bool block_auto_should_fit_content = style.LogicalHeight().HasAuto();
     const BoxStrut child_border_padding =
         ComputeBorders(parent_space, child) +
         ComputePadding(parent_space, style);
     if (style.LogicalWidth().IsFixed()) {
-      available_size.inline_size =
-          LayoutUnit(style.LogicalWidth().Pixels()) +
-          child_border_padding.InlineSum();
+      available_size.inline_size = LayoutUnit(style.LogicalWidth().Pixels());
+      if (style.BoxSizing() == EBoxSizing::kContentBox) {
+        available_size.inline_size += child_border_padding.InlineSum();
+      } else {
+        available_size.inline_size = std::max(
+            child_border_padding.InlineSum(), available_size.inline_size);
+      }
       is_fixed_inline_size = true;
     }
     if (style.LogicalHeight().IsFixed()) {
-      available_size.block_size =
-          LayoutUnit(style.LogicalHeight().Pixels()) +
-          child_border_padding.BlockSum();
+      available_size.block_size = LayoutUnit(style.LogicalHeight().Pixels());
+      if (style.BoxSizing() == EBoxSizing::kContentBox) {
+        available_size.block_size += child_border_padding.BlockSum();
+      } else {
+        available_size.block_size =
+            std::max(child_border_padding.BlockSum(), available_size.block_size);
+      }
       is_fixed_block_size = true;
     }
     if (!style.LogicalWidth().IsFixed() && inline_start_offset &&
@@ -19211,6 +15858,12 @@ void OutOfFlowLayoutPart::Run() {
     ConstraintSpaceBuilder child_space_builder(
         parent_space, style.GetWritingDirection(), /*is_new_fc=*/true);
     child_space_builder.SetAvailableSize(available_size);
+    if (inline_auto_should_fit_content && !is_fixed_inline_size) {
+      child_space_builder.SetInlineAutoBehavior(AutoSizeBehavior::kFitContent);
+    }
+    if (block_auto_should_fit_content && !is_fixed_block_size) {
+      child_space_builder.SetBlockAutoBehavior(AutoSizeBehavior::kFitContent);
+    }
     if (is_fixed_inline_size) {
       child_space_builder.SetIsFixedInlineSize(true);
     }
@@ -19344,7 +15997,7 @@ void NamingScope::Trace(Visitor*) const {}
 
 PaintLayerScrollableArea::~PaintLayerScrollableArea() = default;
 PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
-    : ScrollableArea(nullptr),
+    : ScrollableArea(StandaloneNoopTaskRunner()),
       layer_(&layer),
       in_resize_mode_(false),
       scrolls_overflow_(false),
@@ -19447,6 +16100,9 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
   bool needs_vertical_scrollbar = false;
   StandaloneComputeScrollbarNeed(*this, needs_horizontal_scrollbar,
                                  needs_vertical_scrollbar);
+  if (needs_horizontal_scrollbar || needs_vertical_scrollbar) {
+    GetLayoutBox()->GetMutableForPainting().EnsureId();
+  }
   SetHasHorizontalScrollbar(needs_horizontal_scrollbar);
   SetHasVerticalScrollbar(needs_vertical_scrollbar);
 
@@ -19827,22 +16483,6 @@ void ImageElementTiming::NotifyBackgroundImagePainted(
     const StyleImage&,
     const PropertyTreeStateOrAlias&,
     const gfx::Rect&) {}
-namespace inspector_paint_image_event {
-void Data(perfetto::TracedValue,
-          Node*,
-          const StyleImage&,
-          const gfx::RectF&,
-          const gfx::RectF&) {}
-}  // namespace inspector_paint_image_event
-std::unique_ptr<JSONArray> RecordAsJSON(const PaintRecord&) {
-  return std::make_unique<JSONArray>();
-}
-String RecordAsDebugString(const PaintRecord&) {
-  return String();
-}
-String CompositingReason::ToString(CompositingReasons) {
-  return String();
-}
 FilterEffectBuilder::FilterEffectBuilder(const gfx::RectF& reference_box,
                                          std::optional<gfx::SizeF> viewport,
                                          float zoom,
@@ -20004,13 +16644,58 @@ gfx::SizeF StyleImage::ApplyZoom(const gfx::SizeF& size, float multiplier) {
   }
   return scaled_size;
 }
-scoped_refptr<Image> Image::LoadPlatformResource(int,
-                                                 ui::ResourceScaleFactor) {
-  return nullptr;
-}
-const TransformPaintPropertyNode*
-VisualViewport::TransformNodeForViewportScrollbars() const {
-  return nullptr;
+scoped_refptr<Image> Image::LoadPlatformResource(
+    int resource_id,
+    ui::ResourceScaleFactor) {
+  if (resource_id != IDR_BROKENIMAGE) {
+    return Image::NullImage();
+  }
+
+  // Chromium serves this PNG from blink_image_resources.pak. The standalone
+  // cut embeds the same Blink broken-image icon so the native fallback shadow
+  // tree can paint through LayoutImageResource/ImagePainter.
+  static constexpr unsigned char kBrokenImagePng[] = {
+      137, 80,  78,  71,  13,  10,  26,  10,  0,   0,   0,   13,  73,
+      72,  68,  82,  0,   0,   0,   14,  0,   0,   0,   16,  8,   6,
+      0,   0,   0,   38,  148, 78,  58,  0,   0,   1,   135, 73,  68,
+      65,  84,  40,  83,  141, 144, 73,  47,  67,  81,  24,  134, 191,
+      181, 95,  132, 165, 132, 159, 32,  54,  88,  88,  179, 176, 183,
+      34,  36,  106, 232, 192, 53,  84,  231, 149, 72,  140, 77,  236,
+      196, 88,  65,  213, 144, 226, 86,  85,  26,  165, 134, 32,  184,
+      180, 104, 175, 215, 249, 14,  183, 81,  185, 162, 111, 242, 44,
+      206, 57,  207, 179, 57,  20,  8,   4,   80,  10,  68,  84,  70,
+      63,  231, 247, 7,   160, 101, 63,  240, 152, 49,  231, 41,  163,
+      67,  81,  20,  176, 87,  20,  251, 124, 126, 156, 223, 233, 56,
+      78,  231, 76,  73,  222, 188, 203, 144, 199, 110, 33,  246, 122,
+      189, 56,  185, 214, 17,  57,  125, 147, 24,  51,  206, 106, 234,
+      181, 16,  242, 216, 151, 177, 219, 237, 65,  252, 74,  199, 118,
+      226, 21,  191, 199, 119, 71,  34,  180, 217, 108, 69,  112, 67,
+      46,  151, 91,  134, 102, 219, 138, 103, 17,  137, 107, 184, 184,
+      203, 225, 94,  203, 75,  248, 63,  184, 33,  167, 115, 12,  241,
+      75,  29,  27,  199, 47,  166, 132, 79,  50,  216, 79,  102, 113,
+      112, 246, 69,  234, 86,  7,   55,  52,  58,  234, 68,  44,  157,
+      71,  72,  125, 46,  9,   118, 185, 161, 225, 225, 17,  168, 226,
+      176, 118, 168, 149, 4,   187, 162, 33,  82,  148, 33,  168, 23,
+      121, 172, 68,  181, 2,   203, 209, 71,  204, 68,  162, 8,   238,
+      196, 138, 238, 25,  225, 114, 67,  52,  56,  168, 224, 72,  132,
+      139, 123, 15,  18,  79,  104, 30,  181, 227, 229, 168, 155, 172,
+      144, 52,  207, 53,  98,  54,  172, 26,  239, 36,  92,  110, 136,
+      28,  142, 1,   28,  158, 231, 177, 176, 251, 0,   219, 146, 87,
+      200, 149, 133, 200, 160, 126, 178, 10,  19,  155, 17,  18,  14,
+      9,   87,  54,  100, 183, 59,  100, 232, 90,  13,  154, 70,  223,
+      80,  195, 84,  53,  205, 133, 19,  28,  130, 27,  178, 90,  237,
+      88,  79,  164, 209, 56,  93,  243, 103, 100, 208, 18,  108, 66,
+      52,  245, 14,  110, 168, 191, 223, 138, 182, 133, 214, 127, 35,
+      227, 174, 119, 173, 7,   189, 214, 62,  80,  103, 103, 23,  218,
+      219, 59,  204, 160, 31,  20,  189, 117, 91,  44,  248, 4,   42,
+      101, 142, 59,  53,  32,  182, 139, 0,   0,   0,   0,   73,  69,
+      78,  68,  174, 66,  96,  130};
+
+  scoped_refptr<Image> image = BitmapImage::Create();
+  image->SetData(
+      SharedBuffer::Create(base::span<const unsigned char>(kBrokenImagePng)),
+      true);
+  return image;
 }
 void CustomScrollbarTheme::PaintIntoRect(const LayoutCustomScrollbarPart&,
                                          const PaintInfo&,
@@ -20992,66 +17677,6 @@ AcquireLineBreakIterator(StringView, const AtomicString&) {
   return nullptr;
 }
 #endif
-SkTypeface* FontPlatformData::Typeface() const {
-  return typeface_.get();
-}
-FontPlatformData::FontPlatformData(sk_sp<SkTypeface> typeface,
-                                   const std::string&,
-                                   float text_size,
-                                   bool synthetic_bold,
-                                   bool synthetic_italic,
-                                   TextRenderingMode text_rendering,
-                                   ResolvedFontFeatures resolved_font_features,
-                                   FontOrientation orientation)
-    : typeface_(std::move(typeface)),
-      text_size_(text_size),
-      synthetic_bold_(synthetic_bold),
-      synthetic_italic_(synthetic_italic),
-      text_rendering_(text_rendering),
-      orientation_(orientation),
-      resolved_font_features_(std::move(resolved_font_features)) {}
-
-FontPlatformData::FontPlatformData(const FontPlatformData& src,
-                                   float text_size)
-    : FontPlatformData(src.typeface_,
-                       std::string(),
-                       text_size,
-                       src.synthetic_bold_,
-                       src.synthetic_italic_,
-                       src.text_rendering_,
-                       src.resolved_font_features_,
-                       src.orientation_) {}
-
-FontPlatformData::~FontPlatformData() = default;
-
-SkFont FontPlatformData::CreateSkFont(const FontDescription*) const {
-  SkFont font(typeface_, text_size_ > 0 ? text_size_ : 12.0f);
-  font.setEmbolden(synthetic_bold_);
-  font.setSkewX(synthetic_italic_ ? -0.25f : 0.0f);
-  font.setEdging(SkFont::Edging::kSubpixelAntiAlias);
-  font.setSubpixel(true);
-  font.setEmbeddedBitmaps(true);
-  return font;
-}
-void FontPlatformData::Trace(Visitor*) const {}
-String FontPlatformData::GetPostScriptName() const {
-  return String();
-}
-SkTypefaceID FontPlatformData::UniqueID() const {
-  return typeface_ ? typeface_->uniqueID() : 0;
-}
-unsigned FontPlatformData::GetHash() const {
-  return UniqueID();
-}
-bool FontPlatformData::operator==(const FontPlatformData& other) const {
-  return UniqueID() == other.UniqueID() && text_size_ == other.text_size_ &&
-         synthetic_bold_ == other.synthetic_bold_ &&
-         synthetic_italic_ == other.synthetic_italic_ &&
-         orientation_ == other.orientation_;
-}
-bool FontPlatformData::FontContainsCharacter(UChar32 character) const {
-  return typeface_ && typeface_->unicharToGlyph(character) != 0;
-}
 FontCache& FontCache::Get() {
   alignas(FontCache) static unsigned char storage[sizeof(FontCache)] = {};
   return *reinterpret_cast<FontCache*>(storage);
@@ -21204,50 +17829,7 @@ DarkModeResult DarkModeImageClassifier::Classify(const SkPixmap&,
                                                  const SkIRect&) const {
   return DarkModeResult::kDoNotApplyFilter;
 }
-bool RuntimeEnabledFeaturesBase::is_scrollbar_gutter_bug_fix_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_remove_scroll_node_workaround_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_geometry_mapper_singular_transform_fix_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_merge_fixed_layers_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_merge_sticky_layers_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_paint_under_invalidation_checking_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_svg_filter_paints_for_hidden_content_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_fe_image_skip_hidden_container_viewport_dependence_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_avoid_resetting_filter_quality_for_tiled_pattern_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_sizing_with_preserve_aspect_ratio_none_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_hit_test_container_transform_state_for_preserve_3d_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_hit_test_border_radius_for_stacking_context_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_svg_filter_user_space_viewport_for_svg_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_inline_root_pixel_snapping_scale_adjustment_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_invisible_svg_animation_throttling_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::
-    is_svg_transform_on_nested_svg_element_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_backface_visibility_interop_enabled_ = false;
-bool RuntimeEnabledFeaturesBase::is_view_transition_hoist_backdrop_filter_effect_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_handle_invalid_mask_image_with_backdrop_filter_enabled_ =
-    false;
-bool RuntimeEnabledFeaturesBase::is_paint_offset_translation_for_composited_enabled_ =
-    false;
 
-PaintPropertyChangeType VisualViewport::UpdatePaintPropertyNodesIfNeeded(
-    PaintPropertyTreeBuilderFragmentContext&) {
-  return PaintPropertyChangeType::kUnchanged;
-}
-const ScrollPaintPropertyNode* VisualViewport::GetScrollNode() const {
-  return nullptr;
-}
 namespace paint_property_tree_printer {
 void UpdateDebugNames(const VisualViewport&) {}
 void UpdateDebugNames(const LayoutObject&, ObjectPaintProperties&) {}
@@ -21342,15 +17924,6 @@ bool PaintLayerScrollableArea::BackgroundNeedsRepaintOnScroll() const {
 cc::ElementId PaintLayerScrollableArea::GetScrollCornerElementId() const {
   return cc::ElementId();
 }
-LayoutView* LayoutEmbeddedContent::ChildLayoutView() const {
-  return nullptr;
-}
-EmbeddedContentView* LayoutEmbeddedContent::GetEmbeddedContentView() const {
-  return nullptr;
-}
-AffineTransform LayoutEmbeddedContent::EmbeddedContentTransform() const {
-  return AffineTransform();
-}
 PhysicalOffset AnchorPositionScrollData::SpeculativeDefaultAnchorRememberedOffset()
     const {
   return PhysicalOffset();
@@ -21415,26 +17988,6 @@ std::optional<gfx::RectF> CSSMaskPainter::MaskBoundingBox(
 bool LinkHighlight::IsHighlightingInternal(const LayoutObject&) const {
   return false;
 }
-bool PaintArtifactCompositor::DirectlyUpdateScrollOffsetTransform(
-    const TransformPaintPropertyNode&) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::DirectlyUpdateScrollOffsetTransform");
-}
-bool PaintArtifactCompositor::UsesRasterInducingScroll(
-    const ScrollPaintPropertyNode&) const {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::UsesRasterInducingScroll");
-}
-bool PaintArtifactCompositor::DirectlyUpdateTransform(
-    const TransformPaintPropertyNode&) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::DirectlyUpdateTransform");
-}
-bool PaintArtifactCompositor::DirectlyUpdateCompositedOpacityValue(
-    const EffectPaintPropertyNode&) {
-  FailStandalonePaintArtifactCompositorBoundary(
-      "PaintArtifactCompositor::DirectlyUpdateCompositedOpacityValue");
-}
 float TargetScaleForPage(const PhysicalBoxFragment&) {
   return 1.0f;
 }
@@ -21484,50 +18037,11 @@ PhysicalRect StitchedPageContentRect(const PhysicalBoxFragment&) {
 const PhysicalBoxFragment* GetPageContainer(const LayoutView&, wtf_size_t) {
   return nullptr;
 }
-namespace features {
-BASE_FEATURE(kExpandCompositedCullRect, base::FEATURE_DISABLED_BY_DEFAULT);
-const base::FeatureParam<int> kCullRectPixelDistanceToExpand{
-    &kExpandCompositedCullRect, "pixels", 4000};
-const base::FeatureParam<bool> kSmallScrollersUseMinCullRect{
-    &kExpandCompositedCullRect, "small_scroller_opt", false};
-const base::FeatureParam<int> kCullRectChangedEnoughDistance{
-    &kExpandCompositedCullRect, "changed_enough", 512};
-}  // namespace features
-
 }  // namespace blink
-
-namespace v8 {
-
-MaybeLocal<Value> Date::New(Local<Context>, double) {
-  return MaybeLocal<Value>();
-}
-
-bool Value::IsDate() const {
-  return false;
-}
-
-double Date::ValueOf() const {
-  return 0;
-}
-
-}  // namespace v8
 
 void ShowAllPropertyTrees(const blink::LocalFrameView&) {}
 
 namespace base {
-RefCountedMemory::RefCountedMemory() = default;
-RefCountedMemory::~RefCountedMemory() = default;
-HistogramBase* BooleanHistogram::FactoryGet(const char*, int32_t) {
-  return nullptr;
-}
-HistogramBase* Histogram::FactoryMicrosecondsTimeGet(const char*,
-                                                     TimeDelta,
-                                                     TimeDelta,
-                                                     uint64_t,
-                                                     int32_t) {
-  return nullptr;
-}
-void HistogramBase::AddBoolean(bool) {}
 bool UncheckedMalloc(size_t size, void** result) {
   *result = std::malloc(size ? size : 1);
   return *result != nullptr;
@@ -21539,113 +18053,18 @@ bool UncheckedCalloc(size_t num_items, size_t size, void** result) {
 void UncheckedFree(void* ptr) {
   std::free(ptr);
 }
-DiscardableMemoryAllocator* DiscardableMemoryAllocator::GetInstance() {
-  return nullptr;
-}
-std::unique_ptr<DiscardableMemory>
-DiscardableMemoryAllocator::AllocateLockedDiscardableMemoryWithRetryOrDie(
-    size_t,
-    OnceClosure) {
-  return nullptr;
-}
-std::string CommandLine::GetSwitchValueASCII(std::string_view) const {
-  return std::string();
-}
 }  // namespace base
-
-namespace base::trace_event {
-TracedValue::~TracedValue() = default;
-void TracedValue::AppendAsTraceFormat(std::string*) const {}
-bool TracedValue::AppendToProto(ProtoAppender*) const {
-  return false;
-}
-}  // namespace base::trace_event
-
-namespace logging {
-int GetMinLogLevel() {
-  return 0;
-}
-}  // namespace logging
-
-extern "C" MojoResult MojoDestroyMessage(MojoMessageHandle) {
-  return MOJO_RESULT_OK;
-}
-extern "C" MojoResult MojoAppendMessageData(
-    MojoMessageHandle,
-    uint32_t payload_size,
-    const MojoHandle*,
-    uint32_t,
-    const MojoAppendMessageDataOptions*,
-    void** buffer,
-    uint32_t* buffer_size) {
-  static std::vector<uint8_t>* storage = new std::vector<uint8_t>();
-  storage->assign(payload_size, 0);
-  if (buffer)
-    *buffer = storage->data();
-  if (buffer_size)
-    *buffer_size = payload_size;
-  return MOJO_RESULT_OK;
-}
 
 namespace viz {
 }  // namespace viz
 
 namespace cc {
-void Layer::SetBounds(const gfx::Size&) {}
-void Layer::SetIsDrawable(bool) {}
-void Layer::SetTouchActionRegion(TouchActionRegion) {}
-void Layer::SetWheelEventRegion(Region) {}
-void Layer::SetCaptureBounds(viz::RegionCaptureBounds) {}
-void Layer::SetTrackedElementRects(viz::TrackedElementRects) {}
-void Layer::SetMainThreadScrollHitTestRegion(const Region&) {}
-void Layer::SetNonCompositedScrollHitTestRects(
-    std::vector<ScrollHitTestRect>) {}
-void Layer::SetContentsOpaque(bool) {}
-void Layer::SetHitTestOpaqueness(HitTestOpaqueness) {}
-void Layer::SetElementId(ElementId) {}
-void Layer::SetOffsetToTransformParent(gfx::Vector2dF) {}
-void ScrollTree::ClearScrollingContentsCullRect(ElementId) {}
-void ScrollTree::SetScrollingContentsCullRect(ElementId, const gfx::Rect&) {}
-scoped_refptr<ScrollbarLayerBase> ScrollbarLayerBase::CreateOrReuse(
-    scoped_refptr<Scrollbar>,
-    ScrollbarLayerBase*) {
-  return nullptr;
-}
-void ScrollbarLayerBase::SetScrollElementId(ElementId) {}
-AnchorPositionScrollData::AnchorPositionScrollData() = default;
-AnchorPositionScrollData::~AnchorPositionScrollData() = default;
-AnchorPositionScrollData::AnchorPositionScrollData(
-    const AnchorPositionScrollData&) = default;
-bool AnchorPositionScrollData::operator==(
-    const AnchorPositionScrollData&) const {
-  return true;
-}
 }  // namespace cc
 
 namespace SkOpts {
 void Init_ml3() {}
 void Init_ml4() {}
 }  // namespace SkOpts
-
-namespace skgpu::graphite {
-int Recorder::maxTextureSize() const {
-  return 0;
-}
-}  // namespace skgpu::graphite
-
-namespace SkImages {
-sk_sp<SkImage> TextureFromImage(skgpu::graphite::Recorder*,
-                                const SkImage*,
-                                SkImage::RequiredProperties) {
-  return nullptr;
-}
-sk_sp<SkImage> TextureFromYUVAImages(skgpu::graphite::Recorder*,
-                                     const SkYUVAInfo&,
-                                     SkSpan<const sk_sp<SkImage>>,
-                                     sk_sp<SkColorSpace>) {
-  return nullptr;
-}
-}  // namespace SkImages
 
 namespace crashpad {
 void Annotation::SetSize(ValueSizeType size) {
@@ -21656,78 +18075,12 @@ void Annotation::Clear() {
 }
 }  // namespace crashpad
 
-namespace gfx::mojom {
-bool HDRMetadata::Validate(const void*, mojo::internal::ValidationContext*) {
-  return true;
-}
-}  // namespace gfx::mojom
-
-namespace mojo {
-bool StructTraits<gfx::mojom::HDRMetadataDataView, gfx::HDRMetadata>::Read(
-    gfx::mojom::HDRMetadataDataView,
-    gfx::HDRMetadata*) {
-  return false;
-}
-}  // namespace mojo
-
-namespace skia::mojom::internal {
-SkColorSpacePrimaries_Data::SkColorSpacePrimaries_Data() = default;
-}  // namespace skia::mojom::internal
-
 namespace cppgc::internal {
-GCInfoIndex EnsureGCInfoIndexTrait::EnsureGCInfoIndex(
-    std::atomic<GCInfoIndex>& registered_index,
-    TraceCallback,
-    FinalizationCallback,
-    NameCallback) {
-  registered_index = 1;
-  return 1;
-}
-GCInfoIndex EnsureGCInfoIndexTrait::EnsureGCInfoIndex(
-    std::atomic<GCInfoIndex>& registered_index,
-    TraceCallback) {
-  registered_index = 1;
-  return 1;
-}
-GCInfoIndex EnsureGCInfoIndexTrait::EnsureGCInfoIndex(
-    std::atomic<GCInfoIndex>& registered_index,
-    TraceCallback,
-    FinalizationCallback) {
-  registered_index = 1;
-  return 1;
-}
 void DCheckImpl(const char*, SourceLocation) {}
 }  // namespace cppgc::internal
 
-namespace cppgc {
-bool LivenessBroker::IsHeapObjectAliveImpl(const void*) const {
-  return true;
-}
-}  // namespace cppgc
-
-namespace cppgc::subtle {
-void NoGarbageCollectionScope::Enter(HeapHandle&) {}
-void NoGarbageCollectionScope::Leave(HeapHandle&) {}
-bool HeapState::IsInAtomicPause(const HeapHandle&) {
-  return false;
-}
-bool HeapState::IsMarking(const HeapHandle&) {
-  return false;
-}
-bool DisallowGarbageCollectionScope::IsGarbageCollectionAllowed(
-    HeapHandle&) {
-  return true;
-}
-}  // namespace cppgc::subtle
-
 namespace base {
 }  // namespace base
-
-namespace base::trace_event {
-bool ConvertableToTraceFormat::AppendToProto(ProtoAppender*) const {
-  return false;
-}
-}  // namespace base::trace_event
 
 namespace base::internal {
 template <bool AllowDangling>
@@ -21740,6 +18093,12 @@ template <bool AllowDangling>
 void RawPtrBackupRefImpl<AllowDangling>::ReleaseInternal(uintptr_t) {}
 template <bool AllowDangling>
 void RawPtrBackupRefImpl<AllowDangling>::ReportIfDanglingInternal(uintptr_t) {}
+template <bool AllowDangling>
+bool RawPtrBackupRefImpl<AllowDangling>::CheckPointerWithinSameAlloc(uintptr_t,
+                                                                     uintptr_t,
+                                                                     size_t) {
+  return false;
+}
 template bool RawPtrBackupRefImpl<false>::IsPointeeAlive(uintptr_t);
 template bool RawPtrBackupRefImpl<true>::IsPointeeAlive(uintptr_t);
 template void RawPtrBackupRefImpl<false>::AcquireInternal(uintptr_t);
@@ -21748,6 +18107,12 @@ template void RawPtrBackupRefImpl<false>::ReleaseInternal(uintptr_t);
 template void RawPtrBackupRefImpl<true>::ReleaseInternal(uintptr_t);
 template void RawPtrBackupRefImpl<false>::ReportIfDanglingInternal(uintptr_t);
 template void RawPtrBackupRefImpl<true>::ReportIfDanglingInternal(uintptr_t);
+template bool RawPtrBackupRefImpl<false>::CheckPointerWithinSameAlloc(uintptr_t,
+                                                                      uintptr_t,
+                                                                      size_t);
+template bool RawPtrBackupRefImpl<true>::CheckPointerWithinSameAlloc(uintptr_t,
+                                                                     uintptr_t,
+                                                                     size_t);
 void CheckThatAddressIsntWithinFirstPartitionPage(uintptr_t) {}
 }  // namespace base::internal
 
@@ -21758,216 +18123,8 @@ SkColor SkRGBA4f<kUnpremul_SkAlphaType>::toSkColor() const {
 }
 #endif
 
-namespace std {
-int uncaught_exceptions() noexcept {
-  return 0;
-}
-}  // namespace std
-
-namespace logging {
-LogMessage::LogMessage(const char* file, int line, int severity)
-    : severity_(severity), message_start_(0), file_(file), line_(line) {}
-CheckError::CheckError(LogMessage* log_message) : log_message_(log_message) {}
-CheckError::~CheckError() = default;
-int GetVlogLevelHelper(const char*, size_t) {
-  return 0;
-}
-bool ShouldCreateLogMessage(int) {
-  return false;
-}
-LogMessage::~LogMessage() = default;
-CheckError CheckError::NotImplemented(const char*, const base::Location&) {
-  return CheckError(nullptr);
-}
-CheckError CheckError::DCheck(const char*, const base::Location&) {
-  return CheckError(nullptr);
-}
-LogMessage* CheckError::DCheckOp(char*, const base::Location&) {
-  return nullptr;
-}
-CheckNoreturnError CheckNoreturnError::Check(const char*,
-                                             const base::Location&) {
-  return CheckNoreturnError(nullptr);
-}
-LogMessage* CheckNoreturnError::CheckOp(char*, const base::Location&) {
-  return nullptr;
-}
-CheckNoreturnError::~CheckNoreturnError() {
-  std::abort();
-}
-std::ostream& CheckError::stream() {
-  static std::ostream* stream = &std::cerr;
-  return *stream;
-}
-NotReachedError NotReachedError::DumpWillBeNotReached(
-    const base::Location&) {
-  return NotReachedError(nullptr);
-}
-NotReachedError::~NotReachedError() = default;
-LogMessageFatal::~LogMessageFatal() = default;
-NotReachedNoreturnError::NotReachedNoreturnError(const base::Location&)
-    : CheckError(nullptr) {}
-NotReachedNoreturnError::~NotReachedNoreturnError() {
-  std::abort();
-}
-void SetLogItems(bool, bool, bool, bool) {}
-}  // namespace logging
-
-namespace partition_alloc::internal {
-PartitionAddressSpace::PoolSetup PartitionAddressSpace::setup_;
-namespace base {
-ScopedClearLastError::ScopedClearLastError() : last_system_error_(0) {}
-ScopedClearLastError::~ScopedClearLastError() = default;
-namespace strings {
-CStringBuilder& CStringBuilder::operator<<(const char* text) {
-  return *this;
-}
-const char* CStringBuilder::c_str() {
-  return "";
-}
-}  // namespace strings
-}  // namespace base
-namespace logging {
-LogMessage::LogMessage(const char* file, int line, LogSeverity severity)
-    : severity_(severity),
-      message_start_(0),
-      file_(file),
-      line_(line),
-      last_error_() {}
-LogMessage::LogMessage(const char* file, int line, const char* condition)
-    : severity_(LOGGING_FATAL),
-      message_start_(0),
-      file_(file),
-      line_(line),
-      last_error_() {
-  if (condition) {
-    stream() << condition;
-  }
-}
-LogMessage::~LogMessage() = default;
-namespace check_error {
-Check::Check(const char* file, int line, const char* condition)
-    : CheckError(file, line, LOGGING_FATAL, condition) {}
-}  // namespace check_error
-CheckError::CheckError(const char* file,
-                       int line,
-                       LogSeverity severity,
-                       const char*) {
-  new (&log_message_) LogMessage(file, line, severity);
-}
-CheckError::CheckError(const char* file, int line, LogSeverity severity) {
-  new (&log_message_) LogMessage(file, line, severity);
-}
-CheckError::CheckError(const char* file,
-                       int line,
-                       LogSeverity severity,
-                       const char* condition,
-                       SystemErrorCode) {
-  new (&log_message_) LogMessage(file, line, condition);
-}
-CheckError::~CheckError() {
-  log_message_.~LogMessage();
-}
-partition_alloc::internal::base::strings::CStringBuilder& CheckError::stream() {
-  static partition_alloc::internal::base::strings::CStringBuilder* builder =
-      new partition_alloc::internal::base::strings::CStringBuilder();
-  return *builder;
-}
-}  // namespace logging
-}  // namespace partition_alloc::internal
-
 namespace skia {
-SkFont DefaultFont() {
-  return SkFont(SkTypeface::MakeEmpty(), 12.0f);
-}
 }  // namespace skia
-
-int GrRecordingContext::maxTextureSize() const {
-  return 0;
-}
-GrSemaphoresSubmitted GrDirectContext::flush(const GrFlushInfo&) {
-  return GrSemaphoresSubmitted::kNo;
-}
-bool GrDirectContext::submit(const GrSubmitInfo&) {
-  return false;
-}
-SkRuntimeEffect::Result SkRuntimeEffect::MakeForShader(
-    SkString,
-    const Options&) {
-  return {};
-}
-sk_sp<SkColorFilter> SkRuntimeEffect::makeColorFilter(
-    sk_sp<const SkData>) const {
-  return nullptr;
-}
-const SkRuntimeEffect::Uniform* SkRuntimeEffect::findUniform(
-    std::string_view) const {
-  return nullptr;
-}
-const SkRuntimeEffect::Child* SkRuntimeEffect::findChild(
-    std::string_view) const {
-  return nullptr;
-}
-size_t SkRuntimeEffect::Uniform::sizeInBytes() const {
-  return 0;
-}
-size_t SkRuntimeEffect::uniformSize() const {
-  return 0;
-}
-sk_sp<SkShader> SkRuntimeEffectBuilder::makeShader(const SkMatrix*) const {
-  return nullptr;
-}
-sk_sp<SkColorFilter> SkRuntimeEffectBuilder::makeColorFilter() const {
-  return nullptr;
-}
-SkRuntimeEffect::Result SkRuntimeEffect::MakeForColorFilter(
-    SkString,
-    const Options&) {
-  return {};
-}
-sk_sp<SkShader> SkRuntimeEffect::makeShader(sk_sp<const SkData>,
-                                            sk_sp<SkShader>[],
-                                            size_t,
-                                            const SkMatrix*) const {
-  return nullptr;
-}
-sk_sp<SkShader> SkRuntimeEffect::makeShader(sk_sp<const SkData>,
-                                            SkSpan<const ChildPtr>,
-                                            const SkMatrix*) const {
-  return nullptr;
-}
-sk_sp<SkBlender> SkRuntimeEffect::makeBlender(sk_sp<const SkData>,
-                                              SkSpan<const ChildPtr>) const {
-  return nullptr;
-}
-
-namespace SkKnownRuntimeEffects {
-bool IsSkiaKnownRuntimeEffect(int) {
-  return false;
-}
-sk_sp<SkRuntimeEffect> MaybeGetKnownRuntimeEffect(uint32_t) {
-  return nullptr;
-}
-const SkRuntimeEffect* GetKnownRuntimeEffect(StableKey) {
-  return nullptr;
-}
-}  // namespace SkKnownRuntimeEffects
-
-namespace SkSL {
-Pool::~Pool() {
-  fMemPool.release();
-}
-Program::~Program() {
-  fSource.release();
-  fConfig.release();
-  fUsage.release();
-  fSymbols.release();
-  fPool.release();
-  for (auto& element : fOwnedElements) {
-    element.release();
-  }
-}
-}  // namespace SkSL
 
 void SkFlattenable::PrivateInitializer::InitEffects() {
   // The standalone build owns a narrow Skia initialization boundary instead of
@@ -21991,190 +18148,11 @@ void SkFlattenable::PrivateInitializer::InitEffects() {
 }
 void SkFlattenable::PrivateInitializer::InitImageFilters() {}
 
-SkMeshSpecification::~SkMeshSpecification() {}
-SkMesh::SkMesh() = default;
-SkMesh::~SkMesh() {}
-SkMesh::SkMesh(const SkMesh&) = default;
-
-namespace skhdr {
-bool ContentLightLevelInformation::parsePngChunk(const SkData*) {
-  return false;
-}
-bool ContentLightLevelInformation::operator==(
-    const ContentLightLevelInformation& other) const {
-  return fMaxCLL == other.fMaxCLL && fMaxFALL == other.fMaxFALL;
-}
-bool MasteringDisplayColorVolume::parse(const SkData*) {
-  return false;
-}
-bool MasteringDisplayColorVolume::operator==(
-    const MasteringDisplayColorVolume& other) const {
-  return fDisplayPrimaries.fRX == other.fDisplayPrimaries.fRX &&
-         fDisplayPrimaries.fRY == other.fDisplayPrimaries.fRY &&
-         fDisplayPrimaries.fGX == other.fDisplayPrimaries.fGX &&
-         fDisplayPrimaries.fGY == other.fDisplayPrimaries.fGY &&
-         fDisplayPrimaries.fBX == other.fDisplayPrimaries.fBX &&
-         fDisplayPrimaries.fBY == other.fDisplayPrimaries.fBY &&
-         fDisplayPrimaries.fWX == other.fDisplayPrimaries.fWX &&
-         fDisplayPrimaries.fWY == other.fDisplayPrimaries.fWY &&
-         fMaximumDisplayMasteringLuminance ==
-             other.fMaximumDisplayMasteringLuminance &&
-         fMinimumDisplayMasteringLuminance ==
-             other.fMinimumDisplayMasteringLuminance;
-}
-Metadata Metadata::MakeEmpty() {
-  return Metadata();
-}
-bool Metadata::getContentLightLevelInformation(
-    ContentLightLevelInformation* clli) const {
-  if (!fContentLightLevelInformation.has_value()) {
-    return false;
-  }
-  if (clli) {
-    *clli = fContentLightLevelInformation.value();
-  }
-  return true;
-}
-bool Metadata::getMasteringDisplayColorVolume(
-    MasteringDisplayColorVolume* mdcv) const {
-  if (!fMasteringDisplayColorVolume.has_value()) {
-    return false;
-  }
-  if (mdcv) {
-    *mdcv = fMasteringDisplayColorVolume.value();
-  }
-  return true;
-}
-void Metadata::setMasteringDisplayColorVolume(
-    const MasteringDisplayColorVolume& mdcv) {
-  fMasteringDisplayColorVolume = mdcv;
-}
-void Metadata::setContentLightLevelInformation(
-    const ContentLightLevelInformation& clli) {
-  fContentLightLevelInformation = clli;
-}
-void Metadata::setAdaptiveGlobalToneMap(const AdaptiveGlobalToneMap&) {}
-bool Metadata::operator==(const Metadata& other) const {
-  return fContentLightLevelInformation == other.fContentLightLevelInformation &&
-         fMasteringDisplayColorVolume == other.fMasteringDisplayColorVolume &&
-         fAdaptiveGlobalToneMap == other.fAdaptiveGlobalToneMap;
-}
-sk_sp<SkColorFilter> Metadata::makeToneMapColorFilter(
-    float,
-    const SkColorSpace*) const {
-  return nullptr;
-}
-}  // namespace skhdr
-
-std::unique_ptr<SkCanvas> SkStrikeServer::makeAnalysisCanvas(
-    int width,
-    int height,
-    const SkSurfaceProps&,
-    sk_sp<SkColorSpace>,
-    bool,
-    bool) {
-  return SkMakeNullCanvas();
-}
-
 sk_sp<SkColorFilter> SkHighContrastFilter::Make(const SkHighContrastConfig&) {
-  return nullptr;
-}
-sk_sp<SkColorFilter> SkLumaColorFilter::Make() {
-  return nullptr;
-}
-sk_sp<SkColorFilter> SkOverdrawColorFilter::MakeWithSkColors(
-    const SkColor[SkOverdrawColorFilter::kNumColors]) {
-  return nullptr;
-}
-sk_sp<SkColorFilter> SkColorFilters::Lerp(float,
-                                          sk_sp<SkColorFilter>,
-                                          sk_sp<SkColorFilter>) {
   return nullptr;
 }
 
 namespace cc {
-size_t NumberOfPlanesForYUVDecodeFormat(YUVDecodeFormat) {
-  return 0;
-}
-ClientImageTransferCacheEntry::Image::Image() = default;
-ClientImageTransferCacheEntry::Image::Image(const Image&) = default;
-ClientImageTransferCacheEntry::Image&
-ClientImageTransferCacheEntry::Image::operator=(const Image&) = default;
-ClientImageTransferCacheEntry::Image::Image(const SkPixmap*) {}
-ClientImageTransferCacheEntry::Image::Image(base::span<const SkPixmap>,
-                                            const SkYUVAInfo&,
-                                            const SkColorSpace*) {}
-ClientImageTransferCacheEntry::ClientImageTransferCacheEntry(
-    const Image& image,
-    bool needs_mips,
-    const gfx::HDRMetadata& hdr_metadata,
-    sk_sp<SkColorSpace> target_color_space)
-    : needs_mips_(needs_mips),
-      target_color_space_(std::move(target_color_space)),
-      id_(kInvalidImageTransferCacheEntryId),
-      image_(image),
-      hdr_metadata_(hdr_metadata) {}
-ClientImageTransferCacheEntry::ClientImageTransferCacheEntry(
-    const Image& image,
-    const Image& gainmap_image,
-    const SkGainmapInfo& gainmap_info,
-    bool needs_mips)
-    : needs_mips_(needs_mips),
-      id_(kInvalidImageTransferCacheEntryId),
-      image_(image),
-      gainmap_image_(gainmap_image),
-      gainmap_info_(gainmap_info) {}
-ClientImageTransferCacheEntry::~ClientImageTransferCacheEntry() = default;
-uint32_t ClientImageTransferCacheEntry::Id() const {
-  return id_;
-}
-uint32_t ClientImageTransferCacheEntry::SerializedSize() const {
-  return 0;
-}
-bool ClientImageTransferCacheEntry::Serialize(base::span<uint8_t>) const {
-  return false;
-}
-base::AtomicSequenceNumber ClientImageTransferCacheEntry::s_next_id_;
-ServiceImageTransferCacheEntry::ServiceImageTransferCacheEntry() = default;
-ServiceImageTransferCacheEntry::~ServiceImageTransferCacheEntry() = default;
-ServiceImageTransferCacheEntry::ServiceImageTransferCacheEntry(
-    ServiceImageTransferCacheEntry&&) = default;
-ServiceImageTransferCacheEntry& ServiceImageTransferCacheEntry::operator=(
-    ServiceImageTransferCacheEntry&&) = default;
-size_t ServiceImageTransferCacheEntry::CachedSize() const {
-  return 0;
-}
-bool ServiceImageTransferCacheEntry::Deserialize(
-    GrDirectContext*,
-    skgpu::graphite::Recorder*,
-    base::span<const uint8_t>) {
-  return false;
-}
-void ServiceImageTransferCacheEntry::EnsureMips() {}
-bool ServiceImageTransferCacheEntry::has_mips() const {
-  return false;
-}
-const sk_sp<SkImage>& ServiceImageTransferCacheEntry::GetPlaneImage(
-    size_t index) const {
-  return plane_images_[index];
-}
-bool ServiceImageTransferCacheEntry::fits_on_gpu() const {
-  return false;
-}
-
-ClientSkottieTransferCacheEntry::ClientSkottieTransferCacheEntry(
-    scoped_refptr<SkottieWrapper> skottie)
-    : skottie_(std::move(skottie)) {}
-ClientSkottieTransferCacheEntry::~ClientSkottieTransferCacheEntry() = default;
-uint32_t ClientSkottieTransferCacheEntry::Id() const {
-  return 0;
-}
-uint32_t ClientSkottieTransferCacheEntry::SerializedSize() const {
-  return 0;
-}
-bool ClientSkottieTransferCacheEntry::Serialize(base::span<uint8_t>) const {
-  return false;
-}
 }  // namespace cc
 
 namespace base {
@@ -22191,15 +18169,6 @@ MemoryConsumerTraits::MemoryConsumerTraits(const MemoryConsumerTraits&) =
     default;
 bool MemoryConsumerRegistry::Exists() {
   return false;
-}
-bool SingleThreadTaskRunner::HasMainThreadDefault() {
-  return false;
-}
-const scoped_refptr<SingleThreadTaskRunner>&
-SingleThreadTaskRunner::GetMainThreadDefault() {
-  static const scoped_refptr<SingleThreadTaskRunner>* runner =
-      new scoped_refptr<SingleThreadTaskRunner>();
-  return *runner;
 }
 }  // namespace base
 
@@ -22242,12 +18211,6 @@ void ScriptLoader::HandleAsyncAttribute() {
 void ScriptLoader::Removed() {}
 void ScriptLoader::NotifyFinished() {}
 
-void BlockingAttribute::OnAttributeValueChanged(const AtomicString&,
-                                                const AtomicString&) {}
-bool BlockingAttribute::ValidateTokenValue(const AtomicString&,
-                                           ExceptionState&) const {
-  return false;
-}
 bool DOMTokenList::contains(const AtomicString& token) const {
   return token_set_.Contains(token);
 }

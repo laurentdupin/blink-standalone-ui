@@ -6,6 +6,7 @@
 
 #ifndef CC_MOJOM_RENDER_FRAME_METADATA_MOJOM_BLINK_IMPORT_HEADERS_H_
 #define CC_MOJOM_RENDER_FRAME_METADATA_MOJOM_BLINK_IMPORT_HEADERS_H_
+#include "cc/trees/render_frame_metadata.h"
 #include "services/viz/public/mojom/compositing/local_surface_id.mojom-blink.h"
 #include "services/viz/public/mojom/compositing/local_surface_id.mojom-blink-import-headers.h"
 #include "services/viz/public/mojom/compositing/selection.mojom-blink.h"

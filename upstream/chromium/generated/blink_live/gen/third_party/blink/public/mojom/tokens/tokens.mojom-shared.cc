@@ -12,6 +12,9 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "third_party/blink/public/mojom/tokens/tokens.mojom-params-data.h"
+#include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
+#include "third_party/blink/public/common/tokens/token_mojom_traits_helper.h"
+#include "third_party/blink/public/common/tokens/tokens_mojom_traits.h"
 namespace blink {
 namespace mojom {
 
@@ -1010,6 +1013,36 @@ bool WebNNTensorToken_Data::Validate(
 }
 
 WebNNTensorToken_Data::WebNNTensorToken_Data()
+    : header_({sizeof(*this), 0}) {}
+
+
+// static
+bool WebNNGraphToken_Data::Validate(
+    const void* data,
+    mojo::internal::ValidationContext* validation_context) {
+  if (!data)
+    return true;
+  if (!ValidateUnversionedStructHeaderAndSizeAndClaimMemory(
+          data, 16, validation_context)) {
+    return false;
+  }
+
+  // NOTE: The memory backing |object| may be smaller than |sizeof(*object)| if
+  // the message comes from an older version.
+  [[maybe_unused]] const WebNNGraphToken_Data* object =
+      static_cast<const WebNNGraphToken_Data*>(data);
+
+  if (!mojo::internal::ValidatePointerNonNullable(
+          object->value, 1, validation_context)) {
+    return false;
+  }
+  if (!mojo::internal::ValidateStruct(object->value, validation_context))
+    return false;
+
+  return true;
+}
+
+WebNNGraphToken_Data::WebNNGraphToken_Data()
     : header_({sizeof(*this), 0}) {}
 
 }  // namespace internal

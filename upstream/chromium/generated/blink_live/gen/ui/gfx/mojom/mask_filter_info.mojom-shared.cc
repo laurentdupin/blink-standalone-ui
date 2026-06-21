@@ -12,6 +12,8 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/gfx/mojom/mask_filter_info.mojom-params-data.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "ui/gfx/mojom/rrect_f_mojom_traits.h"
 namespace gfx {
 namespace mojom {
 

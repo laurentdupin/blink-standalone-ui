@@ -25,6 +25,7 @@
 #include "components/performance_manager/public/mojom/web_memory.mojom-features.h"  // IWYU pragma: export
 #include "components/performance_manager/public/mojom/web_memory.mojom-shared.h"  // IWYU pragma: export
 #include "components/performance_manager/public/mojom/web_memory.mojom-blink-forward.h"  // IWYU pragma: export
+#include "components/performance_manager/public/mojom/web_memory.mojom-blink-import-headers.h"
 #include "mojo/public/mojom/base/byte_size.mojom-blink.h"
 
 #include "mojo/public/cpp/bindings/lib/wtf_clone_equals_util.h"

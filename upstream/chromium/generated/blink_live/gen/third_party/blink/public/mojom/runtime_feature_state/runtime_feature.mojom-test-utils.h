@@ -8,7 +8,6 @@
 #define THIRD_PARTY_BLINK_PUBLIC_MOJOM_RUNTIME_FEATURE_STATE_RUNTIME_FEATURE_MOJOM_TEST_UTILS_H_
 
 #include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature.mojom.h"
-#include "third_party/blink/public/common/common_export.h"
 
 
 namespace blink::mojom {

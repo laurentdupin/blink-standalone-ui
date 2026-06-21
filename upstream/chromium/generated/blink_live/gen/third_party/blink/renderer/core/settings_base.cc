@@ -5,7 +5,7 @@
 // Generated from template:
 //   templates/settings_base.cc.tmpl
 // and input files:
-//   ../../third_party/blink/renderer/core/frame/settings.json5
+//   third_party/blink/renderer/core/frame/settings.json5
 
 
 #include "third_party/blink/renderer/core/settings_base.h"
@@ -97,6 +97,7 @@ SettingsBase::SettingsBase()
     , antialiased_clips_2d_canvas_enabled_(true)
     , aria_modal_prunes_ax_tree_(false)
     , barrel_button_for_drag_enabled_(false)
+    , battery_saver_enabled_(false)
     , bypass_csp_(false)
     , caret_browsing_enabled_(false)
     , cookie_enabled_(true)
@@ -152,10 +153,10 @@ SettingsBase::SettingsBase()
     , prefers_default_scrollbar_styles_(false)
     , prefers_reduced_motion_(false)
     , prefers_reduced_transparency_(false)
+    , preloading_disabled_(false)
     , presentation_receiver_(false)
     , presentation_requires_user_gesture_(true)
     , report_screen_size_in_physical_pixels_quirk_(false)
-    , require_transient_activation_and_authorization_for_sub_apps_api_(true)
     , require_transient_activation_for_get_display_media_(true)
     , require_transient_activation_for_show_file_or_directory_picker_(true)
     , resizable_(true)
@@ -399,6 +400,12 @@ void SettingsBase::SetBarrelButtonForDragEnabled(bool barrel_button_for_drag_ena
   if (barrel_button_for_drag_enabled_ == barrel_button_for_drag_enabled)
     return;
   barrel_button_for_drag_enabled_ = barrel_button_for_drag_enabled;
+}
+
+void SettingsBase::SetBatterySaverEnabled(bool battery_saver_enabled) {
+  if (battery_saver_enabled_ == battery_saver_enabled)
+    return;
+  battery_saver_enabled_ = battery_saver_enabled;
 }
 
 void SettingsBase::SetBypassCSP(bool bypass_csp) {
@@ -956,6 +963,12 @@ void SettingsBase::SetPrefersReducedTransparency(bool prefers_reduced_transparen
   Invalidate(SettingsDelegate::ChangeType::kMediaQuery);
 }
 
+void SettingsBase::SetPreloadingDisabled(bool preloading_disabled) {
+  if (preloading_disabled_ == preloading_disabled)
+    return;
+  preloading_disabled_ = preloading_disabled;
+}
+
 void SettingsBase::SetPresentationReceiver(bool presentation_receiver) {
   if (presentation_receiver_ == presentation_receiver)
     return;
@@ -992,12 +1005,6 @@ void SettingsBase::SetReportScreenSizeInPhysicalPixelsQuirk(bool report_screen_s
   if (report_screen_size_in_physical_pixels_quirk_ == report_screen_size_in_physical_pixels_quirk)
     return;
   report_screen_size_in_physical_pixels_quirk_ = report_screen_size_in_physical_pixels_quirk;
-}
-
-void SettingsBase::SetRequireTransientActivationAndAuthorizationForSubAppsAPI(bool require_transient_activation_and_authorization_for_sub_apps_api) {
-  if (require_transient_activation_and_authorization_for_sub_apps_api_ == require_transient_activation_and_authorization_for_sub_apps_api)
-    return;
-  require_transient_activation_and_authorization_for_sub_apps_api_ = require_transient_activation_and_authorization_for_sub_apps_api;
 }
 
 void SettingsBase::SetRequireTransientActivationForGetDisplayMedia(bool require_transient_activation_for_get_display_media) {
@@ -1512,6 +1519,10 @@ void SettingsBase::SetFromStrings(const String& name, const String& value) {
     SetBarrelButtonForDragEnabled(FromString<bool>()(value));
     return;
   }
+  if (name == "batterySaverEnabled") {
+    SetBatterySaverEnabled(FromString<bool>()(value));
+    return;
+  }
   if (name == "bypassCSP") {
     SetBypassCSP(FromString<bool>()(value));
     return;
@@ -1860,6 +1871,10 @@ void SettingsBase::SetFromStrings(const String& name, const String& value) {
     SetPrefersReducedTransparency(FromString<bool>()(value));
     return;
   }
+  if (name == "preloadingDisabled") {
+    SetPreloadingDisabled(FromString<bool>()(value));
+    return;
+  }
   if (name == "presentationReceiver") {
     SetPresentationReceiver(FromString<bool>()(value));
     return;
@@ -1882,10 +1897,6 @@ void SettingsBase::SetFromStrings(const String& name, const String& value) {
   }
   if (name == "reportScreenSizeInPhysicalPixelsQuirk") {
     SetReportScreenSizeInPhysicalPixelsQuirk(FromString<bool>()(value));
-    return;
-  }
-  if (name == "requireTransientActivationAndAuthorizationForSubAppsAPI") {
-    SetRequireTransientActivationAndAuthorizationForSubAppsAPI(FromString<bool>()(value));
     return;
   }
   if (name == "requireTransientActivationForGetDisplayMedia") {

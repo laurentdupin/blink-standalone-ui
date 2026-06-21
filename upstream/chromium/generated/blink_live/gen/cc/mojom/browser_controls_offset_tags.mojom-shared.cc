@@ -12,6 +12,8 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "cc/mojom/browser_controls_offset_tags.mojom-params-data.h"
+#include "mojo/public/cpp/base/token_mojom_traits.h"
+#include "services/viz/public/cpp/compositing/offset_tag_mojom_traits.h"
 namespace cc {
 namespace mojom {
 

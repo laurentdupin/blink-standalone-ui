@@ -6856,7 +6856,7 @@ enum class WebFeature : int32_t {
   
   kV8Navigator_DeprecatedReplaceInURN_Method = 4227,
   
-  kWebAppBorderless = 4228,
+  kOBSOLETE_WebAppBorderless = 4228,
   
   kPaymentInstruments = 4229,
   
@@ -6888,17 +6888,17 @@ enum class WebFeature : int32_t {
   
   kFocusgroup = 4243,
   
-  kV8HTMLElement_Focusgroup_AttributeGetter = 4244,
+  kV8HTMLElement_FocusGroup_AttributeGetter = 4244,
   
-  kV8HTMLElement_Focusgroup_AttributeSetter = 4245,
+  kV8HTMLElement_FocusGroup_AttributeSetter = 4245,
   
-  kV8MathMLElement_Focusgroup_AttributeGetter = 4246,
+  kV8MathMLElement_FocusGroup_AttributeGetter = 4246,
   
-  kV8MathMLElement_Focusgroup_AttributeSetter = 4247,
+  kV8MathMLElement_FocusGroup_AttributeSetter = 4247,
   
-  kV8SVGElement_Focusgroup_AttributeGetter = 4248,
+  kV8SVGElement_FocusGroup_AttributeGetter = 4248,
   
-  kV8SVGElement_Focusgroup_AttributeSetter = 4249,
+  kV8SVGElement_FocusGroup_AttributeSetter = 4249,
   
   kCSSLegacyPerspectiveOrigin = 4250,
   
@@ -10038,7 +10038,7 @@ enum class WebFeature : int32_t {
   
   kSynthesizedMiddleClickSVGAnchor = 5821,
   
-  kWebAuthenticationCspDisallowsRpId = 5822,
+  kOBSOLETE_WebAuthenticationCspDisallowsRpId = 5822,
   
   kHistoryGoBackWouldSkipAd = 5823,
   
@@ -10164,18 +10164,80 @@ enum class WebFeature : int32_t {
   
   kPreventSvgFilterPaint = 5884,
   
-  kCSSDiscardedVarWithValidArgumentGrammar = 5885,
+  kLanguageModel_Prompt_ResponseConstraint = 5885,
   
-  kCSSDiscardedEnvWithValidArgumentGrammar = 5886,
+  kLanguageModel_Prompt_Prefix = 5886,
   
-  kCSSDiscardedAttrWithValidArgumentGrammar = 5887,
+  kCapabilityElementIsValid = 5887,
   
-  kCSSDiscardedIfWithValidArgumentGrammar = 5888,
+  kCapabilityElementInvalidReason = 5888,
+  
+  kCapabilityElementInitialPermissionStatus = 5889,
+  
+  kCapabilityElementPermissionStatus = 5890,
+  
+  kCapabilityElementOnPromptAction = 5891,
+  
+  kCapabilityElementOnPromptDismiss = 5892,
+  
+  kCapabilityElementOnValidationStatusChange = 5893,
+  
+  kInputParsedParentSelectNoOptions = 5894,
+  
+  kFocusGroupStart = 5895,
+  
+  kWebAuthenticationRemoteCspDisallowsRpId = 5896,
+  
+  kSpeculationMeasurement = 5897,
+  
+  kCryptoAlgorithmMlKem768X25519 = 5898,
+  
+  kGeolocationAccuracyModeApproximate = 5899,
+  
+  kSVGAnimVal = 5900,
+  
+  kSubtleCryptoGetPublicKey = 5901,
+  
+  kCapabilityDelegationOfDigitalCredentialsCreate = 5902,
+  
+  kCapabilityDelegationOfDigitalCredentialsGet = 5903,
+  
+  kModelContextGetTools = 5904,
+  
+  kWebSpeechSttAvailable = 5905,
+  
+  kWebSpeechSttStart = 5906,
+  
+  kWebSpeechSttResultRetrieved = 5907,
+  
+  kWebSpeechSttError = 5908,
+  
+  kWebSpeechTtsSynthesize = 5909,
+  
+  kWebSpeechTtsSuccess = 5910,
+  
+  kWebSpeechTtsError = 5911,
+  
+  kSemanticEmbedder_Availability = 5912,
+  
+  kSemanticEmbedder_Create = 5913,
+  
+  kSemanticEmbedder_Embed = 5914,
+  
+  kSemanticEmbedder_Destroy = 5915,
+  
+  kEmailVerificationProtocol = 5916,
+  
+  kWebTransportDatagramDuplexStreamIncomingHighWaterMark = 5917,
+  
+  kWebTransportDatagramDuplexStreamOutgoingHighWaterMark = 5918,
+  
+  kHistoryGoBackWouldSkipSameOriginAd = 5919,
   kMinValue = 0,
-  kMaxValue = 5888,
+  kMaxValue = 5919,
 };
 
-COMPONENT_EXPORT(WEB_FEATURE_MOJO_BINDINGS_MOJOM_SHARED) std::ostream& operator<<(std::ostream& os, WebFeature value);
+ std::ostream& operator<<(std::ostream& os, WebFeature value);
 inline bool IsKnownEnumValue(WebFeature value) {
   return internal::WebFeature_Data::IsKnownValue(
       static_cast<int32_t>(value));

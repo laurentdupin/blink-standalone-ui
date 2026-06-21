@@ -38,9 +38,7 @@
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_export.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
-#endif
 
 // `AtomicString` is interned, so it's safe to hash; allow conversion to a byte
 // span to facilitate this.
@@ -93,8 +91,8 @@ class WTF_EXPORT AtomicString {
   explicit AtomicString(const char* chars)
       // SAFETY: The below span creation is safe if `chars` points to a
       // NUL-terminated string.
-      : AtomicString(base::as_bytes(
-            UNSAFE_BUFFERS(base::span(chars, chars ? strlen(chars) : 0u)))) {}
+      : AtomicString(base::as_bytes(UNSAFE_BUFFERS(
+            base::span(base::unchecked, chars, chars ? strlen(chars) : 0u)))) {}
   explicit AtomicString(base::span<const LChar> chars);
   explicit AtomicString(
       base::span<const UChar> chars,
@@ -275,9 +273,7 @@ class WTF_EXPORT AtomicString {
   void Show() const;
 #endif
 
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
   void WriteIntoTrace(perfetto::TracedValue context) const;
-#endif
 
  private:
   friend struct HashTraits<AtomicString>;

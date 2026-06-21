@@ -36,7 +36,7 @@
 
 
 #include "mojo/public/cpp/base/shared_memory_mojom_traits.h"
-#include "base/component_export.h"
+#include "third_party/blink/public/platform/web_common.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -55,7 +55,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) ReadOnlySharedMemoryRegion {
+class BLINK_PLATFORM_EXPORT ReadOnlySharedMemoryRegion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<ReadOnlySharedMemoryRegion, T>::value>;
@@ -192,7 +192,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) WritableSharedMemoryRegion {
+class BLINK_PLATFORM_EXPORT WritableSharedMemoryRegion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<WritableSharedMemoryRegion, T>::value>;
@@ -329,7 +329,7 @@ bool operator>=(const T& lhs, const T& rhs) {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) UnsafeSharedMemoryRegion {
+class BLINK_PLATFORM_EXPORT UnsafeSharedMemoryRegion {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<UnsafeSharedMemoryRegion, T>::value>;
@@ -536,7 +536,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::ReadOnlySharedMemoryRegion::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::ReadOnlySharedMemoryRegion::DataView,
                                          ::mojo_base::mojom::blink::ReadOnlySharedMemoryRegionPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::ReadOnlySharedMemoryRegionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::ReadOnlySharedMemoryRegionPtr* output) { output->reset(); }
@@ -551,7 +551,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::WritableSharedMemoryRegion::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::WritableSharedMemoryRegion::DataView,
                                          ::mojo_base::mojom::blink::WritableSharedMemoryRegionPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::WritableSharedMemoryRegionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::WritableSharedMemoryRegionPtr* output) { output->reset(); }
@@ -566,7 +566,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::UnsafeSharedMemoryRegion::DataView,
+struct BLINK_PLATFORM_EXPORT StructTraits<::mojo_base::mojom::blink::UnsafeSharedMemoryRegion::DataView,
                                          ::mojo_base::mojom::blink::UnsafeSharedMemoryRegionPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::UnsafeSharedMemoryRegionPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::UnsafeSharedMemoryRegionPtr* output) { output->reset(); }

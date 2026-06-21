@@ -13,7 +13,6 @@
 #include "mojo/public/c/system/macros.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -32,7 +31,7 @@ class BigBuffer_Data;
 #pragma pack(push, 1)
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) BigBuffer_Data {
+class  BigBuffer_Data {
  public:
   // Used to identify Mojom Union Data Classes.
   typedef void MojomUnionDataType;
@@ -85,7 +84,7 @@ class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) BigBuffer_Data {
 };
 static_assert(sizeof(BigBuffer_Data) == mojo::internal::kUnionDataSize,
               "Bad sizeof(BigBuffer_Data)");
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) BigBufferSharedMemoryRegion_Data {
+class  BigBufferSharedMemoryRegion_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

@@ -24,6 +24,7 @@
 
 #include "cc/mojom/synced_scroll_offset.mojom-import-headers.h"
 #include "cc/mojom/synced_scroll_offset.mojom-test-utils.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
 
 
 namespace cc::mojom {

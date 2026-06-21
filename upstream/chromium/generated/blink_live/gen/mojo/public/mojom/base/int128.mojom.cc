@@ -38,6 +38,11 @@ Int128::Int128(
       low(std::move(low_in)) {}
 
 Int128::~Int128() = default;
+size_t Int128::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->high);
+  seed = mojo::internal::Hash(seed, this->low);
+  return seed;
+}
 
 void Int128::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
@@ -78,6 +83,11 @@ Uint128::Uint128(
       low(std::move(low_in)) {}
 
 Uint128::~Uint128() = default;
+size_t Uint128::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, this->high);
+  seed = mojo::internal::Hash(seed, this->low);
+  return seed;
+}
 
 void Uint128::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

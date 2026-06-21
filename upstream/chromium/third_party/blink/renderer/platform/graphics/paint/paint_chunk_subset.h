@@ -111,6 +111,11 @@ class PaintChunkSubset {
 
   bool IsEmpty() const { return subset_indices_.empty(); }
 
+  bool HasValidFirstChunk() const {
+    return paint_artifact_ && !subset_indices_.empty() &&
+           subset_indices_[0] < paint_artifact_->GetPaintChunks().size();
+  }
+
   wtf_size_t size() const { return subset_indices_.size(); }
 
   const PaintArtifact& GetPaintArtifact() const { return *paint_artifact_; }

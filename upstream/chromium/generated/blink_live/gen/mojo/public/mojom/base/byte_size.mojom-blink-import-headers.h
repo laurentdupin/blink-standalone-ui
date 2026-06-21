@@ -6,5 +6,7 @@
 
 #ifndef MOJO_PUBLIC_MOJOM_BASE_BYTE_SIZE_MOJOM_BLINK_IMPORT_HEADERS_H_
 #define MOJO_PUBLIC_MOJOM_BASE_BYTE_SIZE_MOJOM_BLINK_IMPORT_HEADERS_H_
+#include "base/byte_size.h"
+#include "mojo/public/cpp/base/byte_size_mojom_traits.h"
 
 #endif  // MOJO_PUBLIC_MOJOM_BASE_BYTE_SIZE_MOJOM_BLINK_IMPORT_HEADERS_H_

@@ -8,6 +8,7 @@
 #define THIRD_PARTY_BLINK_PUBLIC_MOJOM_PEERCONNECTION_WEBRTC_IP_HANDLING_POLICY_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "third_party/blink/public/mojom/peerconnection/webrtc_ip_handling_policy.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace blink::mojom::blink {

@@ -34,11 +34,50 @@
 #include "third_party/blink/renderer/platform/graphics/scoped_image_rendering_settings.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
+#include <cstdlib>
+#include <cstdio>
+
 namespace blink {
 
 extern "C" void StandaloneRendererNoteImagePainterPaintReplaced();
+extern "C" void StandaloneRendererNoteImagePaintIntoRect(
+    float dest_x,
+    float dest_y,
+    float dest_width,
+    float dest_height,
+    float content_x,
+    float content_y,
+    float content_width,
+    float content_height,
+    float snapped_dest_x,
+    float snapped_dest_y,
+    float snapped_dest_width,
+    float snapped_dest_height,
+    float src_x,
+    float src_y,
+    float src_width,
+    float src_height,
+    int image_width,
+    int image_height,
+    int interpolation_quality);
 
 namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool TraceStandaloneImagePaintStages() {
+  static const bool enabled =
+      std::getenv("HTML_CSS_RENDERER_TRACE_IMAGE_PAINT") != nullptr;
+  return enabled;
+}
+
+void TraceStandaloneImagePaintStage(const char* stage) {
+  if (!TraceStandaloneImagePaintStages()) {
+    return;
+  }
+  std::fprintf(stderr, "standalone_image_paint.stage=%s\n", stage);
+  std::fflush(stderr);
+}
+#endif
 
 ImagePaintTimingInfo ComputeImagePaintTimingInfo(
     const LayoutImage& layout_image,
@@ -120,6 +159,9 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info) {
 void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
                                  const PhysicalOffset& paint_offset) {
   StandaloneRendererNoteImagePainterPaintReplaced();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintReplaced begin");
+#endif
   const PhysicalSize content_size = layout_image_.PhysicalContentBoxSize();
   bool has_image = layout_image_.ImageResource()->HasImage();
   if (has_image) {
@@ -202,12 +244,21 @@ void ImagePainter::PaintReplaced(const PaintInfo& paint_info,
 
   DrawingRecorder recorder(context, layout_image_, paint_info.phase,
                            ToEnclosingRect(visual_rect));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintReplaced before PaintIntoRect");
+#endif
   PaintIntoRect(context, paint_rect, visual_rect);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintReplaced after PaintIntoRect");
+#endif
 }
 
 void ImagePainter::PaintIntoRect(GraphicsContext& context,
                                  const PhysicalRect& dest_rect,
                                  const PhysicalRect& content_rect) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintIntoRect begin");
+#endif
   const LayoutImageResource& image_resource = *layout_image_.ImageResource();
   if (!image_resource.HasImage() || image_resource.ErrorOccurred())
     return;  // FIXME: should we just ASSERT these conditions? (audit all
@@ -219,6 +270,9 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
 
   scoped_refptr<Image> image =
       image_resource.GetImage(gfx::SizeF(dest_rect.size));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintIntoRect after GetImage");
+#endif
   if (!image || image->IsNull())
     return;
 
@@ -267,6 +321,9 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
   auto image_auto_dark_mode = ImageClassifierHelper::GetImageAutoDarkMode(
       *layout_image_.GetFrame(), layout_image_.StyleRef(),
       gfx::RectF(pixel_snapped_dest_rect), src_rect);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintIntoRect after auto dark mode");
+#endif
 
   // At this point we have all the necessary information to report paint
   // timing data. Do so now in order to mark the resulting PaintImage as
@@ -290,6 +347,21 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
         context.GetPaintController().CurrentPaintChunkProperties(),
         pixel_snapped_dest_rect);
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintIntoRect before DrawImage");
+  StandaloneRendererNoteImagePaintIntoRect(
+      dest_rect.X().ToFloat(), dest_rect.Y().ToFloat(),
+      dest_rect.Width().ToFloat(), dest_rect.Height().ToFloat(),
+      content_rect.X().ToFloat(), content_rect.Y().ToFloat(),
+      content_rect.Width().ToFloat(), content_rect.Height().ToFloat(),
+      static_cast<float>(pixel_snapped_dest_rect.x()),
+      static_cast<float>(pixel_snapped_dest_rect.y()),
+      static_cast<float>(pixel_snapped_dest_rect.width()),
+      static_cast<float>(pixel_snapped_dest_rect.height()), src_rect.x(),
+      src_rect.y(), src_rect.width(), src_rect.height(), image->Size().width(),
+      image->Size().height(),
+      static_cast<int>(layout_image_.StyleRef().GetInterpolationQuality()));
+#endif
 
   context.DrawImage(
       *image, decode_mode, image_auto_dark_mode,
@@ -299,6 +371,9 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
       respect_orientation, Image::ImageClampingMode::kClampImageToSourceRect,
       ImageNodeAnimationInfo(node ? node->GetDomNodeId() : kInvalidDOMNodeId,
                              layout_image_.StyleRef().ImageAnimation()));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneImagePaintStage("PaintIntoRect after DrawImage");
+#endif
 }
 
 }  // namespace blink

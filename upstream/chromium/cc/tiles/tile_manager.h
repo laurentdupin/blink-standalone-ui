@@ -352,7 +352,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient,
       std::vector<DrawImage>* sync_decoded_images,
       std::vector<PaintImage>* checkered_images,
       const gfx::Rect* invalidated_rect,
-      base::flat_map<PaintImage::Id, size_t>* image_to_frame_index = nullptr);
+      scoped_refptr<AnimatedImageFrameIndexMap> image_to_frame_index = nullptr);
   void AddCheckeredImagesToDecodeQueue(
       const PrioritizedTile& prioritized_tile,
       const TargetColorParams& target_color_params,
@@ -448,7 +448,6 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient,
   scoped_refptr<base::TaskRunner> task_runner_for_testing_ = nullptr;
   raw_ptr<const base::TickClock> tick_clock_for_testing_ = nullptr;
 
-  base::MetricsSubSampler metrics_sub_sampler_;
   float metrics_sampling_rate_ = .01;
 
   // The callback scheduled to poll whether the GPU side work for pending tiles

@@ -7,7 +7,7 @@
 #ifndef CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_FORWARD_H_
 #define CC_MOJOM_OVERSCROLL_BEHAVIOR_MOJOM_FORWARD_H_
 
-
+#include <stdint.h>
 
 #include "mojo/public/cpp/bindings/struct_forward.h"
 
@@ -22,10 +22,12 @@
 
 
 namespace cc::mojom {
-using OverscrollBehaviorDataView = mojo::native::NativeStructDataView;
+class OverscrollBehaviorDataView;
 
-using OverscrollBehavior = mojo::native::NativeStruct;
-using OverscrollBehaviorPtr = mojo::native::NativeStructPtr;
+
+enum class OverscrollBehaviorType : int32_t;
+class OverscrollBehavior;
+using OverscrollBehaviorPtr = mojo::InlinedStructPtr<OverscrollBehavior>;
 
 
 

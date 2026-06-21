@@ -8,36 +8,12 @@
 #include <stdint.h>
 
 #include "build/build_config.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/public/mojom/css/preferred_contrast.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
-#endif
 #include "third_party/blink/public/platform/web_theme_engine.h"
 #include "ui/color/color_provider.h"
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_THEME_MOJOM_ENUMS_DEFINED)
-#define BLINK_STANDALONE_THEME_MOJOM_ENUMS_DEFINED
-namespace mojom::blink {
-enum class ColorScheme {
-  kLight,
-  kDark,
-};
-
-enum class PreferredContrast {
-  kNoPreference,
-  kMore,
-  kLess,
-  kCustom,
-};
-}  // namespace mojom::blink
-namespace mojom {
-using ColorScheme = ::blink::mojom::blink::ColorScheme;
-using PreferredContrast = ::blink::mojom::blink::PreferredContrast;
-}  // namespace mojom
-#endif
 
 class WebThemeEngineDefault : public WebThemeEngine {
  public:

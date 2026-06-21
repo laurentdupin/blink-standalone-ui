@@ -8,6 +8,7 @@
 #define CC_MOJOM_UI_RESOURCE_ID_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/ui_resource_id.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

@@ -19,16 +19,75 @@
 #include <memory>
 #include <optional>
 #include <sstream>
-#include <utility>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
+#include "base/check.h"
+#include "base/base_paths.h"
+#include "base/command_line.h"
+#include "base/containers/flat_map.h"
+#include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
+#include "base/path_service.h"
+#include "base/run_loop.h"
+#include "base/sequence_checker.h"
+#include "base/synchronization/lock.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/timer/timer.h"
+#include "build/build_config.h"
+#include "cc/layers/layer.h"
 #include "cc/paint/paint_op.h"
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
+#include "cc/animation/animation_host.h"
+#include "cc/metrics/begin_main_frame_metrics.h"
+#include "cc/raster/synchronous_task_graph_runner.h"
+#include "cc/trees/compositor_commit_data.h"
+#include "cc/trees/layer_tree_frame_sink.h"
+#include "cc/trees/layer_tree_frame_sink_client.h"
+#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree_host_delegate.h"
+#include "cc/trees/layer_tree_host_single_thread_delegate.h"
+#include "cc/trees/layer_tree_settings.h"
+#include "components/viz/common/frame_sinks/copy_output_request.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
+#include "components/viz/common/gpu/context_cache_controller.h"
+#include "components/viz/common/gpu/context_lost_observer.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
+#include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
+#include "components/viz/service/display/display.h"
+#include "components/viz/service/display/display_client.h"
+#include "components/viz/service/display/display_compositor_memory_and_task_controller.h"
+#include "components/viz/service/display/display_scheduler_base.h"
+#include "components/viz/service/display/output_surface.h"
+#include "components/viz/service/display/overlay_processor_interface.h"
+#include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
+#include "components/viz/service/display_embedder/skia_output_surface_impl.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/pending_copy_output_request.h"
+#include "gpu/command_buffer/client/context_support.h"
+#include "gpu/command_buffer/client/raster_interface.h"
+#include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/command_buffer/service/scheduler.h"
+#include "gpu/command_buffer/service/scheduler_sequence.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
+#include "gpu/command_buffer/service/sync_point_manager.h"
+#include "gpu/ipc/in_process_gpu_thread_holder.h"
+#include "gpu/ipc/common/surface_handle.h"
+#include "gpu/ipc/raster_in_process_context.h"
+#include "gpu/ipc/service/image_transport_surface.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
+#include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -36,6 +95,7 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkPathEffect.h"
+#include "third_party/skia/include/core/SkPixmap.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkString.h"
@@ -43,8 +103,16 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkTypeface.h"
+#include "third_party/skia/include/encode/SkPngEncoder.h"
+#include "ui/gl/buildflags.h"
+#include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface.h"
+#include "ui/gl/init/gl_factory.h"
+#include "ui/gl/presenter.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/shadow_root.h"
@@ -53,6 +121,7 @@
 #include "third_party/blink/renderer/core/animation/animation_clock.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
+#include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/pending_animations.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
@@ -66,13 +135,16 @@
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/html/html_base_element.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/radio_button_group_scope.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
@@ -92,6 +164,7 @@
 #include "third_party/blink/renderer/core/layout/table/layout_table.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
+#include "third_party/blink/renderer/core/loader/empty_clients.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -122,6 +195,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/ca_layer_params.h"
 
 namespace blink::standalone_renderer_probe {
 
@@ -174,6 +248,18 @@ extern "C" int StandaloneRendererLayoutImageSetResourceCalled();
 extern "C" int StandaloneRendererLayoutImageResourceInitializeCalled();
 extern "C" int StandaloneRendererLayoutImageResourceSetResourceCalled();
 extern "C" int StandaloneRendererLayoutImageResourceNaturalDimensionsCalled();
+
+namespace {
+void* g_standalone_native_window_handle = nullptr;
+gfx::Size g_standalone_native_window_size;
+bool g_standalone_defer_image_attribute_loads = false;
+}  // namespace
+extern "C" bool StandaloneRendererDeferImageAttributeLoads() {
+  return g_standalone_defer_image_attribute_loads;
+}
+extern "C" void StandaloneRendererSetDeferImageAttributeLoads(bool enabled) {
+  g_standalone_defer_image_attribute_loads = enabled;
+}
 extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled();
 extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedCalled();
 extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedNullImage();
@@ -233,8 +319,39 @@ extern "C" int StandaloneRendererMediaQueryDiagnosticFieldAt(int,
 
 void ResetStandaloneStackingPaintProvenanceForProbe();
 std::string StandaloneStackingPaintProvenanceJsonForProbe();
+void InstallStandaloneMojoThunksForStandaloneRenderer();
 
 namespace {
+
+void TraceLiveFrameProbeStage(const char* stage);
+
+std::string DescribeGLInitializationFailure(const char* prefix) {
+  std::ostringstream out;
+  out << prefix;
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  const std::optional<gl::GLImplementationParts> requested =
+      gl::GetRequestedGLImplementationFromCommandLine(command_line);
+  out << " (requested_gl="
+      << (requested.has_value() ? requested->ToString() : "none")
+      << ", active_gl=" << gl::GetGLImplementationParts().ToString()
+      << ", USE_STATIC_ANGLE=" << (BUILDFLAG(USE_STATIC_ANGLE) ? 1 : 0)
+      << ", ENABLE_VULKAN=" << (BUILDFLAG(ENABLE_VULKAN) ? 1 : 0);
+#if BUILDFLAG(IS_WIN)
+  base::FilePath module_dir;
+  if (base::PathService::Get(base::DIR_MODULE, &module_dir)) {
+    const base::FilePath gles = module_dir.Append(L"libGLESv2.dll");
+    const base::FilePath egl = module_dir.Append(L"libEGL.dll");
+    out << ", libGLESv2.dll=" << (base::PathExists(gles) ? 1 : 0)
+        << ", libEGL.dll=" << (base::PathExists(egl) ? 1 : 0)
+        << ", module_dir=" << module_dir.AsUTF8Unsafe();
+  } else {
+    out << ", module_dir=<unavailable>";
+  }
+#endif
+  out << ")";
+  return out.str();
+}
 
 struct StandaloneTypefacePayload {
   char magic[4] = {'B', 'S', 'T', 'F'};
@@ -268,6 +385,11 @@ struct ImageReachabilityDiagnostics {
   bool loader_content_present = false;
   bool loader_content_has_image = false;
   bool loader_content_error = false;
+  bool loader_content_loaded = false;
+  bool loader_content_loading = false;
+  int loader_content_status = -1;
+  bool image_element_complete = false;
+  bool image_element_primary_content = false;
   std::string width_attr;
   std::string height_attr;
   int computed_display = -1;
@@ -287,6 +409,30 @@ struct ImageReachabilityDiagnostics {
   int physical_fragment_count = 0;
   bool paint_layer_present = false;
   bool object_paint_properties_present = false;
+};
+
+struct ImagePaintIntoRectDiagnostics {
+  bool called = false;
+  int count = 0;
+  float dest_x = 0.0f;
+  float dest_y = 0.0f;
+  float dest_width = 0.0f;
+  float dest_height = 0.0f;
+  float content_x = 0.0f;
+  float content_y = 0.0f;
+  float content_width = 0.0f;
+  float content_height = 0.0f;
+  float snapped_dest_x = 0.0f;
+  float snapped_dest_y = 0.0f;
+  float snapped_dest_width = 0.0f;
+  float snapped_dest_height = 0.0f;
+  float src_x = 0.0f;
+  float src_y = 0.0f;
+  float src_width = 0.0f;
+  float src_height = 0.0f;
+  int image_width = 0;
+  int image_height = 0;
+  int interpolation_quality = -1;
 };
 
 struct LiveExportedGlyph {
@@ -509,13 +655,1223 @@ struct EmptyClipChunkForStandaloneRenderer {
   std::optional<SkRRect> clip_rrect;
 };
 
+class StandaloneVizFrameSinkClient final
+    : public viz::mojom::CompositorFrameSinkClient {
+ public:
+  StandaloneVizFrameSinkClient() = default;
+  StandaloneVizFrameSinkClient(const StandaloneVizFrameSinkClient&) = delete;
+  StandaloneVizFrameSinkClient& operator=(const StandaloneVizFrameSinkClient&) =
+      delete;
+  ~StandaloneVizFrameSinkClient() override = default;
+
+  void SetCcClient(cc::LayerTreeFrameSinkClient* client) {
+    cc_client_ = client;
+  }
+
+  void DidReceiveCompositorFrameAck(
+      std::vector<viz::ReturnedResource> resources) override {
+    if (!cc_client_) {
+      return;
+    }
+    cc_client_->ReclaimResources(std::move(resources));
+    cc_client_->DidReceiveCompositorFrameAck();
+  }
+
+  void OnBeginFrame(
+      const viz::BeginFrameArgs& args,
+      const base::flat_map<uint32_t, viz::FrameTimingDetails>& details,
+      std::vector<viz::ReturnedResource> resources) override {
+    if (cc_client_ && !resources.empty()) {
+      cc_client_->ReclaimResources(std::move(resources));
+    }
+  }
+
+  void OnBeginFramePausedChanged(bool paused) override {}
+
+  void ReclaimResources(
+      std::vector<viz::ReturnedResource> resources) override {
+    if (cc_client_ && !resources.empty()) {
+      cc_client_->ReclaimResources(std::move(resources));
+    }
+  }
+
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      uint32_t sequence_id) override {
+    if (cc_client_) {
+      cc_client_->OnCompositorFrameTransitionDirectiveProcessed(sequence_id);
+    }
+  }
+
+  void OnSurfaceEvicted(
+      const viz::LocalSurfaceId& local_surface_id) override {
+    if (cc_client_) {
+      cc_client_->OnSurfaceEvicted(local_surface_id);
+    }
+  }
+
+ private:
+  raw_ptr<cc::LayerTreeFrameSinkClient> cc_client_ = nullptr;
+};
+
+class StandaloneDisplayClient final : public viz::DisplayClient {
+ public:
+  StandaloneDisplayClient(bool* skia_gpu_reached, std::string* failure_reason)
+      : skia_gpu_reached_(skia_gpu_reached),
+        failure_reason_(failure_reason) {}
+
+  StandaloneDisplayClient(const StandaloneDisplayClient&) = delete;
+  StandaloneDisplayClient& operator=(const StandaloneDisplayClient&) = delete;
+  ~StandaloneDisplayClient() override = default;
+
+  void DisplayOutputSurfaceLost() override {
+    if (failure_reason_) {
+      *failure_reason_ = "Viz Display output surface was lost";
+    }
+  }
+
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      viz::AggregatedRenderPassList* render_passes) override {
+    if (will_draw_and_swap && skia_gpu_reached_) {
+      *skia_gpu_reached_ = true;
+    }
+  }
+
+  void DisplayDidDrawAndSwap() override {
+    if (skia_gpu_reached_) {
+      *skia_gpu_reached_ = true;
+    }
+  }
+
+  void DisplayDidReceiveCALayerParams(gfx::CALayerParams ca_layer_params)
+      override {}
+
+  void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {}
+
+  void DisplayAddChildWindowToBrowser(gpu::SurfaceHandle child_window) override {
+  }
+
+  void SetWideColorEnabled(bool enabled) override {}
+
+ private:
+  raw_ptr<bool> skia_gpu_reached_ = nullptr;
+  raw_ptr<std::string> failure_reason_ = nullptr;
+};
+
+const char* StandaloneCopyOutputErrorName(viz::CopyOutputResult::Error error) {
+  switch (error) {
+    case viz::CopyOutputResult::Error::kNone:
+      return "none";
+    case viz::CopyOutputResult::Error::kUnknown:
+      return "unknown";
+    case viz::CopyOutputResult::Error::kTimeout:
+      return "timeout";
+    case viz::CopyOutputResult::Error::kEmbeddingTokenChanged:
+      return "embedding_token_changed";
+  }
+  return "unknown";
+}
+
+class StandaloneSkiaOutputSurfaceDependency final
+    : public viz::SkiaOutputSurfaceDependency {
+ public:
+  StandaloneSkiaOutputSurfaceDependency(
+      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
+      gpu::SurfaceHandle surface_handle,
+      std::string* failure_reason)
+      : gpu_thread_holder_(std::move(gpu_thread_holder)),
+        surface_handle_(surface_handle),
+        failure_reason_(failure_reason),
+        client_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
+  }
+
+  StandaloneSkiaOutputSurfaceDependency(
+      const StandaloneSkiaOutputSurfaceDependency&) = delete;
+  StandaloneSkiaOutputSurfaceDependency& operator=(
+      const StandaloneSkiaOutputSurfaceDependency&) = delete;
+
+  ~StandaloneSkiaOutputSurfaceDependency() override = default;
+
+  std::unique_ptr<gpu::SingleTaskSequence> CreateSequence() override {
+    if (!gpu_thread_holder_ || !gpu_thread_holder_->GetTaskExecutor()) {
+      SetFailure("Viz Display cannot create a GPU task sequence");
+      return nullptr;
+    }
+    return std::make_unique<gpu::SchedulerSequence>(
+        gpu_thread_holder_->scheduler(), gpu_thread_holder_->task_runner());
+  }
+
+  gpu::SharedImageManager* GetSharedImageManager() override {
+    return gpu_thread_holder_ ? gpu_thread_holder_->shared_image_manager()
+                              : nullptr;
+  }
+
+  gpu::SyncPointManager* GetSyncPointManager() override {
+    return gpu_thread_holder_ ? gpu_thread_holder_->sync_point_manager()
+                              : nullptr;
+  }
+
+  const gpu::GpuDriverBugWorkarounds& GetGpuDriverBugWorkarounds() override {
+    return gpu_thread_holder_->gpu_driver_bug_workarounds();
+  }
+
+  scoped_refptr<gpu::SharedContextState> GetSharedContextState() override {
+    return gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
+                              : nullptr;
+  }
+
+  gpu::raster::GrShaderCache* GetGrShaderCache() override { return nullptr; }
+
+  viz::VulkanContextProvider* GetVulkanContextProvider() override {
+    return nullptr;
+  }
+
+  gpu::DawnContextProvider* GetDawnContextProvider() override {
+    return nullptr;
+  }
+
+  const gpu::GpuPreferences& GetGpuPreferences() const override {
+    return gpu_thread_holder_->gpu_preferences();
+  }
+
+  const gpu::GpuFeatureInfo& GetGpuFeatureInfo() override {
+    return gpu_thread_holder_->gpu_feature_info();
+  }
+
+  bool IsOffscreen() override {
+    return surface_handle_ == gpu::kNullSurfaceHandle;
+  }
+
+  gpu::SurfaceHandle GetSurfaceHandle() override { return surface_handle_; }
+
+  scoped_refptr<gl::Presenter> CreatePresenter() override {
+    if (IsOffscreen()) {
+      SetFailure("Viz Display has no native HWND surface handle for presenter");
+      return nullptr;
+    }
+    return gpu::ImageTransportSurface::CreatePresenter(
+        GetSharedContextState(), GetGpuDriverBugWorkarounds(),
+        GetGpuFeatureInfo(), surface_handle_);
+  }
+
+  scoped_refptr<gl::GLSurface> CreateGLSurface(
+      gl::GLSurfaceFormat format) override {
+    if (IsOffscreen()) {
+      SetFailure("Viz Display has no native HWND surface handle for GL surface");
+      return nullptr;
+    }
+    auto context_state = GetSharedContextState();
+    if (!context_state || !context_state->display()) {
+      SetFailure("Viz Display shared context has no GL display");
+      return nullptr;
+    }
+    return gpu::ImageTransportSurface::CreateNativeGLSurface(
+        context_state->display(), surface_handle_, format);
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner> GetClientTaskRunner() override {
+    return client_task_runner_;
+  }
+
+  void ScheduleGrContextCleanup() override {
+    if (auto context_state = GetSharedContextState()) {
+      context_state->ScheduleSkiaCleanup();
+    }
+  }
+
+  void ScheduleDelayedGPUTaskFromGPUThread(base::OnceClosure task) override {
+    if (!gpu_thread_holder_) {
+      return;
+    }
+    gpu_thread_holder_->task_runner()->PostDelayedTask(
+        FROM_HERE, std::move(task), base::Milliseconds(2));
+  }
+
+  void DidLoseContext(gpu::error::ContextLostReason reason,
+                      const GURL& active_url) override {
+    SetFailure("Viz Display Skia output surface lost its GPU context");
+  }
+
+  bool NeedsSupportForExternalStencil() override { return false; }
+
+  bool IsUsingCompositorGpuThread() override { return false; }
+
+ private:
+  void SetFailure(const char* reason) {
+    if (failure_reason_ && reason && failure_reason_->empty()) {
+      *failure_reason_ = reason;
+    }
+  }
+
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  gpu::SurfaceHandle surface_handle_ = gpu::kNullSurfaceHandle;
+  raw_ptr<std::string> failure_reason_ = nullptr;
+  scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
+};
+
+class StandaloneInProcessRasterContextProvider final
+    : public viz::RasterContextProvider,
+      public base::RefCountedThreadSafe<
+          StandaloneInProcessRasterContextProvider> {
+ public:
+  StandaloneInProcessRasterContextProvider(
+      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
+      bool enforce_cache_controller_lock,
+      bool* gpu_context_created,
+      bool* raster_context_created,
+      bool* shared_image_interface_available,
+      std::string* failure_reason)
+      : gpu_thread_holder_(std::move(gpu_thread_holder)),
+        enforce_cache_controller_lock_(enforce_cache_controller_lock),
+        gpu_context_created_(gpu_context_created),
+        raster_context_created_(raster_context_created),
+        shared_image_interface_available_(shared_image_interface_available),
+        failure_reason_(failure_reason) {
+    DETACH_FROM_SEQUENCE(sequence_checker_);
+  }
+
+  StandaloneInProcessRasterContextProvider(
+      const StandaloneInProcessRasterContextProvider&) = delete;
+  StandaloneInProcessRasterContextProvider& operator=(
+      const StandaloneInProcessRasterContextProvider&) = delete;
+
+  void AddRef() const override {
+    base::RefCountedThreadSafe<
+        StandaloneInProcessRasterContextProvider>::AddRef();
+  }
+
+  void Release() const override {
+    base::RefCountedThreadSafe<
+        StandaloneInProcessRasterContextProvider>::Release();
+  }
+
+  gpu::ContextResult BindToCurrentSequence() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    TraceLiveFrameProbeStage("cc raster context BindToCurrentSequence begin");
+    if (bind_tried_) {
+      TraceLiveFrameProbeStage("cc raster context BindToCurrentSequence cached");
+      return bind_result_;
+    }
+    bind_tried_ = true;
+
+    if (!gpu_thread_holder_) {
+      TraceLiveFrameProbeStage("cc raster context missing gpu thread holder");
+      SetFailure("missing in-process GPU thread holder");
+      bind_result_ = gpu::ContextResult::kFatalFailure;
+      return bind_result_;
+    }
+
+    if (gl::GetGLImplementation() == gl::kGLImplementationNone) {
+      TraceLiveFrameProbeStage("cc raster context before static GL bindings");
+      if (!gl::init::InitializeStaticGLBindingsOneOff()) {
+        TraceLiveFrameProbeStage("cc raster context static GL bindings failed");
+        SetFailure(DescribeGLInitializationFailure(
+            "Chromium GL static binding initialization failed before raster "
+            "context creation"));
+        bind_result_ = gpu::ContextResult::kFatalFailure;
+        return bind_result_;
+      }
+      TraceLiveFrameProbeStage("cc raster context after static GL bindings");
+      if (gl::GetGLImplementation() != gl::kGLImplementationDisabled &&
+          !gl::init::InitializeGLOneOffPlatformImplementation(
+              /*disable_gl_drawing=*/false, /*init_extensions=*/true,
+              gl::GpuPreference::kDefault)) {
+        TraceLiveFrameProbeStage("cc raster context platform GL init failed");
+        SetFailure(DescribeGLInitializationFailure(
+            "Chromium GL display/platform initialization failed before raster "
+            "context creation"));
+        bind_result_ = gpu::ContextResult::kFatalFailure;
+        return bind_result_;
+      }
+      TraceLiveFrameProbeStage("cc raster context after platform GL init");
+    }
+
+    TraceLiveFrameProbeStage("cc raster context before RasterInProcessContext");
+    raster_context_ = std::make_unique<gpu::RasterInProcessContext>();
+    TraceLiveFrameProbeStage("cc raster context before GetTaskExecutor");
+    gpu::CommandBufferTaskExecutor* task_executor =
+        gpu_thread_holder_->GetTaskExecutor();
+    TraceLiveFrameProbeStage("cc raster context after GetTaskExecutor");
+    if (!task_executor) {
+      SetFailure("in-process GPU thread failed to create a command-buffer task "
+                 "executor");
+      bind_result_ = gpu::ContextResult::kFatalFailure;
+      return bind_result_;
+    }
+    TraceLiveFrameProbeStage("cc raster context before Initialize");
+    bind_result_ = raster_context_->Initialize(
+        task_executor, /*gr_shader_cache=*/nullptr,
+        /*use_shader_cache_shm_count=*/nullptr);
+    TraceLiveFrameProbeStage("cc raster context after Initialize");
+    if (bind_result_ != gpu::ContextResult::kSuccess) {
+      TraceLiveFrameProbeStage("cc raster context Initialize failed");
+      SetFailure("gpu::RasterInProcessContext initialization failed");
+      raster_context_.reset();
+      return bind_result_;
+    }
+
+    TraceLiveFrameProbeStage("cc raster context before cache controller");
+    cache_controller_ = std::make_unique<viz::ContextCacheController>(
+        raster_context_->GetContextSupport(),
+        base::SingleThreadTaskRunner::GetCurrentDefault());
+    if (enforce_cache_controller_lock_) {
+      cache_controller_->SetLock(&context_lock_);
+    }
+    TraceLiveFrameProbeStage("cc raster context after cache controller");
+
+    if (gpu_context_created_) {
+      *gpu_context_created_ = true;
+    }
+    if (raster_context_created_) {
+      *raster_context_created_ = true;
+    }
+    if (shared_image_interface_available_) {
+      *shared_image_interface_available_ =
+          raster_context_->GetSharedImageInterface() != nullptr;
+    }
+    SetFailure("");
+    return bind_result_;
+  }
+
+  void AddObserver(viz::ContextLostObserver* obs) override {
+    observers_.AddObserver(obs);
+  }
+
+  void RemoveObserver(viz::ContextLostObserver* obs) override {
+    observers_.RemoveObserver(obs);
+  }
+
+  base::Lock* GetLock() override { return &context_lock_; }
+
+  viz::ContextCacheController* CacheController() override {
+    CHECK(cache_controller_);
+    return cache_controller_.get();
+  }
+
+  gpu::ContextSupport* ContextSupport() override {
+    CHECK(raster_context_);
+    return raster_context_->GetContextSupport();
+  }
+
+  gpu::SharedImageInterface* SharedImageInterface() override {
+    CHECK(raster_context_);
+    return raster_context_->GetSharedImageInterface();
+  }
+
+  const gpu::Capabilities& ContextCapabilities() const override {
+    CHECK(raster_context_);
+    return raster_context_->GetCapabilities();
+  }
+
+  const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override {
+    CHECK(raster_context_);
+    return raster_context_->GetGpuFeatureInfo();
+  }
+
+  gpu::raster::RasterInterface* RasterInterface() override {
+    CHECK(raster_context_);
+    return raster_context_->GetImplementation();
+  }
+
+ private:
+  friend class base::RefCountedThreadSafe<
+      StandaloneInProcessRasterContextProvider>;
+
+  ~StandaloneInProcessRasterContextProvider() override = default;
+
+  void SetFailure(const char* reason) {
+    if (failure_reason_) {
+      *failure_reason_ = reason ? reason : "";
+    }
+  }
+
+  void SetFailure(const std::string& reason) {
+    if (failure_reason_) {
+      *failure_reason_ = reason;
+    }
+  }
+
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  std::unique_ptr<gpu::RasterInProcessContext> raster_context_;
+  std::unique_ptr<viz::ContextCacheController> cache_controller_;
+  base::Lock context_lock_;
+  base::ObserverList<viz::ContextLostObserver>::Unchecked observers_;
+  bool enforce_cache_controller_lock_ = false;
+  bool bind_tried_ = false;
+  gpu::ContextResult bind_result_ = gpu::ContextResult::kSuccess;
+  raw_ptr<bool> gpu_context_created_ = nullptr;
+  raw_ptr<bool> raster_context_created_ = nullptr;
+  raw_ptr<bool> shared_image_interface_available_ = nullptr;
+  raw_ptr<std::string> failure_reason_ = nullptr;
+  SEQUENCE_CHECKER(sequence_checker_);
+};
+
+class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
+ public:
+  StandaloneDirectLayerTreeFrameSink(
+      viz::FrameSinkManagerImpl* frame_sink_manager,
+      const viz::FrameSinkId& frame_sink_id,
+      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
+      scoped_refptr<viz::RasterContextProvider> compositor_context_provider,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider,
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
+      const gfx::Size& viewport,
+      bool* compositor_frame_submitted,
+      bool* viz_display_created,
+      bool* skia_gpu_reached,
+      bool* copy_output_requested,
+      bool* copy_output_completed,
+      bool* copy_output_succeeded,
+      std::vector<uint8_t>* copy_output_png,
+      std::string* copy_output_failure,
+      std::string* failure_reason)
+      : cc::LayerTreeFrameSink(std::move(compositor_context_provider),
+                               std::move(worker_context_provider),
+                               std::move(compositor_task_runner),
+                               /*shared_image_interface=*/nullptr),
+        frame_sink_manager_(frame_sink_manager),
+        frame_sink_id_(frame_sink_id),
+        gpu_thread_holder_(std::move(gpu_thread_holder)),
+        viewport_(viewport),
+        display_client_(skia_gpu_reached, failure_reason),
+        compositor_frame_submitted_(compositor_frame_submitted),
+        viz_display_created_(viz_display_created),
+        skia_gpu_reached_(skia_gpu_reached),
+        copy_output_requested_(copy_output_requested),
+        copy_output_completed_(copy_output_completed),
+        copy_output_succeeded_(copy_output_succeeded),
+        copy_output_png_(copy_output_png),
+        copy_output_failure_(copy_output_failure),
+        failure_reason_(failure_reason) {
+    // Standalone screenshot/readback consumers compare CSS top-left pixel
+    // coordinates. Disable Viz backing/output-surface padding that is useful
+    // for production buffer reuse but changes observable CopyOutput bounds.
+    renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
+  }
+
+  StandaloneDirectLayerTreeFrameSink(
+      const StandaloneDirectLayerTreeFrameSink&) = delete;
+  StandaloneDirectLayerTreeFrameSink& operator=(
+      const StandaloneDirectLayerTreeFrameSink&) = delete;
+
+  ~StandaloneDirectLayerTreeFrameSink() override = default;
+
+  bool BindToClient(cc::LayerTreeFrameSinkClient* client) override {
+    TraceLiveFrameProbeStage("direct frame sink BindToClient begin");
+    if (!cc::LayerTreeFrameSink::BindToClient(client)) {
+      TraceLiveFrameProbeStage("direct frame sink base BindToClient failed");
+      if (!failure_reason_ || failure_reason_->empty()) {
+        SetFailure("cc::LayerTreeFrameSink rejected the cc client");
+      }
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink after base BindToClient");
+    viz_client_.SetCcClient(client);
+    TraceLiveFrameProbeStage("direct frame sink before support create");
+    support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
+        &viz_client_, frame_sink_manager_, frame_sink_id_, /*is_root=*/true);
+    TraceLiveFrameProbeStage("direct frame sink after support create");
+    return true;
+  }
+
+  void DetachFromClient() override {
+    viz_client_.SetCcClient(nullptr);
+    support_.reset();
+    cc::LayerTreeFrameSink::DetachFromClient();
+  }
+
+  void SetLocalSurfaceId(
+      const viz::LocalSurfaceId& local_surface_id) override {
+    TraceLiveFrameProbeStage("direct frame sink SetLocalSurfaceId");
+    local_surface_id_ = local_surface_id;
+  }
+
+  void SubmitCompositorFrame(viz::CompositorFrame frame,
+                             bool hit_test_data_changed) override {
+    TraceLiveFrameProbeStage("direct frame sink SubmitCompositorFrame begin");
+    if (std::getenv("HTML_CSS_RENDERER_DUMP_CC_FRAME")) {
+      const std::string frame_json = frame.ToString();
+      std::fprintf(stderr, "standalone_cc_frame=%s\n", frame_json.c_str());
+      std::fflush(stderr);
+    }
+    if (!support_) {
+      SetFailure("Viz CompositorFrameSinkSupport is not initialized");
+      return;
+    }
+    if (!local_surface_id_.is_valid()) {
+      SetFailure("cc submitted a frame before setting a valid LocalSurfaceId");
+      return;
+    }
+    std::optional<viz::HitTestRegionList> hit_test_region_list;
+    if (client_) {
+      hit_test_region_list = client_->BuildHitTestData();
+    }
+    const float device_scale_factor = frame.device_scale_factor();
+    gfx::Size output_size = viewport_;
+    if (!frame.render_pass_list.empty()) {
+      output_size = frame.render_pass_list.back()->output_rect.size();
+    }
+    if (EnsureVizDisplay(output_size)) {
+      display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
+      display_->Resize(output_size);
+    }
+    const viz::SubmitResult result = support_->MaybeSubmitCompositorFrame(
+        local_surface_id_, std::move(frame), std::move(hit_test_region_list),
+        /*submit_time=*/0);
+    TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
+    if (result == viz::SubmitResult::ACCEPTED) {
+      if (compositor_frame_submitted_) {
+        *compositor_frame_submitted_ = true;
+      }
+      SetFailure("");
+      const bool should_copy_output =
+          copy_output_requested_ && *copy_output_requested_;
+      if (should_copy_output && display_) {
+        RequestCopyOutputPng(output_size);
+      }
+      if (display_) {
+        DrawVizDisplayNow();
+      }
+      if (should_copy_output) {
+        if (copy_output_completed_ && !*copy_output_completed_) {
+          base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+          base::OneShotTimer timeout;
+          copy_output_run_loop_ = &run_loop;
+          timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+          run_loop.Run();
+          timeout.Stop();
+          copy_output_run_loop_ = nullptr;
+        }
+        if (copy_output_requested_) {
+          *copy_output_requested_ = false;
+        }
+        if (copy_output_completed_ && !*copy_output_completed_) {
+          SetCopyOutputFailure(
+              "Viz CopyOutput did not complete during Display DrawAndSwap");
+        }
+      }
+      return;
+    }
+    SetFailure(viz::CompositorFrameSinkSupport::GetSubmitResultAsString(result));
+  }
+
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack,
+                          cc::FrameSkippedReason reason) override {
+    TraceLiveFrameProbeStage("direct frame sink DidNotProduceFrame");
+    if (support_) {
+      support_->DidNotProduceFrame(ack);
+    }
+  }
+
+  void NotifyNewLocalSurfaceIdExpectedWhilePaused() override {
+    if (support_) {
+      support_->NotifyNewLocalSurfaceIdExpectedWhilePaused();
+    }
+  }
+
+  void ExportFrameTiming() override {}
+
+ private:
+  void SetFailure(const char* reason) {
+    if (failure_reason_) {
+      *failure_reason_ = reason ? reason : "";
+    }
+  }
+
+  bool EnsureVizDisplay(const gfx::Size& output_size) {
+    if (display_) {
+      return true;
+    }
+    if (!g_standalone_native_window_handle) {
+      return false;
+    }
+    if (!gpu_thread_holder_) {
+      SetFailure("Viz Display cannot initialize without GPU thread holder");
+      return false;
+    }
+    gpu::SurfaceHandle surface_handle = reinterpret_cast<gpu::SurfaceHandle>(
+        g_standalone_native_window_handle);
+    if (surface_handle == gpu::kNullSurfaceHandle) {
+      SetFailure("Viz Display received a null native surface handle");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Viz Display GPU init");
+    if (!gpu_thread_holder_->GetTaskExecutor()) {
+      SetFailure("Viz Display GPU thread holder failed to initialize");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Viz Display dependency");
+    auto display_controller =
+        std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
+            std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
+                gpu_thread_holder_, surface_handle, failure_reason_));
+    TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
+    std::unique_ptr<viz::OutputSurface> output_surface =
+        viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
+                                           renderer_settings_,
+                                           &debug_settings_);
+    if (!output_surface) {
+      SetFailure("Viz Display SkiaOutputSurfaceImpl creation failed");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
+    auto overlay_processor = viz::OverlayProcessorInterface::CreateOverlayProcessor(
+        output_surface.get(), surface_handle, output_surface->capabilities(),
+        display_controller.get(), gpu_thread_holder_->shared_image_manager(),
+        renderer_settings_, &debug_settings_);
+    if (!overlay_processor) {
+      SetFailure("Viz Display overlay processor creation failed");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Display create");
+    display_ = std::make_unique<viz::Display>(
+        gpu_thread_holder_->shared_image_manager(), gpu_thread_holder_->scheduler(),
+        renderer_settings_, &debug_settings_, frame_sink_id_,
+        std::move(display_controller), std::move(output_surface),
+        std::move(overlay_processor),
+        /*scheduler=*/nullptr, base::SingleThreadTaskRunner::GetCurrentDefault());
+    display_->Initialize(&display_client_, frame_sink_manager_->surface_manager());
+    display_->SetVisible(true);
+    display_->Resize(output_size);
+    if (viz_display_created_) {
+      *viz_display_created_ = true;
+    }
+    TraceLiveFrameProbeStage("direct frame sink after Display initialize");
+    return true;
+  }
+
+  void DrawVizDisplayNow() {
+    if (!display_) {
+      return;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Display DrawAndSwap");
+    const base::TimeTicks now = base::TimeTicks::Now();
+    const base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
+    viz::DrawAndSwapParams params;
+    params.begin_frame_args = viz::BeginFrameArgs::Create(
+        BEGINFRAME_FROM_HERE, viz::BeginFrameArgs::kManualSourceId,
+        ++display_begin_frame_sequence_, now, now + interval, interval,
+        viz::BeginFrameArgs::NORMAL);
+    params.expected_display_time = now + interval;
+    const bool drew = display_->DrawAndSwap(params);
+    TraceLiveFrameProbeStage("direct frame sink after Display DrawAndSwap");
+    if (!drew) {
+      SetFailure("Viz Display DrawAndSwap returned false");
+      return;
+    }
+    if (skia_gpu_reached_) {
+      *skia_gpu_reached_ = true;
+    }
+  }
+
+  void RequestCopyOutputPng(const gfx::Size& output_size) {
+    if (!support_) {
+      SetCopyOutputFailure("Viz CopyOutput cannot run without frame sink support");
+      return;
+    }
+    if (!local_surface_id_.is_valid()) {
+      SetCopyOutputFailure("Viz CopyOutput cannot run without LocalSurfaceId");
+      return;
+    }
+    if (copy_output_completed_) {
+      *copy_output_completed_ = false;
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = false;
+    }
+    if (copy_output_png_) {
+      copy_output_png_->clear();
+    }
+    if (copy_output_failure_) {
+      copy_output_failure_->clear();
+    }
+
+    auto request = std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA,
+        viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+        base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutputPng,
+                       base::Unretained(this)));
+    request->set_area(gfx::Rect(output_size));
+    support_->RequestCopyOfOutput(
+        std::make_unique<viz::PendingCopyOutputRequest>(
+            local_surface_id_, viz::SubtreeCaptureId(), std::move(request)));
+  }
+
+  void OnCopyOutputPng(std::unique_ptr<viz::CopyOutputResult> output) {
+    if (!output) {
+      SetCopyOutputFailure("Viz CopyOutput returned no result");
+      return;
+    }
+    if (output->IsEmpty()) {
+      SetCopyOutputFailure(
+          std::string("Viz CopyOutput returned empty result: ") +
+          StandaloneCopyOutputErrorName(output->error()));
+      return;
+    }
+    viz::CopyOutputResult::ScopedSkBitmap scoped_bitmap =
+        output->ScopedAccessSkBitmap();
+    SkBitmap bitmap = scoped_bitmap.GetOutScopedBitmap();
+    if (!bitmap.readyToDraw()) {
+      SetCopyOutputFailure("Viz CopyOutput bitmap is not drawable");
+      return;
+    }
+    SkPixmap pixmap;
+    if (!bitmap.peekPixels(&pixmap)) {
+      SetCopyOutputFailure("Viz CopyOutput bitmap has no readable pixels");
+      return;
+    }
+    SkBitmap top_left_bitmap;
+    if (!top_left_bitmap.tryAllocPixels(pixmap.info())) {
+      SetCopyOutputFailure("Viz CopyOutput PNG normalization allocation failed");
+      return;
+    }
+    SkPixmap top_left_pixmap;
+    if (!top_left_bitmap.peekPixels(&top_left_pixmap)) {
+      SetCopyOutputFailure("Viz CopyOutput normalized bitmap has no pixels");
+      return;
+    }
+    const size_t row_bytes =
+        pixmap.info().minRowBytes64() > 0
+            ? static_cast<size_t>(pixmap.info().minRowBytes64())
+            : static_cast<size_t>(pixmap.width()) *
+                  pixmap.info().bytesPerPixel();
+    for (int y = 0; y < pixmap.height(); ++y) {
+      std::memcpy(top_left_pixmap.writable_addr(0, y),
+                  pixmap.addr(0, pixmap.height() - 1 - y), row_bytes);
+    }
+    SkPngEncoder::Options options;
+    sk_sp<SkData> png = SkPngEncoder::Encode(top_left_pixmap, options);
+    if (!png || png->empty()) {
+      SetCopyOutputFailure("Viz CopyOutput PNG encoding failed");
+      return;
+    }
+    if (copy_output_png_) {
+      const auto* bytes = static_cast<const uint8_t*>(png->data());
+      copy_output_png_->assign(bytes, bytes + png->size());
+    }
+    if (copy_output_failure_) {
+      copy_output_failure_->clear();
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = true;
+    }
+    if (copy_output_completed_) {
+      *copy_output_completed_ = true;
+    }
+    if (copy_output_run_loop_) {
+      copy_output_run_loop_->Quit();
+    }
+  }
+
+  void SetCopyOutputFailure(std::string reason) {
+    if (copy_output_png_) {
+      copy_output_png_->clear();
+    }
+    if (copy_output_failure_) {
+      *copy_output_failure_ = std::move(reason);
+    }
+    if (copy_output_succeeded_) {
+      *copy_output_succeeded_ = false;
+    }
+    if (copy_output_completed_) {
+      *copy_output_completed_ = true;
+    }
+    if (copy_output_run_loop_) {
+      copy_output_run_loop_->Quit();
+    }
+  }
+
+  raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
+  viz::FrameSinkId frame_sink_id_;
+  viz::LocalSurfaceId local_surface_id_;
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  gfx::Size viewport_;
+  viz::RendererSettings renderer_settings_;
+  viz::DebugRendererSettings debug_settings_;
+  StandaloneVizFrameSinkClient viz_client_;
+  StandaloneDisplayClient display_client_;
+  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
+  std::unique_ptr<viz::Display> display_;
+  uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
+  raw_ptr<bool> compositor_frame_submitted_ = nullptr;
+  raw_ptr<bool> viz_display_created_ = nullptr;
+  raw_ptr<bool> skia_gpu_reached_ = nullptr;
+  raw_ptr<bool> copy_output_requested_ = nullptr;
+  raw_ptr<bool> copy_output_completed_ = nullptr;
+  raw_ptr<bool> copy_output_succeeded_ = nullptr;
+  raw_ptr<std::vector<uint8_t>> copy_output_png_ = nullptr;
+  raw_ptr<std::string> copy_output_failure_ = nullptr;
+  raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
+  raw_ptr<std::string> failure_reason_ = nullptr;
+};
+
 struct OriginalElementAttributeValue {
   bool present = false;
   std::string value;
 };
 
+class StandaloneCcLayerHost final
+    : public cc::LayerTreeHostDelegate,
+      public cc::LayerTreeHostSingleThreadDelegate,
+      public cc::LayerTreeHostSchedulingDelegate {
+ public:
+  StandaloneCcLayerHost() {
+    settings_.single_thread_proxy_scheduler = false;
+    settings_.use_layer_lists = true;
+    settings_.can_use_lcd_text = true;
+    settings_.layers_always_allowed_lcd_text = true;
+  }
+
+  StandaloneCcLayerHost(const StandaloneCcLayerHost&) = delete;
+  StandaloneCcLayerHost& operator=(const StandaloneCcLayerHost&) = delete;
+
+  ~StandaloneCcLayerHost() override = default;
+
+  bool AttachRootLayer(scoped_refptr<cc::Layer> root_layer,
+                       const gfx::Size& viewport,
+                       std::string* failure_reason) {
+    attach_attempted_ = true;
+    root_layer_attached_ = false;
+    if (!root_layer) {
+      SetFailure(failure_reason, "PaintArtifactCompositor supplied no root cc::Layer");
+      return false;
+    }
+    if (!EnsureHost(failure_reason)) {
+      return false;
+    }
+    const bool viewport_changed = viewport_ != viewport;
+    if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
+      surface_id_allocator_.GenerateId();
+    }
+    viewport_ = viewport;
+    TraceLiveFrameProbeStage("cc host AttachRootLayer before viewport surface");
+    layer_tree_host_->SetViewportRectAndScale(
+        gfx::Rect(viewport), /*device_scale_factor=*/1.0f,
+        surface_id_allocator_.GetCurrentLocalSurfaceId());
+    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(gfx::Rect(viewport));
+    layer_tree_host_->SetVisualDeviceViewportSize(viewport);
+    TraceLiveFrameProbeStage("cc host AttachRootLayer after viewport surface");
+    root_layer->SetBounds(viewport);
+    layer_tree_host_->SetRootLayer(std::move(root_layer));
+    root_layer_attached_ = layer_tree_host_->has_root_layer();
+    if (root_layer_attached_) {
+      layer_tree_host_->SetNeedsCommit();
+      commit_requested_ = true;
+    } else {
+      SetFailure(failure_reason, "cc::LayerTreeHost rejected the PAC root layer");
+    }
+    return root_layer_attached_;
+  }
+
+  bool CompositeForTest(std::string* failure_reason) {
+    if (!layer_tree_host_ || !root_layer_attached_) {
+      SetFailure(failure_reason,
+                 "cc::LayerTreeHost has no attached PAC root layer to submit");
+      return false;
+    }
+    TraceLiveFrameProbeStage("cc host CompositeForTest before SetNeedsCommit");
+    layer_tree_host_->SetNeedsCommitWithForcedRedraw();
+    commit_requested_ = true;
+    TraceLiveFrameProbeStage("cc host CompositeForTest before cc composite");
+    layer_tree_host_->CompositeForTest(base::TimeTicks::Now(),
+                                       /*raster=*/true, base::DoNothing());
+    TraceLiveFrameProbeStage("cc host CompositeForTest after cc composite");
+    return true;
+  }
+
+  bool host_created() const { return layer_tree_host_ != nullptr; }
+  bool attach_attempted() const { return attach_attempted_; }
+  bool root_layer_attached() const { return root_layer_attached_; }
+  bool commit_requested() const { return commit_requested_; }
+  bool frame_sink_requested() const { return frame_sink_requested_; }
+  bool frame_sink_bound() const { return frame_sink_bound_; }
+  bool compositor_frame_submitted() const {
+    return compositor_frame_submitted_;
+  }
+  bool gpu_context_created() const { return gpu_context_created_; }
+  bool raster_context_created() const { return raster_context_created_; }
+  bool shared_image_interface_available() const {
+    return shared_image_interface_available_;
+  }
+  bool viz_display_created() const { return viz_display_created_; }
+  bool skia_gpu_reached() const { return skia_gpu_reached_; }
+  int commit_count() const { return commit_count_; }
+  const std::string& frame_sink_failure_reason() const {
+    return frame_sink_failure_reason_;
+  }
+  void RequestNextCopyOutputPng() {
+    copy_output_requested_ = true;
+    copy_output_completed_ = false;
+    copy_output_succeeded_ = false;
+    copy_output_png_.clear();
+    copy_output_failure_.clear();
+  }
+  bool copy_output_completed() const { return copy_output_completed_; }
+  bool copy_output_succeeded() const { return copy_output_succeeded_; }
+  const std::vector<uint8_t>& copy_output_png() const {
+    return copy_output_png_;
+  }
+  const std::string& copy_output_failure() const {
+    return copy_output_failure_;
+  }
+
+  cc::AnimationHost* animation_host() const { return animation_host_.get(); }
+
+ private:
+  bool EnsureHost(std::string* failure_reason) {
+    if (layer_tree_host_) {
+      return true;
+    }
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
+    if (!main_task_runner) {
+      SetFailure(failure_reason,
+                 "cc::LayerTreeHost requires a current main-thread task runner");
+      return false;
+    }
+
+    animation_host_ = cc::AnimationHost::CreateMainInstance();
+    cc::LayerTreeHost::InitParams params;
+    params.client = this;
+    params.scheduling_delegate = this;
+    params.task_graph_runner = &task_graph_runner_;
+    params.settings = &settings_;
+    params.main_task_runner = std::move(main_task_runner);
+    params.mutator_host = animation_host_.get();
+
+    layer_tree_host_ =
+        cc::LayerTreeHost::CreateSingleThreaded(this, std::move(params));
+    if (!layer_tree_host_) {
+      SetFailure(failure_reason, "cc::LayerTreeHost creation failed");
+      animation_host_.reset();
+      return false;
+    }
+    layer_tree_host_->SetVisible(true);
+    return true;
+  }
+
+  static void SetFailure(std::string* out, const char* reason) {
+    if (out) {
+      *out = reason ? reason : "";
+    }
+  }
+
+  void RememberFrameSinkFailure(const char* reason) {
+    frame_sink_failure_reason_ = reason ? reason : "";
+  }
+
+  bool CreateFrameSink() {
+    TraceLiveFrameProbeStage("cc host CreateFrameSink begin");
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
+    if (!main_task_runner) {
+      TraceLiveFrameProbeStage("cc host CreateFrameSink missing task runner");
+      RememberFrameSinkFailure(
+          "cc::LayerTreeFrameSink requires a current task runner");
+      return false;
+    }
+
+    viz::FrameSinkManagerImpl::InitParams manager_params;
+    if (!frame_sink_manager_) {
+      TraceLiveFrameProbeStage("cc host CreateFrameSink before manager");
+      frame_sink_manager_ =
+          std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
+      TraceLiveFrameProbeStage("cc host CreateFrameSink after manager");
+    }
+
+    const viz::FrameSinkId frame_sink_id(777, 1);
+    if (!frame_sink_id_registered_) {
+      TraceLiveFrameProbeStage("cc host CreateFrameSink before register id");
+      frame_sink_manager_->RegisterFrameSinkId(frame_sink_id,
+                                               /*report_activation=*/true);
+      frame_sink_manager_->SetFrameSinkDebugLabel(
+          frame_sink_id, "standalone-renderer-cc-root");
+      frame_sink_id_registered_ = true;
+      TraceLiveFrameProbeStage("cc host CreateFrameSink after register id");
+    }
+
+    TraceLiveFrameProbeStage("cc host CreateFrameSink before gpu holder");
+    if (!gpu_thread_holder_) {
+      gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
+      gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
+          gpu::GrContextType::kGL;
+    }
+    TraceLiveFrameProbeStage("cc host CreateFrameSink after gpu holder");
+    TraceLiveFrameProbeStage("cc host CreateFrameSink before context providers");
+    auto compositor_context_provider =
+        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
+            gpu_thread_holder_, /*enforce_cache_controller_lock=*/false,
+            &gpu_context_created_, &raster_context_created_,
+            &shared_image_interface_available_, &frame_sink_failure_reason_);
+    auto worker_context_provider =
+        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
+            gpu_thread_holder_,
+            /*enforce_cache_controller_lock=*/true, &gpu_context_created_,
+            &raster_context_created_, &shared_image_interface_available_,
+            &frame_sink_failure_reason_);
+    TraceLiveFrameProbeStage("cc host CreateFrameSink after context providers");
+
+    TraceLiveFrameProbeStage("cc host CreateFrameSink before worker bind");
+    const gpu::ContextResult worker_bind_result =
+        worker_context_provider->BindToCurrentSequence();
+    TraceLiveFrameProbeStage("cc host CreateFrameSink after worker bind");
+    if (worker_bind_result != gpu::ContextResult::kSuccess) {
+      RememberFrameSinkFailure(
+          frame_sink_failure_reason_.empty()
+              ? "worker raster context provider failed to bind"
+              : frame_sink_failure_reason_.c_str());
+      return false;
+    }
+
+    TraceLiveFrameProbeStage("cc host CreateFrameSink before frame sink");
+    auto layer_tree_frame_sink =
+        std::make_unique<StandaloneDirectLayerTreeFrameSink>(
+            frame_sink_manager_.get(), frame_sink_id, gpu_thread_holder_,
+            std::move(compositor_context_provider),
+            std::move(worker_context_provider), std::move(main_task_runner),
+            g_standalone_native_window_size.IsEmpty() ? gfx::Size(1, 1)
+                                                      : g_standalone_native_window_size,
+            &compositor_frame_submitted_, &viz_display_created_,
+            &skia_gpu_reached_, &copy_output_requested_,
+            &copy_output_completed_, &copy_output_succeeded_,
+            &copy_output_png_, &copy_output_failure_,
+            &frame_sink_failure_reason_);
+    TraceLiveFrameProbeStage("cc host CreateFrameSink before SetLayerTreeFrameSink");
+    layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
+    TraceLiveFrameProbeStage("cc host CreateFrameSink after SetLayerTreeFrameSink");
+    return true;
+  }
+
+  void WillBeginMainFrame() override {}
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {}
+  void BeginMainFrameNotExpectedSoon() override {}
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
+  void DidBeginMainFrame() override {}
+  void WillUpdateLayers() override {}
+  void DidUpdateLayers() override {}
+  void DidObserveFirstScrollDelay(int source_frame_number,
+                                  base::TimeDelta first_scroll_delay,
+                                  base::TimeTicks first_scroll_timestamp)
+      override {}
+  void OnDeferMainFrameUpdatesChanged(bool defer_status) override {}
+  void OnDeferCommitsChanged(bool defer_status,
+                             cc::PaintHoldingReason reason) override {}
+  void OnCommitRequested() override { commit_requested_ = true; }
+  void UpdateLayerTreeHost() override {}
+  void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override {
+  }
+  void UpdateCompositorScrollState(
+      const cc::CompositorCommitData& commit_data) override {}
+  void UpdateAnimatedImageState(
+      const cc::CompositorCommitData& commit_data) override {}
+  void RequestNewLayerTreeFrameSink() override {
+    frame_sink_requested_ = true;
+    frame_sink_bound_ = false;
+    compositor_frame_submitted_ = false;
+    gpu_context_created_ = false;
+    raster_context_created_ = false;
+    shared_image_interface_available_ = false;
+    viz_display_created_ = false;
+    skia_gpu_reached_ = false;
+    frame_sink_failure_reason_.clear();
+    if (!CreateFrameSink()) {
+      frame_sink_bound_ = false;
+    }
+  }
+  void DidInitializeLayerTreeFrameSink() override {
+    frame_sink_bound_ = true;
+    frame_sink_failure_reason_.clear();
+  }
+  void DidFailToInitializeLayerTreeFrameSink() override {
+    frame_sink_bound_ = false;
+    if (frame_sink_failure_reason_.empty()) {
+      RememberFrameSinkFailure("cc::LayerTreeHost rejected LayerTreeFrameSink");
+    }
+  }
+  void WillCommit(const cc::CommitState& commit_state) override {}
+  void DidCommit(int source_frame_number,
+                 base::TimeTicks commit_start_time,
+                 base::TimeTicks commit_finish_time) override {
+    ++commit_count_;
+  }
+  void DidCommitAndDrawFrame(int source_frame_number) override {}
+  void DidCompletePageScaleAnimation(int source_frame_number) override {}
+  void DidPresentCompositorFrame(
+      uint32_t frame_token,
+      const viz::FrameTimingDetails& frame_timing_details) override {}
+  void RecordStartOfFrameMetrics() override {}
+  void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
+                               cc::ActiveFrameSequenceTrackers trackers)
+      override {}
+  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
+      override {
+    return nullptr;
+  }
+  void NotifyCompositorMetricsTrackerResults(
+      cc::CustomTrackerResults results) override {}
+  void DidRunBeginMainFrame() override {}
+  void DidSubmitCompositorFrame() override {
+    compositor_frame_submitted_ = true;
+  }
+  void DidLoseLayerTreeFrameSink() override {
+    frame_sink_requested_ = true;
+    frame_sink_bound_ = false;
+    RememberFrameSinkFailure("cc::LayerTreeFrameSink was lost");
+  }
+
+  cc::LayerTreeSettings settings_;
+  cc::SynchronousTaskGraphRunner task_graph_runner_;
+  std::unique_ptr<cc::AnimationHost> animation_host_;
+  viz::ParentLocalSurfaceIdAllocator surface_id_allocator_;
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
+  gfx::Size viewport_;
+  bool attach_attempted_ = false;
+  bool root_layer_attached_ = false;
+  bool commit_requested_ = false;
+  bool frame_sink_requested_ = false;
+  bool frame_sink_bound_ = false;
+  bool frame_sink_id_registered_ = false;
+  bool compositor_frame_submitted_ = false;
+  bool gpu_context_created_ = false;
+  bool raster_context_created_ = false;
+  bool shared_image_interface_available_ = false;
+  bool viz_display_created_ = false;
+  bool skia_gpu_reached_ = false;
+  bool copy_output_requested_ = false;
+  bool copy_output_completed_ = false;
+  bool copy_output_succeeded_ = false;
+  std::vector<uint8_t> copy_output_png_;
+  std::string copy_output_failure_;
+  int commit_count_ = 0;
+  std::string frame_sink_failure_reason_;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
+  Persistent<ChromeClient> chrome_client;
+  std::unique_ptr<StandaloneCcLayerHost> cc_layer_host;
+  bool cc_host_created = false;
+  bool cc_attach_attempted = false;
+  bool cc_root_layer_attached = false;
+  bool cc_commit_requested = false;
+  bool cc_frame_sink_requested = false;
+  bool cc_frame_sink_bound = false;
+  bool cc_compositor_frame_submitted = false;
+  bool cc_gpu_context_created = false;
+  bool cc_raster_context_created = false;
+  bool cc_shared_image_interface_available = false;
+  bool cc_viz_display_created = false;
+  bool cc_skia_gpu_reached = false;
+  bool copy_output_png_requested = false;
+  bool copy_output_png_completed = false;
+  bool copy_output_png_succeeded = false;
+  std::vector<uint8_t> copy_output_png;
+  std::string copy_output_failure;
+  int cc_commit_count = 0;
+  std::string cc_attach_failure_reason;
+  std::string cc_frame_sink_failure_reason;
   LiveFramePaintProbeResult result;
   std::string body_html;
   std::string requested_element_attributes_serialized;
@@ -583,6 +1939,8 @@ struct LiveFramePaintProbeCache {
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
   std::string sticky_position_diagnostics_json;
+  bool compositor_root_layer_available = false;
+  int compositor_layer_count = 0;
   int sticky_update_scroll_area_count = 0;
   int sticky_update_consumed_descendant_count = 0;
   int sticky_update_constrained_after_count = 0;
@@ -646,6 +2004,7 @@ struct LiveFramePaintProbeCache {
   bool trace_stages = false;
   std::string lifecycle_stop;
   ImageReachabilityDiagnostics image_reachability;
+  ImagePaintIntoRectDiagnostics image_paint_into_rect;
   bool initialized = false;
 };
 
@@ -658,6 +2017,118 @@ LiveFramePaintProbeCache& ProbeCache() {
   static LiveFramePaintProbeCache* cache = new LiveFramePaintProbeCache();
   return *cache;
 }
+
+extern "C" void StandaloneRendererNoteImagePaintIntoRect(
+    float dest_x,
+    float dest_y,
+    float dest_width,
+    float dest_height,
+    float content_x,
+    float content_y,
+    float content_width,
+    float content_height,
+    float snapped_dest_x,
+    float snapped_dest_y,
+    float snapped_dest_width,
+    float snapped_dest_height,
+    float src_x,
+    float src_y,
+    float src_width,
+    float src_height,
+    int image_width,
+    int image_height,
+    int interpolation_quality) {
+  ImagePaintIntoRectDiagnostics& diagnostics =
+      ProbeCache().image_paint_into_rect;
+  diagnostics.called = true;
+  ++diagnostics.count;
+  diagnostics.dest_x = dest_x;
+  diagnostics.dest_y = dest_y;
+  diagnostics.dest_width = dest_width;
+  diagnostics.dest_height = dest_height;
+  diagnostics.content_x = content_x;
+  diagnostics.content_y = content_y;
+  diagnostics.content_width = content_width;
+  diagnostics.content_height = content_height;
+  diagnostics.snapped_dest_x = snapped_dest_x;
+  diagnostics.snapped_dest_y = snapped_dest_y;
+  diagnostics.snapped_dest_width = snapped_dest_width;
+  diagnostics.snapped_dest_height = snapped_dest_height;
+  diagnostics.src_x = src_x;
+  diagnostics.src_y = src_y;
+  diagnostics.src_width = src_width;
+  diagnostics.src_height = src_height;
+  diagnostics.image_width = image_width;
+  diagnostics.image_height = image_height;
+  diagnostics.interpolation_quality = interpolation_quality;
+}
+
+void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache) {
+  if (!cache.cc_layer_host) {
+    return;
+  }
+  cache.copy_output_png_completed =
+      cache.cc_layer_host->copy_output_completed();
+  cache.copy_output_png_succeeded =
+      cache.cc_layer_host->copy_output_succeeded();
+  cache.copy_output_png = cache.cc_layer_host->copy_output_png();
+  cache.copy_output_failure = cache.cc_layer_host->copy_output_failure();
+  if (cache.copy_output_png_completed) {
+    cache.copy_output_png_requested = false;
+  }
+}
+
+class StandaloneCompositorChromeClient final : public EmptyChromeClient {
+ public:
+  explicit StandaloneCompositorChromeClient(LiveFramePaintProbeCache* cache)
+      : cache_(cache) {}
+
+  void AttachRootLayer(scoped_refptr<cc::Layer> layer,
+                       LocalFrame* local_root) override {
+    if (!cache_) {
+      return;
+    }
+    if (!cache_->cc_layer_host) {
+      cache_->cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
+    }
+    cache_->cc_attach_failure_reason.clear();
+    const bool attached = cache_->cc_layer_host->AttachRootLayer(
+        std::move(layer), gfx::Size(cache_->viewport_width,
+                                    cache_->viewport_height),
+        &cache_->cc_attach_failure_reason);
+    cache_->cc_host_created = cache_->cc_layer_host->host_created();
+    cache_->cc_attach_attempted = cache_->cc_layer_host->attach_attempted();
+    cache_->cc_root_layer_attached = attached;
+    cache_->cc_commit_requested = cache_->cc_layer_host->commit_requested();
+    cache_->cc_frame_sink_requested =
+        cache_->cc_layer_host->frame_sink_requested();
+    cache_->cc_frame_sink_bound = cache_->cc_layer_host->frame_sink_bound();
+    cache_->cc_compositor_frame_submitted =
+        cache_->cc_layer_host->compositor_frame_submitted();
+    cache_->cc_gpu_context_created =
+        cache_->cc_layer_host->gpu_context_created();
+    cache_->cc_raster_context_created =
+        cache_->cc_layer_host->raster_context_created();
+    cache_->cc_shared_image_interface_available =
+        cache_->cc_layer_host->shared_image_interface_available();
+    cache_->cc_viz_display_created =
+        cache_->cc_layer_host->viz_display_created();
+    cache_->cc_skia_gpu_reached =
+        cache_->cc_layer_host->skia_gpu_reached();
+    cache_->cc_commit_count = cache_->cc_layer_host->commit_count();
+    cache_->cc_frame_sink_failure_reason =
+        cache_->cc_layer_host->frame_sink_failure_reason();
+  }
+
+  cc::AnimationHost* GetCompositorAnimationHost(LocalFrame& frame) const override {
+    return cache_ && cache_->cc_layer_host ? cache_->cc_layer_host->animation_host()
+                                           : nullptr;
+  }
+
+ private:
+  LiveFramePaintProbeCache* cache_;
+};
 
 using StandaloneProbeClock = std::chrono::steady_clock;
 
@@ -686,6 +2157,41 @@ void TraceLiveFrameProbeStagef(const char* format,
   std::snprintf(buffer, sizeof(buffer), format,
                 static_cast<unsigned long>(first),
                 static_cast<unsigned long>(second));
+  TraceLiveFrameProbeStage(buffer);
+}
+
+int LifecycleStateForStandaloneRenderer(const Document* document) {
+  return document ? static_cast<int>(document->Lifecycle().GetState()) : -1;
+}
+
+bool IsPrePaintCleanForStandaloneRenderer(const Document* document) {
+  return document &&
+         document->Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean;
+}
+
+void TraceLiveFrameProbeLifecycleState(const char* label,
+                                       Document* document,
+                                       LocalFrame* frame,
+                                       LocalFrameView* frame_view) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.trace_stages) {
+    return;
+  }
+
+  Document* frame_document = frame ? frame->GetDocument() : nullptr;
+  LocalFrame* view_frame = frame_view ? &frame_view->GetFrame() : nullptr;
+  char buffer[512];
+  std::snprintf(
+      buffer, sizeof(buffer),
+      "%s doc=%p doc_state=%d doc_needs_style=%d frame=%p frame_doc=%p "
+      "frame_doc_state=%d view=%p view_frame=%p view_needs_layout=%d",
+      label ? label : "lifecycle", static_cast<void*>(document),
+      LifecycleStateForStandaloneRenderer(document),
+      document && document->NeedsLayoutTreeUpdate() ? 1 : 0,
+      static_cast<void*>(frame), static_cast<void*>(frame_document),
+      LifecycleStateForStandaloneRenderer(frame_document),
+      static_cast<void*>(frame_view), static_cast<void*>(view_frame),
+      frame_view && frame_view->NeedsLayout() ? 1 : 0);
   TraceLiveFrameProbeStage(buffer);
 }
 
@@ -862,7 +2368,8 @@ bool TryApplyWheelScrollToOverflowElementForStandaloneRenderer(
   return false;
 }
 
-void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) {
+void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view,
+                                                    bool apply_wheel_scroll) {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.applied_scroll_x = 0.0f;
   cache.applied_scroll_y = 0.0f;
@@ -920,7 +2427,8 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
   }
   if (!viewport) {
     cache.scroll_offset_status = "frame_scrollable_area_missing";
-    if (cache.requested_wheel_scroll && !cache.wheel_scroll_applied) {
+    if (apply_wheel_scroll && cache.requested_wheel_scroll &&
+        !cache.wheel_scroll_applied) {
       cache.wheel_scroll_status = "frame_scrollable_area_missing";
     }
     return;
@@ -940,7 +2448,8 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
   cache.scroll_visible_height = visible_rect.height();
   const bool should_apply_requested_document_scroll =
       cache.scroll_offset_requested &&
-      !(cache.requested_wheel_scroll && cache.wheel_scroll_applied);
+      !(apply_wheel_scroll && cache.requested_wheel_scroll &&
+        cache.wheel_scroll_applied);
   if (should_apply_requested_document_scroll) {
     const ScrollOffset requested_offset = viewport->ScrollPositionToOffset(
         gfx::PointF(cache.requested_scroll_x, cache.requested_scroll_y));
@@ -961,10 +2470,12 @@ void ApplyDocumentScrollOffsetForStandaloneRenderer(LocalFrameView& frame_view) 
     cache.scroll_offset_status =
         "skipped_absolute_document_scroll_after_wheel_applied";
   }
-  if (cache.requested_wheel_scroll && !cache.wheel_scroll_applied) {
+  if (apply_wheel_scroll && cache.requested_wheel_scroll &&
+      !cache.wheel_scroll_applied) {
     TryApplyWheelScrollToOverflowElementForStandaloneRenderer(frame_view);
   }
-  if (cache.requested_wheel_scroll && !cache.wheel_scroll_applied) {
+  if (apply_wheel_scroll && cache.requested_wheel_scroll &&
+      !cache.wheel_scroll_applied) {
     if (!cache.wheel_scroll_base_captured) {
       const ScrollOffset base_offset = viewport->GetScrollOffset();
       cache.wheel_scroll_base_x = base_offset.x();
@@ -1047,19 +2558,9 @@ void AppendDrawLooperLayers(const cc::PaintFlags& flags,
   if (!looper) {
     return;
   }
-  looper->ForEachLayer([&exported](SkPoint offset, float blur_sigma,
-                                   SkColor4f color, uint32_t flags) {
-    LiveExportedDrawLooperLayer layer;
-    layer.offset_x = offset.fX;
-    layer.offset_y = offset.fY;
-    layer.blur_sigma = blur_sigma;
-    layer.r = color.fR;
-    layer.g = color.fG;
-    layer.b = color.fB;
-    layer.a = color.fA;
-    layer.flags = flags;
-    exported.draw_looper_layers.push_back(layer);
-  });
+  // Real cc::DrawLooper no longer exposes layer iteration. Keep this temporary
+  // retained bridge from adding a non-upstream cc accessor; the final cc path
+  // should own draw looper playback directly.
 }
 
 void AppendStrokeStyle(const cc::PaintFlags& flags,
@@ -1952,6 +3453,24 @@ bool SkM44IsIdentityOr2dTranslation(const SkM44& matrix) {
          matrix.rc(2, 2) == 1.0f && matrix.rc(2, 3) == 0.0f &&
          matrix.rc(3, 0) == 0.0f && matrix.rc(3, 1) == 0.0f &&
          matrix.rc(3, 2) == 0.0f && matrix.rc(3, 3) == 1.0f;
+}
+
+std::string SamplingOptionsStringForStandaloneRenderer(
+    const SkSamplingOptions& sampling) {
+  if (sampling.isAniso()) {
+    return "aniso=" + std::to_string(sampling.maxAniso);
+  }
+  if (sampling.useCubic) {
+    return "cubic=B" + std::to_string(sampling.cubic.B) + ",C" +
+           std::to_string(sampling.cubic.C);
+  }
+  return std::string("filter=") +
+         (sampling.filter == SkFilterMode::kLinear ? "linear" : "nearest") +
+         ",mipmap=" +
+         (sampling.mipmap == SkMipmapMode::kLinear
+              ? "linear"
+              : sampling.mipmap == SkMipmapMode::kNearest ? "nearest"
+                                                          : "none");
 }
 
 gfx::Transform DirectTransformToRootForStandaloneRenderer(
@@ -3378,6 +4897,10 @@ std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
   Element* card = body ? FindElementByClassForStandaloneRenderer(
                              *body, AtomicString("card"))
                        : nullptr;
+  if (!card && body) {
+    card = FindElementByAttributeValueForStandaloneRenderer(
+        *body, AtomicString("id"), AtomicString("card"));
+  }
   Element* child = body ? FindElementByClassForStandaloneRenderer(
                               *body, AtomicString("child"))
                         : nullptr;
@@ -3986,17 +5509,31 @@ std::string OutOfFlowElementEvidenceJsonForStandaloneRenderer(
     json << "[]";
   }
   if (const auto* box = DynamicTo<LayoutBox>(layout_object)) {
-    const PhysicalOffset local_to_root_offset =
-        layout_object->OffsetFromAncestor(layout_object->View());
+    bool has_transform_related_ancestor = false;
+    for (const LayoutObject* current = layout_object;
+         current && current != layout_object->View();
+         current = current->Parent()) {
+      if (current->HasTransformRelatedProperty()) {
+        has_transform_related_ancestor = true;
+        break;
+      }
+    }
     const gfx::Rect absolute_bounding_box_rect =
         layout_object->AbsoluteBoundingBoxRect();
     json << ",\"box_geometry\":{\"stitched_size\":"
          << PhysicalSizeJsonForStandaloneRenderer(box->StitchedSize())
          << ",\"border_box_rect\":"
-         << PhysicalRectJsonForStandaloneRenderer(box->PhysicalBorderBoxRect())
-         << ",\"local_to_root_offset\":"
-         << PhysicalOffsetJsonForStandaloneRenderer(local_to_root_offset)
-         << ",\"absolute_bounding_box_rect\":"
+         << PhysicalRectJsonForStandaloneRenderer(box->PhysicalBorderBoxRect());
+    if (has_transform_related_ancestor) {
+      json << ",\"local_to_root_offset\":null"
+           << ",\"local_to_root_offset_reason\":\"transform_related_ancestor\"";
+    } else {
+      const PhysicalOffset local_to_root_offset =
+          layout_object->OffsetFromAncestor(layout_object->View());
+      json << ",\"local_to_root_offset\":"
+           << PhysicalOffsetJsonForStandaloneRenderer(local_to_root_offset);
+    }
+    json << ",\"absolute_bounding_box_rect\":"
          << GfxRectJsonForStandaloneRenderer(absolute_bounding_box_rect)
          << "}";
   } else {
@@ -4232,10 +5769,10 @@ std::string MediaQueryDiagnosticsJsonForStandaloneRenderer(
        << ",\"device_width\":" << cache.viewport_width
        << ",\"device_height\":" << cache.viewport_height
        << ",\"orientation\":" << JsonStringForStandaloneRenderer(orientation)
-       << ",\"hover\":\"none\""
-       << ",\"pointer\":\"none\""
-       << ",\"any_hover\":\"none\""
-       << ",\"any_pointer\":\"none\""
+       << ",\"hover\":\"hover\""
+       << ",\"pointer\":\"fine\""
+       << ",\"any_hover\":\"hover\""
+       << ",\"any_pointer\":\"fine\""
        << ",\"prefers_color_scheme\":\"light\""
        << ",\"prefers_reduced_motion\":\"no-preference\"}"
        << ",\"queries\":" << queries.str() << "}";
@@ -5425,6 +6962,14 @@ std::string RootBackgroundDiagnosticsJsonForStandaloneRenderer(
   LayoutView* layout_view = document.GetLayoutView();
   Element* html = document.documentElement();
   HTMLElement* body = document.body();
+  Element* fixture_target =
+      body ? FindElementByClassForStandaloneRenderer(
+                 *body, AtomicString("fixture-target"))
+           : nullptr;
+  Element* debug_id =
+      body ? FindElementByAttributeForStandaloneRenderer(
+                 *body, AtomicString("data-debug-id"))
+           : nullptr;
   const LayoutBox* root_box = layout_view ? &layout_view->RootBox() : nullptr;
   const Node* node = html ? static_cast<const Node*>(html)
                           : static_cast<const Node*>(&document);
@@ -5450,6 +6995,19 @@ std::string RootBackgroundDiagnosticsJsonForStandaloneRenderer(
        << BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
               "body", document, body ? body->GetComputedStyle() : nullptr,
               body ? body->GetLayoutObject() : nullptr, layout_view, node)
+       << ","
+       << BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
+              "fixture-target", document,
+              fixture_target ? fixture_target->GetComputedStyle() : nullptr,
+              fixture_target ? fixture_target->GetLayoutObject() : nullptr,
+              layout_view,
+              fixture_target ? static_cast<const Node*>(fixture_target) : node)
+       << ","
+       << BackgroundLayerDiagnosticsJsonForStandaloneRenderer(
+              "data-debug-id", document,
+              debug_id ? debug_id->GetComputedStyle() : nullptr,
+              debug_id ? debug_id->GetLayoutObject() : nullptr, layout_view,
+              debug_id ? static_cast<const Node*>(debug_id) : node)
        << "]}";
   return json.str();
 }
@@ -6013,11 +7571,9 @@ int DrawLooperLayerCountForStandaloneRenderer(const cc::PaintFlags& flags) {
   if (!looper) {
     return 0;
   }
-  int count = 0;
-  looper->ForEachLayer([&count](SkPoint, float, SkColor4f, uint32_t) {
-    ++count;
-  });
-  return count;
+  // See AppendDrawLooperLayers: this local bridge must not depend on cc
+  // internals that are intentionally hidden by real Chromium.
+  return 0;
 }
 
 void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
@@ -6125,7 +7681,42 @@ void AppendPaintRecordAuditJson(const cc::PaintRecord& record,
                       << ",\"has_path_effect\":"
                       << (has_path_effect ? "true" : "false")
                       << ",\"bounds_or_geometry\":"
-                      << PaintOpGeometryJsonForStandaloneRenderer(op) << "}";
+                      << PaintOpGeometryJsonForStandaloneRenderer(op);
+      if (op.GetType() == cc::PaintOpType::kDrawImage) {
+        const auto& image_op = static_cast<const cc::DrawImageOp&>(op);
+        const int image_width = image_op.image.width();
+        const int image_height = image_op.image.height();
+        *paint_ops_json
+            << ",\"src_rect\":"
+            << SkRectJsonForStandaloneRenderer(SkRect::MakeXYWH(
+                   0.0f, 0.0f, static_cast<SkScalar>(image_width),
+                   static_cast<SkScalar>(image_height)))
+            << ",\"dst_rect\":"
+            << SkRectJsonForStandaloneRenderer(SkRect::MakeXYWH(
+                   image_op.left, image_op.top,
+                   static_cast<SkScalar>(image_width),
+                   static_cast<SkScalar>(image_height)))
+            << ",\"image_size\":[" << image_width << "," << image_height
+            << "]"
+            << ",\"sampling_options\":"
+            << JsonStringForStandaloneRenderer(
+                   SamplingOptionsStringForStandaloneRenderer(
+                       image_op.sampling));
+      } else if (op.GetType() == cc::PaintOpType::kDrawImageRect) {
+        const auto& image_op = static_cast<const cc::DrawImageRectOp&>(op);
+        *paint_ops_json
+            << ",\"src_rect\":"
+            << SkRectJsonForStandaloneRenderer(image_op.src)
+            << ",\"dst_rect\":"
+            << SkRectJsonForStandaloneRenderer(image_op.dst)
+            << ",\"image_size\":[" << image_op.image.width() << ","
+            << image_op.image.height() << "]"
+            << ",\"sampling_options\":"
+            << JsonStringForStandaloneRenderer(
+                   SamplingOptionsStringForStandaloneRenderer(
+                       image_op.sampling));
+      }
+      *paint_ops_json << "}";
     }
 
     if (op.GetType() == cc::PaintOpType::kDrawRecord) {
@@ -6558,6 +8149,13 @@ void CollectImageReachabilityFromNodeForStandaloneRenderer(
           diagnostics.loader_content_present = true;
           diagnostics.loader_content_has_image = content->HasImage();
           diagnostics.loader_content_error = content->ErrorOccurred();
+          diagnostics.loader_content_loaded = content->IsLoaded();
+          diagnostics.loader_content_loading = content->IsLoading();
+          diagnostics.loader_content_status =
+              static_cast<int>(content->GetContentStatus());
+          diagnostics.image_element_complete = image_element->complete();
+          diagnostics.image_element_primary_content =
+              image_element->IsPrimaryContent();
           if (Image* image = content->GetImage()) {
             const gfx::Size resource_size = image->Size(kRespectImageOrientation);
             diagnostics.loader_resource_width = resource_size.width();
@@ -6677,6 +8275,117 @@ std::string FirstMissingImageStageForStandaloneRenderer(
     return "LayoutImageResource_GetNaturalDimensions_not_called";
   }
   return "none";
+}
+
+void StartStandaloneImageLoadsForStaticRenderFromNode(Node& node) {
+  if (auto* image = DynamicTo<HTMLImageElement>(node)) {
+    const AtomicString src = image->FastGetAttribute(html_names::kSrcAttr);
+    const AtomicString srcset =
+        image->FastGetAttribute(html_names::kSrcsetAttr);
+    if (src.empty() && srcset.empty()) {
+      for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+        StartStandaloneImageLoadsForStaticRenderFromNode(*child);
+      }
+      return;
+    }
+    if (!src.empty() && srcset.empty()) {
+      std::string source = src.GetString().Utf8();
+      std::string lowered_source = LowerAsciiForStandaloneRenderer(source);
+      if (lowered_source.rfind("data:", 0) != 0 &&
+          lowered_source.rfind("file:", 0) != 0 &&
+          lowered_source.find(':') == std::string::npos) {
+        html_css_renderer::StandaloneResourceRequest request;
+        request.url = source;
+        request.type_hint =
+            html_css_renderer::StandaloneResourceTypeHint::kImage;
+        request.initiator =
+            html_css_renderer::StandaloneResourceInitiator::kImgElement;
+        request.accepted_mime_types.push_back("image/png");
+        request.accepted_mime_types.push_back("image/jpeg");
+        request.accepted_mime_types.push_back("image/bmp");
+        request.accepted_mime_types.push_back("image/svg+xml");
+        html_css_renderer::StandaloneResourceResult result =
+            html_css_renderer::DefaultStandaloneResourceProvider().LoadResource(
+                request);
+        if (result.status !=
+                html_css_renderer::StandaloneResourceStatus::kSuccess ||
+            result.resolved_path.empty()) {
+          TraceLiveFrameProbeStage("static image load skipped local resource");
+          for (Node* child = node.firstChild(); child;
+               child = child->nextSibling()) {
+            StartStandaloneImageLoadsForStaticRenderFromNode(*child);
+          }
+          return;
+        }
+        std::string file_url = result.resolved_path;
+        std::replace(file_url.begin(), file_url.end(), '\\', '/');
+        if (file_url.size() < 3 || file_url[1] != ':') {
+          file_url = "/" + file_url;
+        }
+        file_url = "file:///" + file_url;
+        StandaloneRendererSetDeferImageAttributeLoads(true);
+        image->setAttribute(html_names::kSrcAttr,
+                            AtomicString(file_url.c_str()));
+        StandaloneRendererSetDeferImageAttributeLoads(false);
+      }
+      TraceLiveFrameProbeStage("static image load before direct src load");
+      image->ForceReload();
+      TraceLiveFrameProbeStage("static image load after direct src load");
+    } else {
+      TraceLiveFrameProbeStage("static image load before SelectSourceURL");
+      image->SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
+      TraceLiveFrameProbeStage("static image load after SelectSourceURL");
+    }
+    TraceLiveFrameProbeStage("static image load before CachedImage");
+    ImageResourceContent* content = image->CachedImage();
+    TraceLiveFrameProbeStage("static image load after CachedImage");
+    if (content && content->ErrorOccurred()) {
+      TraceLiveFrameProbeStage("static image load before ForceReload");
+      image->ForceReload();
+      TraceLiveFrameProbeStage("static image load after ForceReload");
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    StartStandaloneImageLoadsForStaticRenderFromNode(*child);
+  }
+}
+
+void StartStandaloneImageLoadsForStaticRender(Document& document) {
+  if (Element* root = document.documentElement()) {
+    StartStandaloneImageLoadsForStaticRenderFromNode(*root);
+  }
+}
+
+void RunStandaloneImageLoadingTasksForStaticRender() {
+  TraceLiveFrameProbeStage("static image load before RunUntilIdle");
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+  run_loop.RunUntilIdle();
+  TraceLiveFrameProbeStage("static image load after RunUntilIdle");
+}
+
+void CompleteStandaloneImageLoadsForStaticRenderFromNode(Node& node) {
+  if (auto* image = DynamicTo<HTMLImageElement>(node)) {
+    ImageResourceContent* content = image->CachedImage();
+    if (content) {
+      content->MaybeFinalizeStandaloneSvgImageForStaticRender();
+      content = image->CachedImage();
+    }
+    if (content && content->IsLoaded() && content->HasImage() &&
+        !content->ErrorOccurred()) {
+      TraceLiveFrameProbeStage("static image load before loaded disposition reset");
+      image->OnImageLoadComplete();
+      TraceLiveFrameProbeStage("static image load after loaded disposition reset");
+    }
+  }
+  for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
+    CompleteStandaloneImageLoadsForStaticRenderFromNode(*child);
+  }
+}
+
+void CompleteStandaloneImageLoadsForStaticRender(Document& document) {
+  if (Element* root = document.documentElement()) {
+    CompleteStandaloneImageLoadsForStaticRenderFromNode(*root);
+  }
 }
 
 std::string SchemeForStandaloneRenderer(const std::string& url);
@@ -7222,6 +8931,15 @@ void ApplyInteractionStateForStandaloneRenderer(
   UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
 }
 
+bool IsStandaloneMouseFocusTargetForStandaloneRenderer(const Element& element) {
+  return IsA<HTMLInputElement>(element) || IsA<HTMLSelectElement>(element) ||
+         IsA<HTMLTextAreaElement>(element) || IsA<HTMLButtonElement>(element);
+}
+
+bool UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+    LocalFrameView& frame_view,
+    DocumentUpdateReason reason);
+
 void ApplyPointerStateForStandaloneRenderer(Document& document,
                                             LocalFrameView& frame_view) {
   LiveFramePaintProbeCache& cache = ProbeCache();
@@ -7252,15 +8970,29 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
     return;
   }
 
+  TraceLiveFrameProbeLifecycleState("pointer before interaction clear",
+                                    &document, document.GetFrame(),
+                                    &frame_view);
   TraceLiveFrameProbeStage("before pointer interaction clear");
   document.UpdateHoverActiveState(/*is_active=*/false,
                                   /*update_active_chain=*/true, nullptr);
   TraceLiveFrameProbeStage("after pointer interaction clear");
+  TraceLiveFrameProbeLifecycleState("pointer after interaction clear",
+                                    &document, document.GetFrame(),
+                                    &frame_view);
   LocalFrame* frame = document.GetFrame();
   if (!frame || !frame->View()) {
     cache.pointer_state_status = "frame_missing";
     return;
   }
+  TraceLiveFrameProbeLifecycleState("pointer before hit-test lifecycle update",
+                                    &document, frame, frame->View());
+  TraceLiveFrameProbeStage("before pointer hit-test lifecycle update");
+  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+      *frame->View(), DocumentUpdateReason::kTest);
+  TraceLiveFrameProbeStage("after pointer hit-test lifecycle update");
+  TraceLiveFrameProbeLifecycleState("pointer after hit-test lifecycle update",
+                                    &document, frame, frame->View());
 
   HitTestRequest::HitTestRequestType hit_type = HitTestRequest::kMove;
   if (cache.requested_pointer_event_type == 1) {
@@ -7274,10 +9006,17 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   const gfx::PointF root_point(cache.requested_pointer_x,
                                cache.requested_pointer_y);
   const HitTestLocation location(frame_view.ConvertFromRootFrame(root_point));
-  TraceLiveFrameProbeStage("before pointer hit test");
+  Document* hit_test_document = frame->GetDocument();
+  const bool use_no_lifecycle_hit_test =
+      IsPrePaintCleanForStandaloneRenderer(hit_test_document);
+  TraceLiveFrameProbeLifecycleState("pointer immediately before hit test",
+                                    &document, frame, frame->View());
+  TraceLiveFrameProbeStage(use_no_lifecycle_hit_test
+                               ? "before pointer hit test no_lifecycle"
+                               : "before pointer hit test lifecycle_update");
   const HitTestResult result =
       frame->GetEventHandler().HitTestResultAtLocation(
-          location, hit_type, nullptr, /*no_lifecycle_update=*/true);
+          location, hit_type, nullptr, use_no_lifecycle_hit_test);
   TraceLiveFrameProbeStage("after pointer hit test");
   Element* hit_element = result.InnerPossiblyPseudoElement();
   if (!hit_element && result.InnerNode()) {
@@ -7286,14 +9025,24 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
       hit_element = result.InnerNode()->parentElement();
     }
   }
+  Element* focus_element = result.InnerElement();
+  if (!focus_element && result.InnerNode()) {
+    focus_element = DynamicTo<Element>(result.InnerNode());
+    if (!focus_element) {
+      focus_element = result.InnerNode()->parentElement();
+    }
+  }
   TraceLiveFrameProbeStage("after pointer target resolve");
   cache.pointer_state_applied = hit_element != nullptr;
   cache.pointer_state_status =
       hit_element ? "applied_to_blink_hit_test_target" : "no_hit_test_target";
   if (hit_element) {
+    TraceLiveFrameProbeStage("before pointer hover active update");
     document.UpdateHoverActiveState(cache.requested_pointer_pressed,
                                     cache.requested_pointer_pressed,
                                     hit_element);
+    TraceLiveFrameProbeStage("after pointer hover active update");
+    TraceLiveFrameProbeStage("before pointer hit element diagnostics");
     cache.pointer_hit_element_id =
         BlinkStringToStdStringForStandaloneRenderer(
             String(hit_element->GetIdAttribute()));
@@ -7312,10 +9061,15 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
           BlinkStringToStdStringForStandaloneRenderer(
             hover_element->getAttribute(html_names::kClassAttr));
     }
+    TraceLiveFrameProbeStage("after pointer hit element diagnostics");
   }
+  TraceLiveFrameProbeStage("before pointer interaction style invalidation");
   UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
+  TraceLiveFrameProbeStage("after pointer interaction style invalidation");
 
+  TraceLiveFrameProbeStage("before pointer activation target resolve");
   Element* activation_target = ActivationTargetForStandaloneRenderer(hit_element);
+  TraceLiveFrameProbeStage("after pointer activation target resolve");
   const std::string activation_element_id =
       activation_target ? ElementIdForStandaloneRenderer(*activation_target)
                         : std::string();
@@ -7323,6 +9077,7 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
       activation_target ? activation_target->GetDomNodeId()
                         : kInvalidDOMNodeId;
   if (cache.requested_pointer_event_type == 1) {
+    TraceLiveFrameProbeStage("before pointer down activation bookkeeping");
     cache.pointer_down_activation_element_id.clear();
     cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
     if (!activation_target) {
@@ -7336,7 +9091,9 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
       cache.pointer_activation_node_id = activation_node_id;
       cache.pointer_activation_status = "stored_pointer_down_activation_target";
     }
+    TraceLiveFrameProbeStage("after pointer down activation bookkeeping");
   } else if (cache.requested_pointer_event_type == 2) {
+    TraceLiveFrameProbeStage("before pointer up activation");
     cache.pointer_activation_requested = true;
     cache.pointer_activation_down_element_id =
         cache.pointer_down_activation_element_id;
@@ -7362,6 +9119,7 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
     }
     cache.pointer_down_activation_element_id.clear();
     cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
+    TraceLiveFrameProbeStage("after pointer up activation");
   }
 
   if (cache.requested_pointer_event_type != 1) {
@@ -7370,23 +9128,40 @@ void ApplyPointerStateForStandaloneRenderer(Document& document,
   }
 
   cache.pointer_focus_requested = true;
-  if (!hit_element) {
+  if (!focus_element) {
     cache.pointer_focus_status = "no_hit_test_target";
     return;
   }
+  TraceLiveFrameProbeLifecycleState("pointer before focusability lifecycle update",
+                                    &document, frame, frame->View());
+  TraceLiveFrameProbeStage("before pointer focusability lifecycle update");
+  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+      *frame->View(), DocumentUpdateReason::kTest);
+  TraceLiveFrameProbeStage("after pointer focusability lifecycle update");
+  TraceLiveFrameProbeLifecycleState("pointer after focusability lifecycle update",
+                                    &document, frame, frame->View());
+  TraceLiveFrameProbeStage("before pointer focusability check");
+  if (!IsStandaloneMouseFocusTargetForStandaloneRenderer(*focus_element)) {
+    TraceLiveFrameProbeStage("after pointer focusability check not focusable");
+    cache.pointer_focus_status = "not_standalone_focus_target";
+    return;
+  }
+  TraceLiveFrameProbeStage("after pointer focusability check focusable");
   Page* page = frame->GetPage();
   if (!page) {
     cache.pointer_focus_status = "page_missing";
     return;
   }
 
+  TraceLiveFrameProbeStage("before pointer focus apply");
   const bool focus_applied = page->GetFocusController().SetFocusedElement(
-      hit_element, frame,
+      focus_element, frame,
       FocusParams(SelectionBehaviorOnFocus::kNone,
                   mojom::blink::FocusType::kMouse, nullptr));
+  TraceLiveFrameProbeStage("after pointer focus apply");
   Element* focused_element = document.FocusedElement();
   cache.pointer_focus_applied =
-      focus_applied && focused_element == hit_element;
+      focus_applied && focused_element == focus_element;
   if (focused_element) {
     cache.pointer_focused_element_id =
         BlinkStringToStdStringForStandaloneRenderer(
@@ -7402,21 +9177,147 @@ void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   if (!cache.animation_time_requested) {
     return;
   }
+  cache.animation_time_status.clear();
 
   const base::TimeTicks animation_time =
       document.Timeline().CalculateZeroTime() +
       base::Milliseconds(cache.requested_animation_time_ms);
   document.GetAnimationClock().SetAllowedToDynamicallyUpdateTime(false);
   document.GetAnimationClock().UpdateTime(animation_time);
-  document.GetDocumentAnimations().UpdateAnimationTimingForAnimationFrame();
+  if (document.GetAgent().event_loop()) {
+    document.GetDocumentAnimations().UpdateAnimationTimingForAnimationFrame();
+  } else {
+    document.GetDocumentAnimations().UpdateAnimationTimingIfNeeded();
+    cache.animation_time_status =
+        "applied_to_document_animation_clock_without_event_loop_checkpoint";
+  }
   for (Animation* animation : document.Timeline().GetAnimations()) {
     if (animation) {
       animation->Update(kTimingUpdateForAnimationFrame);
+      animation->UpdateIfNecessary();
     }
   }
   cache.applied_animation_time_ms = cache.requested_animation_time_ms;
   cache.animation_time_applied = true;
-  cache.animation_time_status = "applied_to_document_animation_clock";
+  if (cache.animation_time_status.empty()) {
+    cache.animation_time_status = "applied_to_document_animation_clock";
+  }
+}
+
+void SeedAnimationStartTimeForStandaloneRenderer(Document& document) {
+  const base::TimeTicks zero_time = document.Timeline().CalculateZeroTime();
+  document.GetAnimationClock().ResetTimeForTesting();
+  document.GetAnimationClock().SetAllowedToDynamicallyUpdateTime(false);
+  document.GetAnimationClock().UpdateTime(zero_time);
+}
+
+bool HtmlContainsStandaloneAnimationForRenderer(
+    const std::string& input_html) {
+  const std::string lower_html = LowerAsciiForStandaloneRenderer(input_html);
+  return lower_html.find("@keyframes") != std::string::npos ||
+         lower_html.find("animation:") != std::string::npos ||
+         lower_html.find("transition:") != std::string::npos;
+}
+
+bool StandaloneAnimationTraceEnabled() {
+  const char* value = std::getenv("HTML_CSS_RENDERER_ANIMATION_TRACE");
+  return value && value[0] && std::strcmp(value, "0") != 0;
+}
+
+void TraceAnimationStateForStandaloneRenderer(const char* label,
+                                              Document& document) {
+  if (!StandaloneAnimationTraceEnabled()) {
+    return;
+  }
+  const std::optional<AnimationTimeDelta> timeline_time =
+      document.Timeline().CurrentTime();
+  wtf_size_t animation_count = 0;
+  for (Animation* animation : document.Timeline().GetAnimations()) {
+    if (animation) {
+      ++animation_count;
+    }
+  }
+  std::fprintf(stderr,
+               "animation_trace label=%s timeline_ms=%.3f needs_timing=%d "
+               "animation_count=%u\n",
+               label,
+               timeline_time ? timeline_time->InMillisecondsF() : -1.0,
+               document.GetDocumentAnimations().NeedsAnimationTimingUpdate()
+                   ? 1
+                   : 0,
+               static_cast<unsigned>(animation_count));
+  int index = 0;
+  for (Animation* animation : document.Timeline().GetAnimations()) {
+    if (!animation) {
+      continue;
+    }
+    const std::optional<AnimationTimeDelta> start_time =
+        animation->StartTimeInternal();
+    const std::optional<AnimationTimeDelta> current_time =
+        animation->CurrentTimeInternal();
+    auto* effect = DynamicTo<KeyframeEffect>(animation->effect());
+    Element* target = effect ? effect->EffectTarget() : nullptr;
+    const std::string target_tag =
+        target ? std::string(target->tagName().Utf8().c_str()) : "";
+    const std::string target_class =
+        target
+            ? std::string(target->getAttribute(html_names::kClassAttr)
+                              .Utf8()
+                              .c_str())
+            : "";
+    int background_red = -1;
+    int background_green = -1;
+    int background_blue = -1;
+    float background_alpha = -1.0f;
+    int needs_style_recalc = -1;
+    int style_change_type = -1;
+    int animation_style_change = -1;
+    if (target) {
+      needs_style_recalc = target->NeedsStyleRecalc() ? 1 : 0;
+      style_change_type = static_cast<int>(target->GetStyleChangeType());
+      if (ElementAnimations* element_animations =
+              target->GetElementAnimations()) {
+        animation_style_change =
+            element_animations->IsAnimationStyleChange() ? 1 : 0;
+      }
+      if (const ComputedStyle* style = target->GetComputedStyle()) {
+        const Color background_color =
+            style->VisitedDependentColor(GetCSSPropertyBackgroundColor());
+        background_red = background_color.Red();
+        background_green = background_color.Green();
+        background_blue = background_color.Blue();
+        background_alpha = background_color.Alpha();
+      }
+    }
+    const bool affects_background =
+        effect && effect->Affects(PropertyHandle(GetCSSPropertyBackgroundColor()));
+    const bool affects_opacity =
+        effect && effect->Affects(PropertyHandle(GetCSSPropertyOpacity()));
+    const bool affects_transform =
+        effect &&
+        (effect->Affects(PropertyHandle(GetCSSPropertyTransform())) ||
+         effect->Affects(PropertyHandle(GetCSSPropertyTranslate())) ||
+         effect->Affects(PropertyHandle(GetCSSPropertyScale())) ||
+         effect->Affects(PropertyHandle(GetCSSPropertyRotate())));
+    std::fprintf(stderr,
+                 "animation_trace item=%d playing=%d effectively_playing=%d "
+                 "pending=%d outdated=%d start_ms=%.3f current_ms=%.3f "
+                 "target_tag=%s target_class=%s affects_bg=%d "
+                 "affects_opacity=%d affects_transform=%d needs_style=%d "
+                 "style_change=%d animation_style_change=%d "
+                 "background_rgba=%d,%d,%d,%.3f\n",
+                 index++, animation->Playing() ? 1 : 0,
+                 animation->EffectivelyPlaying() ? 1 : 0,
+                 animation->PendingInternal() ? 1 : 0,
+                 animation->Outdated() ? 1 : 0,
+                 start_time ? start_time->InMillisecondsF() : -1.0,
+                 current_time ? current_time->InMillisecondsF() : -1.0,
+                 target_tag.c_str(), target_class.c_str(),
+                 affects_background ? 1 : 0, affects_opacity ? 1 : 0,
+                 affects_transform ? 1 : 0, needs_style_recalc,
+                 style_change_type, animation_style_change, background_red,
+                 background_green, background_blue, background_alpha);
+  }
 }
 
 void MarkPaintPropertyTargetForStandaloneRenderer(LayoutObject& layout_object,
@@ -7465,7 +9366,9 @@ void MarkComputedPaintPropertyTargetsForStandaloneRenderer(Node& node) {
 void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
   // Standalone does not run the browser compositor commit path that can directly
   // refresh animated property nodes, so keep Blink's prepaint builder honest
-  // after sampled opacity/transform style changes.
+  // after sampled opacity/transform style changes. Non-composited animations
+  // such as background-color still need Blink's normal animation style recalc
+  // and paint invalidation before this synthetic frame is captured.
   for (Animation* animation : document.Timeline().GetAnimations()) {
     if (!animation) {
       continue;
@@ -7481,16 +9384,28 @@ void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
         effect->Affects(PropertyHandle(GetCSSPropertyTranslate())) ||
         effect->Affects(PropertyHandle(GetCSSPropertyScale())) ||
         effect->Affects(PropertyHandle(GetCSSPropertyRotate()));
-    if (!affects_opacity && !affects_transform) {
-      continue;
-    }
+    const bool affects_background =
+        effect->Affects(PropertyHandle(GetCSSPropertyBackgroundColor()));
     Element* target = effect->EffectTarget();
     if (!target) {
       continue;
     }
+    target->SetNeedsAnimationStyleRecalc();
+    target->SetAnimationStyleChange(true);
     if (LayoutObject* layout_object = target->GetLayoutObject()) {
-      MarkPaintPropertyTargetForStandaloneRenderer(
-          *layout_object, affects_opacity, affects_transform);
+      if (affects_opacity || affects_transform) {
+        MarkPaintPropertyTargetForStandaloneRenderer(
+            *layout_object, affects_opacity, affects_transform);
+      } else {
+        if (affects_background) {
+          layout_object->SetBackgroundNeedsFullPaintInvalidation();
+        }
+        layout_object->SetShouldDoFullPaintInvalidationWithoutLayoutChange(
+            PaintInvalidationReason::kStyle);
+      }
+      if (LocalFrameView* frame_view = layout_object->GetFrameView()) {
+        frame_view->SetPaintArtifactCompositorNeedsUpdate();
+      }
     }
   }
   if (Element* document_element = document.documentElement()) {
@@ -8293,11 +10208,13 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       CssImageSchemeHistogramForStandaloneRenderer(cache.body_html);
   TraceLiveFrameProbeStage("paint audit after css image scheme histogram");
   const std::string page_evidence_json =
-      "{\"status\":\"inaccessible\",\"field\":\"page_evidence\","
-      "\"reason\":\"optional PageEvidenceJsonForStandaloneRenderer walk is "
-      "disabled in the raw PaintArtifact audit because absolute/fixed pages "
-      "exposed it as an unsafe metadata access; use --dump-page-setup for "
-      "coordinate-correct element evidence\"}";
+      std::getenv("HTML_CSS_RENDERER_PAGE_EVIDENCE") && cache.holder
+          ? PageEvidenceJsonForStandaloneRenderer(cache.holder->GetDocument())
+          : "{\"status\":\"inaccessible\",\"field\":\"page_evidence\","
+            "\"reason\":\"optional PageEvidenceJsonForStandaloneRenderer walk "
+            "is disabled by default; set "
+            "HTML_CSS_RENDERER_PAGE_EVIDENCE=1 for coordinate-correct element "
+            "evidence\"}";
   const std::string out_of_flow_evidence_json =
       cache.holder
           ? OutOfFlowElementEvidenceJsonForStandaloneRenderer(
@@ -8363,6 +10280,14 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       (evidence_has_effect_opacity ||
        lowered_input.find("opacity") != std::string::npos) &&
       effect_opacity_chunk_count == 0;
+  const bool img_layout_record_paint =
+      lowered_input.find("<img") != std::string::npos &&
+      cache.image_reachability.layout_is_layout_image &&
+      cache.image_reachability.loader_content_loaded &&
+      StandaloneRendererLayoutImagePaintReplacedCalled() > 0 &&
+      StandaloneRendererImagePainterPaintReplacedCalled() > 0;
+  const bool has_standalone_image_paint =
+      total_raw_audit.image_count > 0 || img_layout_record_paint;
   std::vector<std::string> warnings;
   if (lowered_input.find("linear-gradient") != std::string::npos &&
       total_raw_audit.shader_count == 0) {
@@ -8379,7 +10304,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
     warnings.push_back(
         "expected_feature_missing feature=text reason=raw Blink PaintArtifact audit found no DrawTextBlob");
   }
-  if (total_raw_audit.image_count == 0 &&
+  if (!has_standalone_image_paint &&
       lowered_input.find("<img") != std::string::npos) {
     warnings.push_back(
         "expected_feature_missing feature=image reason=raw Blink PaintArtifact audit found no DrawImage/DrawImageRect; standalone live embedder does not yet feed data/local image resources into Blink image loading");
@@ -8791,10 +10716,17 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       break;
     }
   }
+  const LiveExportedDrawOp* first_draw_image_op = nullptr;
+  for (const LiveExportedDrawOp& op : cache.exported_draw_ops) {
+    if (op.type == 22) {
+      first_draw_image_op = &op;
+      break;
+    }
+  }
   json << image_element_count << ",\"src_scheme_histogram\":"
        << MapToJsonObject(image_scheme_histogram)
        << ",\"resource_load_status\":\""
-       << (image_element_count > 0 && total_raw_audit.image_count == 0
+       << (image_element_count > 0 && !has_standalone_image_paint
                ? "no Blink image paint emitted; standalone image element/loader ownership path is not fully linked"
                : "not_applicable_or_painted")
        << "\",\"decode_status\":\"unknown\",\"layout_status\":\"unknown\"}"
@@ -8816,6 +10748,17 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.image_reachability.loader_content_has_image ? "true" : "false")
        << ",\"loader_content_error\":"
        << (cache.image_reachability.loader_content_error ? "true" : "false")
+       << ",\"loader_content_loaded\":"
+       << (cache.image_reachability.loader_content_loaded ? "true" : "false")
+       << ",\"loader_content_loading\":"
+       << (cache.image_reachability.loader_content_loading ? "true" : "false")
+       << ",\"loader_content_status\":"
+       << cache.image_reachability.loader_content_status
+       << ",\"image_element_complete\":"
+       << (cache.image_reachability.image_element_complete ? "true" : "false")
+       << ",\"image_element_primary_content\":"
+       << (cache.image_reachability.image_element_primary_content ? "true"
+                                                                  : "false")
        << ",\"provider_decoded_width\":" << provider_decoded_width
        << ",\"provider_decoded_height\":" << provider_decoded_height
        << ",\"layout_intrinsic_width\":"
@@ -8867,7 +10810,60 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                         ? "provider_decoded_size_available_element_natural_size_not_observed"
                         : "unknown")
        << ",\"provider_status\":"
-       << JsonStringForStandaloneRenderer(provider_image_status) << "}"
+       << JsonStringForStandaloneRenderer(provider_image_status)
+       << ",\"paint_into_rect_called\":"
+       << (cache.image_paint_into_rect.called ? "true" : "false")
+       << ",\"paint_into_rect_count\":"
+       << cache.image_paint_into_rect.count
+       << ",\"paint_into_rect_dest\":["
+       << cache.image_paint_into_rect.dest_x << ","
+       << cache.image_paint_into_rect.dest_y << ","
+       << cache.image_paint_into_rect.dest_width << ","
+       << cache.image_paint_into_rect.dest_height << "]"
+       << ",\"paint_into_rect_content\":["
+       << cache.image_paint_into_rect.content_x << ","
+       << cache.image_paint_into_rect.content_y << ","
+       << cache.image_paint_into_rect.content_width << ","
+       << cache.image_paint_into_rect.content_height << "]"
+       << ",\"paint_into_rect_pixel_snapped_dest\":["
+       << cache.image_paint_into_rect.snapped_dest_x << ","
+       << cache.image_paint_into_rect.snapped_dest_y << ","
+       << cache.image_paint_into_rect.snapped_dest_width << ","
+       << cache.image_paint_into_rect.snapped_dest_height << "]"
+       << ",\"paint_into_rect_src\":["
+       << cache.image_paint_into_rect.src_x << ","
+       << cache.image_paint_into_rect.src_y << ","
+       << cache.image_paint_into_rect.src_width << ","
+       << cache.image_paint_into_rect.src_height << "]"
+       << ",\"paint_into_rect_image_size\":["
+       << cache.image_paint_into_rect.image_width << ","
+       << cache.image_paint_into_rect.image_height << "]"
+       << ",\"paint_into_rect_interpolation_quality\":"
+       << cache.image_paint_into_rect.interpolation_quality
+       << ",\"first_draw_image_op\":";
+  if (first_draw_image_op) {
+    json << "{\"label\":"
+         << JsonStringForStandaloneRenderer(first_draw_image_op->debug_label)
+         << ",\"dst_rect\":[" << first_draw_image_op->x << ","
+         << first_draw_image_op->y << "," << first_draw_image_op->width
+         << "," << first_draw_image_op->height << "]"
+         << ",\"src_rect\":[" << first_draw_image_op->src_x << ","
+         << first_draw_image_op->src_y << ","
+         << first_draw_image_op->src_width << ","
+         << first_draw_image_op->src_height << "]"
+         << ",\"image_size\":[" << first_draw_image_op->mask_width << ","
+         << first_draw_image_op->mask_height << "]"
+         << ",\"sampling_options\":"
+         << JsonStringForStandaloneRenderer(
+                first_draw_image_op->sampling_options)
+         << ",\"source_chunk_index\":"
+         << first_draw_image_op->source_chunk_index
+         << ",\"source_display_item_index\":"
+         << first_draw_image_op->source_display_item_index << "}";
+  } else {
+    json << "null";
+  }
+  json << "}"
        << ",\"image_pipeline\":{\"image_element_count\":"
        << image_element_count << ",\"images\":[";
   const std::vector<std::string> image_sources =
@@ -8877,7 +10873,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
       json << ",";
     }
     const std::string& src = image_sources[i];
-    const bool has_image_paint = total_raw_audit.image_count > 0;
+    const bool has_image_paint = has_standalone_image_paint;
     json << "{\"src_scheme\":"
          << JsonStringForStandaloneRenderer(SchemeForStandaloneRenderer(src))
          << ",\"current_src\":"
@@ -8945,6 +10941,17 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
                      StandaloneRendererImageResourceContentFetchCalled() > 0
                  ? "true"
                  : "false")
+         << ",\"loader_content_loaded\":"
+         << (cache.image_reachability.loader_content_loaded ? "true" : "false")
+         << ",\"loader_content_loading\":"
+         << (cache.image_reachability.loader_content_loading ? "true" : "false")
+         << ",\"loader_content_status\":"
+         << cache.image_reachability.loader_content_status
+         << ",\"image_element_complete\":"
+         << (cache.image_reachability.image_element_complete ? "true" : "false")
+         << ",\"image_element_primary_content\":"
+         << (cache.image_reachability.image_element_primary_content ? "true"
+                                                                    : "false")
          << ",\"encoded_data_bytes\":"
          << EncodedDataBytesForStandaloneRenderer(src)
          << ",\"decode_status\":"
@@ -9189,6 +11196,9 @@ std::string BuildRetainedMetadataTimingJsonForStandaloneRenderer(
 void InstallStyleElementsForStandaloneRenderer(Document& document,
                                                Element& head,
                                                const std::string& head_html) {
+  if (head_html.empty()) {
+    return;
+  }
   const std::vector<std::string> style_texts =
       ExtractStyleElementTextForStandaloneRenderer(head_html);
   if (style_texts.empty()) {
@@ -9238,11 +11248,23 @@ void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
 void EnsureWtfInitializedForStandaloneRenderer() {
   static bool initialized = false;
   if (!initialized) {
+    InstallStandaloneMojoThunksForStandaloneRenderer();
     blink::InitializeWtf();
     blink::Length::Initialize();
     blink::CoreInitializer::GetInstance().Initialize();
     initialized = true;
   }
+}
+
+int CountCcLayersForStandaloneRenderer(const cc::Layer* layer) {
+  if (!layer) {
+    return 0;
+  }
+  int count = 1;
+  for (const scoped_refptr<cc::Layer>& child : layer->children()) {
+    count += CountCcLayersForStandaloneRenderer(child.get());
+  }
+  return count;
 }
 
 LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
@@ -9276,6 +11298,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   g_standalone_document_animations_update_called = 0;
   g_standalone_page_animator_service_called = 0;
   cache.image_reachability = ImageReachabilityDiagnostics();
+  cache.image_paint_into_rect = ImagePaintIntoRectDiagnostics();
   cache.timing_total_ms = 0.0;
   cache.timing_input_setup_ms = 0.0;
   cache.timing_html_document_setup_ms = 0.0;
@@ -9297,14 +11320,51 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.needs_animation_timing_update = false;
   cache.needs_lifecycle_update = false;
   cache.needs_begin_frame = false;
+  cache.compositor_root_layer_available = false;
+  cache.compositor_layer_count = 0;
+  cache.cc_host_created =
+      cache.cc_layer_host && cache.cc_layer_host->host_created();
+  cache.cc_attach_attempted =
+      cache.cc_layer_host && cache.cc_layer_host->attach_attempted();
+  cache.cc_root_layer_attached =
+      cache.cc_layer_host && cache.cc_layer_host->root_layer_attached();
+  cache.cc_commit_requested =
+      cache.cc_layer_host && cache.cc_layer_host->commit_requested();
+  cache.cc_frame_sink_requested =
+      cache.cc_layer_host && cache.cc_layer_host->frame_sink_requested();
+  cache.cc_frame_sink_bound =
+      cache.cc_layer_host && cache.cc_layer_host->frame_sink_bound();
+  cache.cc_compositor_frame_submitted =
+      cache.cc_layer_host &&
+      cache.cc_layer_host->compositor_frame_submitted();
+  cache.cc_gpu_context_created =
+      cache.cc_layer_host && cache.cc_layer_host->gpu_context_created();
+  cache.cc_raster_context_created =
+      cache.cc_layer_host && cache.cc_layer_host->raster_context_created();
+  cache.cc_shared_image_interface_available =
+      cache.cc_layer_host &&
+      cache.cc_layer_host->shared_image_interface_available();
+  cache.cc_viz_display_created =
+      cache.cc_layer_host && cache.cc_layer_host->viz_display_created();
+  cache.cc_skia_gpu_reached =
+      cache.cc_layer_host && cache.cc_layer_host->skia_gpu_reached();
+  cache.cc_commit_count =
+      cache.cc_layer_host ? cache.cc_layer_host->commit_count() : 0;
+  cache.cc_frame_sink_failure_reason =
+      cache.cc_layer_host ? cache.cc_layer_host->frame_sink_failure_reason()
+                          : std::string();
   LiveFramePaintProbeResult result;
   TraceLiveFrameProbeStage("before DummyPageHolder");
   if (!cache.holder) {
+    cache.chrome_client =
+        MakeGarbageCollected<StandaloneCompositorChromeClient>(&cache);
     cache.holder = new DummyPageHolder(
-        gfx::Size(cache.viewport_width, cache.viewport_height));
+        gfx::Size(cache.viewport_width, cache.viewport_height),
+        cache.chrome_client.Get());
   }
   TraceLiveFrameProbeStage("after DummyPageHolder");
   Document& document = cache.holder->GetDocument();
+  document.GetStyleEngine().UpdateViewportSize();
   TraceLiveFrameProbeStage("after GetDocument");
   cache.timing_input_setup_ms =
       StandaloneProbeElapsedMs(setup_start, StandaloneProbeClock::now());
@@ -9359,7 +11419,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
               : input_html.substr(body_start, body_open_end - body_start + 1);
       const std::string body_fragment =
           input_html.substr(body_content_start, body_end - body_content_start);
+      TraceLiveFrameProbeStage("before InstallStyleElements full html");
       InstallStyleElementsForStandaloneRenderer(document, *head, head_html);
+      TraceLiveFrameProbeStage("after InstallStyleElements full html");
       const std::string body_class =
           ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "class");
       if (!body_class.empty()) {
@@ -9376,26 +11438,47 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
       if (!body_fragment.empty() && body_string.empty()) {
         body_string = String(body_fragment);
       }
+      TraceLiveFrameProbeStage("before body SetInnerHTML full html");
+      StandaloneRendererSetDeferImageAttributeLoads(true);
       document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
+      StandaloneRendererSetDeferImageAttributeLoads(false);
+      TraceLiveFrameProbeStage("after body SetInnerHTML full html");
     } else {
+      TraceLiveFrameProbeStage("before InstallStyleElements fragment");
       InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
+      TraceLiveFrameProbeStage("after InstallStyleElements fragment");
       const std::string body_fragment =
           RemoveStyleElementBlocksForStandaloneRenderer(input_html);
+      TraceLiveFrameProbeStage("before body SetInnerHTML fragment");
+      StandaloneRendererSetDeferImageAttributeLoads(true);
       document.body()->SetInnerHTMLWithoutTrustedTypes(
           String::FromUtf8(body_fragment));
+      StandaloneRendererSetDeferImageAttributeLoads(false);
+      TraceLiveFrameProbeStage("after body SetInnerHTML fragment");
     }
   }
+  TraceLiveFrameProbeStage("before ApplyElementAttributes");
   ApplyElementAttributesForStandaloneRenderer(
       document, cache.requested_element_attributes_by_id_and_name,
       &cache.original_element_attribute_values,
       &cache.applied_element_attributes_by_id_and_name);
+  TraceLiveFrameProbeStage("after ApplyElementAttributes");
   cache.element_attributes_changed_since_probe = false;
   TraceLiveFrameProbeStage("after SetInnerHTML");
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
+  TraceLiveFrameProbeStage("before static image loads");
+  StartStandaloneImageLoadsForStaticRender(document);
+  RunStandaloneImageLoadingTasksForStaticRender();
+  CompleteStandaloneImageLoadsForStaticRender(document);
+  TraceLiveFrameProbeStage("after static image loads");
+  TraceLiveFrameProbeStage("before image reachability");
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
+  TraceLiveFrameProbeStage("after image reachability");
+  TraceLiveFrameProbeStage("before render blocking unblock");
   document.RenderBlockingResourceUnblocked();
+  TraceLiveFrameProbeStage("after render blocking unblock");
   if (LifecycleStopEqualsForStandaloneRenderer("html")) {
     result.lifecycle_reached_paint_clean = 0;
     cache.body_html = input_html;
@@ -9409,6 +11492,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   DumpNodeForStandaloneRenderer(*document.body(), 0);
 
   LocalFrameView& frame_view = cache.holder->GetFrameView();
+  frame_view.SetCanHaveScrollbars(false);
   if (Settings* settings = document.GetSettings()) {
     settings->SetDefaultFontSize(16);
     settings->SetDefaultFixedFontSize(13);
@@ -9450,20 +11534,45 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   }
   TraceLiveFrameProbeStage("before required layout lifecycle update");
   const auto layout_lifecycle_start = StandaloneProbeClock::now();
+  const bool seeded_animation_start_time =
+      !html_content_already_loaded &&
+      (cache.animation_time_requested ||
+       HtmlContainsStandaloneAnimationForRenderer(input_html));
+  if (seeded_animation_start_time) {
+    SeedAnimationStartTimeForStandaloneRenderer(document);
+    TraceAnimationStateForStandaloneRenderer("after_seed_zero", document);
+  }
   if (cache.animation_time_requested) {
-    document.UpdateStyleAndLayoutTree();
+    UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+        frame_view, DocumentUpdateReason::kTest);
   }
   UpdateLifecycleToLayoutCleanForStandaloneRenderer(
       frame_view, DocumentUpdateReason::kTest);
+  TraceAnimationStateForStandaloneRenderer("after_initial_layout_clean",
+                                           document);
+  if (seeded_animation_start_time) {
+    document.GetPendingAnimations().Update(nullptr, false);
+    document.GetDocumentAnimations().UpdateAnimationTimingIfNeeded();
+    TraceAnimationStateForStandaloneRenderer("after_initial_pending_update",
+                                             document);
+  }
   if (cache.animation_time_requested) {
     TraceLiveFrameProbeStage("before standalone animation time apply");
+    TraceAnimationStateForStandaloneRenderer("before_requested_time_apply",
+                                             document);
     document.GetPendingAnimations().Update(nullptr, false);
     ApplyAnimationTimeForStandaloneRenderer(document);
+    TraceAnimationStateForStandaloneRenderer("after_requested_time_apply",
+                                             document);
     if (cache.animation_time_applied) {
-      document.UpdateStyleAndLayoutTree();
       MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(document);
       UpdateLifecycleToLayoutCleanForStandaloneRenderer(
           frame_view, DocumentUpdateReason::kTest);
+      MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(document);
+      UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+          frame_view, DocumentUpdateReason::kTest);
+      TraceAnimationStateForStandaloneRenderer("after_requested_time_layout",
+                                               document);
     }
     TraceLiveFrameProbeStage("after standalone animation time apply");
   }
@@ -9484,7 +11593,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     TraceLiveFrameProbeStage("after pre-wheel element scroll offset apply");
   }
   TraceLiveFrameProbeStage("before document scroll offset apply");
-  ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
+  ApplyDocumentScrollOffsetForStandaloneRenderer(
+      frame_view, /*apply_wheel_scroll=*/false);
   TraceLiveFrameProbeStage("after document scroll offset apply");
   if (!cache.requested_wheel_scroll || !cache.wheel_scroll_applied) {
     TraceLiveFrameProbeStage("before element scroll offset apply");
@@ -9492,6 +11602,16 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     TraceLiveFrameProbeStage("after element scroll offset apply");
   }
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
+  TraceLiveFrameProbeLifecycleState("pre-input before prepaint lifecycle update",
+                                    &document, document.GetFrame(),
+                                    &frame_view);
+  TraceLiveFrameProbeStage("before pre-input prepaint lifecycle update");
+  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+      frame_view, DocumentUpdateReason::kTest);
+  TraceLiveFrameProbeStage("after pre-input prepaint lifecycle update");
+  TraceLiveFrameProbeLifecycleState("pre-input after prepaint lifecycle update",
+                                    &document, document.GetFrame(),
+                                    &frame_view);
   ApplyPointerStateForStandaloneRenderer(document, frame_view);
   if (cache.pointer_state_applied || cache.pointer_focus_requested) {
     TraceLiveFrameProbeStage("before post-pointer lifecycle update");
@@ -9552,7 +11672,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         "after post-lifecycle pre-wheel element scroll offset apply");
   }
   TraceLiveFrameProbeStage("before post-lifecycle document scroll offset apply");
-  ApplyDocumentScrollOffsetForStandaloneRenderer(frame_view);
+  ApplyDocumentScrollOffsetForStandaloneRenderer(
+      frame_view, /*apply_wheel_scroll=*/true);
   TraceLiveFrameProbeStage("after post-lifecycle document scroll offset apply");
   if (!cache.requested_wheel_scroll || !cache.wheel_scroll_applied) {
     TraceLiveFrameProbeStage(
@@ -9561,6 +11682,17 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     TraceLiveFrameProbeStage("after post-lifecycle element scroll offset apply");
   }
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
+  if (cache.cc_layer_host && cache.cc_layer_host->root_layer_attached()) {
+    TraceLiveFrameProbeStage("before standalone cc composite");
+    cache.cc_frame_sink_failure_reason.clear();
+    if (cache.copy_output_png_requested) {
+      cache.cc_layer_host->RequestNextCopyOutputPng();
+    }
+    cache.cc_layer_host->CompositeForTest(
+        &cache.cc_frame_sink_failure_reason);
+    ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
+    TraceLiveFrameProbeStage("after standalone cc composite");
+  }
   if (cache.scroll_offset_changed || cache.element_scroll_offset_changed ||
       cache.wheel_scroll_changed) {
     TraceLiveFrameProbeStage("before post-scroll lifecycle update");
@@ -9568,6 +11700,17 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         UpdateAllLifecyclePhasesForTestForStandaloneRenderer(frame_view) ? 1
                                                                          : 0;
     TraceLiveFrameProbeStage("after post-scroll lifecycle update");
+    if (cache.cc_layer_host && cache.cc_layer_host->root_layer_attached()) {
+      TraceLiveFrameProbeStage("before post-scroll standalone cc composite");
+      cache.cc_frame_sink_failure_reason.clear();
+      if (cache.copy_output_png_requested) {
+        cache.cc_layer_host->RequestNextCopyOutputPng();
+      }
+      cache.cc_layer_host->CompositeForTest(
+          &cache.cc_frame_sink_failure_reason);
+      ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
+      TraceLiveFrameProbeStage("after post-scroll standalone cc composite");
+    }
   }
   UpdateFrameSchedulingStateForStandaloneRenderer(document, frame_view);
   cache.timing_prepaint_and_paint_lifecycle_ms =
@@ -9607,6 +11750,68 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
+  if (cc::Layer* root_layer = frame_view.RootCcLayer()) {
+    cache.compositor_root_layer_available = true;
+    cache.compositor_layer_count =
+        CountCcLayersForStandaloneRenderer(root_layer);
+    cache.artifact_audit_lines.push_back(
+        "paint_artifact_compositor root_layer=1 cc_layer_count=" +
+        std::to_string(cache.compositor_layer_count));
+  } else {
+    cache.compositor_root_layer_available = false;
+    cache.compositor_layer_count = 0;
+    cache.artifact_audit_lines.push_back(
+        "paint_artifact_compositor root_layer=0 cc_layer_count=0");
+  }
+  if (cache.cc_layer_host) {
+    cache.cc_host_created = cache.cc_layer_host->host_created();
+    cache.cc_attach_attempted = cache.cc_layer_host->attach_attempted();
+    cache.cc_root_layer_attached =
+        cache.cc_layer_host->root_layer_attached();
+    cache.cc_commit_requested = cache.cc_layer_host->commit_requested();
+    cache.cc_frame_sink_requested =
+        cache.cc_layer_host->frame_sink_requested();
+    cache.cc_frame_sink_bound = cache.cc_layer_host->frame_sink_bound();
+    cache.cc_compositor_frame_submitted =
+        cache.cc_layer_host->compositor_frame_submitted();
+    cache.cc_gpu_context_created =
+        cache.cc_layer_host->gpu_context_created();
+    cache.cc_raster_context_created =
+        cache.cc_layer_host->raster_context_created();
+    cache.cc_shared_image_interface_available =
+        cache.cc_layer_host->shared_image_interface_available();
+    cache.cc_viz_display_created =
+        cache.cc_layer_host->viz_display_created();
+    cache.cc_skia_gpu_reached =
+        cache.cc_layer_host->skia_gpu_reached();
+    cache.cc_commit_count = cache.cc_layer_host->commit_count();
+    cache.cc_frame_sink_failure_reason =
+        cache.cc_layer_host->frame_sink_failure_reason();
+  }
+  if (cache.cc_host_created || cache.cc_attach_attempted) {
+    cache.artifact_audit_lines.push_back(
+        "cc_layer_tree_host host=" +
+        std::to_string(cache.cc_host_created ? 1 : 0) + " attached=" +
+        std::to_string(cache.cc_root_layer_attached ? 1 : 0) +
+        " commit_requested=" +
+        std::to_string(cache.cc_commit_requested ? 1 : 0) +
+        " frame_sink_requested=" +
+        std::to_string(cache.cc_frame_sink_requested ? 1 : 0) +
+        " frame_sink_bound=" +
+        std::to_string(cache.cc_frame_sink_bound ? 1 : 0) +
+        " gpu_context=" +
+        std::to_string(cache.cc_gpu_context_created ? 1 : 0) +
+        " raster_context=" +
+        std::to_string(cache.cc_raster_context_created ? 1 : 0) +
+        " shared_image=" +
+        std::to_string(cache.cc_shared_image_interface_available ? 1 : 0) +
+        " compositor_frame_submitted=" +
+        std::to_string(cache.cc_compositor_frame_submitted ? 1 : 0) +
+        " viz_display=" +
+        std::to_string(cache.cc_viz_display_created ? 1 : 0) +
+        " skia_gpu=" +
+        std::to_string(cache.cc_skia_gpu_reached ? 1 : 0));
+  }
   SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
       artifact, cache.hit_test_entries);
   SortLiveScrollableElementEntriesByPaintOrderForStandaloneRenderer(
@@ -9752,10 +11957,19 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   cache.viewport_height = clamped_height;
   g_standalone_blink_viewport_width = clamped_width;
   g_standalone_blink_viewport_height = clamped_height;
-  delete cache.holder;
-  cache.holder = nullptr;
+  if (cache.holder) {
+    const gfx::Size viewport_size(clamped_width, clamped_height);
+    // LocalFrameView::Resize() enters WebWidget/browser geometry plumbing that
+    // is outside this SDL-hosted embedder boundary. Keep viewport changes in
+    // Blink-owned visual/style state so SDL resize events do not tear down the
+    // active Page/cc host or the HWND-backed Viz output path.
+    cache.holder->GetPage().GetVisualViewport().SetSize(viewport_size);
+    cache.holder->GetDocument().GetStyleEngine().UpdateViewportSize();
+  }
   cache.initialized = false;
   cache.body_html.clear();
+  cache.cc_attach_failure_reason.clear();
+  cache.cc_frame_sink_failure_reason.clear();
   cache.element_attributes_changed_since_probe = false;
   cache.original_element_attribute_values.clear();
   cache.applied_element_attributes_by_id_and_name.clear();
@@ -9778,6 +11992,34 @@ void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer() {
   cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
+    void* native_window_handle,
+    int width,
+    int height) {
+  gfx::Size requested_size(std::max(1, width), std::max(1, height));
+  if (g_standalone_native_window_handle == native_window_handle &&
+      g_standalone_native_window_size == requested_size) {
+    return;
+  }
+  g_standalone_native_window_handle = native_window_handle;
+  g_standalone_native_window_size = requested_size;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.initialized = false;
+  cache.cc_frame_sink_failure_reason.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.copy_output_png_requested = true;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_png.clear();
+  cache.copy_output_failure.clear();
+  cache.initialized = false;
 }
 
 void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
@@ -10081,6 +12323,120 @@ int StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
 int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
     const char* body_html) {
   return RunLiveFramePaintProbe(body_html).display_item_count;
+}
+
+int StandaloneBlinkLiveFrameBridgeCompositorRootLayerForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().compositor_root_layer_available ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcHostForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_host_created ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcRootLayerAttachedForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_root_layer_attached ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcCommitRequestedForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_commit_requested ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcFrameSinkRequestedForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_frame_sink_requested ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcFrameSinkBoundForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_frame_sink_bound ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcCompositorFrameSubmittedForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_compositor_frame_submitted ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcGpuContextForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_gpu_context_created ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcRasterContextForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_raster_context_created ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcSharedImageInterfaceForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_shared_image_interface_available ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcVizDisplayForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_viz_display_created ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcSkiaGpuForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().cc_skia_gpu_reached ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
+    const char* body_html,
+    char* out,
+    int capacity) {
+  RunLiveFramePaintProbe(body_html);
+  if (!out || capacity <= 0) {
+    return 0;
+  }
+  const std::string& failure = ProbeCache().cc_frame_sink_failure_reason;
+  const int copied =
+      std::min<int>(capacity - 1, static_cast<int>(failure.size()));
+  if (copied > 0) {
+    std::memcpy(out, failure.data(), copied);
+  }
+  out[copied] = '\0';
+  return copied;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcAttachFailureForStandaloneRenderer(
+    const char* body_html,
+    char* out,
+    int capacity) {
+  RunLiveFramePaintProbe(body_html);
+  if (!out || capacity <= 0) {
+    return 0;
+  }
+  const std::string& failure = ProbeCache().cc_attach_failure_reason;
+  const int copied =
+      std::min<int>(capacity - 1, static_cast<int>(failure.size()));
+  if (copied > 0) {
+    std::memcpy(out, failure.data(), copied);
+  }
+  out[copied] = '\0';
+  return copied;
+}
+
+int StandaloneBlinkLiveFrameBridgeCompositorLayerCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().compositor_layer_count;
 }
 
 int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
@@ -10638,6 +12994,55 @@ int StandaloneBlinkLiveFrameBridgeRawPaintArtifactAuditJsonForStandaloneRenderer
   const int copy_count =
       std::min(static_cast<int>(json.size()), buffer_size - 1);
   std::memcpy(buffer, json.data(), static_cast<size_t>(copy_count));
+  buffer[copy_count] = '\0';
+  return copy_count;
+}
+
+int StandaloneBlinkLiveFrameBridgePngSnapshotStatusForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  const LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.copy_output_png_succeeded) {
+    return 1;
+  }
+  if (cache.copy_output_png_completed) {
+    return -1;
+  }
+  return 0;
+}
+
+int StandaloneBlinkLiveFrameBridgePngSnapshotByteSizeForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().copy_output_png.size());
+}
+
+int StandaloneBlinkLiveFrameBridgePngSnapshotBytesForStandaloneRenderer(
+    const char* body_html,
+    uint8_t* destination,
+    int destination_size) {
+  RunLiveFramePaintProbe(body_html);
+  const std::vector<uint8_t>& png = ProbeCache().copy_output_png;
+  if (!destination || destination_size <= 0 ||
+      destination_size < static_cast<int>(png.size())) {
+    return 0;
+  }
+  std::memcpy(destination, png.data(), png.size());
+  return static_cast<int>(png.size());
+}
+
+int StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
+    const char* body_html,
+    char* buffer,
+    int buffer_size) {
+  RunLiveFramePaintProbe(body_html);
+  const std::string& failure = ProbeCache().copy_output_failure;
+  if (!buffer || buffer_size <= 0) {
+    return 0;
+  }
+  const int copy_count =
+      std::min(static_cast<int>(failure.size()), buffer_size - 1);
+  std::memcpy(buffer, failure.data(), static_cast<size_t>(copy_count));
   buffer[copy_count] = '\0';
   return copy_count;
 }

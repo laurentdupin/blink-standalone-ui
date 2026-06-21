@@ -513,6 +513,9 @@ void DisplayLockContext::UpgradeForcedScope(ForcedPhase old_phase,
 }
 
 void DisplayLockContext::ScheduleStateChangeEventIfNeeded() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   if (state_ == EContentVisibility::kAuto && !state_change_task_pending_) {
     document_->GetExecutionContext()
         ->GetTaskRunner(TaskType::kMiscPlatformAPI)
@@ -522,9 +525,14 @@ void DisplayLockContext::ScheduleStateChangeEventIfNeeded() {
                      WrapPersistent(this)));
     state_change_task_pending_ = true;
   }
+#endif
 }
 
 void DisplayLockContext::DispatchStateChangeEventIfNeeded() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  state_change_task_pending_ = false;
+  return;
+#else
   DCHECK(state_change_task_pending_);
   state_change_task_pending_ = false;
   // If we're not connected to view, reset the state that we reported so that we
@@ -540,6 +548,7 @@ void DisplayLockContext::DispatchStateChangeEventIfNeeded() {
     element_->DispatchEvent(*ContentVisibilityAutoStateChangeEvent::Create(
         event_type_names::kContentvisibilityautostatechange, is_locked_));
   }
+#endif
 }
 
 void DisplayLockContext::NotifyForcedUpdateScopeEnded(ForcedPhase phase) {
@@ -618,6 +627,7 @@ void DisplayLockContext::Unlock() {
   // versions only, so it does not know that ranges intersecting this subtree
   // need to be revisited now that the subtree is visible. Force a fresh
   // validation pass on the next lifecycle update.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (LocalDOMWindow* window = document_->domWindow()) {
     if (auto* registry =
             Supplement<LocalDOMWindow>::From<HighlightRegistry>(*window);
@@ -625,6 +635,7 @@ void DisplayLockContext::Unlock() {
       registry->ScheduleRepaint();
     }
   }
+#endif
 }
 
 bool DisplayLockContext::CanDirtyStyle() const {
@@ -988,10 +999,12 @@ void DisplayLockContext::ElementDisconnected() {
   DCHECK(!element_->GetComputedStyle());
   SetRequestedState(EContentVisibility::kVisible);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (auto* document_rules =
           DocumentSpeculationRules::FromIfExists(*document_)) {
     document_rules->DisplayLockedElementDisconnected(element_);
   }
+#endif
 
   // blocked_child_recalc_change_ must be cleared because things can be in an
   // inconsistent state when we add the element back (e.g. crbug.com/1262742).
@@ -1063,10 +1076,17 @@ const char* DisplayLockContext::ShouldForceUnlock() const {
   // We allow replaced elements without fallback content to be locked. This
   // check is similar to the check in DefinitelyNewFormattingContext() in
   // element.cc, but in this case we allow object element to get locked.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (IsA<HTMLObjectElement>(*element_)) {
+    return nullptr;
+  } else
+#else
   if (const auto* object_element = DynamicTo<HTMLObjectElement>(*element_)) {
     if (!object_element->UseFallbackContent())
       return nullptr;
-  } else if (IsA<HTMLImageElement>(*element_) ||
+  } else
+#endif
+  if (IsA<HTMLImageElement>(*element_) ||
              IsA<HTMLCanvasElement>(*element_) ||
              (element_->IsFormControlElement() &&
               !element_->IsOutputElement()) ||
@@ -1243,6 +1263,10 @@ void DisplayLockContext::NotifySubtreeLostSelection() {
 }
 
 void DisplayLockContext::DetermineIfSubtreeHasSelection() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  SetRenderAffectingState(RenderAffectingState::kSubtreeHasSelection, false);
+  return;
+#else
   if (!ConnectedToView() || !document_->GetFrame()) {
     SetRenderAffectingState(RenderAffectingState::kSubtreeHasSelection, false);
     return;
@@ -1265,6 +1289,7 @@ void DisplayLockContext::DetermineIfSubtreeHasSelection() {
   }
   SetRenderAffectingState(RenderAffectingState::kSubtreeHasSelection,
                           subtree_has_selection);
+#endif
 }
 
 void DisplayLockContext::SetRenderAffectingState(RenderAffectingState state,

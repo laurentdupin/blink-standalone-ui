@@ -22,7 +22,7 @@ REQUIRED_RUNTIME_POLICIES = {
     "javascript_execution": "blocked",
     "network_access": "blocked",
     "filesystem_resource_loading": "blocked",
-    "gpu_presentation": "blocked",
+    "gpu_presentation": "source_owned_viz_gpu_vulkan",
     "browser_process_services": "blocked",
     "resource_loading": "caller_asset_provider_only",
 }
@@ -31,8 +31,9 @@ REQUIRED_PUBLIC_BOUNDARIES = {
     "RendererCreateInfo",
     "FrameInput",
     "AssetProvider",
-    "RenderResult",
-    "DrawCommandList",
+    "StandaloneCompositorRuntime",
+    "CompositorFrameResult",
+    "NativePresentationResult",
 }
 
 REQUIRED_SHIMS = {

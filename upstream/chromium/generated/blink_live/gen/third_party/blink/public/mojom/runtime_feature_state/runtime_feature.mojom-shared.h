@@ -22,7 +22,6 @@
 
 
 #include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 
@@ -95,7 +94,7 @@ namespace blink::mojom {
 namespace perfetto {
 
 template <>
-struct COMPONENT_EXPORT(MOJOM_SHARED_BLINK_COMMON_EXPORT) TraceFormatTraits<::blink::mojom::RuntimeFeature> {
+struct  TraceFormatTraits<::blink::mojom::RuntimeFeature> {
  static void WriteIntoTrace(perfetto::TracedValue context, ::blink::mojom::RuntimeFeature value);
 };
 

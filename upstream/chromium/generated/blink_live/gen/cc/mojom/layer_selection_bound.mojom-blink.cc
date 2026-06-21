@@ -25,6 +25,8 @@
 #include "cc/mojom/layer_selection_bound.mojom-blink-import-headers.h"
 #include "cc/mojom/layer_selection_bound.mojom-blink-test-utils.h"
 #include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
+#include "ui/gfx/geometry/mojom/geometry_mojom_traits.h"
+#include "ui/gfx/mojom/selection_bound_mojom_traits.h"
 
 
 namespace cc::mojom::blink {
@@ -109,8 +111,8 @@ LayerSelection::LayerSelection()
       end() {}
 
 LayerSelection::LayerSelection(
-    LayerSelectionBoundPtr start_in,
-    LayerSelectionBoundPtr end_in)
+    const ::cc::LayerSelectionBound& start_in,
+    const ::cc::LayerSelectionBound& end_in)
     : start(std::move(start_in)),
       end(std::move(end_in)) {}
 
@@ -123,7 +125,7 @@ void LayerSelection::WriteIntoTrace(
     dict.AddItem(
       "start"), this->start,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type LayerSelectionBoundPtr>"
+      "<value of type const ::cc::LayerSelectionBound&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)
@@ -132,7 +134,7 @@ void LayerSelection::WriteIntoTrace(
     dict.AddItem(
       "end"), this->end,
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-      "<value of type LayerSelectionBoundPtr>"
+      "<value of type const ::cc::LayerSelectionBound&>"
 #else
       "<value>"
 #endif  // BUILDFLAG(MOJO_TRACE_ENABLED)

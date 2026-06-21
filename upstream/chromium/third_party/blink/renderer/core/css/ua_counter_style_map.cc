@@ -15,8 +15,10 @@ namespace {
 
 bool IsPredefinedSymbolMarkerName(const AtomicString& name) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  return name == "disc" || name == "square" || name == "circle" ||
-         name == "disclosure-open" || name == "disclosure-closed";
+  // Keep the common standalone list markers on the textual counter-style path.
+  // This lets marker glyph metrics and spacing come from Blink text layout
+  // instead of the legacy geometric symbol painter.
+  return name == "disclosure-open" || name == "disclosure-closed";
 #else
   static const AtomicString* predefined_symbol_markers[] = {
       &keywords::kDisc, &keywords::kSquare, &keywords::kCircle,

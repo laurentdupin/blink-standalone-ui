@@ -38,10 +38,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/css/forced_colors.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/public/mojom/css/preferred_contrast.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/color_scheme.mojom-forward.h"
-#endif
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
@@ -56,28 +54,6 @@ class ColorProvider;
 }
 
 namespace blink {
-
-#if defined(STANDALONE_RENDERER_GN_PROBE) && \
-    !defined(BLINK_STANDALONE_THEME_MOJOM_ENUMS_DEFINED)
-#define BLINK_STANDALONE_THEME_MOJOM_ENUMS_DEFINED
-namespace mojom::blink {
-enum class ColorScheme {
-  kLight,
-  kDark,
-};
-
-enum class PreferredContrast {
-  kNoPreference,
-  kMore,
-  kLess,
-  kCustom,
-};
-}  // namespace mojom::blink
-namespace mojom {
-using ColorScheme = ::blink::mojom::blink::ColorScheme;
-using PreferredContrast = ::blink::mojom::blink::PreferredContrast;
-}  // namespace mojom
-#endif
 
 class WebThemeEngine {
  public:

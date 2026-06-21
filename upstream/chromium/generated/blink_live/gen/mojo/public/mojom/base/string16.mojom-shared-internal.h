@@ -13,7 +13,6 @@
 #include "mojo/public/mojom/base/big_buffer.mojom-shared-internal.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -30,7 +29,7 @@ class String16_Data;
 class BigString16_Data;
 
 #pragma pack(push, 1)
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) String16_Data {
+class  String16_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
@@ -78,7 +77,7 @@ struct String16_UnserializedMessageContext
 template <typename UserType, typename DataView>
 const mojo::internal::UnserializedMessageContext::Tag
     String16_UnserializedMessageContext<UserType, DataView>::kMessageTag = {};
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) BigString16_Data {
+class  BigString16_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

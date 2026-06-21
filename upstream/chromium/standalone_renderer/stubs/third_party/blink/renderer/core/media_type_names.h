@@ -4,11 +4,15 @@
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink::media_type_names {
+extern const AtomicString& kAll;
+extern const AtomicString& kScreen;
+extern const AtomicString& kPrint;
+extern const AtomicString& kTv;
 
-inline const AtomicString kAll("all");
-inline const AtomicString kScreen("screen");
-inline const AtomicString kPrint("print");
-inline const AtomicString kTv("tv");
+constexpr unsigned kNamesCount = 4;
+
+void Init();
+
 
 }  // namespace blink::media_type_names
 

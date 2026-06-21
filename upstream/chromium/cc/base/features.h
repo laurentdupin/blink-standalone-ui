@@ -83,9 +83,8 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSlimScheduler);
 // Modes for `kWaitForLateScrollEvents` changing event dispatch. Where the
 // default is to just always enqueue scroll events.
 //
-// The ideal goal for both
-// `kScrollEventDispatchModeNameDispatchScrollEventsImmediately` and
-// `kScrollEventDispatchModeDispatchScrollEventsUntilDeadline` is that they will
+// The ideal goal for
+// `kScrollEventDispatchModeNameDispatchScrollEventsImmediately` is that it will
 // wait for `kWaitForLateScrollEventsDeadlineRatio` of the frame interval for
 // input. During this time the first scroll event will be dispatched
 // immediately. Subsequent scroll events will be enqueued. At the deadline we
@@ -106,11 +105,6 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSlimScheduler);
 // production, we will first attempt to generate a new prediction to dispatch.
 // As in `kScrollEventDispatchModeUseScrollPredictorForEmptyQueue`. After
 // which we will resume frame production and enqueuing input.
-//
-// `kScrollEventDispatchModeDispatchScrollEventsUntilDeadline` relies on
-// `blink::InputHandlerProxy` to directly enforce the deadline. This isolates us
-// from cc scheduling bugs. Allowing us to no longer dispatch events, even if
-// frame production has yet to complete.
 CC_BASE_EXPORT extern const base::FeatureParam<std::string>
     kScrollEventDispatchMode;
 CC_BASE_EXPORT extern const char
@@ -119,8 +113,6 @@ CC_BASE_EXPORT extern const char
     kScrollEventDispatchModeUseScrollPredictorForEmptyQueue[];
 CC_BASE_EXPORT extern const char
     kScrollEventDispatchModeUseScrollPredictorForDeadline[];
-CC_BASE_EXPORT extern const char
-    kScrollEventDispatchModeDispatchScrollEventsUntilDeadline[];
 
 // Enables Viz service-side layer trees for content rendering.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kTreesInViz);
@@ -154,9 +146,17 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kAllowLCDTextWithFilter);
 // explicitly via img.decode(), it will be decoded only once.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kPreventDuplicateImageDecodes);
 
+// When enabled, HTMLImageElement::decode() promises resolve even if the image
+// is too large to fit into the image decode cache budget.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kResolveLargeImageDecodes);
+
 // When enabled, fix bug where an image decode cache entry last use timestamp is
 // initialized to 0 instead of now.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kInitImageDecodeLastUseTime);
+
+// When enabled, throttles the framerate after a certain number of no-damage
+// frames in a row.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kThrottleRepeatedNoDamageFrames);
 
 // On devices with a high refresh rate, whether to throttle main (not impl)
 // frame production to 60Hz.
@@ -226,8 +226,13 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSlimDirectReceiverIpc);
 // When enabled, the overscroll effect will display on non-root scrollers.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kOverscrollEffectOnNonRootScrollers);
 
-// A kill switch in case skipping finish causes unexpected issues.
-CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSkipFinishDuringReleaseLayerTreeFrameSink);
+// When enabled, scrolling to the end of a snap scroller has the same fling
+// curve as a regular scroller.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSnapFlingNearExtremes);
+
+// When enabled, SnapFlingController uses decay-based prediction for snap
+// flings.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSnapFlingDecayPrediction);
 
 // When enabled, the V4 scroll jank metric will be emitted.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kScrollJankV4Metric);
@@ -242,6 +247,16 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(
 CC_BASE_EXPORT BASE_DECLARE_FEATURE_PARAM(
     double,
     kScrollJankV4MetricFlingContinuityThreshold);
+
+// When disabled, `cc::ScrollJankV4FrameStageCalculator` relies on the
+// timestamps of arrival of individual `cc::ScrollEventMetrics` in the renderer
+// compositor (`scroll_event_metrics->GetDispatchStageTimestamp(
+// cc::EventMetrics::DispatchStage::kGenerated)`) when calculating the
+// `ScrollJankV4Frame::Stage`s that happened in a single frame. When enabled,
+// `cc::ScrollJankV4FrameStageCalculator` uses the scroll IDs
+// (`scroll_event_metrics->scroll_begin_arrival_timestamp()`) instead.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kUseScrollIdToCalculateScrollJankV4FrameStages);
 
 // When enabled, AsyncLayerTreeFrameSink will generate its own BeginFrameArgs
 // when auto_needs_begin_frame_ is enabled.
@@ -270,6 +285,17 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kBrowserControlsScrollSnapAnimation);
 // instead of a point sample near edge_end. This is a kill switch for
 // crbug.com/451833352.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSelectionEdgeVisibilityUsesFullEdge);
+
+// When enabled, ResourcePool will prioritize exact size matches when reusing
+// resources.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kResourcePoolPreferExactSizeReuse);
+
+// When enabled, instructs the scheduler to act as though a new BeginMainFrame
+// signal has just occurred. This optimization is specific to the last frame of
+// the document renderer during a cross-document view transition and should
+// not occur otherwise.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kSendEarlyFinalBeginMainFrame);
+CC_BASE_EXPORT bool SendEarlyFinalBeginMainFrameIsEnabled();
 
 }  // namespace features
 

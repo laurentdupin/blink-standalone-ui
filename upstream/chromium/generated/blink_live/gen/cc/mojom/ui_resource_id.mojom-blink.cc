@@ -36,10 +36,6 @@ UIResourceId::UIResourceId(
     : value(std::move(value_in)) {}
 
 UIResourceId::~UIResourceId() = default;
-size_t UIResourceId::Hash(size_t seed) const {
-  seed = mojo::internal::WTFHash(seed, this->value);
-  return seed;
-}
 
 void UIResourceId::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

@@ -20,11 +20,18 @@ class CORE_EXPORT AgentRegistry {
   DISALLOW_NEW();
 
  public:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  AgentRegistry() = default;
+#else
   AgentRegistry() : data_(MakeGarbageCollected<Data>()) {}
+#endif
 
   // Add an agent to this list. An agent should not be added to the same
   // list more than once.
   void AddAgent(AgentType* agent) {
+    if (!data_) {
+      data_ = MakeGarbageCollected<Data>();
+    }
     if (HasAgent(agent))
       return;
     if (!RequiresCopy()) {
@@ -41,6 +48,9 @@ class CORE_EXPORT AgentRegistry {
   // Removes the given agent from this list. Does nothing if this agent is
   // not in this list.
   void RemoveAgent(AgentType* agent) {
+    if (!data_) {
+      return;
+    }
     if (!HasAgent(agent))
       return;
     wtf_size_t position = data_->agents.Find(agent);
@@ -62,9 +72,12 @@ class CORE_EXPORT AgentRegistry {
   // This method must be safe to call during finalization.
   bool IsEmpty() const { return is_empty_; }
 
-  wtf_size_t size() const { return data_->agents.size(); }
+  wtf_size_t size() const { return data_ ? data_->agents.size() : 0; }
 
   bool HasAgent(AgentType* agent) const {
+    if (!data_) {
+      return false;
+    }
     return data_->agents.Find(agent) != kNotFound;
   }
 
@@ -76,6 +89,9 @@ class CORE_EXPORT AgentRegistry {
   //     });
   template <typename ForEachCallable>
   void ForEachAgent(const ForEachCallable& callable) const {
+    if (!data_) {
+      return;
+    }
     iteration_counter_++;
     Member<Data> snapshot = data_;
     for (const Member<AgentType>& agent : snapshot->agents) {
@@ -85,7 +101,11 @@ class CORE_EXPORT AgentRegistry {
       iteration_counter_--;
   }
 
-  void Trace(Visitor* visitor) const { visitor->Trace(data_); }
+  void Trace(Visitor* visitor) const {
+    if (data_) {
+      visitor->Trace(data_);
+    }
+  }
 
  private:
   struct Data : public GarbageCollected<Data> {

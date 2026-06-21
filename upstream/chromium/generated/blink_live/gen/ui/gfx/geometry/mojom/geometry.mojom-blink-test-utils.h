@@ -8,6 +8,7 @@
 #define UI_GFX_GEOMETRY_MOJOM_GEOMETRY_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "ui/gfx/geometry/mojom/geometry.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace gfx::mojom::blink {

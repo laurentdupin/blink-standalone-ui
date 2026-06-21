@@ -5,17 +5,13 @@
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
 
 #include "base/process/memory.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "components/viz/common/gpu/context_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_provider.h"
-#endif
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
 #include "third_party/blink/renderer/platform/graphics/web_graphics_context_3d_provider_wrapper.h"
-#endif
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
@@ -27,23 +23,27 @@ namespace blink {
 
 scoped_refptr<UnacceleratedStaticBitmapImage>
 UnacceleratedStaticBitmapImage::Create(sk_sp<SkImage> image,
-                                       ImageOrientation orientation) {
-  if (!image)
+                                       ImageOrientation orientation,
+                                       const gfx::HDRMetadata& hdr_metadata) {
+  if (!image) {
     return nullptr;
+  }
   DCHECK(!image->isTextureBacked());
-  return base::AdoptRef(
-      new UnacceleratedStaticBitmapImage(std::move(image), orientation));
+  return base::AdoptRef(new UnacceleratedStaticBitmapImage(
+      std::move(image), orientation, hdr_metadata));
 }
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(
     sk_sp<SkImage> image,
-    ImageOrientation orientation)
+    ImageOrientation orientation,
+    const gfx::HDRMetadata& hdr_metadata)
     : StaticBitmapImage(orientation) {
   CHECK(image);
   DCHECK(!image->isLazyGenerated());
   paint_image_ =
       CreatePaintImageBuilder()
           .set_image(std::move(image), cc::PaintImage::GetNextContentId())
+          .set_hdr_metadata(hdr_metadata)
           .TakePaintImage();
 }
 

@@ -298,6 +298,17 @@ void LayoutSVGRoot::StyleDidChange(
     const StyleChangeContext& style_change_context) {
   NOT_DESTROYED();
   LayoutReplaced::StyleDidChange(diff, old_style, style_change_context);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (IsEmbeddedThroughSVGImage() && IsDocumentElement() && IsInline()) {
+    // The isolated SVG image document is installed synchronously and its
+    // document-element <svg> can retain SVG's atomic-inline display at layout
+    // object creation time. The frame's LayoutView is laid out as a block root,
+    // so the embedded document's LayoutSVGRoot must be a block child before it
+    // is inserted or SVGImage paint will enter the inline child iterator on the
+    // parentless LayoutView.
+    SetInline(false);
+  }
+#endif
 
   if (old_style && StyleChangeAffectsIntrinsicSize(*old_style))
     IntrinsicSizingInfoChanged();

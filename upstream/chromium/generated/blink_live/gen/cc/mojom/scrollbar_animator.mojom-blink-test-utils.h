@@ -8,6 +8,7 @@
 #define CC_MOJOM_SCROLLBAR_ANIMATOR_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/scrollbar_animator.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

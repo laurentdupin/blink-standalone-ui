@@ -524,15 +524,11 @@ void FrameSequenceMetrics::TraceData::Advance(base::TimeTicks start_timestamp,
   if (!enabled)
     return;
   if (!trace_track) {
-    // The underlying usage of TRACE_ID_LOCAL is mapping the raw uint64_t from
-    // the point into either `trace_event_internal::TraceID::LocalId` or
-    // `perfetto::internal::LegacyTraceId`. However the trace macros don't
-    // support just providing that object directly. Here we do the cast
-    // ourselves ahead, and save the resulting value. This value will be used to
-    // nest other traces, as well as close the async trace at a later time. The
-    // value can also be merged into future sequences. This avoids holding
-    // dangling ptrs.
-    trace_track.emplace(perfetto::Track::FromPointer(this));
+    // Create a NamedTrack that will be used to nest other events, as well as
+    // close the async trace at a later time. The track can also be merged into
+    // future sequences. This avoids holding dangling ptrs.
+    trace_track.emplace(perfetto::NamedTrack::FromPointer(
+        perfetto::StaticString(histogram_name), this));
     TRACE_EVENT_BEGIN(
         "cc,benchmark", perfetto::StaticString(histogram_name), *trace_track,
         start_timestamp, "name",
@@ -760,12 +756,10 @@ void FrameSequenceMetrics::TraceJankV3(uint64_t sequence_number,
   dict->SetString("tracker-type",
                   FrameSequenceTracker::GetFrameSequenceTrackerTypeName(type_));
   dict->EndDictionary();
-  TRACE_EVENT_BEGIN("cc,benchmark", "JankV3",
-                    perfetto::Track::FromPointer(this), last_termination_time,
+  const auto track = perfetto::NamedTrack::FromPointer("JankV3", this);
+  TRACE_EVENT_BEGIN("cc,benchmark", "JankV3", track, last_termination_time,
                     "data", std::move(dict));
-  TRACE_EVENT_END("cc,benchmark",
-                  /*"JankV3"*/ perfetto::Track::FromPointer(this),
-                  termination_time);
+  TRACE_EVENT_END("cc,benchmark", track, termination_time);
 }
 
 }  // namespace cc

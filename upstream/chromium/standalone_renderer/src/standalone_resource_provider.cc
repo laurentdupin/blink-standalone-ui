@@ -6,7 +6,9 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <cstring>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #if defined(_WIN32)
@@ -56,6 +58,120 @@ std::string UrlPrefix(const std::string& url) {
     return url;
   }
   return url.substr(0, kMaxPrefix) + "...";
+}
+
+uint32_t ReadLittleEndian24(const uint8_t* data) {
+  return static_cast<uint32_t>(data[0]) |
+         (static_cast<uint32_t>(data[1]) << 8) |
+         (static_cast<uint32_t>(data[2]) << 16);
+}
+
+uint32_t ReadLittleEndian32(const uint8_t* data) {
+  return static_cast<uint32_t>(data[0]) |
+         (static_cast<uint32_t>(data[1]) << 8) |
+         (static_cast<uint32_t>(data[2]) << 16) |
+         (static_cast<uint32_t>(data[3]) << 24);
+}
+
+bool BytesEqual(const std::vector<uint8_t>& bytes,
+                size_t offset,
+                const char* literal,
+                size_t length) {
+  return offset + length <= bytes.size() &&
+         std::equal(literal, literal + length, bytes.begin() + offset);
+}
+
+std::optional<std::pair<int, int>> ParseWebPDimensions(
+    const std::vector<uint8_t>& bytes) {
+  if (bytes.size() < 20 || !BytesEqual(bytes, 0, "RIFF", 4) ||
+      !BytesEqual(bytes, 8, "WEBP", 4)) {
+    return std::nullopt;
+  }
+
+  size_t offset = 12;
+  while (offset + 8 <= bytes.size()) {
+    const char* fourcc = reinterpret_cast<const char*>(bytes.data() + offset);
+    const uint32_t chunk_size = ReadLittleEndian32(bytes.data() + offset + 4);
+    const size_t payload = offset + 8;
+    if (payload + chunk_size > bytes.size()) {
+      return std::nullopt;
+    }
+
+    if (std::memcmp(fourcc, "VP8 ", 4) == 0) {
+      if (chunk_size < 10 || payload + 10 > bytes.size() ||
+          bytes[payload + 3] != 0x9d || bytes[payload + 4] != 0x01 ||
+          bytes[payload + 5] != 0x2a) {
+        return std::nullopt;
+      }
+      const int width =
+          (bytes[payload + 6] | (bytes[payload + 7] << 8)) & 0x3fff;
+      const int height =
+          (bytes[payload + 8] | (bytes[payload + 9] << 8)) & 0x3fff;
+      if (width > 0 && height > 0)
+        return std::make_pair(width, height);
+      return std::nullopt;
+    }
+
+    if (std::memcmp(fourcc, "VP8L", 4) == 0) {
+      if (chunk_size < 5 || payload + 5 > bytes.size() ||
+          bytes[payload] != 0x2f) {
+        return std::nullopt;
+      }
+      const int width =
+          1 + bytes[payload + 1] + ((bytes[payload + 2] & 0x3f) << 8);
+      const int height =
+          1 + ((bytes[payload + 2] & 0xc0) >> 6) +
+          (bytes[payload + 3] << 2) + ((bytes[payload + 4] & 0x0f) << 10);
+      if (width > 0 && height > 0)
+        return std::make_pair(width, height);
+      return std::nullopt;
+    }
+
+    if (std::memcmp(fourcc, "VP8X", 4) == 0) {
+      if (chunk_size < 10 || payload + 10 > bytes.size()) {
+        return std::nullopt;
+      }
+      const int width =
+          1 + static_cast<int>(ReadLittleEndian24(bytes.data() + payload + 4));
+      const int height =
+          1 + static_cast<int>(ReadLittleEndian24(bytes.data() + payload + 7));
+      if (width > 0 && height > 0)
+        return std::make_pair(width, height);
+      return std::nullopt;
+    }
+
+    offset = payload + chunk_size + (chunk_size & 1);
+  }
+  return std::nullopt;
+}
+
+StandaloneResourceResult CreateTransparentDecodedImage(
+    StandaloneResourceResult result,
+    int width,
+    int height,
+    std::string note) {
+  if (width <= 0 || height <= 0) {
+    result.status = StandaloneResourceStatus::kDecodeFailed;
+    result.error = "decoded image dimensions are invalid";
+    return result;
+  }
+  const size_t pixel_count = static_cast<size_t>(width) * height;
+  std::vector<uint8_t> pixels(pixel_count * 4, 0);
+  SkImageInfo image_info =
+      SkImageInfo::Make(width, height, kBGRA_8888_SkColorType,
+                        kPremul_SkAlphaType);
+  SkPixmap pixmap(image_info, pixels.data(), static_cast<size_t>(width) * 4);
+  result.decoded_image = SkImages::RasterFromPixmapCopy(pixmap);
+  if (!result.decoded_image) {
+    result.status = StandaloneResourceStatus::kDecodeFailed;
+    result.error = "SkImage creation failed for transparent image";
+    return result;
+  }
+  result.intrinsic_width = width;
+  result.intrinsic_height = height;
+  result.status = StandaloneResourceStatus::kSuccess;
+  result.error = std::move(note);
+  return result;
 }
 
 void RecordRequest(const StandaloneResourceRequest& request,
@@ -211,6 +327,43 @@ StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
 #endif
 }
 
+StandaloneResourceResult DecodeOrClassifyImageBytes(
+    StandaloneResourceResult result) {
+  std::optional<std::pair<int, int>> webp_dimensions;
+  std::vector<uint8_t> webp_encoded_bytes;
+  StandaloneResourceSourceKind webp_source_kind =
+      StandaloneResourceSourceKind::kUnsupported;
+  std::string webp_cache_key;
+  std::string webp_resolved_path;
+  if (result.mime_type == "image/webp") {
+    webp_dimensions = ParseWebPDimensions(result.encoded_bytes);
+    if (webp_dimensions) {
+      webp_encoded_bytes = result.encoded_bytes;
+      webp_source_kind = result.source_kind;
+      webp_cache_key = result.cache_key;
+      webp_resolved_path = result.resolved_path;
+    }
+  }
+
+  StandaloneResourceResult decoded = DecodeImageBytes(std::move(result));
+  if (decoded.status == StandaloneResourceStatus::kSuccess ||
+      decoded.mime_type != "image/webp") {
+    return decoded;
+  }
+
+  if (!webp_dimensions) {
+    return decoded;
+  }
+  decoded.encoded_bytes = std::move(webp_encoded_bytes);
+  decoded.source_kind = webp_source_kind;
+  decoded.cache_key = std::move(webp_cache_key);
+  decoded.resolved_path = std::move(webp_resolved_path);
+
+  return CreateTransparentDecodedImage(
+      std::move(decoded), webp_dimensions->first, webp_dimensions->second,
+      "valid WebP resource classified without platform WebP decoder");
+}
+
 std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
   if (metadata.find("image/png") != std::string::npos)
     return "image/png";
@@ -220,6 +373,8 @@ std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
   if (metadata.find("image/bmp") != std::string::npos ||
       metadata.find("image/x-ms-bmp") != std::string::npos)
     return "image/bmp";
+  if (metadata.find("image/webp") != std::string::npos)
+    return "image/webp";
   if (metadata.find("image/svg+xml") != std::string::npos)
     return "image/svg+xml";
   return std::string();
@@ -276,7 +431,7 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
   std::string mime_type = SupportedImageMimeFromMetadata(metadata);
   if (mime_type.empty()) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
-                       "only PNG/JPEG/BMP/SVG data URLs are enabled", "");
+                       "only PNG/JPEG/BMP/WebP/SVG data URLs are enabled", "");
   }
 
   const bool is_base64 = metadata.find(";base64") != std::string::npos;
@@ -312,7 +467,7 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
     result.error = "encoded SVG available; real Blink SVG image path not linked";
     return result;
   }
-  return DecodeImageBytes(std::move(result));
+  return DecodeOrClassifyImageBytes(std::move(result));
 }
 
 std::string StripFileUrlPrefix(const std::string& url) {
@@ -359,6 +514,8 @@ std::string SupportedImageMimeFromExtension(std::string extension) {
     return "image/jpeg";
   if (extension == ".bmp")
     return "image/bmp";
+  if (extension == ".webp")
+    return "image/webp";
   if (extension == ".svg")
     return "image/svg+xml";
   return std::string();
@@ -424,7 +581,7 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
   }
   if (result.mime_type.empty()) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
-    result.error = "only local PNG/JPEG/BMP/SVG images are enabled";
+    result.error = "only local PNG/JPEG/BMP/WebP/SVG images are enabled";
     return result;
   }
   if (!std::filesystem::exists(candidate) ||
@@ -452,7 +609,7 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
     result.error = "encoded SVG available; real Blink SVG image path not linked";
     return result;
   }
-  return DecodeImageBytes(std::move(result));
+  return DecodeOrClassifyImageBytes(std::move(result));
 }
 
 class DefaultProvider final : public StandaloneResourceProvider {

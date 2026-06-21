@@ -12,6 +12,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "ui/gfx/mojom/swap_timings.mojom-params-data.h"
+#include "mojo/public/cpp/base/time_mojom_traits.h"
 namespace gfx {
 namespace mojom {
 

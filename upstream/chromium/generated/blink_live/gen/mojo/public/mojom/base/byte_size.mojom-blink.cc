@@ -36,6 +36,10 @@ ByteSize::ByteSize(
     : size(std::move(size_in)) {}
 
 ByteSize::~ByteSize() = default;
+size_t ByteSize::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, this->size);
+  return seed;
+}
 
 void ByteSize::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {
@@ -64,6 +68,10 @@ ByteSizeDelta::ByteSizeDelta(
     : delta(std::move(delta_in)) {}
 
 ByteSizeDelta::~ByteSizeDelta() = default;
+size_t ByteSizeDelta::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, this->delta);
+  return seed;
+}
 
 void ByteSizeDelta::WriteIntoTrace(
     perfetto::TracedValue traced_context) const {

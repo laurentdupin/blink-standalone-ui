@@ -8,6 +8,7 @@
 #define CC_MOJOM_LAYER_SELECTION_BOUND_MOJOM_BLINK_TEST_UTILS_H_
 
 #include "cc/mojom/layer_selection_bound.mojom-blink.h"
+#include "third_party/blink/public/platform/web_common.h"
 
 
 namespace cc::mojom::blink {

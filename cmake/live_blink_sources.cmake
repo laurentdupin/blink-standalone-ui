@@ -10,13 +10,17 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/crash_logging.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/dump_without_crashing.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/hash/hash.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/hash/legacy_hash.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/case_conversion.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/i18n_constants.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_string_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/string_escape.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_writer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/location.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/advanced_memory_safety_checks.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/aligned_memory.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/ref_counted.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/ref_counted_memory.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/weak_ptr.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_internal.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_types.cc
@@ -56,6 +60,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/tick_clock.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/cityhash/city.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/cityhash_v103/src/city_v103.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum-dtoa.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/bignum.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/double_conversion/double-conversion/cached-powers.cc
@@ -113,33 +118,44 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/shared_image_usage.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/sync_token.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cookies/site_for_cookies.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/address_family.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/base64.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/data_url.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/ip_address.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/ip_address_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/mime_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/net_string_util_icu.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/parse_number.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/registry_controlled_domains/registry_controlled_domain.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/lookup_string_in_fixed_set.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/url_util.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_byte_range.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/log/net_log_values.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_connection_info.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_content_disposition.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_response_headers.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_status_code.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/http/http_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/url_request/referrer_policy.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/third_party/quiche/src/quiche/common/structured_headers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/cicp.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/platform_canvas.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/raster_handle_allocator_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/rgba_to_yuva.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/SkDiscardableMemory_chrome.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skcolorspace_primaries.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skcolorspace_trfn.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skia_trace_memory_dump_impl.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skia_utils_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/skia_utils_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/metrics/public/cpp/metrics_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/simdutf/simdutf.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_mixer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/overlay_plane_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/linear_gradient.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/hdr_static_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/swap_result.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/skia_span_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/skia_color_space_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_utils.cc
@@ -181,13 +197,16 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/html_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/html_tokenizer_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/keywords.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/mathml_element_type_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/mathml_names.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/svg_element_type_helpers.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/svg_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/trustedtypes/trusted_types_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xlink_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xml_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/xmlns_names.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/cors/cors_error_status.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/cors/origin_access_entry.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/fetch_retry_options.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/integrity_report.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource.cc
@@ -195,65 +214,34 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_load_timing.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_request.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_response.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/heap/custom_spaces.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/associated_interface_provider_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_adapter.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_page_embedder.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_runtime_adapter.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_runtime_environment.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blink_embedded_ua_resources.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/compositor_runtime.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/vulkan_window_host.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/content_security_policy_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/cpu_renderer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/css_file_loader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/devtools_instrumentation_unsupported.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/document_loader_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/draw_command.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/draw_command_serializer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/file_chooser_standalone.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/fetch_initiator_type_names_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/generated_name_atoms_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/history_item_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/incremental_damage.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/inspector_trace_events_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_boundary_value_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_core_initializer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_link_boundary_stubs.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_native_theme.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_element_resource_support.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/load_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_phase1_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_feature_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/paint_translator.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/render_frame.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/render_policy.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/retained_scene.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/url_network_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_history_item_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/hardening.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/raw_logging.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/throw_delegate.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/container/internal/raw_hash_set.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/hash/internal/city.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/hash/internal/hash.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/numeric/int128.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/ascii.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/charconv.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/escaping.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_bigint.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_parse.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/escaping.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/memutil.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/bind.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/extension.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/float_conversion.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/output.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/parser.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/internal/utf8.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/match.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_gesture_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value_mojom_traits.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/animation/element_smil_animations.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/trustedtypes/trusted_script_url.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/bitmap_image.cc
@@ -285,6 +273,10 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkColorPalette.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkEncodedInfo.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkExif.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkHdrAgtm.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkHdrAgtmParse.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkGainmapInfo.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkHdrMetadata.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCodecBase.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCodec.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkPngCompositeChunkReader.cpp
@@ -292,6 +284,12 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkSampler.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkSwizzler.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/codec/SkTiffUtility.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkDataTable.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkMD5.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/encode/SkEncoder.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/encode/SkICC.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/encode/SkPngEncoderBase.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/encode/SkPngEncoderImpl.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngerror.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngget.c
@@ -303,16 +301,12 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngset.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngtrans.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwio.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwtran.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/crc32.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/infback.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inffast.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inflate.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inftrees.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/zutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_effect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/animation/animation_clock.cc
@@ -601,6 +595,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/select_mutation_observer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/select_type.cc
 
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_base_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_body_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_br_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_collection.cc
@@ -621,7 +616,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_title_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_unknown_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/list_item_ordinal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/background_html_scanner.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/atomic_html_token.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/css_preload_scanner.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/fragment_parser.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_construction_site.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_document_parser.cc
@@ -632,9 +629,13 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_parser_idioms.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_parser_options.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_parser_reentry_permit.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_preload_scanner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_resource_preloader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_tokenizer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/html_tree_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/patch.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/preload_request.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/resource_preloader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/shadow/shadow_element_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/window_name_collection.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/anchor_map.cc
@@ -1010,6 +1011,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/trustedtypes/trusted_script_url.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/testing/dummy_page_holder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/view_transition/view_transition_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/exported/file_path_conversion.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/exported/web_url.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_height.cc
@@ -1050,17 +1052,29 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/geometry/stroke_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/blend_mode.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/box_reflection.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/adjust_mask_layer_geometry.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/chunk_to_layer_mapper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/content_layer_client_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/layers_as_json.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/paint_artifact_compositor.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/paint_chunks_to_cc_layer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/pending_layer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing/property_tree_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositing_reasons.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositor_element_id.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/compositor_filter_operations.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/graphics_context.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/graphics_context_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/intercepting_canvas.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/logging_canvas.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/memory_managed_paint_canvas.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/memory_managed_paint_recorder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/cull_rect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/display_item.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/display_item_client.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/display_item_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/display_item_raster_invalidator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/drawing_display_item.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/drawing_recorder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.cc
@@ -1081,6 +1095,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/paint_under_invalidation_checker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/property_tree_state.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/raster_invalidation_tracking.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/raster_invalidator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/region_capture_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/scroll_paint_property_node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint/scrollbar_display_item.cc
@@ -1089,8 +1104,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/paint_invalidation_reason.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/path_traversal_state.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/platform_focus_ring.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/predefined_color_space.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/styled_stroke_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/touch_action_rect.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/instrumentation/canvas_memory_dump_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/json/json_parser.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/json/json_values.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/fetch_context.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_loader_options.cc
@@ -1109,6 +1127,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_default.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/timer.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/transforms/affine_transform.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/transforms/interpolated_transform_operation.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/transforms/matrix_3d_transform_operation.cc
@@ -1156,6 +1175,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/text/utf16.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/text/utf8.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/text/wtf_string.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/stack_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/threading.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/threading_primitives.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/wtf/uuid.cc
@@ -1368,7 +1388,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/win/SkHRESULT.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkParsePath.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/rrect_f.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/rrect_f_builder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/url_canon.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/origin.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkPathMeasure.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkTextBlob.cpp
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/pathops/SkPathOpsOp.cpp
@@ -2188,6 +2210,1712 @@ set_source_files_properties(
   PROPERTIES INCLUDE_DIRECTORIES
              "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/include")
 
+set(BLINK_STANDALONE_PROTOZERO_RUNTIME_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/field.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/gen_field_helpers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/message_arena.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/packed_repeated_fields.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/proto_decoder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/scattered_heap_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/scattered_stream_null_delegate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/scattered_stream_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/static_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/virtual_destructors.cc
+)
+
+set(BLINK_STANDALONE_PROTOZERO_FILTERING_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/filtering/filter_bytecode_parser.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/filtering/message_filter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/filtering/message_filter_config.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protozero/filtering/string_filter.cc
+)
+
+set(BLINK_STANDALONE_PERFETTO_BASE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/android_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/base64.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/clock_snapshots.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/crash_keys.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/ctrl_c_handler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/default_platform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/event_fd.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/file_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/getopt_compat.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/intrusive_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/intrusive_tree.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/lock_free_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/logging.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/metatrace.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/paged_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/periodic_task.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/pipe.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/regex/regex.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/scoped_mmap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/scoped_sched_boost.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/status.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/string_splitter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/string_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/string_view.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/string_view_splitter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/temp_file.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/thread_checker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/thread_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/thread_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/time.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/unix_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/uuid.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/version.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/virtual_destructors.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/waitable_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/base/weak_runner.cc
+)
+
+set(BLINK_STANDALONE_PERFETTO_PROTOVM_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/error_handling.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/executor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/parser.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/ro_cursor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/rw_proto.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/rw_proto_cursor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/protovm/vm.cc
+)
+
+set(BLINK_STANDALONE_PERFETTO_TRACING_CORE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/id_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/in_process_shared_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/null_trace_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/shared_memory_abi.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/shared_memory_arbiter_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/trace_packet.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/trace_writer_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/core/virtual_destructors.cc
+)
+
+set(BLINK_STANDALONE_PERFETTO_TRACING_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/console_interceptor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/data_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/event_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/interceptor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/in_process_tracing_backend.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/interceptor_trace_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/system_tracing_backend_fake.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/tracing_backend_fake.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/tracing_muxer_fake.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/tracing_muxer_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/track_event_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/internal/track_event_interned_fields.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/platform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/platform_windows.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/traced_value.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/trace_writer_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/tracing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/tracing_policy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/track.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/track_event_category_registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/track_event_legacy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/track_event_state_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/virtual_destructors.cc
+)
+
+set(BLINK_STANDALONE_PERFETTO_TRACING_SERVICE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/clock.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/metatrace_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/packet_stream_validator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/random.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/trace_buffer_v1.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/trace_buffer_v1_with_v2_shadow.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/trace_buffer_v2.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/tracing_service_endpoints_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/tracing_service_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/tracing/service/tracing_service_session.cc
+)
+
+set(BLINK_STANDALONE_PERFETTO_ANDROID_STATS_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/perfetto/src/android_stats/statsd_logging_helper.cc
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_PERFETTO_GENERATED_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/common/*.gen.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/common/*.pbzero.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/config/*.gen.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/config/*.pbzero.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/protovm/*.gen.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/protovm/*.pbzero.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/trace/*.gen.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/perfetto/protos/perfetto/trace/*.pbzero.cc
+)
+
+list(APPEND BLINK_STANDALONE_PERFETTO_GENERATED_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/base/tracing/protos/chrome_enums.pbzero.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/base/tracing/protos/chrome_track_event.pbzero.cc
+)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_PERFETTO_GENERATED_SOURCES)
+
+set(BLINK_STANDALONE_BASE_TRACING_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/interned_args_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_dump_request_args.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/named_trigger.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/perfetto_proto_appender.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_arguments.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_config.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_config_category_filter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_event_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_log.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/trace_session_observer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/traced_value.cc
+)
+
+set(BLINK_STANDALONE_BLINK_TRACING_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/instrumentation/tracing/trace_event.cc
+)
+
+# DevTools/Inspector implementation is outside the Phase 1 compositor target.
+# Keep generated headers available for declarations, but do not link the
+# inspector agents/protocol runtime or probe implementation into production.
+set(BLINK_STANDALONE_BLINK_INSPECTOR_OWNER_SOURCES
+)
+
+set(BLINK_STANDALONE_BLINK_PROBE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/probe/async_task_context.cc
+)
+
+set(BLINK_STANDALONE_RE2_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/bitmap256.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/bitstate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/compile.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/dfa.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/filtered_re2.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/mimics_pcre.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/nfa.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/onepass.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/parse.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/perl_groups.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/prefilter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/prefilter_tree.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/prog.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/re2.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/regexp.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/simplify.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/tostring.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/unicode_casefold.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/re2/unicode_groups.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/util/rune.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/re2/src/util/strutil.cc
+)
+
+set(BLINK_STANDALONE_URL_PATTERN_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/url_pattern/simple_url_pattern_matcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/url_pattern/url_pattern_util.cc
+)
+
+set(BLINK_STANDALONE_LIBURLPATTERN_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/liburlpattern/constructor_string_parser.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/liburlpattern/parse.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/liburlpattern/part.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/liburlpattern/pattern.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/liburlpattern/tokenize.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/liburlpattern/utils.cc
+)
+
+set(BLINK_STANDALONE_URL_PATTERN_INDEX_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/url_pattern_index/url_rule_util.cc
+)
+
+set(BLINK_STANDALONE_SUBRESOURCE_FILTER_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/subresource_filter/core/common/scoped_rule.cc
+)
+
+set(BLINK_STANDALONE_INSPECTOR_PROTOCOL_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/cbor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/chromium/json_platform_chromium.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/chromium/protocol_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/dispatch.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/error_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/json.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/protocol_core.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/serializable.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/span.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/inspector_protocol/crdtp/status.cc
+)
+
+set_source_files_properties(${BLINK_STANDALONE_INSPECTOR_PROTOCOL_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "CRDTP_IMPLEMENTATION")
+
+set(BLINK_STANDALONE_BLINK_INSPECTOR_PROTOCOL_GENERATED_SOURCES)
+
+# Network service runtime and network IPC implementation files are not active in
+# the standalone renderer. Generated services/network headers remain available
+# as Blink data vocabulary, but external network access is intentionally closed
+# at the standalone resource-loading boundary.
+
+set(BLINK_STANDALONE_NETWORK_PUBLIC_MOJOM_VOCABULARY_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/content_security_policy.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/content_security_policy.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/content_security_policy.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/connection_allowlist.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/connection_allowlist.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/connection_allowlist.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cors.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cors.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cors.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cors_origin_pattern.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cors_origin_pattern.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cors_origin_pattern.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cross_origin_embedder_policy.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cross_origin_embedder_policy.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cross_origin_embedder_policy.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_address.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_address.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_address.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_address_space.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_address_space.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_address_space.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_algorithm.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_algorithm.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_algorithm.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_metadata.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_metadata.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_metadata.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_policy.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_policy.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/integrity_policy.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_endpoint.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_endpoint.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/ip_endpoint.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/link_header.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/link_header.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/link_header.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/load_timing_info.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/load_timing_info.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/load_timing_info.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/network_param.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/network_param.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/network_param.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cross_origin_opener_policy.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cross_origin_opener_policy.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/cross_origin_opener_policy.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/schemeful_site.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/schemeful_site.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/schemeful_site.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/fetch_api.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/permissions_policy/permissions_policy.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/permissions_policy/permissions_policy.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/permissions_policy/permissions_policy.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/referrer_policy.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/service_worker_router_info.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/source_location.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/source_location.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/source_location.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/trust_tokens.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/trust_tokens.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/trust_tokens.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/url_response_head.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/url_response_head.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/url_response_head.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/web_sandbox_flags.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/web_sandbox_flags.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/web_sandbox_flags.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/web_bundle_handle.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/web_bundle_handle.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/web_bundle_handle.mojom.cc
+)
+
+# Structured-clone/postMessage/blob-transfer implementations are outside the
+# Phase 1 rendering target. Headers remain available as generated vocabulary,
+# but these runtime transfer paths are not linked.
+set(BLINK_STANDALONE_BLINK_MESSAGING_SOURCES)
+
+set(BLINK_STANDALONE_UNSUPPORTED_MESSAGING_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/messaging_transfer_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/task_attribution_id.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/task_attribution_id.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/task_attribution_id.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/user_activation_snapshot.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/user_activation_snapshot.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/user_activation_snapshot.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/messaging/message_port_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/messaging/message_port_descriptor.cc
+)
+
+set(BLINK_STANDALONE_FRAME_MOJOM_SUPPORT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/frame_mojom_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/frame/frame_policy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/frame/frame_policy_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/base/ime/ime_text_span.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/base/ime/mojom/ime_types_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/events/ipc/ui_events_param_traits.cc
+)
+
+set(BLINK_STANDALONE_UNSUPPORTED_POLICY_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/html_meta_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mixed_content_checker_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_mojom_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/permissions_policy_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/permissions_policy_protocol_constants_unsupported.cc
+)
+
+set(BLINK_STANDALONE_PHASE1_UNSUPPORTED_RUNTIME_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/image_map_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/lcpp_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/preload_helper_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/text_track_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/worker_performance_phase1_unsupported.cc
+)
+
+set(BLINK_STANDALONE_POLICY_CONTAINER_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/connection_allowlist.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/cross_origin_embedder_policy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/integrity_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/integrity_metadata_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/integrity_policy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/policy_container_utils.cc
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/*.mojom-shared.cc
+)
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "test-utils\\.cc$")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/annotation/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/array_buffer/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/blob/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/context_menu/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/devtools/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/disk_allocator\\.mojom")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/drag/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/fenced_frame/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/fetch/")
+list(FILTER BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/third_party/blink/public/mojom/messaging/")
+
+set(BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_VOCABULARY_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/blob/data_element.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/blob/data_element.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/static_bitmap_image.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/static_bitmap_image.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/messaging/static_bitmap_image.mojom.cc
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_MOJOM_GENERATED_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/cc/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/cc/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/cc/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/mojo/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/mojo/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/mojo/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/components/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/components/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/components/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ipc/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ipc/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/skia/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/skia/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/skia/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ui/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ui/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ui/*.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/url/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/url/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/url/*.mojom-shared.cc
+)
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "test-utils\\.cc$")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "mojo/public/mojom/base/proto_wrapper\\.mojom")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "mojo/public/mojom/base/ref_counted_memory\\.mojom")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "mojo/public/mojom/base/safe_base_name\\.mojom")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "motion_event_android")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "(^|/)android(/|_|$)")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "_android\\.mojom")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "frame_sink_video_capture")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "video_capture")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "WebGPU")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "webgpu")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "WebNN")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "webnn")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "dawn")
+# Viz, input, and GL service interfaces are non-Blink service vocabulary in
+# this phase. Keep normal/shared C++ outputs, but do not compile accidental
+# Blink variants from broad local generation passes.
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/services/viz/.*\\.mojom-blink\\.cc$")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/components/input/.*\\.mojom-blink\\.cc$")
+list(FILTER BLINK_STANDALONE_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "/ui/gl/.*\\.mojom-blink\\.cc$")
+list(REMOVE_DUPLICATES BLINK_STANDALONE_MOJOM_GENERATED_SOURCES)
+
+set(BLINK_STANDALONE_VIZ_BLINK_VALUE_MOJOM_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/compositing/local_surface_id.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/compositing/shared_image_format.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/viz/public/mojom/compositing/view_transition_element_resource_id.mojom-blink.cc
+)
+
+set(BLINK_STANDALONE_UI_GL_MOJOM_GENERATED_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ui/gl/mojom/gl_implementation.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ui/gl/mojom/gl_implementation.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/ui/gl/mojom/gl_implementation.mojom.cc
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/gpu/*.mojom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/gpu/*.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/gpu/*.mojom-shared.cc
+)
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "test-utils\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "WebGPU")
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "webgpu")
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "WebNN")
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "webnn")
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES EXCLUDE REGEX "dawn")
+list(REMOVE_DUPLICATES BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES)
+
+file(GLOB_RECURSE BLINK_STANDALONE_CC_COMPOSITOR_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/animation/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/base/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/debug/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/input/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/metrics/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/mojom/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/paint/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/raster/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/resources/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/scheduler/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/tiles/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/trees/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/view_transition/*.cc
+)
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/benchmarks/")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/test/")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/test_support/")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/android/")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "_unittest")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "_perftest")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "_pixeltest")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "_test\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "_test_base\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "_fuzzer")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/layers/video_layer.*\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/layers/video_frame_provider_client_impl\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/layers/heads_up_display_layer.*\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/paint/skottie_mru_resource_provider\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/paint/skottie_wrapper_impl\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/metrics/scroll_jank_v4_frame_stage_calculator\\.cc$")
+list(FILTER BLINK_STANDALONE_CC_COMPOSITOR_SOURCES EXCLUDE REGEX "/cc/metrics/scroll_jank_v4_tracing_recorder\\.cc$")
+list(REMOVE_DUPLICATES BLINK_STANDALONE_CC_COMPOSITOR_SOURCES)
+
+set(BLINK_STANDALONE_CC_PHASE1_EXPLICIT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/cc_scroll_jank_metrics_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/cc_micro_benchmark_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/benchmarks/benchmark_instrumentation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/benchmarks/micro_benchmark.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/benchmarks/micro_benchmark_controller_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/benchmarks/micro_benchmark_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/heads_up_display_layer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/cc/layers/heads_up_display_layer_impl.cc
+)
+
+set(BLINK_STANDALONE_NATIVE_MOJOM_TRAIT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/big_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/big_buffer_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/byte_size_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/byte_string_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/file_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/generic_pending_associated_receiver_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/generic_pending_receiver_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/process_id_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/read_only_file_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/read_only_buffer_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/shared_memory_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/shared_memory_version.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/string16_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/time_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/token_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/unguessable_token_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/values_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/base/wstring_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/string_traits_wtf.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_errors.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/message_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/message_view.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/sqlite_vfs/mojom/sqlite_vfs_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/persistent_cache/mojom/persistent_cache_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/connection_allowlist_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/cross_origin_embedder_policy_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/integrity_policy_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/network/public/cpp/url_loader_completion_status.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/blit_request_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/bitmap_in_shared_memory_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/frame_deadline_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/public/mojom/bitmap_skbitmap_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/public/mojom/image_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/mailbox_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/constants_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/gpu_disk_cache_type_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/luid_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/messaging/accelerated_static_bitmap_image_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/frame/view_transition_state_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/navigation/impression_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/tokens/tokens_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/mojo/string16_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/mojom/url_gurl_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/url/mojom/origin_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/buffer_types_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/color_space_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/display_color_spaces_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/gpu_extra_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/gpu_fence_handle_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/hdr_metadata_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/delegated_ink_metadata_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/linear_gradient_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/mask_filter_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/mojom/native_handle_types_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/mojom/gl_implementation_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/latency/mojom/latency_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/events/mojom/event_latency_metadata_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/display/mojom/display_constants_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/display/mojom/screen_info_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/display/mojom/screen_infos_mojom_traits.cc
+)
+
+set(BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/generic_pending_associated_receiver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/generic_pending_receiver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/async_flusher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/pending_flush.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/urgent_message_scope.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/connection_group.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/connection_group_ref.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/associated_interface_ptr_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/associated_group_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/associated_group.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/associated_receiver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/array_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/binding_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/connector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/control_message_handler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/control_message_proxy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/generated_code_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/handle_serialization.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/interface_endpoint_client.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message_dispatcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message_header_validator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/message_size_estimator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/multiplex_router.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/pending_receiver_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/pending_remote_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/pipe_control_message_handler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/pipe_control_message_proxy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/proxy_to_responder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/scoped_interface_endpoint_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/send_message_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/sequence_local_sync_event_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/sync_call_restrictions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/sync_event_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/sync_handle_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/sync_handle_registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/task_runner_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/thread_safe_forwarder_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_errors.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/bindings/lib/validation_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/platform/platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/functions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/handle_signal_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/platform_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/simple_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/trap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/wait.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/cpp/system/wait_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/mojo/public/c/system/thunks.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_native_struct_unsupported.cc
+)
+
+set(BLINK_STANDALONE_VIZ_COMMON_VALUE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/client/shared_image_interface.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/client/client_resource_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/viz_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/gl_switches.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/gpu/context_cache_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/blit_request.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/begin_frame_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/copy_output_request.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/copy_output_result.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/begin_frame_args.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_sinks/delay_based_time_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/frame_timing_details.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/hit_test/hit_test_region_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/aggregated_render_pass.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/aggregated_render_pass_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/compositor_frame.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/compositor_frame_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/compositor_frame_transition_directive.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/compositor_render_pass.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/compositor_render_pass_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/content_draw_quad_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/frame_deadline.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/frame_interval_inputs.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/largest_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/picture_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/quad_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/render_pass_io.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/render_pass_draw_quad_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/render_pass_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/shared_element_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/solid_color_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/surface_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/texture_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/tile_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/quads/video_hole_draw_quad.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/returned_resource.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/resources/transferable_resource.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/child_local_surface_id_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/parent_local_surface_id_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/surfaces/tracked_element_rects.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/transition_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/copy_output_result_mojom_traits.cc
+)
+
+set(BLINK_STANDALONE_VIZ_PUBLIC_CPP_MOJOM_TRAIT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/crash_keys.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/begin_frame_args_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/compositor_frame_metadata_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/compositor_frame_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/compositor_frame_transition_directive_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/compositor_render_pass_id_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/compositor_render_pass_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/filter_operation_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/filter_operations_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/frame_interval_inputs_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/frame_timing_details_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/paint_filter_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/quads_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/resource_id_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/shared_image_format_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/thread_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/transferable_resource_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/compositing/trees_in_viz_timing_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/hit_test/aggregated_hit_test_region_mojom_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/cpp/hit_test/hit_test_region_list_mojom_traits.cc
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/client/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/common/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/host/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/public/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/services/viz/privileged/*.cc
+)
+# Phase Viz/GPU keeps the broad Viz service/display import, but filters browser
+# host glue, tests, optional debugger/input trails, and platform output devices
+# that are not part of the first in-process software/Vulkan checkpoint.
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/components/viz/host/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/test/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/tests/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/test_support/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_test_")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/demo/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/java/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/debugger/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/input/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/performance_hint/")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_unittest")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_perftest")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_pixeltest")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_test\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_test_base\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_test_helper\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_mock\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "mock_")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "fake")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_fuzzer")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)android(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)fuchsia(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)ios(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)linux(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)mac(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)ozone(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)wayland(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "(^|/)x11(/|_|$)")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_android\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_fuchsia\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_ios\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_linux\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_mac\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_ozone\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_wayland\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_x11\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "delegated_ink")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "ca_layer_overlay")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "dc_layer_overlay\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_processor_android")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_processor_delegated")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_processor_mac")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_processor_ozone")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_processor_surface_control")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_processor_win")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "overlay_strategy_underlay_cast")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "test_resource_factory")
+# Browser-side GPU remote/channel wrappers are not part of the first
+# in-process Viz display checkpoint. The GPU service implementation remains in
+# the broad import; services/viz/public/cpp/gpu/gpu.cc is client/browser glue.
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/services/viz/public/cpp/gpu/gpu\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "/services/viz/public/cpp/gpu/context_provider_command_buffer\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "throw_uncaught_exception")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "skia_output_device_dawn")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "skia_output_device_dcomp")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "skia_output_device_webview")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "skia_output_device_vulkan")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "software_output_device_win")
+# Keep optional runtime/platform feature paths out of this Windows Vulkan
+# checkpoint. The generated/value vocabulary remains available separately.
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "frame_sink_throttler")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "WebGPU")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "webgpu")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "WebNN")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "webnn")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "dawn")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "gmock")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "_posix\\.cc$")
+# Video cadence matching is media-timing policy, not required for the first
+# in-process static/canvas compositor checkpoint.
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "frame_interval_matchers")
+# ImageContextImpl currently includes Skia Graphite/Dawn headers unconditionally;
+# keep Dawn/WebGPU runtime out of this Windows Vulkan checkpoint.
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "image_context_impl\\.cc$")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "video")
+list(FILTER BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES EXCLUDE REGEX "media")
+
+file(GLOB_RECURSE BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/client/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/common/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/config/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/*.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/vulkan/*.cc
+)
+list(APPEND BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/vulkan/init/vulkan_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/vulkan/win32/vulkan_implementation_win32.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/vulkan/win32/vulkan_surface_win32.cc
+)
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/test/")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/tests/")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/test_support/")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_test_")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_unittest")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_perftest")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_pixeltest")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_test\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_test_base\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_test_helper\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_mock\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "fake")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "test_helper")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "test_utils")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "test_image")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_fuzzer")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "mock_")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "mock_transfer_buffer")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "test_shared_image_interface")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "unittest_main")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/mocks")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)android(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)fuchsia(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)ios(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)linux(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)mac(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)ozone(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)wayland(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "(^|/)x11(/|_|$)")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_android\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_fuchsia\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_ios\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_linux\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_mac\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_ozone\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_wayland\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_x11\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "ahardwarebuffer")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "d3d")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "dcomp")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "compound_image_backing")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "egl_image_backing")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "external_vk_image")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "disk_cache")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "drm_modifiers_filter_vulkan")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gles2_c_lib")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/dawn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "dawn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "dxgi")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gles2_cmd_decoder")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gl_context_mock")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gl_surface_mock")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "iosurface")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "image_reader_gl_owner")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "mappable_buffer_ahb")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "mappable_buffer_io_surface")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "mappable_buffer_native_pixmap")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "native_pixmap")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "passthrough")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "memory_program_cache")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "mock_texture_owner")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "texture_owner")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "webgpu")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "webgpu_implementation")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "webgpu_interface")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "WebGPU")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "WebNN")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "webnn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gmock")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_posix\\.cc$")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gl_ozone")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "ozone_image")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "android_image")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "android.*image")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "external_vk_image_dawn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "shared_image.*dawn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gpu_surface")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "wrapped_graphite_texture_backing")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "video")
+list(FILTER BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "media")
+
+file(GLOB_RECURSE BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/*.cc
+)
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/test/")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/tests/")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_unittest")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_perftest")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_test\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_mock\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "fake")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/android/")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "/ozone/")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "android")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "ozone")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "dawn")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "WebGPU")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "webgpu")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gmock")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_posix\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_android\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_fuchsia\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_ios\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_linux\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_mac\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_ozone\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_wayland\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "_x11\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "child_window_win\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "ca_renderer")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "dcomp")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "dc_layer")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "delegated_ink")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "direct_composition")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "egl_surface_io_surface\\.cc$")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gl_mock")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gl_surface_egl_surface_control")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "gl_surface_egl_x11")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "swap_chain")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "vsync_provider_win_dcomp")
+list(FILTER BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES EXCLUDE REGEX "vsync_thread_win_dcomp")
+list(REMOVE_DUPLICATES BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES)
+
+set(BLINK_STANDALONE_GFX_RANGE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/range/range.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/range/range_f.cc
+)
+
+set(BLINK_STANDALONE_UI_VALUE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/base/ui_base_features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/trace_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/animation/tween.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/animation/keyframe/animation_curve.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/animation/keyframe/keyframe_effect.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/animation/keyframe/keyframe_model.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/animation/keyframe/keyframed_animation_curve.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/animation/keyframe/transition.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/ca_layer_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_space.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/color_space_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/delegated_ink_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/display_color_spaces.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/extension_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/font_render_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/win/d3d_shared_fence.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/ipc/gfx_param_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/ipc/geometry/gfx_param_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_extra_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/insets_outsets_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/three_point_cubic_bezier.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/transform_operation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/geometry/transform_operations.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/codec/png_codec.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/codec/vector_wstream.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_memory_buffer_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/hdr_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/overlay_layer_id.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/overlay_transform_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/win/crash_id_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/win/hwnd_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/win/window_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/selection_bound.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/swap_result.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/vsync_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/latency/latency_info.cc
+)
+
+set(BLINK_STANDALONE_VIZ_GPU_SUPPORT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/sqlite_vfs/pending_file_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/persistent_cache/pending_backend.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/discardable_memory/client/client_discardable_shared_memory_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/discardable_memory/common/discardable_shared_memory_heap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/startup_metric_utils/common/startup_metric_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/startup_metric_utils/gpu/startup_metric_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/version_info/version_info_with_user_agent.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/debugger/viz_debugger.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display/frame_interval_matchers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/image_context_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_device_dcomp.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_device_webview.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_device_vulkan.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/software_output_device_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/software_output_device_win_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/software_output_device_win_swapchain.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/frame_sinks/frame_sink_throttler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/frame_sinks/video_detector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/hit_test/hit_test_aggregator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/hit_test/hit_test_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/performance_hint/hint_session.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/client/gles2_c_lib.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/gles2_cmd_decoder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/gles2_cmd_decoder_passthrough.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_doers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_handlers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/gles2_cmd_decoder_passthrough_handlers_autogen.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/passthrough_program_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/dxgi_shared_handle_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/compound_image_backing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/external_vk_image_backing_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/external_vk_image_backing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/external_vk_image_gl_representation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/external_vk_image_overlay_representation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/external_vk_image_skia_representation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/command_buffer_stub.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/context_url.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gles2_command_buffer_stub.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_channel_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_channel_shared_image_interface.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_init.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/gpu_watchdog_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/image_transport_surface_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/raster_command_buffer_stub.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/service/shared_image_stub.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/gpu_in_process_thread_service.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/in_process_command_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/in_process_gpu_thread_holder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/raster_in_process_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/gpu_disk_cache_type.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/color_plane_layout.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/format_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/video_frame.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/video_frame_layout.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/video_frame_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/video_frame_pool.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/video_types.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/video_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/base/wait_and_replace_sync_token_client.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/media/filters/video_cadence_estimator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/convolver.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/convolver_SSE2.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/image_operations.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/opacity_filter_canvas.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkPaintFilterCanvas.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/display/win/display_config_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/dc_layer_overlay_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/dcomp_surface_registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/direct_composition_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/dc_layer_overlay_image.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gl/child_window_win.cc
+)
+
+set(BLINK_STANDALONE_ANGLE_IMAGE_UTIL_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/angle_version_info.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/angleutils.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/CompiledShaderState.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/debug.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/entry_points_enum_autogen.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/Float16ToFloat32.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/gl_enum_utils.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/gl_enum_utils_autogen.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/mathutil.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/PackedEnums.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/PackedGLEnums_autogen.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/PoolAlloc.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/SimpleMutex.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/string_utils.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/system_utils.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/system_utils_win.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/system_utils_win32.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/tls.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/utilities.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/common/third_party/xxhash/xxhash.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/image_util/imageformats.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/image_util/loadimage.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/image_util/loadimage_etc.cpp
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/compiler/preprocessor/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/compiler/translator/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/compiler/translator/glsl/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/compiler/translator/tree_ops/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/compiler/translator/tree_ops/glsl/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/src/compiler/translator/tree_util/*.cpp
+)
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/ir/src/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/tree_ops/glsl/apple/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/hlsl/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/msl/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/spirv/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/wgsl/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "/tests?/")
+list(FILTER BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES EXCLUDE REGEX "_unittest")
+list(REMOVE_DUPLICATES BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES)
+set_source_files_properties(${BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "ANGLE_ENABLE_ESSL=1;ANGLE_ENABLE_GLSL=1")
+
+# Video/audio decoding, media session, WebRTC, and media stream parser runtime
+# sources are intentionally not active in this standalone phase. Canvas and
+# static image rendering remain active through Blink, Skia, GPU, and Viz owners.
+
+set(BLINK_STANDALONE_BASE_JSON_RUNTIME_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/atomicops.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/check.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/byte_size.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_reader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/json_string_value_serializer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/json/values_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/discardable_memory_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/discardable_shared_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/memory_pressure_listener.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/memory_pressure_listener_registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/unsafe_shared_memory_pool.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/pattern.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/cancelable_task_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_collision_warner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/hang_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_pressure_level_proto.cc
+)
+
+file(GLOB_RECURSE BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/tessellate/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/vk/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/vk/vulkanmemoryallocator/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/analysis/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/codegen/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/ir/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/lex/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/tracing/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/transform/*.cpp
+)
+list(APPEND BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/base/SkBase64.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/base/SkLog.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/base/SkSpinlock.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkExecutor.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkFontMetricsPriv.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkKnownRuntimeEffects.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkRuntimeBlender.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkRuntimeEffect.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkYUVMath.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkMesh.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkSLTypeShared.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkTaskGroup.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkTypeface_remote.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/effects/SkColorMatrix.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/effects/SkShaderMaskFilterImpl.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/effects/colorfilters/SkRuntimeColorFilter.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/shaders/SkRuntimeShader.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/DistanceFieldAdjustTable.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/GlyphVector.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/Slug.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/SlugImpl.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/StrikeCache.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/SubRunAllocator.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/SubRunContainer.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/SubRunControl.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/TextBlob.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/TextBlobRedrawCoordinator.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/VertexFiller.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/text/gpu/SkChromeRemoteGlyphCache.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/utils/SkShaderUtils.cpp
+)
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/android/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/dawn/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/d3d/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/gl/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/ganesh/gl/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/ganesh/d3d/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/ganesh/mtl/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/mtl/")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/gpu/tessellate/.*Test")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "AHardwareBuffer")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "Android")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "Graphite")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "Metal")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "Mock")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "Test")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/lex/Main\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/SkSLModuleDataFile\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/codegen/SkSLHLSLCodeGenerator\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/codegen/SkSLMetalCodeGenerator\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/codegen/SkSLSPIRVtoHLSL\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/codegen/SkSLSPIRVValidator\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/codegen/SkSLWGSLCodeGenerator\\.cpp$")
+list(FILTER BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES EXCLUDE REGEX "/sksl/codegen/SkSLWGSLValidator\\.cpp$")
+list(APPEND BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES
+  # GrDirectContext::MakeMock is compiled into Skia's runtime object even
+  # though standalone never selects it for presentation.
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/mock/GrMockBackendSurface.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/mock/GrMockCaps.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/mock/GrMockGpu.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/mock/GrMockTypes.cpp
+)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES)
+
+set_source_files_properties(${BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "SKIA_IMPLEMENTATION=1;SK_GANESH=1;SK_VULKAN=1;SK_USE_INTERNAL_VULKAN_HEADERS=1")
+
+file(GLOB_RECURSE BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/*.cpp
+)
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/dawn/")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/d3d/")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/mtl/")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/surface/Surface_Android")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/precompile/")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/gpu/graphite/vk/precompile/")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "AHardwareBuffer")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "Android")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "Dawn")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "Metal")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "Mock")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "Test")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "Vello")
+list(FILTER BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES EXCLUDE REGEX "/third_party/vello/")
+list(APPEND BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/capture/SkCapture.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/capture/SkCaptureCanvas.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/capture/SkCaptureManager.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PaintOption.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PaintOptions.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PrecompileBlender.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PrecompileColorFilter.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PrecompileImageFilter.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PrecompileMaskFilter.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PrecompileRuntimeEffect.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/precompile/PrecompileShader.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/SkSLGraphiteModules.cpp
+)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES)
+
+set_source_files_properties(${BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "SKIA_IMPLEMENTATION=1;SK_GRAPHITE=1;SK_VULKAN=1;SK_USE_INTERNAL_VULKAN_HEADERS=1")
+
+file(GLOB BLINK_STANDALONE_SKIA_GL_BACKEND_COMPAT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/gl/*.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/ganesh/gl/builders/*.cpp
+)
+list(FILTER BLINK_STANDALONE_SKIA_GL_BACKEND_COMPAT_SOURCES EXCLUDE REGEX "AHardwareBuffer")
+list(APPEND BLINK_STANDALONE_SKIA_GL_BACKEND_COMPAT_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/core/SkOverdrawCanvas.cpp
+)
+list(REMOVE_DUPLICATES BLINK_STANDALONE_SKIA_GL_BACKEND_COMPAT_SOURCES)
+
+set_source_files_properties(${BLINK_STANDALONE_SKIA_GL_BACKEND_COMPAT_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "SKIA_IMPLEMENTATION=1;SK_GANESH=1;SK_GL=1")
+
+set(BLINK_STANDALONE_CRYPTO_RUNTIME_SOURCES
+)
+
+set(BLINK_STANDALONE_BORINGSSL_HASH_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/md5/md5.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/sha/sha1.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/sha/sha256.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/fipsmodule/sha/sha1.cc.inc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/fipsmodule/sha/sha256.cc.inc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/boringssl_hash_support.cc
+)
+
+set(BLINK_STANDALONE_BASE_RUNTIME_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/at_exit.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/barrier_closure.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/command_line.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/debugger.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/debugger_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/gdi_debug_util_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/stack_trace.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/stack_trace_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/debug/task_trace.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/feature_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base_paths.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/base_paths_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/environment.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/scoped_environment_variable_override.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/discardable_memory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_enumerator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_enumerator_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_tracing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_util_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/file_path.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/file_version_info_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/important_file_writer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/important_file_writer_cleaner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/memory_mapped_file.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/memory_mapped_file_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/files/safe_base_name.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/functional/callback_helpers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/hash/sha1.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/lazy_instance_helpers.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/logging.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/message_loop/io_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/message_loop/message_pump.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/message_loop/message_pump_default.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/message_loop/message_pump_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/platform_shared_memory_mapper_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/read_only_shared_memory_region.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/platform_shared_memory_region.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/platform_shared_memory_region_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/page_size_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/post_delayed_memory_reduction_task.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/protected_memory_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/shared_memory_mapper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/shared_memory_mapping.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/shared_memory_security_policy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/shared_memory_switch.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/shared_memory_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/unsafe_shared_memory_region.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory/writable_shared_memory_region.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/memory_coordinator/memory_coordinator_features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/native_library_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/scoped_native_library.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/version.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/bucket_ranges.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/crc32.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/dummy_histogram.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/field_trial.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/field_trial_entry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/field_trial_param_associator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/field_trial_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/histogram.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/histogram_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/histogram_functions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/histogram_samples.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/histogram_snapshot_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/metrics_hashes.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/persistent_histogram_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/persistent_memory_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/persistent_sample_map.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/ranges_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/sample_map.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/sample_vector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/sparse_histogram.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/metrics/statistics_recorder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/observer_list_threadsafe.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/pending_task.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/process_info_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/process_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/process_handle_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/process_metrics.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/process_metrics_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/process/process_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/profiler/metadata_recorder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/profiler/module_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/profiler/module_cache_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/profiler/sample_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/base_stack_sampling_profiler_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/run_loop.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/strcat_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_split_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/strings/string_number_conversions_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/condition_variable_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/waitable_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/waitable_event_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/waitable_event_watcher_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/system/sys_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/system/sys_info_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/path_service.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/containers/intrusive_heap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/power_monitor/power_monitor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/power_monitor/power_monitor_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/message_loop/work_id_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/synchronization/lock_metrics_recorder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/common/checked_lock_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/common/lazy_now.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/common/operations_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/common/scoped_defer_task_posting.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/common/task_annotator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/current_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/execution_fence.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/scoped_set_task_priority_for_current_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/post_job.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/default_delayed_task_handle_delegate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequenced_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/single_thread_task_executor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/single_thread_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/associated_thread_id.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/atomic_flag_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/delayed_task_handle_delegate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/enqueue_order_generator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/fence.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/sequence_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/sequence_manager_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/sequenced_task_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/task_order.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/task_queue.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/task_queue_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/task_queue_selector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/task_time_observer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/tasks.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/thread_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/thread_controller_power_monitor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/thread_controller_with_message_pump_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/time_domain.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/wake_up_queue.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/work_deduplicator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/work_queue.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/work_queue_sets.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/sequence_manager/work_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/delayed_task_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/environment_config.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/job_task_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/pooled_parallel_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/pooled_sequenced_task_runner.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/pooled_single_thread_task_runner_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/pooled_task_runner_delegate.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/priority_queue.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/sequence.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/service_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/task.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/task_source.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/task_source_sort_key.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/task_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/thread_group.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/thread_group_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/thread_pool_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/thread_pool_instance.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/worker_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_pool/worker_thread_set.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/task_features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/task_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/task/thread_type.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/timer/elapsed_timer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/timer/timer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/platform_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/platform_thread_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/scoped_blocking_call.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/scoped_blocking_call_internal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/scoped_thread_priority.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/sequence_local_storage_map.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/sequence_local_storage_slot.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/simple_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_id_name_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/thread_restrictions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/threading/post_task_and_reply_impl.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/third_party/nspr/prtime.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/time.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/time_delta_from_string.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/time_override.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/time/time_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/unguessable_token.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/heap_profiler_allocation_context_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/histogram_scope.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/malloc_dump_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_allocator_dump.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_allocator_dump_guid.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_dump_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_dump_provider_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_dump_scheduler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/memory_infra_background_allowlist.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/measured_memory_dump_provider_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/trace_event/process_memory_dump.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/message_window.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/pe_image.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/pe_image_reader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/security_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/access_token.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/access_control_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/com_init_balancer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/com_init_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/hstring_reference.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/object_watcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/resource_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/resource_exhaustion.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_bstr.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_gdi_object.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_handle.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_handle_verifier.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_hstring.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_com_initializer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_winrt_initializer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/scoped_variant.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/security_descriptor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/sid.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/static_constants.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/win_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/wrapped_window_proc.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/windows_version.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/win/wmi.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/vlog.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/version_info/version_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/handle_attachment_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/handle_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_channel_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_channel_proxy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_listener.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_message_attachment.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_message_pipe_reader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_mojo_handle_attachment.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_mojo_bootstrap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/param_traits_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ipc/ipc_sync_channel.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/codec_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/font_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/skia/ext/geometry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/base_threading_instrumentation_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/canvas_phase1_unsupported.cc
+)
+
+set(BLINK_STANDALONE_BLINK_RUNTIME_OWNER_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/common/features_generated.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/permissions_policy/policy_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/core/settings_base.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/renderer/platform/runtime_enabled_features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/cert/ct_sct_to_string.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/net/base/ip_endpoint.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/features.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/storage_key/storage_key.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/web_preferences/web_preferences.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/bindings/core/v8/capture_source_location.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/mailbox_ref.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/mailbox_texture_backing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/skia/skia_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/ad_tracker_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/cssom_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/binding_world_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/blob_registry_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/execution_context_browser_policy_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/fetch_phase1_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/font_face_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/font_phase1_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/document_write_intervention_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/memory_cache_tracing_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/memory_pressure_phase1_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_utils_data_url_phase1.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/net_data_url_phase1_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/script_streaming_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/static_render_mime_phase1.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/to_blink_string_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/v8_binding_for_core_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/v8_wrapper_type_info_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_font_decoder_phase1_unsupported.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_test_support_phase1.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/execution_context/execution_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/dom_exception.cc
+  # CSSOM/IDL wrapper owners are intentionally outside the Phase 1 cc path.
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/media_values_cached.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/media_values.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/display_lock/display_lock_context.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/display_lock/display_lock_document_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/display_lock/display_lock_utilities.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/idleness_detector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/page_visibility_observer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/canvas/canvas_resource_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/canvas/html_canvas_accessibility_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/canvas/html_canvas_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/canvas/unique_font_selector.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_html_canvas.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/blocking_attribute.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_meta_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/link_rel_attribute.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/inspector/identifiers_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/inspector/inspected_frames.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_embedded_content.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/lcp_critical_path_predictor/element_locator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/bindings/source_location.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/bindings/thread_debugger.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_custom_platform_data.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_platform_data.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/opentype/font_format_check.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/opentype/open_type_cpal_lookup.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/opentype/variable_axes_names.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/palette_interpolation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/plain_text_node.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/plain_text_painter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/shaping/frame_shape_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/web_font_render_style.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/win/font_platform_data_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/canvas_child_paint_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/color_space_gamut.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/instrumentation/instance_counters.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/memory_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/buffering_bytes_consumer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/fetch_parameters.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/raw_resource.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/resource_fetcher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/scheduler/common/worker_pool.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/web_bundle/script_web_bundle_rule.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/viewport_description.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/scrolling/scrolling_coordinator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/html_canvas_painter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/frame/test_report_body.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/frame/visual_viewport.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/timing/worker_global_scope_performance.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/canvas_2d_color_params.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/canvas_resource.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/canvas_resource_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/mime/mime_type_registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/network/network_state_notifier.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/weborigin/origin_access_entry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/weborigin/known_ports.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/weborigin/kurl.cc
+)
+
+set_source_files_properties(
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/fipsmodule/sha/sha1.cc.inc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/crypto/fipsmodule/sha/sha256.cc.inc
+  PROPERTIES
+    LANGUAGE CXX)
+
+set_source_files_properties(${BLINK_STANDALONE_BORINGSSL_HASH_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "OPENSSL_NO_ASM=1;STANDALONE_RENDERER_NO_BLINK_PREINCLUDE=1")
+
+set(BLINK_STANDALONE_SKIA_PNG_WRITE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/encode/SkPngEncoder.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/encode/SkPngEncoderImpl.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwio.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwtran.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
+)
+
+set_source_files_properties(${BLINK_STANDALONE_SKIA_PNG_WRITE_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "PNG_WRITE_SUPPORTED=1;PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1")
+
+set_source_files_properties(${BLINK_STANDALONE_BASE_RUNTIME_SOURCES}
+  PROPERTIES
+    COMPILE_DEFINITIONS "STANDALONE_RENDERER_NEEDS_WIN_CALLBACK=1;STANDALONE_RENDERER_NO_BLINK_PREINCLUDE=1")
+
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_PROTOZERO_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_PROTOZERO_FILTERING_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_BASE_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_PROTOVM_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_TRACING_CORE_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_TRACING_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_TRACING_SERVICE_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_ANDROID_STATS_SOURCES}
+  ${BLINK_STANDALONE_PERFETTO_GENERATED_SOURCES}
+  ${BLINK_STANDALONE_BASE_TRACING_SOURCES}
+  ${BLINK_STANDALONE_BLINK_TRACING_SOURCES}
+  ${BLINK_STANDALONE_BLINK_INSPECTOR_OWNER_SOURCES}
+  ${BLINK_STANDALONE_BLINK_PROBE_SOURCES}
+  ${BLINK_STANDALONE_RE2_SOURCES}
+  ${BLINK_STANDALONE_URL_PATTERN_SOURCES}
+  ${BLINK_STANDALONE_LIBURLPATTERN_SOURCES}
+  ${BLINK_STANDALONE_URL_PATTERN_INDEX_SOURCES}
+  ${BLINK_STANDALONE_SUBRESOURCE_FILTER_SOURCES}
+  ${BLINK_STANDALONE_INSPECTOR_PROTOCOL_SOURCES}
+  ${BLINK_STANDALONE_BLINK_INSPECTOR_PROTOCOL_GENERATED_SOURCES}
+  ${BLINK_STANDALONE_NETWORK_PUBLIC_MOJOM_VOCABULARY_SOURCES}
+  ${BLINK_STANDALONE_UNSUPPORTED_POLICY_SOURCES}
+  ${BLINK_STANDALONE_PHASE1_UNSUPPORTED_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_BLINK_MESSAGING_SOURCES}
+  ${BLINK_STANDALONE_UNSUPPORTED_MESSAGING_SOURCES}
+  ${BLINK_STANDALONE_FRAME_MOJOM_SUPPORT_SOURCES}
+  ${BLINK_STANDALONE_POLICY_CONTAINER_SOURCES}
+  ${BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_VOCABULARY_SOURCES}
+  ${BLINK_STANDALONE_BLINK_PUBLIC_MOJOM_GENERATED_SOURCES}
+  ${BLINK_STANDALONE_MOJOM_GENERATED_SOURCES}
+  ${BLINK_STANDALONE_VIZ_BLINK_VALUE_MOJOM_SOURCES}
+  ${BLINK_STANDALONE_UI_GL_MOJOM_GENERATED_SOURCES}
+  ${BLINK_STANDALONE_GPU_MOJOM_GENERATED_SOURCES}
+  ${BLINK_STANDALONE_CC_COMPOSITOR_SOURCES}
+  ${BLINK_STANDALONE_CC_PHASE1_EXPLICIT_SOURCES}
+  ${BLINK_STANDALONE_MOJO_BINDINGS_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_NATIVE_MOJOM_TRAIT_SOURCES}
+  ${BLINK_STANDALONE_VIZ_COMMON_VALUE_SOURCES}
+  ${BLINK_STANDALONE_VIZ_PUBLIC_CPP_MOJOM_TRAIT_SOURCES}
+  ${BLINK_STANDALONE_VIZ_GPU_IMPORT_SOURCES}
+  ${BLINK_STANDALONE_GPU_RUNTIME_IMPORT_SOURCES}
+  ${BLINK_STANDALONE_UI_GL_RUNTIME_IMPORT_SOURCES}
+  ${BLINK_STANDALONE_GFX_RANGE_SOURCES}
+  ${BLINK_STANDALONE_UI_VALUE_SOURCES}
+  ${BLINK_STANDALONE_VIZ_GPU_SUPPORT_SOURCES}
+  ${BLINK_STANDALONE_ANGLE_IMAGE_UTIL_SOURCES}
+  ${BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES}
+  ${BLINK_STANDALONE_BASE_JSON_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_SKIA_GPU_GANESH_VULKAN_SOURCES}
+  ${BLINK_STANDALONE_SKIA_GRAPHITE_VULKAN_SOURCES}
+  ${BLINK_STANDALONE_SKIA_GL_BACKEND_COMPAT_SOURCES}
+  ${BLINK_STANDALONE_CRYPTO_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_BORINGSSL_HASH_SOURCES}
+  ${BLINK_STANDALONE_BASE_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_BLINK_RUNTIME_OWNER_SOURCES}
+)
+
 set(BLINK_STANDALONE_LIBYUV_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/compare.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/source/compare_common.cc
@@ -2225,6 +3953,7 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
 
 list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_fallback_helper.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_loader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/image_loader.cc
@@ -2248,3 +3977,5 @@ list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/xml/parser/xml_document_parser_scope.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/xml/parser/xml_errors.cc
 )
+
+list(REMOVE_DUPLICATES BLINK_STANDALONE_LIVE_SOURCES)

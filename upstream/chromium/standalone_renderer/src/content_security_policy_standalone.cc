@@ -36,6 +36,10 @@ bool ContentSecurityPolicy::AllowEval(ReportingDisposition,
   return true;
 }
 
+void ContentSecurityPolicy::SetOverrideAllowInlineStyle(bool value) {
+  override_inline_style_allowed_ = value;
+}
+
 bool ContentSecurityPolicy::IsActive() const {
   return false;
 }

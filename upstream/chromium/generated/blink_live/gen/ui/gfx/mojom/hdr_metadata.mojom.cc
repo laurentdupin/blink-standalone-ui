@@ -24,6 +24,9 @@
 
 #include "ui/gfx/mojom/hdr_metadata.mojom-import-headers.h"
 #include "ui/gfx/mojom/hdr_metadata.mojom-test-utils.h"
+#include "skia/public/mojom/hdr_metadata_mojom_traits.h"
+#include "skia/public/mojom/skcolorspace_primaries_mojom_traits.h"
+#include "ui/gfx/mojom/hdr_metadata_mojom_traits.h"
 
 
 namespace gfx::mojom {

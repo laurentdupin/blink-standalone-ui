@@ -36,9 +36,6 @@
 #include "mojo/public/cpp/bindings/raw_ptr_impl_ref_traits.h"
 
 
-#include "third_party/blink/renderer/platform/mojo/big_string_mojom_traits.h"
-#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-#include "base/component_export.h"
 #if !BLINK_MOJO_IMPL && !INSIDE_BLINK
 #error "File must only be imported inside blink"
 #endif
@@ -55,7 +52,7 @@ namespace mojo_base::mojom::blink {
 
 
 
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) BigString {
+class  BigString {
  public:
   template <typename T>
   using EnableIfSame = std::enable_if_t<std::is_same<BigString, T>::value>;
@@ -218,7 +215,7 @@ namespace mojo {
 
 
 template <>
-struct COMPONENT_EXPORT(MOJO_BASE_MOJOM_BLINK) StructTraits<::mojo_base::mojom::blink::BigString::DataView,
+struct  StructTraits<::mojo_base::mojom::blink::BigString::DataView,
                                          ::mojo_base::mojom::blink::BigStringPtr> {
   static bool IsNull(const ::mojo_base::mojom::blink::BigStringPtr& input) { return !input; }
   static void SetToNull(::mojo_base::mojom::blink::BigStringPtr* output) { output->reset(); }

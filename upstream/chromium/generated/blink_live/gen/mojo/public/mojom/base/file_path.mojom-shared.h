@@ -26,7 +26,6 @@
 
 
 #include "mojo/public/mojom/base/file_path.mojom-data-view.h"  // IWYU pragma: export
-#include "base/component_export.h"
 
 
 
@@ -51,28 +50,6 @@ struct Serializer<::mojo_base::mojom::FilePathDataView, MaybeConstUserType> {
     if (CallIsNullIfExists<Traits>(input))
       return;
     fragment.Allocate();
-
-    decltype(Traits::path(input)) in_path = Traits::path(input);
-    mojo::internal::MessageFragment<
-        typename decltype(fragment->path)::BaseType>
-        path_fragment(fragment.message());
-    constexpr const mojo::internal::ContainerValidateParams& path_validate_params =
-        mojo::internal::GetArrayValidator<0, false, nullptr>();
-    
-    mojo::internal::Serialize<mojo::ArrayDataView<uint16_t>>(
-      in_path,
-      path_fragment,
-      &path_validate_params);
-
-    fragment->path.Set(
-        path_fragment.is_null() ? nullptr : path_fragment.data());
-
-    
-    MOJO_INTERNAL_CHECK_SERIALIZATION(
-      mojo::internal::SendValidation::kDefault,
-      !(fragment->path.is_null()),
-      mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-      "null path in FilePath struct");
   }
 
   static bool Deserialize(::mojo_base::mojom::internal::FilePath_Data* input,
@@ -102,28 +79,6 @@ struct Serializer<::mojo_base::mojom::RelativeFilePathDataView, MaybeConstUserTy
     if (CallIsNullIfExists<Traits>(input))
       return;
     fragment.Allocate();
-
-    decltype(Traits::path(input)) in_path = Traits::path(input);
-    mojo::internal::MessageFragment<
-        typename decltype(fragment->path)::BaseType>
-        path_fragment(fragment.message());
-    constexpr const mojo::internal::ContainerValidateParams& path_validate_params =
-        mojo::internal::GetArrayValidator<0, false, nullptr>();
-    
-    mojo::internal::Serialize<mojo::ArrayDataView<uint16_t>>(
-      in_path,
-      path_fragment,
-      &path_validate_params);
-
-    fragment->path.Set(
-        path_fragment.is_null() ? nullptr : path_fragment.data());
-
-    
-    MOJO_INTERNAL_CHECK_SERIALIZATION(
-      mojo::internal::SendValidation::kDefault,
-      !(fragment->path.is_null()),
-      mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-      "null path in RelativeFilePath struct");
   }
 
   static bool Deserialize(::mojo_base::mojom::internal::RelativeFilePath_Data* input,
@@ -144,18 +99,8 @@ struct Serializer<::mojo_base::mojom::RelativeFilePathDataView, MaybeConstUserTy
 
 namespace mojo_base::mojom {
 
-inline void FilePathDataView::GetPathDataView(
-    mojo::ArrayDataView<uint16_t>* output) {
-  auto pointer = data_->path.Get();
-  *output = mojo::ArrayDataView<uint16_t>(pointer, message_);
-}
 
 
-inline void RelativeFilePathDataView::GetPathDataView(
-    mojo::ArrayDataView<uint16_t>* output) {
-  auto pointer = data_->path.Get();
-  *output = mojo::ArrayDataView<uint16_t>(pointer, message_);
-}
 
 
 

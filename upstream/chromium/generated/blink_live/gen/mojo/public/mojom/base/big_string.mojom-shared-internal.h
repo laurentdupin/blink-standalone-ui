@@ -13,7 +13,6 @@
 #include "mojo/public/mojom/base/big_buffer.mojom-shared-internal.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_data.h"
 #include "mojo/public/interfaces/bindings/native_struct.mojom-shared-internal.h"
-#include "base/component_export.h"
 
 
 
@@ -29,7 +28,7 @@ namespace internal {
 class BigString_Data;
 
 #pragma pack(push, 1)
-class COMPONENT_EXPORT(MOJO_BASE_MOJOM_SHARED) BigString_Data {
+class  BigString_Data {
  public:
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);

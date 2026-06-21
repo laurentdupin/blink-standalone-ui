@@ -13,6 +13,10 @@
 #include <iosfwd>
 #include <type_traits>
 #include <utility>
+#include "mojo/public/cpp/bindings/array_data_view.h"
+#include "mojo/public/cpp/bindings/map_data_view.h"
+#include "mojo/public/cpp/bindings/string_data_view.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
@@ -20,8 +24,6 @@
 
 
 
-#include "mojo/public/cpp/bindings/native_enum.h"
-#include "mojo/public/cpp/bindings/lib/native_struct_serialization.h"
 
 #include "cc/mojom/touch_action.mojom-data-view.h"  // IWYU pragma: export
 
@@ -34,10 +36,43 @@ namespace std {
 
 namespace mojo {
 
+
+namespace internal {
+
+template <typename MaybeConstUserType>
+struct Serializer<::cc::mojom::TouchActionDataView, MaybeConstUserType> {
+  using UserType = typename std::remove_const<MaybeConstUserType>::type;
+  using Traits = StructTraits<::cc::mojom::TouchActionDataView, UserType>;
+
+  static void Serialize(
+      MaybeConstUserType& input,
+      mojo::internal::MessageFragment<::cc::mojom::internal::TouchAction_Data>& fragment) {
+    if (CallIsNullIfExists<Traits>(input))
+      return;
+    fragment.Allocate();
+
+    fragment->value = Traits::value(input);
+  }
+
+  static bool Deserialize(::cc::mojom::internal::TouchAction_Data* input,
+                          UserType* output,
+                          Message* message) {
+    if (!input)
+      return CallSetToNullIfExists<Traits>(output);
+
+    ::cc::mojom::TouchActionDataView data_view(input, message);
+    return Traits::Read(data_view, output);
+  }
+};
+
+}  // namespace internal
+
 }  // namespace mojo
 
 
 namespace cc::mojom {
+
+
 
 
 }  // cc::mojom

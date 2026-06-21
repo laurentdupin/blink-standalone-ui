@@ -12,6 +12,7 @@
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
 #include "third_party/blink/public/mojom/disk_allocator.mojom-params-data.h"
+#include "mojo/public/cpp/base/file_mojom_traits.h"
 namespace blink {
 namespace mojom {
 

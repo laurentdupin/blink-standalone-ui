@@ -124,7 +124,6 @@ const std::string& Uuid::AsLowercaseString() const {
 absl::uint128 Uuid::AsInteger() const {
   return 0;
 }
-void UmaHistogramTimes(std::string_view, TimeDelta) {}
 
 }  // namespace base
 
@@ -181,9 +180,6 @@ bool SignedCertificateTimestamp::LessThan::operator()(
 }
 }  // namespace ct
 
-X509Certificate::ParsedFields::~ParsedFields() = default;
-X509Certificate::~X509Certificate() = default;
-
 ResolveErrorInfo::ResolveErrorInfo() = default;
 ResolveErrorInfo::ResolveErrorInfo(int resolve_error,
                                    bool secure_network_error)
@@ -194,9 +190,6 @@ ResolveErrorInfo& ResolveErrorInfo::operator=(const ResolveErrorInfo&) =
     default;
 ResolveErrorInfo& ResolveErrorInfo::operator=(ResolveErrorInfo&&) = default;
 
-IPEndPoint::IPEndPoint() = default;
-IPEndPoint::~IPEndPoint() = default;
-IPEndPoint::IPEndPoint(const IPEndPoint&) = default;
 SSLInfo::SSLInfo() = default;
 SSLInfo::SSLInfo(const SSLInfo&) = default;
 SSLInfo::SSLInfo(SSLInfo&&) = default;
@@ -210,14 +203,6 @@ AuthChallengeInfo::~AuthChallengeInfo() = default;
 }  // namespace net
 
 namespace network {
-
-IntegrityMetadata::IntegrityMetadata() = default;
-IntegrityMetadata::~IntegrityMetadata() = default;
-IntegrityMetadata::IntegrityMetadata(const IntegrityMetadata&) = default;
-IntegrityMetadata& IntegrityMetadata::operator=(const IntegrityMetadata&) =
-    default;
-IntegrityMetadata::IntegrityMetadata(IntegrityMetadata&&) = default;
-IntegrityMetadata& IntegrityMetadata::operator=(IntegrityMetadata&&) = default;
 
 bool NoVarySearchHasBooleanParamsMember(std::string_view) {
   return false;
@@ -271,103 +256,6 @@ std::string SchemeHostPort::SerializeInternal(url::Parsed*) const {
   return Serialize();
 }
 
-Origin::Origin() = default;
-Origin::Origin(const Origin&) = default;
-Origin& Origin::operator=(const Origin&) = default;
-Origin::Origin(Origin&&) noexcept = default;
-Origin& Origin::operator=(Origin&&) noexcept = default;
-Origin::~Origin() = default;
-Origin Origin::Create(const GURL&) {
-  return Origin();
-}
-Origin Origin::Resolve(const GURL&, const Origin& base_origin) {
-  return base_origin;
-}
-std::optional<Origin> Origin::UnsafelyCreateTupleOriginWithoutNormalization(
-    std::string_view,
-    std::string_view,
-    uint16_t) {
-  return Origin();
-}
-Origin Origin::CreateFromNormalizedTuple(std::string, std::string, uint16_t) {
-  return Origin();
-}
-Origin Origin::CreateOpaqueFromNormalizedPrecursorTuple(std::string,
-                                                        std::string,
-                                                        uint16_t,
-                                                        const Nonce& nonce) {
-  return Origin(nonce, SchemeHostPort());
-}
-std::string Origin::Serialize() const {
-  return {};
-}
-bool Origin::IsSameOriginWith(const Origin&) const {
-  return true;
-}
-bool Origin::IsSameOriginWith(const GURL&) const {
-  return true;
-}
-bool Origin::CanBeDerivedFrom(const GURL&) const {
-  return true;
-}
-GURL Origin::GetURL() const {
-  return GURL();
-}
-bool Origin::DomainIs(std::string_view) const {
-  return false;
-}
-Origin Origin::DeriveNewOpaqueOrigin() const {
-  return Origin();
-}
-const base::UnguessableToken* Origin::GetNonceForTesting() const {
-  return nullptr;
-}
-std::string Origin::GetDebugString(bool) const {
-  return {};
-}
-void Origin::WriteIntoTrace(perfetto::TracedValue) const {}
-size_t Origin::EstimateMemoryUsage() const {
-  return 0;
-}
-Origin::Origin(SchemeHostPort tuple) : tuple_(std::move(tuple)) {}
-Origin::Origin(const Nonce& nonce, SchemeHostPort precursor)
-    : tuple_(std::move(precursor)), nonce_(nonce) {}
-const base::UnguessableToken* Origin::GetNonceForSerialization() const {
-  return nullptr;
-}
-std::optional<std::string> Origin::SerializeWithNonce() const {
-  return std::string();
-}
-std::optional<std::string> Origin::SerializeWithNonceAndInitIfNeeded() {
-  return std::string();
-}
-std::optional<std::string> Origin::SerializeWithNonceImpl() const {
-  return std::string();
-}
-std::optional<Origin> Origin::Deserialize(std::string_view) {
-  return Origin();
-}
-Origin::Nonce::Nonce() = default;
-Origin::Nonce::Nonce(const base::UnguessableToken& token) : token_(token) {}
-Origin::Nonce::Nonce(const Nonce&) = default;
-Origin::Nonce& Origin::Nonce::operator=(const Nonce&) = default;
-Origin::Nonce::Nonce(Nonce&&) noexcept = default;
-Origin::Nonce& Origin::Nonce::operator=(Nonce&&) noexcept = default;
-const base::UnguessableToken& Origin::Nonce::token() const {
-  return token_;
-}
-const base::UnguessableToken& Origin::Nonce::raw_token() const {
-  return token_;
-}
-std::strong_ordering Origin::Nonce::operator<=>(const Nonce&) const {
-  return std::strong_ordering::equal;
-}
-bool Origin::Nonce::operator==(const Nonce&) const {
-  return true;
-}
-bool IsSameOriginWith(const GURL&, const GURL&) {
-  return true;
-}
 }  // namespace url
 
 GURL::GURL() : is_valid_(false) {}
@@ -507,100 +395,6 @@ bool operator==(const GURL& x, const GURL& y) {
 bool operator==(const GURL& x, std::string_view spec) {
   return x.possibly_invalid_spec() == spec;
 }
-
-namespace mojo::internal {
-
-PendingReceiverState::PendingReceiverState() = default;
-PendingReceiverState::PendingReceiverState(ScopedMessagePipeHandle input_pipe)
-    : pipe(std::move(input_pipe)) {}
-PendingReceiverState::PendingReceiverState(PendingReceiverState&&) noexcept =
-    default;
-PendingReceiverState::~PendingReceiverState() = default;
-PendingReceiverState& PendingReceiverState::operator=(
-    PendingReceiverState&&) noexcept = default;
-void PendingReceiverState::reset() {
-  pipe.reset();
-}
-
-PendingRemoteState::PendingRemoteState() = default;
-PendingRemoteState::PendingRemoteState(ScopedMessagePipeHandle input_pipe,
-                                       uint32_t input_version)
-    : pipe(std::move(input_pipe)), version(input_version) {}
-PendingRemoteState::PendingRemoteState(PendingRemoteState&&) noexcept =
-    default;
-PendingRemoteState::~PendingRemoteState() = default;
-PendingRemoteState& PendingRemoteState::operator=(
-    PendingRemoteState&&) noexcept = default;
-void PendingRemoteState::reset() {
-  pipe.reset();
-  version = 0;
-}
-
-}  // namespace mojo::internal
-
-namespace mojo {
-
-ConnectionGroupRef::ConnectionGroupRef() = default;
-ConnectionGroupRef::ConnectionGroupRef(const ConnectionGroupRef&) = default;
-ConnectionGroupRef::ConnectionGroupRef(ConnectionGroupRef&&) noexcept = default;
-ConnectionGroupRef::~ConnectionGroupRef() = default;
-ConnectionGroupRef& ConnectionGroupRef::operator=(const ConnectionGroupRef&) =
-    default;
-ConnectionGroupRef& ConnectionGroupRef::operator=(ConnectionGroupRef&&) noexcept =
-    default;
-void ConnectionGroupRef::reset() {
-  group_.reset();
-}
-ConnectionGroupRef ConnectionGroupRef::WeakCopy() const {
-  return ConnectionGroupRef();
-}
-bool ConnectionGroupRef::HasZeroRefs() const {
-  return true;
-}
-void ConnectionGroupRef::SetParentGroup(ConnectionGroupRef) {}
-ConnectionGroupRef::ConnectionGroupRef(scoped_refptr<ConnectionGroup> group)
-    : type_(Type::kStrong), group_(std::move(group)) {}
-
-}  // namespace mojo
-
-namespace blink::features {
-
-BASE_FEATURE(kRenderBlockingFonts,
-             "RenderBlockingFonts",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(int,
-                   kMaxBlockingTimeMsForRenderBlockingFonts,
-                   &kRenderBlockingFonts,
-                   "max_blocking_time_ms",
-                   0);
-BASE_FEATURE(kPaintHolding,
-             "PaintHolding",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kThreadedBodyLoader,
-             "ThreadedBodyLoader",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kServiceWorkerSyntheticResponse,
-             "ServiceWorkerSyntheticResponse",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE_PARAM(bool,
-                   kServiceWorkerSyntheticResponseDryRun,
-                   &kServiceWorkerSyntheticResponse,
-                   "dry_run",
-                   false);
-BASE_FEATURE(kStreamlineRendererInit,
-             "StreamlineRendererInit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kPartitionVisitedLinkDatabaseWithSelfLinks,
-             "PartitionVisitedLinkDatabaseWithSelfLinks",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kUseSandboxTokenForOriginDerivation,
-             "UseSandboxTokenForOriginDerivation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-BASE_FEATURE(kIsolateSandboxedIframes,
-             "IsolateSandboxedIframes",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-}  // namespace blink::features
 
 namespace blink::FencedFrame {
 
@@ -792,50 +586,6 @@ void DocumentXSLT::Trace(Visitor* visitor) const {
   Supplement<Document>::Trace(visitor);
 }
 
-#if DCHECK_IS_ON()
-bool DisplayLockUtilities::AssertStyleAllowed(const Node&) {
-  return true;
-}
-#endif
-bool DisplayLockUtilities::IsPotentialStyleRecalcRoot(const Node&) {
-  return false;
-}
-KURL::KURL(const AtomicString& canonical_string,
-           const url::Parsed& parsed,
-           bool is_valid)
-    : is_valid_(is_valid),
-      protocol_is_in_http_family_(false),
-      parsed_(parsed),
-      string_(canonical_string) {}
-
-bool KURL::IsStandard() const {
-  return true;
-}
-uint16_t KURL::Port() const {
-  return 0;
-}
-bool KURL::HasPort() const {
-  return false;
-}
-bool KURL::HasFragmentIdentifier() const {
-  return false;
-}
-StringView KURL::GetPath() const {
-  return StringView();
-}
-std::ostream& operator<<(std::ostream& ostream, const KURL& url) {
-  return ostream << url.GetString().Utf8();
-}
-uint16_t DefaultPortForProtocol(const String& protocol) {
-  if (protocol == "http") {
-    return 80;
-  }
-  if (protocol == "https") {
-    return 443;
-  }
-  return 0;
-}
-
 KURL BlobURL::CreatePublicURL(const SecurityOrigin*) {
   return KURL();
 }
@@ -893,27 +643,6 @@ bool SchemeRegistry::ShouldTreatURLSchemeAsDisplayIsolated(const String&) {
   return false;
 }
 
-void ExecutionContext::SetContentSecurityPolicy(
-    ContentSecurityPolicy* content_security_policy) {
-  content_security_policy_ = content_security_policy;
-}
-void ExecutionContext::ParseAndSetReferrerPolicy(const String&,
-                                                 ReferrerPolicySource) {}
-void ExecutionContext::SetPolicyContainer(
-    std::unique_ptr<PolicyContainer> container) {
-  policy_container_ = std::move(container);
-}
-std::unique_ptr<PolicyContainer> ExecutionContext::TakePolicyContainer() {
-  return std::move(policy_container_);
-}
-bool ExecutionContext::IsFeatureEnabled(
-    mojom::blink::DocumentPolicyFeature,
-    ReportOptions,
-    const String&,
-    const String&) {
-  return true;
-}
-
 Vector<network::mojom::blink::ContentSecurityPolicyPtr>
 ParseContentSecurityPolicies(
     const String&,
@@ -930,6 +659,232 @@ void RuntimeFeatureStateOverrideContext::ApplyOverrideValuesFromParams(
   }
 }
 
+namespace {
+bool RuntimeFeatureIsForced(
+    const base::flat_map<mojom::RuntimeFeature, bool>& overrides,
+    mojom::RuntimeFeature feature,
+    bool enabled) {
+  auto it = overrides.find(feature);
+  return it != overrides.end() && it->second == enabled;
+}
+}  // namespace
+
+bool RuntimeFeatureStateOverrideContext::
+    IsBlinkExtensionChromeOSForceDisabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_, mojom::RuntimeFeature::kBlinkExtensionChromeOS, false);
+}
+
+bool RuntimeFeatureStateOverrideContext::IsBlinkExtensionChromeOSForceEnabled()
+    const {
+  return RuntimeFeatureIsForced(
+      override_values_, mojom::RuntimeFeature::kBlinkExtensionChromeOS, true);
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetBlinkExtensionChromeOSForceDisabled() {
+  override_values_[mojom::RuntimeFeature::kBlinkExtensionChromeOS] = false;
+}
+
+void RuntimeFeatureStateOverrideContext::SetBlinkExtensionChromeOSForceEnabled() {
+  override_values_[mojom::RuntimeFeature::kBlinkExtensionChromeOS] = true;
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsBlinkExtensionChromeOSIsolatedWebAppSetShapeForceDisabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::kBlinkExtensionChromeOSIsolatedWebAppSetShape,
+      false);
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsBlinkExtensionChromeOSIsolatedWebAppSetShapeForceEnabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::kBlinkExtensionChromeOSIsolatedWebAppSetShape,
+      true);
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetBlinkExtensionChromeOSIsolatedWebAppSetShapeForceDisabled() {
+  override_values_[mojom::RuntimeFeature::
+                       kBlinkExtensionChromeOSIsolatedWebAppSetShape] = false;
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetBlinkExtensionChromeOSIsolatedWebAppSetShapeForceEnabled() {
+  override_values_[mojom::RuntimeFeature::
+                       kBlinkExtensionChromeOSIsolatedWebAppSetShape] = true;
+}
+
+bool RuntimeFeatureStateOverrideContext::IsBlinkExtensionChromeOSKioskForceDisabled()
+    const {
+  return RuntimeFeatureIsForced(
+      override_values_, mojom::RuntimeFeature::kBlinkExtensionChromeOSKiosk,
+      false);
+}
+
+bool RuntimeFeatureStateOverrideContext::IsBlinkExtensionChromeOSKioskForceEnabled()
+    const {
+  return RuntimeFeatureIsForced(
+      override_values_, mojom::RuntimeFeature::kBlinkExtensionChromeOSKiosk,
+      true);
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetBlinkExtensionChromeOSKioskForceDisabled() {
+  override_values_[mojom::RuntimeFeature::kBlinkExtensionChromeOSKiosk] = false;
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetBlinkExtensionChromeOSKioskForceEnabled() {
+  override_values_[mojom::RuntimeFeature::kBlinkExtensionChromeOSKiosk] = true;
+}
+
+bool RuntimeFeatureStateOverrideContext::IsDirectSocketsForceDisabled() const {
+  return RuntimeFeatureIsForced(override_values_,
+                                mojom::RuntimeFeature::kDirectSockets, false);
+}
+
+bool RuntimeFeatureStateOverrideContext::IsDirectSocketsForceEnabled() const {
+  return RuntimeFeatureIsForced(override_values_,
+                                mojom::RuntimeFeature::kDirectSockets, true);
+}
+
+void RuntimeFeatureStateOverrideContext::SetDirectSocketsForceDisabled() {
+  override_values_[mojom::RuntimeFeature::kDirectSockets] = false;
+}
+
+void RuntimeFeatureStateOverrideContext::SetDirectSocketsForceEnabled() {
+  override_values_[mojom::RuntimeFeature::kDirectSockets] = true;
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsGetDisplayMediaWindowAudioCaptureForceDisabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::kGetDisplayMediaWindowAudioCapture, false);
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsGetDisplayMediaWindowAudioCaptureForceEnabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::kGetDisplayMediaWindowAudioCapture, true);
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetGetDisplayMediaWindowAudioCaptureForceDisabled() {
+  override_values_[mojom::RuntimeFeature::kGetDisplayMediaWindowAudioCapture] =
+      false;
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetGetDisplayMediaWindowAudioCaptureForceEnabled() {
+  override_values_[mojom::RuntimeFeature::kGetDisplayMediaWindowAudioCapture] =
+      true;
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsOriginTrialsSampleAPIBrowserReadWriteForceDisabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::kOriginTrialsSampleAPIBrowserReadWrite, false);
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsOriginTrialsSampleAPIBrowserReadWriteForceEnabled() const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::kOriginTrialsSampleAPIBrowserReadWrite, true);
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetOriginTrialsSampleAPIBrowserReadWriteForceDisabled() {
+  override_values_[mojom::RuntimeFeature::
+                       kOriginTrialsSampleAPIBrowserReadWrite] = false;
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetOriginTrialsSampleAPIBrowserReadWriteForceEnabled() {
+  override_values_[mojom::RuntimeFeature::
+                       kOriginTrialsSampleAPIBrowserReadWrite] = true;
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    SetOriginTrialsSampleAPIBrowserReadWriteEnabled(const Vector<String>&) {
+  return false;
+}
+
+bool RuntimeFeatureStateOverrideContext::IsTestFeatureForceDisabled() const {
+  return RuntimeFeatureIsForced(override_values_,
+                                mojom::RuntimeFeature::kTestFeature, false);
+}
+
+bool RuntimeFeatureStateOverrideContext::IsTestFeatureForceEnabled() const {
+  return RuntimeFeatureIsForced(override_values_,
+                                mojom::RuntimeFeature::kTestFeature, true);
+}
+
+void RuntimeFeatureStateOverrideContext::SetTestFeatureForceDisabled() {
+  override_values_[mojom::RuntimeFeature::kTestFeature] = false;
+}
+
+void RuntimeFeatureStateOverrideContext::SetTestFeatureForceEnabled() {
+  override_values_[mojom::RuntimeFeature::kTestFeature] = true;
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsTestFeatureForBrowserProcessReadWriteAccessOriginTrialForceDisabled()
+        const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::
+          kTestFeatureForBrowserProcessReadWriteAccessOriginTrial,
+      false);
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    IsTestFeatureForBrowserProcessReadWriteAccessOriginTrialForceEnabled()
+        const {
+  return RuntimeFeatureIsForced(
+      override_values_,
+      mojom::RuntimeFeature::
+          kTestFeatureForBrowserProcessReadWriteAccessOriginTrial,
+      true);
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetTestFeatureForBrowserProcessReadWriteAccessOriginTrialForceDisabled() {
+  override_values_[mojom::RuntimeFeature::
+                       kTestFeatureForBrowserProcessReadWriteAccessOriginTrial] =
+      false;
+}
+
+void RuntimeFeatureStateOverrideContext::
+    SetTestFeatureForBrowserProcessReadWriteAccessOriginTrialForceEnabled() {
+  override_values_[mojom::RuntimeFeature::
+                       kTestFeatureForBrowserProcessReadWriteAccessOriginTrial] =
+      true;
+}
+
+bool RuntimeFeatureStateOverrideContext::
+    SetTestFeatureForBrowserProcessReadWriteAccessOriginTrialEnabled(
+        const Vector<String>&) {
+  return false;
+}
+
+void RuntimeFeatureStateOverrideContext::ApplyOriginTrialOverride(
+    const blink::mojom::blink::OriginTrialFeature&,
+    const Vector<String>&) {}
+
+void RuntimeFeatureStateOverrideContext::EnablePersistentTrial(
+    const String&,
+    const Vector<scoped_refptr<const blink::SecurityOrigin>>&) {}
+
+void RuntimeFeatureStateOverrideContext::Trace(Visitor*) const {}
+
 void UserActivationState::SetHasBeenActive() {
   has_been_active_ = true;
 }
@@ -937,9 +892,6 @@ void UserActivationState::Clear() {
   has_been_active_ = false;
   last_activation_was_restricted_ = false;
 }
-
-bool RuntimeEnabledFeaturesBase::
-    is_resource_timing_use_cors_for_body_sizes_enabled_ = false;
 
 class TaskHandle::Runner {
  public:
@@ -1013,17 +965,11 @@ void FrameLoader::ProcessScrollForSameDocumentNavigation(
     mojom::blink::ScrollBehavior) {}
 void FrameLoader::DispatchDidClearDocumentOfWindowObject() {}
 void EventHandler::StopAutoscroll() {}
-void ResourceFetcher::StopFetching() {}
 void ScriptController::UpdateDocument() {}
 DOMWindow* DOMWindow::parent() const {
   return const_cast<DOMWindow*>(this);
 }
 
-class BlobDataHandle {
- public:
-  void AddRef() const {}
-  void Release() const {}
-};
 class WrappedDataPipeGetter {
  public:
   void AddRef() const {}
@@ -1144,7 +1090,6 @@ bool EncodedFormData::IsSafeToSendToAnotherThread() const {
 void ViewTransitionSupplement::CreateFromSnapshotForNavigation(
     Document&,
     ViewTransitionState) {}
-void IdlenessDetector::WillCommitLoad() {}
 void InteractiveDetector::SetNavigationStartTime(base::TimeTicks) {}
 ScopedOldDocumentInfoForCommitCapturer*
     ScopedOldDocumentInfoForCommitCapturer::current_capturer_ = nullptr;
@@ -1671,13 +1616,6 @@ CacheControlHeader ParseCacheControlDirectives(
   result.contains_must_revalidate =
       cache_control.contains("must-revalidate");
   return result;
-}
-
-StringView KURL::User() const {
-  return StringView();
-}
-StringView KURL::Pass() const {
-  return StringView();
 }
 
 mojom::blink::ResourceTimingInfoPtr CreateResourceTimingInfo(
