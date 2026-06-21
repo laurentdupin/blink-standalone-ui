@@ -201,6 +201,48 @@ async function main() {
           document.documentElement.scrollHeight,
           document.body ? document.body.scrollHeight : 0),
       }));
+      state.interactiveElements = await page.evaluate(() => {
+        const selector = [
+          "input",
+          "textarea",
+          "select",
+          "button",
+          "a[href]",
+          "[contenteditable]",
+          "[role='button']",
+          "[role='combobox']",
+          "[role='textbox']",
+        ].join(",");
+        return Array.from(document.querySelectorAll(selector))
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            const style = window.getComputedStyle(element);
+            const visible =
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.right >= 0 &&
+              rect.bottom >= 0 &&
+              rect.left <= window.innerWidth &&
+              rect.top <= window.innerHeight &&
+              style.visibility !== "hidden" &&
+              style.display !== "none" &&
+              Number(style.opacity || "1") > 0;
+            if (!visible) {
+              return null;
+            }
+            return {
+              tagName: element.tagName,
+              id: element.id || "",
+              type: element.getAttribute("type") || "",
+              role: element.getAttribute("role") || "",
+              x: Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2)),
+              y: Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2)),
+              width: rect.width,
+              height: rect.height,
+            };
+          })
+          .filter(Boolean);
+      });
       state.elementScrolls = {};
       for (const scroll of elementScrolls) {
         state.elementScrolls[scroll.id] = await page.evaluate((id) => {

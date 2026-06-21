@@ -9367,6 +9367,22 @@ bool AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
   return false;
 }
 
+bool AttributeMutationMayAffectImageLoadsForStandaloneRenderer(
+    const std::unordered_map<std::string, std::string>& attributes) {
+  for (const auto& [key, value] : attributes) {
+    const size_t separator = key.find(':');
+    if (separator == std::string::npos || separator + 1 >= key.size()) {
+      continue;
+    }
+    const std::string attribute =
+        LowerAsciiForStandaloneRenderer(key.substr(separator + 1));
+    if (attribute == "src" || attribute == "srcset" || attribute == "sizes") {
+      return true;
+    }
+  }
+  return false;
+}
+
 void ApplyElementAttributesForStandaloneRenderer(
     Document& document,
     const std::unordered_map<std::string, std::string>& attributes,
@@ -12491,11 +12507,19 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   TraceLiveFrameProbeStage("after SetInnerHTML");
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
-  TraceLiveFrameProbeStage("before static image loads");
-  StartStandaloneImageLoadsForStaticRender(document);
-  RunStandaloneImageLoadingTasksForStaticRender();
-  CompleteStandaloneImageLoadsForStaticRender(document);
-  TraceLiveFrameProbeStage("after static image loads");
+  const bool static_image_loads_needed =
+      !html_content_already_loaded ||
+      AttributeMutationMayAffectImageLoadsForStandaloneRenderer(
+          cache.requested_element_attributes_by_id_and_name);
+  if (static_image_loads_needed) {
+    TraceLiveFrameProbeStage("before static image loads");
+    StartStandaloneImageLoadsForStaticRender(document);
+    RunStandaloneImageLoadingTasksForStaticRender();
+    CompleteStandaloneImageLoadsForStaticRender(document);
+    TraceLiveFrameProbeStage("after static image loads");
+  } else {
+    TraceLiveFrameProbeStage("static image loads skipped for live document");
+  }
   TraceLiveFrameProbeStage("before image reachability");
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);

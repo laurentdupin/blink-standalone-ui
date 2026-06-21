@@ -326,6 +326,19 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* size) {
   return size->width > 0.0f && size->height > 0.0f;
 }
 
+bool ParsePoint(const std::string& value, html_css_renderer::Point* point) {
+  const size_t comma = value.find(',');
+  if (comma == std::string::npos)
+    return false;
+  try {
+    point->x = std::stof(value.substr(0, comma));
+    point->y = std::stof(value.substr(comma + 1));
+  } catch (...) {
+    return false;
+  }
+  return point->x >= 0.0f && point->y >= 0.0f;
+}
+
 html_css_renderer::Size SdlWindowPixelViewport(SDL_Window* window) {
   int width = 0;
   int height = 0;
@@ -359,8 +372,8 @@ void PrintUsage() {
       "[--quit-after-ms N] [--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--screenshot-out <png>] [--screenshot-after-ms N] "
       "[--synthetic-input-smoke] [--synthetic-resize WxH] "
-      "[--synthetic-navigation-smoke] "
-      "[--full-frame-diagnostics]\n"
+      "[--synthetic-click x,y] [--synthetic-navigation-smoke] "
+      "[--trace-stages] [--full-frame-diagnostics]\n"
       "Launching without --html, --html-file, or --html-dir opens a native "
       "HTML directory picker on Windows and recursively lists HTML files. "
       "F1/F2 switch files; F5 resets the current file.\n"
@@ -593,10 +606,12 @@ int main(int argc, char** argv) {
   bool synthetic_input_smoke = false;
   bool synthetic_navigation_smoke = false;
   std::optional<html_css_renderer::Size> synthetic_resize;
+  std::vector<html_css_renderer::Point> synthetic_click_points;
   bool html_input_provided = false;
   bool resource_root_explicit = false;
   bool resource_base_path_explicit = false;
   bool full_frame_diagnostics = false;
+  bool trace_stages = false;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -734,10 +749,27 @@ int main(int argc, char** argv) {
       resource_base_path_explicit = true;
     } else if (arg == "--synthetic-input-smoke") {
       synthetic_input_smoke = true;
+    } else if (arg == "--synthetic-click") {
+      const char* value = next_value();
+      html_css_renderer::Point parsed_point;
+      if (!value || !ParsePoint(value, &parsed_point)) {
+        std::fprintf(stderr, "invalid --synthetic-click\n");
+        return 2;
+      }
+      synthetic_click_points.push_back(parsed_point);
+    } else if (arg.rfind("--synthetic-click=", 0) == 0) {
+      html_css_renderer::Point parsed_point;
+      if (!ParsePoint(arg.substr(18), &parsed_point)) {
+        std::fprintf(stderr, "invalid --synthetic-click\n");
+        return 2;
+      }
+      synthetic_click_points.push_back(parsed_point);
     } else if (arg == "--synthetic-navigation-smoke") {
       synthetic_navigation_smoke = true;
     } else if (arg == "--full-frame-diagnostics") {
       full_frame_diagnostics = true;
+    } else if (arg == "--trace-stages") {
+      trace_stages = true;
     } else if (arg == "--synthetic-resize") {
       const char* value = next_value();
       html_css_renderer::Size parsed_size;
@@ -943,6 +975,7 @@ int main(int argc, char** argv) {
     html_css_renderer::CompositorRuntimeCreateInfo create_info;
     create_info.renderer = std::move(document_renderer);
     create_info.enable_paint_artifact_audit = !paint_artifact_dump_path.empty();
+    create_info.trace_stages = trace_stages;
     runtime.reset();
     runtime =
         html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
@@ -1050,7 +1083,8 @@ int main(int argc, char** argv) {
         return frame_and_present_succeeded(result, presentation);
       };
 
-  if (synthetic_input_smoke || synthetic_resize || synthetic_navigation_smoke) {
+  if (synthetic_input_smoke || synthetic_resize || synthetic_navigation_smoke ||
+      !synthetic_click_points.empty()) {
     bool synthetic_ok = frame_and_present_succeeded(result, presentation);
     double synthetic_time = 1.0 / 60.0;
     if (synthetic_navigation_smoke) {
@@ -1073,6 +1107,28 @@ int main(int argc, char** argv) {
       if (capture_resized_screenshot && !write_current_screenshot()) {
         synthetic_ok = false;
       }
+      synthetic_time += 1.0 / 60.0;
+    }
+    for (const html_css_renderer::Point& point : synthetic_click_points) {
+      html_css_renderer::FrameInput next_input = input;
+      next_input.pointers = {html_css_renderer::PointerState{1, point, false}};
+      synthetic_ok = run_update_frame("synthetic_click_move",
+                                      std::move(next_input), synthetic_time) &&
+                     synthetic_ok;
+      synthetic_time += 1.0 / 60.0;
+
+      next_input = input;
+      next_input.pointers = {html_css_renderer::PointerState{1, point, true}};
+      synthetic_ok = run_update_frame("synthetic_click_down",
+                                      std::move(next_input), synthetic_time) &&
+                     synthetic_ok;
+      synthetic_time += 1.0 / 60.0;
+
+      next_input = input;
+      next_input.pointers = {html_css_renderer::PointerState{1, point, false}};
+      synthetic_ok = run_update_frame("synthetic_click_up",
+                                      std::move(next_input), synthetic_time) &&
+                     synthetic_ok;
       synthetic_time += 1.0 / 60.0;
     }
     if (synthetic_input_smoke) {
