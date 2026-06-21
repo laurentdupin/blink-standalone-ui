@@ -60,6 +60,26 @@ perfetto::NamedTrack GetTracingTrack(const TileManager* tile_manager) {
   return perfetto::NamedTrack::FromPointer("cc::TileManager", tile_manager);
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" bool
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage);
+
+bool StandaloneCcTileTraceEnabled() {
+  return StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+}
+
+void TraceStandaloneCcTileStage(const char* stage) {
+  if (StandaloneCcTileTraceEnabled())
+    StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+void TraceStandaloneCcTileStage(const std::string& stage) {
+  TraceStandaloneCcTileStage(stage.c_str());
+}
+#endif
+
 // Flag to indicate whether we should try and detect that
 // a tile is of solid color.
 const bool kUseColorEstimator = true;
@@ -673,6 +693,14 @@ void TileManager::ExternalDependencyCompletedForRasterTask(
 bool TileManager::PrepareTiles(
     const GlobalStateThatImpactsTilePriority& state) {
   TRACE_EVENT("cc", __PRETTY_FUNCTION__);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile PrepareTiles enter manager=%d viewport=%dx%d "
+      "needs_ready_draw=%d",
+      tile_task_manager_ ? 1 : 0, state.viewport_size.width(),
+      state.viewport_size.height(),
+      tile_manager_settings_.needs_notify_ready_to_draw ? 1 : 0));
+#endif
   ++prepare_tiles_count_;
   last_active_time_ = NowWithOverride();
   ScheduleReduceTileMemoryWhenIdle(base::TimeDelta());
@@ -683,6 +711,9 @@ bool TileManager::PrepareTiles(
 
   if (!tile_task_manager_) {
     TRACE_EVENT_INSTANT("cc", "PrepareTiles aborted");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcTileStage("cc tile PrepareTiles abort no task manager");
+#endif
     return false;
   }
 
@@ -710,6 +741,24 @@ bool TileManager::PrepareTiles(
     FreeResourcesForOccludedTiles();
 
   PrioritizedWorkToSchedule prioritized_work = AssignGpuMemoryToTiles();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const bool has_raster_work = !prioritized_work.tiles_to_raster.empty();
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile PrepareTiles assigned raster=%zu front_draw=%d "
+      "front_activate=%d pending_gpu=%zu",
+      prioritized_work.tiles_to_raster.size(),
+      has_raster_work &&
+              prioritized_work.tiles_to_raster.front().tile()->required_for_draw()
+          ? 1
+          : 0,
+      has_raster_work &&
+              prioritized_work.tiles_to_raster.front()
+                  .tile()
+                  ->required_for_activation()
+          ? 1
+          : 0,
+      pending_gpu_work_tiles_.size()));
+#endif
 
   // Inform the client that will likely require a draw if the highest priority
   // tile that will be rasterized is required for draw.
@@ -721,6 +770,17 @@ bool TileManager::PrepareTiles(
   ScheduleTasks(std::move(prioritized_work));
 
   TRACE_EVENT_INSTANT("cc", "DidPrepareTiles", "state", BasicStateAsValue());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile PrepareTiles exit scheduled=%d draw_done=%d gpu_done=%d "
+      "notified_draw=%d pending_draw_cb=%llu pending_gpu=%zu",
+      has_scheduled_tile_tasks_ ? 1 : 0,
+      signals_.draw_tile_tasks_completed ? 1 : 0,
+      signals_.draw_gpu_work_completed ? 1 : 0,
+      signals_.did_notify_ready_to_draw ? 1 : 0,
+      static_cast<unsigned long long>(pending_required_for_draw_callback_id_),
+      pending_gpu_work_tiles_.size()));
+#endif
   return true;
 }
 
@@ -1241,6 +1301,12 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
       work_to_schedule.tiles_to_raster;
   TRACE_EVENT1("cc", "TileManager::ScheduleTasks", "count",
                tiles_that_need_to_be_rasterized.size());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile ScheduleTasks enter raster=%zu manager=%d scheduled_before=%d",
+      tiles_that_need_to_be_rasterized.size(), tile_task_manager_ ? 1 : 0,
+      has_scheduled_tile_tasks_ ? 1 : 0));
+#endif
 
   DCHECK(did_check_for_completed_tasks_since_last_schedule_tasks_);
 
@@ -1381,6 +1447,14 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
   image_controller_.ReduceMemoryUsage();
 
   bool only_completion_tasks = graph_.nodes.empty();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile ScheduleTasks graph counts raster=%zu required_draw=%zu "
+      "required_activate=%zu all=%zu only_completion=%d graph_nodes=%zu",
+      tiles_that_need_to_be_rasterized.size(), required_for_draw_count,
+      required_for_activate_count, all_count, only_completion_tasks ? 1 : 0,
+      graph_.nodes.size()));
+#endif
   // Insert nodes for our task completion tasks. We enqueue these using
   // NONCONCURRENT_FOREGROUND category this is the highest priority category and
   // we'd like to run these tasks as soon as possible.
@@ -1425,6 +1499,11 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
   // scheduled tasks and effectively cancels all tasks not present
   // in |raster_queue_|.
   tile_task_manager_->ScheduleTasks(&graph_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile ScheduleTasks after manager scheduled=%d graph_nodes=%zu",
+      has_scheduled_tile_tasks_ ? 1 : 0, graph_.nodes.size()));
+#endif
 
   // Schedule running of the checker-image decode queue. This replaces the
   // previously scheduled queue and effectively cancels image decodes from the
@@ -1436,6 +1515,10 @@ void TileManager::ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule) {
   // nodes when completed tasks are collected, addressing dangling raw_ptr in
   // TaskGraph::Edge. The TaskGraphRunner holds necessary state post-schedule.
   graph_.Reset();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(
+      "cc tile ScheduleTasks after graph reset did_check_completed=0");
+#endif
 
   did_check_for_completed_tasks_since_last_schedule_tasks_ = false;
 
@@ -1850,13 +1933,49 @@ void TileManager::CheckRasterFinishedQueries() {
 
 void TileManager::CheckForCompletedTasksAndIssueSignals() {
   TRACE_EVENT0("cc", "TileManager::CheckForCompletedTasksAndIssueSignals");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile CheckCompleted enter scheduled=%d pending_gpu=%zu "
+      "pending_draw_cb=%llu draw_tiles_done=%d draw_gpu_done=%d "
+      "notified_draw=%d",
+      has_scheduled_tile_tasks_ ? 1 : 0, pending_gpu_work_tiles_.size(),
+      static_cast<unsigned long long>(pending_required_for_draw_callback_id_),
+      signals_.draw_tile_tasks_completed ? 1 : 0,
+      signals_.draw_gpu_work_completed ? 1 : 0,
+      signals_.did_notify_ready_to_draw ? 1 : 0));
+#endif
   tile_task_manager_->CheckForCompletedTasks();
   did_check_for_completed_tasks_since_last_schedule_tasks_ = true;
 
   CheckPendingGpuWorkAndIssueSignals();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile CheckCompleted exit scheduled=%d pending_gpu=%zu "
+      "pending_draw_cb=%llu draw_tiles_done=%d draw_gpu_done=%d "
+      "notified_draw=%d",
+      has_scheduled_tile_tasks_ ? 1 : 0, pending_gpu_work_tiles_.size(),
+      static_cast<unsigned long long>(pending_required_for_draw_callback_id_),
+      signals_.draw_tile_tasks_completed ? 1 : 0,
+      signals_.draw_gpu_work_completed ? 1 : 0,
+      signals_.did_notify_ready_to_draw ? 1 : 0));
+#endif
 }
 
 void TileManager::IssueSignals() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile IssueSignals enter activate_tiles=%d activate_gpu=%d "
+      "draw_tiles=%d draw_gpu=%d notified_activate=%d notified_draw=%d "
+      "needs_draw_notify=%d pending_draw_cb=%llu",
+      signals_.activate_tile_tasks_completed ? 1 : 0,
+      signals_.activate_gpu_work_completed ? 1 : 0,
+      signals_.draw_tile_tasks_completed ? 1 : 0,
+      signals_.draw_gpu_work_completed ? 1 : 0,
+      signals_.did_notify_ready_to_activate ? 1 : 0,
+      signals_.did_notify_ready_to_draw ? 1 : 0,
+      tile_manager_settings_.needs_notify_ready_to_draw ? 1 : 0,
+      static_cast<unsigned long long>(pending_required_for_draw_callback_id_)));
+#endif
   // Ready to activate.
   if (signals_.activate_tile_tasks_completed &&
       signals_.activate_gpu_work_completed &&
@@ -1874,10 +1993,25 @@ void TileManager::IssueSignals() {
   // Ready to draw.
   if (signals_.draw_tile_tasks_completed && signals_.draw_gpu_work_completed &&
       !signals_.did_notify_ready_to_draw) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    const bool ready_to_draw = IsReadyToDraw();
+    TraceStandaloneCcTileStage(base::StringPrintf(
+        "cc tile IssueSignals ready_to_draw eval needs=%d ready=%d "
+        "pending_draw_cb=%llu",
+        tile_manager_settings_.needs_notify_ready_to_draw ? 1 : 0,
+        ready_to_draw ? 1 : 0,
+        static_cast<unsigned long long>(pending_required_for_draw_callback_id_)));
+    if (tile_manager_settings_.needs_notify_ready_to_draw && ready_to_draw) {
+#else
     if (tile_manager_settings_.needs_notify_ready_to_draw && IsReadyToDraw()) {
+#endif
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("cc.debug"),
                    "TileManager::IssueSignals - ready to draw");
       signals_.did_notify_ready_to_draw = true;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneCcTileStage(
+          "cc tile IssueSignals before NotifyReadyToDraw");
+#endif
       client_->NotifyReadyToDraw();
     }
   }
@@ -2082,6 +2216,15 @@ void TileManager::CheckPendingGpuWorkAndIssueSignals() {
                "pending_gpu_work_tiles", pending_gpu_work_tiles_.size(),
                "tree_priority",
                TreePriorityToString(global_state_.tree_priority));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile CheckGpu enter pending_gpu=%zu pending_draw_cb=%llu "
+      "pending_activate_cb=%llu",
+      pending_gpu_work_tiles_.size(),
+      static_cast<unsigned long long>(pending_required_for_draw_callback_id_),
+      static_cast<unsigned long long>(
+          pending_required_for_activation_callback_id_)));
+#endif
 
   std::vector<const ResourcePool::InUsePoolResource*> required_for_activation;
   std::vector<const ResourcePool::InUsePoolResource*> required_for_draw;
@@ -2147,11 +2290,31 @@ void TileManager::CheckPendingGpuWorkAndIssueSignals() {
       (pending_required_for_activation_callback_id_ == 0);
   signals_.draw_gpu_work_completed =
       (pending_required_for_draw_callback_id_ == 0);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile CheckGpu after callbacks required_draw=%zu "
+      "required_activate=%zu pending_draw_cb=%llu pending_activate_cb=%llu "
+      "draw_gpu_done=%d",
+      required_for_draw.size(), required_for_activation.size(),
+      static_cast<unsigned long long>(pending_required_for_draw_callback_id_),
+      static_cast<unsigned long long>(
+          pending_required_for_activation_callback_id_),
+      signals_.draw_gpu_work_completed ? 1 : 0));
+#endif
 
   // We've just updated all pending tile requirements if necessary.
   pending_tile_requirements_dirty_ = false;
 
   IssueSignals();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcTileStage(base::StringPrintf(
+      "cc tile CheckGpu exit pending_gpu=%zu draw_tiles_done=%d "
+      "draw_gpu_done=%d notified_draw=%d",
+      pending_gpu_work_tiles_.size(),
+      signals_.draw_tile_tasks_completed ? 1 : 0,
+      signals_.draw_gpu_work_completed ? 1 : 0,
+      signals_.did_notify_ready_to_draw ? 1 : 0));
+#endif
 }
 
 // Utility function that can be used to create a "Task set finished" task that

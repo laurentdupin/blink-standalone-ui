@@ -67,10 +67,16 @@ struct KeyboardState {
   std::vector<uint32_t> pressed_key_codes;
 };
 
+enum class FrameResultCollection {
+  kFull,
+  kMinimal,
+};
+
 struct FrameInput {
   double delta_time_seconds = 0.0;
   double timeline_time_seconds = 0.0;
   bool request_png_snapshot = false;
+  FrameResultCollection result_collection = FrameResultCollection::kFull;
   std::optional<Size> viewport;
   std::optional<std::string> html_override;
   std::optional<std::vector<Stylesheet>> stylesheets_override;

@@ -400,6 +400,9 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
   void OnBeginImplFrameDeadline();
   void PollToAdvanceCommitState();
   void BeginMainFrameAnimateAndLayoutOnly(const viz::BeginFrameArgs& args);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void TraceStandaloneSchedulerState(const char* label);
+#endif
 
   bool IsInsideAction(SchedulerStateMachine::Action action) {
     return inside_action_ == action;

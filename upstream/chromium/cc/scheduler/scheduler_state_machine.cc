@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
@@ -76,6 +77,55 @@ SchedulerStateMachine::SchedulerStateMachine(const SchedulerSettings& settings)
     : settings_(settings) {}
 
 SchedulerStateMachine::~SchedulerStateMachine() = default;
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+std::string SchedulerStateMachine::StandaloneStateSummary(
+    const char* label,
+    Action next_action,
+    BeginImplFrameDeadlineMode deadline_mode,
+    bool deadline_timer_running) const {
+  const char* should_draw_blocker = "none";
+  if (PendingDrawsShouldBeAborted()) {
+    should_draw_blocker = active_tree_needs_first_draw_ ? "abort_first_draw"
+                                                        : "pending_draw_abort";
+  } else if (did_draw_) {
+    should_draw_blocker = "did_draw";
+  } else if (skip_draw_) {
+    should_draw_blocker = "skip_draw";
+  } else if (layer_tree_frame_sink_state_ != LayerTreeFrameSinkState::ACTIVE) {
+    should_draw_blocker = "frame_sink_not_active";
+  } else if (IsDrawThrottled()) {
+    should_draw_blocker = "draw_throttled";
+  } else if (begin_impl_frame_state_ != BeginImplFrameState::INSIDE_DEADLINE) {
+    should_draw_blocker = "not_inside_deadline";
+  } else if (CheckShouldDraw()) {
+    should_draw_blocker = "check_should_draw";
+  } else if (settings_.commit_to_active_tree && CommitPending()) {
+    should_draw_blocker = "commit_pending";
+  } else if (forced_redraw_state_ ==
+             ForcedRedrawOnTimeoutState::WAITING_FOR_DRAW) {
+    should_draw_blocker = "forced_redraw";
+  } else if (!needs_redraw_) {
+    should_draw_blocker = "no_redraw";
+  }
+
+  return base::StringPrintf(
+      "cc scheduler state %s next=%d needs_redraw=%d can_draw=%d visible=%d "
+      "lfs=%d bif=%d bmf=%d active_first=%d active_ready=%d pending=%d "
+      "skip_draw=%d did_draw=%d throttled=%d deadline=%d deadline_timer=%d "
+      "draw_blocker=%s",
+      label ? label : "", static_cast<int>(next_action),
+      needs_redraw_ ? 1 : 0, can_draw_ ? 1 : 0, visible_ ? 1 : 0,
+      static_cast<int>(layer_tree_frame_sink_state_),
+      static_cast<int>(begin_impl_frame_state_),
+      static_cast<int>(begin_main_frame_state_),
+      active_tree_needs_first_draw_ ? 1 : 0,
+      active_tree_is_ready_to_draw_ ? 1 : 0, has_pending_tree_ ? 1 : 0,
+      skip_draw_ ? 1 : 0, did_draw_ ? 1 : 0,
+      IsDrawThrottled() ? 1 : 0, static_cast<int>(deadline_mode),
+      deadline_timer_running ? 1 : 0, should_draw_blocker);
+}
+#endif
 
 perfetto::protos::pbzero::ChromeCompositorStateMachineV2::MajorStateV2::
     LayerTreeFrameSinkState

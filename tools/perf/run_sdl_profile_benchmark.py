@@ -146,10 +146,13 @@ def run_command(
     return code, elapsed_ms, output
 
 
-def parse_output(output: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
+def parse_output(
+    output: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], dict[str, Any]]:
     frames: list[dict[str, Any]] = []
     presentations: list[dict[str, Any]] = []
     diagnostics: list[str] = []
+    idle_summary: dict[str, Any] = {}
     for line in output.splitlines():
         text = line.strip()
         if text.startswith("frame="):
@@ -158,7 +161,9 @@ def parse_output(output: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]
             presentations.append(parse_key_values(text))
         elif text.startswith("diagnostic:"):
             diagnostics.append(text)
-    return frames, presentations, diagnostics
+        elif text.startswith("idle_summary"):
+            idle_summary = parse_key_values(text)
+    return frames, presentations, diagnostics, idle_summary
 
 
 def validate_row(
@@ -224,7 +229,7 @@ def main() -> int:
     code, elapsed_ms, output = run_command(
         cmd, out_dir / "sdl_compositor_profile.log", args.timeout, args.sdl_video_driver
     )
-    frames, presentations, diagnostics = parse_output(output)
+    frames, presentations, diagnostics, idle_summary = parse_output(output)
     initial_frame = next((row for row in frames if row.get("reason") == "initial"), None)
     initial_presentation = next(
         (row for row in presentations if row.get("presentation") == "initial"), None
@@ -260,6 +265,15 @@ def main() -> int:
                 FRAME_REQUIRED,
                 f"{reason} frame",
             )
+            validate_row(
+                failures,
+                next(
+                    (row for row in presentations if row.get("presentation") == reason),
+                    None,
+                ),
+                PRESENTATION_REQUIRED,
+                f"{reason} presentation",
+            )
     if args.synthetic_resize:
         validate_row(
             failures,
@@ -286,15 +300,6 @@ def main() -> int:
                 f"synthetic_resize presentation expected surface={args.synthetic_resize}, "
                 f"got {resize_presentation.get('surface')}"
             )
-            validate_row(
-                failures,
-                next(
-                    (row for row in presentations if row.get("presentation") == reason),
-                    None,
-                ),
-                PRESENTATION_REQUIRED,
-                f"{reason} presentation",
-            )
     if "SWAP_ACK" not in output:
         failures.append("missing Chromium Vulkan SWAP_ACK diagnostic")
     for marker in FAILURE_MARKERS:
@@ -318,6 +323,7 @@ def main() -> int:
         or (presentations[0] if presentations else {}),
         "resize_frame": resize_frame or {},
         "resize_presentation": resize_presentation or {},
+        "idle_summary": idle_summary,
         "diagnostics": diagnostics,
         "failure_count": len(failures),
         "failures": failures,

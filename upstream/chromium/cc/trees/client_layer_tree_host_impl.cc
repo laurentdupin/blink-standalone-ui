@@ -26,6 +26,17 @@
 namespace cc {
 
 namespace {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" int
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage);
+
+void TraceStandaloneCcSchedulerStage(const char* stage) {
+  if (StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer())
+    StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#endif
 
 bool VerboseLogEnabled() {
   return VLOG_IS_ON(3);
@@ -109,18 +120,30 @@ void ClientLayerTreeHostImpl::BeginMainFrameAborted(
 void ClientLayerTreeHostImpl::BeginCommit(int source_frame_number,
                                           BeginMainFrameTraceId trace_id) {
   TRACE_EVENT0("cc", "LayerTreeHostImpl::BeginCommit");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi BeginCommit enter");
+#endif
 
   if (!CommitsToActiveTree()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage("cc client lthi BeginCommit CreatePendingTree");
+#endif
     CreatePendingTree();
   }
   sync_tree()->set_source_frame_number(source_frame_number);
   sync_tree()->set_trace_id(trace_id);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi BeginCommit exit");
+#endif
 }
 
 void ClientLayerTreeHostImpl::FinishCommit(
     CommitState& state,
     const ThreadUnsafeCommitState& unsafe_state) {
   TRACE_EVENT0("cc,benchmark", "LayerTreeHostImpl::FinishCommit");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi FinishCommit enter");
+#endif
   LayerTreeImpl* tree = sync_tree();
   {
     // Instead of individual `Layer::PushPropertiesTo` triggering separate
@@ -129,13 +152,25 @@ void ClientLayerTreeHostImpl::FinishCommit(
     viz::ClientResourceProvider::ScopedBatchResourcesRelease
         scoped_resource_release =
             resource_provider_->CreateScopedBatchResourcesRelease();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc client lthi FinishCommit before PullPropertiesFrom");
+#endif
     tree->PullPropertiesFrom(state, unsafe_state);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc client lthi FinishCommit after PullPropertiesFrom");
+#endif
   }
 
   // Check whether the impl scroll animating nodes were removed by the commit.
   mutator_host()->HandleRemovedScrollAnimatingElements(CommitsToActiveTree());
 
   PullLayerTreeHostPropertiesFrom(state);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc client lthi FinishCommit after PullLayerTreeHostPropertiesFrom");
+#endif
 
   // Transfer image decode requests to the impl thread.
   for (auto& entry : state.queued_image_decodes) {
@@ -155,6 +190,9 @@ void ClientLayerTreeHostImpl::FinishCommit(
                 << tree->property_trees()->ToString() << "\n"
                 << "cc::LayerImpls:\n"
                 << tree->LayerListAsJson();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi FinishCommit exit");
+#endif
 }
 
 void ClientLayerTreeHostImpl::PullLayerTreeHostPropertiesFrom(
@@ -183,6 +221,9 @@ void ClientLayerTreeHostImpl::RecordGpuRasterizationHistogram() {
 
 void ClientLayerTreeHostImpl::CommitComplete() {
   DCHECK(!settings_.trees_in_viz_in_viz_process);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi CommitComplete enter");
+#endif
 
   TRACE_EVENT(
       "cc,benchmark", "LayerTreeHostImpl::CommitComplete",
@@ -204,6 +245,9 @@ void ClientLayerTreeHostImpl::CommitComplete() {
     // UpdateDrawProperties.
     ActivateAnimations();
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi CommitComplete after active tree");
+#endif
 
   // We clear the entries that were never mutated by CC animations from the last
   // commit until now. Moreover, we reset the values of input properties and
@@ -274,6 +318,9 @@ void ClientLayerTreeHostImpl::CommitComplete() {
       frame_trackers_.StopCustomSequence(sequence_id);
     }
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi CommitComplete exit");
+#endif
 }
 
 void ClientLayerTreeHostImpl::ReadyToCommit(
@@ -507,6 +554,9 @@ void ClientLayerTreeHostImpl::OnPaintWorkletResultsReady(
 }
 
 void ClientLayerTreeHostImpl::NotifyPendingTreeFullyPainted() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi NotifyPendingTreeFullyPainted enter");
+#endif
   // The pending tree must be fully painted at this point.
   DCHECK(pending_tree_fully_painted_ && !settings_.trees_in_viz_in_viz_process);
 
@@ -519,7 +569,17 @@ void ClientLayerTreeHostImpl::NotifyPendingTreeFullyPainted() {
   // TODO(vmpstr): Investigate always having PrepareTiles issue
   // NotifyReadyToActivate, instead of handling it here.
   bool did_prepare_tiles = PrepareTiles();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      did_prepare_tiles
+          ? "cc client lthi NotifyPendingTreeFullyPainted PrepareTiles true"
+          : "cc client lthi NotifyPendingTreeFullyPainted PrepareTiles false");
+#endif
   if (!did_prepare_tiles) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc client lthi NotifyPendingTreeFullyPainted before ReadyToActivate");
+#endif
     NotifyReadyToActivate();
 
     // Ensure we get ReadyToDraw signal even when PrepareTiles not run. This
@@ -528,9 +588,16 @@ void ClientLayerTreeHostImpl::NotifyPendingTreeFullyPainted() {
     // Scheduler to wait for ReadyToDraw signal to avoid Checkerboard.
     if (CommitsToActiveTree() ||
         settings_.wait_for_all_pipeline_stages_before_draw) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneCcSchedulerStage(
+          "cc client lthi NotifyPendingTreeFullyPainted before ReadyToDraw");
+#endif
       NotifyReadyToDraw();
     }
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc client lthi NotifyPendingTreeFullyPainted exit");
+#endif
 }
 
 void ClientLayerTreeHostImpl::AnimatePendingTreeAfterCommit() {

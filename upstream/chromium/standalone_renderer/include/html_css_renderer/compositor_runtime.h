@@ -16,8 +16,30 @@ struct CompositorRuntimeCreateInfo {
   std::string lifecycle_stop;
 };
 
+struct CompositorFrameTiming {
+  double runtime_apply_state_ms = 0.0;
+  double runtime_bridge_query_ms = 0.0;
+  double runtime_total_ms = 0.0;
+  double bridge_total_ms = 0.0;
+  double bridge_input_setup_ms = 0.0;
+  double bridge_html_document_setup_ms = 0.0;
+  double bridge_style_update_ms = 0.0;
+  double bridge_layout_lifecycle_ms = 0.0;
+  double bridge_prepaint_and_paint_lifecycle_ms = 0.0;
+  double bridge_paint_artifact_generation_ms = 0.0;
+  double bridge_paint_artifact_audit_ms = 0.0;
+  double bridge_paint_artifact_extraction_ms = 0.0;
+  double bridge_cc_composite_ms = 0.0;
+  bool bridge_cache_hit = false;
+  bool bridge_reused_live_document = false;
+  bool bridge_rebuilt_for_attributes = false;
+};
+
 struct CompositorFrameResult {
   RendererSnapshot successor_snapshot;
+  CompositorFrameTiming timing;
+  bool frame_advanced = true;
+  bool frame_skipped_due_to_no_demand = false;
   bool paint_clean = false;
   bool root_layer_available = false;
   bool cc_host_created = false;

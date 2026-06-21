@@ -89,7 +89,25 @@ static base::AtomicSequenceNumber s_image_decode_sequence_number;
 }  // namespace
 
 namespace cc {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" int
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage);
+#endif
+
 namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void TraceStandaloneCcSchedulerStage(const char* stage) {
+  if (StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer())
+    StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+void TraceStandaloneCcSchedulerStage(const std::string& stage) {
+  TraceStandaloneCcSchedulerStage(stage.c_str());
+}
+#endif
 
 bool AreEmbedTokensEqual(const viz::LocalSurfaceId& lsi1,
                          const viz::LocalSurfaceId& lsi2) {
@@ -424,6 +442,11 @@ void LayerTreeHost::SetNextCommitWaitsForActivation() {
 std::unique_ptr<CommitState> LayerTreeHost::WillCommit(
     std::unique_ptr<CompletionEvent> completion,
     bool has_updates) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(has_updates
+                                      ? "cc lth WillCommit enter has_updates"
+                                      : "cc lth WillCommit enter no_updates");
+#endif
   DCHECK(IsMainThread());
   DCHECK(!commit_completion_event_);
 
@@ -446,11 +469,17 @@ std::unique_ptr<CommitState> LayerTreeHost::WillCommit(
   // TODO(paint-dev): We can avoid the churn of this call when (!has_updates) if
   // we know there are no paint event handlers registered.
   std::unique_ptr<CommitState> activated_commit_state = ActivateCommitState();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth WillCommit after ActivateCommitState");
+#endif
 
   {
     base::AutoReset<bool> in_will_commit(&inside_will_commit_, true);
     client_->WillCommit(*activated_commit_state.get());
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth WillCommit after client WillCommit");
+#endif
 
   // We need activated_commit_state to absorb any effects of
   // UpdateAfterPaintEvent() and applying layer invalidation rects, so we swap
@@ -471,6 +500,9 @@ std::unique_ptr<CommitState> LayerTreeHost::WillCommit(
   std::swap(pending_commit_state_, activated_commit_state);
 
   if (!has_updates) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage("cc lth WillCommit returning null");
+#endif
     // Even after paint event handlers there is no update. Unwind the effects of
     // ActiveCommitState() and return.
     pending_commit_state_ = std::move(activated_commit_state);
@@ -485,6 +517,9 @@ std::unique_ptr<CommitState> LayerTreeHost::WillCommit(
   }
 
   pending_commit_state()->source_frame_number++;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth WillCommit returning state");
+#endif
 
   // Pull state not stored directly on LayerTreeHost
   activated_commit_state->event_metrics =
@@ -551,6 +586,9 @@ bool LayerTreeHost::IsUsingLayerLists() const {
 
 void LayerTreeHost::CommitComplete(int source_frame_number,
                                    const CommitTimestamps& commit_timestamps) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth CommitComplete enter");
+#endif
   DCHECK(IsMainThread());
 
   // At this point, commit_completion_event_ could be for the *next* commit, and
@@ -570,10 +608,16 @@ void LayerTreeHost::CommitComplete(int source_frame_number,
     WaitForCommitCompletion(/* for_protected_sequence */ false);
   client_->DidCommit(source_frame_number, commit_timestamps.start,
                      commit_timestamps.finish);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth CommitComplete after client DidCommit");
+#endif
   if (did_complete_scale_animation_) {
     client_->DidCompletePageScaleAnimation(source_frame_number);
     did_complete_scale_animation_ = false;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth CommitComplete exit");
+#endif
 }
 
 void LayerTreeHost::NotifyImageDecodeFinished(int request_id,
@@ -956,7 +1000,13 @@ void LayerTreeHost::CompositeForTest(base::TimeTicks frame_begin_time,
 }
 
 bool LayerTreeHost::UpdateLayers() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth UpdateLayers enter");
+#endif
   if (!root_layer()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage("cc lth UpdateLayers no root layer");
+#endif
     property_trees()->clear();
     pending_commit_state()->viewport_property_ids = ViewportPropertyIds();
     return false;
@@ -966,7 +1016,14 @@ bool LayerTreeHost::UpdateLayers() {
   base::ElapsedTimer timer;
 
   client_->WillUpdateLayers();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth UpdateLayers before DoUpdateLayers");
+#endif
   bool result = DoUpdateLayers();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(result ? "cc lth UpdateLayers result true"
+                                         : "cc lth UpdateLayers result false");
+#endif
   client_->DidUpdateLayers();
   micro_benchmark_controller_.DidUpdateLayers();
 
@@ -1094,10 +1151,16 @@ bool LayerTreeHost::DoUpdateLayers() {
   DCHECK(IsMainThread());
   TRACE_EVENT1("cc,benchmark", "LayerTreeHost::DoUpdateLayers",
                "source_frame_number", SourceFrameNumber());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth DoUpdateLayers enter");
+#endif
 
   UpdateHudLayer(pending_commit_state()->debug_state.ShouldCreateHudLayer());
 
   property_tree_delegate_->UpdatePropertyTreesIfNeeded();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lth DoUpdateLayers after property trees");
+#endif
 
 #if DCHECK_IS_ON()
   // Ensure property tree nodes were created for all layers. When using layer
@@ -1122,7 +1185,18 @@ bool LayerTreeHost::DoUpdateLayers() {
 
   LayerList update_layer_list;
   draw_property_utils::FindLayersThatNeedUpdates(this, &update_layer_list);
-  return PaintContent(update_layer_list);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lth DoUpdateLayers update_layer_count %zu",
+      update_layer_list.size()));
+#endif
+  const bool result = PaintContent(update_layer_list);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      result ? "cc lth DoUpdateLayers PaintContent true"
+             : "cc lth DoUpdateLayers PaintContent false");
+#endif
+  return result;
 }
 
 void LayerTreeHost::ApplyViewportChanges(

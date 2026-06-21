@@ -7,6 +7,8 @@
 
 #include <stdint.h>
 
+#include <string>
+
 #include "base/time/time.h"
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "cc/cc_export.h"
@@ -329,6 +331,13 @@ class CC_EXPORT SchedulerStateMachine {
   bool active_tree_needs_first_draw() const {
     return active_tree_needs_first_draw_;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  std::string StandaloneStateSummary(
+      const char* label,
+      Action next_action,
+      BeginImplFrameDeadlineMode deadline_mode,
+      bool deadline_timer_running) const;
+#endif
 
   void DidPrepareTiles();
   void DidLoseLayerTreeFrameSink();

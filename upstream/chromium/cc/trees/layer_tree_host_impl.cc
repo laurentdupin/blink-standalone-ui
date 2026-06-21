@@ -161,6 +161,22 @@
 namespace cc {
 namespace {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" int
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage);
+
+void TraceStandaloneCcSchedulerStage(const char* stage) {
+  if (StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer())
+    StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+void TraceStandaloneCcSchedulerStage(const std::string& stage) {
+  TraceStandaloneCcSchedulerStage(stage.c_str());
+}
+#endif
+
 // In BuildHitTestData we iterate all layers to find all layers that overlap
 // OOPIFs, but when the number of layers is greater than
 // |kAssumeOverlapThreshold|, it can be inefficient to accumulate layer bounds
@@ -764,10 +780,32 @@ bool LayerTreeHostImpl::PrepareTiles() {
   TRACE_EVENT("cc", __PRETTY_FUNCTION__);
   DCHECK(!settings_.trees_in_viz_in_viz_process);
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi PrepareTiles enter dirty=%d active=%d active_layers=%zu "
+      "pending=%d pending_layers=%zu",
+      tile_priorities_dirty_ ? 1 : 0, active_tree() ? 1 : 0,
+      active_tree() ? active_tree()->num_layers() : 0u,
+      pending_tree() ? 1 : 0,
+      pending_tree() ? pending_tree()->num_layers() : 0u));
+#endif
   tile_priorities_dirty_ |= active_tree() && active_tree()->UpdateTiles();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi PrepareTiles after active UpdateTiles dirty=%d",
+      tile_priorities_dirty_ ? 1 : 0));
+#endif
   tile_priorities_dirty_ |= pending_tree() && pending_tree()->UpdateTiles();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi PrepareTiles after pending UpdateTiles dirty=%d",
+      tile_priorities_dirty_ ? 1 : 0));
+#endif
 
   if (!tile_priorities_dirty_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage("cc lthi PrepareTiles no dirty priorities");
+#endif
     return false;
   }
 
@@ -777,6 +815,11 @@ bool LayerTreeHostImpl::PrepareTiles() {
   }
 
   bool did_prepare_tiles = tile_manager_.PrepareTiles(global_tile_state_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi PrepareTiles after TileManager did_prepare=%d",
+      did_prepare_tiles ? 1 : 0));
+#endif
   if (did_prepare_tiles) {
     tile_priorities_dirty_ = false;
   }
@@ -785,6 +828,11 @@ bool LayerTreeHostImpl::PrepareTiles() {
         sync_tree()->source_frame_number());
   }
   delegate_->DidPrepareTiles();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi PrepareTiles exit did_prepare=%d dirty=%d",
+      did_prepare_tiles ? 1 : 0, tile_priorities_dirty_ ? 1 : 0));
+#endif
   return did_prepare_tiles;
 }
 
@@ -1886,24 +1934,46 @@ bool LayerTreeHostImpl::HasPendingTree() {
 }
 
 void LayerTreeHostImpl::NotifyReadyToActivate() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi NotifyReadyToActivate enter pending_fully_painted=%d "
+      "has_pending=%d can_draw=%d",
+      pending_tree_fully_painted_ ? 1 : 0, pending_tree_ ? 1 : 0,
+      CanDraw() ? 1 : 0));
+#endif
   // The TileManager may call this method while the pending tree is still being
   // painted, as it isn't aware of the ongoing paint. We shouldn't tell the
   // scheduler we are ready to activate in that case, as if we do it will
   // immediately activate once we call NotifyPaintWorkletStateChange, rather
   // than wait for the TileManager to actually raster the content!
   if (!pending_tree_fully_painted_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc lthi NotifyReadyToActivate skipped pending not painted");
+#endif
     return;
   }
   delegate_->NotifyReadyToActivate();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lthi NotifyReadyToActivate exit");
+#endif
 }
 
 void LayerTreeHostImpl::NotifyReadyToDraw() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi NotifyReadyToDraw enter can_draw=%d has_pending=%d",
+      CanDraw() ? 1 : 0, pending_tree_ ? 1 : 0));
+#endif
   // Tiles that are ready will cause NotifyTileStateChanged() to be called so we
   // don't need to schedule a draw here. Just stop WillBeginImplFrame() from
   // causing optimistic requests to draw a frame.
   is_likely_to_require_a_draw_ = false;
 
   delegate_->NotifyReadyToDraw();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lthi NotifyReadyToDraw exit");
+#endif
 }
 
 void LayerTreeHostImpl::NotifyAllTileTasksCompleted() {
@@ -3851,6 +3921,11 @@ void LayerTreeHostImpl::PushScrollbarOpacitiesFromActiveToPending() {
 }
 
 void LayerTreeHostImpl::ActivateSyncTree() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi ActivateSyncTree enter has_pending=%d can_draw=%d",
+      pending_tree_ ? 1 : 0, CanDraw() ? 1 : 0));
+#endif
   TRACE_EVENT(
       "cc,benchmark", "LayerTreeHostImpl::ActivateSyncTree",
       [&](perfetto::EventContext ctx) {
@@ -3957,8 +4032,19 @@ void LayerTreeHostImpl::ActivateSyncTree() {
   }
 
   UpdateChildLocalSurfaceId();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(base::StringPrintf(
+      "cc lthi ActivateSyncTree before OnCanDraw can_draw=%d has_pending=%d",
+      CanDraw() ? 1 : 0, pending_tree_ ? 1 : 0));
+#endif
   delegate_->OnCanDrawStateChanged(CanDraw());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lthi ActivateSyncTree before DidActivate");
+#endif
   delegate_->DidActivateSyncTree();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lthi ActivateSyncTree after DidActivate");
+#endif
   if (!tree_activation_callback_.is_null()) {
     tree_activation_callback_.Run();
   }
@@ -3996,6 +4082,9 @@ void LayerTreeHostImpl::ActivateSyncTree() {
                 << active_tree_->property_trees()->ToString() << "\n"
                 << "cc::LayerImpls:\n"
                 << active_tree_->LayerListAsJson();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc lthi ActivateSyncTree exit");
+#endif
 }
 
 void LayerTreeHostImpl::ActivateStateForImages() {

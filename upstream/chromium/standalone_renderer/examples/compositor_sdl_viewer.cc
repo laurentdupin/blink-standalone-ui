@@ -282,6 +282,20 @@ html_css_renderer::Size SdlWindowPixelViewport(SDL_Window* window) {
                                  static_cast<float>(std::max(1, height))};
 }
 
+bool SameViewportSize(html_css_renderer::Size lhs,
+                      html_css_renderer::Size rhs) {
+  return static_cast<int>(lhs.width) == static_cast<int>(rhs.width) &&
+         static_cast<int>(lhs.height) == static_cast<int>(rhs.height);
+}
+
+bool SamePointerState(const html_css_renderer::PointerState& lhs,
+                      const html_css_renderer::PointerState& rhs) {
+  return lhs.id == rhs.id &&
+         static_cast<int>(lhs.position.x) == static_cast<int>(rhs.position.x) &&
+         static_cast<int>(lhs.position.y) == static_cast<int>(rhs.position.y) &&
+         lhs.pressed == rhs.pressed;
+}
+
 void PrintUsage() {
   std::fprintf(
       stderr,
@@ -289,7 +303,8 @@ void PrintUsage() {
       "[--css <css>|--css-file <path>] [--viewport WxH] [--quit-after-ms N] "
       "[--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--screenshot-out <png>] [--screenshot-after-ms N] "
-      "[--synthetic-input-smoke] [--synthetic-resize WxH]\n"
+      "[--synthetic-input-smoke] [--synthetic-resize WxH] "
+      "[--full-frame-diagnostics]\n"
       "Launching without --html or --html-file opens a native HTML file "
       "picker on Windows.\n"
       "SDL owns the host window/event pump only. HTML/CSS frames are driven "
@@ -434,7 +449,8 @@ void PrintFrameStatus(const char* reason,
 
 void PrintPresentationStatus(
     const char* reason,
-    const html_css_renderer::NativePresentationResult& result) {
+    const html_css_renderer::NativePresentationResult& result,
+    bool include_diagnostics = true) {
   std::fprintf(stderr,
                "presentation=%s native_window=%d vulkan_instance=%d "
                "vulkan_queue=%d vulkan_surface=%d vulkan_swapchain=%d "
@@ -466,8 +482,10 @@ void PrintPresentationStatus(
   if (!result.failure_reason.empty())
     std::fprintf(stderr, " failure='%s'", result.failure_reason.c_str());
   std::fprintf(stderr, "\n");
-  for (const std::string& diagnostic : result.diagnostics)
-    std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+  if (include_diagnostics) {
+    for (const std::string& diagnostic : result.diagnostics)
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+  }
 }
 
 }  // namespace
@@ -498,6 +516,7 @@ int main(int argc, char** argv) {
   bool html_input_provided = false;
   bool resource_root_explicit = false;
   bool resource_base_path_explicit = false;
+  bool full_frame_diagnostics = false;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -609,6 +628,8 @@ int main(int argc, char** argv) {
       resource_base_path_explicit = true;
     } else if (arg == "--synthetic-input-smoke") {
       synthetic_input_smoke = true;
+    } else if (arg == "--full-frame-diagnostics") {
+      full_frame_diagnostics = true;
     } else if (arg == "--synthetic-resize") {
       const char* value = next_value();
       html_css_renderer::Size parsed_size;
@@ -709,6 +730,14 @@ int main(int argc, char** argv) {
   input.viewport = renderer.viewport;
   input.request_png_snapshot =
       !screenshot_out.empty() && screenshot_after_ms <= 0;
+  const auto result_collection_for_frame = [&](bool request_png_snapshot) {
+    return (full_frame_diagnostics || !paint_artifact_dump_path.empty() ||
+            request_png_snapshot)
+               ? html_css_renderer::FrameResultCollection::kFull
+               : html_css_renderer::FrameResultCollection::kMinimal;
+  };
+  input.result_collection =
+      result_collection_for_frame(input.request_png_snapshot);
   html_css_renderer::CompositorFrameResult result = runtime->AdvanceFrame(input);
   for (const std::string& diagnostic : result.diagnostics)
     std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
@@ -758,12 +787,22 @@ int main(int argc, char** argv) {
                present_result.viz_display_created &&
                present_result.skia_renderer_gpu_path_reached;
       };
+  const auto include_presentation_diagnostics =
+      [&](const html_css_renderer::NativePresentationResult& present_result) {
+        return full_frame_diagnostics || !present_result.failure_reason.empty() ||
+               !present_result.vulkan_presented ||
+               !present_result.compositor_frame_submitted ||
+               !present_result.viz_display_created ||
+               !present_result.skia_renderer_gpu_path_reached;
+      };
 
   auto run_update_frame =
       [&](const char* reason, html_css_renderer::FrameInput next_input,
           double timeline_seconds) {
         next_input.delta_time_seconds = 1.0 / 60.0;
         next_input.timeline_time_seconds = timeline_seconds;
+        next_input.result_collection =
+            result_collection_for_frame(next_input.request_png_snapshot);
         result = runtime->AdvanceFrame(next_input);
         next_input.scroll_offsets_by_element_id =
             result.successor_snapshot.scroll_offsets_by_element_id;
@@ -776,7 +815,8 @@ int main(int argc, char** argv) {
         ++frame_count;
         PrintFrameStatus(reason, frame_count, result);
         presentation = runtime->PresentToNativeWindow(result);
-        PrintPresentationStatus(reason, presentation);
+        PrintPresentationStatus(reason, presentation,
+                                include_presentation_diagnostics(presentation));
         return frame_and_present_succeeded(result, presentation);
       };
 
@@ -835,6 +875,18 @@ int main(int argc, char** argv) {
   }
 
   const uint64_t start_ms = SDL_GetTicks();
+  uint64_t advanced_update_frames = 0;
+  uint64_t idle_waits = 0;
+  uint64_t idle_no_frame_ticks = 0;
+  float initial_mouse_x = 0.0f;
+  float initial_mouse_y = 0.0f;
+  const SDL_MouseButtonFlags initial_mouse_buttons =
+      SDL_GetMouseState(&initial_mouse_x, &initial_mouse_y);
+  std::optional<html_css_renderer::PointerState> last_sdl_pointer =
+      html_css_renderer::PointerState{
+          1,
+          html_css_renderer::Point{initial_mouse_x, initial_mouse_y},
+          (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
   bool running = true;
   while (running) {
     SDL_Event event;
@@ -845,27 +897,43 @@ int main(int argc, char** argv) {
     next_input.timeline_time_seconds =
         static_cast<double>(SDL_GetTicks() - start_ms) / 1000.0;
 
-    while (SDL_PollEvent(&event)) {
+    auto handle_event = [&](const SDL_Event& event) {
       if (event.type == SDL_EVENT_QUIT ||
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
       } else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
-        next_input.viewport = SdlWindowPixelViewport(window);
-        needs_frame = true;
+        const html_css_renderer::Size new_viewport =
+            SdlWindowPixelViewport(window);
+        const html_css_renderer::Size current_viewport =
+            input.viewport.value_or(result.successor_snapshot.viewport);
+        if (!SameViewportSize(new_viewport, current_viewport)) {
+          next_input.viewport = new_viewport;
+          needs_frame = true;
+        }
       } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        next_input.pointers = {html_css_renderer::PointerState{
+        html_css_renderer::PointerState pointer{
             1,
             html_css_renderer::Point{event.motion.x, event.motion.y},
-            (event.motion.state & SDL_BUTTON_LMASK) != 0}};
-        needs_frame = true;
+            (event.motion.state & SDL_BUTTON_LMASK) != 0};
+        if (!last_sdl_pointer ||
+            !SamePointerState(pointer, *last_sdl_pointer)) {
+          next_input.pointers = {pointer};
+          last_sdl_pointer = pointer;
+          needs_frame = true;
+        }
       } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                  event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        next_input.pointers = {html_css_renderer::PointerState{
+        html_css_renderer::PointerState pointer{
             1,
             html_css_renderer::Point{event.button.x, event.button.y},
-            event.type == SDL_EVENT_MOUSE_BUTTON_DOWN}};
-        needs_frame = true;
+            event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
+        if (!last_sdl_pointer ||
+            !SamePointerState(pointer, *last_sdl_pointer)) {
+          next_input.pointers = {pointer};
+          last_sdl_pointer = pointer;
+          needs_frame = true;
+        }
       } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
         float mouse_x = 0.0f;
         float mouse_y = 0.0f;
@@ -876,13 +944,50 @@ int main(int argc, char** argv) {
                                      -event.wheel.y * 48.0f}};
         needs_frame = true;
       }
+    };
+
+    auto screenshot_due = [&]() {
+      return !screenshot_out.empty() && !screenshot_written &&
+             screenshot_after_ms > 0 &&
+             SDL_GetTicks() - start_ms >=
+                 static_cast<uint64_t>(screenshot_after_ms);
+    };
+
+    if (!needs_frame && !screenshot_due()) {
+      int wait_ms = 50;
+      const uint64_t now_ms = SDL_GetTicks();
+      if (!screenshot_out.empty() && !screenshot_written &&
+          screenshot_after_ms > 0) {
+        const uint64_t capture_ms = static_cast<uint64_t>(screenshot_after_ms);
+        const int until_capture_ms =
+            capture_ms > now_ms - start_ms
+                ? static_cast<int>(capture_ms - (now_ms - start_ms))
+                : 0;
+        wait_ms = std::min(wait_ms, until_capture_ms);
+      }
+      if (quit_after_ms > 0) {
+        const uint64_t quit_ms = static_cast<uint64_t>(quit_after_ms);
+        const int until_quit_ms =
+            quit_ms > now_ms - start_ms
+                ? static_cast<int>(quit_ms - (now_ms - start_ms))
+                : 0;
+        wait_ms = std::min(wait_ms, until_quit_ms);
+      }
+      wait_ms = std::max(0, wait_ms);
+      if (SDL_WaitEventTimeout(&event, wait_ms)) {
+        handle_event(event);
+      } else {
+        ++idle_waits;
+      }
     }
 
-    if (!screenshot_out.empty() && !screenshot_written &&
-        screenshot_after_ms > 0 &&
-        SDL_GetTicks() - start_ms >=
-            static_cast<uint64_t>(screenshot_after_ms)) {
+    while (SDL_PollEvent(&event)) {
+      handle_event(event);
+    }
+
+    if (screenshot_due()) {
       next_input.request_png_snapshot = true;
+      next_input.result_collection = result_collection_for_frame(true);
       next_input.timeline_time_seconds =
           static_cast<double>(screenshot_after_ms) / 1000.0;
       needs_frame = true;
@@ -890,6 +995,8 @@ int main(int argc, char** argv) {
 
     if (needs_frame) {
       const bool requested_png_snapshot = next_input.request_png_snapshot;
+      next_input.result_collection =
+          result_collection_for_frame(requested_png_snapshot);
       result = runtime->AdvanceFrame(next_input);
       next_input.scroll_offsets_by_element_id =
           result.successor_snapshot.scroll_offsets_by_element_id;
@@ -898,9 +1005,11 @@ int main(int argc, char** argv) {
       next_input.wheel = std::nullopt;
       input = std::move(next_input);
       ++frame_count;
+      ++advanced_update_frames;
       PrintFrameStatus("update", frame_count, result);
       presentation = runtime->PresentToNativeWindow(result);
-      PrintPresentationStatus("update", presentation);
+      PrintPresentationStatus("update", presentation,
+                              include_presentation_diagnostics(presentation));
       if (requested_png_snapshot) {
         if (!result.png_snapshot_available) {
           std::fprintf(stderr, "screenshot capture failed: %s\n",
@@ -917,14 +1026,24 @@ int main(int argc, char** argv) {
                      fs::absolute(fs::path(screenshot_out)).string().c_str());
         screenshot_written = true;
       }
+    } else {
+      ++idle_no_frame_ticks;
     }
 
     if (quit_after_ms > 0 && SDL_GetTicks() - start_ms >=
                                  static_cast<uint64_t>(quit_after_ms)) {
       running = false;
     }
-    SDL_Delay(8);
+    if (needs_frame)
+      SDL_Delay(8);
   }
+
+  std::fprintf(stderr,
+               "idle_summary advanced_update_frames=%llu idle_waits=%llu "
+               "idle_no_frame_ticks=%llu\n",
+               static_cast<unsigned long long>(advanced_update_frames),
+               static_cast<unsigned long long>(idle_waits),
+               static_cast<unsigned long long>(idle_no_frame_ticks));
 
   const int exit_code =
       result.paint_clean && result.root_layer_available ? 0 : 4;

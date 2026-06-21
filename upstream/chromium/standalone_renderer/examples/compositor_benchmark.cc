@@ -21,6 +21,11 @@
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 #include "ui/gl/gl_switches.h"
 
+extern "C" const char*
+StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
+    int width,
+    int height);
+
 namespace {
 
 bool ReadTextFile(const std::string& path, std::string* out) {
@@ -120,7 +125,8 @@ void PrintUsage() {
       "[--css <css>|--css-file <path>] [--viewport WxH] [--json <path>] "
       "[--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--trace-stages] [--lifecycle-stop <stage>] "
-      "[--warm-iterations N] [--warm-scenario name[,name...]]\n"
+      "[--warm-iterations N] [--warm-scenario name[,name...]] "
+      "[--result-collection full|minimal] [--cc-scheduler-probe]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
       "readback is removed from production; --out is intentionally unsupported "
       "until Viz/GPU readback is wired.\n");
@@ -358,6 +364,8 @@ int WarmFailureCount(const WarmScenarioRecord& scenario) {
   int failures = 0;
   for (const WarmFrameRecord& frame : scenario.frames) {
     const auto& result = frame.result;
+    if (result.frame_skipped_due_to_no_demand)
+      continue;
     if (!result.paint_clean || !result.root_layer_available ||
         !result.cc_host_created || !result.cc_root_layer_attached ||
         !result.cc_commit_requested || !result.cc_frame_sink_requested ||
@@ -371,11 +379,59 @@ int WarmFailureCount(const WarmScenarioRecord& scenario) {
   return failures;
 }
 
+void WriteFrameTimingJsonFields(
+    std::ofstream& file,
+    const html_css_renderer::CompositorFrameTiming& timing,
+    const std::string& indent,
+    bool trailing_comma) {
+  file << indent << "\"frame_timing\": {\n";
+  file << indent << "  \"runtime_apply_state_ms\": "
+       << timing.runtime_apply_state_ms << ",\n";
+  file << indent << "  \"runtime_bridge_query_ms\": "
+       << timing.runtime_bridge_query_ms << ",\n";
+  file << indent << "  \"runtime_total_ms\": " << timing.runtime_total_ms
+       << ",\n";
+  file << indent << "  \"bridge_total_ms\": " << timing.bridge_total_ms
+       << ",\n";
+  file << indent << "  \"bridge_input_setup_ms\": "
+       << timing.bridge_input_setup_ms << ",\n";
+  file << indent << "  \"bridge_html_document_setup_ms\": "
+       << timing.bridge_html_document_setup_ms << ",\n";
+  file << indent << "  \"bridge_style_update_ms\": "
+       << timing.bridge_style_update_ms << ",\n";
+  file << indent << "  \"bridge_layout_lifecycle_ms\": "
+       << timing.bridge_layout_lifecycle_ms << ",\n";
+  file << indent << "  \"bridge_prepaint_and_paint_lifecycle_ms\": "
+       << timing.bridge_prepaint_and_paint_lifecycle_ms << ",\n";
+  file << indent << "  \"bridge_paint_artifact_generation_ms\": "
+       << timing.bridge_paint_artifact_generation_ms << ",\n";
+  file << indent << "  \"bridge_paint_artifact_audit_ms\": "
+       << timing.bridge_paint_artifact_audit_ms << ",\n";
+  file << indent << "  \"bridge_paint_artifact_extraction_ms\": "
+       << timing.bridge_paint_artifact_extraction_ms << ",\n";
+  file << indent << "  \"bridge_cc_composite_ms\": "
+       << timing.bridge_cc_composite_ms << ",\n";
+  file << indent << "  \"bridge_cache_hit\": "
+       << (timing.bridge_cache_hit ? "true" : "false") << ",\n";
+  file << indent << "  \"bridge_reused_live_document\": "
+       << (timing.bridge_reused_live_document ? "true" : "false")
+       << ",\n";
+  file << indent << "  \"bridge_rebuilt_for_attributes\": "
+       << (timing.bridge_rebuilt_for_attributes ? "true" : "false")
+       << "\n";
+  file << indent << "}" << (trailing_comma ? ",\n" : "\n");
+}
+
 void WriteCompositorResultJsonFields(
     std::ofstream& file,
     const html_css_renderer::CompositorFrameResult& result,
     const std::string& indent,
     bool trailing_comma) {
+  file << indent << "\"frame_advanced\": "
+       << (result.frame_advanced ? "true" : "false") << ",\n";
+  file << indent << "\"frame_skipped_due_to_no_demand\": "
+       << (result.frame_skipped_due_to_no_demand ? "true" : "false")
+       << ",\n";
   file << indent << "\"paint_clean\": " << (result.paint_clean ? "true" : "false")
        << ",\n";
   file << indent << "\"root_layer_available\": "
@@ -409,13 +465,15 @@ void WriteCompositorResultJsonFields(
   file << indent << "\"paint_chunk_count\": " << result.paint_chunk_count
        << ",\n";
   file << indent << "\"display_item_count\": " << result.display_item_count
-       << (trailing_comma ? ",\n" : "\n");
+       << ",\n";
+  WriteFrameTimingJsonFields(file, result.timing, indent, trailing_comma);
 }
 
 bool WriteJson(const std::string& path,
                const html_css_renderer::CompositorFrameResult& result,
                const std::vector<std::string>& init_diagnostics,
                const std::vector<WarmScenarioRecord>& warm_scenarios,
+               html_css_renderer::FrameResultCollection result_collection,
                double runtime_create_ms,
                double initialize_ms,
                double advance_frame_ms,
@@ -426,6 +484,16 @@ bool WriteJson(const std::string& path,
   file << "{\n";
   file << "  \"renderer_path\": \"blink_paint_artifact_compositor_cc_viz_gpu_vulkan\",\n";
   file << "  \"single_chromium_compositor_path\": true,\n";
+  file << "  \"result_collection\": \""
+       << (result_collection == html_css_renderer::FrameResultCollection::kFull
+               ? "full"
+               : "minimal")
+       << "\",\n";
+  file << "  \"frame_advanced\": "
+       << (result.frame_advanced ? "true" : "false") << ",\n";
+  file << "  \"frame_skipped_due_to_no_demand\": "
+       << (result.frame_skipped_due_to_no_demand ? "true" : "false")
+       << ",\n";
   file << "  \"paint_clean\": " << (result.paint_clean ? "true" : "false")
        << ",\n";
   file << "  \"root_layer_available\": "
@@ -473,6 +541,8 @@ bool WriteJson(const std::string& path,
   file << "    \"advance_frame_ms\": " << advance_frame_ms << ",\n";
   file << "    \"process_elapsed_ms\": " << process_elapsed_ms << "\n";
   file << "  },\n";
+  WriteFrameTimingJsonFields(file, result.timing, "  ",
+                             /*trailing_comma=*/true);
   file << "  \"warm_scenarios\": [\n";
   for (size_t i = 0; i < warm_scenarios.size(); ++i) {
     const WarmScenarioRecord& scenario = warm_scenarios[i];
@@ -481,6 +551,12 @@ bool WriteJson(const std::string& path,
     file << "      \"scenario\": \"" << EscapeJson(scenario.name) << "\",\n";
     file << "      \"frame_count\": " << scenario.frames.size() << ",\n";
     file << "      \"failure_count\": " << WarmFailureCount(scenario)
+         << ",\n";
+    file << "      \"skipped_frame_count\": "
+         << std::count_if(scenario.frames.begin(), scenario.frames.end(),
+                          [](const WarmFrameRecord& frame) {
+                            return frame.result.frame_skipped_due_to_no_demand;
+                          })
          << ",\n";
     file << "      \"advance_frame_ms\": {\"p50\": "
          << Percentile(durations, 0.50) << ", \"p95\": "
@@ -550,8 +626,11 @@ int main(int argc, char** argv) {
   bool trace_stages = false;
   std::string lifecycle_stop;
   bool unsupported_out_requested = false;
+  bool cc_scheduler_probe = false;
   int warm_iterations = 0;
   std::vector<std::string> warm_scenarios;
+  html_css_renderer::FrameResultCollection result_collection =
+      html_css_renderer::FrameResultCollection::kFull;
 
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
@@ -643,6 +722,8 @@ int main(int argc, char** argv) {
       resource_base_path = value;
     } else if (arg == "--trace-stages") {
       trace_stages = true;
+    } else if (arg == "--cc-scheduler-probe") {
+      cc_scheduler_probe = true;
     } else if (arg == "--lifecycle-stop") {
       const char* value = next_value();
       if (!value) {
@@ -680,6 +761,31 @@ int main(int argc, char** argv) {
       std::vector<std::string> parsed = SplitCommaList(arg.substr(17));
       warm_scenarios.insert(warm_scenarios.end(), parsed.begin(),
                             parsed.end());
+    } else if (arg == "--result-collection") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      const std::string mode = value;
+      if (mode == "full") {
+        result_collection = html_css_renderer::FrameResultCollection::kFull;
+      } else if (mode == "minimal") {
+        result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+      } else {
+        std::fprintf(stderr, "invalid --result-collection\n");
+        return 2;
+      }
+    } else if (arg.rfind("--result-collection=", 0) == 0) {
+      const std::string mode = arg.substr(20);
+      if (mode == "full") {
+        result_collection = html_css_renderer::FrameResultCollection::kFull;
+      } else if (mode == "minimal") {
+        result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+      } else {
+        std::fprintf(stderr, "invalid --result-collection\n");
+        return 2;
+      }
     } else if (arg == "--out" || arg.rfind("--out=", 0) == 0) {
       if (arg == "--out" && !next_value()) {
         PrintUsage();
@@ -700,6 +806,25 @@ int main(int argc, char** argv) {
       PrintUsage();
       return 2;
     }
+  }
+
+  if (cc_scheduler_probe) {
+    const char* probe_json =
+        StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
+            static_cast<int>(renderer.viewport.width),
+            static_cast<int>(renderer.viewport.height));
+    const std::string json = probe_json ? probe_json : "{}\n";
+    if (!json_path.empty()) {
+      std::ofstream file(json_path, std::ios::binary);
+      if (!file) {
+        std::fprintf(stderr, "failed to write json: %s\n",
+                     json_path.c_str());
+        return 1;
+      }
+      file << json;
+    }
+    std::printf("%s", json.c_str());
+    return json.find("\"success\": true") != std::string::npos ? 0 : 6;
   }
 
   if (renderer.html.empty()) {
@@ -735,7 +860,9 @@ int main(int argc, char** argv) {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer = std::move(renderer);
   create_info.enable_paint_artifact_audit =
-      !paint_artifact_dump_path.empty() || !json_path.empty();
+      !paint_artifact_dump_path.empty() ||
+      (!json_path.empty() &&
+       result_collection == html_css_renderer::FrameResultCollection::kFull);
   create_info.trace_stages = trace_stages;
   create_info.lifecycle_stop = lifecycle_stop;
   const auto create_start = std::chrono::steady_clock::now();
@@ -752,6 +879,10 @@ int main(int argc, char** argv) {
 
   html_css_renderer::FrameInput input;
   input.viewport = runtime->Snapshot().viewport;
+  input.result_collection =
+      !paint_artifact_dump_path.empty()
+          ? html_css_renderer::FrameResultCollection::kFull
+          : result_collection;
   const auto advance_start = std::chrono::steady_clock::now();
   html_css_renderer::CompositorFrameResult result = runtime->AdvanceFrame(input);
   const auto advance_end = std::chrono::steady_clock::now();
@@ -770,6 +901,7 @@ int main(int argc, char** argv) {
       html_css_renderer::FrameInput warm_input =
           MakeWarmInput(scenario, iteration, runtime->Snapshot(),
                         previous_warm_result, &effective);
+      warm_input.result_collection = result_collection;
       const auto warm_start = std::chrono::steady_clock::now();
       html_css_renderer::CompositorFrameResult warm_result =
           runtime->AdvanceFrame(warm_input);
@@ -805,7 +937,7 @@ int main(int argc, char** argv) {
   }
   if (!json_path.empty() &&
       !WriteJson(json_path, result, init_diagnostics, warm_reports,
-                 runtime_create_ms,
+                 result_collection, runtime_create_ms,
                  initialize_ms, advance_frame_ms, process_elapsed_ms)) {
     std::fprintf(stderr, "failed to write json: %s\n", json_path.c_str());
     return 1;
@@ -842,9 +974,13 @@ int main(int argc, char** argv) {
     const int failure_count = WarmFailureCount(scenario);
     int viz_submit_count = 0;
     int effective_count = 0;
+    int skipped_count = 0;
     for (const WarmFrameRecord& frame : scenario.frames) {
-      if (frame.result.compositor_frame_submitted)
+      if (frame.result.frame_skipped_due_to_no_demand) {
+        ++skipped_count;
+      } else if (frame.result.compositor_frame_submitted) {
         ++viz_submit_count;
+      }
       if (frame.effective)
         ++effective_count;
     }
@@ -853,10 +989,10 @@ int main(int argc, char** argv) {
             ? 0.0
             : *std::max_element(durations.begin(), durations.end());
     std::printf("compositor_warm scenario=%s frame_count=%zu effective_count=%d "
-                "failures=%d p50_ms=%.3f p95_ms=%.3f max_ms=%.3f "
-                "viz_submit_count=%d\n",
+                "skipped_count=%d failures=%d p50_ms=%.3f p95_ms=%.3f "
+                "max_ms=%.3f viz_submit_count=%d\n",
                 scenario.name.c_str(), scenario.frames.size(), effective_count,
-                failure_count, Percentile(durations, 0.50),
+                skipped_count, failure_count, Percentile(durations, 0.50),
                 Percentile(durations, 0.95), max_ms, viz_submit_count);
   }
   if (unsupported_out_requested) {

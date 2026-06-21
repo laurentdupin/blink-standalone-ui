@@ -41,6 +41,18 @@
 namespace cc {
 
 namespace {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" int
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage);
+
+void TraceStandaloneCcSchedulerStage(const char* stage) {
+  if (StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer())
+    StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#endif
+
 // This is a fudge factor we subtract from the deadline to account
 // for message latency and kernel scheduling variability.
 const base::TimeDelta kDeadlineFudgeFactor = base::Microseconds(1000);
@@ -122,19 +134,43 @@ base::TimeTicks Scheduler::Now() const {
   return now;
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void Scheduler::TraceStandaloneSchedulerState(const char* label) {
+  if (!StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer())
+    return;
+  TraceStandaloneCcSchedulerStage(
+      state_machine_
+          ->StandaloneStateSummary(
+              label, state_machine_->NextAction(),
+              state_machine_->CurrentBeginImplFrameDeadlineMode(),
+              begin_impl_frame_deadline_timer_.IsRunning())
+          .c_str());
+}
+#endif
+
 void Scheduler::SetVisible(bool visible) {
   state_machine_->SetVisible(visible);
   UpdateCompositorTimingHistoryRecordingEnabled();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState("after SetVisible");
+#endif
   ProcessScheduledActions();
 }
 
 void Scheduler::SetShouldWarmUp() {
   state_machine_->SetShouldWarmUp();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState("after SetShouldWarmUp");
+#endif
   ProcessScheduledActions();
 }
 
 void Scheduler::SetCanDraw(bool can_draw) {
   state_machine_->SetCanDraw(can_draw);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState(can_draw ? "after SetCanDraw true"
+                                         : "after SetCanDraw false");
+#endif
   ProcessScheduledActions();
 }
 
@@ -143,6 +179,9 @@ void Scheduler::NotifyReadyToActivate() {
     compositor_timing_history_->ReadyToActivate();
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState("after NotifyReadyToActivate");
+#endif
   ProcessScheduledActions();
 }
 
@@ -153,6 +192,9 @@ bool Scheduler::IsReadyToActivate() {
 void Scheduler::NotifyReadyToDraw() {
   // Future work might still needed for crbug.com/352894.
   state_machine_->NotifyReadyToDraw();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState("after NotifyReadyToDraw");
+#endif
   ProcessScheduledActions();
 }
 
@@ -181,6 +223,10 @@ void Scheduler::NotifyPaintWorkletStateChange(PaintWorkletState state) {
 
 void Scheduler::SetNeedsBeginMainFrame(bool now) {
   state_machine_->SetNeedsBeginMainFrame(now);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState(now ? "after SetNeedsBeginMainFrame urgent"
+                                    : "after SetNeedsBeginMainFrame");
+#endif
   ProcessScheduledActions();
 }
 
@@ -250,6 +296,9 @@ void Scheduler::SendEarlyFinalBeginMainFrame() {
 
 void Scheduler::SetNeedsRedraw() {
   state_machine_->SetNeedsRedraw();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState("after SetNeedsRedraw");
+#endif
   ProcessScheduledActions();
 }
 
@@ -299,6 +348,9 @@ void Scheduler::SetTreePrioritiesAndScrollState(
 
 void Scheduler::NotifyReadyToCommit(
     std::unique_ptr<BeginMainFrameMetrics> details) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc scheduler NotifyReadyToCommit enter");
+#endif
   {
     TRACE_EVENT0("cc", "Scheduler::NotifyReadyToCommit");
     compositor_timing_history_->NotifyReadyToCommit();
@@ -307,7 +359,15 @@ void Scheduler::NotifyReadyToCommit(
     state_machine_->NotifyReadyToCommit();
     next_commit_origin_frame_args_ = last_dispatched_begin_main_frame_args_;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc scheduler NotifyReadyToCommit before ProcessScheduledActions");
+#endif
   ProcessScheduledActions();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc scheduler NotifyReadyToCommit after ProcessScheduledActions");
+#endif
 }
 
 void Scheduler::BeginMainFrameAborted(CommitEarlyOutReason reason) {
@@ -798,6 +858,9 @@ void Scheduler::BeginImplFrame(const viz::BeginFrameArgs& args,
 void Scheduler::ScheduleBeginImplFrameDeadline() {
   using DeadlineMode = SchedulerStateMachine::BeginImplFrameDeadlineMode;
   deadline_mode_ = state_machine_->CurrentBeginImplFrameDeadlineMode();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSchedulerState("ScheduleBeginImplFrameDeadline selected");
+#endif
 
   base::TimeTicks new_deadline;
   switch (deadline_mode_) {
@@ -806,6 +869,9 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
       // or when outside a begin frame. In either case deadline task shouldn't
       // be posted or should be cancelled already.
       DCHECK(!begin_impl_frame_deadline_timer_.IsRunning());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneSchedulerState("ScheduleBeginImplFrameDeadline none");
+#endif
       return;
     case DeadlineMode::BLOCKED: {
       // TODO(sunnyps): Posting the deadline for pending begin frame is required
@@ -822,6 +888,9 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
         break;
       } else {
         begin_impl_frame_deadline_timer_.Stop();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneSchedulerState("ScheduleBeginImplFrameDeadline blocked stop");
+#endif
         return;
       }
     }
@@ -880,12 +949,18 @@ void Scheduler::ScheduleBeginImplFrameDeadline() {
         base::BindOnce(&Scheduler::OnBeginImplFrameDeadline,
                        base::Unretained(this)),
         base::subtle::DelayPolicy::kPrecise);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSchedulerState("ScheduleBeginImplFrameDeadline started");
+#endif
   }
 }
 
 void Scheduler::OnBeginImplFrameDeadline() {
   {
     TRACE_EVENT0("cc,benchmark", "Scheduler::OnBeginImplFrameDeadline");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSchedulerState("OnBeginImplFrameDeadline enter");
+#endif
     begin_impl_frame_deadline_timer_.Stop();
     // We split the deadline actions up into two phases so the state machine
     // has a chance to trigger actions that should occur during and after
@@ -907,6 +982,9 @@ void Scheduler::OnBeginImplFrameDeadline() {
     }
 
     state_machine_->OnBeginImplFrameDeadline();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneSchedulerState("OnBeginImplFrameDeadline after state");
+#endif
     client_->OnBeginImplFrameDeadline();
   }
   ProcessScheduledActions();
@@ -998,8 +1076,15 @@ void Scheduler::ProcessScheduledActions() {
         &inside_action_, action);
     switch (action) {
       case SchedulerStateMachine::Action::NONE:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneSchedulerState("ProcessScheduledActions none");
+#endif
         break;
       case SchedulerStateMachine::Action::SEND_BEGIN_MAIN_FRAME:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage(
+            "cc scheduler action SEND_BEGIN_MAIN_FRAME");
+#endif
         compositor_timing_history_->WillBeginMainFrame(begin_main_frame_args_);
         compositor_frame_reporting_controller_->WillBeginMainFrame(
             begin_main_frame_args_);
@@ -1008,6 +1093,9 @@ void Scheduler::ProcessScheduledActions() {
         last_dispatched_begin_main_frame_args_ = begin_main_frame_args_;
         break;
       case SchedulerStateMachine::Action::COMMIT:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage("cc scheduler action COMMIT");
+#endif
         state_machine_->WillCommit(/*commit_had_no_updates=*/false);
         compositor_timing_history_->WillCommit();
         compositor_frame_reporting_controller_->WillCommit();
@@ -1018,10 +1106,16 @@ void Scheduler::ProcessScheduledActions() {
         last_commit_origin_frame_args_ = next_commit_origin_frame_args_;
         break;
       case SchedulerStateMachine::Action::POST_COMMIT:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage("cc scheduler action POST_COMMIT");
+#endif
         client_->ScheduledActionPostCommit();
         state_machine_->DidPostCommit();
         break;
       case SchedulerStateMachine::Action::ACTIVATE_SYNC_TREE:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage("cc scheduler action ACTIVATE_SYNC_TREE");
+#endif
         compositor_timing_history_->WillActivate();
         compositor_frame_reporting_controller_->WillActivate();
         state_machine_->WillActivate();
@@ -1029,6 +1123,9 @@ void Scheduler::ProcessScheduledActions() {
         compositor_timing_history_->DidActivate();
         compositor_frame_reporting_controller_->DidActivate();
         last_activate_origin_frame_args_ = last_commit_origin_frame_args_;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneSchedulerState("after ACTIVATE_SYNC_TREE");
+#endif
         break;
       case SchedulerStateMachine::Action::PERFORM_IMPL_SIDE_INVALIDATION:
         state_machine_->WillPerformImplSideInvalidation();
@@ -1037,12 +1134,21 @@ void Scheduler::ProcessScheduledActions() {
         client_->ScheduledActionPerformImplSideInvalidation();
         break;
       case SchedulerStateMachine::Action::DRAW_IF_POSSIBLE:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage("cc scheduler action DRAW_IF_POSSIBLE");
+#endif
         DrawIfPossible();
         break;
       case SchedulerStateMachine::Action::DRAW_FORCED:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage("cc scheduler action DRAW_FORCED");
+#endif
         DrawForced();
         break;
       case SchedulerStateMachine::Action::DRAW_ABORT:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneCcSchedulerStage("cc scheduler action DRAW_ABORT");
+#endif
         // No action is actually performed, but this allows the state machine to
         // drain the pipeline without actually drawing.
         state_machine_->AbortDraw();

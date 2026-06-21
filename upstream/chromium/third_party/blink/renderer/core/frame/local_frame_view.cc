@@ -3546,6 +3546,46 @@ const cc::Layer* LocalFrameView::RootCcLayer() const {
   return const_cast<LocalFrameView*>(this)->RootCcLayer();
 }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void LocalFrameView::
+    EnsurePaintArtifactCompositorRootLayerAttachedForStandaloneRenderer() {
+  TraceStandaloneLocalFrameViewStage(
+      "EnsurePaintArtifactCompositorRootLayerAttached begin");
+  if (!frame_->GetSettings()->GetAcceleratedCompositingEnabled()) {
+    TraceStandaloneLocalFrameViewStage(
+        "EnsurePaintArtifactCompositorRootLayerAttached compositing disabled");
+    return;
+  }
+
+  Page* page = GetFrame().GetPage();
+  if (!page) {
+    TraceStandaloneLocalFrameViewStage(
+        "EnsurePaintArtifactCompositorRootLayerAttached no page");
+    return;
+  }
+
+  if (!paint_artifact_compositor_) {
+    TraceStandaloneLocalFrameViewStage(
+        "EnsurePaintArtifactCompositorRootLayerAttached before compositor create");
+    paint_artifact_compositor_ = MakeGarbageCollected<PaintArtifactCompositor>(
+        page->GetScrollingCoordinator()->GetScrollCallbacks());
+    TraceStandaloneLocalFrameViewStage(
+        "EnsurePaintArtifactCompositorRootLayerAttached before AttachRootLayer");
+    page->GetChromeClient().AttachRootLayer(
+        paint_artifact_compositor_->RootLayer(), &GetFrame());
+    TraceStandaloneLocalFrameViewStage(
+        "EnsurePaintArtifactCompositorRootLayerAttached after AttachRootLayer");
+  }
+
+  paint_artifact_compositor_->SetLCDTextPreference(
+      page->GetSettings().GetLCDTextPreference());
+  paint_artifact_compositor_->SetDevicePixelRatio(
+      frame_->GetDocument()->DevicePixelRatio());
+  TraceStandaloneLocalFrameViewStage(
+      "EnsurePaintArtifactCompositorRootLayerAttached done");
+}
+#endif
+
 void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
   TraceStandaloneLocalFrameViewStage("PushPaintArtifactToCompositor begin");
   TRACE_EVENT0("blink", "LocalFrameView::pushPaintArtifactToCompositor");

@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -48,6 +50,8 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     int requested);
 void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
     int enabled);
+void StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
+    int enabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
@@ -68,6 +72,35 @@ int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
 int StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingTotalMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingInputSetupMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingHtmlDocumentSetupMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingStyleUpdateMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingLayoutLifecycleMsForStandaloneRenderer(
+    const char* body_html);
+double
+StandaloneBlinkLiveFrameBridgeTimingPrepaintAndPaintLifecycleMsForStandaloneRenderer(
+    const char* body_html);
+double
+StandaloneBlinkLiveFrameBridgeTimingPaintArtifactGenerationMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingPaintArtifactAuditMsForStandaloneRenderer(
+    const char* body_html);
+double
+StandaloneBlinkLiveFrameBridgeTimingPaintArtifactExtractionMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcCompositeMsForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeTimingReusedLiveDocumentForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeTimingRebuiltForAttributesForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeCompositorRootLayerForStandaloneRenderer(
     const char* body_html);
@@ -167,6 +200,13 @@ namespace html_css_renderer {
 namespace {
 
 namespace fs = std::filesystem;
+
+using RuntimeClock = std::chrono::steady_clock;
+
+double RuntimeElapsedMs(RuntimeClock::time_point start,
+                        RuntimeClock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
 
 class StandaloneLocalDiscardableMemory final : public base::DiscardableMemory {
  public:
@@ -537,6 +577,52 @@ Point SnapshotDocumentScrollOffset(const RendererSnapshot& snapshot) {
   return Point{};
 }
 
+bool SameFloat(float lhs, float rhs) {
+  return std::abs(lhs - rhs) <= 0.001f;
+}
+
+bool SamePoint(const Point& lhs, const Point& rhs) {
+  return SameFloat(lhs.x, rhs.x) && SameFloat(lhs.y, rhs.y);
+}
+
+bool SameSize(const Size& lhs, const Size& rhs) {
+  return SameFloat(lhs.width, rhs.width) && SameFloat(lhs.height, rhs.height);
+}
+
+bool SameStylesheets(const std::vector<Stylesheet>& lhs,
+                     const std::vector<Stylesheet>& rhs) {
+  if (lhs.size() != rhs.size())
+    return false;
+  for (size_t i = 0; i < lhs.size(); ++i) {
+    if (lhs[i].id != rhs[i].id || lhs[i].css != rhs[i].css)
+      return false;
+  }
+  return true;
+}
+
+bool SamePointMap(const std::unordered_map<std::string, Point>& lhs,
+                  const std::unordered_map<std::string, Point>& rhs) {
+  if (lhs.size() != rhs.size())
+    return false;
+  for (const auto& [key, value] : lhs) {
+    const auto it = rhs.find(key);
+    if (it == rhs.end() || !SamePoint(value, it->second))
+      return false;
+  }
+  return true;
+}
+
+bool SameStringMap(
+    const std::unordered_map<std::string, std::string>& lhs,
+    const std::unordered_map<std::string, std::string>& rhs) {
+  return lhs == rhs;
+}
+
+bool SamePointerState(const PointerState& lhs, const PointerState& rhs) {
+  return lhs.id == rhs.id && SamePoint(lhs.position, rhs.position) &&
+         lhs.pressed == rhs.pressed;
+}
+
 std::string SerializeElementScrollOffsets(
     const std::unordered_map<std::string, Point>& scroll_offsets) {
   std::vector<std::pair<std::string, Point>> ordered;
@@ -621,6 +707,11 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
 
   CompositorFrameResult AdvanceFrame(const FrameInput& input) override {
     namespace probe = ::blink::standalone_renderer_probe;
+    if (!NeedsFrameForInput(input))
+      return MakeSkippedFrameResult(input);
+
+    const auto runtime_start = RuntimeClock::now();
+    const auto apply_state_start = RuntimeClock::now();
     ApplyInput(input);
     if (native_window_config_) {
       native_window_config_->viewport = snapshot_.viewport;
@@ -632,14 +723,22 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     CompositorFrameResult result;
     result.png_snapshot_requested = input.request_png_snapshot;
     result.successor_snapshot = snapshot_;
+    const bool collect_full_result =
+        input.request_png_snapshot ||
+        input.result_collection == FrameResultCollection::kFull;
+    probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
+        collect_full_result ? 1 : 0);
     const std::string probe_html =
         BuildLiveBlinkProbeHtml(snapshot_.html, snapshot_.stylesheets);
     if (input.request_png_snapshot) {
       probe::StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
     }
 
-    ResetTypefaceResourceRegistryForFrame();
-    probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+    if (last_probe_html_ != probe_html) {
+      ResetTypefaceResourceRegistryForFrame();
+      probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+      last_probe_html_ = probe_html;
+    }
     probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(snapshot_.viewport.width),
         static_cast<int>(snapshot_.viewport.height));
@@ -695,7 +794,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       last_pointer_pressed_ = false;
       previous_pointer_.reset();
     }
+    result.timing.runtime_apply_state_ms =
+        RuntimeElapsedMs(apply_state_start, RuntimeClock::now());
 
+    const auto bridge_query_start = RuntimeClock::now();
     result.paint_clean =
         probe::StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
             probe_html.c_str()) != 0;
@@ -774,74 +876,63 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       snapshot_.active_element_id = result.successor_snapshot.active_element_id;
     }
 
-    ImportHitTestEntries(probe_html, result);
-    ImportScrollableElementEntries(probe_html, result);
-    CopyRawAudit(probe_html, result);
+    if (collect_full_result) {
+      ImportHitTestEntries(probe_html, result);
+      ImportScrollableElementEntries(probe_html, result);
+      CopyRawAudit(probe_html, result);
+    }
     CopyPngSnapshot(probe_html, result);
-    result.diagnostics.push_back(
-        result.paint_clean ? "Blink lifecycle reached PaintClean"
-                           : "Blink lifecycle did not reach PaintClean");
-    result.diagnostics.push_back(
-        result.root_layer_available
-            ? "PaintArtifactCompositor produced a cc root layer"
-            : "PaintArtifactCompositor did not produce a cc root layer");
-    result.diagnostics.push_back(
-        result.cc_host_created ? "Standalone cc::LayerTreeHost created"
-                               : "Standalone cc::LayerTreeHost was not created");
-    result.diagnostics.push_back(
-        result.cc_root_layer_attached
-            ? "PAC root cc::Layer attached to cc::LayerTreeHost"
-            : "PAC root cc::Layer is not attached to cc::LayerTreeHost");
-    result.diagnostics.push_back(
-        result.cc_commit_requested
-            ? "cc::LayerTreeHost commit requested after root attach"
-            : "cc::LayerTreeHost commit was not requested");
-    result.diagnostics.push_back(
-        result.cc_frame_sink_requested
-            ? "cc::LayerTreeHost requested a LayerTreeFrameSink"
-            : "cc::LayerTreeHost has not requested a LayerTreeFrameSink");
-    result.diagnostics.push_back(
-        result.cc_frame_sink_bound
-            ? "cc::LayerTreeHost initialized a real LayerTreeFrameSink"
-            : "cc::LayerTreeHost has not initialized a LayerTreeFrameSink");
-    result.diagnostics.push_back(
-        result.gpu_context_created
-            ? "Standalone GPU command-buffer context created"
-            : "Standalone GPU command-buffer context not created");
-    result.diagnostics.push_back(
-        result.raster_context_created
-            ? "Standalone raster command-buffer context created"
-            : "Standalone raster command-buffer context not created");
-    result.diagnostics.push_back(
-        result.shared_image_interface_available
-            ? "Standalone shared-image interface available"
-            : "Standalone shared-image interface unavailable");
-    result.diagnostics.push_back(
-        result.compositor_frame_submitted
-            ? "cc submitted a compositor frame through the Viz frame sink"
-            : "cc has not submitted a compositor frame yet");
-    result.diagnostics.push_back(
-        result.viz_display_created
-            ? "Viz Display created for the submitted root surface"
-            : "Viz Display is not available for this frame");
-    result.diagnostics.push_back(
-        result.skia_renderer_gpu_path_reached
-            ? "Viz SkiaRenderer GPU draw/swap path was reached"
-            : "Viz SkiaRenderer GPU draw/swap path was not reached");
-    std::array<char, 256> cc_attach_failure{};
-    if (probe::StandaloneBlinkLiveFrameBridgeCcAttachFailureForStandaloneRenderer(
-            probe_html.c_str(), cc_attach_failure.data(),
-            static_cast<int>(cc_attach_failure.size())) > 0) {
-      result.diagnostics.emplace_back(std::string("cc attach failure: ") +
-                                      cc_attach_failure.data());
+    if (collect_full_result) {
+      AppendFrameDiagnostics(probe_html, result);
+    } else if (!result.cc_root_layer_attached ||
+               !result.cc_frame_sink_bound ||
+               !result.compositor_frame_submitted) {
+      AppendFrameFailures(probe_html, result);
     }
-    std::array<char, 256> cc_frame_sink_failure{};
-    if (probe::StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
-            probe_html.c_str(), cc_frame_sink_failure.data(),
-            static_cast<int>(cc_frame_sink_failure.size())) > 0) {
-      result.diagnostics.emplace_back(std::string("cc frame sink failure: ") +
-                                      cc_frame_sink_failure.data());
-    }
+    result.timing.bridge_total_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingTotalMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_input_setup_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingInputSetupMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_html_document_setup_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingHtmlDocumentSetupMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_style_update_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingStyleUpdateMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_layout_lifecycle_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingLayoutLifecycleMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_prepaint_and_paint_lifecycle_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingPrepaintAndPaintLifecycleMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_paint_artifact_generation_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingPaintArtifactGenerationMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_paint_artifact_audit_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingPaintArtifactAuditMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_paint_artifact_extraction_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingPaintArtifactExtractionMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_composite_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcCompositeMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cache_hit =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(
+            probe_html.c_str()) != 0;
+    result.timing.bridge_reused_live_document =
+        probe::StandaloneBlinkLiveFrameBridgeTimingReusedLiveDocumentForStandaloneRenderer(
+            probe_html.c_str()) != 0;
+    result.timing.bridge_rebuilt_for_attributes =
+        probe::StandaloneBlinkLiveFrameBridgeTimingRebuiltForAttributesForStandaloneRenderer(
+            probe_html.c_str()) != 0;
+    result.timing.runtime_bridge_query_ms =
+        RuntimeElapsedMs(bridge_query_start, RuntimeClock::now());
+    result.timing.runtime_total_ms =
+        RuntimeElapsedMs(runtime_start, RuntimeClock::now());
+    last_frame_result_ = result;
     return result;
   }
 
@@ -860,6 +951,74 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   RendererSnapshot Snapshot() const override { return snapshot_; }
 
  private:
+  bool NeedsFrameForInput(const FrameInput& input) const {
+    if (!last_frame_result_)
+      return true;
+    if (input.request_png_snapshot)
+      return true;
+    if (last_frame_result_->needs_begin_frame)
+      return true;
+    if (input.viewport && !SameSize(*input.viewport, snapshot_.viewport))
+      return true;
+    if (input.html_override && *input.html_override != snapshot_.html)
+      return true;
+    if (input.stylesheets_override &&
+        !SameStylesheets(*input.stylesheets_override, snapshot_.stylesheets)) {
+      return true;
+    }
+    if (!SameStringMap(input.element_attributes_by_id_and_name,
+                       snapshot_.element_attributes_by_id_and_name)) {
+      return true;
+    }
+    if (!SamePointMap(input.scroll_offsets_by_element_id,
+                      snapshot_.scroll_offsets_by_element_id)) {
+      return true;
+    }
+    if (input.focused_element_id != snapshot_.focused_element_id ||
+        input.hovered_element_id != snapshot_.hovered_element_id ||
+        input.active_element_id != snapshot_.active_element_id) {
+      return true;
+    }
+    if (!SameStringMap(input.form_values_by_element_id,
+                       snapshot_.form_values_by_element_id)) {
+      return true;
+    }
+    if (input.wheel)
+      return true;
+    if (!input.keyboard.pressed_key_codes.empty())
+      return true;
+    if (input.pointers.empty()) {
+      if (previous_pointer_)
+        return true;
+    } else {
+      if (!previous_pointer_)
+        return true;
+      if (input.pointers.size() != 1 ||
+          !SamePointerState(input.pointers.front(), *previous_pointer_)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  CompositorFrameResult MakeSkippedFrameResult(const FrameInput& input) const {
+    CompositorFrameResult result = *last_frame_result_;
+    result.timing = CompositorFrameTiming();
+    result.frame_advanced = false;
+    result.frame_skipped_due_to_no_demand = true;
+    result.png_snapshot_requested = input.request_png_snapshot;
+    result.png_snapshot_available = false;
+    result.png_snapshot_failure.clear();
+    result.png_snapshot_bytes.clear();
+    if (input.result_collection == FrameResultCollection::kMinimal) {
+      result.raw_paint_artifact_audit_json.clear();
+      result.hit_test_entries.clear();
+      result.scrollable_element_entries.clear();
+      result.diagnostics.clear();
+    }
+    return result;
+  }
+
   void ApplyInput(const FrameInput& input) {
     snapshot_.timeline_time_seconds =
         input.timeline_time_seconds > 0.0
@@ -1000,6 +1159,80 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
   }
 
+  static void AppendFrameFailures(const std::string& probe_html,
+                                  CompositorFrameResult& result) {
+    namespace probe = ::blink::standalone_renderer_probe;
+    std::array<char, 256> cc_attach_failure{};
+    if (probe::StandaloneBlinkLiveFrameBridgeCcAttachFailureForStandaloneRenderer(
+            probe_html.c_str(), cc_attach_failure.data(),
+            static_cast<int>(cc_attach_failure.size())) > 0) {
+      result.diagnostics.emplace_back(std::string("cc attach failure: ") +
+                                      cc_attach_failure.data());
+    }
+    std::array<char, 256> cc_frame_sink_failure{};
+    if (probe::StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
+            probe_html.c_str(), cc_frame_sink_failure.data(),
+            static_cast<int>(cc_frame_sink_failure.size())) > 0) {
+      result.diagnostics.emplace_back(std::string("cc frame sink failure: ") +
+                                      cc_frame_sink_failure.data());
+    }
+  }
+
+  static void AppendFrameDiagnostics(const std::string& probe_html,
+                                     CompositorFrameResult& result) {
+    result.diagnostics.push_back(
+        result.paint_clean ? "Blink lifecycle reached PaintClean"
+                           : "Blink lifecycle did not reach PaintClean");
+    result.diagnostics.push_back(
+        result.root_layer_available
+            ? "PaintArtifactCompositor produced a cc root layer"
+            : "PaintArtifactCompositor did not produce a cc root layer");
+    result.diagnostics.push_back(
+        result.cc_host_created ? "Standalone cc::LayerTreeHost created"
+                               : "Standalone cc::LayerTreeHost was not created");
+    result.diagnostics.push_back(
+        result.cc_root_layer_attached
+            ? "PAC root cc::Layer attached to cc::LayerTreeHost"
+            : "PAC root cc::Layer is not attached to cc::LayerTreeHost");
+    result.diagnostics.push_back(
+        result.cc_commit_requested
+            ? "cc::LayerTreeHost commit requested after root attach"
+            : "cc::LayerTreeHost commit was not requested");
+    result.diagnostics.push_back(
+        result.cc_frame_sink_requested
+            ? "cc::LayerTreeHost requested a LayerTreeFrameSink"
+            : "cc::LayerTreeHost has not requested a LayerTreeFrameSink");
+    result.diagnostics.push_back(
+        result.cc_frame_sink_bound
+            ? "cc::LayerTreeHost initialized a real LayerTreeFrameSink"
+            : "cc::LayerTreeHost has not initialized a LayerTreeFrameSink");
+    result.diagnostics.push_back(
+        result.gpu_context_created
+            ? "Standalone GPU command-buffer context created"
+            : "Standalone GPU command-buffer context not created");
+    result.diagnostics.push_back(
+        result.raster_context_created
+            ? "Standalone raster command-buffer context created"
+            : "Standalone raster command-buffer context not created");
+    result.diagnostics.push_back(
+        result.shared_image_interface_available
+            ? "Standalone shared-image interface available"
+            : "Standalone shared-image interface unavailable");
+    result.diagnostics.push_back(
+        result.compositor_frame_submitted
+            ? "cc submitted a compositor frame through the Viz frame sink"
+            : "cc has not submitted a compositor frame yet");
+    result.diagnostics.push_back(
+        result.viz_display_created
+            ? "Viz Display created for the submitted root surface"
+            : "Viz Display is not available for this frame");
+    result.diagnostics.push_back(
+        result.skia_renderer_gpu_path_reached
+            ? "Viz SkiaRenderer GPU draw/swap path was reached"
+            : "Viz SkiaRenderer GPU draw/swap path was not reached");
+    AppendFrameFailures(probe_html, result);
+  }
+
   RendererSnapshot snapshot_;
   bool audit_enabled_ = false;
   bool trace_stages_ = false;
@@ -1008,6 +1241,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   std::optional<PointerState> previous_pointer_;
   std::optional<NativeWindowConfig> native_window_config_;
   std::unique_ptr<VulkanWindowHost> vulkan_window_host_;
+  std::string last_probe_html_;
+  std::optional<CompositorFrameResult> last_frame_result_;
 };
 
 }  // namespace

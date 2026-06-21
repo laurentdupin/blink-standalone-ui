@@ -269,6 +269,8 @@ def validate_result(
             if not isinstance(frame, dict):
                 failures.append(f"warm scenario {scenario_name} has invalid frame entry")
                 continue
+            if frame.get("frame_skipped_due_to_no_demand") is True:
+                continue
             for key in WARM_REQUIRED_TRUE_FIELDS:
                 if frame.get(key) is not True:
                     failures.append(
@@ -349,6 +351,8 @@ def run_case(
             key: payload.get(key)
             for key in [
                 "paint_clean",
+                "frame_advanced",
+                "frame_skipped_due_to_no_demand",
                 "root_layer_available",
                 "cc_host_created",
                 "cc_root_layer_attached",
@@ -416,6 +420,7 @@ def summarize_warm(rows: list[dict[str, Any]]) -> dict[str, Any]:
                     "effective_frame_count": 0,
                     "failure_count": 0,
                     "gpu_submission_frame_count": 0,
+                    "skipped_frame_count": 0,
                     "advance_frame_values": [],
                 },
             )
@@ -427,7 +432,9 @@ def summarize_warm(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 bucket["frame_count"] += 1
                 if frame.get("effective") is True:
                     bucket["effective_frame_count"] += 1
-                if frame.get("compositor_frame_submitted") is True:
+                if frame.get("frame_skipped_due_to_no_demand") is True:
+                    bucket["skipped_frame_count"] += 1
+                elif frame.get("compositor_frame_submitted") is True:
                     bucket["gpu_submission_frame_count"] += 1
                 value = frame.get("advance_frame_ms")
                 if isinstance(value, (int, float)):

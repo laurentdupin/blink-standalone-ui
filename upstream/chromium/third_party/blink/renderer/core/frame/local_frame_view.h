@@ -777,6 +777,9 @@ class CORE_EXPORT LocalFrameView final
 
   cc::Layer* RootCcLayer();
   const cc::Layer* RootCcLayer() const;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void EnsurePaintArtifactCompositorRootLayerAttachedForStandaloneRenderer();
+#endif
 
   cc::AnimationHost* GetCompositorAnimationHost() const;
   cc::AnimationTimeline* GetScrollAnimationTimeline() const;

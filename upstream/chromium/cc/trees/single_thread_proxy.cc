@@ -46,6 +46,18 @@
 namespace cc {
 
 namespace {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" int
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer();
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage);
+
+void TraceStandaloneCcSchedulerStage(const char* stage) {
+  if (StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer())
+    StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#endif
+
 perfetto::NamedTrack GetTracingTrack(const SingleThreadProxy* proxy) {
   return perfetto::NamedTrack::FromPointer("cc::SingleThreadProxy", proxy);
 }
@@ -224,6 +236,9 @@ void SingleThreadProxy::SetNeedsUpdateLayers() {
 
 void SingleThreadProxy::DoCommit(const viz::BeginFrameArgs& commit_args) {
   TRACE_EVENT0("cc", "SingleThreadProxy::DoCommit");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit enter");
+#endif
   DCHECK(task_runner_provider_->IsMainThread());
   CHECK_EQ(source_frame_number_for_next_commit_, kInvalidSourceFrameNumber);
 
@@ -241,9 +256,17 @@ void SingleThreadProxy::DoCommit(const viz::BeginFrameArgs& commit_args) {
   auto* completion_event = completion_event_ptr.get();
   // Must get unsafe_state before calling WillCommit() to avoid deadlock.
   auto& unsafe_state = layer_tree_host_->GetUnsafeStateForCommit();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit before WillCommit");
+#endif
   std::unique_ptr<CommitState> commit_state =
       layer_tree_host_->WillCommit(std::move(completion_event_ptr),
                                    /*has_updates=*/true);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(commit_state
+                                      ? "cc stp DoCommit WillCommit state"
+                                      : "cc stp DoCommit WillCommit null");
+#endif
   DCHECK(commit_state.get());
   devtools_instrumentation::ScopedCommitTrace commit_task(
       layer_tree_host_->GetId(), commit_args.frame_id.sequence_number);
@@ -253,32 +276,64 @@ void SingleThreadProxy::DoCommit(const viz::BeginFrameArgs& commit_args) {
   DebugScopedSetImplThread impl(task_runner_provider_);
 
   source_frame_number_for_next_commit_ = commit_state->source_frame_number;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit before BeginCommit");
+#endif
   host_impl_->BeginCommit(commit_state->source_frame_number,
                           commit_state->trace_id);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit after BeginCommit");
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit before FinishCommit");
+#endif
 
   host_impl_->FinishCommit(*commit_state, unsafe_state);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit after FinishCommit");
+#endif
   commit_state.reset();
   completion_event->Signal();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit after completion signal");
+#endif
 
   {
     DebugScopedSetMainThread main(task_runner_provider_);
     IssueImageDecodeFinishedCallbacks();
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoCommit exit");
+#endif
 }
 
 void SingleThreadProxy::DoPostCommit() {
   TRACE_EVENT0("cc", "SingleThreadProxy::DoPostCommit");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoPostCommit enter");
+#endif
   DCHECK(task_runner_provider_->IsMainThread());
 
   DebugScopedSetImplThread impl(task_runner_provider_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoPostCommit before CommitComplete");
+#endif
   host_impl_->CommitComplete();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoPostCommit after CommitComplete");
+#endif
 
   // Commit goes directly to the active tree, but we need to synchronously
   // "activate" the tree still during commit to satisfy any potential
   // SetNextCommitWaitsForActivation calls.  Unfortunately, the tree
   // might not be ready to draw, so DidActivateSyncTree must set
   // the flag to force the tree to not draw until textures are ready.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc stp DoPostCommit before NotifyReadyToActivate");
+#endif
   NotifyReadyToActivate();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoPostCommit exit");
+#endif
 }
 
 void SingleThreadProxy::IssueImageDecodeFinishedCallbacks() {
@@ -289,6 +344,9 @@ void SingleThreadProxy::IssueImageDecodeFinishedCallbacks() {
 }
 
 void SingleThreadProxy::CommitComplete() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp CommitComplete enter");
+#endif
   // Commit complete happens on the main side after activate to satisfy any
   // SetNextCommitWaitsForActivation calls.
   DCHECK(task_runner_provider_->IsImplThread());
@@ -300,9 +358,16 @@ void SingleThreadProxy::CommitComplete() {
   layer_tree_host_->DidBeginMainFrame();
   layer_tree_host_->CommitComplete(source_frame_number_for_next_commit_,
                                    {base::TimeTicks(), base::TimeTicks::Now()});
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc stp CommitComplete after LTH CommitComplete");
+#endif
   source_frame_number_for_next_commit_ = kInvalidSourceFrameNumber;
 
   next_frame_is_newly_committed_frame_ = true;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp CommitComplete exit");
+#endif
 }
 
 void SingleThreadProxy::SetNeedsCommit() {
@@ -495,6 +560,13 @@ void SingleThreadProxy::OnCanDrawStateChanged(bool can_draw) {
          task_runner_provider_->IsImplThread());
   TRACE_EVENT1("cc", "SingleThreadProxy::OnCanDrawStateChanged", "can_draw",
                can_draw);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      scheduler_on_impl_thread_
+          ? (can_draw ? "cc stp OnCanDrawStateChanged true scheduler"
+                      : "cc stp OnCanDrawStateChanged false scheduler")
+          : "cc stp OnCanDrawStateChanged no scheduler");
+#endif
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->SetCanDraw(can_draw);
 }
@@ -503,6 +575,11 @@ void SingleThreadProxy::NotifyReadyToActivate() {
   DCHECK(!task_runner_provider_->HasImplThread() ||
          task_runner_provider_->IsImplThread());
   TRACE_EVENT0("cc", "SingleThreadProxy::NotifyReadyToActivate");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(scheduler_on_impl_thread_
+                                      ? "cc stp NotifyReadyToActivate scheduler"
+                                      : "cc stp NotifyReadyToActivate no scheduler");
+#endif
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->NotifyReadyToActivate();
 }
@@ -518,6 +595,11 @@ void SingleThreadProxy::NotifyReadyToDraw() {
   DCHECK(!task_runner_provider_->HasImplThread() ||
          task_runner_provider_->IsImplThread());
   TRACE_EVENT0("cc", "SingleThreadProxy::NotifyReadyToDraw");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(scheduler_on_impl_thread_
+                                      ? "cc stp NotifyReadyToDraw scheduler"
+                                      : "cc stp NotifyReadyToDraw no scheduler");
+#endif
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->NotifyReadyToDraw();
 }
@@ -525,6 +607,11 @@ void SingleThreadProxy::NotifyReadyToDraw() {
 void SingleThreadProxy::SetNeedsRedrawOnImplThread() {
   DCHECK(!task_runner_provider_->HasImplThread() ||
          task_runner_provider_->IsImplThread());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      scheduler_on_impl_thread_ ? "cc stp SetNeedsRedrawOnImplThread scheduler"
+                                : "cc stp SetNeedsRedrawOnImplThread no scheduler");
+#endif
   if (scheduler_on_impl_thread_) {
     scheduler_on_impl_thread_->SetNeedsRedraw();
   }
@@ -590,9 +677,15 @@ void SingleThreadProxy::PostDelayedAnimationTaskOnImplThread(
 }
 
 void SingleThreadProxy::DidActivateSyncTree() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DidActivateSyncTree enter");
+#endif
   DCHECK(!task_runner_provider_->HasImplThread() ||
          task_runner_provider_->IsImplThread());
   CommitComplete();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DidActivateSyncTree exit");
+#endif
 }
 
 void SingleThreadProxy::DidPrepareTiles() {
@@ -1029,6 +1122,9 @@ void SingleThreadProxy::ScheduledActionSendBeginMainFrame(
     const viz::BeginFrameArgs& begin_frame_args) {
   DebugScopedSetImplThread impl(task_runner_provider_);
   TRACE_EVENT0("cc", "SingleThreadProxy::ScheduledActionSendBeginMainFrame");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionSendBeginMainFrame");
+#endif
 #if DCHECK_IS_ON()
   // Although this proxy is single-threaded, it's problematic to synchronously
   // have BeginMainFrame happen after ScheduledActionSendBeginMainFrame.  This
@@ -1058,6 +1154,9 @@ void SingleThreadProxy::OnBeginImplFrameDeadline() {
 
 void SingleThreadProxy::BeginMainFrame(
     const viz::BeginFrameArgs& begin_frame_args) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp BeginMainFrame enter");
+#endif
   // This checker assumes NotifyReadyToCommit in this stack causes a synchronous
   // commit.
   ScopedAbortRemainingSwapPromises swap_promise_checker(
@@ -1076,6 +1175,10 @@ void SingleThreadProxy::BeginMainFrame(
 
   if (defer_main_frame_update_) {
     TRACE_EVENT_INSTANT("cc", "EarlyOut_DeferBeginMainFrame");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc stp BeginMainFrame early defer_main_frame_update");
+#endif
     BeginMainFrameAbortedOnImplThread(
         CommitEarlyOutReason::kAbortedDeferredMainFrameUpdate);
     return;
@@ -1083,6 +1186,9 @@ void SingleThreadProxy::BeginMainFrame(
 
   if (!layer_tree_host_->IsVisible()) {
     TRACE_EVENT_INSTANT("cc", "EarlyOut_NotVisible");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage("cc stp BeginMainFrame early not visible");
+#endif
 
     // Since the commit is deferred due to the page becoming invisible, the
     // metrics are not meaningful anymore (as the page might become visible in
@@ -1107,6 +1213,9 @@ void SingleThreadProxy::BeginMainFrame(
 
   layer_tree_host_->RecordStartOfFrameMetrics();
   DoBeginMainFrame(begin_frame_args);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp BeginMainFrame after DoBeginMainFrame");
+#endif
 
   // New commits requested inside UpdateLayers should be respected.
   commit_requested_ = false;
@@ -1116,6 +1225,18 @@ void SingleThreadProxy::BeginMainFrame(
   if (defer_main_frame_update_ || IsDeferringCommits() ||
       begin_frame_args.animate_only) {
     TRACE_EVENT_INSTANT("cc", "EarlyOut_DeferCommit_InsideBeginMainFrame");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (defer_main_frame_update_) {
+      TraceStandaloneCcSchedulerStage(
+          "cc stp BeginMainFrame early deferred after DoBeginMainFrame");
+    } else if (IsDeferringCommits()) {
+      TraceStandaloneCcSchedulerStage(
+          "cc stp BeginMainFrame early IsDeferringCommits");
+    } else {
+      TraceStandaloneCcSchedulerStage(
+          "cc stp BeginMainFrame early animate_only");
+    }
+#endif
     BeginMainFrameAbortedOnImplThread(
         CommitEarlyOutReason::kAbortedDeferredCommit);
     layer_tree_host_->RecordEndOfFrameMetrics(frame_start_time,
@@ -1125,6 +1246,9 @@ void SingleThreadProxy::BeginMainFrame(
   }
 
   DoPainting();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp BeginMainFrame after DoPainting");
+#endif
   layer_tree_host_->RecordEndOfFrameMetrics(frame_start_time,
                                             /* trackers */ 0u);
 }
@@ -1164,7 +1288,15 @@ void SingleThreadProxy::DoBeginMainFrame(
 }
 
 void SingleThreadProxy::DoPainting() {
-  layer_tree_host_->UpdateLayers();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoPainting before UpdateLayers");
+#endif
+  const bool updated_layers = layer_tree_host_->UpdateLayers();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(updated_layers
+                                      ? "cc stp DoPainting UpdateLayers true"
+                                      : "cc stp DoPainting UpdateLayers false");
+#endif
   update_layers_requested_ = false;
 
   std::unique_ptr<BeginMainFrameMetrics> begin_main_frame_metrics =
@@ -1172,13 +1304,24 @@ void SingleThreadProxy::DoPainting() {
   host_impl_->ReadyToCommit(/*scroll_and_viewport_changes_synced=*/true,
                             begin_main_frame_metrics.get(),
                             /*commit_timeout=*/false);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp DoPainting after ReadyToCommit");
+#endif
 
   // TODO(enne): SingleThreadProxy does not support cancelling commits yet,
   // search for CommitEarlyOutReason::FINISHED_NO_UPDATES inside
   // thread_proxy.cc
   if (scheduler_on_impl_thread_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc stp DoPainting before NotifyReadyToCommit");
+#endif
     scheduler_on_impl_thread_->NotifyReadyToCommit(
         std::move(begin_main_frame_metrics));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneCcSchedulerStage(
+        "cc stp DoPainting after NotifyReadyToCommit");
+#endif
   }
 }
 
@@ -1197,38 +1340,75 @@ void SingleThreadProxy::BeginMainFrameAbortedOnImplThread(
 }
 
 DrawResult SingleThreadProxy::ScheduledActionDrawIfPossible() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionDrawIfPossible");
+#endif
   DebugScopedSetImplThread impl(task_runner_provider_);
   FrameData frame;
   frame.begin_frame_ack =
       scheduler_on_impl_thread_->CurrentBeginFrameAckForActiveTree();
   frame.origin_begin_main_frame_args =
       scheduler_on_impl_thread_->last_activate_origin_frame_args();
-  return DoComposite(&frame);
+  DrawResult result = DoComposite(&frame);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionDrawIfPossible exit");
+#endif
+  return result;
 }
 
 DrawResult SingleThreadProxy::ScheduledActionDrawForced() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionDrawForced");
+#endif
   NOTREACHED();
 }
 
 void SingleThreadProxy::ScheduledActionCommit() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionCommit");
+#endif
   // DebugScopedSetImplThread here is just a formality; all SchedulerClient
   // methods should have it.
   DebugScopedSetImplThread impl(task_runner_provider_);
   DebugScopedSetMainThread main(task_runner_provider_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionCommit before DoCommit");
+#endif
   DoCommit(scheduler_on_impl_thread_->last_dispatched_begin_main_frame_args());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionCommit after DoCommit");
+#endif
 }
 
 void SingleThreadProxy::ScheduledActionPostCommit() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionPostCommit");
+#endif
   // DebugScopedSetImplThread here is just a formality; all SchedulerClient
   // methods should have it.
   DebugScopedSetImplThread impl(task_runner_provider_);
   DebugScopedSetMainThread main(task_runner_provider_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc stp ScheduledActionPostCommit before DoPostCommit");
+#endif
   DoPostCommit();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc stp ScheduledActionPostCommit after DoPostCommit");
+#endif
 }
 
 void SingleThreadProxy::ScheduledActionActivateSyncTree() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage("cc stp ScheduledActionActivateSyncTree");
+#endif
   DebugScopedSetImplThread impl(task_runner_provider_);
   host_impl_->ActivateSyncTree();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneCcSchedulerStage(
+      "cc stp ScheduledActionActivateSyncTree after ActivateSyncTree");
+#endif
 }
 
 void SingleThreadProxy::ScheduledActionBeginLayerTreeFrameSinkCreation() {

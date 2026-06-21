@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/check.h"
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -42,11 +43,13 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/layers/layer.h"
+#include "cc/layers/solid_color_layer.h"
 #include "cc/paint/paint_op.h"
 #include "cc/paint/paint_op_buffer_iterator.h"
 #include "cc/paint/paint_record.h"
 #include "cc/animation/animation_host.h"
 #include "cc/metrics/begin_main_frame_metrics.h"
+#include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/raster/synchronous_task_graph_runner.h"
 #include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/layer_tree_frame_sink.h"
@@ -55,6 +58,7 @@
 #include "cc/trees/layer_tree_host_delegate.h"
 #include "cc/trees/layer_tree_host_single_thread_delegate.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
@@ -324,6 +328,10 @@ void InstallStandaloneMojoThunksForStandaloneRenderer();
 namespace {
 
 void TraceLiveFrameProbeStage(const char* stage);
+void TraceLiveFrameProbeStagef(const char* format,
+                               wtf_size_t first,
+                               wtf_size_t second);
+std::string JsonStringForStandaloneRenderer(const std::string& value);
 
 std::string DescribeGLInitializationFailure(const char* prefix) {
   std::ostringstream out;
@@ -668,8 +676,50 @@ class StandaloneVizFrameSinkClient final
     cc_client_ = client;
   }
 
+  void SetAsyncCompositorFrameAck(bool enabled) {
+    async_compositor_frame_ack_ = enabled;
+  }
+
+  void SetDeferCompositorFrameAck(bool enabled) {
+    defer_compositor_frame_ack_ = enabled;
+  }
+
+  void FlushDeferredCompositorFrameAck() {
+    if (!deferred_compositor_frame_ack_pending_) {
+      return;
+    }
+    deferred_compositor_frame_ack_pending_ = false;
+    std::vector<viz::ReturnedResource> resources =
+        std::move(deferred_compositor_frame_ack_resources_);
+    deferred_compositor_frame_ack_resources_.clear();
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&StandaloneVizFrameSinkClient::ForwardCompositorFrameAck,
+                       weak_factory_.GetWeakPtr(), std::move(resources)));
+  }
+
   void DidReceiveCompositorFrameAck(
       std::vector<viz::ReturnedResource> resources) override {
+    if (async_compositor_frame_ack_) {
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &StandaloneVizFrameSinkClient::ForwardCompositorFrameAck,
+              weak_factory_.GetWeakPtr(), std::move(resources)));
+      return;
+    }
+    ForwardCompositorFrameAck(std::move(resources));
+  }
+
+  void ForwardCompositorFrameAck(
+      std::vector<viz::ReturnedResource> resources) {
+    if (defer_compositor_frame_ack_) {
+      for (auto& resource : resources) {
+        deferred_compositor_frame_ack_resources_.push_back(std::move(resource));
+      }
+      deferred_compositor_frame_ack_pending_ = true;
+      return;
+    }
     if (!cc_client_) {
       return;
     }
@@ -711,6 +761,11 @@ class StandaloneVizFrameSinkClient final
 
  private:
   raw_ptr<cc::LayerTreeFrameSinkClient> cc_client_ = nullptr;
+  bool async_compositor_frame_ack_ = false;
+  bool defer_compositor_frame_ack_ = false;
+  bool deferred_compositor_frame_ack_pending_ = false;
+  std::vector<viz::ReturnedResource> deferred_compositor_frame_ack_resources_;
+  base::WeakPtrFactory<StandaloneVizFrameSinkClient> weak_factory_{this};
 };
 
 class StandaloneDisplayClient final : public viz::DisplayClient {
@@ -1124,7 +1179,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       bool* copy_output_succeeded,
       std::vector<uint8_t>* copy_output_png,
       std::string* copy_output_failure,
-      std::string* failure_reason)
+      std::string* failure_reason,
+      bool* begin_frame_source_set = nullptr,
+      int* did_not_produce_count = nullptr,
+      int* last_frame_skipped_reason = nullptr,
+      int* last_did_not_produce_has_damage = nullptr,
+      bool async_compositor_frame_ack = false)
       : cc::LayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
                                std::move(compositor_task_runner),
@@ -1142,11 +1202,17 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         copy_output_succeeded_(copy_output_succeeded),
         copy_output_png_(copy_output_png),
         copy_output_failure_(copy_output_failure),
-        failure_reason_(failure_reason) {
+        failure_reason_(failure_reason),
+        begin_frame_source_set_(begin_frame_source_set),
+        did_not_produce_count_(did_not_produce_count),
+        last_frame_skipped_reason_(last_frame_skipped_reason),
+        last_did_not_produce_has_damage_(
+            last_did_not_produce_has_damage) {
     // Standalone screenshot/readback consumers compare CSS top-left pixel
     // coordinates. Disable Viz backing/output-surface padding that is useful
     // for production buffer reuse but changes observable CopyOutput bounds.
     renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
+    viz_client_.SetAsyncCompositorFrameAck(async_compositor_frame_ack);
   }
 
   StandaloneDirectLayerTreeFrameSink(
@@ -1166,6 +1232,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink after base BindToClient");
+    begin_frame_source_ = std::make_unique<viz::BackToBackBeginFrameSource>(
+        std::make_unique<viz::DelayBasedTimeSource>(
+            compositor_task_runner_.get()));
+    client->SetBeginFrameSource(begin_frame_source_.get());
+    if (begin_frame_source_set_) {
+      *begin_frame_source_set_ = true;
+    }
     viz_client_.SetCcClient(client);
     TraceLiveFrameProbeStage("direct frame sink before support create");
     support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
@@ -1175,6 +1248,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   void DetachFromClient() override {
+    if (client_) {
+      client_->SetBeginFrameSource(nullptr);
+    }
+    begin_frame_source_.reset();
+    if (begin_frame_source_set_) {
+      *begin_frame_source_set_ = false;
+    }
     viz_client_.SetCcClient(nullptr);
     support_.reset();
     cc::LayerTreeFrameSink::DetachFromClient();
@@ -1238,7 +1318,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           base::OneShotTimer timeout;
           copy_output_run_loop_ = &run_loop;
           timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+          viz_client_.SetDeferCompositorFrameAck(true);
           run_loop.Run();
+          viz_client_.SetDeferCompositorFrameAck(false);
+          viz_client_.FlushDeferredCompositorFrameAck();
           timeout.Stop();
           copy_output_run_loop_ = nullptr;
         }
@@ -1257,7 +1340,20 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack,
                           cc::FrameSkippedReason reason) override {
-    TraceLiveFrameProbeStage("direct frame sink DidNotProduceFrame");
+    if (did_not_produce_count_) {
+      ++*did_not_produce_count_;
+    }
+    if (last_frame_skipped_reason_) {
+      *last_frame_skipped_reason_ = static_cast<int>(reason);
+    }
+    if (last_did_not_produce_has_damage_) {
+      *last_did_not_produce_has_damage_ = ack.has_damage ? 1 : 0;
+    }
+    TraceLiveFrameProbeStagef(
+        "direct frame sink DidNotProduceFrame reason=%lu has_damage=%lu",
+        static_cast<wtf_size_t>(reason),
+        ack.has_damage ? static_cast<wtf_size_t>(1)
+                       : static_cast<wtf_size_t>(0));
     if (support_) {
       support_->DidNotProduceFrame(ack);
     }
@@ -1490,6 +1586,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   viz::DebugRendererSettings debug_settings_;
   StandaloneVizFrameSinkClient viz_client_;
   StandaloneDisplayClient display_client_;
+  std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   std::unique_ptr<viz::Display> display_;
   uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
@@ -1503,6 +1600,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<std::string> copy_output_failure_ = nullptr;
   raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
+  raw_ptr<bool> begin_frame_source_set_ = nullptr;
+  raw_ptr<int> did_not_produce_count_ = nullptr;
+  raw_ptr<int> last_frame_skipped_reason_ = nullptr;
+  raw_ptr<int> last_did_not_produce_has_damage_ = nullptr;
 };
 
 struct OriginalElementAttributeValue {
@@ -1516,7 +1617,7 @@ class StandaloneCcLayerHost final
       public cc::LayerTreeHostSchedulingDelegate {
  public:
   StandaloneCcLayerHost() {
-    settings_.single_thread_proxy_scheduler = false;
+    settings_.single_thread_proxy_scheduler = true;
     settings_.use_layer_lists = true;
     settings_.can_use_lcd_text = true;
     settings_.layers_always_allowed_lcd_text = true;
@@ -1525,21 +1626,31 @@ class StandaloneCcLayerHost final
   StandaloneCcLayerHost(const StandaloneCcLayerHost&) = delete;
   StandaloneCcLayerHost& operator=(const StandaloneCcLayerHost&) = delete;
 
-  ~StandaloneCcLayerHost() override = default;
+  ~StandaloneCcLayerHost() override {
+    layer_tree_host_.reset();
+    animation_host_.reset();
+    if (scheduler_task_graph_runner_started_) {
+      scheduler_task_graph_runner_.Shutdown();
+      scheduler_task_graph_runner_started_ = false;
+    }
+  }
 
   bool AttachRootLayer(scoped_refptr<cc::Layer> root_layer,
                        const gfx::Size& viewport,
                        std::string* failure_reason) {
     attach_attempted_ = true;
-    root_layer_attached_ = false;
     if (!root_layer) {
+      root_layer_attached_ = false;
       SetFailure(failure_reason, "PaintArtifactCompositor supplied no root cc::Layer");
       return false;
     }
+    cc::Layer* root_layer_ptr = root_layer.get();
     if (!EnsureHost(failure_reason)) {
+      root_layer_attached_ = false;
       return false;
     }
     const bool viewport_changed = viewport_ != viewport;
+    const bool root_layer_changed = root_layer_ptr != attached_root_layer_;
     if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
       surface_id_allocator_.GenerateId();
     }
@@ -1555,9 +1666,16 @@ class StandaloneCcLayerHost final
     layer_tree_host_->SetRootLayer(std::move(root_layer));
     root_layer_attached_ = layer_tree_host_->has_root_layer();
     if (root_layer_attached_) {
-      layer_tree_host_->SetNeedsCommit();
+      attached_root_layer_ = root_layer_ptr;
+      next_composite_requires_forced_redraw_ |=
+          viewport_changed || root_layer_changed || commit_count_ == 0 ||
+          !frame_sink_bound_;
+      if (!inside_scheduler_layer_tree_update_) {
+        layer_tree_host_->SetNeedsCommit();
+      }
       commit_requested_ = true;
     } else {
+      attached_root_layer_ = nullptr;
       SetFailure(failure_reason, "cc::LayerTreeHost rejected the PAC root layer");
     }
     return root_layer_attached_;
@@ -1570,7 +1688,12 @@ class StandaloneCcLayerHost final
       return false;
     }
     TraceLiveFrameProbeStage("cc host CompositeForTest before SetNeedsCommit");
-    layer_tree_host_->SetNeedsCommitWithForcedRedraw();
+    if (next_composite_requires_forced_redraw_) {
+      layer_tree_host_->SetNeedsCommitWithForcedRedraw();
+    } else {
+      layer_tree_host_->SetNeedsCommit();
+    }
+    next_composite_requires_forced_redraw_ = false;
     commit_requested_ = true;
     TraceLiveFrameProbeStage("cc host CompositeForTest before cc composite");
     layer_tree_host_->CompositeForTest(base::TimeTicks::Now(),
@@ -1605,6 +1728,7 @@ class StandaloneCcLayerHost final
     copy_output_succeeded_ = false;
     copy_output_png_.clear();
     copy_output_failure_.clear();
+    next_composite_requires_forced_redraw_ = true;
   }
   bool copy_output_completed() const { return copy_output_completed_; }
   bool copy_output_succeeded() const { return copy_output_succeeded_; }
@@ -1616,6 +1740,105 @@ class StandaloneCcLayerHost final
   }
 
   cc::AnimationHost* animation_host() const { return animation_host_.get(); }
+
+  bool EnsureHostForScheduler(const gfx::Size& viewport,
+                              std::string* failure_reason) {
+    if (!EnsureHost(failure_reason)) {
+      return false;
+    }
+    viewport_ = viewport;
+    return true;
+  }
+
+  bool EnsureFrameSinkReadyForScheduler(std::string* failure_reason) {
+    if (!layer_tree_host_) {
+      SetFailure(failure_reason,
+                 "cc scheduler frame requested before LayerTreeHost exists");
+      return false;
+    }
+    if (frame_sink_bound_) {
+      return true;
+    }
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    frame_sink_init_run_loop_ = &run_loop;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), base::Seconds(2));
+    TraceLiveFrameProbeStage("cc host scheduler before frame sink warm-up");
+    layer_tree_host_->SetShouldWarmUp();
+    run_loop.Run();
+    TraceLiveFrameProbeStage("cc host scheduler after frame sink warm-up");
+    frame_sink_init_run_loop_ = nullptr;
+    if (!frame_sink_bound_) {
+      SetFailure(failure_reason,
+                 frame_sink_failure_reason_.empty()
+                     ? "cc scheduler did not initialize LayerTreeFrameSink"
+                     : frame_sink_failure_reason_.c_str());
+      return false;
+    }
+    return true;
+  }
+
+  void SetPendingLayerTreeUpdateForScheduler(std::function<void()> update) {
+    pending_scheduler_layer_tree_update_ = std::move(update);
+  }
+
+  void ClearPendingLayerTreeUpdateForScheduler() {
+    pending_scheduler_layer_tree_update_ = nullptr;
+  }
+
+  bool ScheduleFrameWithPendingLayerTreeUpdateForScheduler(
+      std::function<void()> pre_attach_root_update,
+      std::function<void()> update,
+      std::string* failure_reason) {
+    if (!layer_tree_host_) {
+      SetFailure(failure_reason,
+                 "cc scheduler frame requested before LayerTreeHost exists");
+      return false;
+    }
+    compositor_frame_submitted_ = false;
+    scheduler_begin_main_frame_seen_ = false;
+    if (!root_layer_attached_) {
+      TraceLiveFrameProbeStage(
+          "cc host scheduler bootstrap before PAC root preattach");
+      base::AutoReset<bool> inside_update(&inside_scheduler_layer_tree_update_,
+                                          true);
+      pre_attach_root_update();
+      TraceLiveFrameProbeStage(
+          "cc host scheduler bootstrap after PAC root preattach");
+      if (!root_layer_attached_) {
+        SetFailure(failure_reason,
+                   "cc scheduler could not preattach the PAC root layer");
+        return false;
+      }
+    }
+    SetPendingLayerTreeUpdateForScheduler(std::move(update));
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    scheduler_frame_run_loop_ = &run_loop;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), base::Seconds(2));
+
+    TraceLiveFrameProbeStage("cc host scheduler before posted SetNeedsCommit");
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &StandaloneCcLayerHost::
+                RequestPendingSchedulerCommitAfterFrameSinkInit,
+            base::Unretained(this)));
+    commit_requested_ = true;
+    TraceLiveFrameProbeStage("cc host scheduler before run loop");
+    run_loop.Run();
+    TraceLiveFrameProbeStage("cc host scheduler after run loop");
+    scheduler_frame_run_loop_ = nullptr;
+    ClearPendingLayerTreeUpdateForScheduler();
+    if (!compositor_frame_submitted_) {
+      SetFailure(failure_reason,
+                 scheduler_begin_main_frame_seen_
+                     ? "cc scheduler did not submit a compositor frame"
+                     : "cc scheduler did not invoke BeginMainFrame");
+      return false;
+    }
+    return true;
+  }
 
  private:
   bool EnsureHost(std::string* failure_reason) {
@@ -1634,7 +1857,7 @@ class StandaloneCcLayerHost final
     cc::LayerTreeHost::InitParams params;
     params.client = this;
     params.scheduling_delegate = this;
-    params.task_graph_runner = &task_graph_runner_;
+    params.task_graph_runner = TaskGraphRunnerForCurrentMode();
     params.settings = &settings_;
     params.main_task_runner = std::move(main_task_runner);
     params.mutator_host = animation_host_.get();
@@ -1656,8 +1879,39 @@ class StandaloneCcLayerHost final
     }
   }
 
+  cc::TaskGraphRunner* TaskGraphRunnerForCurrentMode() {
+    if (!settings_.single_thread_proxy_scheduler) {
+      return &task_graph_runner_;
+    }
+    if (!scheduler_task_graph_runner_started_) {
+      scheduler_task_graph_runner_.Start(
+          "StandaloneCcSchedulerTileRunner", base::SimpleThread::Options());
+      scheduler_task_graph_runner_started_ = true;
+      TraceLiveFrameProbeStage(
+          "cc host scheduler using SingleThreadTaskGraphRunner");
+    }
+    return &scheduler_task_graph_runner_;
+  }
+
   void RememberFrameSinkFailure(const char* reason) {
     frame_sink_failure_reason_ = reason ? reason : "";
+  }
+
+  void RequestPendingSchedulerCommitAfterFrameSinkInit() {
+    if (!layer_tree_host_ ||
+        (!pending_scheduler_layer_tree_update_ && !root_layer_attached_)) {
+      return;
+    }
+    TraceLiveFrameProbeStage(
+        "cc host posted frame-sink init pending update commit");
+    if (next_composite_requires_forced_redraw_) {
+      layer_tree_host_->SetNeedsRecalculateRasterScales();
+    }
+    layer_tree_host_->SetNeedsUpdateLayers();
+    layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+    layer_tree_host_->SetNeedsCommit();
+    next_composite_requires_forced_redraw_ = false;
+    commit_requested_ = true;
   }
 
   bool CreateFrameSink() {
@@ -1735,7 +1989,12 @@ class StandaloneCcLayerHost final
             &skia_gpu_reached_, &copy_output_requested_,
             &copy_output_completed_, &copy_output_succeeded_,
             &copy_output_png_, &copy_output_failure_,
-            &frame_sink_failure_reason_);
+            &frame_sink_failure_reason_,
+            /*begin_frame_source_set=*/nullptr,
+            /*did_not_produce_count=*/nullptr,
+            /*last_frame_skipped_reason=*/nullptr,
+            /*last_did_not_produce_has_damage=*/nullptr,
+            settings_.single_thread_proxy_scheduler);
     TraceLiveFrameProbeStage("cc host CreateFrameSink before SetLayerTreeFrameSink");
     layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
     TraceLiveFrameProbeStage("cc host CreateFrameSink after SetLayerTreeFrameSink");
@@ -1743,7 +2002,11 @@ class StandaloneCcLayerHost final
   }
 
   void WillBeginMainFrame() override {}
-  void BeginMainFrame(const viz::BeginFrameArgs& args) override {}
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
+    TraceLiveFrameProbeStage("cc host BeginMainFrame");
+    last_begin_main_frame_args_ = args;
+    scheduler_begin_main_frame_seen_ = true;
+  }
   void BeginMainFrameNotExpectedSoon() override {}
   void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
   void DidBeginMainFrame() override {}
@@ -1757,7 +2020,17 @@ class StandaloneCcLayerHost final
   void OnDeferCommitsChanged(bool defer_status,
                              cc::PaintHoldingReason reason) override {}
   void OnCommitRequested() override { commit_requested_ = true; }
-  void UpdateLayerTreeHost() override {}
+  void UpdateLayerTreeHost() override {
+    TraceLiveFrameProbeStage("cc host UpdateLayerTreeHost");
+    if (!pending_scheduler_layer_tree_update_) {
+      return;
+    }
+    std::function<void()> update = std::move(pending_scheduler_layer_tree_update_);
+    pending_scheduler_layer_tree_update_ = nullptr;
+    base::AutoReset<bool> inside_update(&inside_scheduler_layer_tree_update_,
+                                        true);
+    update();
+  }
   void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override {
   }
   void UpdateCompositorScrollState(
@@ -1781,6 +2054,20 @@ class StandaloneCcLayerHost final
   void DidInitializeLayerTreeFrameSink() override {
     frame_sink_bound_ = true;
     frame_sink_failure_reason_.clear();
+    if (frame_sink_init_run_loop_) {
+      frame_sink_init_run_loop_->Quit();
+    }
+    if (layer_tree_host_ &&
+        (pending_scheduler_layer_tree_update_ || root_layer_attached_)) {
+      TraceLiveFrameProbeStage(
+          "cc host DidInitializeLayerTreeFrameSink post pending update");
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &StandaloneCcLayerHost::
+                  RequestPendingSchedulerCommitAfterFrameSinkInit,
+              base::Unretained(this)));
+    }
   }
   void DidFailToInitializeLayerTreeFrameSink() override {
     frame_sink_bound_ = false;
@@ -1811,7 +2098,11 @@ class StandaloneCcLayerHost final
       cc::CustomTrackerResults results) override {}
   void DidRunBeginMainFrame() override {}
   void DidSubmitCompositorFrame() override {
+    TraceLiveFrameProbeStage("cc host DidSubmitCompositorFrame");
     compositor_frame_submitted_ = true;
+    if (scheduler_frame_run_loop_) {
+      scheduler_frame_run_loop_->Quit();
+    }
   }
   void DidLoseLayerTreeFrameSink() override {
     frame_sink_requested_ = true;
@@ -1821,14 +2112,18 @@ class StandaloneCcLayerHost final
 
   cc::LayerTreeSettings settings_;
   cc::SynchronousTaskGraphRunner task_graph_runner_;
+  cc::SingleThreadTaskGraphRunner scheduler_task_graph_runner_;
+  bool scheduler_task_graph_runner_started_ = false;
   std::unique_ptr<cc::AnimationHost> animation_host_;
   viz::ParentLocalSurfaceIdAllocator surface_id_allocator_;
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
+  raw_ptr<cc::Layer> attached_root_layer_ = nullptr;
   gfx::Size viewport_;
   bool attach_attempted_ = false;
   bool root_layer_attached_ = false;
+  bool next_composite_requires_forced_redraw_ = true;
   bool commit_requested_ = false;
   bool frame_sink_requested_ = false;
   bool frame_sink_bound_ = false;
@@ -1846,6 +2141,387 @@ class StandaloneCcLayerHost final
   std::string copy_output_failure_;
   int commit_count_ = 0;
   std::string frame_sink_failure_reason_;
+  std::function<void()> pending_scheduler_layer_tree_update_;
+  viz::BeginFrameArgs last_begin_main_frame_args_;
+  bool scheduler_begin_main_frame_seen_ = false;
+  bool inside_scheduler_layer_tree_update_ = false;
+  raw_ptr<base::RunLoop> scheduler_frame_run_loop_ = nullptr;
+  raw_ptr<base::RunLoop> frame_sink_init_run_loop_ = nullptr;
+};
+
+class StandaloneCcSchedulerParityProbe final
+    : public cc::LayerTreeHostDelegate,
+      public cc::LayerTreeHostSingleThreadDelegate,
+      public cc::LayerTreeHostSchedulingDelegate {
+ public:
+  explicit StandaloneCcSchedulerParityProbe(const gfx::Size& viewport)
+      : viewport_(viewport) {
+    settings_.single_thread_proxy_scheduler = true;
+    settings_.use_layer_lists = false;
+  }
+
+  ~StandaloneCcSchedulerParityProbe() override {
+    layer_tree_host_.reset();
+    animation_host_.reset();
+    if (task_graph_runner_started_) {
+      task_graph_runner_.Shutdown();
+      task_graph_runner_started_ = false;
+    }
+  }
+
+  StandaloneCcSchedulerParityProbe(const StandaloneCcSchedulerParityProbe&) =
+      delete;
+  StandaloneCcSchedulerParityProbe& operator=(
+      const StandaloneCcSchedulerParityProbe&) = delete;
+
+  std::string Run() {
+    if (!CreateHost()) {
+      return BuildJson(false);
+    }
+
+    frame_sink_warm_run_loop_ = std::make_unique<base::RunLoop>(
+        base::RunLoop::Type::kNestableTasksAllowed);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, frame_sink_warm_run_loop_->QuitClosure(), base::Seconds(2));
+    TraceLiveFrameProbeStage("cc scheduler probe before SetShouldWarmUp");
+    layer_tree_host_->SetShouldWarmUp();
+    frame_sink_warm_run_loop_->Run();
+    TraceLiveFrameProbeStage("cc scheduler probe after SetShouldWarmUp");
+    frame_sink_warm_run_loop_.reset();
+
+    scheduler_run_loop_ = std::make_unique<base::RunLoop>(
+        base::RunLoop::Type::kNestableTasksAllowed);
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, scheduler_run_loop_->QuitClosure(), base::Seconds(2));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&StandaloneCcSchedulerParityProbe::PostInitCommit,
+                       base::Unretained(this)));
+    scheduler_run_loop_->Run();
+    scheduler_run_loop_.reset();
+
+    return BuildJson(compositor_frame_submitted_);
+  }
+
+ private:
+  bool CreateHost() {
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
+    if (!main_task_runner) {
+      failure_reason_ =
+          "cc scheduler probe requires a current main-thread task runner";
+      return false;
+    }
+
+    animation_host_ = cc::AnimationHost::CreateMainInstance();
+    cc::LayerTreeHost::InitParams params;
+    params.client = this;
+    params.scheduling_delegate = this;
+    params.task_graph_runner = TaskGraphRunnerForProbe();
+    params.settings = &settings_;
+    params.main_task_runner = std::move(main_task_runner);
+    params.mutator_host = animation_host_.get();
+    layer_tree_host_ =
+        cc::LayerTreeHost::CreateSingleThreaded(this, std::move(params));
+    if (!layer_tree_host_) {
+      failure_reason_ = "cc scheduler probe failed to create LayerTreeHost";
+      return false;
+    }
+    host_created_ = true;
+    layer_tree_host_->SetVisible(true);
+    visible_ = true;
+    return true;
+  }
+
+  cc::TaskGraphRunner* TaskGraphRunnerForProbe() {
+    if (!task_graph_runner_started_) {
+      task_graph_runner_.Start("StandaloneCcSchedulerProbeTileRunner",
+                               base::SimpleThread::Options());
+      task_graph_runner_started_ = true;
+    }
+    return &task_graph_runner_;
+  }
+
+  bool CreateFrameSink() {
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
+    if (!main_task_runner) {
+      failure_reason_ =
+          "cc scheduler probe frame sink requires a current task runner";
+      return false;
+    }
+
+    if (!frame_sink_manager_) {
+      viz::FrameSinkManagerImpl::InitParams manager_params;
+      frame_sink_manager_ =
+          std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
+    }
+    const viz::FrameSinkId frame_sink_id(778, 1);
+    if (!frame_sink_id_registered_) {
+      frame_sink_manager_->RegisterFrameSinkId(frame_sink_id,
+                                               /*report_activation=*/true);
+      frame_sink_manager_->SetFrameSinkDebugLabel(
+          frame_sink_id, "standalone-renderer-cc-scheduler-probe");
+      frame_sink_id_registered_ = true;
+    }
+
+    if (!gpu_thread_holder_) {
+      gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
+      gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
+          gpu::GrContextType::kGL;
+    }
+    auto compositor_context_provider =
+        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
+            gpu_thread_holder_, /*enforce_cache_controller_lock=*/false,
+            &gpu_context_created_, &raster_context_created_,
+            &shared_image_interface_available_, &failure_reason_);
+    auto worker_context_provider =
+        base::MakeRefCounted<StandaloneInProcessRasterContextProvider>(
+            gpu_thread_holder_, /*enforce_cache_controller_lock=*/true,
+            &gpu_context_created_, &raster_context_created_,
+            &shared_image_interface_available_, &failure_reason_);
+    const gpu::ContextResult worker_bind_result =
+        worker_context_provider->BindToCurrentSequence();
+    if (worker_bind_result != gpu::ContextResult::kSuccess) {
+      if (failure_reason_.empty()) {
+        failure_reason_ =
+            "cc scheduler probe worker raster context provider failed to bind";
+      }
+      return false;
+    }
+
+    auto layer_tree_frame_sink =
+        std::make_unique<StandaloneDirectLayerTreeFrameSink>(
+            frame_sink_manager_.get(), frame_sink_id, gpu_thread_holder_,
+            std::move(compositor_context_provider),
+            std::move(worker_context_provider), std::move(main_task_runner),
+            viewport_, &compositor_frame_submitted_, &viz_display_created_,
+            &skia_gpu_reached_, &copy_output_requested_,
+            &copy_output_completed_, &copy_output_succeeded_,
+            &copy_output_png_, &copy_output_failure_, &failure_reason_,
+            &begin_frame_source_set_, &did_not_produce_count_,
+            &last_frame_skipped_reason_, &last_did_not_produce_has_damage_,
+            /*async_compositor_frame_ack=*/true);
+    layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
+    return true;
+  }
+
+  void PostInitCommit() {
+    post_init_commit_ran_ = true;
+    if (!layer_tree_host_) {
+      failure_reason_ = "cc scheduler probe post-init commit has no host";
+      QuitSchedulerRunLoop();
+      return;
+    }
+    if (!frame_sink_bound_) {
+      failure_reason_ =
+          "cc scheduler probe post-init commit ran before frame sink bound";
+      QuitSchedulerRunLoop();
+      return;
+    }
+    if (!surface_id_allocator_.HasValidLocalSurfaceId()) {
+      surface_id_allocator_.GenerateId();
+    }
+    layer_tree_host_->SetViewportRectAndScale(
+        gfx::Rect(viewport_), /*device_scale_factor=*/1.0f,
+        surface_id_allocator_.GetCurrentLocalSurfaceId());
+    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
+        gfx::Rect(viewport_));
+    layer_tree_host_->SetVisualDeviceViewportSize(viewport_);
+
+    scoped_refptr<cc::SolidColorLayer> root_layer =
+        cc::SolidColorLayer::Create();
+    root_layer->SetBounds(viewport_);
+    root_layer->SetIsDrawable(true);
+    root_layer->SetBackgroundColor(SkColor4f{0.1f, 0.45f, 0.9f, 1.0f});
+    layer_tree_host_->SetRootLayer(root_layer);
+    root_layer_attached_ = layer_tree_host_->has_root_layer();
+    layer_tree_host_->SetNeedsCommit();
+    layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+    set_needs_commit_posted_ = true;
+  }
+
+  void QuitSchedulerRunLoop() {
+    if (scheduler_run_loop_) {
+      scheduler_run_loop_->Quit();
+    }
+  }
+
+  std::string BuildJson(bool success) const {
+    std::ostringstream json;
+    json << "{\n";
+    json << "  \"probe\": \"cc_scheduler_parity\",\n";
+    json << "  \"success\": " << (success ? "true" : "false") << ",\n";
+    json << "  \"host_created\": " << (host_created_ ? 1 : 0) << ",\n";
+    json << "  \"visible\": " << (visible_ ? 1 : 0) << ",\n";
+    json << "  \"request_new_layer_tree_frame_sink\": "
+         << (request_new_layer_tree_frame_sink_seen_ ? 1 : 0) << ",\n";
+    json << "  \"frame_sink_bound\": " << (frame_sink_bound_ ? 1 : 0)
+         << ",\n";
+    json << "  \"begin_frame_source_set\": "
+         << (begin_frame_source_set_ ? 1 : 0) << ",\n";
+    json << "  \"post_init_commit_ran\": " << (post_init_commit_ran_ ? 1 : 0)
+         << ",\n";
+    json << "  \"set_needs_commit_posted\": "
+         << (set_needs_commit_posted_ ? 1 : 0) << ",\n";
+    json << "  \"root_layer_attached\": " << (root_layer_attached_ ? 1 : 0)
+         << ",\n";
+    json << "  \"will_begin_main_frame_count\": "
+         << will_begin_main_frame_count_ << ",\n";
+    json << "  \"begin_main_frame_count\": " << begin_main_frame_count_
+         << ",\n";
+    json << "  \"did_begin_main_frame_count\": "
+         << did_begin_main_frame_count_ << ",\n";
+    json << "  \"update_layer_tree_host_count\": "
+         << update_layer_tree_host_count_ << ",\n";
+    json << "  \"did_run_begin_main_frame_count\": "
+         << did_run_begin_main_frame_count_ << ",\n";
+    json << "  \"did_commit_count\": " << did_commit_count_ << ",\n";
+    json << "  \"did_submit_compositor_frame_count\": "
+         << did_submit_compositor_frame_count_ << ",\n";
+    json << "  \"did_not_produce_count\": " << did_not_produce_count_
+         << ",\n";
+    json << "  \"last_frame_skipped_reason\": "
+         << last_frame_skipped_reason_ << ",\n";
+    json << "  \"last_did_not_produce_has_damage\": "
+         << last_did_not_produce_has_damage_ << ",\n";
+    json << "  \"gpu_context_created\": " << (gpu_context_created_ ? 1 : 0)
+         << ",\n";
+    json << "  \"raster_context_created\": "
+         << (raster_context_created_ ? 1 : 0) << ",\n";
+    json << "  \"shared_image_interface_available\": "
+         << (shared_image_interface_available_ ? 1 : 0) << ",\n";
+    json << "  \"compositor_frame_submitted\": "
+         << (compositor_frame_submitted_ ? 1 : 0) << ",\n";
+    json << "  \"failure_reason\": "
+         << JsonStringForStandaloneRenderer(failure_reason_) << "\n";
+    json << "}\n";
+    return json.str();
+  }
+
+  void WillBeginMainFrame() override { ++will_begin_main_frame_count_; }
+  void BeginMainFrame(const viz::BeginFrameArgs& args) override {
+    ++begin_main_frame_count_;
+  }
+  void BeginMainFrameNotExpectedSoon() override {}
+  void BeginMainFrameNotExpectedUntil(base::TimeTicks time) override {}
+  void DidBeginMainFrame() override { ++did_begin_main_frame_count_; }
+  void WillUpdateLayers() override {}
+  void DidUpdateLayers() override {}
+  void DidObserveFirstScrollDelay(int source_frame_number,
+                                  base::TimeDelta first_scroll_delay,
+                                  base::TimeTicks first_scroll_timestamp)
+      override {}
+  void OnDeferMainFrameUpdatesChanged(bool defer_status) override {}
+  void OnDeferCommitsChanged(bool defer_status,
+                             cc::PaintHoldingReason reason) override {}
+  void OnCommitRequested() override {}
+  void UpdateLayerTreeHost() override { ++update_layer_tree_host_count_; }
+  void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override {
+  }
+  void UpdateCompositorScrollState(
+      const cc::CompositorCommitData& commit_data) override {}
+  void UpdateAnimatedImageState(
+      const cc::CompositorCommitData& commit_data) override {}
+  void RequestNewLayerTreeFrameSink() override {
+    request_new_layer_tree_frame_sink_seen_ = true;
+    frame_sink_bound_ = false;
+    if (!CreateFrameSink()) {
+      frame_sink_bound_ = false;
+    }
+  }
+  void DidInitializeLayerTreeFrameSink() override {
+    frame_sink_bound_ = true;
+    if (frame_sink_warm_run_loop_) {
+      frame_sink_warm_run_loop_->Quit();
+    }
+  }
+  void DidFailToInitializeLayerTreeFrameSink() override {
+    frame_sink_bound_ = false;
+    if (failure_reason_.empty()) {
+      failure_reason_ =
+          "cc scheduler probe LayerTreeFrameSink initialization failed";
+    }
+    if (frame_sink_warm_run_loop_) {
+      frame_sink_warm_run_loop_->Quit();
+    }
+  }
+  void WillCommit(const cc::CommitState& commit_state) override {}
+  void DidCommit(int source_frame_number,
+                 base::TimeTicks commit_start_time,
+                 base::TimeTicks commit_finish_time) override {
+    ++did_commit_count_;
+  }
+  void DidCommitAndDrawFrame(int source_frame_number) override {}
+  void DidCompletePageScaleAnimation(int source_frame_number) override {}
+  void DidPresentCompositorFrame(
+      uint32_t frame_token,
+      const viz::FrameTimingDetails& frame_timing_details) override {}
+  void RecordStartOfFrameMetrics() override {}
+  void RecordEndOfFrameMetrics(base::TimeTicks frame_begin_time,
+                               cc::ActiveFrameSequenceTrackers trackers)
+      override {}
+  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
+      override {
+    return nullptr;
+  }
+  void NotifyCompositorMetricsTrackerResults(
+      cc::CustomTrackerResults results) override {}
+  void DidRunBeginMainFrame() override {
+    ++did_run_begin_main_frame_count_;
+  }
+  void DidSubmitCompositorFrame() override {
+    ++did_submit_compositor_frame_count_;
+    compositor_frame_submitted_ = true;
+    QuitSchedulerRunLoop();
+  }
+  void DidLoseLayerTreeFrameSink() override {
+    frame_sink_bound_ = false;
+    failure_reason_ = "cc scheduler probe LayerTreeFrameSink was lost";
+  }
+
+  gfx::Size viewport_;
+  cc::LayerTreeSettings settings_;
+  cc::SingleThreadTaskGraphRunner task_graph_runner_;
+  bool task_graph_runner_started_ = false;
+  std::unique_ptr<cc::AnimationHost> animation_host_;
+  viz::ParentLocalSurfaceIdAllocator surface_id_allocator_;
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
+  std::unique_ptr<base::RunLoop> frame_sink_warm_run_loop_;
+  std::unique_ptr<base::RunLoop> scheduler_run_loop_;
+  bool host_created_ = false;
+  bool visible_ = false;
+  bool request_new_layer_tree_frame_sink_seen_ = false;
+  bool frame_sink_bound_ = false;
+  bool frame_sink_id_registered_ = false;
+  bool begin_frame_source_set_ = false;
+  bool post_init_commit_ran_ = false;
+  bool set_needs_commit_posted_ = false;
+  bool root_layer_attached_ = false;
+  int will_begin_main_frame_count_ = 0;
+  int begin_main_frame_count_ = 0;
+  int did_begin_main_frame_count_ = 0;
+  int update_layer_tree_host_count_ = 0;
+  int did_run_begin_main_frame_count_ = 0;
+  int did_commit_count_ = 0;
+  int did_submit_compositor_frame_count_ = 0;
+  int did_not_produce_count_ = 0;
+  int last_frame_skipped_reason_ = -1;
+  int last_did_not_produce_has_damage_ = -1;
+  bool gpu_context_created_ = false;
+  bool raster_context_created_ = false;
+  bool shared_image_interface_available_ = false;
+  bool compositor_frame_submitted_ = false;
+  bool viz_display_created_ = false;
+  bool skia_gpu_reached_ = false;
+  bool copy_output_requested_ = false;
+  bool copy_output_completed_ = false;
+  bool copy_output_succeeded_ = false;
+  std::vector<uint8_t> copy_output_png_;
+  std::string copy_output_failure_;
+  std::string failure_reason_;
 };
 
 struct LiveFramePaintProbeCache {
@@ -1999,8 +2675,12 @@ struct LiveFramePaintProbeCache {
   double timing_paint_artifact_generation_ms = 0.0;
   double timing_paint_artifact_audit_ms = 0.0;
   double timing_paint_artifact_extraction_ms = 0.0;
+  double timing_cc_composite_ms = 0.0;
   bool timing_cache_hit = false;
+  bool timing_reused_live_document = false;
+  bool timing_rebuilt_for_attributes = false;
   bool full_paint_artifact_audit = false;
+  bool collect_frame_diagnostics = true;
   bool trace_stages = false;
   std::string lifecycle_stop;
   ImageReachabilityDiagnostics image_reachability;
@@ -2079,6 +2759,78 @@ void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
   }
 }
 
+void SyncStandaloneCcHostStateForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache) {
+  if (!cache.cc_layer_host) {
+    cache.cc_host_created = false;
+    cache.cc_attach_attempted = false;
+    cache.cc_root_layer_attached = false;
+    cache.cc_commit_requested = false;
+    cache.cc_frame_sink_requested = false;
+    cache.cc_frame_sink_bound = false;
+    cache.cc_compositor_frame_submitted = false;
+    cache.cc_gpu_context_created = false;
+    cache.cc_raster_context_created = false;
+    cache.cc_shared_image_interface_available = false;
+    cache.cc_viz_display_created = false;
+    cache.cc_skia_gpu_reached = false;
+    cache.cc_commit_count = 0;
+    cache.cc_frame_sink_failure_reason.clear();
+    return;
+  }
+
+  cache.cc_host_created = cache.cc_layer_host->host_created();
+  cache.cc_attach_attempted = cache.cc_layer_host->attach_attempted();
+  cache.cc_root_layer_attached = cache.cc_layer_host->root_layer_attached();
+  cache.cc_commit_requested = cache.cc_layer_host->commit_requested();
+  cache.cc_frame_sink_requested = cache.cc_layer_host->frame_sink_requested();
+  cache.cc_frame_sink_bound = cache.cc_layer_host->frame_sink_bound();
+  cache.cc_compositor_frame_submitted =
+      cache.cc_layer_host->compositor_frame_submitted();
+  cache.cc_gpu_context_created = cache.cc_layer_host->gpu_context_created();
+  cache.cc_raster_context_created =
+      cache.cc_layer_host->raster_context_created();
+  cache.cc_shared_image_interface_available =
+      cache.cc_layer_host->shared_image_interface_available();
+  cache.cc_viz_display_created = cache.cc_layer_host->viz_display_created();
+  cache.cc_skia_gpu_reached = cache.cc_layer_host->skia_gpu_reached();
+  cache.cc_commit_count = cache.cc_layer_host->commit_count();
+  cache.cc_frame_sink_failure_reason =
+      cache.cc_layer_host->frame_sink_failure_reason();
+}
+
+using StandaloneProbeClock = std::chrono::steady_clock;
+
+double StandaloneProbeElapsedMs(StandaloneProbeClock::time_point start,
+                                StandaloneProbeClock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
+bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache,
+    const char* before_stage,
+    const char* after_stage) {
+  SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+  if (!cache.cc_layer_host || !cache.cc_layer_host->root_layer_attached()) {
+    return false;
+  }
+
+  TraceLiveFrameProbeStage(before_stage);
+  cache.cc_frame_sink_failure_reason.clear();
+  if (cache.copy_output_png_requested) {
+    cache.cc_layer_host->RequestNextCopyOutputPng();
+  }
+  const auto composite_start = StandaloneProbeClock::now();
+  const bool submitted =
+      cache.cc_layer_host->CompositeForTest(&cache.cc_frame_sink_failure_reason);
+  cache.timing_cc_composite_ms +=
+      StandaloneProbeElapsedMs(composite_start, StandaloneProbeClock::now());
+  ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
+  SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+  TraceLiveFrameProbeStage(after_stage);
+  return submitted;
+}
+
 class StandaloneCompositorChromeClient final : public EmptyChromeClient {
  public:
   explicit StandaloneCompositorChromeClient(LiveFramePaintProbeCache* cache)
@@ -2097,28 +2849,8 @@ class StandaloneCompositorChromeClient final : public EmptyChromeClient {
         std::move(layer), gfx::Size(cache_->viewport_width,
                                     cache_->viewport_height),
         &cache_->cc_attach_failure_reason);
-    cache_->cc_host_created = cache_->cc_layer_host->host_created();
-    cache_->cc_attach_attempted = cache_->cc_layer_host->attach_attempted();
+    SyncStandaloneCcHostStateForStandaloneRenderer(*cache_);
     cache_->cc_root_layer_attached = attached;
-    cache_->cc_commit_requested = cache_->cc_layer_host->commit_requested();
-    cache_->cc_frame_sink_requested =
-        cache_->cc_layer_host->frame_sink_requested();
-    cache_->cc_frame_sink_bound = cache_->cc_layer_host->frame_sink_bound();
-    cache_->cc_compositor_frame_submitted =
-        cache_->cc_layer_host->compositor_frame_submitted();
-    cache_->cc_gpu_context_created =
-        cache_->cc_layer_host->gpu_context_created();
-    cache_->cc_raster_context_created =
-        cache_->cc_layer_host->raster_context_created();
-    cache_->cc_shared_image_interface_available =
-        cache_->cc_layer_host->shared_image_interface_available();
-    cache_->cc_viz_display_created =
-        cache_->cc_layer_host->viz_display_created();
-    cache_->cc_skia_gpu_reached =
-        cache_->cc_layer_host->skia_gpu_reached();
-    cache_->cc_commit_count = cache_->cc_layer_host->commit_count();
-    cache_->cc_frame_sink_failure_reason =
-        cache_->cc_layer_host->frame_sink_failure_reason();
   }
 
   cc::AnimationHost* GetCompositorAnimationHost(LocalFrame& frame) const override {
@@ -2129,13 +2861,6 @@ class StandaloneCompositorChromeClient final : public EmptyChromeClient {
  private:
   LiveFramePaintProbeCache* cache_;
 };
-
-using StandaloneProbeClock = std::chrono::steady_clock;
-
-double StandaloneProbeElapsedMs(StandaloneProbeClock::time_point start,
-                                StandaloneProbeClock::time_point end) {
-  return std::chrono::duration<double, std::milli>(end - start).count();
-}
 
 void TraceLiveFrameProbeStage(const char* stage) {
   LiveFramePaintProbeCache& cache = ProbeCache();
@@ -8576,37 +9301,10 @@ ParseElementAttributesForStandaloneRenderer(const std::string& serialized) {
 bool AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
     const std::string& html,
     const std::unordered_map<std::string, std::string>& attributes) {
-  if (attributes.empty()) {
-    return false;
-  }
-  const std::string lower_html = LowerAsciiForStandaloneRenderer(html);
-  bool selector_mentions_changed_attribute = false;
-  for (const auto& [key, value] : attributes) {
-    const size_t separator = key.find(':');
-    if (separator == std::string::npos || separator + 1 >= key.size()) {
-      continue;
-    }
-    const std::string attribute_name =
-        LowerAsciiForStandaloneRenderer(key.substr(separator + 1));
-    if (lower_html.find("[" + attribute_name) != std::string::npos) {
-      selector_mentions_changed_attribute = true;
-      break;
-    }
-  }
-  if (!selector_mentions_changed_attribute) {
-    return false;
-  }
-
-  static constexpr const char* kRetainedBoundarySensitiveCssTokens[] = {
-      "-webkit-mask", "mask-image", "mask:", "opacity:", "transform:",
-      "filter:", "backdrop-filter:", "clip-path:", "clip:", "box-shadow:",
-      "text-shadow:", "overflow:", "overflow-x:", "overflow-y:",
-      "scrollbar", "z-index:", "order:"};
-  for (const char* token : kRetainedBoundarySensitiveCssTokens) {
-    if (lower_html.find(token) != std::string::npos) {
-      return true;
-    }
-  }
+  // Blink's live attribute mutation path now drives style invalidation,
+  // property-tree updates, and cc commits for these cases. Rebuilding the
+  // standalone document here defeats resource/layer retention on every
+  // effective attribute update.
   return false;
 }
 
@@ -11267,231 +11965,20 @@ int CountCcLayersForStandaloneRenderer(const cc::Layer* layer) {
   return count;
 }
 
-LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
-  const auto total_start = StandaloneProbeClock::now();
-  EnsureWtfInitializedForStandaloneRenderer();
-  LiveFramePaintProbeCache& cache = ProbeCache();
-  const std::string input_html = body_html ? body_html : "";
-  if (cache.initialized && cache.body_html == input_html) {
-    cache.timing_cache_hit = true;
-    return cache.result;
-  }
-  const bool rebuild_for_attribute_mutation =
-      cache.element_attributes_changed_since_probe &&
-      (AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
-           input_html, cache.requested_element_attributes_by_id_and_name) ||
-       AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
-           input_html, cache.applied_element_attributes_by_id_and_name));
-  const bool html_content_already_loaded =
-      cache.holder && cache.body_html == input_html &&
-      !rebuild_for_attribute_mutation;
-  const auto setup_start = StandaloneProbeClock::now();
-  html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
-  StandaloneRendererResetImageReachabilityDiagnostics();
-  StandaloneRendererResetOutOfFlowDiagnostics();
-  StandaloneRendererResetMediaQueryDiagnostics();
-  StandaloneRendererResetListItemFactoryDiagnostics();
-  ResetStandaloneStackingPaintProvenanceForProbe();
-  g_standalone_css_animation_timeline_update_called = 0;
-  g_standalone_css_animation_update_called = 0;
-  g_standalone_css_transition_update_called = 0;
-  g_standalone_document_animations_update_called = 0;
-  g_standalone_page_animator_service_called = 0;
-  cache.image_reachability = ImageReachabilityDiagnostics();
-  cache.image_paint_into_rect = ImagePaintIntoRectDiagnostics();
-  cache.timing_total_ms = 0.0;
-  cache.timing_input_setup_ms = 0.0;
-  cache.timing_html_document_setup_ms = 0.0;
-  cache.timing_style_update_ms = 0.0;
-  cache.timing_layout_lifecycle_ms = 0.0;
-  cache.timing_prepaint_and_paint_lifecycle_ms = 0.0;
-  cache.timing_paint_artifact_generation_ms = 0.0;
-  cache.timing_paint_artifact_audit_ms = 0.0;
-  cache.timing_paint_artifact_extraction_ms = 0.0;
-  cache.timing_cache_hit = false;
-  cache.hit_test_entries.clear();
-  cache.scrollable_element_entries.clear();
-  cache.sticky_update_scroll_area_count = 0;
-  cache.sticky_update_consumed_descendant_count = 0;
-  cache.sticky_update_constrained_after_count = 0;
-  cache.sticky_update_consumed_horizontal_count = 0;
-  cache.sticky_update_consumed_vertical_count = 0;
-  cache.active_animation_count = 0;
-  cache.needs_animation_timing_update = false;
-  cache.needs_lifecycle_update = false;
-  cache.needs_begin_frame = false;
-  cache.compositor_root_layer_available = false;
-  cache.compositor_layer_count = 0;
-  cache.cc_host_created =
-      cache.cc_layer_host && cache.cc_layer_host->host_created();
-  cache.cc_attach_attempted =
-      cache.cc_layer_host && cache.cc_layer_host->attach_attempted();
-  cache.cc_root_layer_attached =
-      cache.cc_layer_host && cache.cc_layer_host->root_layer_attached();
-  cache.cc_commit_requested =
-      cache.cc_layer_host && cache.cc_layer_host->commit_requested();
-  cache.cc_frame_sink_requested =
-      cache.cc_layer_host && cache.cc_layer_host->frame_sink_requested();
-  cache.cc_frame_sink_bound =
-      cache.cc_layer_host && cache.cc_layer_host->frame_sink_bound();
-  cache.cc_compositor_frame_submitted =
-      cache.cc_layer_host &&
-      cache.cc_layer_host->compositor_frame_submitted();
-  cache.cc_gpu_context_created =
-      cache.cc_layer_host && cache.cc_layer_host->gpu_context_created();
-  cache.cc_raster_context_created =
-      cache.cc_layer_host && cache.cc_layer_host->raster_context_created();
-  cache.cc_shared_image_interface_available =
-      cache.cc_layer_host &&
-      cache.cc_layer_host->shared_image_interface_available();
-  cache.cc_viz_display_created =
-      cache.cc_layer_host && cache.cc_layer_host->viz_display_created();
-  cache.cc_skia_gpu_reached =
-      cache.cc_layer_host && cache.cc_layer_host->skia_gpu_reached();
-  cache.cc_commit_count =
-      cache.cc_layer_host ? cache.cc_layer_host->commit_count() : 0;
-  cache.cc_frame_sink_failure_reason =
-      cache.cc_layer_host ? cache.cc_layer_host->frame_sink_failure_reason()
-                          : std::string();
-  LiveFramePaintProbeResult result;
-  TraceLiveFrameProbeStage("before DummyPageHolder");
-  if (!cache.holder) {
-    cache.chrome_client =
-        MakeGarbageCollected<StandaloneCompositorChromeClient>(&cache);
-    cache.holder = new DummyPageHolder(
-        gfx::Size(cache.viewport_width, cache.viewport_height),
-        cache.chrome_client.Get());
-  }
-  TraceLiveFrameProbeStage("after DummyPageHolder");
-  Document& document = cache.holder->GetDocument();
-  document.GetStyleEngine().UpdateViewportSize();
-  TraceLiveFrameProbeStage("after GetDocument");
-  cache.timing_input_setup_ms =
-      StandaloneProbeElapsedMs(setup_start, StandaloneProbeClock::now());
+enum class StandaloneCcFrameAdvanceMode {
+  kCompositeForTest,
+  kSchedulerCallback,
+};
 
-  if (!document.documentElement() || !document.body()) {
-    TraceLiveFrameProbeStage("missing body");
-    return result;
-  }
-
-  Element* head = document.head();
-  if (!head) {
-    head = document.CreateRawElement(html_names::kHeadTag,
-                                     CreateElementFlags::ByCreateElement());
-    if (document.body()) {
-      document.documentElement()->ParserInsertBefore(head, *document.body());
-    } else {
-      document.documentElement()->ParserAppendChild(head);
-    }
-  }
-
-  TraceLiveFrameProbeStage("before SetInnerHTML");
-  const auto html_setup_start = StandaloneProbeClock::now();
-  g_standalone_blink_saw_font_draw_text = false;
-  if (!html_content_already_loaded) {
-    cache.original_element_attribute_values.clear();
-    cache.applied_element_attributes_by_id_and_name.clear();
-    const std::string head_open = "<head>";
-    const std::string head_close = "</head>";
-    const std::string body_close = "</body>";
-    const size_t head_start = input_html.find(head_open);
-    const size_t head_end = input_html.find(head_close);
-    const size_t body_start =
-        head_end == std::string::npos
-            ? std::string::npos
-            : input_html.find("<body", head_end + head_close.size());
-    if (head_start != std::string::npos && head_end != std::string::npos &&
-        body_start != std::string::npos) {
-      const size_t head_content_start = head_start + head_open.size();
-      const std::string head_html =
-          input_html.substr(head_content_start, head_end - head_content_start);
-      const size_t body_open_end = input_html.find('>', body_start);
-      const size_t body_content_start =
-          body_open_end == std::string::npos ? input_html.size()
-                                             : body_open_end + 1;
-      size_t body_end = input_html.rfind(body_close);
-      if (body_end == std::string::npos || body_end < body_content_start) {
-        body_end = input_html.size();
-      }
-      const std::string body_open_tag =
-          body_open_end == std::string::npos
-              ? std::string()
-              : input_html.substr(body_start, body_open_end - body_start + 1);
-      const std::string body_fragment =
-          input_html.substr(body_content_start, body_end - body_content_start);
-      TraceLiveFrameProbeStage("before InstallStyleElements full html");
-      InstallStyleElementsForStandaloneRenderer(document, *head, head_html);
-      TraceLiveFrameProbeStage("after InstallStyleElements full html");
-      const std::string body_class =
-          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "class");
-      if (!body_class.empty()) {
-        document.body()->setAttribute(
-            html_names::kClassAttr, AtomicString(String::FromUtf8(body_class)));
-      }
-      const std::string body_id =
-          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "id");
-      if (!body_id.empty()) {
-        document.body()->setAttribute(html_names::kIdAttr,
-                                      AtomicString(String::FromUtf8(body_id)));
-      }
-      String body_string = String::FromUtf8(body_fragment);
-      if (!body_fragment.empty() && body_string.empty()) {
-        body_string = String(body_fragment);
-      }
-      TraceLiveFrameProbeStage("before body SetInnerHTML full html");
-      StandaloneRendererSetDeferImageAttributeLoads(true);
-      document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
-      StandaloneRendererSetDeferImageAttributeLoads(false);
-      TraceLiveFrameProbeStage("after body SetInnerHTML full html");
-    } else {
-      TraceLiveFrameProbeStage("before InstallStyleElements fragment");
-      InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
-      TraceLiveFrameProbeStage("after InstallStyleElements fragment");
-      const std::string body_fragment =
-          RemoveStyleElementBlocksForStandaloneRenderer(input_html);
-      TraceLiveFrameProbeStage("before body SetInnerHTML fragment");
-      StandaloneRendererSetDeferImageAttributeLoads(true);
-      document.body()->SetInnerHTMLWithoutTrustedTypes(
-          String::FromUtf8(body_fragment));
-      StandaloneRendererSetDeferImageAttributeLoads(false);
-      TraceLiveFrameProbeStage("after body SetInnerHTML fragment");
-    }
-  }
-  TraceLiveFrameProbeStage("before ApplyElementAttributes");
-  ApplyElementAttributesForStandaloneRenderer(
-      document, cache.requested_element_attributes_by_id_and_name,
-      &cache.original_element_attribute_values,
-      &cache.applied_element_attributes_by_id_and_name);
-  TraceLiveFrameProbeStage("after ApplyElementAttributes");
-  cache.element_attributes_changed_since_probe = false;
-  TraceLiveFrameProbeStage("after SetInnerHTML");
-  cache.timing_html_document_setup_ms =
-      StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
-  TraceLiveFrameProbeStage("before static image loads");
-  StartStandaloneImageLoadsForStaticRender(document);
-  RunStandaloneImageLoadingTasksForStaticRender();
-  CompleteStandaloneImageLoadsForStaticRender(document);
-  TraceLiveFrameProbeStage("after static image loads");
-  TraceLiveFrameProbeStage("before image reachability");
-  cache.image_reachability =
-      CollectImageReachabilityForStandaloneRenderer(document, input_html);
-  TraceLiveFrameProbeStage("after image reachability");
-  TraceLiveFrameProbeStage("before render blocking unblock");
-  document.RenderBlockingResourceUnblocked();
-  TraceLiveFrameProbeStage("after render blocking unblock");
-  if (LifecycleStopEqualsForStandaloneRenderer("html")) {
-    result.lifecycle_reached_paint_clean = 0;
-    cache.body_html = input_html;
-    cache.raw_paint_artifact_audit_json =
-        "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"html\","
-        "\"status\":\"stopped_after_html\"}";
-    cache.result = result;
-    cache.initialized = true;
-    return result;
-  }
-  DumpNodeForStandaloneRenderer(*document.body(), 0);
-
-  LocalFrameView& frame_view = cache.holder->GetFrameView();
+std::optional<LiveFramePaintProbeResult>
+UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache,
+    const std::string& input_html,
+    bool html_content_already_loaded,
+    Document& document,
+    LocalFrameView& frame_view,
+    LiveFramePaintProbeResult& result,
+    StandaloneCcFrameAdvanceMode cc_advance_mode) {
   frame_view.SetCanHaveScrollbars(false);
   if (Settings* settings = document.GetSettings()) {
     settings->SetDefaultFontSize(16);
@@ -11682,16 +12169,12 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     TraceLiveFrameProbeStage("after post-lifecycle element scroll offset apply");
   }
   UpdateStickyConstraintsForStandaloneRenderer(frame_view, document);
-  if (cache.cc_layer_host && cache.cc_layer_host->root_layer_attached()) {
-    TraceLiveFrameProbeStage("before standalone cc composite");
-    cache.cc_frame_sink_failure_reason.clear();
-    if (cache.copy_output_png_requested) {
-      cache.cc_layer_host->RequestNextCopyOutputPng();
-    }
-    cache.cc_layer_host->CompositeForTest(
-        &cache.cc_frame_sink_failure_reason);
-    ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
-    TraceLiveFrameProbeStage("after standalone cc composite");
+  if (cc_advance_mode == StandaloneCcFrameAdvanceMode::kCompositeForTest) {
+    SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
+        cache, "before standalone cc composite",
+        "after standalone cc composite");
+  } else {
+    SyncStandaloneCcHostStateForStandaloneRenderer(cache);
   }
   if (cache.scroll_offset_changed || cache.element_scroll_offset_changed ||
       cache.wheel_scroll_changed) {
@@ -11700,32 +12183,309 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         UpdateAllLifecyclePhasesForTestForStandaloneRenderer(frame_view) ? 1
                                                                          : 0;
     TraceLiveFrameProbeStage("after post-scroll lifecycle update");
-    if (cache.cc_layer_host && cache.cc_layer_host->root_layer_attached()) {
-      TraceLiveFrameProbeStage("before post-scroll standalone cc composite");
-      cache.cc_frame_sink_failure_reason.clear();
-      if (cache.copy_output_png_requested) {
-        cache.cc_layer_host->RequestNextCopyOutputPng();
-      }
-      cache.cc_layer_host->CompositeForTest(
-          &cache.cc_frame_sink_failure_reason);
-      ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
-      TraceLiveFrameProbeStage("after post-scroll standalone cc composite");
+    if (cc_advance_mode == StandaloneCcFrameAdvanceMode::kCompositeForTest) {
+      SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
+          cache, "before post-scroll standalone cc composite",
+          "after post-scroll standalone cc composite");
+    } else {
+      SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     }
   }
   UpdateFrameSchedulingStateForStandaloneRenderer(document, frame_view);
   cache.timing_prepaint_and_paint_lifecycle_ms =
       StandaloneProbeElapsedMs(paint_lifecycle_start,
                                StandaloneProbeClock::now());
+  return std::nullopt;
+}
+
+bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache,
+    const std::string& input_html,
+    bool html_content_already_loaded,
+    Document& document,
+    LocalFrameView& frame_view,
+    LiveFramePaintProbeResult& result) {
+  if (!cache.cc_layer_host) {
+    cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
+  }
+  cache.cc_frame_sink_failure_reason.clear();
+  if (!cache.cc_layer_host->EnsureHostForScheduler(
+          gfx::Size(cache.viewport_width, cache.viewport_height),
+          &cache.cc_frame_sink_failure_reason)) {
+    SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+    return false;
+  }
+  if (!cache.cc_layer_host->EnsureFrameSinkReadyForScheduler(
+          &cache.cc_frame_sink_failure_reason)) {
+    SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+    return false;
+  }
+  if (cache.copy_output_png_requested) {
+    cache.cc_layer_host->RequestNextCopyOutputPng();
+  }
+
+  std::optional<LiveFramePaintProbeResult> lifecycle_stop_result;
+  auto pre_attach_root = [&cache, &frame_view]() {
+    TraceLiveFrameProbeStage("before standalone cc scheduler PAC root preattach");
+    frame_view.EnsurePaintArtifactCompositorRootLayerAttachedForStandaloneRenderer();
+    SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+    TraceLiveFrameProbeStage("after standalone cc scheduler PAC root preattach");
+  };
+  auto update = [&cache, &input_html, html_content_already_loaded, &document,
+                 &frame_view, &result, &lifecycle_stop_result]() {
+    lifecycle_stop_result =
+        UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
+            cache, input_html, html_content_already_loaded, document,
+            frame_view, result,
+            StandaloneCcFrameAdvanceMode::kSchedulerCallback);
+  };
+
+  TraceLiveFrameProbeStage("before standalone cc scheduler frame");
+  const auto scheduler_start = StandaloneProbeClock::now();
+  const bool submitted =
+      cache.cc_layer_host->ScheduleFrameWithPendingLayerTreeUpdateForScheduler(
+          std::move(pre_attach_root), std::move(update),
+          &cache.cc_frame_sink_failure_reason);
+  cache.timing_cc_composite_ms +=
+      StandaloneProbeElapsedMs(scheduler_start, StandaloneProbeClock::now());
+  ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
+  SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+  TraceLiveFrameProbeStage("after standalone cc scheduler frame");
+  if (lifecycle_stop_result) {
+    cache.result = *lifecycle_stop_result;
+  }
+  return submitted;
+}
+
+LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
+  const auto total_start = StandaloneProbeClock::now();
+  EnsureWtfInitializedForStandaloneRenderer();
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const std::string input_html = body_html ? body_html : "";
+  if (cache.initialized && cache.body_html == input_html) {
+    cache.timing_cache_hit = true;
+    return cache.result;
+  }
+  const bool rebuild_for_attribute_mutation =
+      cache.element_attributes_changed_since_probe &&
+      (AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
+           input_html, cache.requested_element_attributes_by_id_and_name) ||
+       AttributeMutationRequiresDocumentRebuildForStandaloneRenderer(
+           input_html, cache.applied_element_attributes_by_id_and_name));
+  const bool html_content_already_loaded =
+      cache.holder && cache.body_html == input_html &&
+      !rebuild_for_attribute_mutation;
+  const auto setup_start = StandaloneProbeClock::now();
+  html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
+  StandaloneRendererResetImageReachabilityDiagnostics();
+  StandaloneRendererResetOutOfFlowDiagnostics();
+  StandaloneRendererResetMediaQueryDiagnostics();
+  StandaloneRendererResetListItemFactoryDiagnostics();
+  ResetStandaloneStackingPaintProvenanceForProbe();
+  g_standalone_css_animation_timeline_update_called = 0;
+  g_standalone_css_animation_update_called = 0;
+  g_standalone_css_transition_update_called = 0;
+  g_standalone_document_animations_update_called = 0;
+  g_standalone_page_animator_service_called = 0;
+  cache.image_reachability = ImageReachabilityDiagnostics();
+  cache.image_paint_into_rect = ImagePaintIntoRectDiagnostics();
+  cache.timing_total_ms = 0.0;
+  cache.timing_input_setup_ms = 0.0;
+  cache.timing_html_document_setup_ms = 0.0;
+  cache.timing_style_update_ms = 0.0;
+  cache.timing_layout_lifecycle_ms = 0.0;
+  cache.timing_prepaint_and_paint_lifecycle_ms = 0.0;
+  cache.timing_paint_artifact_generation_ms = 0.0;
+  cache.timing_paint_artifact_audit_ms = 0.0;
+  cache.timing_paint_artifact_extraction_ms = 0.0;
+  cache.timing_cc_composite_ms = 0.0;
+  cache.timing_cache_hit = false;
+  cache.timing_reused_live_document = false;
+  cache.timing_rebuilt_for_attributes = false;
+  cache.timing_reused_live_document = html_content_already_loaded;
+  cache.timing_rebuilt_for_attributes = rebuild_for_attribute_mutation;
+  cache.hit_test_entries.clear();
+  cache.scrollable_element_entries.clear();
+  cache.sticky_update_scroll_area_count = 0;
+  cache.sticky_update_consumed_descendant_count = 0;
+  cache.sticky_update_constrained_after_count = 0;
+  cache.sticky_update_consumed_horizontal_count = 0;
+  cache.sticky_update_consumed_vertical_count = 0;
+  cache.active_animation_count = 0;
+  cache.needs_animation_timing_update = false;
+  cache.needs_lifecycle_update = false;
+  cache.needs_begin_frame = false;
+  cache.compositor_root_layer_available = false;
+  cache.compositor_layer_count = 0;
+  SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+  LiveFramePaintProbeResult result;
+  TraceLiveFrameProbeStage("before DummyPageHolder");
+  if (!cache.holder) {
+    cache.chrome_client =
+        MakeGarbageCollected<StandaloneCompositorChromeClient>(&cache);
+    cache.holder = new DummyPageHolder(
+        gfx::Size(cache.viewport_width, cache.viewport_height),
+        cache.chrome_client.Get());
+  }
+  TraceLiveFrameProbeStage("after DummyPageHolder");
+  Document& document = cache.holder->GetDocument();
+  document.GetStyleEngine().UpdateViewportSize();
+  TraceLiveFrameProbeStage("after GetDocument");
+  cache.timing_input_setup_ms =
+      StandaloneProbeElapsedMs(setup_start, StandaloneProbeClock::now());
+
+  if (!document.documentElement() || !document.body()) {
+    TraceLiveFrameProbeStage("missing body");
+    return result;
+  }
+
+  Element* head = document.head();
+  if (!head) {
+    head = document.CreateRawElement(html_names::kHeadTag,
+                                     CreateElementFlags::ByCreateElement());
+    if (document.body()) {
+      document.documentElement()->ParserInsertBefore(head, *document.body());
+    } else {
+      document.documentElement()->ParserAppendChild(head);
+    }
+  }
+
+  TraceLiveFrameProbeStage("before SetInnerHTML");
+  const auto html_setup_start = StandaloneProbeClock::now();
+  g_standalone_blink_saw_font_draw_text = false;
+  if (!html_content_already_loaded) {
+    cache.original_element_attribute_values.clear();
+    cache.applied_element_attributes_by_id_and_name.clear();
+    const std::string head_open = "<head>";
+    const std::string head_close = "</head>";
+    const std::string body_close = "</body>";
+    const size_t head_start = input_html.find(head_open);
+    const size_t head_end = input_html.find(head_close);
+    const size_t body_start =
+        head_end == std::string::npos
+            ? std::string::npos
+            : input_html.find("<body", head_end + head_close.size());
+    if (head_start != std::string::npos && head_end != std::string::npos &&
+        body_start != std::string::npos) {
+      const size_t head_content_start = head_start + head_open.size();
+      const std::string head_html =
+          input_html.substr(head_content_start, head_end - head_content_start);
+      const size_t body_open_end = input_html.find('>', body_start);
+      const size_t body_content_start =
+          body_open_end == std::string::npos ? input_html.size()
+                                             : body_open_end + 1;
+      size_t body_end = input_html.rfind(body_close);
+      if (body_end == std::string::npos || body_end < body_content_start) {
+        body_end = input_html.size();
+      }
+      const std::string body_open_tag =
+          body_open_end == std::string::npos
+              ? std::string()
+              : input_html.substr(body_start, body_open_end - body_start + 1);
+      const std::string body_fragment =
+          input_html.substr(body_content_start, body_end - body_content_start);
+      TraceLiveFrameProbeStage("before InstallStyleElements full html");
+      InstallStyleElementsForStandaloneRenderer(document, *head, head_html);
+      TraceLiveFrameProbeStage("after InstallStyleElements full html");
+      const std::string body_class =
+          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "class");
+      if (!body_class.empty()) {
+        document.body()->setAttribute(
+            html_names::kClassAttr, AtomicString(String::FromUtf8(body_class)));
+      }
+      const std::string body_id =
+          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "id");
+      if (!body_id.empty()) {
+        document.body()->setAttribute(html_names::kIdAttr,
+                                      AtomicString(String::FromUtf8(body_id)));
+      }
+      String body_string = String::FromUtf8(body_fragment);
+      if (!body_fragment.empty() && body_string.empty()) {
+        body_string = String(body_fragment);
+      }
+      TraceLiveFrameProbeStage("before body SetInnerHTML full html");
+      StandaloneRendererSetDeferImageAttributeLoads(true);
+      document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
+      StandaloneRendererSetDeferImageAttributeLoads(false);
+      TraceLiveFrameProbeStage("after body SetInnerHTML full html");
+    } else {
+      TraceLiveFrameProbeStage("before InstallStyleElements fragment");
+      InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
+      TraceLiveFrameProbeStage("after InstallStyleElements fragment");
+      const std::string body_fragment =
+          RemoveStyleElementBlocksForStandaloneRenderer(input_html);
+      TraceLiveFrameProbeStage("before body SetInnerHTML fragment");
+      StandaloneRendererSetDeferImageAttributeLoads(true);
+      document.body()->SetInnerHTMLWithoutTrustedTypes(
+          String::FromUtf8(body_fragment));
+      StandaloneRendererSetDeferImageAttributeLoads(false);
+      TraceLiveFrameProbeStage("after body SetInnerHTML fragment");
+    }
+  }
+  TraceLiveFrameProbeStage("before ApplyElementAttributes");
+  ApplyElementAttributesForStandaloneRenderer(
+      document, cache.requested_element_attributes_by_id_and_name,
+      &cache.original_element_attribute_values,
+      &cache.applied_element_attributes_by_id_and_name);
+  TraceLiveFrameProbeStage("after ApplyElementAttributes");
+  cache.element_attributes_changed_since_probe = false;
+  TraceLiveFrameProbeStage("after SetInnerHTML");
+  cache.timing_html_document_setup_ms =
+      StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
+  TraceLiveFrameProbeStage("before static image loads");
+  StartStandaloneImageLoadsForStaticRender(document);
+  RunStandaloneImageLoadingTasksForStaticRender();
+  CompleteStandaloneImageLoadsForStaticRender(document);
+  TraceLiveFrameProbeStage("after static image loads");
+  TraceLiveFrameProbeStage("before image reachability");
   cache.image_reachability =
       CollectImageReachabilityForStandaloneRenderer(document, input_html);
+  TraceLiveFrameProbeStage("after image reachability");
+  TraceLiveFrameProbeStage("before render blocking unblock");
+  document.RenderBlockingResourceUnblocked();
+  TraceLiveFrameProbeStage("after render blocking unblock");
+  if (LifecycleStopEqualsForStandaloneRenderer("html")) {
+    result.lifecycle_reached_paint_clean = 0;
+    cache.body_html = input_html;
+    cache.raw_paint_artifact_audit_json =
+        "{\"source\":\"real Blink PaintArtifact\",\"lifecycle_stop\":\"html\","
+        "\"status\":\"stopped_after_html\"}";
+    cache.result = result;
+    cache.initialized = true;
+    return result;
+  }
+  DumpNodeForStandaloneRenderer(*document.body(), 0);
+
+  LocalFrameView& frame_view = cache.holder->GetFrameView();
+  if (cache.lifecycle_stop.empty()) {
+    ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRenderer(
+        cache, input_html, html_content_already_loaded, document, frame_view,
+        result);
+  } else {
+    std::optional<LiveFramePaintProbeResult> lifecycle_stop_result =
+        UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
+            cache, input_html, html_content_already_loaded, document,
+            frame_view, result,
+            StandaloneCcFrameAdvanceMode::kSchedulerCallback);
+    if (lifecycle_stop_result) {
+      return *lifecycle_stop_result;
+    }
+  }
   cache.hit_test_entries.clear();
-  CollectLiveHitTestEntriesForStandaloneRenderer(&document,
-                                                 cache.hit_test_entries);
   cache.scrollable_element_entries.clear();
-  CollectLiveScrollableElementEntriesForStandaloneRenderer(
-      &document, cache.scrollable_element_entries);
-  cache.sticky_position_diagnostics_json =
-      StickyPositionDiagnosticsJsonForStandaloneRenderer(&document);
+  if (cache.collect_frame_diagnostics) {
+    cache.image_reachability =
+        CollectImageReachabilityForStandaloneRenderer(document, input_html);
+    CollectLiveHitTestEntriesForStandaloneRenderer(&document,
+                                                   cache.hit_test_entries);
+    CollectLiveScrollableElementEntriesForStandaloneRenderer(
+        &document, cache.scrollable_element_entries);
+    cache.sticky_position_diagnostics_json =
+        StickyPositionDiagnosticsJsonForStandaloneRenderer(&document);
+  } else {
+    cache.image_reachability = ImageReachabilityDiagnostics();
+    cache.sticky_position_diagnostics_json.clear();
+  }
   if (LifecycleStopEqualsForStandaloneRenderer("paint")) {
     cache.body_html = input_html;
     cache.raw_paint_artifact_audit_json =
@@ -11763,31 +12523,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     cache.artifact_audit_lines.push_back(
         "paint_artifact_compositor root_layer=0 cc_layer_count=0");
   }
-  if (cache.cc_layer_host) {
-    cache.cc_host_created = cache.cc_layer_host->host_created();
-    cache.cc_attach_attempted = cache.cc_layer_host->attach_attempted();
-    cache.cc_root_layer_attached =
-        cache.cc_layer_host->root_layer_attached();
-    cache.cc_commit_requested = cache.cc_layer_host->commit_requested();
-    cache.cc_frame_sink_requested =
-        cache.cc_layer_host->frame_sink_requested();
-    cache.cc_frame_sink_bound = cache.cc_layer_host->frame_sink_bound();
-    cache.cc_compositor_frame_submitted =
-        cache.cc_layer_host->compositor_frame_submitted();
-    cache.cc_gpu_context_created =
-        cache.cc_layer_host->gpu_context_created();
-    cache.cc_raster_context_created =
-        cache.cc_layer_host->raster_context_created();
-    cache.cc_shared_image_interface_available =
-        cache.cc_layer_host->shared_image_interface_available();
-    cache.cc_viz_display_created =
-        cache.cc_layer_host->viz_display_created();
-    cache.cc_skia_gpu_reached =
-        cache.cc_layer_host->skia_gpu_reached();
-    cache.cc_commit_count = cache.cc_layer_host->commit_count();
-    cache.cc_frame_sink_failure_reason =
-        cache.cc_layer_host->frame_sink_failure_reason();
-  }
+  SyncStandaloneCcHostStateForStandaloneRenderer(cache);
   if (cache.cc_host_created || cache.cc_attach_attempted) {
     cache.artifact_audit_lines.push_back(
         "cc_layer_tree_host host=" +
@@ -11812,10 +12548,12 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         " skia_gpu=" +
         std::to_string(cache.cc_skia_gpu_reached ? 1 : 0));
   }
-  SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
-      artifact, cache.hit_test_entries);
-  SortLiveScrollableElementEntriesByPaintOrderForStandaloneRenderer(
-      artifact, cache.scrollable_element_entries);
+  if (cache.collect_frame_diagnostics) {
+    SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
+        artifact, cache.hit_test_entries);
+    SortLiveScrollableElementEntriesByPaintOrderForStandaloneRenderer(
+        artifact, cache.scrollable_element_entries);
+  }
   cache.timing_paint_artifact_generation_ms =
       StandaloneProbeElapsedMs(paint_artifact_start,
                                StandaloneProbeClock::now());
@@ -11823,10 +12561,15 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.timing_total_ms =
       StandaloneProbeElapsedMs(total_start, StandaloneProbeClock::now());
   const auto audit_start = StandaloneProbeClock::now();
-  if (cache.full_paint_artifact_audit) {
-    BuildPaintArtifactAudit(artifact, cache);
+  if (cache.collect_frame_diagnostics) {
+    if (cache.full_paint_artifact_audit) {
+      BuildPaintArtifactAudit(artifact, cache);
+    } else {
+      BuildPaintArtifactRetainedMetadata(artifact, cache);
+    }
   } else {
-    BuildPaintArtifactRetainedMetadata(artifact, cache);
+    cache.raw_paint_artifact_audit_json.clear();
+    cache.artifact_audit_lines.clear();
   }
   cache.timing_paint_artifact_audit_ms =
       StandaloneProbeElapsedMs(audit_start, StandaloneProbeClock::now());
@@ -11837,12 +12580,16 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     return result;
   }
   const auto extraction_start = StandaloneProbeClock::now();
-  ExportDrawOpsForStandaloneRenderer(artifact, cache);
+  if (cache.collect_frame_diagnostics) {
+    ExportDrawOpsForStandaloneRenderer(artifact, cache);
+  } else {
+    cache.exported_draw_ops.clear();
+  }
   cache.timing_paint_artifact_extraction_ms =
       StandaloneProbeElapsedMs(extraction_start, StandaloneProbeClock::now());
   cache.timing_total_ms =
       StandaloneProbeElapsedMs(total_start, StandaloneProbeClock::now());
-  if (!cache.full_paint_artifact_audit) {
+  if (!cache.full_paint_artifact_audit && cache.collect_frame_diagnostics) {
     cache.raw_paint_artifact_audit_json =
         BuildRetainedMetadataTimingJsonForStandaloneRenderer(cache);
   }
@@ -11851,7 +12598,26 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   return result;
 }
 
+std::string RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(
+    int width,
+    int height) {
+  const int safe_width = std::max(1, width);
+  const int safe_height = std::max(1, height);
+  StandaloneCcSchedulerParityProbe probe(gfx::Size(safe_width, safe_height));
+  return probe.Run();
+}
+
 }  // namespace
+
+extern "C" const char*
+StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
+    int width,
+    int height) {
+  static std::string probe_json;
+  probe_json =
+      RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(width, height);
+  return probe_json.c_str();
+}
 
 void ResetStandaloneStackingPaintProvenanceForProbe() {
   StandaloneStackingPaintEventsForProbe().clear();
@@ -11967,12 +12733,9 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
     cache.holder->GetDocument().GetStyleEngine().UpdateViewportSize();
   }
   cache.initialized = false;
-  cache.body_html.clear();
   cache.cc_attach_failure_reason.clear();
   cache.cc_frame_sink_failure_reason.clear();
   cache.element_attributes_changed_since_probe = false;
-  cache.original_element_attribute_values.clear();
-  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -12060,6 +12823,13 @@ void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     int requested) {
   LiveFramePaintProbeCache& cache = ProbeCache();
   const bool next_requested = requested != 0;
+  if (cache.requested_wheel_scroll == next_requested &&
+      std::abs(cache.requested_wheel_x - x) <= 0.001f &&
+      std::abs(cache.requested_wheel_y - y) <= 0.001f &&
+      std::abs(cache.requested_wheel_delta_x - delta_x) <= 0.001f &&
+      std::abs(cache.requested_wheel_delta_y - delta_y) <= 0.001f) {
+    return;
+  }
   cache.requested_wheel_scroll = next_requested;
   cache.requested_wheel_x = x;
   cache.requested_wheel_y = y;
@@ -12103,10 +12873,7 @@ void StandaloneBlinkLiveFrameBridgeSetElementScrollOffsetsForStandaloneRenderer(
   cache.element_scroll_offset_applied = false;
   cache.element_scroll_offset_changed = false;
   cache.initialized = false;
-  cache.body_html.clear();
   cache.element_attributes_changed_since_probe = false;
-  cache.original_element_attribute_values.clear();
-  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -12203,10 +12970,7 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
   cache.requested_hovered_element_id = hovered;
   cache.requested_active_element_id = active;
   cache.initialized = false;
-  cache.body_html.clear();
   cache.element_attributes_changed_since_probe = false;
-  cache.original_element_attribute_values.clear();
-  cache.applied_element_attributes_by_id_and_name.clear();
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
@@ -12283,6 +13047,24 @@ void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRendere
   cache.raw_paint_artifact_audit_json.clear();
 }
 
+void StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
+    int enabled) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool value = enabled != 0;
+  if (cache.collect_frame_diagnostics == value) {
+    return;
+  }
+  cache.collect_frame_diagnostics = value;
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled) {
   ProbeCache().trace_stages = enabled != 0;
@@ -12290,6 +13072,16 @@ void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
 
 int StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer() {
   return ProbeCache().trace_stages ? 1 : 0;
+}
+
+extern "C" int
+StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForCcForStandaloneRenderer() {
+  return StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer();
+}
+
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char* stage) {
+  TraceLiveFrameProbeStage(stage);
 }
 
 void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
@@ -12323,6 +13115,88 @@ int StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
 int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
     const char* body_html) {
   return RunLiveFramePaintProbe(body_html).display_item_count;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingTotalMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_total_ms;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingInputSetupMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_input_setup_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingHtmlDocumentSetupMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_html_document_setup_ms;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingStyleUpdateMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_style_update_ms;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingLayoutLifecycleMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_layout_lifecycle_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingPrepaintAndPaintLifecycleMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_prepaint_and_paint_lifecycle_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingPaintArtifactGenerationMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_paint_artifact_generation_ms;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingPaintArtifactAuditMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_paint_artifact_audit_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingPaintArtifactExtractionMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_paint_artifact_extraction_ms;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingCcCompositeMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_composite_ms;
+}
+
+int StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cache_hit ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeTimingReusedLiveDocumentForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_reused_live_document ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeTimingRebuiltForAttributesForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_rebuilt_for_attributes ? 1 : 0;
 }
 
 int StandaloneBlinkLiveFrameBridgeCompositorRootLayerForStandaloneRenderer(
