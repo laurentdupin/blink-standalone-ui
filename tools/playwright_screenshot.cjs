@@ -209,6 +209,7 @@ async function main() {
           "button",
           "a[href]",
           "[contenteditable]",
+          "[tabindex]",
           "[role='button']",
           "[role='combobox']",
           "[role='textbox']",

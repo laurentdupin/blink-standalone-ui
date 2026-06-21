@@ -16,6 +16,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -402,6 +403,35 @@ void AccumulateWheelInput(std::optional<html_css_renderer::WheelInput>* wheel,
   *wheel = html_css_renderer::WheelInput{position, delta};
 }
 
+void AppendSyntheticSdlClickEventsForCompositorViewer(
+    html_css_renderer::Point point,
+    int repeats,
+    std::deque<SDL_Event>* events) {
+  const int safe_repeats = std::max(1, repeats);
+  for (int i = 0; i < safe_repeats; ++i) {
+    SDL_Event motion{};
+    motion.type = SDL_EVENT_MOUSE_MOTION;
+    motion.motion.x = point.x;
+    motion.motion.y = point.y;
+    motion.motion.state = 0;
+    events->push_back(motion);
+
+    SDL_Event down{};
+    down.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    down.button.x = point.x;
+    down.button.y = point.y;
+    down.button.button = SDL_BUTTON_LEFT;
+    events->push_back(down);
+
+    SDL_Event up{};
+    up.type = SDL_EVENT_MOUSE_BUTTON_UP;
+    up.button.x = point.x;
+    up.button.y = point.y;
+    up.button.button = SDL_BUTTON_LEFT;
+    events->push_back(up);
+  }
+}
+
 html_css_renderer::Point DocumentScrollForCompositorViewer(
     const html_css_renderer::CompositorFrameResult& result) {
   const auto& offsets = result.successor_snapshot.scroll_offsets_by_element_id;
@@ -422,7 +452,8 @@ void PrintUsage() {
       "[--quit-after-ms N] [--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--screenshot-out <png>] [--screenshot-after-ms N] "
       "[--synthetic-input-smoke] [--synthetic-resize WxH] "
-      "[--synthetic-click x,y] [--synthetic-navigation-smoke] "
+      "[--synthetic-click x,y] [--synthetic-sdl-click x,y] "
+      "[--synthetic-sdl-click-repeats N] [--synthetic-navigation-smoke] "
       "[--synthetic-navigation-stress N] "
       "[--synthetic-wheel-burst count,deltaY|count,deltaX,deltaY] "
       "[--trace-stages] [--full-frame-diagnostics]\n"
@@ -661,6 +692,8 @@ int main(int argc, char** argv) {
   std::optional<html_css_renderer::Size> synthetic_resize;
   std::optional<SyntheticWheelBurst> synthetic_wheel_burst;
   std::vector<html_css_renderer::Point> synthetic_click_points;
+  std::vector<html_css_renderer::Point> synthetic_sdl_click_points;
+  int synthetic_sdl_click_repeats = 1;
   bool html_input_provided = false;
   bool resource_root_explicit = false;
   bool resource_base_path_explicit = false;
@@ -818,6 +851,31 @@ int main(int argc, char** argv) {
         return 2;
       }
       synthetic_click_points.push_back(parsed_point);
+    } else if (arg == "--synthetic-sdl-click") {
+      const char* value = next_value();
+      html_css_renderer::Point parsed_point;
+      if (!value || !ParsePoint(value, &parsed_point)) {
+        std::fprintf(stderr, "invalid --synthetic-sdl-click\n");
+        return 2;
+      }
+      synthetic_sdl_click_points.push_back(parsed_point);
+    } else if (arg.rfind("--synthetic-sdl-click=", 0) == 0) {
+      html_css_renderer::Point parsed_point;
+      if (!ParsePoint(arg.substr(22), &parsed_point)) {
+        std::fprintf(stderr, "invalid --synthetic-sdl-click\n");
+        return 2;
+      }
+      synthetic_sdl_click_points.push_back(parsed_point);
+    } else if (arg == "--synthetic-sdl-click-repeats") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      synthetic_sdl_click_repeats = std::max(1, std::atoi(value));
+    } else if (arg.rfind("--synthetic-sdl-click-repeats=", 0) == 0) {
+      synthetic_sdl_click_repeats =
+          std::max(1, std::atoi(arg.substr(30).c_str()));
     } else if (arg == "--synthetic-navigation-smoke") {
       synthetic_navigation_smoke = true;
     } else if (arg == "--synthetic-navigation-stress") {
@@ -1144,6 +1202,60 @@ int main(int argc, char** argv) {
     return load_current_document("reset", false);
   };
 
+  float initial_mouse_x = 0.0f;
+  float initial_mouse_y = 0.0f;
+  const SDL_MouseButtonFlags initial_mouse_buttons =
+      SDL_GetMouseState(&initial_mouse_x, &initial_mouse_y);
+  std::optional<html_css_renderer::PointerState> last_sdl_pointer =
+      html_css_renderer::PointerState{
+          1,
+          html_css_renderer::Point{initial_mouse_x, initial_mouse_y},
+          (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
+
+  auto apply_sdl_mouse_event =
+      [&](const SDL_Event& event, html_css_renderer::FrameInput* next_input,
+          bool* needs_frame) {
+        if (event.type == SDL_EVENT_MOUSE_MOTION) {
+          html_css_renderer::PointerState pointer{
+              1,
+              html_css_renderer::Point{event.motion.x, event.motion.y},
+              (event.motion.state & SDL_BUTTON_LMASK) != 0};
+          if (!last_sdl_pointer ||
+              !SamePointerState(pointer, *last_sdl_pointer)) {
+            next_input->pointers = {pointer};
+            last_sdl_pointer = pointer;
+            *needs_frame = true;
+          }
+          return true;
+        }
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+            event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+          html_css_renderer::PointerState pointer{
+              1,
+              html_css_renderer::Point{event.button.x, event.button.y},
+              event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
+          if (!last_sdl_pointer ||
+              !SamePointerState(pointer, *last_sdl_pointer)) {
+            next_input->pointers = {pointer};
+            last_sdl_pointer = pointer;
+            *needs_frame = true;
+          }
+          return true;
+        }
+        if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+          float mouse_x = 0.0f;
+          float mouse_y = 0.0f;
+          SDL_GetMouseState(&mouse_x, &mouse_y);
+          AccumulateWheelInput(
+              &next_input->wheel, html_css_renderer::Point{mouse_x, mouse_y},
+              html_css_renderer::Point{-event.wheel.x * 48.0f,
+                                       -event.wheel.y * 48.0f});
+          *needs_frame = true;
+          return true;
+        }
+        return false;
+      };
+
   auto run_update_frame =
       [&](const char* reason, html_css_renderer::FrameInput next_input,
           double timeline_seconds) {
@@ -1347,21 +1459,22 @@ int main(int argc, char** argv) {
   uint64_t advanced_update_frames = 0;
   uint64_t idle_waits = 0;
   uint64_t idle_no_frame_ticks = 0;
-  float initial_mouse_x = 0.0f;
-  float initial_mouse_y = 0.0f;
-  const SDL_MouseButtonFlags initial_mouse_buttons =
-      SDL_GetMouseState(&initial_mouse_x, &initial_mouse_y);
-  std::optional<html_css_renderer::PointerState> last_sdl_pointer =
-      html_css_renderer::PointerState{
-          1,
-          html_css_renderer::Point{initial_mouse_x, initial_mouse_y},
-          (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
   enum class NavigationAction {
     kNone,
     kPrevious,
     kNext,
     kReset,
   };
+  std::deque<SDL_Event> pending_synthetic_sdl_events;
+  for (const html_css_renderer::Point& point : synthetic_sdl_click_points) {
+    AppendSyntheticSdlClickEventsForCompositorViewer(
+        point, synthetic_sdl_click_repeats, &pending_synthetic_sdl_events);
+  }
+  if (!pending_synthetic_sdl_events.empty()) {
+    std::fprintf(stderr, "synthetic_sdl_click_queue events=%zu repeats=%d\n",
+                 pending_synthetic_sdl_events.size(),
+                 synthetic_sdl_click_repeats);
+  }
   bool running = true;
   while (running) {
     SDL_Event event;
@@ -1377,15 +1490,19 @@ int main(int argc, char** argv) {
       if (event.type == SDL_EVENT_QUIT ||
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
+        return false;
       } else if (event.type == SDL_EVENT_KEY_DOWN &&
                  event.key.key == SDLK_F1) {
         navigation_action = NavigationAction::kPrevious;
+        return false;
       } else if (event.type == SDL_EVENT_KEY_DOWN &&
                  event.key.key == SDLK_F2) {
         navigation_action = NavigationAction::kNext;
+        return false;
       } else if (event.type == SDL_EVENT_KEY_DOWN &&
                  event.key.key == SDLK_F5) {
         navigation_action = NavigationAction::kReset;
+        return false;
       } else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
         const html_css_renderer::Size new_viewport =
@@ -1396,39 +1513,12 @@ int main(int argc, char** argv) {
           next_input.viewport = new_viewport;
           needs_frame = true;
         }
-      } else if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        html_css_renderer::PointerState pointer{
-            1,
-            html_css_renderer::Point{event.motion.x, event.motion.y},
-            (event.motion.state & SDL_BUTTON_LMASK) != 0};
-        if (!last_sdl_pointer ||
-            !SamePointerState(pointer, *last_sdl_pointer)) {
-          next_input.pointers = {pointer};
-          last_sdl_pointer = pointer;
-          needs_frame = true;
-        }
-      } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
-                 event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        html_css_renderer::PointerState pointer{
-            1,
-            html_css_renderer::Point{event.button.x, event.button.y},
-            event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
-        if (!last_sdl_pointer ||
-            !SamePointerState(pointer, *last_sdl_pointer)) {
-          next_input.pointers = {pointer};
-          last_sdl_pointer = pointer;
-          needs_frame = true;
-        }
-      } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        float mouse_x = 0.0f;
-        float mouse_y = 0.0f;
-        SDL_GetMouseState(&mouse_x, &mouse_y);
-        AccumulateWheelInput(
-            &next_input.wheel, html_css_renderer::Point{mouse_x, mouse_y},
-            html_css_renderer::Point{-event.wheel.x * 48.0f,
-                                     -event.wheel.y * 48.0f});
-        needs_frame = true;
+        return false;
+      } else if (apply_sdl_mouse_event(event, &next_input, &needs_frame)) {
+        return needs_frame && (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                               event.type == SDL_EVENT_MOUSE_BUTTON_UP);
       }
+      return false;
     };
 
     auto screenshot_due = [&]() {
@@ -1438,7 +1528,12 @@ int main(int argc, char** argv) {
                  static_cast<uint64_t>(screenshot_after_ms);
     };
 
-    if (!needs_frame && !screenshot_due()) {
+    bool flush_frame_now = false;
+    if (!pending_synthetic_sdl_events.empty()) {
+      event = pending_synthetic_sdl_events.front();
+      pending_synthetic_sdl_events.pop_front();
+      flush_frame_now = handle_event(event);
+    } else if (!needs_frame && !screenshot_due()) {
       int wait_ms = 50;
       const uint64_t now_ms = SDL_GetTicks();
       if (!screenshot_out.empty() && !screenshot_written &&
@@ -1460,14 +1555,14 @@ int main(int argc, char** argv) {
       }
       wait_ms = std::max(0, wait_ms);
       if (SDL_WaitEventTimeout(&event, wait_ms)) {
-        handle_event(event);
+        flush_frame_now = handle_event(event);
       } else {
         ++idle_waits;
       }
     }
 
-    while (SDL_PollEvent(&event)) {
-      handle_event(event);
+    while (!flush_frame_now && SDL_PollEvent(&event)) {
+      flush_frame_now = handle_event(event);
     }
 
     if (navigation_action != NavigationAction::kNone) {
@@ -1530,6 +1625,11 @@ int main(int argc, char** argv) {
     }
     if (needs_frame)
       SDL_Delay(8);
+    if (!synthetic_sdl_click_points.empty() &&
+        pending_synthetic_sdl_events.empty() && quit_after_ms <= 0 &&
+        !needs_frame) {
+      running = false;
+    }
   }
 
   std::fprintf(stderr,

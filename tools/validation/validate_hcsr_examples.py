@@ -247,10 +247,13 @@ def run_interaction_smoke(
         viewport,
         "--quit-after-ms",
         "1200",
-        "--synthetic-input-smoke",
     ]
+    if points:
+        cmd.extend(["--synthetic-sdl-click-repeats", "2"])
+    else:
+        cmd.append("--synthetic-input-smoke")
     for point in points:
-        cmd.extend(["--synthetic-click", f"{point['x']},{point['y']}"])
+        cmd.extend(["--synthetic-sdl-click", f"{point['x']},{point['y']}"])
     exit_code, elapsed_ms, output, timed_out = run_command(
         cmd, interaction_log, timeout_seconds
     )
