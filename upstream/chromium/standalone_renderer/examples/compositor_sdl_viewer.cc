@@ -948,6 +948,13 @@ int main(int argc, char** argv) {
     html_css_renderer::RendererCreateInfo document_renderer = renderer;
     document_renderer.viewport = SdlWindowPixelViewport(window);
     std::string effective_resource_root = resource_root;
+    bool effective_resource_root_explicit = resource_root_explicit;
+    if (!effective_resource_root_explicit &&
+        html_input_mode == HtmlInputMode::kDirectory &&
+        !html_directory_root.empty()) {
+      effective_resource_root = html_directory_root.string();
+      effective_resource_root_explicit = true;
+    }
     std::string effective_resource_base_path = resource_base_path;
     std::string loaded_html_file;
 
@@ -955,7 +962,7 @@ int main(int argc, char** argv) {
       if (!LoadHtmlFileForCompositorViewer(
               html_files[current_html_index], &document_renderer,
               &loaded_html_file, &effective_resource_root,
-              &effective_resource_base_path, resource_root_explicit,
+              &effective_resource_base_path, effective_resource_root_explicit,
               resource_base_path_explicit)) {
         document_load_error_code = 2;
         return false;

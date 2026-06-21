@@ -229,6 +229,7 @@ def read_interactive_points(state_json: Path, max_points: int) -> list[dict[str,
 
 def run_interaction_smoke(
     html_file: Path,
+    examples_root: Path,
     viewer: Path,
     page_dir: Path,
     viewport: str,
@@ -240,6 +241,8 @@ def run_interaction_smoke(
         str(viewer.resolve()),
         "--html-file",
         str(html_file.resolve()),
+        "--resource-root",
+        str(examples_root.resolve()),
         "--viewport",
         viewport,
         "--quit-after-ms",
@@ -289,6 +292,8 @@ def validate_page(
         str(viewer.resolve()),
         "--html-file",
         str(html_file.resolve()),
+        "--resource-root",
+        str(examples_root.resolve()),
         "--viewport",
         viewport,
         "--quit-after-ms",
@@ -346,6 +351,7 @@ def validate_page(
         result.update(
             run_interaction_smoke(
                 html_file,
+                examples_root,
                 viewer,
                 page_dir,
                 viewport,
