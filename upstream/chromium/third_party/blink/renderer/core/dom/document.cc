@@ -2900,6 +2900,8 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   UpdateUseShadowTreesIfNeeded();
 
   UpdateOverscrollCommandTargets();
+#else
+  document_animations_->UpdateAnimationTimingIfNeeded();
 #endif
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
