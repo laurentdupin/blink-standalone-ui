@@ -422,6 +422,7 @@ void PrintFrameStatus(const char* reason,
   std::fprintf(stderr,
                "frame=%llu reason=%s paint_clean=%d root_layer=%d layers=%d "
                "viewport=%dx%d "
+               "cc_output=%dx%d viz_output=%dx%d "
                "chunks=%d display_items=%d begin_frame=%d cc_host=%d "
                "cc_attached=%d cc_commit=%d frame_sink_request=%d "
                "frame_sink_bound=%d gpu_context=%d raster_context=%d "
@@ -432,6 +433,10 @@ void PrintFrameStatus(const char* reason,
                result.compositor_layer_count,
                static_cast<int>(result.successor_snapshot.viewport.width),
                static_cast<int>(result.successor_snapshot.viewport.height),
+               static_cast<int>(result.compositor_output_size.width),
+               static_cast<int>(result.compositor_output_size.height),
+               static_cast<int>(result.viz_display_output_size.width),
+               static_cast<int>(result.viz_display_output_size.height),
                result.paint_chunk_count,
                result.display_item_count, result.needs_begin_frame ? 1 : 0,
                result.cc_host_created ? 1 : 0,
@@ -455,6 +460,7 @@ void PrintPresentationStatus(
                "presentation=%s native_window=%d vulkan_instance=%d "
                "vulkan_queue=%d vulkan_surface=%d vulkan_swapchain=%d "
                "vulkan_present=%d surface=%dx%d viz_manager=%d viz_support=%d "
+               "cc_output=%dx%d viz_output=%dx%d "
                "viz_display=%d cc_host=%d cc_attached=%d cc_commit=%d "
                "frame_sink_request=%d frame_sink_bound=%d gpu_context=%d "
                "raster_context=%d shared_image=%d viz_submit=%d skia_gpu=%d",
@@ -468,6 +474,10 @@ void PrintPresentationStatus(
                static_cast<int>(result.surface_size.height),
                result.viz_frame_sink_manager_created ? 1 : 0,
                result.viz_frame_sink_support_created ? 1 : 0,
+               static_cast<int>(result.compositor_output_size.width),
+               static_cast<int>(result.compositor_output_size.height),
+               static_cast<int>(result.viz_display_output_size.width),
+               static_cast<int>(result.viz_display_output_size.height),
                result.viz_display_created ? 1 : 0,
                result.cc_host_created ? 1 : 0,
                result.cc_root_layer_attached ? 1 : 0,
@@ -752,21 +762,27 @@ int main(int argc, char** argv) {
   presentation = runtime->PresentToNativeWindow(result);
   PrintPresentationStatus("initial", presentation);
   bool screenshot_written = false;
-  if (!screenshot_out.empty() && result.png_snapshot_requested) {
+  auto write_current_screenshot = [&]() {
     if (!result.png_snapshot_available) {
       std::fprintf(stderr, "screenshot capture failed: %s\n",
                    result.png_snapshot_failure.empty()
                        ? "Viz CopyOutput PNG snapshot was not produced"
                        : result.png_snapshot_failure.c_str());
-      return 3;
+      return false;
     }
     if (!WriteBinaryFileForCompositorViewer(screenshot_out,
                                             result.png_snapshot_bytes)) {
-      return 3;
+      return false;
     }
     std::fprintf(stderr, "wrote compositor screenshot: %s\n",
                  fs::absolute(fs::path(screenshot_out)).string().c_str());
     screenshot_written = true;
+    return true;
+  };
+  if (!screenshot_out.empty() && result.png_snapshot_requested) {
+    if (!write_current_screenshot()) {
+      return 3;
+    }
   }
   input.request_png_snapshot = false;
   SDL_SetWindowTitle(window, presentation.vulkan_presented
@@ -828,9 +844,15 @@ int main(int argc, char** argv) {
                         static_cast<int>(synthetic_resize->height));
       html_css_renderer::FrameInput next_input = input;
       next_input.viewport = SdlWindowPixelViewport(window);
+      const bool capture_resized_screenshot =
+          !screenshot_out.empty() && !screenshot_written;
+      next_input.request_png_snapshot = capture_resized_screenshot;
       synthetic_ok = run_update_frame("synthetic_resize", std::move(next_input),
                                       synthetic_time) &&
                      synthetic_ok;
+      if (capture_resized_screenshot && !write_current_screenshot()) {
+        synthetic_ok = false;
+      }
       synthetic_time += 1.0 / 60.0;
     }
     if (synthetic_input_smoke) {
@@ -1011,20 +1033,9 @@ int main(int argc, char** argv) {
       PrintPresentationStatus("update", presentation,
                               include_presentation_diagnostics(presentation));
       if (requested_png_snapshot) {
-        if (!result.png_snapshot_available) {
-          std::fprintf(stderr, "screenshot capture failed: %s\n",
-                       result.png_snapshot_failure.empty()
-                           ? "Viz CopyOutput PNG snapshot was not produced"
-                           : result.png_snapshot_failure.c_str());
+        if (!write_current_screenshot()) {
           return 3;
         }
-        if (!WriteBinaryFileForCompositorViewer(screenshot_out,
-                                                result.png_snapshot_bytes)) {
-          return 3;
-        }
-        std::fprintf(stderr, "wrote compositor screenshot: %s\n",
-                     fs::absolute(fs::path(screenshot_out)).string().c_str());
-        screenshot_written = true;
       }
     } else {
       ++idle_no_frame_ticks;

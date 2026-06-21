@@ -126,6 +126,14 @@ int StandaloneBlinkLiveFrameBridgeCcVizDisplayForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeCcSkiaGpuForStandaloneRenderer(
     const char* body_html);
+int StandaloneBlinkLiveFrameBridgeCcSubmittedOutputSizeForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height);
+int StandaloneBlinkLiveFrameBridgeCcVizDisplayOutputSizeForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height);
 int StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
     const char* body_html,
     char* out,
@@ -846,6 +854,23 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.skia_renderer_gpu_path_reached =
         probe::StandaloneBlinkLiveFrameBridgeCcSkiaGpuForStandaloneRenderer(
             probe_html.c_str()) != 0;
+    int submitted_output_width = 0;
+    int submitted_output_height = 0;
+    if (probe::StandaloneBlinkLiveFrameBridgeCcSubmittedOutputSizeForStandaloneRenderer(
+            probe_html.c_str(), &submitted_output_width,
+            &submitted_output_height)) {
+      result.compositor_output_size =
+          Size{static_cast<float>(submitted_output_width),
+               static_cast<float>(submitted_output_height)};
+    }
+    int viz_output_width = 0;
+    int viz_output_height = 0;
+    if (probe::StandaloneBlinkLiveFrameBridgeCcVizDisplayOutputSizeForStandaloneRenderer(
+            probe_html.c_str(), &viz_output_width, &viz_output_height)) {
+      result.viz_display_output_size =
+          Size{static_cast<float>(viz_output_width),
+               static_cast<float>(viz_output_height)};
+    }
     result.compositor_layer_count =
         probe::StandaloneBlinkLiveFrameBridgeCompositorLayerCountForStandaloneRenderer(
             probe_html.c_str());

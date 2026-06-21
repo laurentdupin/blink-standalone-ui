@@ -460,6 +460,12 @@ void WriteCompositorResultJsonFields(
   file << indent << "\"skia_renderer_gpu_path_reached\": "
        << (result.skia_renderer_gpu_path_reached ? "true" : "false")
        << ",\n";
+  file << indent << "\"compositor_output_size\": {\"width\": "
+       << result.compositor_output_size.width << ", \"height\": "
+       << result.compositor_output_size.height << "},\n";
+  file << indent << "\"viz_display_output_size\": {\"width\": "
+       << result.viz_display_output_size.width << ", \"height\": "
+       << result.viz_display_output_size.height << "},\n";
   file << indent << "\"compositor_layer_count\": "
        << result.compositor_layer_count << ",\n";
   file << indent << "\"paint_chunk_count\": " << result.paint_chunk_count
@@ -522,6 +528,12 @@ bool WriteJson(const std::string& path,
   file << "  \"skia_renderer_gpu_path_reached\": "
        << (result.skia_renderer_gpu_path_reached ? "true" : "false")
        << ",\n";
+  file << "  \"compositor_output_size\": {\"width\": "
+       << result.compositor_output_size.width << ", \"height\": "
+       << result.compositor_output_size.height << "},\n";
+  file << "  \"viz_display_output_size\": {\"width\": "
+       << result.viz_display_output_size.width << ", \"height\": "
+       << result.viz_display_output_size.height << "},\n";
   file << "  \"compositor_layer_count\": " << result.compositor_layer_count
        << ",\n";
   file << "  \"paint_chunk_count\": " << result.paint_chunk_count << ",\n";
@@ -943,7 +955,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::printf("compositor_metrics width=%d height=%d paint_clean=%d root_layer=%d "
+  std::printf("compositor_metrics width=%d height=%d cc_output=%dx%d "
+              "viz_output=%dx%d paint_clean=%d root_layer=%d "
               "cc_host=%d cc_attached=%d cc_commit=%d frame_sink_request=%d "
               "frame_sink_bound=%d gpu_context=%d raster_context=%d "
               "shared_image=%d viz_submit=%d viz_display=%d skia_gpu=%d "
@@ -951,6 +964,10 @@ int main(int argc, char** argv) {
               "display_items=%d\n",
               static_cast<int>(result.successor_snapshot.viewport.width),
               static_cast<int>(result.successor_snapshot.viewport.height),
+              static_cast<int>(result.compositor_output_size.width),
+              static_cast<int>(result.compositor_output_size.height),
+              static_cast<int>(result.viz_display_output_size.width),
+              static_cast<int>(result.viz_display_output_size.height),
               result.paint_clean ? 1 : 0, result.root_layer_available ? 1 : 0,
               result.cc_host_created ? 1 : 0,
               result.cc_root_layer_attached ? 1 : 0,

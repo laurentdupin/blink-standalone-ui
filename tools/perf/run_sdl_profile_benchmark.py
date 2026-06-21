@@ -181,6 +181,20 @@ def validate_row(
             failures.append(f"{label} expected {key}={expected}, got {actual}")
 
 
+def validate_size_field(
+    failures: list[str],
+    row: dict[str, Any] | None,
+    field: str,
+    expected: str,
+    label: str,
+) -> None:
+    if row is None:
+        return
+    actual = row.get(field)
+    if actual != expected:
+        failures.append(f"{label} expected {field}={expected}, got {actual}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--viewer", type=Path, default=DEFAULT_VIEWER)
@@ -292,6 +306,20 @@ def main() -> int:
                 f"synthetic_resize frame expected viewport={args.synthetic_resize}, "
                 f"got {resize_frame.get('viewport')}"
             )
+        validate_size_field(
+            failures,
+            resize_frame,
+            "cc_output",
+            args.synthetic_resize,
+            "synthetic_resize frame",
+        )
+        validate_size_field(
+            failures,
+            resize_frame,
+            "viz_output",
+            args.synthetic_resize,
+            "synthetic_resize frame",
+        )
         if (
             resize_presentation
             and resize_presentation.get("surface") != args.synthetic_resize
@@ -300,6 +328,20 @@ def main() -> int:
                 f"synthetic_resize presentation expected surface={args.synthetic_resize}, "
                 f"got {resize_presentation.get('surface')}"
             )
+        validate_size_field(
+            failures,
+            resize_presentation,
+            "cc_output",
+            args.synthetic_resize,
+            "synthetic_resize presentation",
+        )
+        validate_size_field(
+            failures,
+            resize_presentation,
+            "viz_output",
+            args.synthetic_resize,
+            "synthetic_resize presentation",
+        )
     if "SWAP_ACK" not in output:
         failures.append("missing Chromium Vulkan SWAP_ACK diagnostic")
     for marker in FAILURE_MARKERS:

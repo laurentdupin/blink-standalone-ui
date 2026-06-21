@@ -192,6 +192,8 @@ class VulkanWindowHost::Impl {
     result.viz_display_created = frame.viz_display_created;
     result.skia_renderer_gpu_path_reached =
         frame.skia_renderer_gpu_path_reached;
+    result.compositor_output_size = frame.compositor_output_size;
+    result.viz_display_output_size = frame.viz_display_output_size;
 
     if (!initialized_) {
       SetFailure(result, "Chromium Vulkan presentation host is not initialized");

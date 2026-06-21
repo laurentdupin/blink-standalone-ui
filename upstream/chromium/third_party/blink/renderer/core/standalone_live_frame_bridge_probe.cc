@@ -1174,6 +1174,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       bool* compositor_frame_submitted,
       bool* viz_display_created,
       bool* skia_gpu_reached,
+      gfx::Size* submitted_output_size,
+      gfx::Size* viz_display_output_size,
       bool* copy_output_requested,
       bool* copy_output_completed,
       bool* copy_output_succeeded,
@@ -1197,6 +1199,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         compositor_frame_submitted_(compositor_frame_submitted),
         viz_display_created_(viz_display_created),
         skia_gpu_reached_(skia_gpu_reached),
+        submitted_output_size_(submitted_output_size),
+        viz_display_output_size_(viz_display_output_size),
         copy_output_requested_(copy_output_requested),
         copy_output_completed_(copy_output_completed),
         copy_output_succeeded_(copy_output_succeeded),
@@ -1291,9 +1295,15 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (!frame.render_pass_list.empty()) {
       output_size = frame.render_pass_list.back()->output_rect.size();
     }
+    if (submitted_output_size_) {
+      *submitted_output_size_ = output_size;
+    }
     if (EnsureVizDisplay(output_size)) {
       display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
       display_->Resize(output_size);
+      if (viz_display_output_size_) {
+        *viz_display_output_size_ = output_size;
+      }
     }
     const viz::SubmitResult result = support_->MaybeSubmitCompositorFrame(
         local_surface_id_, std::move(frame), std::move(hit_test_region_list),
@@ -1593,6 +1603,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
+  raw_ptr<gfx::Size> submitted_output_size_ = nullptr;
+  raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<bool> copy_output_requested_ = nullptr;
   raw_ptr<bool> copy_output_completed_ = nullptr;
   raw_ptr<bool> copy_output_succeeded_ = nullptr;
@@ -1718,6 +1730,8 @@ class StandaloneCcLayerHost final
   }
   bool viz_display_created() const { return viz_display_created_; }
   bool skia_gpu_reached() const { return skia_gpu_reached_; }
+  gfx::Size submitted_output_size() const { return submitted_output_size_; }
+  gfx::Size viz_display_output_size() const { return viz_display_output_size_; }
   int commit_count() const { return commit_count_; }
   const std::string& frame_sink_failure_reason() const {
     return frame_sink_failure_reason_;
@@ -1746,7 +1760,7 @@ class StandaloneCcLayerHost final
     if (!EnsureHost(failure_reason)) {
       return false;
     }
-    viewport_ = viewport;
+    UpdateViewportForScheduler(viewport);
     return true;
   }
 
@@ -1811,6 +1825,7 @@ class StandaloneCcLayerHost final
         return false;
       }
     }
+    UpdateViewportForScheduler(viewport_);
     SetPendingLayerTreeUpdateForScheduler(std::move(update));
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     scheduler_frame_run_loop_ = &run_loop;
@@ -1914,6 +1929,38 @@ class StandaloneCcLayerHost final
     commit_requested_ = true;
   }
 
+  void UpdateViewportForScheduler(const gfx::Size& viewport) {
+    if (!layer_tree_host_) {
+      viewport_ = viewport;
+      return;
+    }
+    const bool viewport_changed = viewport_ != viewport;
+    if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
+      surface_id_allocator_.GenerateId();
+    }
+    viewport_ = viewport;
+    TraceLiveFrameProbeStage("cc host scheduler before viewport surface");
+    layer_tree_host_->SetViewportRectAndScale(
+        gfx::Rect(viewport_), /*device_scale_factor=*/1.0f,
+        surface_id_allocator_.GetCurrentLocalSurfaceId());
+    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
+        gfx::Rect(viewport_));
+    layer_tree_host_->SetVisualDeviceViewportSize(viewport_);
+    if (attached_root_layer_) {
+      attached_root_layer_->SetBounds(viewport_);
+    }
+    if (viewport_changed) {
+      next_composite_requires_forced_redraw_ = true;
+      layer_tree_host_->SetNeedsUpdateLayers();
+      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+      if (!inside_scheduler_layer_tree_update_) {
+        layer_tree_host_->SetNeedsCommit();
+      }
+      commit_requested_ = true;
+    }
+    TraceLiveFrameProbeStage("cc host scheduler after viewport surface");
+  }
+
   bool CreateFrameSink() {
     TraceLiveFrameProbeStage("cc host CreateFrameSink begin");
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner =
@@ -1986,7 +2033,8 @@ class StandaloneCcLayerHost final
             g_standalone_native_window_size.IsEmpty() ? gfx::Size(1, 1)
                                                       : g_standalone_native_window_size,
             &compositor_frame_submitted_, &viz_display_created_,
-            &skia_gpu_reached_, &copy_output_requested_,
+            &skia_gpu_reached_, &submitted_output_size_,
+            &viz_display_output_size_, &copy_output_requested_,
             &copy_output_completed_, &copy_output_succeeded_,
             &copy_output_png_, &copy_output_failure_,
             &frame_sink_failure_reason_,
@@ -2134,6 +2182,8 @@ class StandaloneCcLayerHost final
   bool shared_image_interface_available_ = false;
   bool viz_display_created_ = false;
   bool skia_gpu_reached_ = false;
+  gfx::Size submitted_output_size_;
+  gfx::Size viz_display_output_size_;
   bool copy_output_requested_ = false;
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
@@ -2296,7 +2346,8 @@ class StandaloneCcSchedulerParityProbe final
             std::move(compositor_context_provider),
             std::move(worker_context_provider), std::move(main_task_runner),
             viewport_, &compositor_frame_submitted_, &viz_display_created_,
-            &skia_gpu_reached_, &copy_output_requested_,
+            &skia_gpu_reached_, /*submitted_output_size=*/nullptr,
+            /*viz_display_output_size=*/nullptr, &copy_output_requested_,
             &copy_output_completed_, &copy_output_succeeded_,
             &copy_output_png_, &copy_output_failure_, &failure_reason_,
             &begin_frame_source_set_, &did_not_produce_count_,
@@ -2540,6 +2591,8 @@ struct LiveFramePaintProbeCache {
   bool cc_shared_image_interface_available = false;
   bool cc_viz_display_created = false;
   bool cc_skia_gpu_reached = false;
+  gfx::Size cc_submitted_output_size;
+  gfx::Size cc_viz_display_output_size;
   bool copy_output_png_requested = false;
   bool copy_output_png_completed = false;
   bool copy_output_png_succeeded = false;
@@ -2774,6 +2827,8 @@ void SyncStandaloneCcHostStateForStandaloneRenderer(
     cache.cc_shared_image_interface_available = false;
     cache.cc_viz_display_created = false;
     cache.cc_skia_gpu_reached = false;
+    cache.cc_submitted_output_size = gfx::Size();
+    cache.cc_viz_display_output_size = gfx::Size();
     cache.cc_commit_count = 0;
     cache.cc_frame_sink_failure_reason.clear();
     return;
@@ -2794,6 +2849,10 @@ void SyncStandaloneCcHostStateForStandaloneRenderer(
       cache.cc_layer_host->shared_image_interface_available();
   cache.cc_viz_display_created = cache.cc_layer_host->viz_display_created();
   cache.cc_skia_gpu_reached = cache.cc_layer_host->skia_gpu_reached();
+  cache.cc_submitted_output_size =
+      cache.cc_layer_host->submitted_output_size();
+  cache.cc_viz_display_output_size =
+      cache.cc_layer_host->viz_display_output_size();
   cache.cc_commit_count = cache.cc_layer_host->commit_count();
   cache.cc_frame_sink_failure_reason =
       cache.cc_layer_host->frame_sink_failure_reason();
@@ -12725,10 +12784,9 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   g_standalone_blink_viewport_height = clamped_height;
   if (cache.holder) {
     const gfx::Size viewport_size(clamped_width, clamped_height);
-    // LocalFrameView::Resize() enters WebWidget/browser geometry plumbing that
-    // is outside this SDL-hosted embedder boundary. Keep viewport changes in
-    // Blink-owned visual/style state so SDL resize events do not tear down the
-    // active Page/cc host or the HWND-backed Viz output path.
+    LocalFrameView& frame_view = cache.holder->GetFrameView();
+    frame_view.Resize(viewport_size);
+    frame_view.SetNeedsUpdateGeometries();
     cache.holder->GetPage().GetVisualViewport().SetSize(viewport_size);
     cache.holder->GetDocument().GetStyleEngine().UpdateViewportSize();
   }
@@ -13269,6 +13327,36 @@ int StandaloneBlinkLiveFrameBridgeCcSkiaGpuForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);
   return ProbeCache().cc_skia_gpu_reached ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcSubmittedOutputSizeForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height) {
+  RunLiveFramePaintProbe(body_html);
+  const gfx::Size size = ProbeCache().cc_submitted_output_size;
+  if (width) {
+    *width = size.width();
+  }
+  if (height) {
+    *height = size.height();
+  }
+  return size.IsEmpty() ? 0 : 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeCcVizDisplayOutputSizeForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height) {
+  RunLiveFramePaintProbe(body_html);
+  const gfx::Size size = ProbeCache().cc_viz_display_output_size;
+  if (width) {
+    *width = size.width();
+  }
+  if (height) {
+    *height = size.height();
+  }
+  return size.IsEmpty() ? 0 : 1;
 }
 
 int StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(

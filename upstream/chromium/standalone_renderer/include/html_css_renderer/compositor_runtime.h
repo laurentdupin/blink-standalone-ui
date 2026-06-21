@@ -53,6 +53,8 @@ struct CompositorFrameResult {
   bool compositor_frame_submitted = false;
   bool viz_display_created = false;
   bool skia_renderer_gpu_path_reached = false;
+  Size compositor_output_size;
+  Size viz_display_output_size;
   int compositor_layer_count = 0;
   int paint_chunk_count = 0;
   int display_item_count = 0;
@@ -95,6 +97,8 @@ struct NativePresentationResult {
   bool compositor_frame_submitted = false;
   bool skia_renderer_gpu_path_reached = false;
   Size surface_size;
+  Size compositor_output_size;
+  Size viz_display_output_size;
   std::string failure_reason;
   std::vector<std::string> diagnostics;
 };
