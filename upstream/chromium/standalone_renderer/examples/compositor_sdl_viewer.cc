@@ -96,6 +96,15 @@ bool IsHtmlFileForCompositorViewer(const fs::path& path) {
   return extension == ".html" || extension == ".htm";
 }
 
+std::string RelativePathForCompositorViewer(const fs::path& path,
+                                            const fs::path& root) {
+  std::error_code error;
+  fs::path relative_path = fs::relative(path, root, error);
+  if (error)
+    relative_path = path.filename();
+  return relative_path.generic_string();
+}
+
 std::vector<fs::path> EnumerateHtmlFilesForCompositorViewer(
     const fs::path& directory) {
   std::vector<fs::path> files;
@@ -106,22 +115,30 @@ std::vector<fs::path> EnumerateHtmlFilesForCompositorViewer(
   if (!fs::is_directory(absolute_directory, error))
     return files;
 
-  for (const fs::directory_entry& entry :
-       fs::directory_iterator(absolute_directory, error)) {
+  fs::recursive_directory_iterator iterator(
+      absolute_directory, fs::directory_options::skip_permission_denied, error);
+  const fs::recursive_directory_iterator end;
+  while (!error && iterator != end) {
+    const fs::directory_entry& entry = *iterator;
+    std::error_code status_error;
+    if (entry.is_regular_file(status_error)) {
+      const fs::path path = entry.path();
+      if (IsHtmlFileForCompositorViewer(path))
+        files.push_back(fs::absolute(path));
+    }
+    iterator.increment(error);
     if (error)
       break;
-    std::error_code status_error;
-    if (!entry.is_regular_file(status_error))
-      continue;
-    const fs::path path = entry.path();
-    if (IsHtmlFileForCompositorViewer(path))
-      files.push_back(fs::absolute(path));
   }
-  std::sort(files.begin(), files.end(), [](const fs::path& lhs,
-                                           const fs::path& rhs) {
-    return LowerAsciiForCompositorViewer(lhs.filename().string()) <
-           LowerAsciiForCompositorViewer(rhs.filename().string());
-  });
+  std::sort(files.begin(), files.end(),
+            [&](const fs::path& lhs, const fs::path& rhs) {
+              return LowerAsciiForCompositorViewer(
+                         RelativePathForCompositorViewer(
+                             lhs, absolute_directory)) <
+                     LowerAsciiForCompositorViewer(
+                         RelativePathForCompositorViewer(
+                             rhs, absolute_directory));
+            });
   return files;
 }
 
@@ -345,8 +362,8 @@ void PrintUsage() {
       "[--synthetic-navigation-smoke] "
       "[--full-frame-diagnostics]\n"
       "Launching without --html, --html-file, or --html-dir opens a native "
-      "HTML directory picker on Windows. F1/F2 switch files; F5 resets the "
-      "current file.\n"
+      "HTML directory picker on Windows and recursively lists HTML files. "
+      "F1/F2 switch files; F5 resets the current file.\n"
       "SDL owns the host window/event pump only. HTML/CSS frames are driven "
       "through Blink PaintArtifactCompositor/cc/Viz/GPU/Vulkan.\n");
 }
@@ -563,6 +580,7 @@ int main(int argc, char** argv) {
   HtmlInputMode html_input_mode = HtmlInputMode::kNone;
   std::optional<fs::path> html_file_arg;
   std::optional<fs::path> html_directory_arg;
+  fs::path html_directory_root;
   std::vector<fs::path> html_files;
   size_t current_html_index = 0;
   bool inline_html_input = false;
@@ -777,16 +795,15 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "--html-dir requires a directory path\n");
       return 2;
     }
-    const fs::path absolute_html_directory = fs::absolute(*html_directory_arg);
-    html_files =
-        EnumerateHtmlFilesForCompositorViewer(absolute_html_directory);
+    html_directory_root = fs::absolute(*html_directory_arg);
+    html_files = EnumerateHtmlFilesForCompositorViewer(html_directory_root);
     if (html_files.empty()) {
       std::fprintf(stderr, "no .html or .htm files found in directory: %s\n",
-                   absolute_html_directory.string().c_str());
+                   html_directory_root.string().c_str());
       return 2;
     }
-    std::fprintf(stderr, "selected HTML directory: %s (%zu files)\n",
-                 absolute_html_directory.string().c_str(), html_files.size());
+    std::fprintf(stderr, "selected HTML directory: %s (%zu files recursive)\n",
+                 html_directory_root.string().c_str(), html_files.size());
   } else if (html_input_mode == HtmlInputMode::kNone) {
     PrintUsage();
     return 2;
@@ -873,8 +890,14 @@ int main(int argc, char** argv) {
     if (html_files.empty())
       return std::string("no document");
     std::ostringstream label;
+    const std::string path_label =
+        html_input_mode == HtmlInputMode::kDirectory &&
+                !html_directory_root.empty()
+            ? RelativePathForCompositorViewer(html_files[current_html_index],
+                                              html_directory_root)
+            : html_files[current_html_index].filename().string();
     label << "[" << (current_html_index + 1) << "/" << html_files.size()
-          << "] " << html_files[current_html_index].filename().string();
+          << "] " << path_label;
     return label.str();
   };
 
