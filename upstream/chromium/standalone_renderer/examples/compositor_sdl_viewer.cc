@@ -13,6 +13,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -81,6 +82,49 @@ bool WriteBinaryFileForCompositorViewer(const std::string& path,
   return true;
 }
 
+std::string LowerAsciiForCompositorViewer(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) {
+                   return static_cast<char>(std::tolower(c));
+                 });
+  return value;
+}
+
+bool IsHtmlFileForCompositorViewer(const fs::path& path) {
+  const std::string extension =
+      LowerAsciiForCompositorViewer(path.extension().string());
+  return extension == ".html" || extension == ".htm";
+}
+
+std::vector<fs::path> EnumerateHtmlFilesForCompositorViewer(
+    const fs::path& directory) {
+  std::vector<fs::path> files;
+  std::error_code error;
+  fs::path absolute_directory = fs::absolute(directory, error);
+  if (error)
+    absolute_directory = directory;
+  if (!fs::is_directory(absolute_directory, error))
+    return files;
+
+  for (const fs::directory_entry& entry :
+       fs::directory_iterator(absolute_directory, error)) {
+    if (error)
+      break;
+    std::error_code status_error;
+    if (!entry.is_regular_file(status_error))
+      continue;
+    const fs::path path = entry.path();
+    if (IsHtmlFileForCompositorViewer(path))
+      files.push_back(fs::absolute(path));
+  }
+  std::sort(files.begin(), files.end(), [](const fs::path& lhs,
+                                           const fs::path& rhs) {
+    return LowerAsciiForCompositorViewer(lhs.filename().string()) <
+           LowerAsciiForCompositorViewer(rhs.filename().string());
+  });
+  return files;
+}
+
 bool LoadHtmlFileForCompositorViewer(const fs::path& html_path,
                                      html_css_renderer::RendererCreateInfo* renderer,
                                      std::string* html_file,
@@ -115,18 +159,18 @@ bool LoadHtmlFileForCompositorViewer(const fs::path& html_path,
 }
 
 #if defined(_WIN32)
-enum class NativeHtmlDialogStatus {
+enum class NativeDirectoryDialogStatus {
   kSelected,
   kCancelled,
   kFailed,
 };
 
-struct NativeHtmlDialogResult {
-  NativeHtmlDialogStatus status = NativeHtmlDialogStatus::kFailed;
+struct NativeDirectoryDialogResult {
+  NativeDirectoryDialogStatus status = NativeDirectoryDialogStatus::kFailed;
   fs::path path;
 };
 
-NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
+NativeDirectoryDialogResult ShowNativeHtmlDirectoryDialog() {
   HRESULT initialize_result =
       CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED |
                                   COINIT_DISABLE_OLE1DDE);
@@ -137,7 +181,7 @@ NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
   if (FAILED(initialize_result)) {
     std::fprintf(stderr, "failed to initialize file dialog COM: 0x%08lx\n",
                  static_cast<unsigned long>(initialize_result));
-    return {NativeHtmlDialogStatus::kFailed, {}};
+    return {NativeDirectoryDialogStatus::kFailed, {}};
   }
 
   IFileOpenDialog* dialog = nullptr;
@@ -150,19 +194,13 @@ NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
     if (should_uninitialize) {
       CoUninitialize();
     }
-    return {NativeHtmlDialogStatus::kFailed, {}};
+    return {NativeDirectoryDialogStatus::kFailed, {}};
   }
 
-  COMDLG_FILTERSPEC filters[] = {
-      {L"HTML files", L"*.html;*.htm"},
-      {L"All files", L"*.*"},
-  };
-  dialog->SetTitle(L"Open HTML file");
-  dialog->SetFileTypes(static_cast<UINT>(std::size(filters)), filters);
-  dialog->SetFileTypeIndex(1);
+  dialog->SetTitle(L"Open HTML directory");
   DWORD options = 0;
   if (SUCCEEDED(dialog->GetOptions(&options))) {
-    dialog->SetOptions(options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST |
+    dialog->SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM |
                        FOS_PATHMUSTEXIST);
   }
 
@@ -172,7 +210,7 @@ NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
     if (should_uninitialize) {
       CoUninitialize();
     }
-    return {NativeHtmlDialogStatus::kCancelled, {}};
+    return {NativeDirectoryDialogStatus::kCancelled, {}};
   }
   if (FAILED(result)) {
     std::fprintf(stderr, "file dialog failed: 0x%08lx\n",
@@ -181,7 +219,7 @@ NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
     if (should_uninitialize) {
       CoUninitialize();
     }
-    return {NativeHtmlDialogStatus::kFailed, {}};
+    return {NativeDirectoryDialogStatus::kFailed, {}};
   }
 
   IShellItem* item = nullptr;
@@ -193,20 +231,20 @@ NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
     if (should_uninitialize) {
       CoUninitialize();
     }
-    return {NativeHtmlDialogStatus::kFailed, {}};
+    return {NativeDirectoryDialogStatus::kFailed, {}};
   }
 
   PWSTR selected_path = nullptr;
   result = item->GetDisplayName(SIGDN_FILESYSPATH, &selected_path);
-  NativeHtmlDialogResult dialog_result;
+  NativeDirectoryDialogResult dialog_result;
   if (SUCCEEDED(result) && selected_path) {
-    dialog_result.status = NativeHtmlDialogStatus::kSelected;
+    dialog_result.status = NativeDirectoryDialogStatus::kSelected;
     dialog_result.path = fs::path(selected_path);
     CoTaskMemFree(selected_path);
   } else {
     std::fprintf(stderr, "file dialog path conversion failed: 0x%08lx\n",
                  static_cast<unsigned long>(result));
-    dialog_result.status = NativeHtmlDialogStatus::kFailed;
+    dialog_result.status = NativeDirectoryDialogStatus::kFailed;
   }
 
   item->Release();
@@ -217,22 +255,22 @@ NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
   return dialog_result;
 }
 #else
-enum class NativeHtmlDialogStatus {
+enum class NativeDirectoryDialogStatus {
   kSelected,
   kCancelled,
   kFailed,
 };
 
-struct NativeHtmlDialogResult {
-  NativeHtmlDialogStatus status = NativeHtmlDialogStatus::kFailed;
+struct NativeDirectoryDialogResult {
+  NativeDirectoryDialogStatus status = NativeDirectoryDialogStatus::kFailed;
   fs::path path;
 };
 
-NativeHtmlDialogResult ShowNativeHtmlFileDialog() {
+NativeDirectoryDialogResult ShowNativeHtmlDirectoryDialog() {
   std::fprintf(stderr,
-               "native HTML file picker is only implemented on Windows; pass "
-               "--html-file <path>\n");
-  return {NativeHtmlDialogStatus::kFailed, {}};
+               "native HTML directory picker is only implemented on Windows; "
+               "pass --html-dir <directory> or --html-file <path>\n");
+  return {NativeDirectoryDialogStatus::kFailed, {}};
 }
 #endif
 
@@ -300,13 +338,15 @@ void PrintUsage() {
   std::fprintf(
       stderr,
       "Usage: blink_standalone_sdl_viewer_skia --html <markup>|--html-file <path> "
-      "[--css <css>|--css-file <path>] [--viewport WxH] [--quit-after-ms N] "
-      "[--paint-artifact-dump <path>] [--resource-root <dir>] "
+      "|--html-dir <dir> [--css <css>|--css-file <path>] [--viewport WxH] "
+      "[--quit-after-ms N] [--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--screenshot-out <png>] [--screenshot-after-ms N] "
       "[--synthetic-input-smoke] [--synthetic-resize WxH] "
+      "[--synthetic-navigation-smoke] "
       "[--full-frame-diagnostics]\n"
-      "Launching without --html or --html-file opens a native HTML file "
-      "picker on Windows.\n"
+      "Launching without --html, --html-file, or --html-dir opens a native "
+      "HTML directory picker on Windows. F1/F2 switch files; F5 resets the "
+      "current file.\n"
       "SDL owns the host window/event pump only. HTML/CSS frames are driven "
       "through Blink PaintArtifactCompositor/cc/Viz/GPU/Vulkan.\n");
 }
@@ -514,7 +554,18 @@ int main(int argc, char** argv) {
   html_css_renderer::RendererCreateInfo renderer;
   renderer.viewport = {800.0f, 600.0f};
   std::string css;
-  std::string html_file;
+  enum class HtmlInputMode {
+    kNone,
+    kInline,
+    kFile,
+    kDirectory,
+  };
+  HtmlInputMode html_input_mode = HtmlInputMode::kNone;
+  std::optional<fs::path> html_file_arg;
+  std::optional<fs::path> html_directory_arg;
+  std::vector<fs::path> html_files;
+  size_t current_html_index = 0;
+  bool inline_html_input = false;
   std::string paint_artifact_dump_path;
   std::string resource_root;
   std::string resource_base_path;
@@ -522,6 +573,7 @@ int main(int argc, char** argv) {
   int screenshot_after_ms = 0;
   int quit_after_ms = 0;
   bool synthetic_input_smoke = false;
+  bool synthetic_navigation_smoke = false;
   std::optional<html_css_renderer::Size> synthetic_resize;
   bool html_input_provided = false;
   bool resource_root_explicit = false;
@@ -546,22 +598,48 @@ int main(int argc, char** argv) {
       }
       renderer.html = value;
       html_input_provided = true;
+      html_input_mode = HtmlInputMode::kInline;
+      inline_html_input = true;
     } else if (arg.rfind("--html=", 0) == 0) {
       renderer.html = arg.substr(7);
       html_input_provided = true;
+      html_input_mode = HtmlInputMode::kInline;
+      inline_html_input = true;
     } else if (arg == "--html-file") {
       const char* value = next_value();
       if (!value) {
         PrintUsage();
         return 2;
       }
-      if (!LoadHtmlFileForCompositorViewer(
-              value, &renderer, &html_file, &resource_root,
-              &resource_base_path, resource_root_explicit,
-              resource_base_path_explicit)) {
+      html_file_arg = fs::path(value);
+      html_input_provided = true;
+      html_input_mode = HtmlInputMode::kFile;
+      inline_html_input = false;
+    } else if (arg.rfind("--html-file=", 0) == 0) {
+      html_file_arg = fs::path(arg.substr(12));
+      html_input_provided = true;
+      html_input_mode = HtmlInputMode::kFile;
+      inline_html_input = false;
+    } else if (arg == "--html-dir" || arg == "--directory") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
         return 2;
       }
+      html_directory_arg = fs::path(value);
       html_input_provided = true;
+      html_input_mode = HtmlInputMode::kDirectory;
+      inline_html_input = false;
+    } else if (arg.rfind("--html-dir=", 0) == 0) {
+      html_directory_arg = fs::path(arg.substr(11));
+      html_input_provided = true;
+      html_input_mode = HtmlInputMode::kDirectory;
+      inline_html_input = false;
+    } else if (arg.rfind("--directory=", 0) == 0) {
+      html_directory_arg = fs::path(arg.substr(12));
+      html_input_provided = true;
+      html_input_mode = HtmlInputMode::kDirectory;
+      inline_html_input = false;
     } else if (arg == "--css") {
       const char* value = next_value();
       if (!value) {
@@ -638,6 +716,8 @@ int main(int argc, char** argv) {
       resource_base_path_explicit = true;
     } else if (arg == "--synthetic-input-smoke") {
       synthetic_input_smoke = true;
+    } else if (arg == "--synthetic-navigation-smoke") {
+      synthetic_navigation_smoke = true;
     } else if (arg == "--full-frame-diagnostics") {
       full_frame_diagnostics = true;
     } else if (arg == "--synthetic-resize") {
@@ -669,46 +749,50 @@ int main(int argc, char** argv) {
   }
 
   if (!html_input_provided) {
-    std::fprintf(stderr, "no HTML input provided; opening native HTML file picker...\n");
-    NativeHtmlDialogResult selected_html = ShowNativeHtmlFileDialog();
-    if (selected_html.status == NativeHtmlDialogStatus::kCancelled) {
-      std::fprintf(stderr, "no HTML file selected; exiting\n");
+    std::fprintf(
+        stderr,
+        "no HTML input provided; opening native HTML directory picker...\n");
+    NativeDirectoryDialogResult selected_directory =
+        ShowNativeHtmlDirectoryDialog();
+    if (selected_directory.status == NativeDirectoryDialogStatus::kCancelled) {
+      std::fprintf(stderr, "no HTML directory selected; exiting\n");
       return 0;
     }
-    if (selected_html.status != NativeHtmlDialogStatus::kSelected ||
-        selected_html.path.empty()) {
+    if (selected_directory.status != NativeDirectoryDialogStatus::kSelected ||
+        selected_directory.path.empty()) {
       return 2;
     }
-    if (!LoadHtmlFileForCompositorViewer(
-            selected_html.path, &renderer, &html_file, &resource_root,
-            &resource_base_path, resource_root_explicit,
-            resource_base_path_explicit)) {
+    html_directory_arg = selected_directory.path;
+    html_input_mode = HtmlInputMode::kDirectory;
+  }
+
+  if (html_input_mode == HtmlInputMode::kFile) {
+    if (!html_file_arg) {
+      std::fprintf(stderr, "--html-file requires a file path\n");
       return 2;
     }
-    std::fprintf(stderr, "selected HTML file: %s\n", html_file.c_str());
+    html_files.push_back(fs::absolute(*html_file_arg));
+  } else if (html_input_mode == HtmlInputMode::kDirectory) {
+    if (!html_directory_arg) {
+      std::fprintf(stderr, "--html-dir requires a directory path\n");
+      return 2;
+    }
+    const fs::path absolute_html_directory = fs::absolute(*html_directory_arg);
+    html_files =
+        EnumerateHtmlFilesForCompositorViewer(absolute_html_directory);
+    if (html_files.empty()) {
+      std::fprintf(stderr, "no .html or .htm files found in directory: %s\n",
+                   absolute_html_directory.string().c_str());
+      return 2;
+    }
+    std::fprintf(stderr, "selected HTML directory: %s (%zu files)\n",
+                 absolute_html_directory.string().c_str(), html_files.size());
+  } else if (html_input_mode == HtmlInputMode::kNone) {
+    PrintUsage();
+    return 2;
   }
   if (!css.empty())
     renderer.stylesheets.push_back({"viewer", css});
-  if (!resource_root.empty()) {
-    html_css_renderer::SetStandaloneResourceProviderResourceRoot(resource_root);
-  }
-  if (!resource_base_path.empty()) {
-    html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
-        resource_base_path);
-  }
-
-  html_css_renderer::CompositorRuntimeCreateInfo create_info;
-  create_info.renderer = renderer;
-  create_info.enable_paint_artifact_audit = !paint_artifact_dump_path.empty();
-  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
-      html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
-  std::vector<std::string> init_diagnostics;
-  if (!runtime || !runtime->Initialize(&init_diagnostics)) {
-    std::fprintf(stderr, "failed to initialize Chromium compositor runtime\n");
-    return 1;
-  }
-  for (const std::string& diagnostic : init_diagnostics)
-    std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
 
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
@@ -729,38 +813,18 @@ int main(int argc, char** argv) {
   void* win32_hwnd = SDL_GetPointerProperty(
       window_properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
   renderer.viewport = SdlWindowPixelViewport(window);
-  html_css_renderer::NativeWindowConfig native_window;
-  native_window.win32_hwnd = win32_hwnd;
-  native_window.viewport = renderer.viewport;
-  html_css_renderer::NativePresentationResult presentation =
-      runtime->InitializeNativeWindow(native_window);
-  PrintPresentationStatus("initialize", presentation);
-
-  html_css_renderer::FrameInput input;
-  input.viewport = renderer.viewport;
-  input.request_png_snapshot =
-      !screenshot_out.empty() && screenshot_after_ms <= 0;
   const auto result_collection_for_frame = [&](bool request_png_snapshot) {
     return (full_frame_diagnostics || !paint_artifact_dump_path.empty() ||
             request_png_snapshot)
                ? html_css_renderer::FrameResultCollection::kFull
                : html_css_renderer::FrameResultCollection::kMinimal;
   };
-  input.result_collection =
-      result_collection_for_frame(input.request_png_snapshot);
-  html_css_renderer::CompositorFrameResult result = runtime->AdvanceFrame(input);
-  for (const std::string& diagnostic : result.diagnostics)
-    std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
-  if (!paint_artifact_dump_path.empty()) {
-    std::ofstream audit_file(paint_artifact_dump_path, std::ios::binary);
-    if (audit_file)
-      audit_file << result.raw_paint_artifact_audit_json << "\n";
-  }
 
-  uint64_t frame_count = 1;
-  PrintFrameStatus("initial", frame_count, result);
-  presentation = runtime->PresentToNativeWindow(result);
-  PrintPresentationStatus("initial", presentation);
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime;
+  html_css_renderer::NativePresentationResult presentation;
+  html_css_renderer::FrameInput input;
+  html_css_renderer::CompositorFrameResult result;
+  uint64_t frame_count = 0;
   bool screenshot_written = false;
   auto write_current_screenshot = [&]() {
     if (!result.png_snapshot_available) {
@@ -779,15 +843,6 @@ int main(int argc, char** argv) {
     screenshot_written = true;
     return true;
   };
-  if (!screenshot_out.empty() && result.png_snapshot_requested) {
-    if (!write_current_screenshot()) {
-      return 3;
-    }
-  }
-  input.request_png_snapshot = false;
-  SDL_SetWindowTitle(window, presentation.vulkan_presented
-                                ? "Chromium Vulkan host: presented"
-                                : "Chromium Vulkan host: presentation blocked");
 
   auto frame_and_present_succeeded =
       [](const html_css_renderer::CompositorFrameResult& frame_result,
@@ -812,6 +867,141 @@ int main(int argc, char** argv) {
                !present_result.skia_renderer_gpu_path_reached;
       };
 
+  auto current_document_label = [&]() {
+    if (inline_html_input)
+      return std::string("inline HTML");
+    if (html_files.empty())
+      return std::string("no document");
+    std::ostringstream label;
+    label << "[" << (current_html_index + 1) << "/" << html_files.size()
+          << "] " << html_files[current_html_index].filename().string();
+    return label.str();
+  };
+
+  auto update_window_title = [&]() {
+    std::string title = "Chromium Vulkan host: ";
+    title += presentation.vulkan_presented ? "presented " : "presentation blocked ";
+    title += current_document_label();
+    SDL_SetWindowTitle(window, title.c_str());
+  };
+
+  uint64_t document_start_ms = SDL_GetTicks();
+  int document_load_error_code = 1;
+  auto load_current_document = [&](const char* reason,
+                                   bool request_png_snapshot) {
+    document_load_error_code = 1;
+    html_css_renderer::RendererCreateInfo document_renderer = renderer;
+    document_renderer.viewport = SdlWindowPixelViewport(window);
+    std::string effective_resource_root = resource_root;
+    std::string effective_resource_base_path = resource_base_path;
+    std::string loaded_html_file;
+
+    if (!html_files.empty()) {
+      if (!LoadHtmlFileForCompositorViewer(
+              html_files[current_html_index], &document_renderer,
+              &loaded_html_file, &effective_resource_root,
+              &effective_resource_base_path, resource_root_explicit,
+              resource_base_path_explicit)) {
+        document_load_error_code = 2;
+        return false;
+      }
+      std::fprintf(stderr, "loaded HTML file: %s\n", loaded_html_file.c_str());
+    }
+
+    if (!effective_resource_root.empty()) {
+      html_css_renderer::SetStandaloneResourceProviderResourceRoot(
+          effective_resource_root);
+    }
+    if (!effective_resource_base_path.empty()) {
+      html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
+          effective_resource_base_path);
+    }
+
+    html_css_renderer::CompositorRuntimeCreateInfo create_info;
+    create_info.renderer = std::move(document_renderer);
+    create_info.enable_paint_artifact_audit = !paint_artifact_dump_path.empty();
+    runtime.reset();
+    runtime =
+        html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
+    std::vector<std::string> init_diagnostics;
+    if (!runtime || !runtime->Initialize(&init_diagnostics)) {
+      std::fprintf(stderr, "failed to initialize Chromium compositor runtime\n");
+      document_load_error_code = 1;
+      return false;
+    }
+    for (const std::string& diagnostic : init_diagnostics)
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+
+    html_css_renderer::NativeWindowConfig native_window;
+    native_window.win32_hwnd = win32_hwnd;
+    native_window.viewport = SdlWindowPixelViewport(window);
+    presentation = runtime->InitializeNativeWindow(native_window);
+    PrintPresentationStatus("initialize", presentation);
+
+    input = html_css_renderer::FrameInput();
+    input.viewport = native_window.viewport;
+    input.request_png_snapshot = request_png_snapshot;
+    input.result_collection =
+        result_collection_for_frame(input.request_png_snapshot);
+    result = runtime->AdvanceFrame(input);
+    for (const std::string& diagnostic : result.diagnostics)
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    if (!paint_artifact_dump_path.empty()) {
+      std::ofstream audit_file(paint_artifact_dump_path, std::ios::binary);
+      if (audit_file)
+        audit_file << result.raw_paint_artifact_audit_json << "\n";
+    }
+
+    input.scroll_offsets_by_element_id =
+        result.successor_snapshot.scroll_offsets_by_element_id;
+    input.hovered_element_id = result.successor_snapshot.hovered_element_id;
+    input.active_element_id = result.successor_snapshot.active_element_id;
+    input.viewport = result.successor_snapshot.viewport;
+    input.request_png_snapshot = false;
+    input.wheel = std::nullopt;
+
+    ++frame_count;
+    PrintFrameStatus(reason, frame_count, result);
+    presentation = runtime->PresentToNativeWindow(result);
+    PrintPresentationStatus(reason, presentation,
+                            include_presentation_diagnostics(presentation));
+    document_start_ms = SDL_GetTicks();
+    update_window_title();
+    if (request_png_snapshot && result.png_snapshot_requested) {
+      if (!write_current_screenshot()) {
+        document_load_error_code = 3;
+        return false;
+      }
+    }
+    return true;
+  };
+
+  if (!load_current_document(
+          "initial", !screenshot_out.empty() && screenshot_after_ms <= 0)) {
+    runtime.reset();
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return document_load_error_code;
+  }
+
+  auto navigate_to_file = [&](int offset, const char* reason) {
+    if (html_files.empty()) {
+      std::fprintf(stderr, "navigation ignored for inline HTML input\n");
+      return true;
+    }
+    const int count = static_cast<int>(html_files.size());
+    int next_index = static_cast<int>(current_html_index) + offset;
+    next_index %= count;
+    if (next_index < 0)
+      next_index += count;
+    current_html_index = static_cast<size_t>(next_index);
+    return load_current_document(reason, false);
+  };
+
+  auto reset_current_document = [&]() {
+    return load_current_document("reset", false);
+  };
+
   auto run_update_frame =
       [&](const char* reason, html_css_renderer::FrameInput next_input,
           double timeline_seconds) {
@@ -833,12 +1023,19 @@ int main(int argc, char** argv) {
         presentation = runtime->PresentToNativeWindow(result);
         PrintPresentationStatus(reason, presentation,
                                 include_presentation_diagnostics(presentation));
+        update_window_title();
         return frame_and_present_succeeded(result, presentation);
       };
 
-  if (synthetic_input_smoke || synthetic_resize) {
+  if (synthetic_input_smoke || synthetic_resize || synthetic_navigation_smoke) {
     bool synthetic_ok = frame_and_present_succeeded(result, presentation);
     double synthetic_time = 1.0 / 60.0;
+    if (synthetic_navigation_smoke) {
+      synthetic_ok = navigate_to_file(1, "synthetic_next") && synthetic_ok;
+      synthetic_ok = navigate_to_file(-1, "synthetic_previous") && synthetic_ok;
+      synthetic_ok = reset_current_document() && synthetic_ok;
+      synthetic_time += 3.0 / 60.0;
+    }
     if (synthetic_resize) {
       SDL_SetWindowSize(window, static_cast<int>(synthetic_resize->width),
                         static_cast<int>(synthetic_resize->height));
@@ -909,20 +1106,36 @@ int main(int argc, char** argv) {
           1,
           html_css_renderer::Point{initial_mouse_x, initial_mouse_y},
           (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
+  enum class NavigationAction {
+    kNone,
+    kPrevious,
+    kNext,
+    kReset,
+  };
   bool running = true;
   while (running) {
     SDL_Event event;
     bool needs_frame = result.needs_begin_frame;
+    NavigationAction navigation_action = NavigationAction::kNone;
     html_css_renderer::FrameInput next_input = input;
     next_input.request_png_snapshot = false;
     next_input.delta_time_seconds = 1.0 / 60.0;
     next_input.timeline_time_seconds =
-        static_cast<double>(SDL_GetTicks() - start_ms) / 1000.0;
+        static_cast<double>(SDL_GetTicks() - document_start_ms) / 1000.0;
 
     auto handle_event = [&](const SDL_Event& event) {
       if (event.type == SDL_EVENT_QUIT ||
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
+      } else if (event.type == SDL_EVENT_KEY_DOWN &&
+                 event.key.key == SDLK_F1) {
+        navigation_action = NavigationAction::kPrevious;
+      } else if (event.type == SDL_EVENT_KEY_DOWN &&
+                 event.key.key == SDLK_F2) {
+        navigation_action = NavigationAction::kNext;
+      } else if (event.type == SDL_EVENT_KEY_DOWN &&
+                 event.key.key == SDLK_F5) {
+        navigation_action = NavigationAction::kReset;
       } else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
         const html_css_renderer::Size new_viewport =
@@ -1007,6 +1220,25 @@ int main(int argc, char** argv) {
       handle_event(event);
     }
 
+    if (navigation_action != NavigationAction::kNone) {
+      bool navigation_ok = false;
+      if (navigation_action == NavigationAction::kPrevious) {
+        navigation_ok = navigate_to_file(-1, "previous");
+      } else if (navigation_action == NavigationAction::kNext) {
+        navigation_ok = navigate_to_file(1, "next");
+      } else {
+        navigation_ok = reset_current_document();
+      }
+      if (!navigation_ok) {
+        runtime.reset();
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return document_load_error_code;
+      }
+      ++advanced_update_frames;
+      continue;
+    }
+
     if (screenshot_due()) {
       next_input.request_png_snapshot = true;
       next_input.result_collection = result_collection_for_frame(true);
@@ -1032,6 +1264,7 @@ int main(int argc, char** argv) {
       presentation = runtime->PresentToNativeWindow(result);
       PrintPresentationStatus("update", presentation,
                               include_presentation_diagnostics(presentation));
+      update_window_title();
       if (requested_png_snapshot) {
         if (!write_current_screenshot()) {
           return 3;
