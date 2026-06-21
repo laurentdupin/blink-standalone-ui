@@ -373,6 +373,7 @@ void PrintUsage() {
       "[--screenshot-out <png>] [--screenshot-after-ms N] "
       "[--synthetic-input-smoke] [--synthetic-resize WxH] "
       "[--synthetic-click x,y] [--synthetic-navigation-smoke] "
+      "[--synthetic-navigation-stress N] "
       "[--trace-stages] [--full-frame-diagnostics]\n"
       "Launching without --html, --html-file, or --html-dir opens a native "
       "HTML directory picker on Windows and recursively lists HTML files. "
@@ -605,6 +606,7 @@ int main(int argc, char** argv) {
   int quit_after_ms = 0;
   bool synthetic_input_smoke = false;
   bool synthetic_navigation_smoke = false;
+  int synthetic_navigation_stress = 0;
   std::optional<html_css_renderer::Size> synthetic_resize;
   std::vector<html_css_renderer::Point> synthetic_click_points;
   bool html_input_provided = false;
@@ -766,6 +768,16 @@ int main(int argc, char** argv) {
       synthetic_click_points.push_back(parsed_point);
     } else if (arg == "--synthetic-navigation-smoke") {
       synthetic_navigation_smoke = true;
+    } else if (arg == "--synthetic-navigation-stress") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      synthetic_navigation_stress = std::max(0, std::atoi(value));
+    } else if (arg.rfind("--synthetic-navigation-stress=", 0) == 0) {
+      synthetic_navigation_stress =
+          std::max(0, std::atoi(arg.substr(30).c_str()));
     } else if (arg == "--full-frame-diagnostics") {
       full_frame_diagnostics = true;
     } else if (arg == "--trace-stages") {
@@ -1091,6 +1103,7 @@ int main(int argc, char** argv) {
       };
 
   if (synthetic_input_smoke || synthetic_resize || synthetic_navigation_smoke ||
+      synthetic_navigation_stress > 0 ||
       !synthetic_click_points.empty()) {
     bool synthetic_ok = frame_and_present_succeeded(result, presentation);
     double synthetic_time = 1.0 / 60.0;
@@ -1099,6 +1112,68 @@ int main(int argc, char** argv) {
       synthetic_ok = navigate_to_file(-1, "synthetic_previous") && synthetic_ok;
       synthetic_ok = reset_current_document() && synthetic_ok;
       synthetic_time += 3.0 / 60.0;
+    }
+    for (int i = 0; i < synthetic_navigation_stress; ++i) {
+      const char* reason = nullptr;
+      if (i % 13 == 12) {
+        reason = "synthetic_stress_reset";
+        synthetic_ok = reset_current_document() && synthetic_ok;
+      } else if (i % 11 == 10) {
+        reason = "synthetic_stress_previous";
+        synthetic_ok = navigate_to_file(-1, reason) && synthetic_ok;
+      } else {
+        reason = "synthetic_stress_next";
+        synthetic_ok = navigate_to_file(1, reason) && synthetic_ok;
+      }
+      synthetic_time += 1.0 / 60.0;
+      if (!synthetic_ok) {
+        break;
+      }
+      if (synthetic_input_smoke) {
+        const float x = 32.0f + static_cast<float>((i * 37) % 320);
+        const float y = 32.0f + static_cast<float>((i * 23) % 220);
+        const html_css_renderer::Point point{x, y};
+        html_css_renderer::FrameInput next_input = input;
+        next_input.pointers = {html_css_renderer::PointerState{1, point,
+                                                               false}};
+        synthetic_ok =
+            run_update_frame("synthetic_stress_pointer_move",
+                             std::move(next_input), synthetic_time) &&
+            synthetic_ok;
+        synthetic_time += 1.0 / 60.0;
+
+        next_input = input;
+        next_input.pointers = {html_css_renderer::PointerState{1, point,
+                                                               true}};
+        synthetic_ok =
+            run_update_frame("synthetic_stress_pointer_down",
+                             std::move(next_input), synthetic_time) &&
+            synthetic_ok;
+        synthetic_time += 1.0 / 60.0;
+
+        next_input = input;
+        next_input.pointers = {html_css_renderer::PointerState{1, point,
+                                                               false}};
+        synthetic_ok =
+            run_update_frame("synthetic_stress_pointer_up",
+                             std::move(next_input), synthetic_time) &&
+            synthetic_ok;
+        synthetic_time += 1.0 / 60.0;
+
+        next_input = input;
+        next_input.wheel =
+            html_css_renderer::WheelInput{point,
+                                          html_css_renderer::Point{0.0f,
+                                                                   48.0f}};
+        synthetic_ok =
+            run_update_frame("synthetic_stress_wheel", std::move(next_input),
+                             synthetic_time) &&
+            synthetic_ok;
+        synthetic_time += 1.0 / 60.0;
+        if (!synthetic_ok) {
+          break;
+        }
+      }
     }
     if (synthetic_resize) {
       SDL_SetWindowSize(window, static_cast<int>(synthetic_resize->width),

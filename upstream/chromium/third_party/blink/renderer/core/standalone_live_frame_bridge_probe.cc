@@ -1811,6 +1811,7 @@ class StandaloneCcLayerHost final
     }
     compositor_frame_submitted_ = false;
     scheduler_begin_main_frame_seen_ = false;
+    scheduler_pending_update_ran_ = false;
     if (!root_layer_attached_) {
       TraceLiveFrameProbeStage(
           "cc host scheduler bootstrap before PAC root preattach");
@@ -1845,6 +1846,11 @@ class StandaloneCcLayerHost final
     TraceLiveFrameProbeStage("cc host scheduler after run loop");
     scheduler_frame_run_loop_ = nullptr;
     ClearPendingLayerTreeUpdateForScheduler();
+    if (!scheduler_pending_update_ran_) {
+      SetFailure(failure_reason,
+                 "cc scheduler did not run the pending standalone frame update");
+      return false;
+    }
     if (!compositor_frame_submitted_) {
       SetFailure(failure_reason,
                  scheduler_begin_main_frame_seen_
@@ -2078,6 +2084,7 @@ class StandaloneCcLayerHost final
     base::AutoReset<bool> inside_update(&inside_scheduler_layer_tree_update_,
                                         true);
     update();
+    scheduler_pending_update_ran_ = true;
   }
   void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override {
   }
@@ -2147,6 +2154,11 @@ class StandaloneCcLayerHost final
   void DidRunBeginMainFrame() override {}
   void DidSubmitCompositorFrame() override {
     TraceLiveFrameProbeStage("cc host DidSubmitCompositorFrame");
+    if (scheduler_frame_run_loop_ && !scheduler_pending_update_ran_) {
+      TraceLiveFrameProbeStage(
+          "cc host ignoring stale submit before pending scheduler update");
+      return;
+    }
     compositor_frame_submitted_ = true;
     if (scheduler_frame_run_loop_) {
       scheduler_frame_run_loop_->Quit();
@@ -2194,6 +2206,7 @@ class StandaloneCcLayerHost final
   std::function<void()> pending_scheduler_layer_tree_update_;
   viz::BeginFrameArgs last_begin_main_frame_args_;
   bool scheduler_begin_main_frame_seen_ = false;
+  bool scheduler_pending_update_ran_ = false;
   bool inside_scheduler_layer_tree_update_ = false;
   raw_ptr<base::RunLoop> scheduler_frame_run_loop_ = nullptr;
   raw_ptr<base::RunLoop> frame_sink_init_run_loop_ = nullptr;
@@ -12541,9 +12554,19 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
 
   LocalFrameView& frame_view = cache.holder->GetFrameView();
   if (cache.lifecycle_stop.empty()) {
-    ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRenderer(
-        cache, input_html, html_content_already_loaded, document, frame_view,
-        result);
+    const bool scheduler_submitted =
+        ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRenderer(
+            cache, input_html, html_content_already_loaded, document,
+            frame_view, result);
+    if (!scheduler_submitted) {
+      cache.body_html = input_html;
+      cache.raw_paint_artifact_audit_json =
+          std::string("{\"source\":\"real Blink PaintArtifact\",") +
+          "\"status\":\"stopped_before_artifact_due_to_scheduler_failure\"}";
+      cache.result = result;
+      cache.initialized = true;
+      return result;
+    }
   } else {
     std::optional<LiveFramePaintProbeResult> lifecycle_stop_result =
         UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
