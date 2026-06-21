@@ -6542,8 +6542,10 @@ void Document::SendFocusNotification(Element* new_focused_element,
 #endif
   }
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   GetFrame()->GetLocalFrameHostRemote().FocusedElementChanged(
       is_editable, is_richly_editable, element_bounds_in_dips, focus_type);
+#endif
 }
 
 void Document::NotifyFocusedElementChanged(Element* old_focused_element,

@@ -209,9 +209,16 @@ def read_interactive_points(state_json: Path, max_points: int) -> list[dict[str,
         state = json.loads(state_json.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return []
+    candidates = sorted(
+        state.get("interactiveElements", []),
+        key=lambda item: (
+            int(item.get("priority", 100)),
+            int(item.get("order", 0)),
+        ),
+    )
     points = []
     seen: set[tuple[int, int]] = set()
-    for item in state.get("interactiveElements", []):
+    for item in candidates:
         try:
             x = int(round(float(item["x"])))
             y = int(round(float(item["y"])))
@@ -235,6 +242,7 @@ def run_interaction_smoke(
     viewport: str,
     timeout_seconds: int,
     points: list[dict[str, Any]],
+    click_repeats: int,
 ) -> dict[str, Any]:
     interaction_log = page_dir / "viewer_interaction.log"
     cmd = [
@@ -249,7 +257,7 @@ def run_interaction_smoke(
         "1200",
     ]
     if points:
-        cmd.extend(["--synthetic-sdl-click-repeats", "2"])
+        cmd.extend(["--synthetic-sdl-click-repeats", str(max(1, click_repeats))])
     else:
         cmd.append("--synthetic-input-smoke")
     for point in points:
@@ -279,6 +287,7 @@ def validate_page(
     threshold: int,
     run_interactions: bool,
     max_interaction_points: int,
+    interaction_click_repeats: int,
 ) -> dict[str, Any]:
     page_slug = slug_for(html_file, examples_root)
     page_dir = out_dir / "pages" / page_slug
@@ -360,6 +369,7 @@ def validate_page(
                 viewport,
                 timeout_seconds,
                 interaction_points,
+                interaction_click_repeats,
             )
         )
     if standalone_png.exists() and reference_png.exists():
@@ -478,6 +488,7 @@ def main() -> int:
     parser.add_argument("--pixel-diff-percent-threshold", type=float, default=5.0)
     parser.add_argument("--skip-interactions", action="store_true")
     parser.add_argument("--max-interaction-points", type=int, default=6)
+    parser.add_argument("--interaction-click-repeats", type=int, default=2)
     args = parser.parse_args()
 
     examples_root = args.examples_root.resolve()
@@ -507,6 +518,7 @@ def main() -> int:
             args.compare_threshold,
             not args.skip_interactions,
             args.max_interaction_points,
+            args.interaction_click_repeats,
         )
         result["status"] = status_for(
             result,
@@ -526,6 +538,7 @@ def main() -> int:
         "pixel_diff_percent_threshold": args.pixel_diff_percent_threshold,
         "interaction_probe_enabled": not args.skip_interactions,
         "max_interaction_points": args.max_interaction_points,
+        "interaction_click_repeats": args.interaction_click_repeats,
         "page_count": len(results),
         "viewer_failure_count": sum(1 for row in results if row["viewer_exit"] != 0),
         "viewer_timeout_count": sum(1 for row in results if row["viewer_timeout"]),

@@ -214,8 +214,30 @@ async function main() {
           "[role='combobox']",
           "[role='textbox']",
         ].join(",");
-        return Array.from(document.querySelectorAll(selector))
-          .map((element) => {
+        const clamp = (value, limit) => Math.max(0, Math.min(limit - 1, value));
+        const points = [];
+        let order = 0;
+        const addPoint = (element, rect, pointKind, priority, x, y) => {
+          points.push({
+            tagName: element.tagName,
+            id: element.id || "",
+            name: element.getAttribute("name") || "",
+            type: element.getAttribute("type") || "",
+            role: element.getAttribute("role") || "",
+            pointKind,
+            priority,
+            order: order++,
+            x: clamp(x, window.innerWidth),
+            y: clamp(y, window.innerHeight),
+            width: rect.width,
+            height: rect.height,
+            rectLeft: rect.left,
+            rectTop: rect.top,
+            rectRight: rect.right,
+            rectBottom: rect.bottom,
+          });
+        };
+        for (const element of Array.from(document.querySelectorAll(selector))) {
             const rect = element.getBoundingClientRect();
             const style = window.getComputedStyle(element);
             const visible =
@@ -229,20 +251,42 @@ async function main() {
               style.display !== "none" &&
               Number(style.opacity || "1") > 0;
             if (!visible) {
-              return null;
+              continue;
             }
-            return {
-              tagName: element.tagName,
-              id: element.id || "",
-              type: element.getAttribute("type") || "",
-              role: element.getAttribute("role") || "",
-              x: Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2)),
-              y: Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2)),
-              width: rect.width,
-              height: rect.height,
-            };
-          })
-          .filter(Boolean);
+            const tagName = element.tagName.toLowerCase();
+            const inputType = (element.getAttribute("type") || "text").toLowerCase();
+            const role = (element.getAttribute("role") || "").toLowerCase();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            if (tagName === "select" || role === "combobox") {
+              addPoint(
+                element,
+                rect,
+                "select-arrow",
+                0,
+                rect.right - Math.min(16, rect.width * 0.15),
+                centerY);
+              addPoint(element, rect, "select-center", 4, centerX, centerY);
+              continue;
+            }
+            if (tagName === "input" &&
+                (inputType === "checkbox" || inputType === "radio")) {
+              addPoint(element, rect, `${inputType}-box`, 1, centerX, centerY);
+              continue;
+            }
+            if (tagName === "textarea" ||
+                role === "textbox" ||
+                element.isContentEditable ||
+                (tagName === "input" &&
+                 !["button", "checkbox", "color", "file", "hidden", "image", "radio",
+                   "range", "reset", "submit"].includes(inputType))) {
+              addPoint(element, rect, "text-control", 2, centerX, centerY);
+              continue;
+            }
+            addPoint(element, rect, "center", 3, centerX, centerY);
+        }
+        return points.sort((left, right) =>
+          left.priority - right.priority || left.order - right.order);
       });
       state.elementScrolls = {};
       for (const scroll of elementScrolls) {
