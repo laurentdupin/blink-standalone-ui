@@ -33,9 +33,6 @@ void StandaloneBlinkLiveFrameBridgeSetAnimationTimeForStandaloneRenderer(
     double time_ms);
 void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
     const char* serialized_attributes);
-void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
-    const char* hovered_element_id,
-    const char* active_element_id);
 void StandaloneBlinkLiveFrameBridgeClearMouseInputEventsForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
     int type,
@@ -771,8 +768,6 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         SerializeElementAttributes(snapshot_.element_attributes_by_id_and_name);
     probe::StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
         serialized_attributes.c_str());
-    probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
-        nullptr, nullptr);
     probe::StandaloneBlinkLiveFrameBridgeClearMouseInputEventsForStandaloneRenderer();
     if (!input.mouse_events.empty()) {
       for (const MouseInputEvent& event : input.mouse_events) {
@@ -1015,11 +1010,6 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
                       snapshot_.scroll_offsets_by_element_id)) {
       return true;
     }
-    if (input.focused_element_id != snapshot_.focused_element_id ||
-        input.hovered_element_id != snapshot_.hovered_element_id ||
-        input.active_element_id != snapshot_.active_element_id) {
-      return true;
-    }
     if (!SameStringMap(input.form_values_by_element_id,
                        snapshot_.form_values_by_element_id)) {
       return true;
@@ -1078,9 +1068,6 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     snapshot_.element_attributes_by_id_and_name =
         input.element_attributes_by_id_and_name;
     snapshot_.scroll_offsets_by_element_id = input.scroll_offsets_by_element_id;
-    snapshot_.focused_element_id = input.focused_element_id;
-    snapshot_.hovered_element_id = input.hovered_element_id;
-    snapshot_.active_element_id = input.active_element_id;
     snapshot_.form_values_by_element_id = input.form_values_by_element_id;
   }
 

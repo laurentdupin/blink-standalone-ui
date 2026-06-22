@@ -1310,8 +1310,6 @@ int main(int argc, char** argv) {
 
     input.scroll_offsets_by_element_id =
         result.successor_snapshot.scroll_offsets_by_element_id;
-    input.hovered_element_id = result.successor_snapshot.hovered_element_id;
-    input.active_element_id = result.successor_snapshot.active_element_id;
     input.viewport = result.successor_snapshot.viewport;
     input.request_png_snapshot = false;
     input.wheel = std::nullopt;
@@ -1460,10 +1458,6 @@ int main(int argc, char** argv) {
         result = runtime->AdvanceFrame(next_input);
         next_input.scroll_offsets_by_element_id =
             result.successor_snapshot.scroll_offsets_by_element_id;
-        next_input.hovered_element_id =
-            result.successor_snapshot.hovered_element_id;
-        next_input.active_element_id =
-            result.successor_snapshot.active_element_id;
         next_input.wheel = std::nullopt;
         next_input.mouse_events.clear();
         next_input.pointers.clear();
@@ -1866,8 +1860,6 @@ int main(int argc, char** argv) {
       result = runtime->AdvanceFrame(next_input);
       next_input.scroll_offsets_by_element_id =
           result.successor_snapshot.scroll_offsets_by_element_id;
-      next_input.hovered_element_id = result.successor_snapshot.hovered_element_id;
-      next_input.active_element_id = result.successor_snapshot.active_element_id;
       next_input.wheel = std::nullopt;
       next_input.mouse_events.clear();
       next_input.pointers.clear();

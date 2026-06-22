@@ -259,9 +259,6 @@ html_css_renderer::FrameInput MakeBaseWarmInput(
   input.element_attributes_by_id_and_name =
       snapshot.element_attributes_by_id_and_name;
   input.scroll_offsets_by_element_id = snapshot.scroll_offsets_by_element_id;
-  input.focused_element_id = snapshot.focused_element_id;
-  input.hovered_element_id = snapshot.hovered_element_id;
-  input.active_element_id = snapshot.active_element_id;
   input.form_values_by_element_id = snapshot.form_values_by_element_id;
   return input;
 }

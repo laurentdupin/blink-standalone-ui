@@ -7164,6 +7164,9 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   bool text_control_inner_editor_present = false;
   bool placeholder_attr_present = false;
   bool placeholder_visible = false;
+  unsigned selection_start = 0;
+  unsigned selection_end = 0;
+  bool selection_offsets_present = false;
   int user_agent_shadow_child_count = 0;
   int shadow_layout_object_count = 0;
   int shadow_layout_text_count = 0;
@@ -7338,6 +7341,9 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
       if (auto* text_control = DynamicTo<TextControlElement>(element)) {
         item.text_control_inner_editor_present =
             text_control->InnerEditorElement();
+        item.selection_start = text_control->selectionStart();
+        item.selection_end = text_control->selectionEnd();
+        item.selection_offsets_present = true;
       }
       if (const ComputedStyle* style = element->GetComputedStyle()) {
         item.computed_display = DisplayNameForTableDiagnostics(style->Display());
@@ -7655,6 +7661,10 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << (item.user_agent_shadow_root_present ? "true" : "false")
          << ",\"text_control_inner_editor_present\":"
          << (item.text_control_inner_editor_present ? "true" : "false")
+         << ",\"selection_offsets_present\":"
+         << (item.selection_offsets_present ? "true" : "false")
+         << ",\"selection_start\":" << item.selection_start
+         << ",\"selection_end\":" << item.selection_end
          << ",\"placeholder_attr_present\":"
          << (item.placeholder_attr_present ? "true" : "false")
          << ",\"placeholder_visible\":"

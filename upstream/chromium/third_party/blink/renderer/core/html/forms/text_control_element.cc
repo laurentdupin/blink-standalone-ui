@@ -554,9 +554,6 @@ static Position PositionForIndex(HTMLElement* inner_editor, unsigned index) {
 
 unsigned TextControlElement::IndexForPosition(HTMLElement* inner_editor,
                                               const Position& passed_position) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return 0;
-#else
   if (!inner_editor || !inner_editor->contains(passed_position.AnchorNode()) ||
       passed_position.IsNull())
     return 0;
@@ -589,7 +586,6 @@ unsigned TextControlElement::IndexForPosition(HTMLElement* inner_editor,
   }
 
   return index;
-#endif
 }
 
 unsigned TextControlElement::IndexForPosition(

@@ -119,6 +119,7 @@
 #include "third_party/blink/renderer/core/image_replacement/image_replacement.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
+#include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
 #include "third_party/blink/renderer/core/layout/layout_image_replacement.h"
 #include "third_party/blink/renderer/core/layout/length_utils.h"
@@ -598,6 +599,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "ui/color/color_recipe.h"
 #include "ui/display/screen_info.h"
 #include "ui/display/screen_infos.h"
+#include "ui/gfx/geometry/point_conversions.h"
 #include "third_party/blink/renderer/core/timing/event_timing.h"
 #include "third_party/blink/renderer/core/timing/window_performance.h"
 #include "third_party/blink/renderer/core/timing/soft_navigation_heuristics.h"
@@ -668,6 +670,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer_interest_group.h"
 #include "third_party/blink/renderer/core/dom/scroll_marker_group_data.h"
+#include "third_party/blink/renderer/core/dom/shadow_root.h"
 #include "third_party/blink/renderer/core/dom/text_diff_range.h"
 #include "third_party/blink/renderer/core/editing/serializers/markup_accumulator.h"
 #include "third_party/blink/renderer/core/editing/dom_selection.h"
@@ -4320,28 +4323,153 @@ void WheelEvent::Trace(Visitor* visitor) const {
   MouseEvent::Trace(visitor);
 }
 
-void MouseEvent::ReceivedTarget() {}
+namespace {
 
-void MouseEvent::ComputeRelativePosition() {}
+float StandaloneLayoutZoomFactor(const LocalDOMWindow* local_dom_window) {
+  if (!local_dom_window)
+    return 1.f;
+  LocalFrame* frame = local_dom_window->GetFrame();
+  if (!frame)
+    return 1.f;
+  return frame->LayoutZoomFactor();
+}
 
-WebMouseEvent TransformWebMouseEvent(LocalFrameView*, const WebMouseEvent& event) {
-  return event;
+const LayoutObject* StandaloneFindTargetLayoutObject(Node*& target_node) {
+  LayoutObject* layout_object = target_node->GetLayoutObject();
+  if (!layout_object || !layout_object->IsSVG())
+    return layout_object;
+  while (!layout_object->IsSVGRoot())
+    layout_object = layout_object->Parent();
+  target_node = layout_object->GetNode();
+  auto* svg_element = DynamicTo<SVGElement>(target_node);
+  DCHECK(!target_node ||
+         (svg_element && svg_element->IsOutermostSVGSVGElement()));
+  return layout_object;
+}
+
+float StandaloneFrameScale(const LocalFrameView* frame_view) {
+  float scale = 1;
+  if (frame_view) {
+    LocalFrameView* root_view = frame_view->GetFrame().LocalFrameRoot().View();
+    if (root_view)
+      scale = root_view->InputEventsScaleFactor();
+  }
+  return scale;
+}
+
+gfx::Vector2dF StandaloneFrameTranslation(const LocalFrameView* frame_view) {
+  gfx::Point visual_viewport;
+  if (frame_view) {
+    LocalFrameView* root_view = frame_view->GetFrame().LocalFrameRoot().View();
+    if (root_view && root_view->GetPage()) {
+      visual_viewport = gfx::ToFlooredPoint(
+          root_view->GetPage()->GetVisualViewport().VisibleRect().origin());
+    }
+  }
+  return visual_viewport.OffsetFromOrigin();
+}
+
+}  // namespace
+
+void MouseEvent::ReceivedTarget() {
+  has_cached_relative_position_ = false;
+}
+
+void MouseEvent::ComputeRelativePosition() {
+  Node* target_node = RawTarget() ? RawTarget()->ToNode() : nullptr;
+  if (!target_node)
+    return;
+
+  offset_x_ = page_x_;
+  offset_y_ = page_y_;
+  layer_location_ = gfx::PointF(page_x_, page_y_);
+
+  LocalDOMWindow* dom_window_for_zoom_factor =
+      DynamicTo<LocalDOMWindow>(view());
+  if (!dom_window_for_zoom_factor)
+    dom_window_for_zoom_factor = target_node->GetDocument().domWindow();
+
+  float zoom_factor = StandaloneLayoutZoomFactor(dom_window_for_zoom_factor);
+  float inverse_zoom_factor = 1 / zoom_factor;
+
+  target_node->GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kInput);
+
+  if (const LayoutObject* layout_object =
+          StandaloneFindTargetLayoutObject(target_node)) {
+    gfx::PointF local_pos =
+        layout_object->AbsoluteToLocalPoint(AbsoluteLocation());
+
+    if (layout_object->IsBoxModelObject()) {
+      const auto* layout_box = To<LayoutBoxModelObject>(layout_object);
+      const PhysicalOffset offset = layout_box->BorderOutsets().Offset();
+      local_pos.Offset(-offset.left, -offset.top);
+    }
+
+    offset_x_ = local_pos.x() * inverse_zoom_factor;
+    offset_y_ = local_pos.y() * inverse_zoom_factor;
+  }
+
+  Node* n = target_node;
+  while (n && !n->GetLayoutObject())
+    n = n->parentNode();
+
+  if (n) {
+    layer_location_.Scale(zoom_factor);
+    if (LocalFrameView* view = n->GetLayoutObject()->View()->GetFrameView())
+      layer_location_ = view->DocumentToFrame(layer_location_);
+
+    PaintLayer* layer = n->GetLayoutObject()->EnclosingLayer();
+    if (layer) {
+      layer = layer->EnclosingSelfPaintingLayer();
+      PhysicalOffset physical_offset =
+          layer->GetLayoutObject().LocalToAbsolutePoint(PhysicalOffset(), 0);
+      layer_location_ -= gfx::Vector2dF(physical_offset);
+    }
+
+    layer_location_.Scale(inverse_zoom_factor);
+  }
+
+  has_cached_relative_position_ = true;
+}
+
+WebMouseEvent TransformWebMouseEvent(LocalFrameView* frame_view,
+                                     const WebMouseEvent& event) {
+  WebMouseEvent result = event;
+  if (event.GetType() == WebInputEvent::Type::kMouseUp ||
+      event.GetType() == WebInputEvent::Type::kMouseDown) {
+    result.UpdateEventModifiersToMatchButton();
+  }
+  result.SetFrameScale(StandaloneFrameScale(frame_view));
+  result.SetFrameTranslate(StandaloneFrameTranslation(frame_view));
+  return result;
 }
 
 int MouseEvent::layerX() {
+  if (!has_cached_relative_position_)
+    ComputeRelativePosition();
   return static_cast<int>(std::floor(layer_location_.x()));
 }
 
 int MouseEvent::layerY() {
+  if (!has_cached_relative_position_)
+    ComputeRelativePosition();
   return static_cast<int>(std::floor(layer_location_.y()));
 }
 
 double MouseEvent::offsetX() const {
-  return std::floor(offset_x_);
+  if (!HasPosition())
+    return 0;
+  if (!has_cached_relative_position_)
+    const_cast<MouseEvent*>(this)->ComputeRelativePosition();
+  return std::round(offset_x_);
 }
 
 double MouseEvent::offsetY() const {
-  return std::floor(offset_y_);
+  if (!HasPosition())
+    return 0;
+  if (!has_cached_relative_position_)
+    const_cast<MouseEvent*>(this)->ComputeRelativePosition();
+  return std::round(offset_y_);
 }
 
 void ContextMenuController::HandleContextMenuEvent(MouseEvent*) {}
@@ -7242,7 +7370,39 @@ void SelectionController::Trace(Visitor* visitor) const {
   visitor->Trace(frame_);
 }
 bool SelectionController::HandleMousePressEvent(
-    const MouseEventWithHitTestResults&) {
+    const MouseEventWithHitTestResults& event) {
+  Node* inner_node = event.InnerNode();
+  mouse_down_may_start_select_ =
+      ((!inner_node || !inner_node->GetLayoutObject() ||
+        inner_node->CanStartSelection()) ||
+       IsSelectionOverLink(event)) &&
+      !event.GetScrollbar();
+  mouse_down_was_single_click_in_selection_ = false;
+  mouse_down_allows_multi_click_ = event.Event().click_count == 1;
+  selection_state_ = SelectionState::kHaveNotStartedSelection;
+
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (event.Event().button == WebPointerProperties::Button::kLeft &&
+      event.Event().click_count == 1 && frame_ && frame_->GetDocument()) {
+    const PositionWithAffinity position =
+        event.GetHitTestResult().GetPosition();
+    TextControlElement* control = nullptr;
+    if (!position.IsNull())
+      control = EnclosingTextControl(position.GetPosition());
+    if (!control) {
+      if (Node* node = event.InnerNode()) {
+        if (auto* element = DynamicTo<Element>(node))
+          control = DynamicTo<TextControlElement>(element);
+        if (!control && node->IsInShadowTree())
+          control = DynamicTo<TextControlElement>(node->OwnerShadowHost());
+      }
+    }
+    if (control && !control->IsDisabledOrReadOnly() && !position.IsNull()) {
+      const unsigned index = control->IndexForPosition(position.GetPosition());
+      control->SetSelectionRange(index, index);
+    }
+  }
+#endif
   return false;
 }
 WebInputEventResult SelectionController::HandleMouseDraggedEvent(
@@ -11473,7 +11633,41 @@ void HitTestResult::CacheValues(const HitTestResult& other) {
       other.hit_test_request_.GetType() & ~HitTestRequest::kAvoidCache;
 }
 PositionWithAffinity HitTestResult::GetPosition() const {
-  return PositionWithAffinity();
+  const Node* node = inner_possibly_pseudo_node_;
+  if (!node)
+    return PositionWithAffinity();
+  DCHECK_GE(node->GetDocument().Lifecycle().GetState(),
+            DocumentLifecycle::kPrePaintClean);
+  LayoutObject* layout_object = node->GetLayoutObject();
+  if (!layout_object)
+    return PositionWithAffinity();
+
+  CHECK(!DisplayLockUtilities::LockedAncestorPreventingPaint(*layout_object));
+
+  if (layout_object->ChildPaintBlockedByDisplayLock())
+    return PositionWithAffinity(Position(*node, 0), TextAffinity::kDefault);
+
+  if (node->IsPseudoElement()) {
+    switch (node->GetPseudoId()) {
+      case kPseudoIdBefore:
+      case kPseudoIdMarker: {
+        const Node* originating =
+            &To<PseudoElement>(node)->UltimateOriginatingElement();
+        return PositionWithAffinity(Position::FirstPositionInNode(*originating));
+      }
+      case kPseudoIdAfter: {
+        const Node* originating =
+            &To<PseudoElement>(node)->UltimateOriginatingElement();
+        return PositionWithAffinity(Position::LastPositionInNode(*originating));
+      }
+      case kPseudoIdCheckMark:
+        return PositionWithAffinity(Position::FirstPositionInNode(*inner_node_));
+      default:
+        break;
+    }
+  }
+
+  return layout_object->PositionForPoint(LocalPoint());
 }
 void HitTestResult::SetURLElement(Element* element) {
   inner_url_element_ = element;
@@ -11484,11 +11678,47 @@ bool HitTestResult::IsOverLink() const {
 void HitTestResult::SetScrollbar(Scrollbar* scrollbar) {
   scrollbar_ = scrollbar;
 }
-void HitTestResult::SetToShadowHostIfInUAShadowRoot() {}
+void HitTestResult::SetToShadowHostIfInUAShadowRoot() {
+  Node* node = InnerNode();
+  if (!node)
+    return;
+
+  ShadowRoot* containing_shadow_root = node->ContainingShadowRoot();
+  Element* shadow_host = nullptr;
+
+  while (containing_shadow_root && containing_shadow_root->IsUserAgent()) {
+    shadow_host = &containing_shadow_root->host();
+    containing_shadow_root = shadow_host->ContainingShadowRoot();
+  }
+
+  if (node->IsInShadowTree() && node->OwnerShadowHost())
+    OverrideNodeAndPosition(node->OwnerShadowHost(), local_point_);
+
+  if (shadow_host)
+    OverrideNodeAndPosition(shadow_host, local_point_);
+}
 HitTestResult::~HitTestResult() = default;
 PositionWithAffinity HitTestResult::GetPositionForInnerNodeOrImageMapImage()
     const {
-  return PositionWithAffinity();
+  Node* node = InnerPossiblyPseudoNode();
+  if (node && !node->IsPseudoElement())
+    node = InnerNodeOrImageMapImage();
+  if (!node)
+    return PositionWithAffinity();
+  DCHECK_GE(node->GetDocument().Lifecycle().GetState(),
+            DocumentLifecycle::kPrePaintClean);
+  LayoutObject* layout_object = node->GetLayoutObject();
+  if (!layout_object)
+    return PositionWithAffinity();
+  CHECK(!DisplayLockUtilities::LockedAncestorPreventingPaint(*layout_object));
+
+  if (layout_object->ChildPaintBlockedByDisplayLock())
+    return PositionWithAffinity(Position(*node, 0), TextAffinity::kDefault);
+
+  PositionWithAffinity position = layout_object->PositionForPoint(LocalPoint());
+  if (position.IsNull())
+    return PositionWithAffinity(FirstPositionInOrBeforeNode(*node));
+  return position;
 }
 KURL HitTestResult::AbsoluteImageURL() const {
   return KURL();
@@ -11539,14 +11769,74 @@ PositionTemplate<Strategy>::PositionTemplate(const Node* anchor_node,
       offset_(0),
       anchor_type_(anchor_type) {}
 template <typename Strategy>
+PositionTemplate<Strategy>::PositionTemplate(const Node& anchor_node,
+                                             int offset)
+    : PositionTemplate(&anchor_node, offset) {}
+template <typename Strategy>
 PositionTemplate<Strategy>::PositionTemplate(const PositionTemplate&) =
     default;
 template <typename Strategy>
 PositionTemplate<Strategy>& PositionTemplate<Strategy>::operator=(
     const PositionTemplate&) = default;
 template <typename Strategy>
+Node* PositionTemplate<Strategy>::ComputeContainerNode() const {
+  if (!anchor_node_)
+    return nullptr;
+
+  switch (AnchorType()) {
+    case PositionAnchorType::kAfterChildren:
+    case PositionAnchorType::kOffsetInAnchor:
+      return anchor_node_.Get();
+    case PositionAnchorType::kBeforeAnchor:
+    case PositionAnchorType::kAfterAnchor:
+      return Strategy::Parent(*anchor_node_);
+  }
+  NOTREACHED();
+}
+template <typename Strategy>
+static int StandaloneMinOffsetForNode(Node* anchor_node, int offset) {
+  if (auto* data = DynamicTo<CharacterData>(anchor_node))
+    return std::min(offset, static_cast<int>(data->length()));
+
+  int new_offset = 0;
+  for (Node* node = Strategy::FirstChild(*anchor_node);
+       node && new_offset < offset; node = Strategy::NextSibling(*node))
+    ++new_offset;
+
+  return new_offset;
+}
+template <typename Strategy>
 int PositionTemplate<Strategy>::ComputeOffsetInContainerNode() const {
-  return 0;
+  if (!anchor_node_)
+    return 0;
+
+  switch (AnchorType()) {
+    case PositionAnchorType::kAfterChildren:
+      return LastOffsetInNode(*anchor_node_);
+    case PositionAnchorType::kOffsetInAnchor:
+      return StandaloneMinOffsetForNode<Strategy>(anchor_node_.Get(), offset_);
+    case PositionAnchorType::kBeforeAnchor:
+      return Strategy::Index(*anchor_node_);
+    case PositionAnchorType::kAfterAnchor:
+      return Strategy::Index(*anchor_node_) + 1;
+  }
+  NOTREACHED();
+}
+template <typename Strategy>
+Node* PositionTemplate<Strategy>::ComputeNodeBeforePosition() const {
+  if (!anchor_node_)
+    return nullptr;
+  switch (AnchorType()) {
+    case PositionAnchorType::kAfterChildren:
+      return Strategy::LastChild(*anchor_node_);
+    case PositionAnchorType::kOffsetInAnchor:
+      return offset_ ? Strategy::ChildAt(*anchor_node_, offset_ - 1) : nullptr;
+    case PositionAnchorType::kBeforeAnchor:
+      return Strategy::PreviousSibling(*anchor_node_);
+    case PositionAnchorType::kAfterAnchor:
+      return anchor_node_.Get();
+  }
+  NOTREACHED();
 }
 template <typename Strategy>
 PositionTemplate<Strategy>
@@ -11587,6 +11877,25 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::AfterNode(
     const Node& anchor_node) {
   return PositionTemplate<Strategy>(&anchor_node,
                                     PositionAnchorType::kAfterAnchor);
+}
+template <typename Strategy>
+int PositionTemplate<Strategy>::LastOffsetInNode(const Node& node) {
+  if (auto* data = DynamicTo<CharacterData>(node))
+    return static_cast<int>(data->length());
+  return static_cast<int>(Strategy::CountChildren(node));
+}
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::FirstPositionInNode(
+    const Node& anchor_node) {
+  return PositionTemplate<Strategy>(anchor_node, 0);
+}
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::LastPositionInNode(
+    const Node& anchor_node) {
+  if (anchor_node.IsTextNode())
+    return PositionTemplate<Strategy>(anchor_node, LastOffsetInNode(anchor_node));
+  return PositionTemplate<Strategy>(&anchor_node,
+                                    PositionAnchorType::kAfterChildren);
 }
 template <typename Strategy>
 PositionTemplate<Strategy>
