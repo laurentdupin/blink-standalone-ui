@@ -82,6 +82,7 @@
 #include "third_party/blink/renderer/core/html/html_table_row_element.h"
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/events/animation_playback_event.h"
+#include "third_party/blink/renderer/core/editing/selection_controller.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
 #include "third_party/blink/renderer/platform/heap/custom_spaces.h"
 #include "v8/include/cppgc/platform.h"
@@ -170,6 +171,7 @@
 #include "third_party/blink/renderer/core/html/html_olist_element.h"
 #include "third_party/blink/renderer/core/html/html_ulist_element.h"
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
+#include "third_party/blink/renderer/core/input/gesture_manager.h"
 #include "third_party/blink/renderer/core/html/blocking_attribute.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlscriptelement_svgscriptelement.h"
@@ -181,6 +183,10 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedscripturl_usvstring.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_event_modifier_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_mouse_event_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_pointer_event_init.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_drag_event_init.h"
 #include "third_party/blink/renderer/core/paint/css_mask_painter.h"
 #include "third_party/blink/renderer/core/paint/svg_root_painter.h"
 #include "third_party/blink/renderer/core/frame/window_properties.h"
@@ -558,6 +564,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
 #include "third_party/blink/renderer/core/page/autoscroll_controller.h"
+#include "third_party/blink/renderer/core/page/touch_adjustment.h"
 #include "third_party/blink/renderer/core/page/context_menu_controller.h"
 #include "third_party/blink/renderer/core/page/drag_controller.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
@@ -652,7 +659,12 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
 #include "third_party/blink/renderer/core/dom/events/tree_scope_event_context.h"
 #include "third_party/blink/renderer/core/css/resolver/style_adjuster.h"
+#include "third_party/blink/renderer/core/clipboard/data_transfer.h"
+#include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
+#include "third_party/blink/renderer/core/clipboard/data_object.h"
+#include "third_party/blink/renderer/core/clipboard/data_object_item.h"
 #include "third_party/blink/renderer/core/dom/processing_instruction.h"
+#include "third_party/blink/renderer/core/dom/document_fragment.h"
 #include "third_party/blink/renderer/core/dom/mutation_observer_interest_group.h"
 #include "third_party/blink/renderer/core/dom/scroll_marker_group_data.h"
 #include "third_party/blink/renderer/core/dom/text_diff_range.h"
@@ -666,6 +678,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/editing/position_with_affinity.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
+#include "third_party/blink/renderer/core/editing/local_caret_rect.h"
 #include "third_party/blink/renderer/core/editing/drag_caret.h"
 #include "third_party/blink/renderer/core/editing/granularity_strategy.h"
 #include "third_party/blink/renderer/core/editing/kill_ring.h"
@@ -684,14 +697,22 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/events/event_util.h"
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
+#include "third_party/blink/renderer/core/events/pointer_event.h"
+#include "third_party/blink/renderer/core/events/drag_event.h"
+#include "third_party/blink/renderer/core/events/wheel_event.h"
 #include "third_party/blink/renderer/core/events/text_event.h"
 #include "third_party/blink/renderer/core/events/toggle_event.h"
 #include "third_party/blink/renderer/core/events/transition_event.h"
 #include "third_party/blink/renderer/core/events/ui_event.h"
+#include "third_party/blink/renderer/core/events/pointer_event_factory.h"
+#include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/input/touch.h"
+#include "third_party/blink/renderer/core/input/touch_list.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_state_observer.h"
 #include "third_party/blink/renderer/core/fileapi/public_url_manager.h"
+#include "third_party/blink/renderer/core/fileapi/file_list.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/fragment_directive/fragment_directive.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
@@ -716,6 +737,10 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/frame/intervention.h"
 #include "third_party/blink/renderer/core/frame/page_dismissal_scope.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
+#include "third_party/blink/renderer/core/input/keyboard_event_manager.h"
+#include "third_party/blink/renderer/core/input/touch_event_manager.h"
+#include "third_party/blink/renderer/core/input/widget_event_handler.h"
+#include "third_party/blink/renderer/core/page/drag_state.h"
 #include "third_party/blink/renderer/core/frame/picture_in_picture_controller.h"
 #include "third_party/blink/renderer/core/html/closewatcher/close_watcher.h"
 #include "third_party/blink/renderer/core/dom/child_frame_disconnector.h"
@@ -1020,6 +1045,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/layout/layout_theme_font_provider.h"
 #include "third_party/blink/renderer/platform/theme/web_theme_engine_helper.h"
 #include "third_party/blink/renderer/core/layout/custom_scrollbar.h"
+#include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
 #include "third_party/blink/renderer/platform/fonts/plain_text_painter.h"
@@ -2502,6 +2528,7 @@ const AtomicString kAnimationEvent("AnimationEvent");
 const AtomicString kCommandEvent("CommandEvent");
 const AtomicString kEvent("Event");
 const AtomicString kInterestEvent("InterestEvent");
+const AtomicString kKeyboardEvent("KeyboardEvent");
 const AtomicString kPageRevealEvent("PageRevealEvent");
 const AtomicString kTextEvent("TextEvent");
 const AtomicString kTransitionEvent("TransitionEvent");
@@ -2884,6 +2911,8 @@ const WrapperTypeInfo& HTMLSelectElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLSelectElement");
 const WrapperTypeInfo& HTMLInputElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLInputElement");
+const WrapperTypeInfo& HTMLLabelElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLLabelElement");
 const WrapperTypeInfo& HTMLTextAreaElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLTextAreaElement");
 const WrapperTypeInfo& HTMLSelectedContentElement::wrapper_type_info_ =
@@ -2964,6 +2993,24 @@ const WrapperTypeInfo& UIEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("UIEvent");
 const WrapperTypeInfo& MouseEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("MouseEvent");
+const WrapperTypeInfo& KeyboardEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("KeyboardEvent");
+const WrapperTypeInfo& TextEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("TextEvent");
+const WrapperTypeInfo& PointerEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("PointerEvent");
+const WrapperTypeInfo& DragEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("DragEvent");
+const WrapperTypeInfo& WheelEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("WheelEvent");
+const WrapperTypeInfo& Touch::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("Touch");
+const WrapperTypeInfo& TouchList::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("TouchList");
+const WrapperTypeInfo& InputDeviceCapabilities::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("InputDeviceCapabilities");
+const WrapperTypeInfo& DataTransfer::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("DataTransfer");
 const WrapperTypeInfo& DOMSelection::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("DOMSelection");
 const WrapperTypeInfo& CSSStyleDeclaration::wrapper_type_info_ =
@@ -3657,34 +3704,6 @@ void LayoutListItem::OrdinalValueChanged() {}
 void LayoutInlineListItem::OrdinalValueChanged() {}
 #endif
 
-EventPath::EventPath(Node&, Event*) {}
-EventTarget& EventPath::EventTargetRespectingTargetRules(Node& reference_node) {
-  return reference_node;
-}
-void EventPath::InitializeWith(Node&, Event*) {}
-NodeEventContext& EventPath::TopNodeEventContext() {
-  static NodeEventContext* context = nullptr;
-  return *context;
-}
-void EventPath::Trace(Visitor*) const {}
-
-GCedHeapVector<Member<EventTarget>>& TreeScopeEventContext::EnsureEventPath(
-    EventPath&) {
-  static Persistent<GCedHeapVector<Member<EventTarget>>> path =
-      MakeGarbageCollected<GCedHeapVector<Member<EventTarget>>>();
-  return *path;
-}
-DispatchEventResult EventDispatcher::Dispatch() {
-  return DispatchEventResult::kNotCanceled;
-}
-DispatchEventResult EventDispatcher::DispatchEvent(Node&, Event&) {
-  return DispatchEventResult::kNotCanceled;
-}
-void EventDispatcher::DispatchScopedEvent(Node&, Event&) {}
-void EventDispatcher::DispatchSimulatedClick(Node&,
-                                             const Event*,
-                                             SimulatedClickCreationScope) {}
-
 UIEvent::UIEvent() : Event(), detail_(0) {}
 UIEvent::UIEvent(const AtomicString& type,
                  Bubbles bubbles,
@@ -3721,6 +3740,176 @@ void UIEvent::Trace(Visitor* visitor) const {
   visitor->Trace(view_);
 }
 
+bool UIEventWithKeyState::new_tab_modifier_set_from_isolated_world_ = false;
+
+UIEventWithKeyState::UIEventWithKeyState(
+    const AtomicString& type,
+    Bubbles bubbles,
+    Cancelable cancelable,
+    AbstractView* view,
+    int detail,
+    WebInputEvent::Modifiers modifiers,
+    base::TimeTicks platform_time_stamp,
+    InputDeviceCapabilities* source_capabilities)
+    : UIEvent(type,
+              bubbles,
+              cancelable,
+              ComposedMode::kComposed,
+              platform_time_stamp,
+              view,
+              detail,
+              source_capabilities),
+      modifiers_(modifiers) {}
+
+UIEventWithKeyState::UIEventWithKeyState(
+    const AtomicString& type,
+    const EventModifierInit* initializer,
+    base::TimeTicks platform_time_stamp)
+    : UIEvent(type,
+              initializer && initializer->bubbles() ? Bubbles::kYes
+                                                    : Bubbles::kNo,
+              initializer && initializer->cancelable() ? Cancelable::kYes
+                                                       : Cancelable::kNo,
+              initializer && initializer->composed()
+                  ? ComposedMode::kComposed
+                  : ComposedMode::kScoped,
+              platform_time_stamp,
+              initializer ? initializer->view() : nullptr,
+              initializer ? initializer->detail() : 0,
+              initializer ? initializer->sourceCapabilities() : nullptr),
+      modifiers_(0) {
+  if (initializer) {
+    InitModifiers(initializer->ctrlKey(), initializer->altKey(),
+                  initializer->shiftKey(), initializer->metaKey());
+  }
+}
+
+void UIEventWithKeyState::DidCreateEventInIsolatedWorld(bool,
+                                                        bool,
+                                                        bool,
+                                                        bool) {}
+
+void UIEventWithKeyState::SetFromWebInputEventModifiers(
+    EventModifierInit* initializer,
+    WebInputEvent::Modifiers modifiers) {
+  if (!initializer) {
+    return;
+  }
+  initializer->setCtrlKey(modifiers & WebInputEvent::kControlKey);
+  initializer->setShiftKey(modifiers & WebInputEvent::kShiftKey);
+  initializer->setAltKey(modifiers & WebInputEvent::kAltKey);
+  initializer->setMetaKey(modifiers & WebInputEvent::kMetaKey);
+}
+
+bool UIEventWithKeyState::getModifierState(const String&) const {
+  return false;
+}
+
+const UIEventWithKeyState* FindEventWithKeyState(const Event*) {
+  return nullptr;
+}
+
+UIEventTiming::UIEventTiming(LocalFrame*, const Event&) {}
+
+TextEvent* TextEvent::Create() {
+  return MakeGarbageCollected<TextEvent>();
+}
+
+TextEvent* TextEvent::Create(AbstractView* view,
+                             const String& data,
+                             TextEventInputType input_type) {
+  return MakeGarbageCollected<TextEvent>(view, data, input_type);
+}
+
+TextEvent* TextEvent::CreateForPlainTextPaste(AbstractView* view,
+                                              const String& data,
+                                              bool should_smart_replace) {
+  return MakeGarbageCollected<TextEvent>(view, data, nullptr,
+                                         should_smart_replace, false);
+}
+
+TextEvent* TextEvent::CreateForFragmentPaste(
+    AbstractView* view,
+    DocumentFragment* data,
+    bool should_smart_replace,
+    bool should_match_style,
+    DataTransfer* data_transfer) {
+  return MakeGarbageCollected<TextEvent>(
+      view, String(), data, should_smart_replace, should_match_style,
+      data_transfer);
+}
+
+TextEvent* TextEvent::CreateForDrop(AbstractView* view, const String& data) {
+  return MakeGarbageCollected<TextEvent>(view, data, kTextEventInputDrop);
+}
+
+TextEvent::TextEvent()
+    : input_type_(kTextEventInputKeyboard),
+      pasting_fragment_(nullptr),
+      data_transfer_(nullptr),
+      should_smart_replace_(false),
+      should_match_style_(false) {}
+
+TextEvent::TextEvent(AbstractView* view,
+                     const String& data,
+                     TextEventInputType input_type)
+    : UIEvent(event_type_names::kTextInput,
+              Bubbles::kYes,
+              Cancelable::kYes,
+              ComposedMode::kComposed,
+              base::TimeTicks::Now(),
+              view,
+              0,
+              nullptr),
+      input_type_(input_type),
+      data_(data),
+      pasting_fragment_(nullptr),
+      data_transfer_(nullptr),
+      should_smart_replace_(false),
+      should_match_style_(false) {}
+
+TextEvent::TextEvent(AbstractView* view,
+                     const String& data,
+                     DocumentFragment* pasting_fragment,
+                     bool should_smart_replace,
+                     bool should_match_style,
+                     DataTransfer* data_transfer)
+    : UIEvent(event_type_names::kTextInput,
+              Bubbles::kYes,
+              Cancelable::kYes,
+              ComposedMode::kComposed,
+              base::TimeTicks::Now(),
+              view,
+              0,
+              nullptr),
+      input_type_(kTextEventInputPaste),
+      data_(data),
+      pasting_fragment_(pasting_fragment),
+      data_transfer_(data_transfer),
+      should_smart_replace_(should_smart_replace),
+      should_match_style_(should_match_style) {}
+
+TextEvent::~TextEvent() = default;
+
+void TextEvent::initTextEvent(const AtomicString& type,
+                              bool bubbles,
+                              bool cancelable,
+                              AbstractView* view,
+                              const String& data) {
+  initUIEvent(type, bubbles, cancelable, view, 0);
+  data_ = data;
+}
+
+const AtomicString& TextEvent::InterfaceName() const {
+  return event_interface_names::kTextEvent;
+}
+
+void TextEvent::Trace(Visitor* visitor) const {
+  UIEvent::Trace(visitor);
+  visitor->Trace(pasting_fragment_);
+  visitor->Trace(data_transfer_);
+}
+
 void UIEventWithKeyState::InitModifiers(bool ctrl_key,
                                         bool alt_key,
                                         bool shift_key,
@@ -3747,6 +3936,50 @@ MouseEvent::MouseEvent()
       buttons_(0),
       synthetic_event_type_(kRealOrIndistinguishable),
       menu_source_type_(ui::mojom::blink::MenuSourceType::kNone) {}
+
+MouseEvent* MouseEvent::Create(
+    const AtomicString& event_type,
+    const MouseEventInit* initializer,
+    base::TimeTicks platform_time_stamp,
+    SyntheticEventType synthetic_event_type,
+    ui::mojom::blink::MenuSourceType menu_source_type) {
+  return MakeGarbageCollected<MouseEvent>(
+      event_type, initializer, platform_time_stamp, synthetic_event_type,
+      menu_source_type);
+}
+
+MouseEvent* MouseEvent::Create(ScriptState*,
+                               const AtomicString& event_type,
+                               const MouseEventInit* initializer) {
+  return Create(event_type, initializer, base::TimeTicks::Now(),
+                kRealOrIndistinguishable,
+                ui::mojom::blink::MenuSourceType::kNone);
+}
+
+MouseEvent::MouseEvent(const AtomicString& event_type,
+                       const MouseEventInit* initializer,
+                       base::TimeTicks platform_time_stamp,
+                       SyntheticEventType synthetic_event_type,
+                       ui::mojom::blink::MenuSourceType menu_source_type,
+                       LocalDOMWindow* fallback_dom_window)
+    : UIEventWithKeyState(event_type, initializer, platform_time_stamp),
+      screen_x_(initializer ? initializer->screenX() : 0),
+      screen_y_(initializer ? initializer->screenY() : 0),
+      movement_delta_(initializer ? initializer->movementX() : 0,
+                      initializer ? initializer->movementY() : 0),
+      position_type_(synthetic_event_type == kPositionless
+                         ? PositionType::kPositionless
+                         : PositionType::kPosition),
+      button_(initializer ? initializer->button() : -1),
+      buttons_(initializer ? initializer->buttons() : 0),
+      related_target_(initializer ? initializer->relatedTarget() : nullptr),
+      synthetic_event_type_(synthetic_event_type),
+      menu_source_type_(menu_source_type) {
+  if (initializer) {
+    InitCoordinates(initializer->clientX(), initializer->clientY(),
+                    fallback_dom_window);
+  }
+}
 
 void MouseEvent::InitCoordinates(const double client_x,
                                  const double client_y,
@@ -3816,6 +4049,23 @@ void MouseEvent::initMouseEvent(ScriptState*,
   menu_source_type_ = ui::mojom::blink::MenuSourceType::kNone;
 }
 
+void MouseEvent::SetCoordinatesFromWebPointerProperties(
+    const WebPointerProperties& web_pointer_properties,
+    const LocalDOMWindow*,
+    MouseEventInit* initializer) {
+  if (!initializer) {
+    return;
+  }
+  initializer->setScreenX(web_pointer_properties.PositionInScreen().x());
+  initializer->setScreenY(web_pointer_properties.PositionInScreen().y());
+  initializer->setClientX(web_pointer_properties.PositionInWidget().x());
+  initializer->setClientY(web_pointer_properties.PositionInWidget().y());
+  if (web_pointer_properties.is_raw_movement_event) {
+    initializer->setMovementX(web_pointer_properties.movement_x);
+    initializer->setMovementY(web_pointer_properties.movement_y);
+  }
+}
+
 const AtomicString& MouseEvent::InterfaceName() const {
   return event_interface_names::kEvent;
 }
@@ -3860,9 +4110,217 @@ DispatchEventResult MouseEvent::DispatchEvent(EventDispatcher& dispatcher) {
   return dispatcher.Dispatch();
 }
 
+PointerEvent::PointerEvent(
+    const AtomicString& type,
+    const PointerEventInit* initializer,
+    base::TimeTicks platform_time_stamp,
+    MouseEvent::SyntheticEventType synthetic_event_type,
+    ui::mojom::blink::MenuSourceType menu_source_type,
+    bool prevent_counting_as_interaction)
+    : MouseEvent(type,
+                 initializer,
+                 platform_time_stamp,
+                 synthetic_event_type,
+                 menu_source_type),
+      pointer_id_(initializer ? initializer->pointerId() : 0),
+      width_(initializer ? initializer->width() : 1),
+      height_(initializer ? initializer->height() : 1),
+      pressure_(initializer ? initializer->pressure() : 0),
+      tilt_x_(initializer ? initializer->getTiltXOr(0) : 0),
+      tilt_y_(initializer ? initializer->getTiltYOr(0) : 0),
+      azimuth_angle_(initializer ? initializer->getAzimuthAngleOr(0) : 0),
+      altitude_angle_(initializer ? initializer->getAltitudeAngleOr(0) : 0),
+      tangential_pressure_(initializer ? initializer->tangentialPressure() : 0),
+      twist_(initializer ? initializer->twist() : 0),
+      pointer_type_(initializer ? initializer->pointerType() : String()),
+      is_primary_(initializer ? initializer->isPrimary() : false),
+      persistent_device_id_(initializer ? initializer->persistentDeviceId() : 0),
+      prevent_counting_as_interaction_(prevent_counting_as_interaction) {}
+
+PointerId PointerEvent::pointerIdForBindings() const {
+  return pointer_id_;
+}
+
+bool PointerEvent::IsMouseEvent() const {
+  return type() == event_type_names::kClick ||
+         type() == event_type_names::kAuxclick ||
+         type() == event_type_names::kContextmenu;
+}
+
+bool PointerEvent::IsPointerEvent() const {
+  return true;
+}
+
+double PointerEvent::offsetX() const {
+  return MouseEvent::offsetX();
+}
+
+double PointerEvent::offsetY() const {
+  return MouseEvent::offsetY();
+}
+
+void PointerEvent::ReceivedTarget() {
+  MouseEvent::ReceivedTarget();
+}
+
+Node* PointerEvent::fromElement() const {
+  return nullptr;
+}
+
+Node* PointerEvent::toElement() const {
+  return nullptr;
+}
+
+HeapVector<Member<PointerEvent>> PointerEvent::getCoalescedEvents() {
+  return coalesced_events_;
+}
+
+HeapVector<Member<PointerEvent>> PointerEvent::getPredictedEvents() {
+  return predicted_events_;
+}
+
+base::TimeTicks PointerEvent::OldestPlatformTimeStamp() const {
+  return PlatformTimeStamp();
+}
+
+DispatchEventResult PointerEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  if (type().empty()) {
+    return DispatchEventResult::kNotCanceled;
+  }
+  if (isTrusted()) {
+    for (const auto& coalesced_event : coalesced_events_) {
+      coalesced_event->SetTarget(&dispatcher.GetNode());
+    }
+    for (const auto& predicted_event : predicted_events_) {
+      predicted_event->SetTarget(&dispatcher.GetNode());
+    }
+  }
+  if (type() == event_type_names::kClick) {
+    return MouseEvent::DispatchEvent(dispatcher);
+  }
+  return dispatcher.Dispatch();
+}
+
+Document* PointerEvent::GetDocument() const {
+  if (auto* local_dom_window = DynamicTo<LocalDOMWindow>(view())) {
+    return local_dom_window->document();
+  }
+  return nullptr;
+}
+
+bool PointerEvent::ShouldHaveIntegerCoordinates() const {
+  return type() == event_type_names::kClick ||
+         type() == event_type_names::kAuxclick ||
+         type() == event_type_names::kContextmenu;
+}
+
+void PointerEvent::Trace(Visitor* visitor) const {
+  MouseEvent::Trace(visitor);
+  visitor->Trace(coalesced_events_);
+  visitor->Trace(predicted_events_);
+}
+
+DragEvent::DragEvent()
+    : MouseEvent(), data_transfer_(nullptr) {}
+
+DragEvent::DragEvent(const AtomicString& type,
+                     const DragEventInit* initializer,
+                     base::TimeTicks platform_time_stamp,
+                     SyntheticEventType synthetic_event_type)
+    : MouseEvent(type, initializer, platform_time_stamp, synthetic_event_type,
+                 ui::mojom::blink::MenuSourceType::kNone),
+      data_transfer_(initializer ? initializer->dataTransfer() : nullptr) {}
+
+bool DragEvent::IsDragEvent() const {
+  return true;
+}
+
+bool DragEvent::IsMouseEvent() const {
+  return false;
+}
+
+DispatchEventResult DragEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  return dispatcher.Dispatch();
+}
+
+void DragEvent::Trace(Visitor* visitor) const {
+  MouseEvent::Trace(visitor);
+  visitor->Trace(data_transfer_);
+}
+
+WheelEvent* WheelEvent::Create(const WebMouseWheelEvent& native_event,
+                               LocalDOMWindow& window) {
+  return MakeGarbageCollected<WheelEvent>(native_event, window);
+}
+
+WheelEvent* WheelEvent::Create(const WebMouseWheelEvent& native_event,
+                               const gfx::Vector2dF& delta_in_pixels,
+                               LocalDOMWindow& window) {
+  return MakeGarbageCollected<WheelEvent>(native_event, delta_in_pixels,
+                                          window);
+}
+
+WheelEvent::WheelEvent()
+    : MouseEvent(),
+      delta_x_(0),
+      delta_y_(0),
+      delta_z_(0),
+      delta_mode_(kDomDeltaPixel) {}
+
+WheelEvent::WheelEvent(const AtomicString&, const WheelEventInit*)
+    : WheelEvent() {}
+
+WheelEvent::WheelEvent(const WebMouseWheelEvent& native_event,
+                       LocalDOMWindow& window)
+    : WheelEvent(native_event,
+                 gfx::Vector2dF(-native_event.delta_x, -native_event.delta_y),
+                 window) {}
+
+WheelEvent::WheelEvent(const WebMouseWheelEvent& native_event,
+                       const gfx::Vector2dF& delta_in_pixels,
+                       LocalDOMWindow&)
+    : MouseEvent(),
+      wheel_delta_(static_cast<int>(native_event.wheel_ticks_x *
+                                    kTickMultiplier),
+                   static_cast<int>(native_event.wheel_ticks_y *
+                                    kTickMultiplier)),
+      delta_x_(delta_in_pixels.x()),
+      delta_y_(delta_in_pixels.y()),
+      delta_z_(0),
+      delta_mode_(kDomDeltaPixel),
+      native_event_(native_event) {}
+
+const AtomicString& WheelEvent::InterfaceName() const {
+  return event_interface_names::kEvent;
+}
+
+bool WheelEvent::IsMouseEvent() const {
+  return false;
+}
+
+bool WheelEvent::IsWheelEvent() const {
+  return true;
+}
+
+void WheelEvent::preventDefault() {
+  Event::preventDefault();
+}
+
+DispatchEventResult WheelEvent::DispatchEvent(EventDispatcher& dispatcher) {
+  return dispatcher.Dispatch();
+}
+
+void WheelEvent::Trace(Visitor* visitor) const {
+  MouseEvent::Trace(visitor);
+}
+
 void MouseEvent::ReceivedTarget() {}
 
 void MouseEvent::ComputeRelativePosition() {}
+
+WebMouseEvent TransformWebMouseEvent(LocalFrameView*, const WebMouseEvent& event) {
+  return event;
+}
 
 int MouseEvent::layerX() {
   return static_cast<int>(std::floor(layer_location_.x()));
@@ -3881,9 +4339,6 @@ double MouseEvent::offsetY() const {
 }
 
 void ContextMenuController::HandleContextMenuEvent(MouseEvent*) {}
-void EventHandler::DefaultKeyboardEventHandler(KeyboardEvent*) {}
-void EventHandler::DefaultTextInputEventHandler(TextEvent*) {}
-void EventHandler::StartMiddleClickAutoscroll(LayoutObject*) {}
 
 namespace event_util {
 const Vector<AtomicString>& MouseButtonEventTypes() {
@@ -5356,6 +5811,12 @@ void CloseWatcher::destroy() {}
 
 void HTMLDialogElement::SetFocusForDialog() {}
 
+void HTMLDialogElement::HandleDialogLightDismissForClick(
+    const PointerEventFactory::PointerTarget&,
+    const PointerEventFactory::PointerTarget&) {}
+void HTMLDialogElement::HandleDialogLightDismiss(const PointerEvent&,
+                                                 const Node&) {}
+
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool HTMLInputElement::IsBaseAppearanceCombobox() const {
   return false;
@@ -5382,14 +5843,41 @@ int KeyboardEvent::charCode() const {
   return 0;
 }
 
+KeyboardEvent::KeyboardEvent(const WebKeyboardEvent&,
+                             LocalDOMWindow*,
+                             bool cancellable)
+    : UIEventWithKeyState(event_type_names::kKeydown,
+                          Bubbles::kYes,
+                          cancellable ? Cancelable::kYes : Cancelable::kNo,
+                          nullptr,
+                          0,
+                          WebInputEvent::kNoModifiers,
+                          base::TimeTicks::Now(),
+                          nullptr),
+      location_(kDomKeyLocationStandard) {}
+
+KeyboardEvent::~KeyboardEvent() = default;
+
+void KeyboardEvent::Trace(Visitor* visitor) const {
+  UIEventWithKeyState::Trace(visitor);
+}
+
+const AtomicString& KeyboardEvent::InterfaceName() const {
+  return event_interface_names::kKeyboardEvent;
+}
+
+bool KeyboardEvent::IsKeyboardEvent() const {
+  return true;
+}
+
+unsigned KeyboardEvent::which() const {
+  return static_cast<unsigned>(keyCode());
+}
+
 void ElementInternals::SetBehaviors(HeapVector<Member<ElementBehavior>>,
                                     ExceptionState&) {}
 
 Element* HTMLFormElement::FindDefaultButton() const {
-  return nullptr;
-}
-
-HTMLElement* HTMLLabelElement::Control() const {
   return nullptr;
 }
 
@@ -6447,7 +6935,11 @@ bool IsWordBreak(char16_t) {
   return false;
 }
 
-void EventDispatcher::DispatchSimulatedEnterEvent(HTMLInputElement&) {}
+InputDeviceCapabilitiesConstants* DOMWindow::GetInputDeviceCapabilities() {
+  if (!input_capabilities_)
+    input_capabilities_ = MakeGarbageCollected<InputDeviceCapabilitiesConstants>();
+  return input_capabilities_.Get();
+}
 
 void HitTestResult::OverrideNodeAndPosition(Node* node,
                                             PhysicalOffset position) {
@@ -6610,16 +7102,16 @@ String TrustedTypesCheckForScriptURL(const String& script_url,
   return script_url;
 }
 
-bool EventHandler::UsesHandCursor(const Node*) {
-  return false;
-}
-
 LayoutShiftTracker::ReattachHookScope::ReattachHookScope(const Node&) {}
 LayoutShiftTracker::ReattachHookScope::~ReattachHookScope() = default;
 void LayoutShiftTracker::ReattachHookScope::NotifyAttach(const Node&) {}
 void LayoutShiftTracker::ReattachHookScope::NotifyDetach(const Node&) {}
 void LayoutShiftTracker::Trace(Visitor*) const {}
 
+EventHandlerRegistry::EventHandlerRegistry(LocalFrame& frame)
+    : frame_(&frame) {}
+EventHandlerRegistry::~EventHandlerRegistry() = default;
+void EventHandlerRegistry::Trace(Visitor*) const {}
 void EventHandlerRegistry::DidAddEventHandler(EventTarget&,
                                               EventHandlerClass) {}
 void EventHandlerRegistry::DidRemoveEventHandler(EventTarget&,
@@ -6638,6 +7130,226 @@ const EventTargetSet* EventHandlerRegistry::EventHandlerTargets(
     EventHandlerClass) const {
   return nullptr;
 }
+bool EventHandlerRegistry::HasEventHandlers(EventHandlerClass) const {
+  return false;
+}
+
+KeyboardEventManager::KeyboardEventManager(LocalFrame& frame,
+                                           ScrollManager& scroll_manager)
+    : frame_(&frame), scroll_manager_(&scroll_manager) {}
+void KeyboardEventManager::Trace(Visitor* visitor) const {
+  visitor->Trace(frame_);
+  visitor->Trace(scroll_manager_);
+  visitor->Trace(scrollend_event_target_);
+}
+bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent&) {
+  return false;
+}
+WebInputEventResult KeyboardEventManager::KeyEvent(const WebKeyboardEvent&) {
+  return WebInputEventResult::kNotHandled;
+}
+void KeyboardEventManager::DefaultKeyboardEventHandler(KeyboardEvent*, Node*) {}
+void KeyboardEventManager::CapsLockStateMayHaveChanged() {}
+WebInputEvent::Modifiers KeyboardEventManager::GetCurrentModifierState() {
+  return WebInputEvent::kNoModifiers;
+}
+bool KeyboardEventManager::CurrentCapsLockState() {
+  return false;
+}
+void KeyboardEventManager::SetCurrentCapsLockState(OverrideCapsLockState) {}
+
+TouchEventManager::TouchEventManager(LocalFrame& frame)
+    : frame_(&frame),
+      suppressing_touchmoves_within_slop_(false),
+      current_touch_action_(TouchAction::kAuto) {}
+void TouchEventManager::Trace(Visitor* visitor) const {
+  visitor->Trace(frame_);
+  visitor->Trace(touch_attribute_map_);
+  visitor->Trace(touch_sequence_document_);
+}
+void TouchEventManager::HandleTouchPoint(
+    const WebPointerEvent&,
+    const Vector<WebPointerEvent>&,
+    const event_handling_util::PointerEventTarget&) {}
+WebInputEventResult TouchEventManager::FlushEvents() {
+  return WebInputEventResult::kNotHandled;
+}
+void TouchEventManager::Clear() {
+  touch_attribute_map_.clear();
+  touch_sequence_document_ = nullptr;
+}
+void TouchEventManager::HandlePseudoElementRemoval(PseudoElement&) {}
+bool TouchEventManager::IsAnyTouchActive() const {
+  return false;
+}
+Node* TouchEventManager::GetTouchPointerNode(
+    const WebPointerEvent&,
+    const event_handling_util::PointerEventTarget&) {
+  return nullptr;
+}
+void TouchEventManager::UpdateTouchAttributeMapsForPointerDown(
+    const WebPointerEvent&,
+    Node*,
+    TouchAction) {}
+Element* TouchEventManager::CurrentTouchDownElement() {
+  return nullptr;
+}
+
+void WidgetEventHandler::HandleMouseMove(
+    LocalFrame&,
+    const WebMouseEvent&,
+    const std::vector<std::unique_ptr<WebInputEvent>>&,
+    const std::vector<std::unique_ptr<WebInputEvent>>&) {}
+void WidgetEventHandler::HandleMouseLeave(LocalFrame&, const WebMouseEvent&) {}
+void WidgetEventHandler::HandleMouseDown(LocalFrame&, const WebMouseEvent&) {}
+WebInputEventResult WidgetEventHandler::HandleMouseUp(LocalFrame&,
+                                                      const WebMouseEvent&) {
+  return WebInputEventResult::kNotHandled;
+}
+WebInputEventResult WidgetEventHandler::HandleMouseWheel(
+    LocalFrame&,
+    const WebMouseWheelEvent&) {
+  return WebInputEventResult::kNotHandled;
+}
+WebInputEventResult WidgetEventHandler::HandlePointerEvent(
+    LocalFrame&,
+    const WebPointerEvent&,
+    const std::vector<std::unique_ptr<WebInputEvent>>&,
+    const std::vector<std::unique_ptr<WebInputEvent>>&) {
+  return WebInputEventResult::kNotHandled;
+}
+WebInputEventResult WidgetEventHandler::HandleInputEvent(
+    const WebCoalescedInputEvent&,
+    LocalFrame*) {
+  return WebInputEventResult::kNotHandled;
+}
+
+SelectionController::SelectionController(LocalFrame& frame)
+    : ExecutionContextLifecycleObserver(nullptr),
+      frame_(&frame),
+      mouse_down_may_start_select_(false),
+      mouse_down_was_single_click_in_selection_(false),
+      mouse_down_allows_multi_click_(false),
+      selection_state_(SelectionState::kHaveNotStartedSelection) {}
+SelectionController::~SelectionController() = default;
+void SelectionController::Trace(Visitor* visitor) const {
+  visitor->Trace(frame_);
+}
+bool SelectionController::HandleMousePressEvent(
+    const MouseEventWithHitTestResults&) {
+  return false;
+}
+WebInputEventResult SelectionController::HandleMouseDraggedEvent(
+    const MouseEventWithHitTestResults&,
+    const gfx::Point&,
+    const PhysicalOffset&) {
+  return WebInputEventResult::kNotHandled;
+}
+bool SelectionController::HandleMouseReleaseEvent(
+    const MouseEventWithHitTestResults&,
+    const PhysicalOffset&) {
+  return false;
+}
+bool SelectionController::HandlePasteGlobalSelection(const WebMouseEvent&) {
+  return false;
+}
+bool SelectionController::HandleGestureLongPress(const HitTestResult&) {
+  return false;
+}
+void SelectionController::HandleGestureTwoFingerTap(
+    const GestureEventWithHitTestResults&) {}
+void SelectionController::UpdateSelectionForMouseDrag(const PhysicalOffset&,
+                                                      const PhysicalOffset&) {}
+template <typename MouseEventObject>
+void SelectionController::UpdateSelectionForContextMenuEvent(
+    const MouseEventObject*,
+    const HitTestResult&,
+    const PhysicalOffset&) {}
+template void SelectionController::UpdateSelectionForContextMenuEvent<MouseEvent>(
+    const MouseEvent*,
+    const HitTestResult&,
+    const PhysicalOffset&);
+template void
+SelectionController::UpdateSelectionForContextMenuEvent<PointerEvent>(
+    const PointerEvent*,
+    const HitTestResult&,
+    const PhysicalOffset&);
+void SelectionController::PassMousePressEventToSubframe(
+    const MouseEventWithHitTestResults&) {}
+void SelectionController::InitializeSelectionState() {
+  selection_state_ = SelectionState::kHaveNotStartedSelection;
+}
+void SelectionController::SetMouseDownMayStartSelect(bool value) {
+  mouse_down_may_start_select_ = value;
+}
+bool SelectionController::MouseDownMayStartSelect() const {
+  return mouse_down_may_start_select_;
+}
+bool SelectionController::MouseDownWasSingleClickInSelection() const {
+  return mouse_down_was_single_click_in_selection_;
+}
+void SelectionController::NotifySelectionChanged() {}
+void SelectionController::ContextDestroyed() {}
+
+bool IsSelectionOverLink(const MouseEventWithHitTestResults&) {
+  return false;
+}
+
+bool IsExtendingSelection(const MouseEventWithHitTestResults&) {
+  return false;
+}
+
+SelectionInFlatTree AdjustSelectionWithTrailingWhitespace(
+    const SelectionInFlatTree& selection) {
+  return selection;
+}
+
+SelectionInFlatTree AdjustSelectionByUserSelect(
+    Node*,
+    const SelectionInFlatTree& selection) {
+  return selection;
+}
+
+FocusChangedObserver::FocusChangedObserver(Page*) {}
+bool FocusChangedObserver::IsFrameFocused(LocalFrame*) {
+  return false;
+}
+
+GestureManager::GestureManager(LocalFrame& frame,
+                               ScrollManager& scroll_manager,
+                               MouseEventManager& mouse_event_manager,
+                               PointerEventManager& pointer_event_manager,
+                               SelectionController& selection_controller)
+    : FocusChangedObserver(nullptr),
+      frame_(&frame),
+      scroll_manager_(&scroll_manager),
+      mouse_event_manager_(&mouse_event_manager),
+      pointer_event_manager_(&pointer_event_manager),
+      suppress_mouse_events_from_gestures_(false),
+      gesture_context_menu_deferred_(false),
+      selection_controller_(&selection_controller) {}
+
+void GestureManager::Trace(Visitor* visitor) const {
+  visitor->Trace(frame_);
+  visitor->Trace(scroll_manager_);
+  visitor->Trace(mouse_event_manager_);
+  visitor->Trace(pointer_event_manager_);
+}
+void GestureManager::Clear() {}
+void GestureManager::ResetLongTapContextMenuStates() {}
+HitTestRequest::HitTestRequestType GestureManager::GetHitTypeForGestureType(
+    WebInputEvent::Type) {
+  return HitTestRequest::kReadOnly | HitTestRequest::kActive;
+}
+WebInputEventResult GestureManager::HandleGestureEventInFrame(
+    const GestureEventWithHitTestResults&) {
+  return WebInputEventResult::kNotHandled;
+}
+bool GestureManager::GestureContextMenuDeferred() const {
+  return false;
+}
+void GestureManager::HandleTouchDragEnd(const WebMouseEvent&,
+                                        ui::mojom::blink::DragOperation) {}
 
 void DocumentMarkerController::RemoveMarkersForNode(
     const Text&,
@@ -6774,10 +7486,6 @@ bool Frame::AllowFocusWithoutUserActivation() {
   return false;
 }
 
-bool EventHandler::IsHandlingKeyEvent() const {
-  return false;
-}
-
 bool EventListenerMap::ContainsJSBasedEventListeners(
     const AtomicString&) const {
   return false;
@@ -6856,18 +7564,6 @@ String TrustedTypesCheckForHTML(
 }
 
 void MergeWithNextTextNode(Text*, ExceptionState&) {}
-
-bool EventHandler::IsPointerEventActive(int) {
-  return false;
-}
-
-void EventHandler::SetPointerCapture(int, Element*) {}
-
-void EventHandler::ReleasePointerCapture(int, Element*) {}
-
-bool EventHandler::HasPointerCapture(int, const Element*) const {
-  return false;
-}
 
 String Element::innerText(TextVisitor*) {
   return textContent(true);
@@ -7034,6 +7730,20 @@ VisibleSelection FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated()
   return VisibleSelection();
 }
 
+VisibleSelection FrameSelection::ComputeVisibleSelectionInDOMTree() const {
+  return VisibleSelection();
+}
+
+void FrameSelection::SetCaretBlinkingSuspended(bool) {}
+
+Document& FrameSelection::GetDocument() const {
+  return *frame_->GetDocument();
+}
+
+bool FrameSelection::SelectionHasFocus() const {
+  return FrameIsFocusedAndActive();
+}
+
 template <typename Strategy>
 Element* VisibleSelectionTemplate<Strategy>::RootEditableElement() const {
   return nullptr;
@@ -7085,6 +7795,35 @@ SelectionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::AsSelection()
   return SelectionTemplate<Strategy>();
 }
 
+template <typename Strategy>
+bool VisibleSelectionTemplate<Strategy>::IsNone() const {
+  return true;
+}
+
+template <typename Strategy>
+bool VisibleSelectionTemplate<Strategy>::IsRange() const {
+  return false;
+}
+
+template <typename Strategy>
+PositionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::Start() const {
+  return anchor_;
+}
+
+template <typename Strategy>
+EphemeralRangeTemplate<Strategy>
+VisibleSelectionTemplate<Strategy>::ToNormalizedEphemeralRange() const {
+  return EphemeralRangeTemplate<Strategy>();
+}
+
+bool IsNodeFullyContained(const EphemeralRange&, const Node&) {
+  return false;
+}
+
+bool IsInPasswordField(const Position&) {
+  return false;
+}
+
 void FrameSelection::SetSelection(const SelectionInDOMTree&,
                                   const SetSelectionOptions&) {}
 
@@ -7099,6 +7838,18 @@ PositionWithAffinity AdjustForEditingBoundary(
 
 PositionWithAffinity AdjustForEditingBoundary(const Position& position) {
   return PositionWithAffinity(position);
+}
+
+LocalCaretRect LocalCaretRectOfPosition(const PositionWithAffinity&,
+                                        CaretShape,
+                                        EditingBoundaryCrossingRule) {
+  return LocalCaretRect();
+}
+
+gfx::Rect AbsoluteCaretBoundsOf(const PositionWithAffinity&,
+                                CaretShape,
+                                EditingBoundaryCrossingRule) {
+  return gfx::Rect();
 }
 
 IndexedPseudoElement::IndexedPseudoElement(Element* parent,
@@ -8234,8 +8985,6 @@ ChildListMutationAccumulator* ChildListMutationAccumulator::GetOrCreate(
 }
 void ChildListMutationAccumulator::WillRemoveChild(Node&) {}
 void ChildListMutationAccumulator::LeaveMutationScope() {}
-void ScopedEventQueue::IncrementScopingLevel() {}
-void ScopedEventQueue::DecrementScopingLevel() {}
 MutationRecord* MutationRecord::CreateCharacterData(Node*, const String&) {
   return nullptr;
 }
@@ -8461,6 +9210,12 @@ void EmbeddedContentView::SetParentVisible(bool visible) {
 }
 FrameView::FrameView(const gfx::Rect& frame_rect)
     : EmbeddedContentView(frame_rect) {}
+bool FrameView::RectInParentIsStable(const base::TimeTicks&) const {
+  return true;
+}
+bool FrameView::RectInParentIsStableForIOv2(const base::TimeTicks&) const {
+  return true;
+}
 void RemoteFrameView::UpdateCompositingScaleFactor() {}
 void RemoteFrameView::UpdateCompositingRect() {}
 PhysicalSize CalculateInitialContainingBlockSizeForPagination(Document&) {
@@ -8558,9 +9313,6 @@ PhysicalRect LayoutReplaced::ReplacedContentRect() const {
   return PhysicalRect();
 }
 #endif
-bool MouseEventManager::IsMousePositionUnknown() {
-  return true;
-}
 FragmentAnchor* FragmentAnchor::TryCreate(const KURL&, LocalFrame&, bool) {
   return nullptr;
 }
@@ -8672,6 +9424,9 @@ String FrameSelection::SelectedText(const TextIteratorBehavior&) const {
 String FrameSelection::SelectedTextForClipboard() const {
   return String();
 }
+String FrameSelection::SelectedHTMLForClipboard() const {
+  return String();
+}
 void FrameSelection::SelectSubString(const Element&, int, int) {}
 Editor::Editor(LocalFrame& frame)
     : frame_(&frame),
@@ -8688,75 +9443,11 @@ void Editor::Clear() {}
 bool Editor::CanEdit() const {
   return false;
 }
-void Editor::SetBaseWritingDirection(mojo_base::mojom::TextDirection) {}
-EventHandler::EventHandler(LocalFrame& frame)
-    : frame_(&frame),
-      selection_controller_(nullptr),
-      hover_timer_(frame.GetTaskRunner(TaskType::kUserInteraction),
-                   this,
-                   &EventHandler::HoverTimerFired),
-      cursor_update_timer_(frame.GetTaskRunner(TaskType::kUserInteraction),
-                           this,
-                           &EventHandler::CursorUpdateTimerFired),
-      should_only_fire_drag_over_event_(false),
-      max_mouse_moved_duration_(0.0),
-      active_interval_timer_(frame.GetTaskRunner(TaskType::kUserInteraction),
-                             this,
-                             &EventHandler::ActiveIntervalTimerFired),
-      should_use_touch_event_adjusted_point_(false) {}
-void EventHandler::Trace(Visitor*) const {}
-void EventHandler::Clear() {}
-bool EventHandler::BubblingScroll(mojom::blink::ScrollDirection,
-                                  ui::ScrollGranularity,
-                                  Node*) {
+bool Editor::HandleTextEvent(TextEvent*) {
   return false;
 }
-HitTestResult EventHandler::HitTestResultAtLocation(
-    const HitTestLocation& location,
-    HitTestRequest::HitTestRequestType hit_type,
-    const LayoutObject* stop_node,
-    bool no_lifecycle_update,
-    std::optional<HitTestRequest::HitNodeCb> hit_node_cb) {
-  if (frame_->GetPage()) {
-    LocalFrame& main_frame = frame_->LocalFrameRoot();
-    if (frame_ != &main_frame) {
-      LocalFrameView* frame_view = frame_->View();
-      LocalFrameView* main_view = main_frame.View();
-      if (frame_view && main_view) {
-        HitTestLocation adjusted_location;
-        if (location.IsRectBasedTest()) {
-          if (hit_type & HitTestRequest::kHitTestVisualOverflow) {
-            PhysicalRect local_rect = location.BoundingBox();
-            PhysicalRect main_frame_rect =
-                frame_view->GetLayoutView()->LocalToAncestorRect(
-                    local_rect, main_view->GetLayoutView(),
-                    kTraverseDocumentBoundaries);
-            adjusted_location = HitTestLocation(main_frame_rect);
-          } else {
-            PhysicalOffset main_content_point = main_view->ConvertFromRootFrame(
-                frame_view->ConvertToRootFrame(location.BoundingBox().offset));
-            adjusted_location = HitTestLocation(
-                PhysicalRect(main_content_point, location.BoundingBox().size));
-          }
-        } else {
-          adjusted_location = HitTestLocation(main_view->ConvertFromRootFrame(
-              frame_view->ConvertToRootFrame(location.Point())));
-        }
-        return main_frame.GetEventHandler().HitTestResultAtLocation(
-            adjusted_location, hit_type, stop_node, no_lifecycle_update);
-      }
-    }
-  }
-
-  HitTestRequest request(hit_type | HitTestRequest::kAllowChildFrameContent,
-                         stop_node, std::move(hit_node_cb));
-  HitTestResult result(request, location);
-  PerformHitTest(location, result, no_lifecycle_update);
-  return result;
-}
-void EventHandler::HoverTimerFired(TimerBase*) {}
-void EventHandler::CursorUpdateTimerFired(TimerBase*) {}
-void EventHandler::ActiveIntervalTimerFired(TimerBase*) {}
+void Editor::HandleKeyboardEvent(KeyboardEvent*) {}
+void Editor::SetBaseWritingDirection(mojo_base::mojom::TextDirection) {}
 FrameConsole::FrameConsole(LocalFrame& frame) : frame_(&frame) {}
 BrowserInterfaceBrokerProxyImpl::BrowserInterfaceBrokerProxyImpl(
     ContextLifecycleNotifier* notifier)
@@ -8813,6 +9504,71 @@ mojom::blink::BackForwardCacheControllerHost&
 LocalFrameMojoHandler::BackForwardCacheControllerHostRemote() {
   return *static_cast<mojom::blink::BackForwardCacheControllerHost*>(nullptr);
 }
+DataObject* DataObject::Create() {
+  return MakeGarbageCollected<DataObject>();
+}
+DataObject::DataObject() : modifiers_(0) {}
+DataObject::~DataObject() = default;
+void DataObject::Trace(Visitor* visitor) const {
+  visitor->Trace(item_list_);
+  visitor->Trace(observers_);
+  Supplementable<DataObject>::Trace(visitor);
+}
+
+void DataObjectItem::Trace(Visitor* visitor) const {
+  visitor->Trace(file_);
+  visitor->Trace(system_clipboard_);
+}
+
+void FileList::Trace(Visitor* visitor) const {
+  visitor->Trace(files_);
+  ScriptWrappable::Trace(visitor);
+}
+
+DataTransfer* DataTransfer::Create() {
+  return MakeGarbageCollected<DataTransfer>(
+      kCopyAndPaste, DataTransferAccessPolicy::kWritable, DataObject::Create());
+}
+DataTransfer* DataTransfer::Create(DataTransferType type,
+                                   DataTransferAccessPolicy policy,
+                                   DataObject* data_object) {
+  return MakeGarbageCollected<DataTransfer>(type, policy, data_object);
+}
+DataTransfer::DataTransfer(DataTransferType type,
+                           DataTransferAccessPolicy policy,
+                           DataObject* data_object)
+    : policy_(policy),
+      transfer_type_(type),
+      data_object_(data_object),
+      data_store_item_list_changed_(false) {}
+DataTransfer::~DataTransfer() = default;
+void DataTransfer::ClearDragImage() {
+  drag_image_ = nullptr;
+  drag_image_element_ = nullptr;
+  drag_loc_ = gfx::Point();
+}
+void DataTransfer::resetDropEffect() {
+  drop_effect_ = AtomicString();
+}
+void DataTransfer::SetDestinationOperationFromEffectAllowed() {}
+void DataTransfer::SetDestinationOperation(ui::mojom::blink::DragOperation) {}
+void DataTransfer::SetAccessPolicy(DataTransferAccessPolicy policy) {
+  policy_ = policy;
+}
+DataObject* DataTransfer::GetDataObject() const {
+  return data_object_.Get();
+}
+void DataTransfer::OnItemListChanged() {
+  data_store_item_list_changed_ = true;
+}
+void DataTransfer::Trace(Visitor* visitor) const {
+  visitor->Trace(data_object_);
+  visitor->Trace(drag_image_);
+  visitor->Trace(drag_image_element_);
+  visitor->Trace(files_);
+  ScriptWrappable::Trace(visitor);
+}
+
 void SystemClipboard::Trace(Visitor*) const {}
 SystemClipboard::Snapshot::~Snapshot() = default;
 SecurityContext::~SecurityContext() = default;
@@ -8903,7 +9659,6 @@ std::optional<Impression> AttributionSrcLoader::RegisterNavigation(
   return std::nullopt;
 }
 void FontFaceSetDocument::DidLayout(Document&) {}
-void EventHandler::MarkHoverStateDirty() {}
 void PaintLayerScrollableArea::UpdateAllStickyConstraints() {
   LayoutBox* layout_box = GetLayoutBox();
   if (!layout_box)
@@ -9100,6 +9855,7 @@ void LayoutShiftTracker::Dispose() {}
 void LayoutShiftTracker::NotifyViewportSizeChanged() {}
 void LayoutShiftTracker::NotifyScroll(mojom::blink::ScrollType,
                                       ScrollOffset) {}
+void LayoutShiftTracker::NotifyChangeEvent() {}
 PaintTimingDetector::PaintTimingDetector(LocalFrameView*) {}
 void PaintTimingDetector::NotifyScroll(mojom::blink::ScrollType) {}
 void PaintTimingDetector::Trace(Visitor*) const {}
@@ -9242,9 +9998,6 @@ void DOMTokenList::DidUpdateAttributeValue(const AtomicString&,
 #if DCHECK_IS_ON()
 unsigned EventDispatchForbiddenScope::count_ = 0;
 #endif
-ScopedEventQueue* ScopedEventQueue::Instance() {
-  return nullptr;
-}
 void Performance::NotifyNavigationTimingToObservers() {}
 void SoftNavigationHeuristics::ModifiedAttribute(Element*,
                                                  const QualifiedName&) {}
@@ -9332,13 +10085,41 @@ AutoscrollController::AutoscrollController(Page& page)
 void AutoscrollController::StopMiddleClickAutoscroll(LocalFrame*) {}
 void AutoscrollController::StopAutoscrollIfNeeded(LayoutObject*) {}
 void AutoscrollController::Animate() {}
+bool AutoscrollController::SelectionAutoscrollInProgress() const {
+  return false;
+}
+bool AutoscrollController::MiddleClickAutoscrollInProgress() const {
+  return false;
+}
 void DragCaret::Trace(Visitor*) const {}
 DragCaret::DragCaret() : display_item_client_(nullptr) {}
 void DragController::Trace(Visitor*) const {}
 DragController::DragController(Page* page)
     : ExecutionContextLifecycleObserver(nullptr),
       page_(page),
+      drag_state_(MakeGarbageCollected<DragState>()),
       document_is_handling_drag_(false) {}
+Node* DragController::DraggableNode(const LocalFrame*,
+                                    Node*,
+                                    const gfx::Point&,
+                                    SelectionDragPolicy,
+                                    DragSourceAction&) const {
+  return nullptr;
+}
+bool DragController::PopulateDragDataTransfer(LocalFrame*,
+                                              const DragState&,
+                                              const gfx::Point&) {
+  return false;
+}
+bool DragController::StartDrag(LocalFrame*,
+                               const DragState&,
+                               const WebMouseEvent&,
+                               const gfx::Point&) {
+  return false;
+}
+DragState& DragController::GetDragState() {
+  return *drag_state_;
+}
 void DragController::ContextDestroyed() {}
 void ContextMenuController::Trace(Visitor*) const {}
 ContextMenuController::ContextMenuController(Page* page) : page_(page) {}
@@ -9530,6 +10311,9 @@ void PointerLockController::ElementRemoved(Element*) {}
 Element* PointerLockController::GetElement() const {
   return nullptr;
 }
+Element* PointerLockController::GetPointerLockedElement(LocalFrame*) {
+  return nullptr;
+}
 void Fullscreen::ElementRemoved(Element&) {}
 Element* Fullscreen::FullscreenElementFrom(Document&) {
   return nullptr;
@@ -9565,10 +10349,6 @@ TextSuggestionController::TextSuggestionController(LocalDOMWindow& window)
       window_(&window),
       text_suggestion_host_(&window) {}
 void TextSuggestionController::Trace(Visitor*) const {}
-void EventHandler::ElementRemoved(Element*) {}
-void EventHandler::ScheduleCursorUpdate() {}
-void MouseEventManager::HandlePseudoElementRemoval(PseudoElement&) {}
-void PointerEventManager::HandlePseudoElementRemoval(PseudoElement&) {}
 void OverscrollAreaTracker::RemoveOverscroll(Element*) {}
 
 void StyleAdjuster::AdjustStyleForDisplay(ComputedStyleBuilder& builder,
@@ -10031,7 +10811,6 @@ VisualViewportScrollEndEvent::VisualViewportScrollEndEvent()
     : Event(AtomicString("scrollend"), Bubbles::kNo, Cancelable::kNo) {}
 VisualViewportScrollEndEvent::~VisualViewportScrollEndEvent() = default;
 void VisualViewportScrollEndEvent::DoneDispatchingEventAtCurrentTarget() {}
-void EventHandler::ScheduleHoverStateUpdate() {}
 NodeChildRemovalTracker* NodeChildRemovalTracker::last_ = nullptr;
 void EditContext::Blur() {}
 void EditContext::Focus() {}
@@ -10047,6 +10826,11 @@ bool IsRichlyEditable(const Node&) {
 Element* RootEditableElement(const Node&) {
   return nullptr;
 }
+
+Element* EnclosingAnchorElement(const Position&) {
+  return nullptr;
+}
+
 void FrameSelection::DidChangeFocus() {}
 void FrameSelection::SetFrameIsFocused(bool flag) {
   focused_ = flag;
@@ -10092,10 +10876,6 @@ void FrameSelection::DidMergeTextNodes(const Text&,
                                        const NodeWithIndex&,
                                        unsigned) {}
 void FrameSelection::DidSplitTextNode(const Text&) {}
-void MouseEventManager::NodeChildrenWillBeRemoved(ContainerNode&) {}
-void MouseEventManager::NodeWillBeRemoved(Node&) {}
-void PointerEventManager::NodeChildrenWillBeRemoved(ContainerNode&) {}
-void PointerEventManager::NodeWillBeRemoved(Node&) {}
 void DragCaret::NodeChildrenWillBeRemoved(ContainerNode&) {}
 void DragCaret::NodeWillBeRemoved(Node&) {}
 void DocumentMarkerController::DidUpdateCharacterData(CharacterData*,
@@ -10157,6 +10937,7 @@ void ExceptionState::ThrowSecurityError(const String&, const String&) {
 }
 void ScriptController::UpdateSecurityOrigin(const SecurityOrigin*) {}
 EventInit::EventInit() = default;
+EventInit::EventInit(v8::Isolate*) : EventInit() {}
 void EventInit::Trace(Visitor*) const {}
 const void* EventInit::TemplateKey() const {
   return nullptr;
@@ -10166,6 +10947,70 @@ v8::Local<v8::Object> EventInit::FillValues(
     ScriptState*,
     v8::Local<v8::DictionaryTemplate>) const {
   return v8::Local<v8::Object>();
+}
+
+UIEventInit::UIEventInit() = default;
+UIEventInit::UIEventInit(v8::Isolate*) : UIEventInit() {}
+void UIEventInit::Trace(Visitor* visitor) const {
+  EventInit::Trace(visitor);
+  visitor->Trace(member_source_capabilities_);
+  visitor->Trace(member_view_);
+}
+
+EventModifierInit::EventModifierInit() = default;
+EventModifierInit::EventModifierInit(v8::Isolate*) : EventModifierInit() {}
+void EventModifierInit::Trace(Visitor* visitor) const {
+  UIEventInit::Trace(visitor);
+}
+
+MouseEventInit::MouseEventInit() = default;
+MouseEventInit::MouseEventInit(v8::Isolate*) : MouseEventInit() {}
+void MouseEventInit::setRegion(const String& value) {
+  member_region_ = value;
+}
+void MouseEventInit::setRegion(String&& value) {
+  member_region_ = std::move(value);
+}
+void MouseEventInit::Trace(Visitor* visitor) const {
+  EventModifierInit::Trace(visitor);
+  visitor->Trace(member_related_target_);
+}
+
+PointerEventInit::PointerEventInit() = default;
+PointerEventInit::PointerEventInit(v8::Isolate*) : PointerEventInit() {}
+void PointerEventInit::setCoalescedEvents(
+    const HeapVector<Member<PointerEvent>>& value) {
+  member_coalesced_events_ = value;
+}
+void PointerEventInit::setCoalescedEvents(
+    HeapVector<Member<PointerEvent>>&& value) {
+  member_coalesced_events_ = std::move(value);
+}
+void PointerEventInit::setPointerType(const String& value) {
+  member_pointer_type_ = value;
+}
+void PointerEventInit::setPointerType(String&& value) {
+  member_pointer_type_ = std::move(value);
+}
+void PointerEventInit::setPredictedEvents(
+    const HeapVector<Member<PointerEvent>>& value) {
+  member_predicted_events_ = value;
+}
+void PointerEventInit::setPredictedEvents(
+    HeapVector<Member<PointerEvent>>&& value) {
+  member_predicted_events_ = std::move(value);
+}
+void PointerEventInit::Trace(Visitor* visitor) const {
+  MouseEventInit::Trace(visitor);
+  visitor->Trace(member_coalesced_events_);
+  visitor->Trace(member_predicted_events_);
+}
+
+DragEventInit::DragEventInit() = default;
+DragEventInit::DragEventInit(v8::Isolate*) : DragEventInit() {}
+void DragEventInit::Trace(Visitor* visitor) const {
+  MouseEventInit::Trace(visitor);
+  visitor->Trace(member_data_transfer_);
 }
 
 V8UnionCSSStyleValueOrUndefined* StylePropertyMapReadOnlyMainThread::get(
@@ -10276,13 +11121,39 @@ template <typename Strategy>
 SelectionTemplate<Strategy>::SelectionTemplate(
     const SelectionTemplate& other) = default;
 template <typename Strategy>
+const PositionTemplate<Strategy>&
+SelectionTemplate<Strategy>::ComputeStartPosition() const {
+  return anchor_;
+}
+template <typename Strategy>
+const PositionTemplate<Strategy>&
+SelectionTemplate<Strategy>::ComputeEndPosition() const {
+  return focus_;
+}
+template <typename Strategy>
+bool SelectionTemplate<Strategy>::IsCaret() const {
+  return anchor_.IsNotNull() && anchor_ == focus_;
+}
+template <typename Strategy>
 VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate()
     : affinity_(TextAffinity::kDownstream), anchor_is_first_(true) {}
 template Element* VisibleSelectionTemplate<EditingStrategy>::RootEditableElement()
     const;
 template SelectionTemplate<EditingStrategy>
 VisibleSelectionTemplate<EditingStrategy>::AsSelection() const;
+template bool VisibleSelectionTemplate<EditingStrategy>::IsNone() const;
+template bool VisibleSelectionTemplate<EditingStrategy>::IsRange() const;
+template PositionTemplate<EditingStrategy>
+VisibleSelectionTemplate<EditingStrategy>::Start() const;
+template EphemeralRangeTemplate<EditingStrategy>
+VisibleSelectionTemplate<EditingStrategy>::ToNormalizedEphemeralRange() const;
+template const PositionTemplate<EditingStrategy>&
+SelectionTemplate<EditingStrategy>::ComputeStartPosition() const;
+template const PositionTemplate<EditingStrategy>&
+SelectionTemplate<EditingStrategy>::ComputeEndPosition() const;
+template bool SelectionTemplate<EditingStrategy>::IsCaret() const;
 template class SelectionTemplate<EditingStrategy>;
+template class SelectionTemplate<EditingInFlatTreeStrategy>;
 template class VisibleSelectionTemplate<EditingStrategy>;
 
 Range* Range::Create(Document& document) {
@@ -10546,6 +11417,12 @@ PositionWithAffinity HitTestResult::GetPosition() const {
 void HitTestResult::SetURLElement(Element* element) {
   inner_url_element_ = element;
 }
+bool HitTestResult::IsOverLink() const {
+  return false;
+}
+void HitTestResult::SetScrollbar(Scrollbar* scrollbar) {
+  scrollbar_ = scrollbar;
+}
 void HitTestResult::SetToShadowHostIfInUAShadowRoot() {}
 HitTestResult::~HitTestResult() = default;
 PositionWithAffinity HitTestResult::GetPositionForInnerNodeOrImageMapImage()
@@ -10570,6 +11447,16 @@ Element* HitTestResult::InnerPossiblyPseudoElement() const {
 }
 Node* HitTestResult::InnerNodeOrImageMapImage() const {
   return inner_node_.Get();
+}
+LocalFrame* HitTestResult::InnerNodeFrame() const {
+  return inner_node_ ? inner_node_->GetDocument().GetFrame() : nullptr;
+}
+HitTestLocation HitTestResult::ResolveRectBasedTest(
+    Node* resolved_inner_node,
+    const PhysicalOffset& resolved_point_in_main_frame) {
+  SetInnerNode(resolved_inner_node);
+  point_in_inner_node_frame_ = resolved_point_in_main_frame;
+  return HitTestLocation(resolved_point_in_main_frame);
 }
 CDATASection* CDATASection::Create(Document&, const String&) {
   return nullptr;
@@ -10774,7 +11661,6 @@ PositionTemplate<EditingStrategy>::InParentBeforeNode(const Node&);
 template int16_t PositionTemplate<EditingStrategy>::CompareTo(
     const PositionTemplate<EditingStrategy>&) const;
 template bool PositionTemplate<EditingStrategy>::IsConnected() const;
-void EventHandler::NotifyElementActivated() {}
 ResizeObserver* ResizeObserver::Create(LocalDOMWindow* window,
                                        ResizeObserver::Delegate* delegate) {
   return MakeGarbageCollected<ResizeObserver>(delegate, window);
@@ -11908,10 +12794,6 @@ MainThread* Thread::MainThread() {
 URLLoaderMockFactory* URLLoaderMockFactory::GetSingletonInstance() {
   return nullptr;
 }
-const ui::Cursor& PointerCursor() {
-  static ui::Cursor* cursor = new ui::Cursor();
-  return *cursor;
-}
 ResourceLoadInfoNotifierWrapper::ResourceLoadInfoNotifierWrapper(
     base::WeakPtr<WeakWrapperResourceLoadInfoNotifier>)
     : weak_wrapper_resource_load_info_notifier_(nullptr), task_runner_(nullptr) {}
@@ -12207,20 +13089,94 @@ Quaternion Quaternion::Slerp(const Quaternion&, double) const {
 
 namespace ui {
 Cursor::Cursor() = default;
+Cursor::Cursor(mojom::CursorType type) : type_(type) {}
 Cursor::Cursor(const Cursor& cursor)
     : type_(cursor.type_),
       platform_cursor_(cursor.platform_cursor_),
       custom_hotspot_(cursor.custom_hotspot_),
       image_scale_factor_(cursor.image_scale_factor_) {}
 Cursor::~Cursor() = default;
+Cursor Cursor::NewCustom(SkBitmap bitmap,
+                         gfx::Point hotspot,
+                         float image_scale_factor) {
+  Cursor cursor;
+  cursor.type_ = mojom::CursorType::kCustom;
+  cursor.custom_bitmap_ = std::move(bitmap);
+  cursor.custom_hotspot_ = hotspot;
+  cursor.image_scale_factor_ = image_scale_factor == 0.0f ? 1.0f : image_scale_factor;
+  return cursor;
+}
 const SkBitmap& Cursor::custom_bitmap() const {
   static SkBitmap* bitmap = new SkBitmap();
   return *bitmap;
 }
+const gfx::Point& Cursor::custom_hotspot() const {
+  return custom_hotspot_;
+}
 float Cursor::image_scale_factor() const {
   return 1.0f;
 }
+bool Cursor::operator==(const Cursor& cursor) const {
+  return type_ == cursor.type_;
+}
+bool Cursor::AreDimensionsValidForWeb(const gfx::Size&, float scale_factor) {
+  return scale_factor != 0.0f;
+}
 }  // namespace ui
+
+namespace blink {
+#define STANDALONE_CURSOR(name, type)                                      \
+  const ui::Cursor& name() {                                               \
+    DEFINE_STATIC_LOCAL(ui::Cursor, cursor, (ui::mojom::CursorType::type)); \
+    return cursor;                                                         \
+  }
+STANDALONE_CURSOR(PointerCursor, kPointer)
+STANDALONE_CURSOR(CrossCursor, kCross)
+STANDALONE_CURSOR(HandCursor, kHand)
+STANDALONE_CURSOR(MoveCursor, kMove)
+STANDALONE_CURSOR(IBeamCursor, kIBeam)
+STANDALONE_CURSOR(WaitCursor, kWait)
+STANDALONE_CURSOR(HelpCursor, kHelp)
+STANDALONE_CURSOR(EastResizeCursor, kEastResize)
+STANDALONE_CURSOR(NorthResizeCursor, kNorthResize)
+STANDALONE_CURSOR(NorthEastResizeCursor, kNorthEastResize)
+STANDALONE_CURSOR(NorthWestResizeCursor, kNorthWestResize)
+STANDALONE_CURSOR(SouthResizeCursor, kSouthResize)
+STANDALONE_CURSOR(SouthEastResizeCursor, kSouthEastResize)
+STANDALONE_CURSOR(SouthWestResizeCursor, kSouthWestResize)
+STANDALONE_CURSOR(WestResizeCursor, kWestResize)
+STANDALONE_CURSOR(NorthSouthResizeCursor, kNorthSouthResize)
+STANDALONE_CURSOR(EastWestResizeCursor, kEastWestResize)
+STANDALONE_CURSOR(NorthEastSouthWestResizeCursor, kNorthEastSouthWestResize)
+STANDALONE_CURSOR(NorthWestSouthEastResizeCursor, kNorthWestSouthEastResize)
+STANDALONE_CURSOR(ColumnResizeCursor, kColumnResize)
+STANDALONE_CURSOR(RowResizeCursor, kRowResize)
+STANDALONE_CURSOR(MiddlePanningCursor, kMiddlePanning)
+STANDALONE_CURSOR(MiddlePanningVerticalCursor, kMiddlePanningVertical)
+STANDALONE_CURSOR(MiddlePanningHorizontalCursor, kMiddlePanningHorizontal)
+STANDALONE_CURSOR(EastPanningCursor, kEastPanning)
+STANDALONE_CURSOR(NorthPanningCursor, kNorthPanning)
+STANDALONE_CURSOR(NorthEastPanningCursor, kNorthEastPanning)
+STANDALONE_CURSOR(NorthWestPanningCursor, kNorthWestPanning)
+STANDALONE_CURSOR(SouthPanningCursor, kSouthPanning)
+STANDALONE_CURSOR(SouthEastPanningCursor, kSouthEastPanning)
+STANDALONE_CURSOR(SouthWestPanningCursor, kSouthWestPanning)
+STANDALONE_CURSOR(WestPanningCursor, kWestPanning)
+STANDALONE_CURSOR(VerticalTextCursor, kVerticalText)
+STANDALONE_CURSOR(CellCursor, kCell)
+STANDALONE_CURSOR(ContextMenuCursor, kContextMenu)
+STANDALONE_CURSOR(NoDropCursor, kNoDrop)
+STANDALONE_CURSOR(NotAllowedCursor, kNotAllowed)
+STANDALONE_CURSOR(ProgressCursor, kProgress)
+STANDALONE_CURSOR(AliasCursor, kAlias)
+STANDALONE_CURSOR(ZoomInCursor, kZoomIn)
+STANDALONE_CURSOR(ZoomOutCursor, kZoomOut)
+STANDALONE_CURSOR(CopyCursor, kCopy)
+STANDALONE_CURSOR(NoneCursor, kNone)
+STANDALONE_CURSOR(GrabCursor, kGrab)
+STANDALONE_CURSOR(GrabbingCursor, kGrabbing)
+#undef STANDALONE_CURSOR
+}  // namespace blink
 
 namespace display {
 ScreenInfo::ScreenInfo() = default;
@@ -14867,6 +15823,9 @@ Image::SizeAvailability Image::SetData(scoped_refptr<SharedBuffer> data,
 
   return DataChanged(all_data_received);
 }
+SkBitmap Image::AsSkBitmapForCurrentFrame(RespectImageOrientationEnum) {
+  return SkBitmap();
+}
 String Image::FilenameExtension() const {
   return String();
 }
@@ -14956,6 +15915,10 @@ PaintImageBuilder Image::CreatePaintImageBuilder(
   return builder;
 }
 void CustomScrollbar::ClearPaintFlags() {}
+const ComputedStyle* CustomScrollbar::GetScrollbarPartStyleForCursor(
+    ScrollbarPart) const {
+  return nullptr;
+}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PhysicalRect LayoutReplaced::PreSnappedRectForPersistentSizing(
     const PhysicalRect& rect) {
@@ -16781,27 +17744,6 @@ bool DragCaret::ShouldPaintCaret(const PhysicalBoxFragment&) const {
   return false;
 }
 void MathMLPainter::Paint(const PaintInfo&, PhysicalOffset) {}
-void EventHandler::PerformHitTest(const HitTestLocation& location,
-                                  HitTestResult& result,
-                                  bool no_lifecycle_update) const {
-  if (!frame_->ContentLayoutObject() || !frame_->View() ||
-      !frame_->View()->DidFirstLayout() ||
-      !frame_->View()->LifecycleUpdatesActive()) {
-    return;
-  }
-
-  if (no_lifecycle_update) {
-    frame_->ContentLayoutObject()->HitTestNoLifecycleUpdate(location, result);
-  } else {
-    frame_->ContentLayoutObject()->HitTest(location, result);
-  }
-  const HitTestRequest& request = result.GetHitTestRequest();
-  if (!request.ReadOnly()) {
-    frame_->GetDocument()->UpdateHoverActiveState(
-        request.Active(), !request.Move(), result.InnerPossiblyPseudoElement());
-  }
-}
-
 void HitTestResult::SetNodeAndPosition(Node* node,
                                        const PhysicalBoxFragment*,
                                        const PhysicalOffset& point) {
@@ -17364,7 +18306,9 @@ HTMLFormControlElement::PopoverTargetElement
 HTMLFormControlElement::popoverTargetElement() {
   return PopoverTargetElement();
 }
-void HTMLFormControlElement::DefaultEventHandler(Event&) {}
+void HTMLFormControlElement::DefaultEventHandler(Event& event) {
+  HTMLElement::DefaultEventHandler(event);
+}
 bool HTMLFormControlElement::willValidate() const {
   return false;
 }
@@ -17378,15 +18322,16 @@ bool HTMLFormControlElement::MayTriggerVirtualKeyboard() const {
   return false;
 }
 bool HTMLFormControlElement::ShouldHaveFocusAppearance() const {
-  return false;
+  return SelectorChecker::MatchesFocusVisiblePseudoClass(*this);
 }
 bool HTMLFormControlElement::IsKeyboardFocusableSlow(
-    UpdateBehavior) const {
-  return false;
+    UpdateBehavior update_behavior) const {
+  return IsFocusable(update_behavior) && tabIndex() >= 0;
 }
 FocusableState HTMLFormControlElement::SupportsFocus(
     UpdateBehavior) const {
-  return FocusableState::kNotFocusable;
+  return IsDisabledFormControl() ? FocusableState::kNotFocusable
+                                 : FocusableState::kFocusable;
 }
 bool HTMLFormControlElement::MatchesValidityPseudoClasses() const {
   return false;
@@ -17609,20 +18554,40 @@ void AuditsIssue::ReportElementAccessibilityIssue(
 int KeyboardEvent::keyCode() const {
   return 0;
 }
-InputDeviceCapabilitiesConstants* DOMWindow::GetInputDeviceCapabilities() {
-  return nullptr;
-}
-InputDeviceCapabilities* InputDeviceCapabilitiesConstants::FiresTouchEvents(
-    bool) {
-  return nullptr;
-}
 void HTMLFormElement::SubmitImplicitly(const Event&, bool) {}
 void AutoscrollController::StartAutoscrollForSelection(LayoutObject*) {}
-void EventHandler::SetMouseDownMayStartAutoscroll() {}
+void AutoscrollController::StartMiddleClickAutoscroll(LocalFrame*,
+                                                      LayoutBox*,
+                                                      const gfx::PointF&,
+                                                      const gfx::PointF&) {}
+void AutoscrollController::HandleMouseMoveForMiddleClickAutoscroll(
+    LocalFrame*,
+    const gfx::PointF&,
+    bool) {}
+void AutoscrollController::HandleMouseReleaseForMiddleClickAutoscroll(
+    LocalFrame*,
+    bool) {}
+void AutoscrollController::UpdateDragAndDrop(Node*,
+                                             const gfx::PointF&,
+                                             base::TimeTicks) {}
 bool AutoscrollController::AutoscrollInProgressFor(const LayoutBox*) const {
   return false;
 }
 void AutoscrollController::StopAutoscroll() {}
+
+bool FindBestTouchAdjustmentCandidate(TouchAdjustmentCandidateType,
+                                      Node*&,
+                                      gfx::Point&,
+                                      const gfx::Point&,
+                                      const gfx::Rect&,
+                                      const HeapVector<Member<Node>>&) {
+  return false;
+}
+
+PhysicalSize GetHitTestRectForAdjustment(LocalFrame&,
+                                         const PhysicalSize& touch_area) {
+  return touch_area;
+}
 
 void HitTestResult::Append(const HitTestResult& other) {
   if (!inner_node_ && other.InnerNode()) {
@@ -17895,6 +18860,17 @@ void PaintLayerScrollableArea::PositionOverflowControls() {
 gfx::Rect PaintLayerScrollableArea::ScrollCornerAndResizerRect() const {
   return gfx::Rect();
 }
+bool PaintLayerScrollableArea::IsAbsolutePointInResizeControl(
+    const gfx::Point&,
+    ResizerHitTestType) const {
+  return false;
+}
+gfx::Transform PaintLayerScrollableArea::InitializeResizeTransform(
+    const gfx::Point&) {
+  return gfx::Transform();
+}
+void PaintLayerScrollableArea::Resize(const gfx::Point&,
+                                      const gfx::Transform&) {}
 gfx::Size PaintLayerScrollableArea::PixelSnappedBorderBoxSize() const {
   const LayoutBox* box = GetLayoutBox();
   if (!box)

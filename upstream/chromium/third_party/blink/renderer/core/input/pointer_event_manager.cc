@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -22,7 +23,9 @@
 #include "third_party/blink/renderer/core/input/mouse_event_manager.h"
 #include "third_party/blink/renderer/core/input/touch_action_util.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
+#endif
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/pointer_lock_controller.h"
@@ -34,10 +37,22 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/display/screen_info.h"
+#include "ui/gfx/geometry/point_conversions.h"
 
 namespace blink {
 
 namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char*);
+
+void TraceStandalonePointerEventManagerStage(const char* stage) {
+  StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#else
+void TraceStandalonePointerEventManagerStage(const char*) {}
+#endif
 
 // Field trial name for skipping touch filtering
 const char kSkipTouchEventFilterTrial[] = "SkipTouchEventFilter";
@@ -164,11 +179,13 @@ WebInputEventResult PointerEventManager::DispatchPointerEvent(
   if (event_type == event_type_names::kPointerdown ||
       event_type == event_type_names::kPointerover ||
       event_type == event_type_names::kPointerout) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     AnchorElementInteractionTracker* tracker =
         frame_->GetDocument()->GetAnchorElementInteractionTracker();
     if (tracker) {
       tracker->OnPointerEvent(*target, *pointer_event);
     }
+#endif
   }
 
   if (Node* target_node = target->ToNode()) {
@@ -1185,6 +1202,13 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
 
   WebInputEventResult result =
       DispatchPointerEvent(effective_target, pointer_event);
+  if (event_type == WebInputEvent::Type::kPointerDown) {
+    TraceStandalonePointerEventManagerStage(
+        "pointer_manager pointerdown after DispatchPointerEvent");
+  } else if (event_type == WebInputEvent::Type::kPointerUp) {
+    TraceStandalonePointerEventManagerStage(
+        "pointer_manager pointerup after DispatchPointerEvent");
+  }
 
   if (result != WebInputEventResult::kNotHandled &&
       pointer_event->type() == event_type_names::kPointerdown &&
@@ -1200,6 +1224,12 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
   bool consider_click_dispatch = !skip_click_dispatch &&
                                  pointer_event->isPrimary() &&
                                  event_type == WebInputEvent::Type::kPointerUp;
+  if (event_type == WebInputEvent::Type::kPointerUp) {
+    TraceStandalonePointerEventManagerStage(
+        consider_click_dispatch
+            ? "pointer_manager pointerup consider click dispatch"
+            : "pointer_manager pointerup skip click dispatch");
+  }
 
   // Calculate mouse target if either compatibility mouse event or click event
   // or both should be sent.
@@ -1214,6 +1244,10 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
   // Dispatch compat mouse events.
   MouseEvent* dispatched_mouse_event = nullptr;
   if (send_compat_mouse) {
+    if (event_type == WebInputEvent::Type::kPointerUp) {
+      TraceStandalonePointerEventManagerStage(
+          "pointer_manager pointerup before compat mouseup");
+    }
     auto dispatch_result = mouse_event_manager_->DispatchMouseEvent(
         mouse_target, MouseEventNameForPointerEventInputType(event_type),
         mouse_event, &last_mouse_position, nullptr);
@@ -1266,6 +1300,8 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
   }
 
   if (consider_click_dispatch) {
+    TraceStandalonePointerEventManagerStage(
+        "pointer_manager pointerup before DispatchMouseClickIfNeeded");
     ProcessPendingPointerCapture(pointer_event);
     Element* click_mouse_target = mouse_target;
     if (click_mouse_target && click_mouse_target->IsPseudoElement() &&
@@ -1278,6 +1314,8 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
         pointer_event_factory_->GetPointerDownTarget(
             pointer_event->pointerId()),
         pointer_event_factory_->GetPointerUpTarget(pointer_event->pointerId()));
+    TraceStandalonePointerEventManagerStage(
+        "pointer_manager pointerup after DispatchMouseClickIfNeeded");
     pointer_event_factory_->RemovePointerTargets(pointer_event->pointerId());
   }
 

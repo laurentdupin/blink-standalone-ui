@@ -298,7 +298,9 @@
 #include "third_party/blink/renderer/core/layout/pagination_utils.h"
 #include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_critical_path_predictor.h"
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
+#endif
 #endif
 #include "third_party/blink/renderer/core/loader/cookie_jar.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
@@ -426,11 +428,24 @@
 namespace blink {
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+namespace standalone_renderer_probe {
+int StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer();
+}  // namespace standalone_renderer_probe
+
 namespace {
 Persistent<Document> g_standalone_body_document;
 Persistent<HTMLElement> g_standalone_body_element;
 Persistent<StyleEngine> g_standalone_style_engine;
 StyleEngine* g_standalone_style_engine_raw = nullptr;
+
+void TraceStandaloneDocumentStage(const char* stage) {
+  if (!standalone_renderer_probe::
+          StandaloneBlinkLiveFrameBridgeTraceStagesEnabledForStandaloneRenderer()) {
+    return;
+  }
+  std::fprintf(stderr, "document.stage=%s\n", stage ? stage : "(null)");
+  std::fflush(stderr);
+}
 
 void TraceStandaloneSvgCheckCompletedStage(const char* stage,
                                            const Document* document) {
@@ -480,6 +495,12 @@ Document* GetStandaloneDocumentForStandaloneRenderer() {
 StyleEngine* GetStandaloneStyleEngineForStandaloneRenderer() {
   return g_standalone_style_engine_raw;
 }
+#endif
+
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+namespace {
+void TraceStandaloneDocumentStage(const char*) {}
+}  // namespace
 #endif
 
 namespace {
@@ -5787,11 +5808,25 @@ MouseEventWithHitTestResults Document::PerformMouseEventHitTest(
 
   HitTestLocation location(document_point);
   HitTestResult result(request, location);
+  TraceStandaloneDocumentStage("PerformMouseEventHitTest before LayoutView HitTest");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean) {
+    GetLayoutView()->HitTestNoLifecycleUpdate(location, result);
+  } else {
+    GetLayoutView()->HitTest(location, result);
+  }
+#else
   GetLayoutView()->HitTest(location, result);
+#endif
+  TraceStandaloneDocumentStage("PerformMouseEventHitTest after LayoutView HitTest");
 
   if (!request.ReadOnly()) {
+    TraceStandaloneDocumentStage(
+        "PerformMouseEventHitTest before UpdateHoverActiveState");
     UpdateHoverActiveState(request.Active(), !request.Move(),
                            result.InnerPossiblyPseudoElement());
+    TraceStandaloneDocumentStage(
+        "PerformMouseEventHitTest after UpdateHoverActiveState");
   }
 
   return MouseEventWithHitTestResults(event, location, result);

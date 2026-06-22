@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -31,6 +32,16 @@ HitTestResult HitTestResultInFrame(
     if (!location.Intersects(rect))
       return result;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (Document* document = frame->GetDocument()) {
+    if (LayoutView* layout_view = document->GetLayoutView();
+        layout_view &&
+        document->Lifecycle().GetState() >= DocumentLifecycle::kPrePaintClean) {
+      layout_view->HitTestNoLifecycleUpdate(location, result);
+      return result;
+    }
+  }
+#endif
   frame->ContentLayoutObject()->HitTest(location, result);
   return result;
 }

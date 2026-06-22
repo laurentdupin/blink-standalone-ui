@@ -100,7 +100,9 @@
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
 #include "third_party/blink/public/web/web_performance_metrics_for_reporting.h"
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "ui/accessibility/ax_event.h"
+#else
 #include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/ax_location_and_scroll_updates.h"
@@ -115,8 +117,6 @@ class LayerTreeSettings;
 
 namespace ui {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-struct AXEvent {};
-struct AXEventIntent {};
 struct AXLocationAndScrollUpdates {};
 struct AXTreeUpdate {};
 #endif

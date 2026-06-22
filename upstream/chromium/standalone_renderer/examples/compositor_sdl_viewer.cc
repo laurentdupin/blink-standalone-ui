@@ -365,6 +365,44 @@ bool SamePointerState(const html_css_renderer::PointerState& lhs,
          lhs.pressed == rhs.pressed;
 }
 
+int MouseButtonModifierForCompositorViewer(
+    html_css_renderer::MouseInputButton button) {
+  switch (button) {
+    case html_css_renderer::MouseInputButton::kLeft:
+      return 1 << 6;  // blink::WebInputEvent::kLeftButtonDown.
+    case html_css_renderer::MouseInputButton::kMiddle:
+      return 1 << 7;  // blink::WebInputEvent::kMiddleButtonDown.
+    case html_css_renderer::MouseInputButton::kRight:
+      return 1 << 8;  // blink::WebInputEvent::kRightButtonDown.
+    case html_css_renderer::MouseInputButton::kNone:
+      return 0;
+  }
+  return 0;
+}
+
+html_css_renderer::MouseInputButton MouseButtonFromSdlForCompositorViewer(
+    Uint8 button) {
+  if (button == SDL_BUTTON_LEFT)
+    return html_css_renderer::MouseInputButton::kLeft;
+  if (button == SDL_BUTTON_MIDDLE)
+    return html_css_renderer::MouseInputButton::kMiddle;
+  if (button == SDL_BUTTON_RIGHT)
+    return html_css_renderer::MouseInputButton::kRight;
+  return html_css_renderer::MouseInputButton::kNone;
+}
+
+void AppendMouseInputEventForCompositorViewer(
+    html_css_renderer::FrameInput* input,
+    html_css_renderer::MouseInputEventType type,
+    html_css_renderer::Point position,
+    html_css_renderer::MouseInputButton button,
+    int modifiers,
+    int click_count) {
+  input->mouse_events.push_back(
+      html_css_renderer::MouseInputEvent{type, position, button, modifiers,
+                                         click_count});
+}
+
 struct SyntheticWheelBurst {
   int count = 0;
   html_css_renderer::Point delta;
@@ -1012,6 +1050,14 @@ int main(int argc, char** argv) {
   html_css_renderer::CompositorFrameResult result;
   uint64_t frame_count = 0;
   bool screenshot_written = false;
+  auto write_current_paint_artifact_dump = [&]() {
+    if (paint_artifact_dump_path.empty()) {
+      return;
+    }
+    std::ofstream audit_file(paint_artifact_dump_path, std::ios::binary);
+    if (audit_file)
+      audit_file << result.raw_paint_artifact_audit_json << "\n";
+  };
   auto write_current_screenshot = [&]() {
     if (!result.png_snapshot_available) {
       std::fprintf(stderr, "screenshot capture failed: %s\n",
@@ -1146,11 +1192,7 @@ int main(int argc, char** argv) {
     result = runtime->AdvanceFrame(input);
     for (const std::string& diagnostic : result.diagnostics)
       std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
-    if (!paint_artifact_dump_path.empty()) {
-      std::ofstream audit_file(paint_artifact_dump_path, std::ios::binary);
-      if (audit_file)
-        audit_file << result.raw_paint_artifact_audit_json << "\n";
-    }
+    write_current_paint_artifact_dump();
 
     input.scroll_offsets_by_element_id =
         result.successor_snapshot.scroll_offsets_by_element_id;
@@ -1159,6 +1201,8 @@ int main(int argc, char** argv) {
     input.viewport = result.successor_snapshot.viewport;
     input.request_png_snapshot = false;
     input.wheel = std::nullopt;
+    input.mouse_events.clear();
+    input.pointers.clear();
 
     ++frame_count;
     PrintFrameStatus(reason, frame_count, result);
@@ -1222,7 +1266,17 @@ int main(int argc, char** argv) {
               (event.motion.state & SDL_BUTTON_LMASK) != 0};
           if (!last_sdl_pointer ||
               !SamePointerState(pointer, *last_sdl_pointer)) {
-            next_input->pointers = {pointer};
+            AppendMouseInputEventForCompositorViewer(
+                next_input,
+                html_css_renderer::MouseInputEventType::kMove,
+                pointer.position,
+                pointer.pressed ? html_css_renderer::MouseInputButton::kLeft
+                                : html_css_renderer::MouseInputButton::kNone,
+                pointer.pressed
+                    ? MouseButtonModifierForCompositorViewer(
+                          html_css_renderer::MouseInputButton::kLeft)
+                    : 0,
+                0);
             last_sdl_pointer = pointer;
             *needs_frame = true;
           }
@@ -1230,13 +1284,24 @@ int main(int argc, char** argv) {
         }
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
             event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+          const html_css_renderer::MouseInputButton button =
+              MouseButtonFromSdlForCompositorViewer(event.button.button);
           html_css_renderer::PointerState pointer{
               1,
               html_css_renderer::Point{event.button.x, event.button.y},
               event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
           if (!last_sdl_pointer ||
               !SamePointerState(pointer, *last_sdl_pointer)) {
-            next_input->pointers = {pointer};
+            AppendMouseInputEventForCompositorViewer(
+                next_input,
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                    ? html_css_renderer::MouseInputEventType::kDown
+                    : html_css_renderer::MouseInputEventType::kUp,
+                pointer.position, button,
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                    ? MouseButtonModifierForCompositorViewer(button)
+                    : 0,
+                1);
             last_sdl_pointer = pointer;
             *needs_frame = true;
           }
@@ -1271,9 +1336,12 @@ int main(int argc, char** argv) {
         next_input.active_element_id =
             result.successor_snapshot.active_element_id;
         next_input.wheel = std::nullopt;
+        next_input.mouse_events.clear();
+        next_input.pointers.clear();
         input = std::move(next_input);
         ++frame_count;
         PrintFrameStatus(reason, frame_count, result);
+        write_current_paint_artifact_dump();
         presentation = runtime->PresentToNativeWindow(result);
         PrintPresentationStatus(reason, presentation,
                                 include_presentation_diagnostics(presentation));
@@ -1313,8 +1381,9 @@ int main(int argc, char** argv) {
         const float y = 32.0f + static_cast<float>((i * 23) % 220);
         const html_css_renderer::Point point{x, y};
         html_css_renderer::FrameInput next_input = input;
-        next_input.pointers = {html_css_renderer::PointerState{1, point,
-                                                               false}};
+        AppendMouseInputEventForCompositorViewer(
+            &next_input, html_css_renderer::MouseInputEventType::kMove, point,
+            html_css_renderer::MouseInputButton::kNone, 0, 0);
         synthetic_ok =
             run_update_frame("synthetic_stress_pointer_move",
                              std::move(next_input), synthetic_time) &&
@@ -1322,8 +1391,12 @@ int main(int argc, char** argv) {
         synthetic_time += 1.0 / 60.0;
 
         next_input = input;
-        next_input.pointers = {html_css_renderer::PointerState{1, point,
-                                                               true}};
+        AppendMouseInputEventForCompositorViewer(
+            &next_input, html_css_renderer::MouseInputEventType::kDown, point,
+            html_css_renderer::MouseInputButton::kLeft,
+            MouseButtonModifierForCompositorViewer(
+                html_css_renderer::MouseInputButton::kLeft),
+            1);
         synthetic_ok =
             run_update_frame("synthetic_stress_pointer_down",
                              std::move(next_input), synthetic_time) &&
@@ -1331,8 +1404,9 @@ int main(int argc, char** argv) {
         synthetic_time += 1.0 / 60.0;
 
         next_input = input;
-        next_input.pointers = {html_css_renderer::PointerState{1, point,
-                                                               false}};
+        AppendMouseInputEventForCompositorViewer(
+            &next_input, html_css_renderer::MouseInputEventType::kUp, point,
+            html_css_renderer::MouseInputButton::kLeft, 0, 1);
         synthetic_ok =
             run_update_frame("synthetic_stress_pointer_up",
                              std::move(next_input), synthetic_time) &&
@@ -1394,21 +1468,30 @@ int main(int argc, char** argv) {
     }
     for (const html_css_renderer::Point& point : synthetic_click_points) {
       html_css_renderer::FrameInput next_input = input;
-      next_input.pointers = {html_css_renderer::PointerState{1, point, false}};
+      AppendMouseInputEventForCompositorViewer(
+          &next_input, html_css_renderer::MouseInputEventType::kMove, point,
+          html_css_renderer::MouseInputButton::kNone, 0, 0);
       synthetic_ok = run_update_frame("synthetic_click_move",
                                       std::move(next_input), synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
 
       next_input = input;
-      next_input.pointers = {html_css_renderer::PointerState{1, point, true}};
+      AppendMouseInputEventForCompositorViewer(
+          &next_input, html_css_renderer::MouseInputEventType::kDown, point,
+          html_css_renderer::MouseInputButton::kLeft,
+          MouseButtonModifierForCompositorViewer(
+              html_css_renderer::MouseInputButton::kLeft),
+          1);
       synthetic_ok = run_update_frame("synthetic_click_down",
                                       std::move(next_input), synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
 
       next_input = input;
-      next_input.pointers = {html_css_renderer::PointerState{1, point, false}};
+      AppendMouseInputEventForCompositorViewer(
+          &next_input, html_css_renderer::MouseInputEventType::kUp, point,
+          html_css_renderer::MouseInputButton::kLeft, 0, 1);
       synthetic_ok = run_update_frame("synthetic_click_up",
                                       std::move(next_input), synthetic_time) &&
                      synthetic_ok;
@@ -1416,24 +1499,33 @@ int main(int argc, char** argv) {
     }
     if (synthetic_input_smoke) {
       html_css_renderer::FrameInput next_input = input;
-      next_input.pointers = {html_css_renderer::PointerState{
-          1, html_css_renderer::Point{32.0f, 32.0f}, false}};
+      AppendMouseInputEventForCompositorViewer(
+          &next_input, html_css_renderer::MouseInputEventType::kMove,
+          html_css_renderer::Point{32.0f, 32.0f},
+          html_css_renderer::MouseInputButton::kNone, 0, 0);
       synthetic_ok = run_update_frame("synthetic_pointer_move",
                                       std::move(next_input), synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
 
       next_input = input;
-      next_input.pointers = {html_css_renderer::PointerState{
-          1, html_css_renderer::Point{32.0f, 32.0f}, true}};
+      AppendMouseInputEventForCompositorViewer(
+          &next_input, html_css_renderer::MouseInputEventType::kDown,
+          html_css_renderer::Point{32.0f, 32.0f},
+          html_css_renderer::MouseInputButton::kLeft,
+          MouseButtonModifierForCompositorViewer(
+              html_css_renderer::MouseInputButton::kLeft),
+          1);
       synthetic_ok = run_update_frame("synthetic_pointer_down",
                                       std::move(next_input), synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
 
       next_input = input;
-      next_input.pointers = {html_css_renderer::PointerState{
-          1, html_css_renderer::Point{32.0f, 32.0f}, false}};
+      AppendMouseInputEventForCompositorViewer(
+          &next_input, html_css_renderer::MouseInputEventType::kUp,
+          html_css_renderer::Point{32.0f, 32.0f},
+          html_css_renderer::MouseInputButton::kLeft, 0, 1);
       synthetic_ok = run_update_frame("synthetic_pointer_up",
                                       std::move(next_input), synthetic_time) &&
                      synthetic_ok;
@@ -1602,10 +1694,13 @@ int main(int argc, char** argv) {
       next_input.hovered_element_id = result.successor_snapshot.hovered_element_id;
       next_input.active_element_id = result.successor_snapshot.active_element_id;
       next_input.wheel = std::nullopt;
+      next_input.mouse_events.clear();
+      next_input.pointers.clear();
       input = std::move(next_input);
       ++frame_count;
       ++advanced_update_frames;
       PrintFrameStatus("update", frame_count, result);
+      write_current_paint_artifact_dump();
       presentation = runtime->PresentToNativeWindow(result);
       PrintPresentationStatus("update", presentation,
                               include_presentation_diagnostics(presentation));

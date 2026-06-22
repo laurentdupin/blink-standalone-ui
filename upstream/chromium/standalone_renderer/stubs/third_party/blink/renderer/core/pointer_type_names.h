@@ -9,6 +9,8 @@
 
 namespace blink::pointer_type_names {
 
+extern const AtomicString& kMouse;
+extern const AtomicString& kPen;
 extern const AtomicString& kTouch;
 
 }  // namespace blink::pointer_type_names

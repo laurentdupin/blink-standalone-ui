@@ -92,6 +92,8 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -129,8 +131,6 @@
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/pending_animations.h"
 #include "third_party/blink/renderer/core/core_initializer.h"
-#include "third_party/blink/renderer/core/event_type_names.h"
-#include "third_party/blink/renderer/core/events/mouse_event.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/root_frame_viewport.h"
@@ -169,7 +169,6 @@
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
-#include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
@@ -2588,6 +2587,15 @@ class StandaloneCcSchedulerParityProbe final
   std::string failure_reason_;
 };
 
+struct StandaloneMouseInputEventForRenderer {
+  int type = 0;
+  float x = 0.0f;
+  float y = 0.0f;
+  int button = 0;
+  int modifiers = 0;
+  int click_count = 0;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   Persistent<ChromeClient> chrome_client;
@@ -2632,6 +2640,11 @@ struct LiveFramePaintProbeCache {
   float requested_pointer_y = 0.0f;
   bool requested_pointer_pressed = false;
   int requested_pointer_event_type = 0;
+  std::vector<StandaloneMouseInputEventForRenderer>
+      requested_mouse_input_events;
+  bool mouse_input_events_dispatched = false;
+  int mouse_input_event_dispatch_count = 0;
+  std::string mouse_input_status = "not_requested";
   bool pointer_state_applied = false;
   std::string pointer_state_status = "not_requested";
   std::string pointer_hit_element_id;
@@ -3033,53 +3046,6 @@ PaintLayerScrollableArea* ScrollableAreaForElementForStandaloneRenderer(
 std::string ElementIdForStandaloneRenderer(Element& element) {
   return BlinkStringToStdStringForStandaloneRenderer(
       String(element.GetIdAttribute()));
-}
-
-Element* ActivationTargetForStandaloneRenderer(Element* hit_element) {
-  for (Element* element = hit_element; element;
-       element = element->parentElement()) {
-    Node& node = *element;
-    if (node.HasActivationBehavior()) {
-      return element;
-    }
-  }
-  return nullptr;
-}
-
-MouseEvent* CreateTrustedLeftClickEventForStandaloneRenderer(
-    Document& document,
-    Element& target,
-    float x,
-    float y) {
-  MouseEvent* event = MouseEvent::Create();
-  const int rounded_x = static_cast<int>(std::lround(x));
-  const int rounded_y = static_cast<int>(std::lround(y));
-  event->initMouseEvent(
-      nullptr, event_type_names::kClick, true, true, nullptr, /*detail=*/1,
-      rounded_x, rounded_y, rounded_x, rounded_y,
-      /*ctrl_key=*/false, /*alt_key=*/false, /*shift_key=*/false,
-      /*meta_key=*/false, /*button=*/0, /*related_target=*/nullptr,
-      /*buttons=*/0);
-  event->SetTarget(&target);
-  event->SetTrusted(true);
-  return event;
-}
-
-bool ApplyActivationBehaviorForStandaloneRenderer(Document& document,
-                                                  Element& target,
-                                                  float x,
-                                                  float y) {
-  MouseEvent* click_event =
-      CreateTrustedLeftClickEventForStandaloneRenderer(document, target, x, y);
-  Node& target_node = target;
-  EventDispatchHandlingState* pre_activation_state =
-      target_node.LegacyPreActivationBehavior(*click_event);
-  if (pre_activation_state) {
-    target_node.RunActivationBehavior(*click_event, pre_activation_state);
-    return click_event->DefaultHandled() || click_event->defaultPrevented();
-  }
-
-  return false;
 }
 
 bool ApplyRelativeWheelDeltaToScrollableAreaForStandaloneRenderer(
@@ -7148,6 +7114,7 @@ std::string TableColumnDiagnosticsJsonForStandaloneRenderer(
 
 struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string tag_name;
+  std::string element_id;
   std::string debug_id;
   std::string type_attr;
   std::string name_attr;
@@ -7160,7 +7127,12 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string first_missing_stage;
   std::string standalone_support_status;
   std::string unsupported_closure_boundary;
+  float absolute_x = 0.0f;
+  float absolute_y = 0.0f;
+  float absolute_width = 0.0f;
+  float absolute_height = 0.0f;
   bool layout_object_present = false;
+  bool absolute_bounds_present = false;
   bool is_connected = false;
   bool checked = false;
   bool radio_group_scope_present = false;
@@ -7293,6 +7265,8 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
       FormControlElementDiagnosticForStandaloneRenderer item;
       item.tag_name = BlinkStringToStdStringForStandaloneRenderer(
           element->tagName());
+      item.element_id = BlinkStringToStdStringForStandaloneRenderer(
+          String(element->GetIdAttribute()));
       item.debug_id = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(AtomicString("data-debug-id")));
       item.type_attr = BlinkStringToStdStringForStandaloneRenderer(
@@ -7348,6 +7322,13 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         ++diagnostics.controls_with_layout_object_count;
         item.layout_object_type = BlinkStringToStdStringForStandaloneRenderer(
             layout_object->DebugName());
+        const gfx::RectF absolute_bounds =
+            layout_object->AbsoluteBoundingBoxRectF();
+        item.absolute_bounds_present = true;
+        item.absolute_x = absolute_bounds.x();
+        item.absolute_y = absolute_bounds.y();
+        item.absolute_width = absolute_bounds.width();
+        item.absolute_height = absolute_bounds.height();
         if (layout_object->Parent()) {
           item.parent_layout_object_type =
               BlinkStringToStdStringForStandaloneRenderer(
@@ -7605,6 +7586,8 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
     }
     const auto& item = diagnostics.controls[i];
     json << "{\"tag_name\":" << JsonStringForStandaloneRenderer(item.tag_name)
+         << ",\"element_id\":"
+         << JsonStringForStandaloneRenderer(item.element_id)
          << ",\"data_debug_id\":"
          << JsonStringForStandaloneRenderer(item.debug_id)
          << ",\"type_attr\":" << JsonStringForStandaloneRenderer(item.type_attr)
@@ -7628,6 +7611,12 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << JsonStringForStandaloneRenderer(item.layout_object_type)
          << ",\"parent_layout_object_type\":"
          << JsonStringForStandaloneRenderer(item.parent_layout_object_type)
+         << ",\"absolute_bounds_present\":"
+         << (item.absolute_bounds_present ? "true" : "false")
+         << ",\"absolute_bounds\":{\"x\":" << item.absolute_x
+         << ",\"y\":" << item.absolute_y
+         << ",\"width\":" << item.absolute_width
+         << ",\"height\":" << item.absolute_height << "}"
          << ",\"standalone_support_status\":"
          << JsonStringForStandaloneRenderer(item.standalone_support_status)
          << ",\"unsupported_closure_boundary\":"
@@ -9717,245 +9706,197 @@ void ApplyInteractionStateForStandaloneRenderer(
   UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
 }
 
-bool IsStandaloneMouseFocusTargetForStandaloneRenderer(const Element& element) {
-  return IsA<HTMLInputElement>(element) || IsA<HTMLSelectElement>(element) ||
-         IsA<HTMLTextAreaElement>(element) || IsA<HTMLButtonElement>(element);
-}
-
 bool UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
     LocalFrameView& frame_view,
     DocumentUpdateReason reason);
 
-void ApplyPointerStateForStandaloneRenderer(Document& document,
-                                            LocalFrameView& frame_view) {
+WebInputEvent::Type WebMouseEventTypeForStandaloneRenderer(int type) {
+  switch (type) {
+    case 2:
+      return WebInputEvent::Type::kMouseDown;
+    case 3:
+      return WebInputEvent::Type::kMouseUp;
+    case 1:
+    default:
+      return WebInputEvent::Type::kMouseMove;
+  }
+}
+
+WebPointerProperties::Button WebMouseButtonForStandaloneRenderer(int button) {
+  switch (button) {
+    case 1:
+      return WebPointerProperties::Button::kLeft;
+    case 2:
+      return WebPointerProperties::Button::kMiddle;
+    case 3:
+      return WebPointerProperties::Button::kRight;
+    case 0:
+    default:
+      return WebPointerProperties::Button::kNoButton;
+  }
+}
+
+std::string WebInputEventResultForStandaloneRenderer(
+    WebInputEventResult result) {
+  switch (result) {
+    case WebInputEventResult::kNotHandled:
+      return "not_handled";
+    case WebInputEventResult::kHandledSystem:
+      return "handled_system";
+    case WebInputEventResult::kHandledApplication:
+      return "handled_application";
+    case WebInputEventResult::kHandledSuppressed:
+      return "handled_suppressed";
+  }
+  return "unknown";
+}
+
+void PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(
+    Document& document) {
   LiveFramePaintProbeCache& cache = ProbeCache();
-  cache.pointer_state_applied = false;
-  cache.pointer_state_status =
-      cache.requested_pointer_state ? "requested" : "not_requested";
   cache.pointer_hit_element_id.clear();
   cache.pointer_hit_element_tag.clear();
   cache.pointer_hit_element_class.clear();
   cache.pointer_hover_element_id.clear();
   cache.pointer_hover_element_tag.clear();
   cache.pointer_hover_element_class.clear();
-  cache.pointer_focus_requested = false;
-  cache.pointer_focus_applied = false;
-  cache.pointer_focus_status = "not_requested";
   cache.pointer_focused_element_id.clear();
-  cache.pointer_activation_requested = false;
-  cache.pointer_activation_applied = false;
-  cache.pointer_activation_element_id.clear();
-  cache.pointer_activation_down_element_id.clear();
-  cache.pointer_activation_node_id = kInvalidDOMNodeId;
-  cache.pointer_activation_down_node_id = kInvalidDOMNodeId;
-  cache.pointer_activation_status =
-      cache.requested_pointer_state ? "not_activation_event" : "not_requested";
-  if (!cache.requested_pointer_state) {
-    cache.pointer_down_activation_element_id.clear();
-    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
-    return;
-  }
 
-  TraceLiveFrameProbeLifecycleState("pointer before interaction clear",
-                                    &document, document.GetFrame(),
-                                    &frame_view);
-  TraceLiveFrameProbeStage("before pointer interaction clear");
-  document.UpdateHoverActiveState(/*is_active=*/false,
-                                  /*update_active_chain=*/true, nullptr);
-  TraceLiveFrameProbeStage("after pointer interaction clear");
-  TraceLiveFrameProbeLifecycleState("pointer after interaction clear",
-                                    &document, document.GetFrame(),
-                                    &frame_view);
-  LocalFrame* frame = document.GetFrame();
-  if (!frame || !frame->View()) {
-    cache.pointer_state_status = "frame_missing";
-    return;
+  if (Element* hover_element = document.HoverElement()) {
+    cache.pointer_hover_element_id =
+        BlinkStringToStdStringForStandaloneRenderer(
+            String(hover_element->GetIdAttribute()));
+    cache.pointer_hover_element_tag =
+        BlinkStringToStdStringForStandaloneRenderer(hover_element->tagName());
+    cache.pointer_hover_element_class =
+        BlinkStringToStdStringForStandaloneRenderer(
+            hover_element->getAttribute(html_names::kClassAttr));
   }
-  TraceLiveFrameProbeLifecycleState("pointer before hit-test lifecycle update",
-                                    &document, frame, frame->View());
-  TraceLiveFrameProbeStage("before pointer hit-test lifecycle update");
-  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
-      *frame->View(), DocumentUpdateReason::kTest);
-  TraceLiveFrameProbeStage("after pointer hit-test lifecycle update");
-  TraceLiveFrameProbeLifecycleState("pointer after hit-test lifecycle update",
-                                    &document, frame, frame->View());
-
-  HitTestRequest::HitTestRequestType hit_type = HitTestRequest::kMove;
-  if (cache.requested_pointer_event_type == 1) {
-    hit_type = HitTestRequest::kActive;
-  } else if (cache.requested_pointer_event_type == 2) {
-    hit_type = HitTestRequest::kRelease;
-  } else if (cache.requested_pointer_pressed) {
-    hit_type |= HitTestRequest::kActive;
-  }
-
-  const gfx::PointF root_point(cache.requested_pointer_x,
-                               cache.requested_pointer_y);
-  const HitTestLocation location(frame_view.ConvertFromRootFrame(root_point));
-  Document* hit_test_document = frame->GetDocument();
-  const bool use_no_lifecycle_hit_test =
-      IsPrePaintCleanForStandaloneRenderer(hit_test_document);
-  TraceLiveFrameProbeLifecycleState("pointer immediately before hit test",
-                                    &document, frame, frame->View());
-  TraceLiveFrameProbeStage(use_no_lifecycle_hit_test
-                               ? "before pointer hit test no_lifecycle"
-                               : "before pointer hit test lifecycle_update");
-  const HitTestResult result =
-      frame->GetEventHandler().HitTestResultAtLocation(
-          location, hit_type, nullptr, use_no_lifecycle_hit_test);
-  TraceLiveFrameProbeStage("after pointer hit test");
-  Element* hit_element = result.InnerPossiblyPseudoElement();
-  if (!hit_element && result.InnerNode()) {
-    hit_element = DynamicTo<Element>(result.InnerNode());
-    if (!hit_element) {
-      hit_element = result.InnerNode()->parentElement();
-    }
-  }
-  Element* focus_element = result.InnerElement();
-  if (!focus_element && result.InnerNode()) {
-    focus_element = DynamicTo<Element>(result.InnerNode());
-    if (!focus_element) {
-      focus_element = result.InnerNode()->parentElement();
-    }
-  }
-  TraceLiveFrameProbeStage("after pointer target resolve");
-  cache.pointer_state_applied = hit_element != nullptr;
-  cache.pointer_state_status =
-      hit_element ? "applied_to_blink_hit_test_target" : "no_hit_test_target";
-  if (hit_element) {
-    TraceLiveFrameProbeStage("before pointer hover active update");
-    document.UpdateHoverActiveState(cache.requested_pointer_pressed,
-                                    cache.requested_pointer_pressed,
-                                    hit_element);
-    TraceLiveFrameProbeStage("after pointer hover active update");
-    TraceLiveFrameProbeStage("before pointer hit element diagnostics");
+  if (Element* active_element = document.GetActiveElement()) {
     cache.pointer_hit_element_id =
         BlinkStringToStdStringForStandaloneRenderer(
-            String(hit_element->GetIdAttribute()));
+            String(active_element->GetIdAttribute()));
     cache.pointer_hit_element_tag =
-        BlinkStringToStdStringForStandaloneRenderer(hit_element->tagName());
+        BlinkStringToStdStringForStandaloneRenderer(active_element->tagName());
     cache.pointer_hit_element_class =
         BlinkStringToStdStringForStandaloneRenderer(
-            hit_element->getAttribute(html_names::kClassAttr));
-    if (Element* hover_element = document.HoverElement()) {
-      cache.pointer_hover_element_id =
-          BlinkStringToStdStringForStandaloneRenderer(
-              String(hover_element->GetIdAttribute()));
-      cache.pointer_hover_element_tag =
-          BlinkStringToStdStringForStandaloneRenderer(hover_element->tagName());
-      cache.pointer_hover_element_class =
-          BlinkStringToStdStringForStandaloneRenderer(
-            hover_element->getAttribute(html_names::kClassAttr));
-    }
-    TraceLiveFrameProbeStage("after pointer hit element diagnostics");
+            active_element->getAttribute(html_names::kClassAttr));
   }
-  TraceLiveFrameProbeStage("before pointer interaction style invalidation");
-  UpdateStandaloneInteractionStyleInvalidationForStandaloneRenderer(document);
-  TraceLiveFrameProbeStage("after pointer interaction style invalidation");
-
-  TraceLiveFrameProbeStage("before pointer activation target resolve");
-  Element* activation_target = ActivationTargetForStandaloneRenderer(hit_element);
-  TraceLiveFrameProbeStage("after pointer activation target resolve");
-  const std::string activation_element_id =
-      activation_target ? ElementIdForStandaloneRenderer(*activation_target)
-                        : std::string();
-  const DOMNodeId activation_node_id =
-      activation_target ? activation_target->GetDomNodeId()
-                        : kInvalidDOMNodeId;
-  if (cache.requested_pointer_event_type == 1) {
-    TraceLiveFrameProbeStage("before pointer down activation bookkeeping");
-    cache.pointer_down_activation_element_id.clear();
-    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
-    if (!activation_target) {
-      cache.pointer_activation_status = "no_activation_behavior_at_pointer_down";
-    } else {
-      cache.pointer_down_activation_element_id = activation_element_id;
-      cache.pointer_down_activation_node_id = activation_node_id;
-      cache.pointer_activation_down_element_id = activation_element_id;
-      cache.pointer_activation_down_node_id = activation_node_id;
-      cache.pointer_activation_element_id = activation_element_id;
-      cache.pointer_activation_node_id = activation_node_id;
-      cache.pointer_activation_status = "stored_pointer_down_activation_target";
-    }
-    TraceLiveFrameProbeStage("after pointer down activation bookkeeping");
-  } else if (cache.requested_pointer_event_type == 2) {
-    TraceLiveFrameProbeStage("before pointer up activation");
-    cache.pointer_activation_requested = true;
-    cache.pointer_activation_down_element_id =
-        cache.pointer_down_activation_element_id;
-    cache.pointer_activation_down_node_id =
-        cache.pointer_down_activation_node_id;
-    cache.pointer_activation_element_id = activation_element_id;
-    cache.pointer_activation_node_id = activation_node_id;
-    if (!activation_target) {
-      cache.pointer_activation_status = "no_activation_behavior_at_pointer_up";
-    } else if (cache.pointer_down_activation_node_id == kInvalidDOMNodeId) {
-      cache.pointer_activation_status = "missing_pointer_down_activation_target";
-    } else if (activation_node_id != cache.pointer_down_activation_node_id) {
-      cache.pointer_activation_status = "pointer_up_target_mismatch";
-    } else {
-      cache.pointer_activation_applied =
-          ApplyActivationBehaviorForStandaloneRenderer(
-              document, *activation_target, cache.requested_pointer_x,
-              cache.requested_pointer_y);
-      cache.pointer_activation_status =
-          cache.pointer_activation_applied
-              ? "applied_blink_default_activation"
-              : "unsupported_default_activation_behavior";
-    }
-    cache.pointer_down_activation_element_id.clear();
-    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
-    TraceLiveFrameProbeStage("after pointer up activation");
-  }
-
-  if (cache.requested_pointer_event_type != 1) {
-    cache.pointer_focus_status = "not_focus_event";
-    return;
-  }
-
-  cache.pointer_focus_requested = true;
-  if (!focus_element) {
-    cache.pointer_focus_status = "no_hit_test_target";
-    return;
-  }
-  TraceLiveFrameProbeLifecycleState("pointer before focusability lifecycle update",
-                                    &document, frame, frame->View());
-  TraceLiveFrameProbeStage("before pointer focusability lifecycle update");
-  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
-      *frame->View(), DocumentUpdateReason::kTest);
-  TraceLiveFrameProbeStage("after pointer focusability lifecycle update");
-  TraceLiveFrameProbeLifecycleState("pointer after focusability lifecycle update",
-                                    &document, frame, frame->View());
-  TraceLiveFrameProbeStage("before pointer focusability check");
-  if (!IsStandaloneMouseFocusTargetForStandaloneRenderer(*focus_element)) {
-    TraceLiveFrameProbeStage("after pointer focusability check not focusable");
-    cache.pointer_focus_status = "not_standalone_focus_target";
-    return;
-  }
-  TraceLiveFrameProbeStage("after pointer focusability check focusable");
-  Page* page = frame->GetPage();
-  if (!page) {
-    cache.pointer_focus_status = "page_missing";
-    return;
-  }
-
-  TraceLiveFrameProbeStage("before pointer focus apply");
-  const bool focus_applied = page->GetFocusController().SetFocusedElement(
-      focus_element, frame,
-      FocusParams(SelectionBehaviorOnFocus::kNone,
-                  mojom::blink::FocusType::kMouse, nullptr));
-  TraceLiveFrameProbeStage("after pointer focus apply");
-  Element* focused_element = document.FocusedElement();
-  cache.pointer_focus_applied =
-      focus_applied && focused_element == focus_element;
-  if (focused_element) {
+  if (Element* focused_element = document.FocusedElement()) {
     cache.pointer_focused_element_id =
         BlinkStringToStdStringForStandaloneRenderer(
             String(focused_element->GetIdAttribute()));
   }
+}
+
+void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
+                                                   LocalFrameView& frame_view) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.mouse_input_events_dispatched = false;
+  cache.mouse_input_event_dispatch_count = 0;
+  cache.mouse_input_status = cache.requested_mouse_input_events.empty()
+                                 ? "not_requested"
+                                 : "requested";
+  cache.pointer_state_applied = false;
+  cache.pointer_state_status =
+      cache.requested_mouse_input_events.empty() ? "not_requested"
+                                                 : "requested";
+  cache.pointer_focus_requested = false;
+  cache.pointer_focus_applied = false;
+  cache.pointer_focus_status = "not_requested";
+  cache.pointer_activation_requested = false;
+  cache.pointer_activation_applied = false;
+  cache.pointer_activation_status = "owned_by_blink_event_dispatch";
+  cache.pointer_activation_element_id.clear();
+  cache.pointer_activation_down_element_id.clear();
+  cache.pointer_activation_node_id = kInvalidDOMNodeId;
+  cache.pointer_activation_down_node_id = kInvalidDOMNodeId;
+  PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(document);
+
+  if (cache.requested_mouse_input_events.empty()) {
+    return;
+  }
+
+  LocalFrame* frame = document.GetFrame();
+  if (!frame || !frame->View()) {
+    cache.mouse_input_status = "frame_missing";
+    cache.pointer_state_status = "frame_missing";
+    return;
+  }
+
+  TraceLiveFrameProbeLifecycleState("mouse input before lifecycle update",
+                                    &document, frame, &frame_view);
+  TraceLiveFrameProbeStage("before mouse input lifecycle update");
+  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+      *frame->View(), DocumentUpdateReason::kTest);
+  TraceLiveFrameProbeStage("after mouse input lifecycle update");
+
+  std::string last_result = "not_dispatched";
+  for (const StandaloneMouseInputEventForRenderer& pending :
+       cache.requested_mouse_input_events) {
+    const WebInputEvent::Type event_type =
+        WebMouseEventTypeForStandaloneRenderer(pending.type);
+    const WebPointerProperties::Button button =
+        WebMouseButtonForStandaloneRenderer(pending.button);
+    WebMouseEvent event(event_type, gfx::PointF(pending.x, pending.y),
+                        gfx::PointF(pending.x, pending.y), button,
+                        pending.click_count, pending.modifiers,
+                        base::TimeTicks::Now());
+    event.UpdateEventModifiersToMatchButton();
+
+    if (cache.trace_stages) {
+      char buffer[256];
+      std::snprintf(buffer, sizeof(buffer),
+                    "before blink mouse event dispatch type=%d x=%.1f y=%.1f",
+                    static_cast<int>(event_type), pending.x, pending.y);
+      TraceLiveFrameProbeStage(buffer);
+    }
+    WebInputEventResult dispatch_result = WebInputEventResult::kNotHandled;
+    if (event_type == WebInputEvent::Type::kMouseMove) {
+      TraceLiveFrameProbeStage("before HandleMouseMoveEvent");
+      dispatch_result = frame->GetEventHandler().HandleMouseMoveEvent(
+          event, Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
+      TraceLiveFrameProbeStage("after HandleMouseMoveEvent");
+    } else if (event_type == WebInputEvent::Type::kMouseDown) {
+      cache.pointer_focus_requested = true;
+      TraceLiveFrameProbeStage("before HandleMousePressEvent");
+      dispatch_result = frame->GetEventHandler().HandleMousePressEvent(event);
+      TraceLiveFrameProbeStage("after HandleMousePressEvent");
+    } else if (event_type == WebInputEvent::Type::kMouseUp) {
+      cache.pointer_activation_requested = true;
+      TraceLiveFrameProbeStage("before HandleMouseReleaseEvent");
+      dispatch_result = frame->GetEventHandler().HandleMouseReleaseEvent(event);
+      TraceLiveFrameProbeStage("after HandleMouseReleaseEvent");
+    }
+    last_result = WebInputEventResultForStandaloneRenderer(dispatch_result);
+    if (cache.trace_stages) {
+      char buffer[256];
+      std::snprintf(buffer, sizeof(buffer),
+                    "after blink mouse event dispatch result=%s",
+                    last_result.c_str());
+      TraceLiveFrameProbeStage(buffer);
+    }
+    ++cache.mouse_input_event_dispatch_count;
+  }
+
+  cache.mouse_input_events_dispatched =
+      cache.mouse_input_event_dispatch_count > 0;
+  cache.mouse_input_status =
+      std::string("dispatched_via_blink_event_handler:") + last_result;
+  cache.pointer_state_applied = cache.mouse_input_events_dispatched;
+  cache.pointer_state_status = cache.mouse_input_status;
+  PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(document);
+  cache.pointer_focus_applied =
+      cache.pointer_focus_requested && !cache.pointer_focused_element_id.empty();
   cache.pointer_focus_status =
-      cache.pointer_focus_applied ? "applied_to_blink_hit_test_target"
-                                  : "no_focusable_target";
+      cache.pointer_focus_requested
+          ? (cache.pointer_focus_applied ? "focused_by_blink_event_handler"
+                                         : "not_focused_by_blink_event_handler")
+          : "not_requested";
+  cache.pointer_activation_status =
+      cache.pointer_activation_requested
+          ? "activation_owned_by_blink_event_handler"
+          : "not_requested";
 }
 
 void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
@@ -11160,6 +11101,13 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"y\":" << cache.wheel_scroll_max_y << "}"
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.wheel_scroll_status) << "}"
+       << ",\"mouse_input_events\":{\"requested_count\":"
+       << cache.requested_mouse_input_events.size()
+       << ",\"dispatched_count\":" << cache.mouse_input_event_dispatch_count
+       << ",\"dispatched_via_blink_event_handler\":"
+       << (cache.mouse_input_events_dispatched ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.mouse_input_status) << "}"
        << ",\"pointer_interaction\":{\"requested\":"
        << (cache.requested_pointer_state ? "true" : "false")
        << ",\"pressed\":"
@@ -12187,7 +12135,7 @@ UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
   TraceLiveFrameProbeLifecycleState("pre-input after prepaint lifecycle update",
                                     &document, document.GetFrame(),
                                     &frame_view);
-  ApplyPointerStateForStandaloneRenderer(document, frame_view);
+  DispatchMouseInputEventsForStandaloneRenderer(document, frame_view);
   if (cache.pointer_state_applied || cache.pointer_focus_requested) {
     TraceLiveFrameProbeStage("before post-pointer lifecycle update");
     document.UpdateStyleAndLayoutTree();
@@ -13085,45 +13033,37 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
   cache.raw_paint_artifact_audit_json.clear();
 }
 
-void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
-    float x,
-    float y,
-    int pressed,
-    int event_type,
-    int requested) {
+void StandaloneBlinkLiveFrameBridgeClearMouseInputEventsForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
-  const bool next_requested = requested != 0;
-  const bool next_pressed = pressed != 0;
-  if (cache.requested_pointer_state == next_requested &&
-      std::abs(cache.requested_pointer_x - x) <= 0.001f &&
-      std::abs(cache.requested_pointer_y - y) <= 0.001f &&
-      cache.requested_pointer_pressed == next_pressed &&
-      cache.requested_pointer_event_type == event_type) {
+  if (cache.requested_mouse_input_events.empty()) {
     return;
   }
-  cache.requested_pointer_state = next_requested;
-  cache.requested_pointer_x = x;
-  cache.requested_pointer_y = y;
-  cache.requested_pointer_pressed = next_pressed;
-  cache.requested_pointer_event_type = event_type;
-  cache.pointer_state_applied = false;
-  cache.pointer_state_status = next_requested ? "requested" : "not_requested";
-  cache.pointer_focus_requested = false;
-  cache.pointer_focus_applied = false;
-  cache.pointer_focus_status = next_requested ? "requested" : "not_requested";
-  cache.pointer_focused_element_id.clear();
-  cache.pointer_activation_requested = false;
-  cache.pointer_activation_applied = false;
-  cache.pointer_activation_element_id.clear();
-  cache.pointer_activation_down_element_id.clear();
-  cache.pointer_activation_node_id = kInvalidDOMNodeId;
-  cache.pointer_activation_down_node_id = kInvalidDOMNodeId;
-  cache.pointer_activation_status =
-      next_requested ? "requested" : "not_requested";
-  if (!next_requested) {
-    cache.pointer_down_activation_element_id.clear();
-    cache.pointer_down_activation_node_id = kInvalidDOMNodeId;
-  }
+  cache.requested_mouse_input_events.clear();
+  cache.mouse_input_events_dispatched = false;
+  cache.mouse_input_event_dispatch_count = 0;
+  cache.mouse_input_status = "not_requested";
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
+    int type,
+    float x,
+    float y,
+    int button,
+    int modifiers,
+    int click_count) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.requested_mouse_input_events.push_back(
+      StandaloneMouseInputEventForRenderer{type, x, y, button, modifiers,
+                                           click_count});
+  cache.mouse_input_status = "requested";
   cache.initialized = false;
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();
@@ -13479,10 +13419,7 @@ int StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(
     hovered_element_id[copied] = '\0';
   }
   if (active_element_id && active_element_id_capacity > 0) {
-    static const std::string empty_active_id;
-    const std::string& active_id =
-        cache.requested_pointer_pressed ? cache.pointer_hit_element_id
-                                        : empty_active_id;
+    const std::string& active_id = cache.pointer_hit_element_id;
     const size_t copied =
         std::min(active_id.size(),
                  static_cast<size_t>(active_element_id_capacity - 1));

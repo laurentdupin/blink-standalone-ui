@@ -2988,9 +2988,11 @@ bool LocalFrame::ConsumeTransientUserActivation(
 
 void LocalFrame::NotifyUserActivation(
     mojom::blink::UserActivationNotificationType notification_type) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   GetLocalFrameHostRemote().UpdateUserActivationState(
       mojom::blink::UserActivationUpdateType::kNotifyActivation,
       notification_type);
+#endif
   Client()->NotifyUserActivation();
   NotifyUserActivationInFrameTree(notification_type);
 }

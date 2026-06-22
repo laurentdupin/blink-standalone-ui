@@ -69,6 +69,25 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 namespace blink {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char*);
+
+namespace {
+
+void TraceStandaloneEventDispatcherStage(const char* stage) {
+  StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+}  // namespace
+#else
+namespace {
+
+void TraceStandaloneEventDispatcherStage(const char*) {}
+
+}  // namespace
+#endif
+
 DispatchEventResult EventDispatcher::DispatchEvent(Node& node, Event& event) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"),
                "EventDispatcher::dispatchEvent");
@@ -227,6 +246,11 @@ DispatchEventResult EventDispatcher::Dispatch() {
   // set activationTarget to target.
   Node* activation_target =
       is_activation_event && node_->HasActivationBehavior() ? node_ : nullptr;
+  if (is_activation_event) {
+    TraceStandaloneEventDispatcherStage(
+        activation_target ? "event_dispatcher activation target direct"
+                          : "event_dispatcher activation target missing");
+  }
 
   // A part of step 6.9 loop.
   //
@@ -245,6 +269,8 @@ DispatchEventResult EventDispatcher::Dispatch() {
       Node& target = event_->GetEventPath()[i].GetNode();
       if (target.HasActivationBehavior()) {
         activation_target = &target;
+        TraceStandaloneEventDispatcherStage(
+            "event_dispatcher activation target ancestor");
         break;
       }
     }
@@ -411,8 +437,12 @@ inline void EventDispatcher::DispatchEventPostProcess(
     // `Node::RunActivationBehavior()` for more information on how activation
     // behavior is implemented in Blink.
     if (activation_target) {
+      TraceStandaloneEventDispatcherStage(
+          "event_dispatcher before RunActivationBehavior");
       activation_target->RunActivationBehavior(
           *event_, pre_dispatch_event_handler_result);
+      TraceStandaloneEventDispatcherStage(
+          "event_dispatcher after RunActivationBehavior");
     }
     // TODO(tkent): Is it safe to kick DefaultEventHandler() with such altered
     // event_?

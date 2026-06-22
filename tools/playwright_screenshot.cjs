@@ -235,6 +235,9 @@ async function main() {
             rectTop: rect.top,
             rectRight: rect.right,
             rectBottom: rect.bottom,
+            checked: typeof element.checked === "boolean" ? element.checked : null,
+            value: typeof element.value === "string" ? element.value : "",
+            selectedIndex: typeof element.selectedIndex === "number" ? element.selectedIndex : null,
           });
         };
         for (const element of Array.from(document.querySelectorAll(selector))) {

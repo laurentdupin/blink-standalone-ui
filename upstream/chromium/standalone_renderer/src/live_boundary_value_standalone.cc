@@ -964,7 +964,6 @@ void FrameLoader::ProcessScrollForSameDocumentNavigation(
     mojom::blink::ScrollRestorationType,
     mojom::blink::ScrollBehavior) {}
 void FrameLoader::DispatchDidClearDocumentOfWindowObject() {}
-void EventHandler::StopAutoscroll() {}
 void ScriptController::UpdateDocument() {}
 DOMWindow* DOMWindow::parent() const {
   return const_cast<DOMWindow*>(this);
@@ -1855,6 +1854,8 @@ network::ParsedPermissionsPolicy SecurityContextInit::ParseIsolatedAppPermission
 
 namespace blink::pointer_type_names {
 
+const AtomicString& kMouse = AtomicString("mouse");
+const AtomicString& kPen = AtomicString("pen");
 const AtomicString& kTouch = AtomicString("touch");
 
 }  // namespace blink::pointer_type_names

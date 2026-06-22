@@ -83,7 +83,9 @@
 #include "third_party/blink/renderer/core/layout/layout_custom_scrollbar_part.h"
 #include "third_party/blink/renderer/core/layout/layout_embedded_content.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/loader/anchor_element_interaction_tracker.h"
+#endif
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/page/autoscroll_controller.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -127,6 +129,17 @@
 #include "ui/gfx/geometry/size_f.h"
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char*);
+
+void TraceStandaloneEventHandlerStage(const char* stage) {
+  StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#else
+void TraceStandaloneEventHandlerStage(const char*) {}
+#endif
 
 using mojom::blink::FormControlType;
 
@@ -861,7 +874,9 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   // invalidated by what happens when we dispatch the event.
   PhysicalOffset document_point = frame_->View()->ConvertFromRootFrame(
       PhysicalOffset(gfx::ToFlooredPoint(mouse_event.PositionInRootFrame())));
+  TraceStandaloneEventHandlerStage("event_handler mousepress before target");
   MouseEventWithHitTestResults mev = GetMouseEventTarget(request, mouse_event);
+  TraceStandaloneEventHandlerStage("event_handler mousepress after target");
   if (!mev.InnerNode()) {
     // An anonymous box can be scrollable.
     if (PassMousePressEventToScrollbar(mev))
@@ -872,10 +887,14 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   }
 
   mouse_event_manager_->SetMousePressNode(mev.InnerNode());
+  TraceStandaloneEventHandlerStage("event_handler mousepress after press node");
   frame_->GetDocument()->SetSequentialFocusNavigationStartingPoint(
       mev.InnerNode());
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after sequential focus start");
 
   LocalFrame* subframe = event_handling_util::GetTargetSubframe(mev);
+  TraceStandaloneEventHandlerStage("event_handler mousepress after subframe");
   if (subframe) {
     WebInputEventResult result = PassMousePressEventToSubframe(mev, subframe);
     if (mouse_event_manager_->MousePressed()) {
@@ -894,6 +913,8 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     mev.InnerNode()->GetDocument().CountUse(
         WebFeature::kInputEventToRecentlyMovedIframeMistakenlyDiscarded);
   }
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress before discard targeting check");
   if (event_handling_util::ShouldDiscardEventTargetingFrame(mev.Event(),
                                                             *frame_)) {
     discarded_events_.mouse_down_target = mev.InnerNode()->GetDomNodeId();
@@ -903,9 +924,15 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     discarded_events_.mouse_down_target = kInvalidDOMNodeId;
     discarded_events_.mouse_down_time = base::TimeTicks();
   }
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after discard targeting check");
 
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress before user activation");
   LocalFrame::NotifyUserActivation(
       frame_, mojom::blink::UserActivationNotificationType::kInteraction);
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after user activation");
 
   if (RuntimeEnabledFeatures::MiddleClickAutoscrollEnabled()) {
     // We store whether middle click autoscroll is in progress before calling
@@ -925,13 +952,21 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
 
   mouse_event_manager_->SetClickCount(mouse_event.click_count);
   mouse_event_manager_->SetMouseDownElement(mev.InnerPossiblyPseudoElement());
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after mouse down element");
 
   if (!mouse_event.FromTouch())
     frame_->Selection().SetCaretBlinkingSuspended(true);
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after caret suspend");
 
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress before pointer down dispatch");
   WebInputEventResult event_result = DispatchMousePointerEvent(
       WebInputEvent::Type::kPointerDown, mev.InnerPossiblyPseudoElement(),
       mev.Event(), Vector<WebMouseEvent>(), Vector<WebMouseEvent>());
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after pointer down dispatch");
 
   // Disabled form controls still need to resize the scrollable area.
   if ((event_result == WebInputEventResult::kNotHandled ||
@@ -958,16 +993,25 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   // dragging if we keep the selection in case of mousedown. FireFox also has
   // the same behavior and it's more compatible with other browsers.
   GetSelectionController().InitializeSelectionState();
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after selection init");
 
   HitTestResult hit_test_result = event_handling_util::HitTestResultInFrame(
       frame_, HitTestLocation(document_point), HitTestRequest::kReadOnly);
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after readonly hit test");
   InputDeviceCapabilities* source_capabilities =
       frame_->DomWindow()->GetInputDeviceCapabilities()->FiresTouchEvents(
           mouse_event.FromTouch());
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousepress after input capabilities");
 
   if (event_result == WebInputEventResult::kNotHandled) {
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress before focus");
     event_result = mouse_event_manager_->HandleMouseFocus(hit_test_result,
                                                           source_capabilities);
+    TraceStandaloneEventHandlerStage("event_handler mousepress after focus");
   }
 
   if (event_result == WebInputEventResult::kNotHandled || mev.GetScrollbar()) {
@@ -979,6 +1023,7 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
 
   if (PassMousePressEventToScrollbar(mev))
     event_result = WebInputEventResult::kHandledSystem;
+  TraceStandaloneEventHandlerStage("event_handler mousepress after scrollbar");
 
   if (event_result == WebInputEventResult::kNotHandled) {
     if (ShouldRefetchEventTarget(mev)) {
@@ -987,7 +1032,11 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
       mev = frame_->GetDocument()->PerformMouseEventHitTest(
           read_only_request, document_point, mouse_event);
     }
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress before mouse manager press");
     event_result = mouse_event_manager_->HandleMousePressEvent(mev);
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress after mouse manager press");
   }
 
   if (mev.GetHitTestResult().InnerNode() &&
@@ -995,9 +1044,19 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
     DCHECK_EQ(WebInputEvent::Type::kMouseDown, mouse_event.GetType());
     HitTestResult result = mev.GetHitTestResult();
     result.SetToShadowHostIfInUAShadowRoot();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress before chrome mouse down");
     frame_->GetChromeClient().OnMouseDown(*result.InnerNode());
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress after chrome mouse down");
+#else
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress skip standalone chrome mouse down");
+#endif
   }
 
+  TraceStandaloneEventHandlerStage("event_handler mousepress done");
   return event_result;
 }
 
@@ -1059,11 +1118,13 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   mouse_event_manager_->HandleSvgPanIfNeeded(false);
 
   if (mouse_event.GetType() == WebInputEvent::Type::kMouseMove) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     AnchorElementInteractionTracker* tracker =
         frame_->GetDocument()->GetAnchorElementInteractionTracker();
     if (tracker) {
       tracker->OnMouseMoveEvent(mouse_event);
     }
+#endif
 
     if (MenuSafeTriangle* safe_triangle =
             frame_->GetDocument()->GetMenuSafeTriangle()) {
@@ -1125,6 +1186,7 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   MouseEventWithHitTestResults mev = MouseEventWithHitTestResults(
       mouse_event, out_location, HitTestResult(request, out_location));
 
+  TraceStandaloneEventHandlerStage("event_handler mousemove before hit test");
   // We don't want to do a hit-test in MouseLeave scenarios because there
   // might actually be some other frame above this one at the specified
   // coordinate. So we avoid the hit test but still clear the hover/active
@@ -1136,6 +1198,7 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   } else {
     mev = GetMouseEventTarget(request, mouse_event);
   }
+  TraceStandaloneEventHandlerStage("event_handler mousemove after hit test");
 
   if (hovered_node_result)
     *hovered_node_result = mev.GetHitTestResult();
@@ -1146,12 +1209,18 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   Scrollbar* scrollbar = nullptr;
 
   if (scroll_manager_->InResizeMode()) {
+    TraceStandaloneEventHandlerStage("event_handler mousemove before resize");
     scroll_manager_->Resize(mev.Event());
+    TraceStandaloneEventHandlerStage("event_handler mousemove after resize");
   } else {
     scrollbar = mev.GetScrollbar();
 
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove before scrollbar update");
     UpdateLastScrollbarUnderMouse(scrollbar,
                                   !mouse_event_manager_->MousePressed());
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove after scrollbar update");
   }
 
   WebInputEventResult event_result = WebInputEventResult::kNotHandled;
@@ -1175,10 +1244,14 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
   }
 
   if (current_subframe) {
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove before boundary subframe");
     // Update over/out state before passing the event to the subframe.
     pointer_event_manager_->SendMouseAndPointerBoundaryEvents(
         EffectiveMouseEventTargetElement(mev.InnerPossiblyPseudoElement()),
         mev.Event());
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove after boundary subframe");
 
     // Event dispatch in sendMouseAndPointerBoundaryEvents may have caused the
     // subframe of the target node to be detached from its LocalFrameView, in
@@ -1192,22 +1265,39 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
     if (scrollbar && !mouse_event_manager_->MousePressed()) {
       // Handle hover effects on platforms that support visual feedback on
       // scrollbar hovering.
+      TraceStandaloneEventHandlerStage(
+          "event_handler mousemove before scrollbar hover");
       scrollbar->MouseMoved(mev.Event());
+      TraceStandaloneEventHandlerStage(
+          "event_handler mousemove after scrollbar hover");
     }
 
-    // Set Effective pan action before Pointer cursor is updated.
+    // Set Effective pan action before Pointer cursor is updated. The standalone
+    // SDL embedder does not provide the browser/widget pan-action host; keep the
+    // rest of Chromium mouse dispatch active without entering that IPC boundary.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     const WebPointerEvent web_pointer_event(WebInputEvent::Type::kPointerMove,
                                             mev.Event().FlattenTransform());
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove before effective pan action");
     pointer_event_manager_->SendEffectivePanActionAtPointer(web_pointer_event,
                                                             mev.InnerNode());
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove after effective pan action");
+#else
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousemove skip standalone pan action");
+#endif
 
     LocalFrameView* view = frame_->View();
     if (!is_remote_frame && view) {
+      TraceStandaloneEventHandlerStage("event_handler mousemove before cursor");
       std::optional<ui::Cursor> optional_cursor =
           SelectCursor(mev.GetHitTestLocation(), mev.GetHitTestResult());
       if (optional_cursor.has_value()) {
         view->SetCursor(optional_cursor.value());
       }
+      TraceStandaloneEventHandlerStage("event_handler mousemove after cursor");
     }
   }
 
@@ -1217,15 +1307,20 @@ WebInputEventResult EventHandler::HandleMouseMoveOrLeaveEvent(
     return event_result;
   }
 
+  TraceStandaloneEventHandlerStage(
+      "event_handler mousemove before dispatch pointer");
   event_result = DispatchMousePointerEvent(
       WebInputEvent::Type::kPointerMove, mev.InnerPossiblyPseudoElement(),
       mev.Event(), coalesced_events, predicted_events);
+  TraceStandaloneEventHandlerStage("event_handler mousemove after dispatch pointer");
   // Since there is no default action for the mousemove event, MouseEventManager
   // handles drag for text selection even when js cancels the mouse move event.
   // https://w3c.github.io/uievents/#event-type-mousemove
   if (event_result == WebInputEventResult::kNotHandled ||
       event_result == WebInputEventResult::kHandledApplication) {
+    TraceStandaloneEventHandlerStage("event_handler mousemove before drag");
     event_result = mouse_event_manager_->HandleMouseDraggedEvent(mev);
+    TraceStandaloneEventHandlerStage("event_handler mousemove after drag");
   }
 
   return event_result;

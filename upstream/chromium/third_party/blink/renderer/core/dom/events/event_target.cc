@@ -84,6 +84,17 @@
 namespace blink {
 namespace {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char*);
+
+void TraceStandaloneEventTargetStage(const char* stage) {
+  StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#else
+void TraceStandaloneEventTargetStage(const char*) {}
+#endif
+
 enum PassiveForcedListenerResultType {
   kPreventDefaultNotCalled,
   kDocumentLevelTouchPreventDefaultCalled,
@@ -861,10 +872,12 @@ bool EventTarget::dispatchEventForBindings(Event* event,
 }
 
 DispatchEventResult EventTarget::DispatchEvent(Event& event) {
-  if (!GetExecutionContext())
+  if (!GetExecutionContext()) {
     return DispatchEventResult::kCanceledBeforeDispatch;
+  }
   event.SetTrusted(true);
-  return DispatchEventInternal(event);
+  DispatchEventResult result = DispatchEventInternal(event);
+  return result;
 }
 
 DispatchEventResult EventTarget::DispatchEventInternal(Event& event) {

@@ -55,6 +55,17 @@ namespace blink {
 
 namespace {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char*);
+
+void TraceStandaloneMouseEventManagerStage(const char* stage) {
+  StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+#else
+void TraceStandaloneMouseEventManagerStage(const char*) {}
+#endif
+
 void UpdateMouseMovementXY(const WebMouseEvent& mouse_event,
                            const gfx::PointF* last_position,
                            LocalDOMWindow* dom_window,
@@ -346,8 +357,17 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
   const bool should_dispatch_click_event =
       click_count_ > 0 && !context_menu_event && mousedown_element_ &&
       mouse_release_target && mousedown_element_->isConnected();
-  if (!should_dispatch_click_event)
+  if (!should_dispatch_click_event) {
+    TraceStandaloneMouseEventManagerStage(
+        click_count_ <= 0
+            ? "mouse_manager click skip no click count"
+            : !mousedown_element_
+                  ? "mouse_manager click skip no mousedown element"
+                  : !mouse_release_target
+                        ? "mouse_manager click skip no mouse release target"
+                        : "mouse_manager click skip mousedown disconnected");
     return WebInputEventResult::kNotHandled;
+  }
 
   Node* click_target_node = nullptr;
   if (captured_click_target) {
@@ -358,18 +378,25 @@ WebInputEventResult MouseEventManager::DispatchMouseClickIfNeeded(
         *mousedown_element_, event_handling_util::ParentForClickEvent);
   }
 
-  if (!click_target_node)
+  if (!click_target_node) {
+    TraceStandaloneMouseEventManagerStage(
+        "mouse_manager click skip no common target");
     return WebInputEventResult::kNotHandled;
+  }
 
   const AtomicString click_event_type =
       (mouse_event.button == WebPointerProperties::Button::kLeft)
           ? event_type_names::kClick
           : event_type_names::kAuxclick;
 
-  return DispatchMouseEvent(click_target_node, click_event_type, mouse_event,
-                            nullptr, nullptr, false, pointer_id, pointer_type,
-                            pointer_down_target, pointer_up_target)
-      .second;
+  TraceStandaloneMouseEventManagerStage("mouse_manager click before dispatch");
+  WebInputEventResult result =
+      DispatchMouseEvent(click_target_node, click_event_type, mouse_event,
+                         nullptr, nullptr, false, pointer_id, pointer_type,
+                         pointer_down_target, pointer_up_target)
+          .second;
+  TraceStandaloneMouseEventManagerStage("mouse_manager click after dispatch");
+  return result;
 }
 
 void MouseEventManager::RecomputeMouseHoverStateIfNeeded() {
@@ -541,9 +568,23 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
   }
 
   // The layout needs to be up to date to determine if an element is focusable.
+  TraceStandaloneMouseEventManagerStage("mouse_manager focus before layout");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (frame_->GetDocument()->Lifecycle().GetState() <
+      DocumentLifecycle::kPrePaintClean) {
+    frame_->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kFocus);
+  } else {
+    TraceStandaloneMouseEventManagerStage(
+        "mouse_manager focus layout already clean");
+  }
+#else
   frame_->GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kFocus);
+#endif
+  TraceStandaloneMouseEventManagerStage("mouse_manager focus after layout");
 
   Element* element = element_under_mouse_;
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_manager focus before element walk");
   while (element) {
     if (element->IsMouseFocusable() && element->IsFocusedElementInDocument()) {
       return WebInputEventResult::kNotHandled;
@@ -554,6 +595,8 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
     }
     element = FlatTreeTraversal::ParentElement(*element);
   }
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_manager focus after element walk");
   DCHECK(!element || element->IsMouseFocusable() ||
          element->IsShadowHostWithDelegatesFocus());
 
@@ -591,6 +634,7 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
   Page* const page = frame_->GetPage();
   if (!page)
     return WebInputEventResult::kNotHandled;
+  TraceStandaloneMouseEventManagerStage("mouse_manager focus after page");
 
   // If focus shift is blocked, we eat the event. Note we should never
   // clear swallowEvent if the page already set it (e.g., by canceling
@@ -607,6 +651,8 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
       delegated_target->Focus(FocusParams(
           SelectionBehaviorOnFocus::kReset, mojom::blink::FocusType::kMouse,
           nullptr, FocusOptions::Create(), FocusTrigger::kUserGesture));
+      TraceStandaloneMouseEventManagerStage(
+          "mouse_manager focus after delegated focus");
       // If the delegated target is a text control element such as input text,
       // the event is handled.
       if (delegated_target->IsTextControl()) {
@@ -621,11 +667,18 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
   // current focus element when a link is clicked; this is expected by
   // some sites that rely on onChange handlers running from form
   // fields before the button click is processed.
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_manager focus before focus controller");
   if (!page->GetFocusController().SetFocusedElement(
           element, frame_,
           FocusParams(SelectionBehaviorOnFocus::kNone,
-                      mojom::blink::FocusType::kMouse, source_capabilities)))
+                      mojom::blink::FocusType::kMouse, source_capabilities))) {
+    TraceStandaloneMouseEventManagerStage(
+        "mouse_manager focus controller blocked");
     return WebInputEventResult::kHandledSystem;
+  }
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_manager focus after focus controller");
   return WebInputEventResult::kNotHandled;
 }
 

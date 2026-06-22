@@ -58,6 +58,27 @@ struct PointerState {
   bool pressed = false;
 };
 
+enum class MouseInputEventType {
+  kMove = 1,
+  kDown = 2,
+  kUp = 3,
+};
+
+enum class MouseInputButton {
+  kNone = 0,
+  kLeft = 1,
+  kMiddle = 2,
+  kRight = 3,
+};
+
+struct MouseInputEvent {
+  MouseInputEventType type = MouseInputEventType::kMove;
+  Point position;
+  MouseInputButton button = MouseInputButton::kNone;
+  int modifiers = 0;
+  int click_count = 0;
+};
+
 struct WheelInput {
   Point position;
   Point delta;
@@ -81,6 +102,7 @@ struct FrameInput {
   std::optional<std::string> html_override;
   std::optional<std::vector<Stylesheet>> stylesheets_override;
   std::unordered_map<std::string, std::string> element_attributes_by_id_and_name;
+  std::vector<MouseInputEvent> mouse_events;
   std::vector<PointerState> pointers;
   std::optional<WheelInput> wheel;
   KeyboardState keyboard;

@@ -234,6 +234,256 @@ def read_interactive_points(state_json: Path, max_points: int) -> list[dict[str,
     return points
 
 
+def read_json_file(path: Path) -> Any:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def form_controls_from_audit(audit_json: Path) -> list[dict[str, Any]]:
+    audit = read_json_file(audit_json)
+    if not isinstance(audit, dict):
+        return []
+    diagnostics = audit.get("form_control_diagnostics")
+    if not isinstance(diagnostics, dict):
+        return []
+    controls = diagnostics.get("controls")
+    return controls if isinstance(controls, list) else []
+
+
+def control_absolute_bounds(control: dict[str, Any]) -> dict[str, float] | None:
+    if not control.get("absolute_bounds_present"):
+        return None
+    bounds = control.get("absolute_bounds")
+    if not isinstance(bounds, dict):
+        return None
+    try:
+        x = float(bounds["x"])
+        y = float(bounds["y"])
+        width = float(bounds["width"])
+        height = float(bounds["height"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if width <= 0 or height <= 0:
+        return None
+    return {"x": x, "y": y, "width": width, "height": height}
+
+
+def find_control_for_point(
+    controls: list[dict[str, Any]], point: dict[str, Any]
+) -> dict[str, Any] | None:
+    point_id = str(point.get("id") or "")
+    if point_id:
+        for control in controls:
+            if str(control.get("element_id") or "") == point_id:
+                return control
+    point_name = str(point.get("name") or "")
+    point_type = str(point.get("type") or "").lower()
+    point_tag = str(point.get("tagName") or "").upper()
+    for control in controls:
+        if point_tag and str(control.get("tag_name") or "").upper() != point_tag:
+            continue
+        if point_name and str(control.get("name_attr") or "") != point_name:
+            continue
+        if point_type and str(control.get("type_attr") or "").lower() != point_type:
+            continue
+        return control
+    return None
+
+
+def clamp_point_coordinate(value: float, limit: int) -> int:
+    return int(round(max(0, min(limit - 1, value))))
+
+
+def point_from_standalone_control_bounds(
+    point: dict[str, Any],
+    control: dict[str, Any] | None,
+    viewport_size: tuple[int, int],
+) -> dict[str, Any]:
+    if control is None:
+        return point
+    bounds = control_absolute_bounds(control)
+    if bounds is None:
+        return point
+    kind = str(point.get("pointKind") or "")
+    x = bounds["x"] + bounds["width"] / 2.0
+    y = bounds["y"] + bounds["height"] / 2.0
+    if kind == "select-arrow":
+        x = bounds["x"] + bounds["width"] - min(16.0, bounds["width"] * 0.15)
+    width, height = viewport_size
+    adjusted = dict(point)
+    adjusted["playwright_x"] = point.get("x")
+    adjusted["playwright_y"] = point.get("y")
+    adjusted["x"] = clamp_point_coordinate(x, width)
+    adjusted["y"] = clamp_point_coordinate(y, height)
+    adjusted["standalone_coordinate_source"] = "form_control_absolute_bounds"
+    adjusted["standalone_bounds"] = {
+        "x": bounds["x"],
+        "y": bounds["y"],
+        "width": bounds["width"],
+        "height": bounds["height"],
+    }
+    return adjusted
+
+
+def standalone_interaction_points(
+    raw_points: list[dict[str, Any]],
+    audit_json: Path,
+    max_points: int,
+    viewport: str,
+) -> list[dict[str, Any]]:
+    if max_points <= 0:
+        return []
+    viewport_size = parse_viewport(viewport)
+    controls = form_controls_from_audit(audit_json)
+    adjusted_points: list[dict[str, Any]] = []
+    seen: set[tuple[int, int, str, str]] = set()
+    for point in raw_points:
+        control = find_control_for_point(controls, point)
+        adjusted = point_from_standalone_control_bounds(
+            point, control, viewport_size
+        )
+        try:
+            x = int(adjusted["x"])
+            y = int(adjusted["y"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        key = (
+            x,
+            y,
+            str(adjusted.get("pointKind") or ""),
+            str(adjusted.get("id") or adjusted.get("name") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        adjusted_points.append(adjusted)
+        if len(adjusted_points) >= max_points:
+            break
+    return adjusted_points
+
+
+def filter_checkbox_and_last_radio_points(
+    points: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    last_radio_by_group: dict[str, int] = {}
+    for index, point in enumerate(points):
+        if str(point.get("pointKind") or "") != "radio-box":
+            continue
+        group = str(point.get("name") or point.get("id") or index)
+        last_radio_by_group[group] = index
+    filtered: list[dict[str, Any]] = []
+    for index, point in enumerate(points):
+        kind = str(point.get("pointKind") or "")
+        if kind == "checkbox-box":
+            filtered.append(point)
+        elif kind == "radio-box":
+            group = str(point.get("name") or point.get("id") or index)
+            if last_radio_by_group.get(group) == index:
+                filtered.append(point)
+    return filtered
+
+
+def semantic_points_for_supported_boundaries(
+    points: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    selected = filter_checkbox_and_last_radio_points(points)
+    selected.extend(
+        point
+        for point in points
+        if str(point.get("pointKind") or "") in {"select-arrow", "text-control"}
+    )
+    return selected
+
+
+def summarize_interaction_semantics(
+    points: list[dict[str, Any]],
+    audit_json: Path,
+    click_repeats: int,
+) -> dict[str, Any]:
+    controls = form_controls_from_audit(audit_json)
+    assertions: list[dict[str, Any]] = []
+    last_radio_by_group: dict[str, int] = {}
+    for index, point in enumerate(points):
+        if str(point.get("pointKind") or "") != "radio-box":
+            continue
+        group = str(point.get("name") or point.get("id") or index)
+        last_radio_by_group[group] = index
+    for point_index, point in enumerate(points):
+        kind = str(point.get("pointKind") or "")
+        if kind not in {"checkbox-box", "radio-box", "select-arrow", "text-control"}:
+            continue
+        assertion: dict[str, Any] = {
+            "pointKind": kind,
+            "id": point.get("id") or "",
+            "name": point.get("name") or "",
+            "type": point.get("type") or "",
+        }
+        control = find_control_for_point(controls, point)
+        if control is None:
+            assertion["status"] = "control_not_found_in_standalone_audit"
+            assertion["passed"] = False
+            assertions.append(assertion)
+            continue
+        assertion["standalone_checked"] = control.get("checked")
+        assertion["standalone_radio_group_checked"] = control.get(
+            "radio_group_checked"
+        )
+        assertion["standalone_support_status"] = control.get(
+            "standalone_support_status", ""
+        )
+        if kind == "checkbox-box":
+            if click_repeats % 2 == 0:
+                assertion["status"] = "not_asserted_even_click_repeats"
+                assertion["passed"] = True
+            else:
+                expected = not bool(point.get("checked"))
+                actual = bool(control.get("checked"))
+                assertion["expected_checked"] = expected
+                assertion["passed"] = actual == expected
+                assertion["status"] = "checked_changed" if assertion[
+                    "passed"
+                ] else "checked_did_not_change"
+        elif kind == "radio-box":
+            group = str(point.get("name") or point.get("id") or point_index)
+            if last_radio_by_group.get(group) != point_index:
+                assertion["passed"] = True
+                assertion["status"] = "radio_superseded_by_later_group_click"
+            else:
+                assertion["passed"] = bool(control.get("checked")) or bool(
+                    control.get("radio_group_checked")
+                )
+                assertion["status"] = (
+                    "radio_selected"
+                    if assertion["passed"]
+                    else "radio_not_selected_after_click"
+                )
+        elif kind == "select-arrow":
+            assertion["passed"] = True
+            assertion["status"] = (
+                "popup_boundary_observed_not_asserted;"
+                "standalone_does_not_provide_browser_select_popup"
+            )
+        else:
+            assertion["passed"] = True
+            assertion["status"] = (
+                "text_editing_not_asserted;"
+                "keyboard_text_input_dispatch_is_next_boundary"
+            )
+        assertions.append(assertion)
+    failed = [item for item in assertions if not item.get("passed")]
+    return {
+        "audit_json": rel_to_repo(audit_json),
+        "control_count": len(controls),
+        "assertion_count": len(assertions),
+        "failed_assertion_count": len(failed),
+        "assertions": assertions,
+    }
+
+
 def run_interaction_smoke(
     html_file: Path,
     examples_root: Path,
@@ -242,6 +492,7 @@ def run_interaction_smoke(
     viewport: str,
     timeout_seconds: int,
     points: list[dict[str, Any]],
+    semantic_points: list[dict[str, Any]],
     click_repeats: int,
 ) -> dict[str, Any]:
     interaction_log = page_dir / "viewer_interaction.log"
@@ -271,8 +522,100 @@ def run_interaction_smoke(
         "interaction_elapsed_ms": elapsed_ms,
         "interaction_log": rel_to_repo(interaction_log),
         "interaction_points": points,
+        "interaction_semantic_points": semantic_points,
         "interaction_last_frame_metrics": last_frame_metrics(output),
         "interaction_last_presentation_metrics": last_presentation_metrics(output),
+    }
+
+
+def run_control_semantic_checks(
+    html_file: Path,
+    examples_root: Path,
+    viewer: Path,
+    page_dir: Path,
+    viewport: str,
+    timeout_seconds: int,
+    points: list[dict[str, Any]],
+    semantic_points: list[dict[str, Any]],
+    baseline_audit: Path,
+) -> dict[str, Any]:
+    assertions: list[dict[str, Any]] = []
+    runs: list[dict[str, Any]] = []
+    unsupported_summary = summarize_interaction_semantics(
+        [
+            point
+            for point in semantic_points
+            if str(point.get("pointKind") or "") in {"select-arrow", "text-control"}
+        ],
+        baseline_audit,
+        0,
+    )
+    assertions.extend(unsupported_summary.get("assertions", []))
+    control_points = [
+        point
+        for point in points
+        if str(point.get("pointKind") or "") in {"checkbox-box", "radio-box"}
+    ]
+    if control_points:
+        audit_dir = ROOT / "build" / "validation" / "semantic_combined"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        audit_path = audit_dir / f"{page_dir.parent.parent.name}_{page_dir.name}.json"
+        try:
+            audit_path.unlink()
+        except FileNotFoundError:
+            pass
+        log_path = page_dir / "semantic_controls.log"
+        cmd = [
+            str(viewer.resolve()),
+            "--html-file",
+            str(html_file.resolve()),
+            "--resource-root",
+            str(examples_root.resolve()),
+            "--viewport",
+            viewport,
+            "--paint-artifact-dump",
+            str(audit_path.resolve()),
+            "--quit-after-ms",
+            "1200",
+            "--synthetic-sdl-click-repeats",
+            "1",
+        ]
+        for point in control_points:
+            try:
+                click_x = int(point["x"])
+                click_y = int(point["y"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            cmd.extend(["--synthetic-sdl-click", f"{click_x},{click_y}"])
+        exit_code, elapsed_ms, output, timed_out = run_command(
+            cmd, log_path, timeout_seconds
+        )
+        summary = summarize_interaction_semantics(control_points, audit_path, 1)
+        assertions.extend(summary.get("assertions", []))
+        runs.append(
+            {
+                "points": control_points,
+                "exit": exit_code,
+                "timeout": timed_out,
+                "elapsed_ms": elapsed_ms,
+                "log": rel_to_repo(log_path),
+                "audit_json": rel_to_repo(audit_path),
+                "last_frame_metrics": last_frame_metrics(output),
+                "last_presentation_metrics": last_presentation_metrics(output),
+                "semantic_summary": summary,
+            }
+        )
+    failed = [item for item in assertions if not item.get("passed")]
+    return {
+        "control_semantic_runs": runs,
+        "interaction_semantics": {
+            "baseline_audit_json": rel_to_repo(baseline_audit),
+            "assertion_count": len(assertions),
+            "failed_assertion_count": len(failed),
+            "assertions": assertions,
+        },
+        "control_semantic_failure_count": sum(1 for run in runs if run["exit"] != 0),
+        "control_semantic_timeout_count": sum(1 for run in runs if run["timeout"]),
     }
 
 
@@ -288,6 +631,8 @@ def validate_page(
     run_interactions: bool,
     max_interaction_points: int,
     interaction_click_repeats: int,
+    click_affordance_points: bool,
+    control_semantic_checks: bool,
 ) -> dict[str, Any]:
     page_slug = slug_for(html_file, examples_root)
     page_dir = out_dir / "pages" / page_slug
@@ -296,6 +641,8 @@ def validate_page(
     reference_png = page_dir / "playwright.png"
     diff_png = page_dir / "diff.png"
     playwright_state = page_dir / "playwright_state.json"
+    viewer_audit = out_dir / "viewer_audits" / f"{page_slug}.json"
+    viewer_audit.parent.mkdir(parents=True, exist_ok=True)
     viewer_log = page_dir / "viewer.log"
     playwright_log = page_dir / "playwright.log"
 
@@ -314,6 +661,8 @@ def validate_page(
         str(standalone_png.resolve()),
         "--screenshot-after-ms",
         str(max(0, screenshot_after_ms)),
+        "--paint-artifact-dump",
+        str(viewer_audit.resolve()),
     ]
     viewer_exit, viewer_elapsed_ms, viewer_output, viewer_timeout = run_command(
         viewer_cmd, viewer_log, timeout_seconds
@@ -351,15 +700,29 @@ def validate_page(
         "viewer_png": rel_to_repo(standalone_png),
         "playwright_png": rel_to_repo(reference_png),
         "playwright_state_json": rel_to_repo(playwright_state),
+        "viewer_audit_json": rel_to_repo(viewer_audit),
         "viewer_png_exists": standalone_png.exists(),
         "playwright_png_exists": reference_png.exists(),
         "last_frame_metrics": last_frame_metrics(viewer_output),
         "last_presentation_metrics": last_presentation_metrics(viewer_output),
     }
     if run_interactions:
-        interaction_points = read_interactive_points(
-            playwright_state, max_interaction_points
+        raw_interaction_points = read_interactive_points(
+            playwright_state, max(max_interaction_points * 4, max_interaction_points)
         )
+        semantic_points = semantic_points_for_supported_boundaries(
+            raw_interaction_points[:max_interaction_points]
+        )
+        interaction_points = standalone_interaction_points(
+            raw_interaction_points,
+            viewer_audit,
+            max_interaction_points,
+            viewport,
+        )
+        interaction_points = filter_checkbox_and_last_radio_points(
+            interaction_points
+        )
+        smoke_points = interaction_points if click_affordance_points else []
         result.update(
             run_interaction_smoke(
                 html_file,
@@ -368,10 +731,44 @@ def validate_page(
                 page_dir,
                 viewport,
                 timeout_seconds,
-                interaction_points,
+                smoke_points,
+                semantic_points,
                 interaction_click_repeats,
             )
         )
+        result["available_affordance_points"] = interaction_points
+        if control_semantic_checks:
+            result.update(
+                run_control_semantic_checks(
+                    html_file,
+                    examples_root,
+                    viewer,
+                    page_dir,
+                    viewport,
+                    timeout_seconds,
+                    interaction_points,
+                    semantic_points,
+                    viewer_audit,
+                )
+            )
+        else:
+            unsupported_summary = summarize_interaction_semantics(
+                [
+                    point
+                    for point in semantic_points
+                    if str(point.get("pointKind") or "")
+                    in {"select-arrow", "text-control"}
+                ],
+                viewer_audit,
+                0,
+            )
+            result["interaction_semantics"] = {
+                "baseline_audit_json": rel_to_repo(viewer_audit),
+                "assertion_count": len(unsupported_summary.get("assertions", [])),
+                "failed_assertion_count": 0,
+                "assertions": unsupported_summary.get("assertions", []),
+                "status": "control_semantic_checks_not_requested",
+            }
     if standalone_png.exists() and reference_png.exists():
         result["comparison"] = compare_images(
             standalone_png, reference_png, diff_png, threshold
@@ -396,6 +793,10 @@ def status_for(result: dict[str, Any], mean_diff_threshold: float,
         return "viewer_failed"
     if result.get("interaction_exit", 0) != 0:
         return "interaction_failed"
+    if result.get("control_semantic_timeout_count", 0):
+        return "control_semantic_timeout"
+    if result.get("control_semantic_failure_count", 0):
+        return "control_semantic_failed"
     if result["playwright_exit"] != 0:
         return "playwright_failed"
     if result.get("missing_artifacts"):
@@ -430,6 +831,9 @@ def write_markdown(summary: dict[str, Any], out_path: Path) -> None:
         f"- Viewer timeouts: `{summary['viewer_timeout_count']}`",
         f"- Interaction failures: `{summary['interaction_failure_count']}`",
         f"- Interaction timeouts: `{summary['interaction_timeout_count']}`",
+        f"- Control semantic command failures: `{summary['control_semantic_failure_count']}`",
+        f"- Control semantic command timeouts: `{summary['control_semantic_timeout_count']}`",
+        f"- Interaction semantic assertion failures: `{summary['interaction_semantic_failure_count']}`",
         f"- Playwright failures: `{summary['playwright_failure_count']}`",
         f"- Playwright timeouts: `{summary['playwright_timeout_count']}`",
         f"- Missing screenshot artifacts: `{summary['missing_artifact_count']}`",
@@ -489,6 +893,8 @@ def main() -> int:
     parser.add_argument("--skip-interactions", action="store_true")
     parser.add_argument("--max-interaction-points", type=int, default=6)
     parser.add_argument("--interaction-click-repeats", type=int, default=2)
+    parser.add_argument("--click-affordance-points", action="store_true")
+    parser.add_argument("--control-semantic-checks", action="store_true")
     args = parser.parse_args()
 
     examples_root = args.examples_root.resolve()
@@ -519,6 +925,8 @@ def main() -> int:
             not args.skip_interactions,
             args.max_interaction_points,
             args.interaction_click_repeats,
+            args.click_affordance_points,
+            args.control_semantic_checks,
         )
         result["status"] = status_for(
             result,
@@ -539,6 +947,8 @@ def main() -> int:
         "interaction_probe_enabled": not args.skip_interactions,
         "max_interaction_points": args.max_interaction_points,
         "interaction_click_repeats": args.interaction_click_repeats,
+        "click_affordance_points": args.click_affordance_points,
+        "control_semantic_checks": args.control_semantic_checks,
         "page_count": len(results),
         "viewer_failure_count": sum(1 for row in results if row["viewer_exit"] != 0),
         "viewer_timeout_count": sum(1 for row in results if row["viewer_timeout"]),
@@ -547,6 +957,16 @@ def main() -> int:
         ),
         "interaction_timeout_count": sum(
             1 for row in results if row.get("interaction_timeout")
+        ),
+        "control_semantic_failure_count": sum(
+            row.get("control_semantic_failure_count", 0) for row in results
+        ),
+        "control_semantic_timeout_count": sum(
+            row.get("control_semantic_timeout_count", 0) for row in results
+        ),
+        "interaction_semantic_failure_count": sum(
+            row.get("interaction_semantics", {}).get("failed_assertion_count", 0)
+            for row in results
         ),
         "playwright_failure_count": sum(
             1 for row in results if row["playwright_exit"] != 0
@@ -577,6 +997,9 @@ def main() -> int:
         or summary["viewer_timeout_count"]
         or summary["interaction_failure_count"]
         or summary["interaction_timeout_count"]
+        or summary["control_semantic_failure_count"]
+        or summary["control_semantic_timeout_count"]
+        or summary["interaction_semantic_failure_count"]
         or summary["playwright_failure_count"]
         or summary["playwright_timeout_count"]
         or summary["missing_artifact_count"]

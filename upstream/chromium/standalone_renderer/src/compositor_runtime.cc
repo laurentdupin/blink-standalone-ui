@@ -36,12 +36,14 @@ void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
 void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
     const char* hovered_element_id,
     const char* active_element_id);
-void StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
+void StandaloneBlinkLiveFrameBridgeClearMouseInputEventsForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
+    int type,
     float x,
     float y,
-    int pressed,
-    int event_type,
-    int requested);
+    int button,
+    int modifiers,
+    int click_count);
 void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     float x,
     float y,
@@ -763,12 +765,38 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         SerializeElementAttributes(snapshot_.element_attributes_by_id_and_name);
     probe::StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
         serialized_attributes.c_str());
-    if (input.pointers.empty()) {
-      probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
-          snapshot_.hovered_element_id.c_str(), snapshot_.active_element_id.c_str());
+    probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
+        nullptr, nullptr);
+    probe::StandaloneBlinkLiveFrameBridgeClearMouseInputEventsForStandaloneRenderer();
+    if (!input.mouse_events.empty()) {
+      for (const MouseInputEvent& event : input.mouse_events) {
+        probe::StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
+            static_cast<int>(event.type), event.position.x, event.position.y,
+            static_cast<int>(event.button), event.modifiers,
+            event.click_count);
+      }
+      last_pointer_pressed_ = false;
+      previous_pointer_.reset();
+    } else if (!input.pointers.empty()) {
+      const PointerState& pointer = input.pointers.front();
+      MouseInputEventType event_type = MouseInputEventType::kMove;
+      if (!last_pointer_pressed_ && pointer.pressed) {
+        event_type = MouseInputEventType::kDown;
+      } else if (last_pointer_pressed_ && !pointer.pressed) {
+        event_type = MouseInputEventType::kUp;
+      }
+      int modifiers = 0;
+      if (pointer.pressed)
+        modifiers |= 1 << 6;  // blink::WebInputEvent::kLeftButtonDown.
+      probe::StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
+          static_cast<int>(event_type), pointer.position.x, pointer.position.y,
+          static_cast<int>(MouseInputButton::kLeft), modifiers,
+          event_type == MouseInputEventType::kMove ? 0 : 1);
+      last_pointer_pressed_ = pointer.pressed;
+      previous_pointer_ = pointer;
     } else {
-      probe::StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
-          nullptr, nullptr);
+      last_pointer_pressed_ = false;
+      previous_pointer_.reset();
     }
     if (input.wheel) {
       probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
@@ -777,30 +805,6 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     } else {
       probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
           0.0f, 0.0f, 0.0f, 0.0f, 0);
-    }
-    if (!input.pointers.empty()) {
-      const PointerState& pointer = input.pointers.front();
-      int pointer_event_type = 0;
-      if (!last_pointer_pressed_ && pointer.pressed) {
-        pointer_event_type = 1;
-      } else if (last_pointer_pressed_ && !pointer.pressed) {
-        pointer_event_type = 2;
-      }
-      const bool pointer_changed =
-          !previous_pointer_ || previous_pointer_->id != pointer.id ||
-          previous_pointer_->position.x != pointer.position.x ||
-          previous_pointer_->position.y != pointer.position.y ||
-          previous_pointer_->pressed != pointer.pressed;
-      probe::StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
-          pointer.position.x, pointer.position.y, pointer.pressed ? 1 : 0,
-          pointer_event_type, pointer_changed ? 1 : 0);
-      last_pointer_pressed_ = pointer.pressed;
-      previous_pointer_ = pointer;
-    } else {
-      probe::StandaloneBlinkLiveFrameBridgeSetPointerStateForStandaloneRenderer(
-          0.0f, 0.0f, 0, 0, 0);
-      last_pointer_pressed_ = false;
-      previous_pointer_.reset();
     }
     result.timing.runtime_apply_state_ms =
         RuntimeElapsedMs(apply_state_start, RuntimeClock::now());
@@ -1008,6 +1012,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
                        snapshot_.form_values_by_element_id)) {
       return true;
     }
+    if (!input.mouse_events.empty())
+      return true;
     if (input.wheel)
       return true;
     if (!input.keyboard.pressed_key_codes.empty())

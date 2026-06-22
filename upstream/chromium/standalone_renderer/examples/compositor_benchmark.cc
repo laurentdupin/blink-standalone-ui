@@ -265,6 +265,17 @@ html_css_renderer::FrameInput MakeBaseWarmInput(
   return input;
 }
 
+void AppendMouseInputEvent(html_css_renderer::FrameInput* input,
+                           html_css_renderer::MouseInputEventType type,
+                           html_css_renderer::Point position,
+                           html_css_renderer::MouseInputButton button,
+                           int modifiers,
+                           int click_count) {
+  input->mouse_events.push_back(
+      html_css_renderer::MouseInputEvent{type, position, button, modifiers,
+                                         click_count});
+}
+
 html_css_renderer::FrameInput MakeWarmInput(
     const std::string& scenario,
     int iteration,
@@ -312,18 +323,23 @@ html_css_renderer::FrameInput MakeWarmInput(
     return input;
   }
   if (scenario == "pointer-move") {
-    input.pointers = {html_css_renderer::PointerState{
-        1,
-        html_css_renderer::Point{32.0f + static_cast<float>(iteration % 4) * 8.0f,
+    AppendMouseInputEvent(
+        &input, html_css_renderer::MouseInputEventType::kMove,
+        html_css_renderer::Point{32.0f +
+                                     static_cast<float>(iteration % 4) * 8.0f,
                                  32.0f},
-        false}};
+        html_css_renderer::MouseInputButton::kNone, 0, 0);
     return input;
   }
   if (scenario == "pointer-click") {
-    input.pointers = {html_css_renderer::PointerState{
-        1,
+    const bool pressed = iteration % 2 == 0;
+    AppendMouseInputEvent(
+        &input,
+        pressed ? html_css_renderer::MouseInputEventType::kDown
+                : html_css_renderer::MouseInputEventType::kUp,
         html_css_renderer::Point{32.0f, 32.0f},
-        iteration % 2 == 0}};
+        html_css_renderer::MouseInputButton::kLeft,
+        pressed ? (1 << 6) : 0, 1);
     return input;
   }
   if (scenario == "wheel-scroll") {
