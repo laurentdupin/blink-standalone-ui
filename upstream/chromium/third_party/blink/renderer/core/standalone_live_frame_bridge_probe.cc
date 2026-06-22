@@ -9979,7 +9979,6 @@ bool ApplyStandaloneTextControlEditForStandaloneRenderer(
   control.SetValue(edited.ToString(), TextFieldEventBehavior::kDispatchInputEvent,
                    TextControlSetValueSelection::kDoNotSet);
   control.SetSelectionRange(caret, caret);
-  control.CheckIfValueWasReverted(control.Value());
   return true;
 }
 

@@ -9502,7 +9502,6 @@ bool Editor::HandleTextEvent(TextEvent* event) {
                     TextFieldEventBehavior::kDispatchInputEvent,
                     TextControlSetValueSelection::kDoNotSet);
   control->SetSelectionRange(caret, caret);
-  control->CheckIfValueWasReverted(control->Value());
   return true;
 #else
   return false;
