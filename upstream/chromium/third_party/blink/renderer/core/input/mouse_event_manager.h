@@ -105,7 +105,8 @@ class CORE_EXPORT MouseEventManager final
 
   WebInputEventResult HandleMouseFocus(
       const HitTestResult&,
-      InputDeviceCapabilities* source_capabilities);
+      InputDeviceCapabilities* source_capabilities,
+      const WebMouseEvent* mouse_event_for_fresh_hit_test = nullptr);
 
   void SetLastKnownMousePosition(const WebMouseEvent&);
   void SetLastMousePositionAsUnknown();

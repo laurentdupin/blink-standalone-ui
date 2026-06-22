@@ -469,6 +469,13 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
             .domWindow()
             ->GetInputDeviceCapabilities()
             ->FiresTouchEvents(mouse_event->FromTouch());
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    select_->GetDocument().SetFocusedElement(
+        select_, FocusParams(SelectionBehaviorOnFocus::kRestore,
+                             mojom::blink::FocusType::kMouse,
+                             source_capabilities, FocusOptions::Create(),
+                             FocusTrigger::kUserGesture));
+#else
     if (PickerIsPopover()) {
       // Don't focus the select when the picker is in base appearance mode,
       // otherwise any click inside the picker would focus the button. Calling
@@ -481,8 +488,16 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
                                  source_capabilities, FocusOptions::Create(),
                                  FocusTrigger::kUserGesture));
     }
+#endif
     if (select_->GetLayoutObject() && !will_be_destroyed_ &&
         !select_->IsDisabledFormControl()) {
+#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+      // The standalone renderer can focus and paint closed menu-list selects,
+      // but it has no browser/page-popup host for native dropdown UI. Avoid
+      // entering Blink's popup-open state; value changes through the popup are
+      // intentionally unsupported until that embedder boundary exists.
+      return true;
+#else
       if (PopupIsVisible()) {
         HidePopup(SelectPopupHideBehavior::kNormal);
       } else {
@@ -515,6 +530,7 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
         ShowPopup(mouse_event->FromTouch() ? PopupMenu::kTouch
                                            : PopupMenu::kOther);
       }
+#endif
     }
     return true;
   }

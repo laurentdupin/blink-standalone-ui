@@ -247,6 +247,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_element_resource_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_phase1_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_feature_standalone.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_process.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/url_network_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/web_history_item_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_input_event.cc

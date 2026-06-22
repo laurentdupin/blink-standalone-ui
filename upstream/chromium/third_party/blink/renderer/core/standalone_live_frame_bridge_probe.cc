@@ -326,6 +326,8 @@ void InstallStandaloneMojoThunksForStandaloneRenderer();
 
 namespace {
 
+extern "C" void HtmlCssRendererStandaloneSetCrashBreadcrumb(const char*);
+
 void TraceLiveFrameProbeStage(const char* stage);
 void TraceLiveFrameProbeStagef(const char* format,
                                wtf_size_t first,
@@ -2642,6 +2644,7 @@ struct LiveFramePaintProbeCache {
   int requested_pointer_event_type = 0;
   std::vector<StandaloneMouseInputEventForRenderer>
       requested_mouse_input_events;
+  bool mouse_input_events_consumed = false;
   bool mouse_input_events_dispatched = false;
   int mouse_input_event_dispatch_count = 0;
   std::string mouse_input_status = "not_requested";
@@ -2948,6 +2951,7 @@ class StandaloneCompositorChromeClient final : public EmptyChromeClient {
 };
 
 void TraceLiveFrameProbeStage(const char* stage) {
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(stage);
   LiveFramePaintProbeCache& cache = ProbeCache();
   if (!cache.trace_stages) {
     return;
@@ -9792,6 +9796,10 @@ void PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(
 void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
                                                    LocalFrameView& frame_view) {
   LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.requested_mouse_input_events.empty() &&
+      cache.mouse_input_events_consumed) {
+    return;
+  }
   cache.mouse_input_events_dispatched = false;
   cache.mouse_input_event_dispatch_count = 0;
   cache.mouse_input_status = cache.requested_mouse_input_events.empty()
@@ -9816,6 +9824,10 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
   if (cache.requested_mouse_input_events.empty()) {
     return;
   }
+  std::vector<StandaloneMouseInputEventForRenderer> pending_events =
+      std::move(cache.requested_mouse_input_events);
+  cache.requested_mouse_input_events.clear();
+  cache.mouse_input_events_consumed = true;
 
   LocalFrame* frame = document.GetFrame();
   if (!frame || !frame->View()) {
@@ -9832,8 +9844,7 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
   TraceLiveFrameProbeStage("after mouse input lifecycle update");
 
   std::string last_result = "not_dispatched";
-  for (const StandaloneMouseInputEventForRenderer& pending :
-       cache.requested_mouse_input_events) {
+  for (const StandaloneMouseInputEventForRenderer& pending : pending_events) {
     const WebInputEvent::Type event_type =
         WebMouseEventTypeForStandaloneRenderer(pending.type);
     const WebPointerProperties::Button button =
@@ -13035,10 +13046,12 @@ void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
 
 void StandaloneBlinkLiveFrameBridgeClearMouseInputEventsForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
-  if (cache.requested_mouse_input_events.empty()) {
+  if (cache.requested_mouse_input_events.empty() &&
+      !cache.mouse_input_events_consumed) {
     return;
   }
   cache.requested_mouse_input_events.clear();
+  cache.mouse_input_events_consumed = false;
   cache.mouse_input_events_dispatched = false;
   cache.mouse_input_event_dispatch_count = 0;
   cache.mouse_input_status = "not_requested";
@@ -13063,6 +13076,7 @@ void StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
   cache.requested_mouse_input_events.push_back(
       StandaloneMouseInputEventForRenderer{type, x, y, button, modifiers,
                                            click_count});
+  cache.mouse_input_events_consumed = false;
   cache.mouse_input_status = "requested";
   cache.initialized = false;
   cache.exported_draw_ops.clear();

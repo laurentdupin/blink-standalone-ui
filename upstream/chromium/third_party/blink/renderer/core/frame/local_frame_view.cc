@@ -994,6 +994,9 @@ void LocalFrameView::WillStartForcedLayout(DocumentUpdateReason reason) {
   forced_layout_stack_depth_++;
   if (forced_layout_stack_depth_ > 1)
     return;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#endif
   if (auto* metrics_aggregator = GetUkmAggregator()) {
     DCHECK(!forced_layout_timer_.has_value());
     forced_layout_timer_ =
@@ -2557,6 +2560,7 @@ bool LocalFrameView::UpdateLifecyclePhases(
 
   // Hit testing metrics include the entire time processing a document update
   // in preparation for a hit test.
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (reason == DocumentUpdateReason::kHitTest) {
     if (auto* metrics_aggregator = GetUkmAggregator()) {
       metrics_aggregator->RecordTimerSample(
@@ -2564,6 +2568,7 @@ bool LocalFrameView::UpdateLifecyclePhases(
           lifecycle_data_.start_time, base::TimeTicks::Now());
     }
   }
+#endif
 
   return Lifecycle().GetState() == target_state;
 }

@@ -36,6 +36,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/css_file_loader.h"
+#include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 #include "ui/gl/gl_switches.h"
@@ -683,6 +684,8 @@ void PrintPresentationStatus(
   if (!result.failure_reason.empty())
     std::fprintf(stderr, " failure='%s'", result.failure_reason.c_str());
   std::fprintf(stderr, "\n");
+  if (result.vulkan_presented)
+    std::fprintf(stderr, "diagnostic: Chromium Vulkan swap result: SWAP_ACK\n");
   if (include_diagnostics) {
     for (const std::string& diagnostic : result.diagnostics)
       std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
@@ -692,6 +695,7 @@ void PrintPresentationStatus(
 }  // namespace
 
 int main(int argc, char** argv) {
+  html_css_renderer::ConfigureStandaloneToolProcess();
   base::CommandLine::Init(argc, argv);
   ApplyStandaloneGpuDefaults();
   base::AtExitManager at_exit_manager;

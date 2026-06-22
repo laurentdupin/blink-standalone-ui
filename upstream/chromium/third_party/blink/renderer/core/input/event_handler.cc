@@ -1009,8 +1009,8 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
   if (event_result == WebInputEventResult::kNotHandled) {
     TraceStandaloneEventHandlerStage(
         "event_handler mousepress before focus");
-    event_result = mouse_event_manager_->HandleMouseFocus(hit_test_result,
-                                                          source_capabilities);
+    event_result = mouse_event_manager_->HandleMouseFocus(
+        hit_test_result, source_capabilities, &mouse_event);
     TraceStandaloneEventHandlerStage("event_handler mousepress after focus");
   }
 

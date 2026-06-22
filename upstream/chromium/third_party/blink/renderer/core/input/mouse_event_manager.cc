@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
 #include "third_party/blink/renderer/core/dom/element.h"
+#include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/editing/editing_utilities.h"
@@ -557,7 +558,8 @@ Element* MouseEventManager::GetElementUnderMouse() {
 
 WebInputEventResult MouseEventManager::HandleMouseFocus(
     const HitTestResult& hit_test_result,
-    InputDeviceCapabilities* source_capabilities) {
+    InputDeviceCapabilities* source_capabilities,
+    const WebMouseEvent* mouse_event_for_fresh_hit_test) {
   // If clicking on a frame scrollbar, do not mess up with content focus.
   if (auto* layout_view = frame_->ContentLayoutObject()) {
     if (hit_test_result.GetScrollbar() && frame_->ContentLayoutObject()) {
@@ -582,7 +584,55 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
 #endif
   TraceStandaloneMouseEventManagerStage("mouse_manager focus after layout");
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  Element* element = nullptr;
+  // The standalone viewer dispatches ordered SDL mouse events through Blink,
+  // but it may flush style/layout during mousedown default handling before the
+  // follow-up focus step. Re-hit-test when the current mouse event is available
+  // so focus does not walk stale pre-dispatch UA-shadow/control state.
+  Node* hit_test_node = nullptr;
+  if (mouse_event_for_fresh_hit_test) {
+    MouseEventWithHitTestResults fresh_hit_test =
+        event_handling_util::PerformMouseEventHitTest(
+            frame_, HitTestRequest(HitTestRequest::kReadOnly),
+            *mouse_event_for_fresh_hit_test);
+    hit_test_node = fresh_hit_test.GetHitTestResult().InnerNode();
+  } else {
+    hit_test_node = hit_test_result.InnerNode();
+  }
+  if (hit_test_node) {
+    while (hit_test_node) {
+      Element* shadow_host = hit_test_node->OwnerShadowHost();
+      if (!shadow_host) {
+        break;
+      }
+      hit_test_node = shadow_host;
+    }
+    Element* hit_test_element = DynamicTo<Element>(hit_test_node);
+    if (!hit_test_element && hit_test_node) {
+      hit_test_element = FlatTreeTraversal::ParentElement(*hit_test_node);
+    }
+    if (hit_test_element) {
+      element = hit_test_element;
+    }
+  }
+  if (element && element->IsFormControlElement()) {
+    Document& focus_document = element->GetDocument();
+    const FocusParams focus_params(SelectionBehaviorOnFocus::kNone,
+                                   mojom::blink::FocusType::kMouse,
+                                   source_capabilities);
+    if (!focus_document.SetFocusedElement(element, focus_params)) {
+      TraceStandaloneMouseEventManagerStage(
+          "mouse_manager focus document blocked");
+      return WebInputEventResult::kHandledSystem;
+    }
+    TraceStandaloneMouseEventManagerStage(
+        "mouse_manager focus form control direct");
+    return WebInputEventResult::kNotHandled;
+  }
+#else
   Element* element = element_under_mouse_;
+#endif
   TraceStandaloneMouseEventManagerStage(
       "mouse_manager focus before element walk");
   while (element) {
@@ -669,6 +719,25 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
   // fields before the button click is processed.
   TraceStandaloneMouseEventManagerStage(
       "mouse_manager focus before focus controller");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  Document* focus_document =
+      element ? &element->GetDocument() : frame_->GetDocument();
+  if (!focus_document) {
+    return WebInputEventResult::kNotHandled;
+  }
+  const FocusParams focus_params(SelectionBehaviorOnFocus::kNone,
+                                 mojom::blink::FocusType::kMouse,
+                                 source_capabilities);
+  if (element) {
+    if (!focus_document->SetFocusedElement(element, focus_params)) {
+      TraceStandaloneMouseEventManagerStage(
+          "mouse_manager focus document blocked");
+      return WebInputEventResult::kHandledSystem;
+    }
+  } else {
+    focus_document->ClearFocusedElement();
+  }
+#else
   if (!page->GetFocusController().SetFocusedElement(
           element, frame_,
           FocusParams(SelectionBehaviorOnFocus::kNone,
@@ -677,6 +746,7 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
         "mouse_manager focus controller blocked");
     return WebInputEventResult::kHandledSystem;
   }
+#endif
   TraceStandaloneMouseEventManagerStage(
       "mouse_manager focus after focus controller");
   return WebInputEventResult::kNotHandled;

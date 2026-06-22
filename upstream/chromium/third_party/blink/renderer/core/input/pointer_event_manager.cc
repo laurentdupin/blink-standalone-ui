@@ -54,6 +54,23 @@ void TraceStandalonePointerEventManagerStage(const char* stage) {
 void TraceStandalonePointerEventManagerStage(const char*) {}
 #endif
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+Element* RetargetStandaloneFormControlHost(Element* target) {
+  Node* node = target;
+  while (node) {
+    Element* shadow_host = node->OwnerShadowHost();
+    if (!shadow_host) {
+      return DynamicTo<Element>(node);
+    }
+    if (shadow_host->IsFormControlElement()) {
+      return shadow_host;
+    }
+    node = shadow_host;
+  }
+  return target;
+}
+#endif
+
 // Field trial name for skipping touch filtering
 const char kSkipTouchEventFilterTrial[] = "SkipTouchEventFilter";
 const char kSkipTouchEventFilterTrialProcessParamName[] =
@@ -1239,6 +1256,9 @@ WebInputEventResult PointerEventManager::SendMousePointerEvent(
         RuntimeEnabledFeatures::BoundaryEventDispatchTracksNodeRemovalEnabled()
             ? mouse_event_manager_->GetElementUnderMouse()
             : NonDeletedElementTarget(effective_target, pointer_event, nullptr);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    mouse_target = RetargetStandaloneFormControlHost(mouse_target);
+#endif
   }
 
   // Dispatch compat mouse events.

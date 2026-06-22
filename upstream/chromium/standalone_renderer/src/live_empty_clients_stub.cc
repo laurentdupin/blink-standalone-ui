@@ -22,16 +22,8 @@ ChromeClient& GetStaticEmptyChromeClientInstance() {
   return *chrome_client;
 }
 
-class EmptyPopupMenu final : public PopupMenu {
- public:
-  void Show(ShowEventType) override {}
-  void Hide() override {}
-  void UpdateFromElement(UpdateReason) override {}
-  void DisconnectClient() override {}
-};
-
 PopupMenu* EmptyChromeClient::OpenPopupMenu(LocalFrame&, HTMLSelectElement&) {
-  return MakeGarbageCollected<EmptyPopupMenu>();
+  return nullptr;
 }
 
 ColorChooser* EmptyChromeClient::OpenColorChooser(LocalFrame*,

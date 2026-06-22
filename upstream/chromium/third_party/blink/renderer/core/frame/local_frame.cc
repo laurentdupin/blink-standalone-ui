@@ -1517,7 +1517,11 @@ void LocalFrame::RemovedSuddenTerminationDisablerListener(
 }
 
 void LocalFrame::DidFocus() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   GetLocalFrameHostRemote().DidFocusFrame();
+#endif
 }
 
 void LocalFrame::DidChangeThemeColor(bool update_theme_color_cache) {
@@ -1934,7 +1938,11 @@ String LocalFrame::SelectedTextForClipboard() const {
 void LocalFrame::TextSelectionChanged(const String& selection_text,
                                       uint32_t offset,
                                       const gfx::Range& range) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   GetLocalFrameHostRemote().TextSelectionChanged(selection_text, offset, range);
+#endif
 }
 
 PositionWithAffinity LocalFrame::PositionForPoint(
