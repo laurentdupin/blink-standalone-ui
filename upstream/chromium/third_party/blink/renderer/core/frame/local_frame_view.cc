@@ -3513,13 +3513,11 @@ void LocalFrameView::PaintTree(
     TraceStandaloneLocalFrameViewStage("PaintTree after CommitNewDisplayItems");
 
     needs_clear_repaint_flags = true;
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (paint_artifact_compositor_) {
       paint_artifact_compositor_->SetNeedsUpdateAfterRepaint(
           previous_artifact,
           paint_controller_persistent_data_->GetPaintArtifact());
     }
-#endif
   }
 
   visual_viewport_or_overlay_needs_repaint_ = false;

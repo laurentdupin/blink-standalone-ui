@@ -70,6 +70,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_selected_content_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
+#include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/dom/opaque_range.h"
 #include "third_party/blink/renderer/core/html/html_base_element.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
@@ -3152,6 +3153,11 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
   }
   if (local_name == html_names::kFormTag.LocalName()) {
     HTMLElement* element = MakeGarbageCollected<HTMLFormElement>(document);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
+  if (local_name == html_names::kLabelTag.LocalName()) {
+    HTMLElement* element = MakeGarbageCollected<HTMLLabelElement>(document);
     TraceStandaloneHtmlFactory(local_name, "after");
     return element;
   }
@@ -9441,10 +9447,66 @@ void Editor::Trace(Visitor*) const {}
 void Editor::CopyImage(const HitTestResult&) {}
 void Editor::Clear() {}
 bool Editor::CanEdit() const {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (!frame_ || !frame_->GetDocument()) {
+    return false;
+  }
+  auto* control =
+      DynamicTo<TextControlElement>(frame_->GetDocument()->FocusedElement());
+  return control && !control->IsDisabledOrReadOnly();
+#else
   return false;
+#endif
 }
-bool Editor::HandleTextEvent(TextEvent*) {
+bool Editor::HandleTextEvent(TextEvent* event) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (!frame_ || !frame_->GetDocument() || !event) {
+    return false;
+  }
+  TextControlElement* control = nullptr;
+  if (EventTarget* target = event->RawTarget()) {
+    if (Node* node = target->ToNode()) {
+      control = DynamicTo<TextControlElement>(node);
+    }
+  }
+  if (!control) {
+    control =
+        DynamicTo<TextControlElement>(frame_->GetDocument()->FocusedElement());
+  }
+  if (!control || control->IsDisabledOrReadOnly() || event->IsDrop() ||
+      event->IsPaste() || event->IsIncrementalInsertion()) {
+    return false;
+  }
+
+  const String data = event->data();
+  if (data.empty()) {
+    return false;
+  }
+  unsigned start = control->selectionStart();
+  unsigned end = control->selectionEnd();
+  if (start > end) {
+    std::swap(start, end);
+  }
+  const String original = control->InnerEditorValue();
+  start = std::min<unsigned>(start, original.length());
+  end = std::min<unsigned>(end, original.length());
+
+  StringBuilder edited;
+  edited.Append(StringView(original, 0, start));
+  edited.Append(data);
+  edited.Append(StringView(original, end));
+  const unsigned caret = start + data.length();
+
+  control->SetValueBeforeFirstUserEditIfNotSet();
+  control->SetValue(edited.ToString(),
+                    TextFieldEventBehavior::kDispatchInputEvent,
+                    TextControlSetValueSelection::kDoNotSet);
+  control->SetSelectionRange(caret, caret);
+  control->CheckIfValueWasReverted(control->Value());
+  return true;
+#else
   return false;
+#endif
 }
 void Editor::HandleKeyboardEvent(KeyboardEvent*) {}
 void Editor::SetBaseWritingDirection(mojo_base::mojom::TextDirection) {}

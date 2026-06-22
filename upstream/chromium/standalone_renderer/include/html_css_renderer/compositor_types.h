@@ -88,6 +88,27 @@ struct KeyboardState {
   std::vector<uint32_t> pressed_key_codes;
 };
 
+enum class KeyboardInputEventType {
+  kText = 1,
+  kKeyDown = 2,
+  kKeyUp = 3,
+};
+
+enum class KeyboardInputKey {
+  kUnknown = 0,
+  kBackspace = 8,
+  kTab = 9,
+  kEnter = 13,
+  kDelete = 46,
+};
+
+struct KeyboardInputEvent {
+  KeyboardInputEventType type = KeyboardInputEventType::kText;
+  KeyboardInputKey key = KeyboardInputKey::kUnknown;
+  std::string text;
+  int modifiers = 0;
+};
+
 enum class FrameResultCollection {
   kFull,
   kMinimal,
@@ -106,6 +127,7 @@ struct FrameInput {
   std::vector<PointerState> pointers;
   std::optional<WheelInput> wheel;
   KeyboardState keyboard;
+  std::vector<KeyboardInputEvent> keyboard_events;
   std::unordered_map<std::string, Point> scroll_offsets_by_element_id;
   std::string focused_element_id;
   std::string hovered_element_id;

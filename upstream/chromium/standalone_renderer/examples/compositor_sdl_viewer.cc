@@ -352,6 +352,22 @@ html_css_renderer::Size SdlWindowPixelViewport(SDL_Window* window) {
                                  static_cast<float>(std::max(1, height))};
 }
 
+html_css_renderer::Point SdlWindowPointToPixelViewport(
+    SDL_Window* window,
+    html_css_renderer::Point window_point) {
+  int window_width = 0;
+  int window_height = 0;
+  SDL_GetWindowSize(window, &window_width, &window_height);
+  const html_css_renderer::Size pixel_viewport = SdlWindowPixelViewport(window);
+  if (window_width <= 0 || window_height <= 0) {
+    return window_point;
+  }
+  return html_css_renderer::Point{
+      window_point.x * pixel_viewport.width / static_cast<float>(window_width),
+      window_point.y * pixel_viewport.height /
+          static_cast<float>(window_height)};
+}
+
 bool SameViewportSize(html_css_renderer::Size lhs,
                       html_css_renderer::Size rhs) {
   return static_cast<int>(lhs.width) == static_cast<int>(rhs.width) &&
@@ -402,6 +418,73 @@ void AppendMouseInputEventForCompositorViewer(
   input->mouse_events.push_back(
       html_css_renderer::MouseInputEvent{type, position, button, modifiers,
                                          click_count});
+}
+
+int KeyboardModifiersFromSdlForCompositorViewer(SDL_Keymod mod) {
+  int modifiers = 0;
+  if ((mod & SDL_KMOD_SHIFT) != 0)
+    modifiers |= 1 << 1;  // blink::WebInputEvent::kShiftKey.
+  if ((mod & SDL_KMOD_CTRL) != 0)
+    modifiers |= 1 << 2;  // blink::WebInputEvent::kControlKey.
+  if ((mod & SDL_KMOD_ALT) != 0)
+    modifiers |= 1 << 3;  // blink::WebInputEvent::kAltKey.
+  if ((mod & SDL_KMOD_GUI) != 0)
+    modifiers |= 1 << 4;  // blink::WebInputEvent::kMetaKey.
+  return modifiers;
+}
+
+html_css_renderer::KeyboardInputKey KeyboardInputKeyFromSdlForCompositorViewer(
+    SDL_Keycode key) {
+  switch (key) {
+    case SDLK_BACKSPACE:
+      return html_css_renderer::KeyboardInputKey::kBackspace;
+    case SDLK_TAB:
+      return html_css_renderer::KeyboardInputKey::kTab;
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER:
+      return html_css_renderer::KeyboardInputKey::kEnter;
+    case SDLK_DELETE:
+      return html_css_renderer::KeyboardInputKey::kDelete;
+    default:
+      return html_css_renderer::KeyboardInputKey::kUnknown;
+  }
+}
+
+std::optional<html_css_renderer::KeyboardInputKey>
+KeyboardInputKeyFromNameForCompositorViewer(const std::string& name) {
+  const std::string lower = LowerAsciiForCompositorViewer(name);
+  if (lower == "backspace")
+    return html_css_renderer::KeyboardInputKey::kBackspace;
+  if (lower == "delete")
+    return html_css_renderer::KeyboardInputKey::kDelete;
+  if (lower == "enter" || lower == "return")
+    return html_css_renderer::KeyboardInputKey::kEnter;
+  if (lower == "tab")
+    return html_css_renderer::KeyboardInputKey::kTab;
+  return std::nullopt;
+}
+
+void AppendKeyboardTextInputEventForCompositorViewer(
+    html_css_renderer::FrameInput* input,
+    const std::string& text,
+    int modifiers) {
+  if (text.empty())
+    return;
+  input->keyboard_events.push_back(html_css_renderer::KeyboardInputEvent{
+      html_css_renderer::KeyboardInputEventType::kText,
+      html_css_renderer::KeyboardInputKey::kUnknown, text, modifiers});
+}
+
+void AppendKeyboardKeyInputEventForCompositorViewer(
+    html_css_renderer::FrameInput* input,
+    html_css_renderer::KeyboardInputEventType type,
+    html_css_renderer::KeyboardInputKey key,
+    int modifiers) {
+  if (key == html_css_renderer::KeyboardInputKey::kUnknown)
+    return;
+  input->keyboard_events.push_back(
+      html_css_renderer::KeyboardInputEvent{type, key, std::string(),
+                                            modifiers});
 }
 
 struct SyntheticWheelBurst {
@@ -492,6 +575,7 @@ void PrintUsage() {
       "[--screenshot-out <png>] [--screenshot-after-ms N] "
       "[--synthetic-input-smoke] [--synthetic-resize WxH] "
       "[--synthetic-click x,y] [--synthetic-sdl-click x,y] "
+      "[--synthetic-sdl-text text] [--synthetic-sdl-key name] "
       "[--synthetic-sdl-click-repeats N] [--synthetic-navigation-smoke] "
       "[--synthetic-navigation-stress N] "
       "[--synthetic-wheel-burst count,deltaY|count,deltaX,deltaY] "
@@ -735,6 +819,8 @@ int main(int argc, char** argv) {
   std::optional<SyntheticWheelBurst> synthetic_wheel_burst;
   std::vector<html_css_renderer::Point> synthetic_click_points;
   std::vector<html_css_renderer::Point> synthetic_sdl_click_points;
+  std::vector<std::string> synthetic_sdl_text_inputs;
+  std::vector<html_css_renderer::KeyboardInputKey> synthetic_sdl_key_inputs;
   int synthetic_sdl_click_repeats = 1;
   bool html_input_provided = false;
   bool resource_root_explicit = false;
@@ -908,6 +994,33 @@ int main(int argc, char** argv) {
         return 2;
       }
       synthetic_sdl_click_points.push_back(parsed_point);
+    } else if (arg == "--synthetic-sdl-text") {
+      const char* value = next_value();
+      if (!value) {
+        PrintUsage();
+        return 2;
+      }
+      synthetic_sdl_text_inputs.push_back(value);
+    } else if (arg.rfind("--synthetic-sdl-text=", 0) == 0) {
+      synthetic_sdl_text_inputs.push_back(arg.substr(21));
+    } else if (arg == "--synthetic-sdl-key") {
+      const char* value = next_value();
+      std::optional<html_css_renderer::KeyboardInputKey> key =
+          value ? KeyboardInputKeyFromNameForCompositorViewer(value)
+                : std::nullopt;
+      if (!key) {
+        std::fprintf(stderr, "invalid --synthetic-sdl-key\n");
+        return 2;
+      }
+      synthetic_sdl_key_inputs.push_back(*key);
+    } else if (arg.rfind("--synthetic-sdl-key=", 0) == 0) {
+      std::optional<html_css_renderer::KeyboardInputKey> key =
+          KeyboardInputKeyFromNameForCompositorViewer(arg.substr(20));
+      if (!key) {
+        std::fprintf(stderr, "invalid --synthetic-sdl-key\n");
+        return 2;
+      }
+      synthetic_sdl_key_inputs.push_back(*key);
     } else if (arg == "--synthetic-sdl-click-repeats") {
       const char* value = next_value();
       if (!value) {
@@ -1036,6 +1149,9 @@ int main(int argc, char** argv) {
     SDL_Quit();
     return 1;
   }
+  if (!SDL_StartTextInput(window)) {
+    std::fprintf(stderr, "SDL_StartTextInput failed: %s\n", SDL_GetError());
+  }
 
   SDL_PropertiesID window_properties = SDL_GetWindowProperties(window);
   void* win32_hwnd = SDL_GetPointerProperty(
@@ -1136,12 +1252,6 @@ int main(int argc, char** argv) {
     document_renderer.viewport = SdlWindowPixelViewport(window);
     std::string effective_resource_root = resource_root;
     bool effective_resource_root_explicit = resource_root_explicit;
-    if (!effective_resource_root_explicit &&
-        html_input_mode == HtmlInputMode::kDirectory &&
-        !html_directory_root.empty()) {
-      effective_resource_root = html_directory_root.string();
-      effective_resource_root_explicit = true;
-    }
     std::string effective_resource_base_path = resource_base_path;
     std::string loaded_html_file;
 
@@ -1207,6 +1317,7 @@ int main(int argc, char** argv) {
     input.wheel = std::nullopt;
     input.mouse_events.clear();
     input.pointers.clear();
+    input.keyboard_events.clear();
 
     ++frame_count;
     PrintFrameStatus(reason, frame_count, result);
@@ -1227,6 +1338,7 @@ int main(int argc, char** argv) {
   if (!load_current_document(
           "initial", !screenshot_out.empty() && screenshot_after_ms <= 0)) {
     runtime.reset();
+    SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return document_load_error_code;
@@ -1257,16 +1369,22 @@ int main(int argc, char** argv) {
   std::optional<html_css_renderer::PointerState> last_sdl_pointer =
       html_css_renderer::PointerState{
           1,
-          html_css_renderer::Point{initial_mouse_x, initial_mouse_y},
+          SdlWindowPointToPixelViewport(
+              window, html_css_renderer::Point{initial_mouse_x,
+                                               initial_mouse_y}),
           (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
 
   auto apply_sdl_mouse_event =
       [&](const SDL_Event& event, html_css_renderer::FrameInput* next_input,
           bool* needs_frame) {
         if (event.type == SDL_EVENT_MOUSE_MOTION) {
+          const html_css_renderer::Point pixel_position =
+              SdlWindowPointToPixelViewport(
+                  window,
+                  html_css_renderer::Point{event.motion.x, event.motion.y});
           html_css_renderer::PointerState pointer{
               1,
-              html_css_renderer::Point{event.motion.x, event.motion.y},
+              pixel_position,
               (event.motion.state & SDL_BUTTON_LMASK) != 0};
           if (!last_sdl_pointer ||
               !SamePointerState(pointer, *last_sdl_pointer)) {
@@ -1290,9 +1408,13 @@ int main(int argc, char** argv) {
             event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
           const html_css_renderer::MouseInputButton button =
               MouseButtonFromSdlForCompositorViewer(event.button.button);
+          const html_css_renderer::Point pixel_position =
+              SdlWindowPointToPixelViewport(
+                  window,
+                  html_css_renderer::Point{event.button.x, event.button.y});
           html_css_renderer::PointerState pointer{
               1,
-              html_css_renderer::Point{event.button.x, event.button.y},
+              pixel_position,
               event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
           if (!last_sdl_pointer ||
               !SamePointerState(pointer, *last_sdl_pointer)) {
@@ -1315,8 +1437,11 @@ int main(int argc, char** argv) {
           float mouse_x = 0.0f;
           float mouse_y = 0.0f;
           SDL_GetMouseState(&mouse_x, &mouse_y);
+          const html_css_renderer::Point pixel_position =
+              SdlWindowPointToPixelViewport(
+                  window, html_css_renderer::Point{mouse_x, mouse_y});
           AccumulateWheelInput(
-              &next_input->wheel, html_css_renderer::Point{mouse_x, mouse_y},
+              &next_input->wheel, pixel_position,
               html_css_renderer::Point{-event.wheel.x * 48.0f,
                                        -event.wheel.y * 48.0f});
           *needs_frame = true;
@@ -1342,6 +1467,7 @@ int main(int argc, char** argv) {
         next_input.wheel = std::nullopt;
         next_input.mouse_events.clear();
         next_input.pointers.clear();
+        next_input.keyboard_events.clear();
         input = std::move(next_input);
         ++frame_count;
         PrintFrameStatus(reason, frame_count, result);
@@ -1546,6 +1672,7 @@ int main(int argc, char** argv) {
 
     const int exit_code = synthetic_ok ? 0 : 5;
     runtime.reset();
+    SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return exit_code;
@@ -1566,6 +1693,10 @@ int main(int argc, char** argv) {
     AppendSyntheticSdlClickEventsForCompositorViewer(
         point, synthetic_sdl_click_repeats, &pending_synthetic_sdl_events);
   }
+  std::deque<std::string> pending_synthetic_sdl_text_inputs(
+      synthetic_sdl_text_inputs.begin(), synthetic_sdl_text_inputs.end());
+  std::deque<html_css_renderer::KeyboardInputKey> pending_synthetic_sdl_key_inputs(
+      synthetic_sdl_key_inputs.begin(), synthetic_sdl_key_inputs.end());
   if (!pending_synthetic_sdl_events.empty()) {
     std::fprintf(stderr, "synthetic_sdl_click_queue events=%zu repeats=%d\n",
                  pending_synthetic_sdl_events.size(),
@@ -1599,6 +1730,28 @@ int main(int argc, char** argv) {
                  event.key.key == SDLK_F5) {
         navigation_action = NavigationAction::kReset;
         return false;
+      } else if (event.type == SDL_EVENT_TEXT_INPUT) {
+        AppendKeyboardTextInputEventForCompositorViewer(
+            &next_input, event.text.text ? event.text.text : "",
+            KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()));
+        needs_frame = true;
+        return true;
+      } else if (event.type == SDL_EVENT_KEY_DOWN ||
+                 event.type == SDL_EVENT_KEY_UP) {
+        const html_css_renderer::KeyboardInputKey key =
+            KeyboardInputKeyFromSdlForCompositorViewer(event.key.key);
+        if (key != html_css_renderer::KeyboardInputKey::kUnknown) {
+          AppendKeyboardKeyInputEventForCompositorViewer(
+              &next_input,
+              event.type == SDL_EVENT_KEY_DOWN
+                  ? html_css_renderer::KeyboardInputEventType::kKeyDown
+                  : html_css_renderer::KeyboardInputEventType::kKeyUp,
+              key,
+              KeyboardModifiersFromSdlForCompositorViewer(event.key.mod));
+          needs_frame = true;
+          return event.type == SDL_EVENT_KEY_DOWN;
+        }
+        return false;
       } else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
         const html_css_renderer::Size new_viewport =
@@ -1629,6 +1782,23 @@ int main(int argc, char** argv) {
       event = pending_synthetic_sdl_events.front();
       pending_synthetic_sdl_events.pop_front();
       flush_frame_now = handle_event(event);
+    } else if (!pending_synthetic_sdl_text_inputs.empty()) {
+      const std::string text = pending_synthetic_sdl_text_inputs.front();
+      pending_synthetic_sdl_text_inputs.pop_front();
+      AppendKeyboardTextInputEventForCompositorViewer(
+          &next_input, text,
+          KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()));
+      needs_frame = true;
+      flush_frame_now = true;
+    } else if (!pending_synthetic_sdl_key_inputs.empty()) {
+      const html_css_renderer::KeyboardInputKey key =
+          pending_synthetic_sdl_key_inputs.front();
+      pending_synthetic_sdl_key_inputs.pop_front();
+      AppendKeyboardKeyInputEventForCompositorViewer(
+          &next_input, html_css_renderer::KeyboardInputEventType::kKeyDown,
+          key, KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()));
+      needs_frame = true;
+      flush_frame_now = true;
     } else if (!needs_frame && !screenshot_due()) {
       int wait_ms = 50;
       const uint64_t now_ms = SDL_GetTicks();
@@ -1672,6 +1842,7 @@ int main(int argc, char** argv) {
       }
       if (!navigation_ok) {
         runtime.reset();
+        SDL_StopTextInput(window);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return document_load_error_code;
@@ -1700,6 +1871,7 @@ int main(int argc, char** argv) {
       next_input.wheel = std::nullopt;
       next_input.mouse_events.clear();
       next_input.pointers.clear();
+      next_input.keyboard_events.clear();
       input = std::move(next_input);
       ++frame_count;
       ++advanced_update_frames;
@@ -1726,6 +1898,21 @@ int main(int argc, char** argv) {
       SDL_Delay(8);
     if (!synthetic_sdl_click_points.empty() &&
         pending_synthetic_sdl_events.empty() && quit_after_ms <= 0 &&
+        pending_synthetic_sdl_text_inputs.empty() &&
+        pending_synthetic_sdl_key_inputs.empty() && !needs_frame) {
+      running = false;
+    }
+    if (!synthetic_sdl_text_inputs.empty() &&
+        pending_synthetic_sdl_events.empty() &&
+        pending_synthetic_sdl_text_inputs.empty() &&
+        pending_synthetic_sdl_key_inputs.empty() && quit_after_ms <= 0 &&
+        !needs_frame) {
+      running = false;
+    }
+    if (!synthetic_sdl_key_inputs.empty() &&
+        pending_synthetic_sdl_events.empty() &&
+        pending_synthetic_sdl_text_inputs.empty() &&
+        pending_synthetic_sdl_key_inputs.empty() && quit_after_ms <= 0 &&
         !needs_frame) {
       running = false;
     }
@@ -1741,6 +1928,7 @@ int main(int argc, char** argv) {
   const int exit_code =
       result.paint_clean && result.root_layer_available ? 0 : 4;
   runtime.reset();
+  SDL_StopTextInput(window);
   SDL_DestroyWindow(window);
   SDL_Quit();
   return exit_code;

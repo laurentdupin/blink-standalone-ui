@@ -470,10 +470,12 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
             ->GetInputDeviceCapabilities()
             ->FiresTouchEvents(mouse_event->FromTouch());
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
+    FocusOptions* focus_options = FocusOptions::Create();
+    focus_options->setPreventScroll(true);
     select_->GetDocument().SetFocusedElement(
         select_, FocusParams(SelectionBehaviorOnFocus::kRestore,
                              mojom::blink::FocusType::kMouse,
-                             source_capabilities, FocusOptions::Create(),
+                             source_capabilities, focus_options,
                              FocusTrigger::kUserGesture));
 #else
     if (PickerIsPopover()) {
@@ -491,13 +493,6 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
 #endif
     if (select_->GetLayoutObject() && !will_be_destroyed_ &&
         !select_->IsDisabledFormControl()) {
-#if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-      // The standalone renderer can focus and paint closed menu-list selects,
-      // but it has no browser/page-popup host for native dropdown UI. Avoid
-      // entering Blink's popup-open state; value changes through the popup are
-      // intentionally unsupported until that embedder boundary exists.
-      return true;
-#else
       if (PopupIsVisible()) {
         HidePopup(SelectPopupHideBehavior::kNormal);
       } else {
@@ -530,7 +525,6 @@ bool MenuListSelectType::DefaultEventHandler(const Event& event) {
         ShowPopup(mouse_event->FromTouch() ? PopupMenu::kTouch
                                            : PopupMenu::kOther);
       }
-#endif
     }
     return true;
   }
@@ -608,12 +602,11 @@ void MenuListSelectType::CreateShadowSubtree(ShadowRoot& root) {
   inner_element_->appendChild(Text::Create(doc, g_empty_string));
   root.AppendChild(inner_element_);
 #if HTML_CSS_RENDERER_STANDALONE_SELECT_CONTROL
-  // The standalone renderer supports closed/basic select layout and paint, but
-  // not browser popup/autofill picker UI. Keep Blink's select value and inner
-  // text path while avoiding the popup-only shadow subtree.
+  // Standalone regular selects use a platform PopupMenu host through
+  // ChromeClient::OpenPopupMenu. Avoid creating the browser popover picker
+  // subtree unless the full Chromium popup widget host is available.
   return;
 #endif
-
   button_slot_ = MakeGarbageCollected<HTMLSlotElement>(doc);
   button_slot_->SetShadowPseudoId(shadow_element_names::kSelectButtonSlot);
   root.appendChild(button_slot_);
@@ -852,13 +845,13 @@ void MenuListSelectType::PopupDidHide() {
 }
 
 bool MenuListSelectType::PopupIsVisible() const {
-    // This is called during style recalc, so we can't check
-    // IsAppearanceBasePicker to determine which picker to look at.
-    bool popover_open = popover_->popoverOpen();
-    CHECK(!(popover_open && native_popup_is_visible_))
-        << " The base appearance and native pickers should never both be open "
-           "at the same time.";
-    return popover_open || native_popup_is_visible_;
+  // This is called during style recalc, so we can't check
+  // IsAppearanceBasePicker to determine which picker to look at.
+  bool popover_open = popover_ && popover_->popoverOpen();
+  CHECK(!(popover_open && native_popup_is_visible_))
+      << " The base appearance and native pickers should never both be open "
+         "at the same time.";
+  return popover_open || native_popup_is_visible_;
 }
 
 void MenuListSelectType::SetNativePopupIsVisible(bool popup_is_visible) {

@@ -154,6 +154,7 @@
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
+#include "third_party/blink/renderer/core/events/text_event.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
@@ -262,6 +263,10 @@ extern "C" bool StandaloneRendererDeferImageAttributeLoads() {
 }
 extern "C" void StandaloneRendererSetDeferImageAttributeLoads(bool enabled) {
   g_standalone_defer_image_attribute_loads = enabled;
+}
+extern "C" void*
+StandaloneRendererNativeWindowHandleForStandaloneRenderer() {
+  return g_standalone_native_window_handle;
 }
 extern "C" int StandaloneRendererLayoutImageResourceGetImageCalled();
 extern "C" int StandaloneRendererLayoutImageResourceMaybeAnimatedCalled();
@@ -2598,6 +2603,13 @@ struct StandaloneMouseInputEventForRenderer {
   int click_count = 0;
 };
 
+struct StandaloneKeyboardInputEventForRenderer {
+  int type = 0;
+  int key = 0;
+  std::string text;
+  int modifiers = 0;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   Persistent<ChromeClient> chrome_client;
@@ -2648,6 +2660,12 @@ struct LiveFramePaintProbeCache {
   bool mouse_input_events_dispatched = false;
   int mouse_input_event_dispatch_count = 0;
   std::string mouse_input_status = "not_requested";
+  std::vector<StandaloneKeyboardInputEventForRenderer>
+      requested_keyboard_input_events;
+  bool keyboard_input_events_consumed = false;
+  bool keyboard_input_events_dispatched = false;
+  int keyboard_input_event_dispatch_count = 0;
+  std::string keyboard_input_status = "not_requested";
   bool pointer_state_applied = false;
   std::string pointer_state_status = "not_requested";
   std::string pointer_hit_element_id;
@@ -7124,6 +7142,7 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string name_attr;
   std::string input_name;
   std::string value_attr;
+  std::string live_value;
   std::string element_interface;
   std::string computed_display;
   std::string layout_object_type;
@@ -7287,6 +7306,8 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         item.checked = input->Checked();
         item.input_name =
             BlinkStringToStdStringForStandaloneRenderer(input->GetName());
+        item.live_value =
+            BlinkStringToStdStringForStandaloneRenderer(input->Value());
         if (input->FormControlType() ==
             mojom::blink::FormControlType::kInputRadio) {
           item.radio_group_size = input->SizeOfRadioGroup();
@@ -7302,6 +7323,7 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         item.element_interface = "HTMLTextAreaElement";
         item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
             textarea->Value());
+        item.live_value = item.value_attr;
         item.placeholder_visible =
             item.placeholder_attr_present && item.value_attr.empty();
       } else if (auto* text_control =
@@ -7309,6 +7331,7 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         item.element_interface = "TextControlElement";
         item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
             text_control->Value());
+        item.live_value = item.value_attr;
       } else {
         item.element_interface = "HTMLElement";
       }
@@ -7598,6 +7621,9 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << ",\"name_attr\":" << JsonStringForStandaloneRenderer(item.name_attr)
          << ",\"input_name\":" << JsonStringForStandaloneRenderer(item.input_name)
          << ",\"value_length\":" << item.value_attr.size()
+         << ",\"live_value\":"
+         << JsonStringForStandaloneRenderer(item.live_value)
+         << ",\"live_value_length\":" << item.live_value.size()
          << ",\"element_interface\":"
          << JsonStringForStandaloneRenderer(item.element_interface)
          << ",\"checked\":" << (item.checked ? "true" : "false")
@@ -9910,6 +9936,139 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
           : "not_requested";
 }
 
+TextControlElement* FocusedTextControlForStandaloneRenderer(Document& document) {
+  Element* focused = document.FocusedElement();
+  if (!focused) {
+    return nullptr;
+  }
+  return DynamicTo<TextControlElement>(focused);
+}
+
+bool ApplyStandaloneTextControlEditForStandaloneRenderer(
+    TextControlElement& control,
+    const String& replacement,
+    bool delete_backward,
+    bool delete_forward) {
+  if (control.IsDisabledOrReadOnly()) {
+    return false;
+  }
+  unsigned start = control.selectionStart();
+  unsigned end = control.selectionEnd();
+  if (start > end) {
+    std::swap(start, end);
+  }
+  const String original = control.InnerEditorValue();
+  start = std::min<unsigned>(start, original.length());
+  end = std::min<unsigned>(end, original.length());
+  if (delete_backward && start == end && start > 0) {
+    --start;
+  } else if (delete_forward && start == end && end < original.length()) {
+    ++end;
+  }
+  if (replacement.empty() && start == end) {
+    return false;
+  }
+
+  StringBuilder edited;
+  edited.Append(StringView(original, 0, start));
+  edited.Append(replacement);
+  edited.Append(StringView(original, end));
+  const unsigned caret = start + replacement.length();
+
+  control.SetValueBeforeFirstUserEditIfNotSet();
+  control.SetValue(edited.ToString(), TextFieldEventBehavior::kDispatchInputEvent,
+                   TextControlSetValueSelection::kDoNotSet);
+  control.SetSelectionRange(caret, caret);
+  control.CheckIfValueWasReverted(control.Value());
+  return true;
+}
+
+void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
+                                                      LocalFrameView& frame_view) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.requested_keyboard_input_events.empty() &&
+      cache.keyboard_input_events_consumed) {
+    return;
+  }
+  cache.keyboard_input_events_dispatched = false;
+  cache.keyboard_input_event_dispatch_count = 0;
+  cache.keyboard_input_status = cache.requested_keyboard_input_events.empty()
+                                    ? "not_requested"
+                                    : "requested";
+  if (cache.requested_keyboard_input_events.empty()) {
+    return;
+  }
+
+  std::vector<StandaloneKeyboardInputEventForRenderer> pending_events =
+      std::move(cache.requested_keyboard_input_events);
+  cache.requested_keyboard_input_events.clear();
+  cache.keyboard_input_events_consumed = true;
+
+  LocalFrame* frame = document.GetFrame();
+  if (!frame || !frame->View()) {
+    cache.keyboard_input_status = "frame_missing";
+    return;
+  }
+
+  TraceLiveFrameProbeLifecycleState("keyboard input before lifecycle update",
+                                    &document, frame, &frame_view);
+  TraceLiveFrameProbeStage("before keyboard input lifecycle update");
+  UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+      *frame->View(), DocumentUpdateReason::kTest);
+  TraceLiveFrameProbeStage("after keyboard input lifecycle update");
+
+  std::string last_result = "not_dispatched";
+  for (const StandaloneKeyboardInputEventForRenderer& pending :
+       pending_events) {
+    bool handled = false;
+    if (pending.type == 1 && !pending.text.empty()) {
+      const String text = String::FromUtf8(pending.text);
+      TraceLiveFrameProbeStage("before blink text input dispatch");
+      handled = frame->GetEventHandler().HandleTextInputEvent(
+          text, nullptr, kTextEventInputKeyboard);
+      TraceLiveFrameProbeStage("after blink text input dispatch");
+      last_result = handled ? "text_handled" : "text_not_handled";
+    } else if (pending.type == 2) {
+      TextControlElement* control =
+          FocusedTextControlForStandaloneRenderer(document);
+      if (control) {
+        if (pending.key == 8) {
+          handled = ApplyStandaloneTextControlEditForStandaloneRenderer(
+              *control, g_empty_string, /*delete_backward=*/true,
+              /*delete_forward=*/false);
+          last_result = handled ? "backspace_handled" : "backspace_not_handled";
+        } else if (pending.key == 46) {
+          handled = ApplyStandaloneTextControlEditForStandaloneRenderer(
+              *control, g_empty_string, /*delete_backward=*/false,
+              /*delete_forward=*/true);
+          last_result = handled ? "delete_handled" : "delete_not_handled";
+        } else if (pending.key == 13) {
+          handled = ApplyStandaloneTextControlEditForStandaloneRenderer(
+              *control, String("\n"), /*delete_backward=*/false,
+              /*delete_forward=*/false);
+          last_result = handled ? "enter_handled" : "enter_not_handled";
+        } else {
+          last_result = "key_ignored";
+        }
+      } else {
+        last_result = "focused_text_control_missing";
+      }
+    } else {
+      last_result = "event_ignored";
+    }
+    if (handled) {
+      cache.keyboard_input_events_dispatched = true;
+    }
+    ++cache.keyboard_input_event_dispatch_count;
+  }
+
+  if (cache.keyboard_input_events_dispatched) {
+    PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(document);
+  }
+  cache.keyboard_input_status =
+      std::string("dispatched_via_blink_text_input:") + last_result;
+}
+
 void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
   LiveFramePaintProbeCache& cache = ProbeCache();
   if (!cache.animation_time_requested) {
@@ -12154,6 +12313,14 @@ UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
         frame_view, DocumentUpdateReason::kTest);
     TraceLiveFrameProbeStage("after post-pointer lifecycle update");
   }
+  DispatchKeyboardInputEventsForStandaloneRenderer(document, frame_view);
+  if (cache.keyboard_input_events_dispatched) {
+    TraceLiveFrameProbeStage("before post-keyboard lifecycle update");
+    document.UpdateStyleAndLayoutTree();
+    UpdateLifecycleToLayoutCleanForStandaloneRenderer(
+        frame_view, DocumentUpdateReason::kTest);
+    TraceLiveFrameProbeStage("after post-keyboard lifecycle update");
+  }
   cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
       layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
@@ -13083,6 +13250,47 @@ void StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
   cache.chunk_property_states.clear();
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeClearKeyboardInputEventsForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.requested_keyboard_input_events.empty() &&
+      !cache.keyboard_input_events_consumed) {
+    return;
+  }
+  cache.requested_keyboard_input_events.clear();
+  cache.keyboard_input_events_consumed = false;
+  cache.keyboard_input_events_dispatched = false;
+  cache.keyboard_input_event_dispatch_count = 0;
+  cache.keyboard_input_status = "not_requested";
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeAppendKeyboardInputEventForStandaloneRenderer(
+    int type,
+    int key,
+    const char* text,
+    int modifiers) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.requested_keyboard_input_events.push_back(
+      StandaloneKeyboardInputEventForRenderer{
+          type, key, text ? std::string(text) : std::string(), modifiers});
+  cache.keyboard_input_events_consumed = false;
+  cache.keyboard_input_status = "requested";
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
   cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();

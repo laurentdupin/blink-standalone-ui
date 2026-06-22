@@ -44,6 +44,12 @@ void StandaloneBlinkLiveFrameBridgeAppendMouseInputEventForStandaloneRenderer(
     int button,
     int modifiers,
     int click_count);
+void StandaloneBlinkLiveFrameBridgeClearKeyboardInputEventsForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeAppendKeyboardInputEventForStandaloneRenderer(
+    int type,
+    int key,
+    const char* text,
+    int modifiers);
 void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     float x,
     float y,
@@ -806,6 +812,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       probe::StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
           0.0f, 0.0f, 0.0f, 0.0f, 0);
     }
+    probe::StandaloneBlinkLiveFrameBridgeClearKeyboardInputEventsForStandaloneRenderer();
+    for (const KeyboardInputEvent& event : input.keyboard_events) {
+      probe::StandaloneBlinkLiveFrameBridgeAppendKeyboardInputEventForStandaloneRenderer(
+          static_cast<int>(event.type), static_cast<int>(event.key),
+          event.text.c_str(), event.modifiers);
+    }
     result.timing.runtime_apply_state_ms =
         RuntimeElapsedMs(apply_state_start, RuntimeClock::now());
 
@@ -1017,6 +1029,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (input.wheel)
       return true;
     if (!input.keyboard.pressed_key_codes.empty())
+      return true;
+    if (!input.keyboard_events.empty())
       return true;
     if (input.pointers.empty()) {
       if (previous_pointer_)
