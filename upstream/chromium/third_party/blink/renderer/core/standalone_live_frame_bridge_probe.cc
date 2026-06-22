@@ -9987,7 +9987,7 @@ std::string DispatchKeyboardInputEventViaBlinkForStandaloneRenderer(
   }
   WebInputEvent::Type event_type = WebInputEvent::Type::kUndefined;
   if (pending.type == 2) {
-    event_type = WebInputEvent::Type::kRawKeyDown;
+    event_type = WebInputEvent::Type::kKeyDown;
   } else if (pending.type == 3) {
     event_type = WebInputEvent::Type::kKeyUp;
   } else {
@@ -9998,6 +9998,14 @@ std::string DispatchKeyboardInputEventViaBlinkForStandaloneRenderer(
   event.windows_key_code = key_code;
   event.native_key_code = key_code;
   event.dom_key = StandaloneDomKeyForKeyboardInputKey(pending.key);
+  if (pending.key == 13) {
+    // Chromium editing treats Enter as a text-insertion command generated from
+    // the keypress/char phase. Standalone receives only the platform keydown,
+    // so provide the text payload and let KeyboardEventManager synthesize the
+    // normal Blink keypress path.
+    event.text[0] = '\r';
+    event.unmodified_text[0] = '\r';
+  }
   const WebInputEventResult result = frame.GetEventHandler().KeyEvent(event);
   return std::string("key_") + WebInputEventResultForStandaloneRenderer(result);
 }

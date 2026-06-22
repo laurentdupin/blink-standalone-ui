@@ -18,6 +18,9 @@ namespace blink {
 
 [[nodiscard]] inline scheduler::TaskAttributionInfo* CaptureCurrentTaskState(
     ExecutionContext* context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   if (!context) {
     return nullptr;
   }
@@ -26,12 +29,16 @@ namespace blink {
   // `tracker` is null if `context` is not a Window or if
   // TaskAttributionInfrastructureDisabledForTesting is enabled.
   return tracker ? tracker->CurrentTaskState() : nullptr;
+#endif
 }
 
 [[nodiscard]] inline std::optional<scheduler::TaskAttributionTracker::TaskScope>
 SetCurrentTaskStateIfTopLevel(scheduler::TaskAttributionInfo* task_state,
                               ExecutionContext* context,
                               TaskScopeType type) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return std::nullopt;
+#else
   if (!context || context->IsContextDestroyed()) {
     return std::nullopt;
   }
@@ -41,6 +48,7 @@ SetCurrentTaskStateIfTopLevel(scheduler::TaskAttributionInfo* task_state,
       scheduler::TaskAttributionTracker::From(context->GetIsolate());
   return tracker ? tracker->SetCurrentTaskStateIfTopLevel(task_state, type)
                  : std::nullopt;
+#endif
 }
 
 // Sets the given `resource_timing_context` in preparation for executing script
@@ -49,6 +57,9 @@ SetCurrentTaskStateIfTopLevel(scheduler::TaskAttributionInfo* task_state,
 [[nodiscard]] inline std::optional<scheduler::TaskAttributionTracker::TaskScope>
 SetTaskStateVariable(ResourceTimingContext* resource_timing_context,
                      ExecutionContext* context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return std::nullopt;
+#else
   if (!context || context->IsContextDestroyed()) {
     return std::nullopt;
   }
@@ -58,6 +69,7 @@ SetTaskStateVariable(ResourceTimingContext* resource_timing_context,
     return std::nullopt;
   }
   return tracker->SetTaskStateVariable(resource_timing_context);
+#endif
 }
 }  // namespace blink
 

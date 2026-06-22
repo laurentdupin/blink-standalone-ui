@@ -13,6 +13,7 @@
 
 namespace blink {
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 HTMLImageElement* HTMLAreaElement::ImageElement() const {
   return nullptr;
 }
@@ -21,5 +22,6 @@ Path HTMLAreaElement::GetPath(const LayoutObject*,
                               const gfx::Vector2dF&) const {
   return Path();
 }
+#endif
 
 }  // namespace blink

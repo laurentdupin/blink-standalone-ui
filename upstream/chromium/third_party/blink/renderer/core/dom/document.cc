@@ -2565,6 +2565,10 @@ void Document::ScheduleLayoutTreeUpdate() {
   DCHECK(NeedsLayoutTreeUpdate());
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Standalone imports the real FrameSelection/SelectionEditor path for text
+  // editing. Keep the same cache invalidation side effect as Chromium before
+  // bumping the style version.
+  GetFrame()->Selection().MarkCacheDirty();
   lifecycle_.EnsureStateAtMost(DocumentLifecycle::kVisualUpdatePending);
   ++style_version_;
   return;

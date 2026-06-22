@@ -63,6 +63,15 @@ AsyncTask::AsyncTask(ExecutionContext* context,
                      AsyncTaskContext* task_context,
                      const char* step,
                      bool enabled)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    : debugger_(nullptr),
+      task_context_(task_context),
+      recurring_(step),
+      ad_tracker_(nullptr) {
+  TRACE_EVENT_BEGIN("blink", "AsyncTask Run",
+                    perfetto::Flow::FromPointer(task_context));
+}
+#else
     : debugger_(enabled && context ? ThreadDebugger::From(context->GetIsolate())
                                    : nullptr),
       task_context_(task_context),
@@ -81,6 +90,7 @@ AsyncTask::AsyncTask(ExecutionContext* context,
   if (ad_tracker_)
     ad_tracker_->DidStartAsyncTask(task_context);
 }
+#endif
 
 AsyncTask::~AsyncTask() {
   if (debugger_) {
@@ -102,10 +112,14 @@ CoreProbeSink* ToCoreProbeSink(OffscreenCanvas* offscreen_canvas) {
 }
 
 void AllAsyncTasksCanceled(ExecutionContext* context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   if (context) {
     if (ThreadDebugger* debugger = ThreadDebugger::From(context->GetIsolate()))
       debugger->AllAsyncTasksCanceled();
   }
+#endif
 }
 
 }  // namespace probe

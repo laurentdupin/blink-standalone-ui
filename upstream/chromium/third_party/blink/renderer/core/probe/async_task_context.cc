@@ -23,6 +23,15 @@ void AsyncTaskContext::Schedule(ExecutionContext* context,
   // TODO(crbug.com/1275875): Verify that this context was not already
   // scheduled or has already been canceled. Currently we don't have enough
   // confidence that such a CHECK wouldn't break blink.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // The standalone renderer does not host the full V8 inspector/ad-tracker
+  // async-task boundary. Internal DOM events can still be queued, but async
+  // probe bookkeeping must remain inert.
+  isolate_ = nullptr;
+  TRACE_EVENT("blink", "AsyncTask Scheduled",
+              perfetto::Flow::FromPointer(this));
+  return;
+#else
   isolate_ = context ? context->GetIsolate() : nullptr;
 
   TRACE_EVENT("blink", "AsyncTask Scheduled",
@@ -40,9 +49,14 @@ void AsyncTaskContext::Schedule(ExecutionContext* context,
       ad_tracker->DidCreateAsyncTask(this);
     }
   }
+#endif
 }
 
 void AsyncTaskContext::Cancel() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  isolate_ = nullptr;
+  return;
+#endif
   if (ThreadDebugger* debugger = ThreadDebugger::From(isolate_))
     debugger->AsyncTaskCanceled(Id());
   isolate_ = nullptr;  // No need to cancel the task a second time.

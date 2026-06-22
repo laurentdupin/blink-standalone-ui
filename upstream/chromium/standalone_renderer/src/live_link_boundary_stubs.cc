@@ -60,6 +60,9 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
+#include "third_party/blink/renderer/core/accessibility/blink_ax_event_intent.h"
+#include "third_party/blink/renderer/core/accessibility/scoped_blink_ax_event_intent.h"
+#include "third_party/blink/renderer/core/annotation/annotation_agent_impl.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/html/forms/form_data.h"
 #include "third_party/blink/renderer/core/html/forms/html_data_list_element.h"
@@ -72,7 +75,9 @@
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/dom/opaque_range.h"
+#include "third_party/blink/renderer/core/html/html_area_element.h"
 #include "third_party/blink/renderer/core/html/html_base_element.h"
+#include "third_party/blink/renderer/core/html/html_map_element.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
@@ -83,7 +88,10 @@
 #include "third_party/blink/renderer/core/html/html_table_row_element.h"
 #include "third_party/blink/renderer/core/html/html_table_section_element.h"
 #include "third_party/blink/renderer/core/events/animation_playback_event.h"
+#include "third_party/blink/renderer/core/events/input_event.h"
+#include "third_party/blink/renderer/core/editing/markers/document_marker_group.h"
 #include "third_party/blink/renderer/core/editing/selection_controller.h"
+#include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_controller.h"
 #include "third_party/blink/renderer/core/html/canvas/image_element_base.h"
 #include "third_party/blink/renderer/platform/heap/custom_spaces.h"
 #include "v8/include/cppgc/platform.h"
@@ -112,6 +120,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
 #include "third_party/blink/renderer/core/html/parser/html_srcset_parser.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
+#include "third_party/blink/renderer/core/highlight/highlight.h"
 #include "third_party/blink/renderer/core/html/html_image_fallback_helper.h"
 #include "third_party/blink/renderer/core/html/html_object_element.h"
 #include "third_party/blink/renderer/core/highlight/highlight_style_utils.h"
@@ -654,6 +663,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/dom/tree_walker.h"
 #include "third_party/blink/renderer/core/dom/node_child_removal_tracker.h"
 #include "third_party/blink/renderer/core/dom/range.h"
+#include "third_party/blink/renderer/core/dom/static_range.h"
 #include "third_party/blink/renderer/core/dom/invalidate_node_list_caches_scope.h"
 #include "third_party/blink/renderer/core/dom/events/event_path.h"
 #include "third_party/blink/renderer/core/dom/events/event_dispatcher.h"
@@ -687,6 +697,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/editing/granularity_strategy.h"
 #include "third_party/blink/renderer/core/editing/kill_ring.h"
 #include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
+#include "third_party/blink/renderer/core/editing/commands/clipboard_commands.h"
 #include "third_party/blink/renderer/core/editing/commands/undo_stack.h"
 #include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
 #include "third_party/blink/renderer/core/events/animation_event.h"
@@ -770,10 +781,12 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
+#include "third_party/blink/renderer/core/html/html_font_element.h"
 #include "third_party/blink/renderer/core/html/html_body_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/html/html_html_element.h"
+#include "third_party/blink/renderer/core/html/html_hr_element.h"
 #include "third_party/blink/renderer/core/html/html_br_element.h"
 #include "third_party/blink/renderer/core/html/html_div_element.h"
 #include "third_party/blink/renderer/core/html/html_heading_element.h"
@@ -1456,6 +1469,23 @@ void CEReactionsScope::EnqueueToCurrentQueue(CustomElementReactionStack&,
 void MutationObserver::CancelInspectorAsyncTasks() {}
 }  // namespace blink
 
+namespace ui {
+
+const char* ToString(ax::mojom::MoveDirection) {
+  return "none";
+}
+const char* ToString(ax::mojom::TextBoundary) {
+  return "none";
+}
+const char* ToString(ax::mojom::InputEventType) {
+  return "none";
+}
+const char* ToString(ax::mojom::Command) {
+  return "none";
+}
+
+}  // namespace ui
+
 namespace cppgc::internal {
 PersistentRegion& StandalonePersistentRegion() {
   static HeapBase* heap = reinterpret_cast<HeapBase*>(1);
@@ -1622,6 +1652,68 @@ void WebThreadScheduler::OnUrgentMessageProcessed() {}
 }  // namespace blink::scheduler
 
 namespace blink {
+
+BlinkAXEventIntent BlinkAXEventIntent::FromEditCommand(const EditCommand&) {
+  return BlinkAXEventIntent();
+}
+BlinkAXEventIntent BlinkAXEventIntent::FromClearedSelection(SetSelectionBy) {
+  return BlinkAXEventIntent();
+}
+BlinkAXEventIntent BlinkAXEventIntent::FromModifiedSelection(
+    SelectionModifyAlteration,
+    SelectionModifyDirection,
+    TextGranularity,
+    SetSelectionBy,
+    TextDirection,
+    PlatformWordBehavior) {
+  return BlinkAXEventIntent();
+}
+BlinkAXEventIntent BlinkAXEventIntent::FromNewSelection(TextGranularity,
+                                                        bool,
+                                                        SetSelectionBy) {
+  return BlinkAXEventIntent();
+}
+BlinkAXEventIntent::BlinkAXEventIntent() = default;
+BlinkAXEventIntent::BlinkAXEventIntent(ax::mojom::blink::Command)
+    : is_initialized_(true) {}
+BlinkAXEventIntent::BlinkAXEventIntent(
+    ax::mojom::blink::Command,
+    ax::mojom::blink::InputEventType)
+    : is_initialized_(true) {}
+BlinkAXEventIntent::BlinkAXEventIntent(ax::mojom::blink::Command,
+                                       ax::mojom::blink::TextBoundary,
+                                       ax::mojom::blink::MoveDirection)
+    : is_initialized_(true) {}
+BlinkAXEventIntent::BlinkAXEventIntent(HashTableDeletedValueType)
+    : is_deleted_(true) {}
+BlinkAXEventIntent::~BlinkAXEventIntent() = default;
+BlinkAXEventIntent::BlinkAXEventIntent(const BlinkAXEventIntent&) = default;
+BlinkAXEventIntent& BlinkAXEventIntent::operator=(
+    const BlinkAXEventIntent&) = default;
+bool BlinkAXEventIntent::IsHashTableDeletedValue() const {
+  return is_deleted_;
+}
+std::string BlinkAXEventIntent::ToString() const {
+  return std::string();
+}
+bool operator==(const BlinkAXEventIntent& a, const BlinkAXEventIntent& b) {
+  return a.is_initialized_ == b.is_initialized_ &&
+         a.is_deleted_ == b.is_deleted_;
+}
+unsigned BlinkAXEventIntentHashTraits::GetHash(
+    const BlinkAXEventIntent& key) {
+  return key.is_initialized() ? 1u : 0u;
+}
+ScopedBlinkAXEventIntent::ScopedBlinkAXEventIntent(
+    const BlinkAXEventIntent& intent,
+    Document* document)
+    : intents_({intent}), document_(document) {}
+ScopedBlinkAXEventIntent::ScopedBlinkAXEventIntent(
+    const Vector<BlinkAXEventIntent>& intents,
+    Document* document)
+    : intents_(intents), document_(document) {}
+ScopedBlinkAXEventIntent::~ScopedBlinkAXEventIntent() = default;
+
 extern "C" bool g_standalone_blink_saw_font_draw_text = false;
 extern "C" int g_standalone_blink_viewport_width = 800;
 extern "C" int g_standalone_blink_viewport_height = 600;
@@ -2633,7 +2725,9 @@ AddEventListenerOptionsResolved* RegisteredEventListener::Options() const {
   return nullptr;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void Editor::CountEvent(ExecutionContext*, const Event&) {}
+#endif
 
 base::TimeDelta PerformanceMonitor::Threshold(ExecutionContext*,
                                               Violation) {
@@ -2887,6 +2981,10 @@ const WrapperTypeInfo& TrustedScriptURL::wrapper_type_info_ =
 
 const WrapperTypeInfo& HTMLBRElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBRElement");
+const WrapperTypeInfo& HTMLAnchorElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLAnchorElement");
+const WrapperTypeInfo& HTMLAreaElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLAreaElement");
 const WrapperTypeInfo& HTMLBaseElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLBaseElement");
 const WrapperTypeInfo& HTMLBodyElement::wrapper_type_info_ =
@@ -2895,14 +2993,20 @@ const WrapperTypeInfo& HTMLDivElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLDivElement");
 const WrapperTypeInfo& HTMLFormElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLFormElement");
+const WrapperTypeInfo& HTMLFontElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLFontElement");
 const WrapperTypeInfo& HTMLImageElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLImageElement");
 const WrapperTypeInfo& HTMLHeadingElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLHeadingElement");
 const WrapperTypeInfo& HTMLHtmlElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLHtmlElement");
+const WrapperTypeInfo& HTMLHRElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLHRElement");
 const WrapperTypeInfo& HTMLLIElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLLIElement");
+const WrapperTypeInfo& HTMLMapElement::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("HTMLMapElement");
 const WrapperTypeInfo& HTMLDataListElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLDataListElement");
 const WrapperTypeInfo& HTMLOptGroupElement::wrapper_type_info_ =
@@ -3001,6 +3105,8 @@ const WrapperTypeInfo& KeyboardEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("KeyboardEvent");
 const WrapperTypeInfo& TextEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("TextEvent");
+const WrapperTypeInfo& InputEvent::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("InputEvent");
 const WrapperTypeInfo& PointerEvent::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("PointerEvent");
 const WrapperTypeInfo& DragEvent::wrapper_type_info_ =
@@ -3083,6 +3189,8 @@ const WrapperTypeInfo& Range::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("Range");
 const WrapperTypeInfo& AbstractRange::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("AbstractRange");
+const WrapperTypeInfo& StaticRange::wrapper_type_info_ =
+    StandaloneWrapperTypeInfo("StaticRange");
 const WrapperTypeInfo& NodeIterator::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("NodeIterator");
 const WrapperTypeInfo& TreeWalker::wrapper_type_info_ =
@@ -3726,6 +3834,13 @@ UIEvent::UIEvent(const AtomicString& type,
       view_(view),
       detail_(detail),
       source_capabilities_(source_capabilities) {}
+UIEvent::UIEvent(const AtomicString& type,
+                 const UIEventInit* initializer,
+                 base::TimeTicks platform_time_stamp)
+    : Event(type, initializer, platform_time_stamp),
+      view_(initializer->view()),
+      detail_(initializer->detail()),
+      source_capabilities_(initializer->sourceCapabilities()) {}
 UIEvent::~UIEvent() = default;
 void UIEvent::initUIEvent(const AtomicString&,
                           bool,
@@ -4432,6 +4547,7 @@ void MouseEvent::ComputeRelativePosition() {
   has_cached_relative_position_ = true;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 WebMouseEvent TransformWebMouseEvent(LocalFrameView* frame_view,
                                      const WebMouseEvent& event) {
   WebMouseEvent result = event;
@@ -4443,6 +4559,7 @@ WebMouseEvent TransformWebMouseEvent(LocalFrameView* frame_view,
   result.SetFrameTranslate(StandaloneFrameTranslation(frame_view));
   return result;
 }
+#endif
 
 int MouseEvent::layerX() {
   if (!has_cached_relative_position_)
@@ -5806,10 +5923,129 @@ void PostLayoutSnapshotClient::UpdateSnapshotForServiceAnimations() {
   UpdateSnapshot();
 }
 
+HTMLAnchorElementBase::HTMLAnchorElementBase(const QualifiedName& tag_name,
+                                             Document& document)
+    : HTMLElement(tag_name, document),
+      link_relations_(0),
+      cached_visited_link_hash_(0),
+      rel_list_(MakeGarbageCollected<RelList>(this)) {}
+HTMLAnchorElementBase::~HTMLAnchorElementBase() = default;
+KURL HTMLAnchorElementBase::Href() const {
+  return GetDocument().CompleteURL(FastGetAttribute(html_names::kHrefAttr));
+}
+void HTMLAnchorElementBase::SetHref(const AtomicString& value) {
+  setAttribute(html_names::kHrefAttr, value);
+}
+void HTMLAnchorElementBase::setHref(const String& value) {
+  SetHref(AtomicString(value));
+}
 const AtomicString& HTMLAnchorElementBase::GetName() const {
   return g_null_atom;
 }
-
+const AtomicString& HTMLAnchorElementBase::GetEffectiveTarget() const {
+  const AtomicString& target = FastGetAttribute(html_names::kTargetAttr);
+  return target.empty() ? GetDocument().BaseTarget() : target;
+}
+KURL HTMLAnchorElementBase::Url() const {
+  return Href();
+}
+void HTMLAnchorElementBase::SetURL(const KURL& url) {
+  SetHref(AtomicString(url.GetString()));
+}
+DOMOrigin* HTMLAnchorElementBase::GetDOMOrigin(LocalDOMWindow*) const {
+  return nullptr;
+}
+String HTMLAnchorElementBase::Input() const {
+  return FastGetAttribute(html_names::kHrefAttr);
+}
+bool HTMLAnchorElementBase::IsLiveLink() const {
+  return false;
+}
+bool HTMLAnchorElementBase::WillRespondToMouseClickEvents() {
+  return false;
+}
+void HTMLAnchorElementBase::Trace(Visitor* visitor) const {
+  visitor->Trace(rel_list_);
+  HTMLElement::Trace(visitor);
+}
+void HTMLAnchorElementBase::ParseAttribute(
+    const AttributeModificationParams& params) {
+  HTMLElement::ParseAttribute(params);
+}
+FocusableState HTMLAnchorElementBase::SupportsFocus(
+    UpdateBehavior update_behavior) const {
+  return HTMLElement::SupportsFocus(update_behavior);
+}
+void HTMLAnchorElementBase::FinishParsingChildren() {
+  HTMLElement::FinishParsingChildren();
+}
+void HTMLAnchorElementBase::AttributeChanged(
+    const AttributeModificationParams& params) {
+  HTMLElement::AttributeChanged(params);
+}
+bool HTMLAnchorElementBase::ShouldHaveFocusAppearance() const {
+  return HTMLElement::ShouldHaveFocusAppearance();
+}
+FocusableState HTMLAnchorElementBase::IsFocusableState(
+    UpdateBehavior update_behavior) const {
+  return HTMLElement::IsFocusableState(update_behavior);
+}
+bool HTMLAnchorElementBase::IsKeyboardFocusableSlow(
+    UpdateBehavior update_behavior) const {
+  return HTMLElement::IsKeyboardFocusableSlow(update_behavior);
+}
+void HTMLAnchorElementBase::DefaultEventHandler(Event& event) {
+  HTMLElement::DefaultEventHandler(event);
+}
+bool HTMLAnchorElementBase::HasActivationBehavior() const {
+  return false;
+}
+void HTMLAnchorElementBase::SetActive(bool active) {
+  HTMLElement::SetActive(active);
+}
+bool HTMLAnchorElementBase::IsURLAttribute(const Attribute& attribute) const {
+  return attribute.GetName() == html_names::kHrefAttr;
+}
+bool HTMLAnchorElementBase::HasLegalLinkAttribute(
+    const QualifiedName& name) const {
+  return name == html_names::kHrefAttr;
+}
+bool HTMLAnchorElementBase::CanStartSelection() const {
+  return true;
+}
+int HTMLAnchorElementBase::DefaultTabIndex() const {
+  return 0;
+}
+bool HTMLAnchorElementBase::draggable() const {
+  return false;
+}
+bool HTMLAnchorElementBase::IsInteractiveContent() const {
+  return false;
+}
+Node::InsertionNotificationRequest HTMLAnchorElementBase::InsertedInto(
+    ContainerNode& insertion_point) {
+  return HTMLElement::InsertedInto(insertion_point);
+}
+void HTMLAnchorElementBase::RemovedFrom(ContainerNode& insertion_point) {
+  HTMLElement::RemovedFrom(insertion_point);
+}
+void HTMLAnchorElementBase::NavigateToHyperlink(ResourceRequest,
+                                                NavigationPolicy,
+                                                bool,
+                                                base::TimeTicks,
+                                                KURL) {}
+void HTMLAnchorElementBase::HandleClick(MouseEvent&) {}
+bool HTMLAnchorElementBase::IsValidInterestInvoker(Element&) const {
+  return false;
+}
+HTMLAnchorElement::HTMLAnchorElement(Document& document)
+    : HTMLAnchorElementBase(html_names::kATag, document) {}
+void HTMLAnchorElement::AttachLayoutTree(AttachContext& context) {
+  HTMLAnchorElementBase::AttachLayoutTree(context);
+}
+void HTMLAnchorElement::DetachLayoutTree(bool performing_reattach) {
+  HTMLAnchorElementBase::DetachLayoutTree(performing_reattach);
+}
 
 CSSStyleSheet* ViewTransition::UAStyleSheet() const {
   return nullptr;
@@ -5876,6 +6112,70 @@ void SpellChecker::RemoveSpellingAndGrammarMarkers(const HTMLElement&,
                                                    ElementsType) {}
 
 void SpellChecker::RespondToChangedEnablement(const HTMLElement&, bool) {}
+void SpellChecker::RespondToChangedContents() {}
+void SpellChecker::RespondToChangedSelection() {}
+void SpellChecker::IgnoreSpelling() {}
+
+bool ClipboardCommands::EnabledCopy(LocalFrame&, Event*, EditorCommandSource) {
+  return false;
+}
+bool ClipboardCommands::EnabledCut(LocalFrame&, Event*, EditorCommandSource) {
+  return false;
+}
+bool ClipboardCommands::EnabledPaste(LocalFrame&, Event*, EditorCommandSource) {
+  return false;
+}
+bool ClipboardCommands::ExecuteCopy(LocalFrame&,
+                                    Event*,
+                                    EditorCommandSource,
+                                    const String&) {
+  return false;
+}
+bool ClipboardCommands::ExecuteCut(LocalFrame&,
+                                   Event*,
+                                   EditorCommandSource,
+                                   const String&) {
+  return false;
+}
+bool ClipboardCommands::ExecutePaste(LocalFrame&,
+                                     Event*,
+                                     EditorCommandSource,
+                                     const String&) {
+  return false;
+}
+bool ClipboardCommands::ExecutePasteGlobalSelection(LocalFrame&,
+                                                    Event*,
+                                                    EditorCommandSource,
+                                                    const String&) {
+  return false;
+}
+bool ClipboardCommands::ExecutePasteAndMatchStyle(LocalFrame&,
+                                                  Event*,
+                                                  EditorCommandSource,
+                                                  const String&) {
+  return false;
+}
+bool ClipboardCommands::ExecutePasteFromImageURL(LocalFrame&,
+                                                Event*,
+                                                EditorCommandSource,
+                                                const String&) {
+  return false;
+}
+bool ClipboardCommands::PasteSupported(LocalFrame*) {
+  return false;
+}
+bool ClipboardCommands::CanReadClipboard(LocalFrame&, EditorCommandSource) {
+  return false;
+}
+bool ClipboardCommands::CanWriteClipboard(LocalFrame&, EditorCommandSource) {
+  return false;
+}
+bool ClipboardCommands::IsExecutingCutOrCopy(ExecutionContext&) {
+  return false;
+}
+bool ClipboardCommands::IsExecutingPaste(ExecutionContext&) {
+  return false;
+}
 
 JSEventHandlerForContentAttribute* JSEventHandlerForContentAttribute::Create(
     ExecutionContext*,
@@ -5973,6 +6273,7 @@ bool HTMLSubmitButtonBehavior::HandleActivation(Event&) {
   return false;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 int KeyboardEvent::charCode() const {
   return 0;
 }
@@ -6007,6 +6308,7 @@ bool KeyboardEvent::IsKeyboardEvent() const {
 unsigned KeyboardEvent::which() const {
   return static_cast<unsigned>(keyCode());
 }
+#endif
 
 void ElementInternals::SetBehaviors(HeapVector<Member<ElementBehavior>>,
                                     ExceptionState&) {}
@@ -6182,6 +6484,7 @@ bool TracedValue::AppendToProto(ProtoAppender*) const {
   return false;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 MarkupFormatter::MarkupFormatter(AbsoluteURLs resolve_urls,
                                  SerializationType serialization_type)
     : resolve_urls_method_(resolve_urls),
@@ -6222,9 +6525,11 @@ void MarkupFormatter::AppendAttribute(StringBuilder&,
                                       const String&,
                                       bool) {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool ElementCannotHaveEndTag(const Node&) {
   return false;
 }
+#endif
 
 class MarkupAccumulator::NamespaceContext {};
 
@@ -6259,6 +6564,7 @@ std::pair<ShadowRoot*, HTMLTemplateElement*> MarkupAccumulator::GetShadowTree(
     const Element&) const {
   return {nullptr, nullptr};
 }
+#endif
 
 const WrapperTypeInfo& HTMLTemplateElement::wrapper_type_info_ =
     StandaloneWrapperTypeInfo("HTMLTemplateElement");
@@ -7065,9 +7371,11 @@ String ExceptionMessages::ReadOnly(const char*) {
   return String("The object is read-only.");
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool IsWordBreak(char16_t) {
   return false;
 }
+#endif
 
 InputDeviceCapabilitiesConstants* DOMWindow::GetInputDeviceCapabilities() {
   if (!input_capabilities_)
@@ -7268,93 +7576,6 @@ bool EventHandlerRegistry::HasEventHandlers(EventHandlerClass) const {
   return false;
 }
 
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-namespace {
-
-int& StandaloneCurrentKeyboardEventKeyCodeForEditor() {
-  static thread_local int key_code = 0;
-  return key_code;
-}
-
-class StandaloneScopedKeyboardEventKeyCodeForEditor {
- public:
-  explicit StandaloneScopedKeyboardEventKeyCodeForEditor(int key_code)
-      : previous_(StandaloneCurrentKeyboardEventKeyCodeForEditor()) {
-    StandaloneCurrentKeyboardEventKeyCodeForEditor() = key_code;
-  }
-  ~StandaloneScopedKeyboardEventKeyCodeForEditor() {
-    StandaloneCurrentKeyboardEventKeyCodeForEditor() = previous_;
-  }
-
- private:
-  int previous_;
-};
-
-}  // namespace
-#endif
-
-KeyboardEventManager::KeyboardEventManager(LocalFrame& frame,
-                                           ScrollManager& scroll_manager)
-    : frame_(&frame), scroll_manager_(&scroll_manager) {}
-void KeyboardEventManager::Trace(Visitor* visitor) const {
-  visitor->Trace(frame_);
-  visitor->Trace(scroll_manager_);
-  visitor->Trace(scrollend_event_target_);
-}
-bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent&) {
-  return false;
-}
-WebInputEventResult KeyboardEventManager::KeyEvent(
-    const WebKeyboardEvent& key_event) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  StandaloneScopedKeyboardEventKeyCodeForEditor standalone_key_code_scope(
-      key_event.windows_key_code);
-#endif
-  if (!frame_ || !frame_->GetDocument() || !frame_->GetDocument()->domWindow()) {
-    return WebInputEventResult::kNotHandled;
-  }
-
-  Node* node = nullptr;
-  if (Element* focused = frame_->GetDocument()->FocusedElement()) {
-    node = focused;
-  } else if (frame_->GetDocument()->body()) {
-    node = frame_->GetDocument()->body();
-  } else {
-    node = frame_->GetDocument()->documentElement();
-  }
-  if (!node) {
-    return WebInputEventResult::kNotHandled;
-  }
-
-  KeyboardEvent* event =
-      KeyboardEvent::Create(key_event, frame_->GetDocument()->domWindow());
-  event->SetTarget(node);
-  const DispatchEventResult dispatch_result = node->DispatchEvent(*event);
-  if (dispatch_result == DispatchEventResult::kNotCanceled &&
-      !event->DefaultHandled()) {
-    DefaultKeyboardEventHandler(event, node);
-  }
-  return event->DefaultHandled() ||
-                 dispatch_result != DispatchEventResult::kNotCanceled
-             ? WebInputEventResult::kHandledSystem
-             : WebInputEventResult::kNotHandled;
-}
-void KeyboardEventManager::DefaultKeyboardEventHandler(KeyboardEvent* event,
-                                                      Node*) {
-  if (!event || !frame_) {
-    return;
-  }
-  frame_->GetEditor().HandleKeyboardEvent(event);
-}
-void KeyboardEventManager::CapsLockStateMayHaveChanged() {}
-WebInputEvent::Modifiers KeyboardEventManager::GetCurrentModifierState() {
-  return WebInputEvent::kNoModifiers;
-}
-bool KeyboardEventManager::CurrentCapsLockState() {
-  return false;
-}
-void KeyboardEventManager::SetCurrentCapsLockState(OverrideCapsLockState) {}
-
 TouchEventManager::TouchEventManager(LocalFrame& frame)
     : frame_(&frame),
       suppressing_touchmoves_within_slop_(false),
@@ -7421,6 +7642,7 @@ WebInputEventResult WidgetEventHandler::HandleInputEvent(
   return WebInputEventResult::kNotHandled;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 SelectionController::SelectionController(LocalFrame& frame)
     : ExecutionContextLifecycleObserver(nullptr),
       frame_(&frame),
@@ -7538,6 +7760,7 @@ SelectionInFlatTree AdjustSelectionByUserSelect(
     const SelectionInFlatTree& selection) {
   return selection;
 }
+#endif
 
 FocusChangedObserver::FocusChangedObserver(Page*) {}
 bool FocusChangedObserver::IsFrameFocused(LocalFrame*) {
@@ -7662,9 +7885,11 @@ V8DOMActivityLogger* V8DOMActivityLogger::CurrentActivityLoggerIfIsolatedWorld(
 }
 
 namespace focusgroup {
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool IsActualFocusgroup(const FocusgroupData&) {
   return false;
 }
+#endif
 }  // namespace focusgroup
 
 
@@ -7717,14 +7942,6 @@ bool Frame::AllowFocusWithoutUserActivation() {
 
 bool EventListenerMap::ContainsJSBasedEventListeners(
     const AtomicString&) const {
-  return false;
-}
-
-bool IsSpatialNavigationEnabled(const LocalFrame*) {
-  return false;
-}
-
-bool IsScrollableNode(const Node*) {
   return false;
 }
 
@@ -7794,9 +8011,11 @@ String TrustedTypesCheckForHTML(
 
 void MergeWithNextTextNode(Text*, ExceptionState&) {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 String Element::innerText(TextVisitor*) {
   return textContent(true);
 }
+#endif
 
 StyleRecalcContext StyleRecalcContext::FromAncestors(Element&) {
   return StyleRecalcContext();
@@ -7844,7 +8063,9 @@ void NamedNodeMap::Trace(Visitor*) const {}
 
 void DOMTokenList::Trace(Visitor*) const {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void DOMRectList::Trace(Visitor*) const {}
+#endif
 
 void AnchorPositionScrollData::Trace(Visitor* visitor) const {
   PostLayoutSnapshotClient::Trace(visitor);
@@ -7870,7 +8091,9 @@ void DisplayAdElementMonitor::DidFinishLifecycleUpdate(
 void OverscrollAreaTracker::RemoveAllOverscroll() {}
 void OverscrollAreaTracker::AddOverscroll(Element*) {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void UndoStack::ElementRemoved(Element*) {}
+#endif
 
 void ColumnPseudoElement::AttachLayoutTree(AttachContext&) {}
 void ColumnPseudoElement::DetachLayoutTree(bool) {}
@@ -7954,6 +8177,7 @@ const AtomicString& ViewTransitionPseudoElementBase::GetContainingGroupName(
   return g_null_atom;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 VisibleSelection FrameSelection::ComputeVisibleSelectionInDOMTreeDeprecated()
     const {
   return VisibleSelection();
@@ -8080,6 +8304,7 @@ gfx::Rect AbsoluteCaretBoundsOf(const PositionWithAffinity&,
                                 EditingBoundaryCrossingRule) {
   return gfx::Rect();
 }
+#endif
 
 IndexedPseudoElement::IndexedPseudoElement(Element* parent,
                                            PseudoId pseudo_id,
@@ -9262,6 +9487,35 @@ String CreateMarkup(const Node*,
                     const ShadowRootInclusion&) {
   return String();
 }
+DocumentFragment* CreateFragmentFromText(const EphemeralRange&,
+                                         const String&) {
+  return nullptr;
+}
+DocumentFragment* CreateFragmentFromMarkup(Document&,
+                                           const String&,
+                                           const String&,
+                                           ParserContentPolicy) {
+  return nullptr;
+}
+DocumentFragment* CreateFragmentFromMarkupWithContext(Document&,
+                                                      const String&,
+                                                      unsigned,
+                                                      unsigned,
+                                                      const String&,
+                                                      ParserContentPolicy) {
+  return nullptr;
+}
+DocumentFragment* CreateStrictlyProcessedFragmentFromMarkupWithContext(
+    Document&,
+    const String&,
+    unsigned,
+    unsigned,
+    const String&) {
+  return nullptr;
+}
+bool IsPlainTextMarkup(Node*) {
+  return false;
+}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 FragmentParserOptions FragmentParserOptions::From(
     const V8UnionSetHTMLUnsafeOptionsOrTrustedParserOptions*) {
@@ -9624,6 +9878,7 @@ FrameLoader::~FrameLoader() = default;
 bool IsReloadLoadType(WebFrameLoadType) {
   return false;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::DidLayout() {}
 void FrameSelection::InvalidatePaint(const LayoutBlock&,
                                      const PaintInvalidatorContext&) {}
@@ -9657,175 +9912,7 @@ String FrameSelection::SelectedHTMLForClipboard() const {
   return String();
 }
 void FrameSelection::SelectSubString(const Element&, int, int) {}
-Editor::Editor(LocalFrame& frame)
-    : frame_(&frame),
-      undo_stack_(nullptr),
-      prevent_reveal_selection_(0),
-      should_start_new_kill_ring_sequence_(false),
-      should_style_with_css_(false),
-      kill_ring_(nullptr),
-      default_paragraph_separator_(EditorParagraphSeparator::kIsDiv) {}
-Editor::~Editor() = default;
-void Editor::Trace(Visitor*) const {}
-void Editor::CopyImage(const HitTestResult&) {}
-void Editor::Clear() {}
-bool Editor::CanEdit() const {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (!frame_ || !frame_->GetDocument()) {
-    return false;
-  }
-  auto* control =
-      DynamicTo<TextControlElement>(frame_->GetDocument()->FocusedElement());
-  return control && !control->IsDisabledOrReadOnly();
-#else
-  return false;
 #endif
-}
-
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-namespace {
-
-TextControlElement* StandaloneTextControlFromEditingEvent(LocalFrame* frame,
-                                                          Event* event) {
-  if (!frame || !frame->GetDocument()) {
-    return nullptr;
-  }
-  if (event && event->RawTarget()) {
-    if (Node* node = event->RawTarget()->ToNode()) {
-      if (auto* control = DynamicTo<TextControlElement>(node)) {
-        return control;
-      }
-      if (node->IsInShadowTree()) {
-        if (auto* control =
-                DynamicTo<TextControlElement>(node->OwnerShadowHost())) {
-          return control;
-        }
-      }
-    }
-  }
-  return DynamicTo<TextControlElement>(frame->GetDocument()->FocusedElement());
-}
-
-bool StandaloneApplyTextControlEditFromEditor(TextControlElement& control,
-                                              const String& replacement,
-                                              bool delete_backward,
-                                              bool delete_forward) {
-  if (control.IsDisabledOrReadOnly()) {
-    return false;
-  }
-  unsigned start = control.selectionStart();
-  unsigned end = control.selectionEnd();
-  if (start > end) {
-    std::swap(start, end);
-  }
-  const String original = control.InnerEditorValue();
-  start = std::min<unsigned>(start, original.length());
-  end = std::min<unsigned>(end, original.length());
-  if (delete_backward && start == end && start > 0) {
-    --start;
-  } else if (delete_forward && start == end && end < original.length()) {
-    ++end;
-  }
-  if (replacement.empty() && start == end) {
-    return false;
-  }
-
-  StringBuilder edited;
-  edited.Append(StringView(original, 0, start));
-  edited.Append(replacement);
-  edited.Append(StringView(original, end));
-  const unsigned caret = start + replacement.length();
-
-  control.SetValueBeforeFirstUserEditIfNotSet();
-  control.SetValue(edited.ToString(),
-                   TextFieldEventBehavior::kDispatchInputEvent,
-                   TextControlSetValueSelection::kDoNotSet);
-  control.SetSelectionRange(caret, caret);
-  return true;
-}
-
-}  // namespace
-#endif
-
-bool Editor::HandleTextEvent(TextEvent* event) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (!frame_ || !frame_->GetDocument() || !event) {
-    return false;
-  }
-  TextControlElement* control =
-      StandaloneTextControlFromEditingEvent(frame_.Get(), event);
-  if (!control || control->IsDisabledOrReadOnly() || event->IsDrop() ||
-      event->IsPaste() || event->IsIncrementalInsertion()) {
-    return false;
-  }
-
-  const String data = event->data();
-  if (data.empty()) {
-    return false;
-  }
-  return StandaloneApplyTextControlEditFromEditor(
-      *control, data, /*delete_backward=*/false, /*delete_forward=*/false);
-#else
-  return false;
-#endif
-}
-void Editor::HandleKeyboardEvent(KeyboardEvent* event) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (!event) {
-    return;
-  }
-  const WebKeyboardEvent* key_event = event->KeyEvent();
-  const bool is_editing_key_event =
-      event->type() == event_type_names::kKeydown ||
-      event->type() == event_type_names::kKeypress ||
-      (key_event &&
-       (key_event->GetType() == WebInputEvent::Type::kRawKeyDown ||
-        key_event->GetType() == WebInputEvent::Type::kKeyDown ||
-        key_event->GetType() == WebInputEvent::Type::kChar));
-  if (!is_editing_key_event) {
-    return;
-  }
-  TextControlElement* control =
-      StandaloneTextControlFromEditingEvent(frame_.Get(), event);
-  if (!control || control->IsDisabledOrReadOnly()) {
-    return;
-  }
-
-  bool handled = false;
-  int key_code = event->keyCode();
-  if (!key_code && key_event) {
-    key_code = key_event->windows_key_code;
-  }
-  if (!key_code) {
-    key_code = StandaloneCurrentKeyboardEventKeyCodeForEditor();
-  }
-  switch (key_code) {
-    case 8:
-      handled = StandaloneApplyTextControlEditFromEditor(
-          *control, g_empty_string, /*delete_backward=*/true,
-          /*delete_forward=*/false);
-      break;
-    case 46:
-      handled = StandaloneApplyTextControlEditFromEditor(
-          *control, g_empty_string, /*delete_backward=*/false,
-          /*delete_forward=*/true);
-      break;
-    case 13:
-      if (IsA<HTMLTextAreaElement>(*control)) {
-        handled = StandaloneApplyTextControlEditFromEditor(
-            *control, String("\n"), /*delete_backward=*/false,
-            /*delete_forward=*/false);
-      }
-      break;
-    default:
-      break;
-  }
-  if (handled) {
-    event->SetDefaultHandled();
-  }
-#endif
-}
-void Editor::SetBaseWritingDirection(mojo_base::mojom::TextDirection) {}
 FrameConsole::FrameConsole(LocalFrame& frame) : frame_(&frame) {}
 BrowserInterfaceBrokerProxyImpl::BrowserInterfaceBrokerProxyImpl(
     ContextLifecycleNotifier* notifier)
@@ -9885,6 +9972,9 @@ LocalFrameMojoHandler::BackForwardCacheControllerHostRemote() {
 DataObject* DataObject::Create() {
   return MakeGarbageCollected<DataObject>();
 }
+DataObject* DataObject::CreateFromString(const String&) {
+  return DataObject::Create();
+}
 DataObject::DataObject() : modifiers_(0) {}
 DataObject::~DataObject() = default;
 void DataObject::Trace(Visitor* visitor) const {
@@ -9928,6 +10018,11 @@ void DataTransfer::ClearDragImage() {
 void DataTransfer::resetDropEffect() {
   drop_effect_ = AtomicString();
 }
+String DataTransfer::getData(const String&) const {
+  return String();
+}
+void DataTransfer::SetSourceEffectAllowed(const AtomicString&) {}
+void DataTransfer::SetSourceOperation(DragOperationsMask) {}
 void DataTransfer::SetDestinationOperationFromEffectAllowed() {}
 void DataTransfer::SetDestinationOperation(ui::mojom::blink::DragOperation) {}
 void DataTransfer::SetAccessPolicy(DataTransferAccessPolicy policy) {
@@ -9948,6 +10043,8 @@ void DataTransfer::Trace(Visitor* visitor) const {
 }
 
 void SystemClipboard::Trace(Visitor*) const {}
+void SystemClipboard::WriteImageWithTag(Image*, const KURL&, const String&) {}
+void SystemClipboard::CommitWrite() {}
 SystemClipboard::Snapshot::~Snapshot() = default;
 SecurityContext::~SecurityContext() = default;
 ContextLifecycleNotifier::~ContextLifecycleNotifier() = default;
@@ -10326,7 +10423,9 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView&) {}
 #endif
 void PageAnimator::ReportFrameAnimations(cc::AnimationHost*) {}
 void WebPluginContainerImpl::UpdateAllLifecyclePhases() {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::UpdateStyleAndLayoutIfNeeded() {}
+#endif
 void DragCaret::UpdateStyleAndLayoutIfNeeded() {}
 void DragCaret::InvalidatePaint(const LayoutBlock&,
                                 const PaintInvalidatorContext&) {}
@@ -10338,7 +10437,9 @@ bool PaintLayerScrollableArea::HasRunningAnimation() {
 }
 void ScrollMarkerGroupPseudoElement::ScrollSelectedIntoView(bool) {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 DOMRectList::DOMRectList() = default;
+#endif
 DOMRect::DOMRect(double x, double y, double width, double height)
     : DOMRectReadOnly(x, y, width, height) {}
 DOMRect* DOMRect::FromRectF(const gfx::RectF& rect) {
@@ -10390,9 +10491,11 @@ bool SoftNavigationHeuristics::ModifiedNode(Node*) {
 void SoftNavigationHeuristics::Shutdown() {}
 void HTMLAnchorElement::UpdateScrollTargetGroupMembership() {}
 namespace focusgroup {
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 FocusgroupData ParseFocusgroup(const Element*, const AtomicString&) {
   return FocusgroupData();
 }
+#endif
 }  // namespace focusgroup
 unsigned ScriptForbiddenScope::g_main_thread_counter_ = 0;
 unsigned ScriptForbiddenScope::g_blink_lifecycle_counter_ = 0;
@@ -10596,9 +10699,6 @@ v8_compile_hints::V8CrowdsourcedCompileHintsProducer::
     : page_(page) {}
 void v8_compile_hints::V8CrowdsourcedCompileHintsProducer::ClearData() {}
 void PointerLockController::DocumentDetached(Document*) {}
-SpatialNavigationController::SpatialNavigationController(Page& page)
-    : page_(&page) {}
-void SpatialNavigationController::Trace(Visitor*) const {}
 SVGDocumentResourceTracker::SVGDocumentResourceTracker(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     const String& cache_identifier)
@@ -10618,9 +10718,11 @@ void PluginData::UpdatePluginList() {}
 void PluginData::ResetPluginData() {}
 FeatureAndJSLocationBlockingBFCache::~FeatureAndJSLocationBlockingBFCache() =
     default;
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool Editor::FindString(LocalFrame&, const String&, FindOptions) {
   return false;
 }
+#endif
 void SyncScrollAttemptHeuristic::DidAccessScrollOffset() {}
 void SyncScrollAttemptHeuristic::DidSetScrollOffset() {}
 void SyncScrollAttemptHeuristic::DidRequestAnimationFrame() {}
@@ -10703,14 +10805,21 @@ bool Fullscreen::HasFullscreenElements() {
 void CSSAnimations::Cancel() {}
 void CSSAnimations::MaybeApplyPendingUpdate(Element*) {}
 #endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void Editor::ElementRemoved(Element*) {}
+#endif
 void SpellChecker::ElementRemoved(Element*) {}
 void SpellChecker::RemoveSpellingMarkersUnderWords(const Vector<String>&) {}
+void SpellChecker::AdvanceToNextMisspelling(bool) {}
+void SpellChecker::ShowSpellingGuessPanel() {}
 SpellChecker::SpellChecker(LocalDOMWindow& window)
     : window_(&window),
       spell_check_requester_(nullptr),
       idle_spell_check_controller_(nullptr) {}
 void SpellChecker::Trace(Visitor*) const {}
+bool SpellChecker::IsSpellCheckingEnabledAt(const Position&) {
+  return false;
+}
 InputMethodController::InputMethodController(LocalDOMWindow& window,
                                              LocalFrame& frame)
     : ExecutionContextLifecycleObserver(&window),
@@ -10722,11 +10831,20 @@ InputMethodController::~InputMethodController() = default;
 void InputMethodController::Trace(Visitor*) const {}
 void InputMethodController::ContextDestroyed() {}
 void InputMethodController::DidChangeVisibility(const LayoutObject&) {}
+bool InputMethodController::HasComposition() const {
+  return false;
+}
 TextSuggestionController::TextSuggestionController(LocalDOMWindow& window)
     : is_suggestion_menu_open_(false),
       window_(&window),
       text_suggestion_host_(&window) {}
 void TextSuggestionController::Trace(Visitor*) const {}
+void TextSuggestionController::HandlePotentialSuggestionTap(
+    const PositionInFlatTree&) {}
+std::optional<mojom::blink::AnnotationType> AnnotationAgentImpl::IsOverAnnotation(
+    const HitTestResult&) {
+  return std::nullopt;
+}
 void OverscrollAreaTracker::RemoveOverscroll(Element*) {}
 
 void StyleAdjuster::AdjustStyleForDisplay(ComputedStyleBuilder& builder,
@@ -10880,10 +10998,12 @@ bool HTMLObjectElement::DidFinishLoading() const {
 FontFaceSetDocument* FontFaceSetDocument::From(Document&) {
   return nullptr;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 std::unique_ptr<DocumentResourceCoordinator>
 DocumentResourceCoordinator::MaybeCreate(const BrowserInterfaceBrokerProxy&) {
   return nullptr;
 }
+#endif
 DOMFeaturePolicy::DOMFeaturePolicy(ExecutionContext*) {}
 void LiveNodeListRegistry::Trace(Visitor*) const {}
 bool Frame::IsDescendantOf(const Frame*) const {
@@ -10962,7 +11082,9 @@ void V8UnionStringOrTrustedHTML::Trace(Visitor* visitor) const {
 }
 void ViewTransitionSupplement::Trace(Visitor*) const {}
 void NodeIterator::Trace(Visitor*) const {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void Range::Trace(Visitor*) const {}
+#endif
 HTMLAllCollection::HTMLAllCollection(ContainerNode& node, CollectionType type)
     : HTMLCollection(node, type) {}
 HTMLAllCollection::~HTMLAllCollection() = default;
@@ -11126,7 +11248,9 @@ PhysicalOffset FragmentItem::MapPointInContainer(
 }
 #endif
 void EventHandlerRegistry::DocumentDetached(Document&) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::ContextDestroyed() {}
+#endif
 void MediaQueryMatcher::DocumentDetached() {}
 AXObjectCache* AXObjectCache::Create(Document&, const ui::AXMode&) {
   return nullptr;
@@ -11192,6 +11316,14 @@ void VisualViewportScrollEndEvent::DoneDispatchingEventAtCurrentTarget() {}
 NodeChildRemovalTracker* NodeChildRemovalTracker::last_ = nullptr;
 void EditContext::Blur() {}
 void EditContext::Focus() {}
+bool EditContext::InsertText(const WebString&) {
+  return false;
+}
+void EditContext::DeleteBackward() {}
+void EditContext::DeleteForward() {}
+void EditContext::DeleteWordBackward() {}
+void EditContext::DeleteWordForward() {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool IsRootEditableElement(const Node&) {
   return false;
 }
@@ -11208,7 +11340,9 @@ Element* RootEditableElement(const Node&) {
 Element* EnclosingAnchorElement(const Position&) {
   return nullptr;
 }
+#endif
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::DidChangeFocus() {}
 void FrameSelection::SetFrameIsFocused(bool flag) {
   focused_ = flag;
@@ -11217,10 +11351,8 @@ bool FrameSelection::FrameIsFocusedAndActive() const {
   return focused_ && frame_->GetPage() &&
          frame_->GetPage()->GetFocusController().IsActive();
 }
-Element* FocusgroupControllerUtils::GetFocusgroupOwnerOfItem(
-    const Element*) {
-  return nullptr;
-}
+#endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void Range::selectNodeContents(Node*, ExceptionState&) {}
 bool Range::IsConnected() const {
   return false;
@@ -11237,11 +11369,13 @@ void Range::DidInsertText(const CharacterData&, unsigned, unsigned) {}
 void Range::DidRemoveText(const CharacterData&, unsigned, unsigned) {}
 void Range::DidMergeTextNodes(const NodeWithIndex&, unsigned) {}
 void Range::DidSplitTextNode(const Text&) {}
+#endif
 void LiveNodeListRegistry::Add(const LiveNodeListBase*,
                                NodeListInvalidationType) {}
 void LiveNodeListRegistry::Remove(const LiveNodeListBase*,
                                   NodeListInvalidationType) {}
 void NodeIterator::NodeWillBeRemoved(Node&) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::NodeChildrenWillBeRemoved(ContainerNode&) {}
 void FrameSelection::NodeWillBeRemoved(Node&) {}
 void FrameSelection::DidUpdateCharacterData(CharacterData*,
@@ -11254,6 +11388,7 @@ void FrameSelection::DidMergeTextNodes(const Text&,
                                        const NodeWithIndex&,
                                        unsigned) {}
 void FrameSelection::DidSplitTextNode(const Text&) {}
+#endif
 void DragCaret::NodeChildrenWillBeRemoved(ContainerNode&) {}
 void DragCaret::NodeWillBeRemoved(Node&) {}
 void DocumentMarkerController::DidUpdateCharacterData(CharacterData*,
@@ -11491,6 +11626,7 @@ RadioNodeList::RadioNodeList(ContainerNode& root,
                              const AtomicString& name)
     : LiveNodeList(root, type, kInvalidateOnNameAttrChange), name_(name) {}
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 SetSelectionOptions::SetSelectionOptions() = default;
 SetSelectionOptions::SetSelectionOptions(const SetSelectionOptions&) = default;
 template <typename Strategy>
@@ -11533,7 +11669,9 @@ template bool SelectionTemplate<EditingStrategy>::IsCaret() const;
 template class SelectionTemplate<EditingStrategy>;
 template class SelectionTemplate<EditingInFlatTreeStrategy>;
 template class VisibleSelectionTemplate<EditingStrategy>;
+#endif
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 Range* Range::Create(Document& document) {
   return MakeGarbageCollected<Range>(document);
 }
@@ -11544,6 +11682,7 @@ Range::Range(Document& document, const Position&, const Position&)
 
 AbstractRange::AbstractRange() = default;
 AbstractRange::~AbstractRange() = default;
+#endif
 
 NodeIteratorBase::NodeIteratorBase(Node* root_node,
                                    unsigned what_to_show,
@@ -11596,7 +11735,9 @@ CompositorAnimations::FailureReasons Animation::CheckCanStartAnimationOnComposit
 void Animation::OnPaintWorkletImageCreated() {}
 #endif
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::MarkCacheDirty() {}
+#endif
 unsigned FontPerformance::in_style_ = 0;
 void DocumentSpeculationRules::DocumentStyleUpdated() {}
 void DocumentSpeculationRules::DocumentBaseTargetChanged() {}
@@ -11654,6 +11795,18 @@ Vector<gfx::Rect> DocumentMarkerController::LayoutRectsForTextMatchMarkers() {
   return Vector<gfx::Rect>();
 }
 void DocumentMarkerController::StartGlicMarkerAnimationIfNeeded() {}
+void DocumentMarkerController::MoveMarkers(const Text&, int, const Text&) {}
+DocumentMarkerGroup* DocumentMarkerController::FirstMarkerGroupAroundPosition(
+    const PositionInFlatTree&,
+    DocumentMarker::MarkerTypes) {
+  return nullptr;
+}
+Position DocumentMarkerGroup::StartPosition() const {
+  return Position();
+}
+Position DocumentMarkerGroup::EndPosition() const {
+  return Position();
+}
 WebPrintPageDescription GetPageDescriptionFromLayout(const Document&, unsigned) {
   return WebPrintPageDescription();
 }
@@ -11883,9 +12036,18 @@ KURL HitTestResult::AbsoluteImageURL() const {
 KURL HitTestResult::AbsoluteLinkURL() const {
   return KURL();
 }
+Image* HitTestResult::GetImage() const {
+  return nullptr;
+}
+bool HitTestResult::IsLiveLink() const {
+  return false;
+}
 String HitTestResult::Title(TextDirection& direction) const {
   direction = TextDirection::kLtr;
   return String();
+}
+const AtomicString& HitTestResult::AltDisplayString() const {
+  return g_null_atom;
 }
 Element* HitTestResult::InnerPossiblyPseudoElement() const {
   if (auto* element = DynamicTo<Element>(inner_possibly_pseudo_node_.Get())) {
@@ -11909,6 +12071,7 @@ HitTestLocation HitTestResult::ResolveRectBasedTest(
 CDATASection* CDATASection::Create(Document&, const String&) {
   return nullptr;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 template <typename Strategy>
 PositionTemplate<Strategy>::PositionTemplate()
     : anchor_node_(nullptr),
@@ -12096,10 +12259,12 @@ bool EditingIgnoresContent(const Node&) {
 bool IsDisplayInsideTable(const Node*) {
   return false;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 template <typename Traversal>
 int EditingAlgorithm<Traversal>::LastOffsetForEditing(const Node*) {
   return 0;
 }
+#endif
 short ComparePositions(const Position& a, const Position& b) {
   return a.CompareTo(b);
 }
@@ -12161,6 +12326,8 @@ EditingBehavior Editor::Behavior() const {
 VisiblePosition CreateVisiblePosition(const PositionWithAffinity&) {
   return VisiblePosition();
 }
+#endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 CreateMarkupOptions::Builder&
 CreateMarkupOptions::Builder::SetShouldAnnotateForInterchange(bool) {
   return *this;
@@ -12169,8 +12336,14 @@ CreateMarkupOptions::Builder& CreateMarkupOptions::Builder::SetShouldResolveURLs
     AbsoluteURLs) {
   return *this;
 }
+#endif
 String CreateMarkup(const Position&,
                     const Position&,
+                    const CreateMarkupOptions&) {
+  return String();
+}
+String CreateMarkup(const PositionInFlatTree&,
+                    const PositionInFlatTree&,
                     const CreateMarkupOptions&) {
   return String();
 }
@@ -12179,6 +12352,7 @@ TextControlElement* EnclosingTextControl(const Node*) {
   return nullptr;
 }
 #endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 template int
 PositionTemplate<EditingStrategy>::ComputeOffsetInContainerNode() const;
 template PositionTemplate<EditingStrategy>
@@ -12188,6 +12362,7 @@ PositionTemplate<EditingStrategy>::InParentBeforeNode(const Node&);
 template int16_t PositionTemplate<EditingStrategy>::CompareTo(
     const PositionTemplate<EditingStrategy>&) const;
 template bool PositionTemplate<EditingStrategy>::IsConnected() const;
+#endif
 ResizeObserver* ResizeObserver::Create(LocalDOMWindow* window,
                                        ResizeObserver::Delegate* delegate) {
   return MakeGarbageCollected<ResizeObserver>(delegate, window);
@@ -12416,6 +12591,7 @@ void CloseWatcher::WatcherStack::SetHadUserInteraction(bool) {}
 CloseWatcher::WatcherStack::WatcherStack(LocalDOMWindow* window)
     : receiver_(this, window), window_(window) {}
 void CloseWatcher::WatcherStack::Trace(Visitor*) const {}
+void CloseWatcher::WatcherStack::EscapeKeyHandler(KeyboardEvent*) {}
 void CloseWatcher::WatcherStack::Signal() {}
 PluginScriptForbiddenScope::PluginScriptForbiddenScope() = default;
 PluginScriptForbiddenScope::~PluginScriptForbiddenScope() = default;
@@ -12424,11 +12600,13 @@ void SelectorQueryCache::Invalidate() {}
 DocumentSpeculationRules* DocumentSpeculationRules::FromIfExists(Document&) {
   return nullptr;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 DocumentResourceCoordinator::~DocumentResourceCoordinator() = default;
 void DocumentResourceCoordinator::SetIsAdFrame(bool) {}
 void DocumentResourceCoordinator::SetLifecycleState(
     performance_manager::mojom::LifecycleState) {}
 void DocumentResourceCoordinator::SetNetworkAlmostIdle() {}
+#endif
 TransformSource::~TransformSource() = default;
 MediaQueryMatcher::MediaQueryMatcher(Document& document) : document_(document) {}
 void VisitedLinkState::InvalidateStyleForAllLinks(bool) {}
@@ -12849,7 +13027,9 @@ LayoutViewTransitionRoot::~LayoutViewTransitionRoot() = default;
 bool ViewTransitionStyleTracker::IsTransitionElement(const Element&) const {
   return false;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::CommitAppearanceIfNeeded() {}
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutListItem::UpdateCounterStyle() {}
 void LayoutInlineListItem::UpdateCounterStyle() {}
@@ -13022,6 +13202,10 @@ GetDocumentPolicyFeatureInfoMap() {
 }
 void HighlightRegistry::ValidateHighlightMarkers() {}
 const char HighlightRegistry::kSupplementName[] = "HighlightRegistry";
+void HighlightRegistry::ScheduleRepaint() {}
+bool Highlight::Contains(AbstractRange*) const {
+  return false;
+}
 NoStatePrefetchClient* NoStatePrefetchClient::From(Page*) {
   return nullptr;
 }
@@ -13216,9 +13400,11 @@ std::ostream& operator<<(std::ostream& os, PaintInvalidationReason reason) {
   return os << static_cast<int>(reason);
 }
 #endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 std::ostream& operator<<(std::ostream& os, TextAffinity affinity) {
   return os << static_cast<int>(affinity);
 }
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const EffectPaintPropertyNodeOrAlias& FragmentData::ContentsEffect() const {
   return *static_cast<const EffectPaintPropertyNodeOrAlias*>(nullptr);
@@ -13237,9 +13423,11 @@ HitTestResult::HitTestResult()
       is_over_embedded_content_view_(false),
       is_over_resizer_(false),
       is_over_scroll_corner_(false) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool LayoutSelection::IsSelected(const LayoutObject&) {
   return false;
 }
+#endif
 void StyleAdjuster::AdjustStyleForCombinedText(ComputedStyleBuilder&) {}
 void StyleAdjuster::AdjustStyleForTextCombine(ComputedStyleBuilder&) {}
 const HeapVector<Member<Element>>& OverscrollAreaTracker::DOMSortedElements() {
@@ -14879,7 +15067,9 @@ v8::Local<v8::Object> ScriptWrappable::AssociateWithWrapper(
   return wrapper;
 }
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::LayoutBlockWillBeDestroyed(const LayoutBlock&) {}
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void FragmentItems::DirtyLinesFromChangedChild(
     const LayoutObject&,
@@ -15491,9 +15681,11 @@ unsigned OffsetMappingUnit::ConvertTextContentToLastDOMOffset(
   return offset;
 }
 #endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 TextIteratorBehavior::TextIteratorBehavior() {
   values_.all = 0;
 }
+#endif
 
 const KURL& SVGResourceDocumentContent::Url() const {
   static const KURL* empty_url = new KURL();
@@ -16760,10 +16952,12 @@ PhysicalRect FragmentItem::InkOverflowRect() const {
 void FragmentItems::LayoutObjectWillBeMoved(const LayoutObject&) {}
 #endif
 
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 LayoutSelectionStatus FrameSelection::ComputeLayoutSelectionStatus(
     const InlineCursor&) const {
   return LayoutSelectionStatus(0, 0, SelectSoftLineBreak::kNotSelected);
 }
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 PhysicalRect InlineCursor::CurrentLocalSelectionRectForText(
     const LayoutSelectionStatus&) const {
@@ -18256,6 +18450,7 @@ bool TextCombinePainter::ShouldPaint(const LayoutTextCombine&) {
 void TextCombinePainter::Paint(const PaintInfo&,
                                const PhysicalOffset&,
                                const LayoutTextCombine&) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 CaretShape FrameSelection::GetCaretShape() const {
   return CaretShape::kBar;
 }
@@ -18264,6 +18459,7 @@ void FrameSelection::PaintCaret(GraphicsContext&,
 bool FrameSelection::ShouldPaintCaret(const PhysicalBoxFragment&) const {
   return false;
 }
+#endif
 void DragCaret::PaintDragCaret(const LocalFrame*,
                                GraphicsContext&,
                                const PhysicalOffset&) const {}
@@ -18600,6 +18796,7 @@ std::optional<TextOffsetRange> MarkerRangeMappingContext::GetTextContentOffsets(
 }
 MarkerRangeMappingContext::DOMToTextContentOffsetMapper::
     DOMToTextContentOffsetMapper(const LayoutObject&) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 CaretShape GetCaretShapeFromComputedStyle(const ComputedStyle&) {
   return CaretShape::kBar;
 }
@@ -18608,6 +18805,8 @@ LogicalRect GetCaretRectAtTextOffset(const InlineCursor&,
                                      CaretShape) {
   return LogicalRect();
 }
+#endif
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 InlineCaretPosition BidiAdjustment::AdjustForHitTest(
     const InlineCaretPosition& position) {
   return position;
@@ -18616,6 +18815,7 @@ InlineCaretPosition BidiAdjustment::AdjustForInlineCaretPositionResolution(
     const InlineCaretPosition& position) {
   return position;
 }
+#endif
 std::unique_ptr<PathPositionMapper> LayoutSVGTextPath::LayoutPath() const {
   return nullptr;
 }
@@ -18811,6 +19011,14 @@ HTMLElement* HTMLFormControlElement::formForBinding() const {
   return nullptr;
 }
 HTMLFormElement* HTMLFormControlElement::formOwner() const {
+  return nullptr;
+}
+const HTMLFormControlElement*
+HTMLFormControlElement::EnclosingFormControlElement(const Node* node) {
+  for (const Node* current = node; current; current = current->parentNode()) {
+    if (auto* control = DynamicTo<HTMLFormControlElement>(current))
+      return control;
+  }
   return nullptr;
 }
 void HTMLFormControlElement::AssociateWith(HTMLFormElement*) {}
@@ -19078,9 +19286,11 @@ void AuditsIssue::ReportElementAccessibilityIssue(
     int,
     ElementAccessibilityIssueReason,
     bool) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 int KeyboardEvent::keyCode() const {
   return 0;
 }
+#endif
 void HTMLFormElement::SubmitImplicitly(const Event&, bool) {}
 void AutoscrollController::StartAutoscrollForSelection(LayoutObject*) {}
 void AutoscrollController::StartMiddleClickAutoscroll(LocalFrame*,
@@ -19208,6 +19418,7 @@ bool UseFontVariantEmojiVariationSelector(VariationSelectorMode) {
 bool Character::IsVariationSequence(UChar32, UChar32) {
   return false;
 }
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 bool Character::IsEmoji(UChar32) {
   return false;
 }
@@ -19217,6 +19428,7 @@ bool Character::IsEmojiTextDefault(UChar32) {
 bool Character::IsEmojiEmojiDefault(UChar32) {
   return false;
 }
+#endif
 FontGlobalContext& FontGlobalContext::Get() {
   DEFINE_STATIC_LOCAL(Persistent<FontGlobalContext>, context, ());
   if (!context) {
@@ -19527,7 +19739,9 @@ LayoutShiftTracker::ContainingBlockScope*
     LayoutShiftTracker::ContainingBlockScope::top_ = nullptr;
 void LayoutShiftTracker::NotifyPrePaintFinished() {}
 void ShowAllPropertyTrees(const LocalFrameView&) {}
+#if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::EnsureInvalidationOfPreviousLayoutBlock() {}
+#endif
 SoftNavigationPaintAttributionTracker::PrePaintUpdateResult
 SoftNavigationPaintAttributionTracker::UpdateOnPrePaint(const LayoutObject&,
                                                         Node*,

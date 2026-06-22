@@ -150,6 +150,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_provider_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_recipe.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/color/color_transform.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/accessibility/ax_event_intent.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/gpu_fence_handle.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/overlay_plane_data.cc
@@ -210,6 +211,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/event_handler.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/event_handling_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/input_device_capabilities.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/keyboard_event_manager.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/mouse_event_manager.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/input/pointer_event_manager.cc
@@ -495,6 +497,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/rule_set.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/rule_set_diff.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/scroll_target_group_scope.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/css_computed_style_declaration.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/computed_style_css_value_mapping.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/selector_filter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/style_containment_scope.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/css/style_engine.cc
@@ -530,6 +534,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/decoded_data_document_parser.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/document.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/document_encoding_data.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/focusgroup_flags.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/increment_load_event_delay_count.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/document_fragment.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/document_init.cc
@@ -562,7 +567,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/node.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/node_lists_node_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/node_traversal.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/abstract_range.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/nth_index_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/range.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/pseudo_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/qualified_name.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/scriptable_document_parser.cc
@@ -577,8 +584,13 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/tree_scope_adopter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/user_action_element_set.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/whitespace_attacher.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/geometry/dom_rect_list.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/url/dom_url_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/url/dom_url_utils_read_only.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/xml_document.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/animation_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/before_text_inserted_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/keyboard_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/simulated_event_util.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/touch_event_context.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/transition_event.cc
@@ -624,15 +636,20 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/forms/select_type.cc
 
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_base_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_area_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_body_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_br_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_collection.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_font_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/rel_list.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_dimension.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_div_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_head_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_heading_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_hr_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_li_element.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_map_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_olist_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_ulist_element.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_html_element.cc
@@ -784,9 +801,130 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/forms/layout_text_control_inner_editor.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/forms/layout_text_control_multi_line.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/forms/layout_text_control_single_line.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/dom/static_range.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/bidi_adjustment.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/caret_display_item_client.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/append_node_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/apply_block_element_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/apply_style_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/break_blockquote_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/composite_edit_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/create_link_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/delete_from_text_node_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/delete_selection_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/delete_selection_options.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/edit_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/editing_commands_utilities.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/editing_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/editor_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/format_block_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/indent_outdent_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_commands.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_incremental_text_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_into_text_node_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_line_break_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_list_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_node_before_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_node_list_before_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_paragraph_separator_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_text_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/merge_identical_elements_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/move_commands.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/remove_css_property_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/remove_format_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/remove_node_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/remove_node_preserving_children_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/replace_node_with_span_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/replace_selection_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/selection_for_undo_step.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/set_character_data_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/set_node_attribute_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/simplify_markup_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/smart_replace_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/split_element_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/split_text_node_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/split_text_node_containing_element_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/style_commands.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/typing_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/undo_stack.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/undo_step.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/unlink_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/wrap_contents_in_dummy_span_command.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/compare_positions.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_behavior.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_style.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_strategy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_style_utilities.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_utilities.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editor_key_bindings.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/element_inner_text.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/ephemeral_range.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/finder/chunk_graph_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/frame_caret.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/frame_selection.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/finder/find_buffer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/finder/find_results.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/granularity_strategy.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/inline_box_position.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/backwards_character_iterator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/bit_stack.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/character_iterator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/fully_clipped_state_stack.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/kill_ring_none.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/simplified_backwards_text_iterator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/text_searcher_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/text_iterator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/text_iterator_behavior.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/text_iterator_text_node_handler.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/text_iterator_text_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/layout_selection.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/local_caret_rect.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/ng_flat_tree_shorthands.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/plain_text_range.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position_iterator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position_units.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position_units_paragraph.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position_units_sentence.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position_units_word.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/position_with_affinity.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/relocatable_position.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/selection_adjuster.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/selection_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/selection_editor.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/selection_modifier.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/selection_modifier_line.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/selection_template.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/set_selection_options.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/backspace_state_machine.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/backward_code_point_state_machine.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/backward_grapheme_boundary_state_machine.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/forward_code_point_state_machine.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/forward_grapheme_boundary_state_machine.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/state_machine_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/state_machines/text_segmentation_machine_state.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/surrounding_text.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/text_affinity.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/text_offset_mapping.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/text_segments.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/serializers/create_markup_options.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/serializers/markup_accumulator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/serializers/markup_formatter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/visible_position.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/visible_selection.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/visible_units.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/visible_units_line.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/visible_units_paragraph.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/visible_units_sentence.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/current_input_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/input_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/web_input_event_conversion.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/inline/caret_rect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/length_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/line_clamp_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/measure_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/selection_state.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/list/layout_inside_list_marker.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/list/layout_inline_list_item.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/list/layout_list_item.cc
@@ -886,6 +1024,11 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/fragment_painter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/frame_painter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/frame_set_painter.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/focusgroup_controller.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/focusgroup_controller_utils.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/grid_focusgroup_structure_info.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/spatial_navigation.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/page/spatial_navigation_controller.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/gap_decorations_painter.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/geometry_box_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/hit_testing_transform_state.cc
@@ -1136,6 +1279,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/styled_stroke_data.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/touch_action_rect.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/instrumentation/canvas_memory_dump_provider.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/instrumentation/resource_coordinator/document_resource_coordinator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/json/json_parser.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/json/json_values.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/fetch_context.cc
@@ -1143,6 +1287,7 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/fetch/text_resource_decoder_options.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/bidi_paragraph.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/character.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/character_emoji.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/character_break_iterator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/icu_error.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/justification_opportunity.cc
@@ -1152,6 +1297,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_break_iterator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_break_iterator_icu.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_break_iterator_internal_icu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/text_boundaries.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/text/unicode_utilities.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_conversions.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_default.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/theme/web_theme_engine_helper.cc
@@ -2579,6 +2726,7 @@ set(BLINK_STANDALONE_FRAME_MOJOM_SUPPORT_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/base/ime/ime_text_span.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/base/ime/mojom/ime_types_mojom_traits.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/events/ipc/ui_events_param_traits.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/events/keycodes/dom/keycode_converter.cc
 )
 
 set(BLINK_STANDALONE_UNSUPPORTED_POLICY_SOURCES

@@ -4,8 +4,19 @@
 namespace ax::mojom::blink {
 
 enum class Role {
-  kUnknown = 0,
+  kUnknown = 181,
   kNone,
+  kGrid = 92,
+  kListBox = 112,
+  kListBoxOption = 113,
+  kMenu = 122,
+  kMenuBar = 123,
+  kMenuItem = 124,
+  kRadioButton = 141,
+  kRadioGroup = 142,
+  kTab = 164,
+  kTabList = 165,
+  kToolbar = 176,
 };
 
 enum class Command {
