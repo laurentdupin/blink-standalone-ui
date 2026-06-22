@@ -92,6 +92,7 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
+#include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -199,6 +200,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/gfx/ca_layer_params.h"
 
 namespace blink::standalone_renderer_probe {
@@ -9946,50 +9948,58 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
           : "not_requested";
 }
 
-TextControlElement* FocusedTextControlForStandaloneRenderer(Document& document) {
-  Element* focused = document.FocusedElement();
-  if (!focused) {
-    return nullptr;
+int StandaloneWindowsKeyCodeForKeyboardInputKey(int key) {
+  switch (key) {
+    case 8:
+      return 8;   // Backspace.
+    case 9:
+      return 9;   // Tab.
+    case 13:
+      return 13;  // Enter.
+    case 46:
+      return 46;  // Delete.
+    default:
+      return 0;
   }
-  return DynamicTo<TextControlElement>(focused);
 }
 
-bool ApplyStandaloneTextControlEditForStandaloneRenderer(
-    TextControlElement& control,
-    const String& replacement,
-    bool delete_backward,
-    bool delete_forward) {
-  if (control.IsDisabledOrReadOnly()) {
-    return false;
+uint32_t StandaloneDomKeyForKeyboardInputKey(int key) {
+  switch (key) {
+    case 8:
+      return static_cast<uint32_t>(ui::DomKey::BACKSPACE);
+    case 9:
+      return static_cast<uint32_t>(ui::DomKey::TAB);
+    case 13:
+      return static_cast<uint32_t>(ui::DomKey::ENTER);
+    case 46:
+      return static_cast<uint32_t>(ui::DomKey::DEL);
+    default:
+      return static_cast<uint32_t>(ui::DomKey::UNIDENTIFIED);
   }
-  unsigned start = control.selectionStart();
-  unsigned end = control.selectionEnd();
-  if (start > end) {
-    std::swap(start, end);
+}
+
+std::string DispatchKeyboardInputEventViaBlinkForStandaloneRenderer(
+    LocalFrame& frame,
+    const StandaloneKeyboardInputEventForRenderer& pending) {
+  const int key_code = StandaloneWindowsKeyCodeForKeyboardInputKey(pending.key);
+  if (!key_code) {
+    return "key_unknown";
   }
-  const String original = control.InnerEditorValue();
-  start = std::min<unsigned>(start, original.length());
-  end = std::min<unsigned>(end, original.length());
-  if (delete_backward && start == end && start > 0) {
-    --start;
-  } else if (delete_forward && start == end && end < original.length()) {
-    ++end;
-  }
-  if (replacement.empty() && start == end) {
-    return false;
+  WebInputEvent::Type event_type = WebInputEvent::Type::kUndefined;
+  if (pending.type == 2) {
+    event_type = WebInputEvent::Type::kRawKeyDown;
+  } else if (pending.type == 3) {
+    event_type = WebInputEvent::Type::kKeyUp;
+  } else {
+    return "key_type_ignored";
   }
 
-  StringBuilder edited;
-  edited.Append(StringView(original, 0, start));
-  edited.Append(replacement);
-  edited.Append(StringView(original, end));
-  const unsigned caret = start + replacement.length();
-
-  control.SetValueBeforeFirstUserEditIfNotSet();
-  control.SetValue(edited.ToString(), TextFieldEventBehavior::kDispatchInputEvent,
-                   TextControlSetValueSelection::kDoNotSet);
-  control.SetSelectionRange(caret, caret);
-  return true;
+  WebKeyboardEvent event(event_type, pending.modifiers, base::TimeTicks::Now());
+  event.windows_key_code = key_code;
+  event.native_key_code = key_code;
+  event.dom_key = StandaloneDomKeyForKeyboardInputKey(pending.key);
+  const WebInputEventResult result = frame.GetEventHandler().KeyEvent(event);
+  return std::string("key_") + WebInputEventResultForStandaloneRenderer(result);
 }
 
 void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
@@ -10037,31 +10047,13 @@ void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
           text, nullptr, kTextEventInputKeyboard);
       TraceLiveFrameProbeStage("after blink text input dispatch");
       last_result = handled ? "text_handled" : "text_not_handled";
-    } else if (pending.type == 2) {
-      TextControlElement* control =
-          FocusedTextControlForStandaloneRenderer(document);
-      if (control) {
-        if (pending.key == 8) {
-          handled = ApplyStandaloneTextControlEditForStandaloneRenderer(
-              *control, g_empty_string, /*delete_backward=*/true,
-              /*delete_forward=*/false);
-          last_result = handled ? "backspace_handled" : "backspace_not_handled";
-        } else if (pending.key == 46) {
-          handled = ApplyStandaloneTextControlEditForStandaloneRenderer(
-              *control, g_empty_string, /*delete_backward=*/false,
-              /*delete_forward=*/true);
-          last_result = handled ? "delete_handled" : "delete_not_handled";
-        } else if (pending.key == 13) {
-          handled = ApplyStandaloneTextControlEditForStandaloneRenderer(
-              *control, String("\n"), /*delete_backward=*/false,
-              /*delete_forward=*/false);
-          last_result = handled ? "enter_handled" : "enter_not_handled";
-        } else {
-          last_result = "key_ignored";
-        }
-      } else {
-        last_result = "focused_text_control_missing";
-      }
+    } else if (pending.type == 2 || pending.type == 3) {
+      TraceLiveFrameProbeStage("before blink keyboard dispatch");
+      last_result =
+          DispatchKeyboardInputEventViaBlinkForStandaloneRenderer(*frame,
+                                                                  pending);
+      TraceLiveFrameProbeStage("after blink keyboard dispatch");
+      handled = true;
     } else {
       last_result = "event_ignored";
     }
@@ -10075,7 +10067,7 @@ void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
     PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(document);
   }
   cache.keyboard_input_status =
-      std::string("dispatched_via_blink_text_input:") + last_result;
+      std::string("dispatched_via_blink_event_handler:") + last_result;
 }
 
 void ApplyAnimationTimeForStandaloneRenderer(Document& document) {
@@ -11287,6 +11279,13 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << (cache.mouse_input_events_dispatched ? "true" : "false")
        << ",\"status\":"
        << JsonStringForStandaloneRenderer(cache.mouse_input_status) << "}"
+       << ",\"keyboard_input_events\":{\"requested_count\":"
+       << cache.requested_keyboard_input_events.size()
+       << ",\"dispatched_count\":" << cache.keyboard_input_event_dispatch_count
+       << ",\"dispatched_via_blink_event_handler\":"
+       << (cache.keyboard_input_events_dispatched ? "true" : "false")
+       << ",\"status\":"
+       << JsonStringForStandaloneRenderer(cache.keyboard_input_status) << "}"
        << ",\"pointer_interaction\":{\"requested\":"
        << (cache.requested_pointer_state ? "true" : "false")
        << ",\"pressed\":"

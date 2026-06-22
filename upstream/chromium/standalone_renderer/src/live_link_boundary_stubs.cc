@@ -7268,6 +7268,31 @@ bool EventHandlerRegistry::HasEventHandlers(EventHandlerClass) const {
   return false;
 }
 
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+namespace {
+
+int& StandaloneCurrentKeyboardEventKeyCodeForEditor() {
+  static thread_local int key_code = 0;
+  return key_code;
+}
+
+class StandaloneScopedKeyboardEventKeyCodeForEditor {
+ public:
+  explicit StandaloneScopedKeyboardEventKeyCodeForEditor(int key_code)
+      : previous_(StandaloneCurrentKeyboardEventKeyCodeForEditor()) {
+    StandaloneCurrentKeyboardEventKeyCodeForEditor() = key_code;
+  }
+  ~StandaloneScopedKeyboardEventKeyCodeForEditor() {
+    StandaloneCurrentKeyboardEventKeyCodeForEditor() = previous_;
+  }
+
+ private:
+  int previous_;
+};
+
+}  // namespace
+#endif
+
 KeyboardEventManager::KeyboardEventManager(LocalFrame& frame,
                                            ScrollManager& scroll_manager)
     : frame_(&frame), scroll_manager_(&scroll_manager) {}
@@ -7279,10 +7304,48 @@ void KeyboardEventManager::Trace(Visitor* visitor) const {
 bool KeyboardEventManager::HandleAccessKey(const WebKeyboardEvent&) {
   return false;
 }
-WebInputEventResult KeyboardEventManager::KeyEvent(const WebKeyboardEvent&) {
-  return WebInputEventResult::kNotHandled;
+WebInputEventResult KeyboardEventManager::KeyEvent(
+    const WebKeyboardEvent& key_event) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  StandaloneScopedKeyboardEventKeyCodeForEditor standalone_key_code_scope(
+      key_event.windows_key_code);
+#endif
+  if (!frame_ || !frame_->GetDocument() || !frame_->GetDocument()->domWindow()) {
+    return WebInputEventResult::kNotHandled;
+  }
+
+  Node* node = nullptr;
+  if (Element* focused = frame_->GetDocument()->FocusedElement()) {
+    node = focused;
+  } else if (frame_->GetDocument()->body()) {
+    node = frame_->GetDocument()->body();
+  } else {
+    node = frame_->GetDocument()->documentElement();
+  }
+  if (!node) {
+    return WebInputEventResult::kNotHandled;
+  }
+
+  KeyboardEvent* event =
+      KeyboardEvent::Create(key_event, frame_->GetDocument()->domWindow());
+  event->SetTarget(node);
+  const DispatchEventResult dispatch_result = node->DispatchEvent(*event);
+  if (dispatch_result == DispatchEventResult::kNotCanceled &&
+      !event->DefaultHandled()) {
+    DefaultKeyboardEventHandler(event, node);
+  }
+  return event->DefaultHandled() ||
+                 dispatch_result != DispatchEventResult::kNotCanceled
+             ? WebInputEventResult::kHandledSystem
+             : WebInputEventResult::kNotHandled;
 }
-void KeyboardEventManager::DefaultKeyboardEventHandler(KeyboardEvent*, Node*) {}
+void KeyboardEventManager::DefaultKeyboardEventHandler(KeyboardEvent* event,
+                                                      Node*) {
+  if (!event || !frame_) {
+    return;
+  }
+  frame_->GetEditor().HandleKeyboardEvent(event);
+}
 void KeyboardEventManager::CapsLockStateMayHaveChanged() {}
 WebInputEvent::Modifiers KeyboardEventManager::GetCurrentModifierState() {
   return WebInputEvent::kNoModifiers;
@@ -9618,21 +9681,79 @@ bool Editor::CanEdit() const {
   return false;
 #endif
 }
+
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+namespace {
+
+TextControlElement* StandaloneTextControlFromEditingEvent(LocalFrame* frame,
+                                                          Event* event) {
+  if (!frame || !frame->GetDocument()) {
+    return nullptr;
+  }
+  if (event && event->RawTarget()) {
+    if (Node* node = event->RawTarget()->ToNode()) {
+      if (auto* control = DynamicTo<TextControlElement>(node)) {
+        return control;
+      }
+      if (node->IsInShadowTree()) {
+        if (auto* control =
+                DynamicTo<TextControlElement>(node->OwnerShadowHost())) {
+          return control;
+        }
+      }
+    }
+  }
+  return DynamicTo<TextControlElement>(frame->GetDocument()->FocusedElement());
+}
+
+bool StandaloneApplyTextControlEditFromEditor(TextControlElement& control,
+                                              const String& replacement,
+                                              bool delete_backward,
+                                              bool delete_forward) {
+  if (control.IsDisabledOrReadOnly()) {
+    return false;
+  }
+  unsigned start = control.selectionStart();
+  unsigned end = control.selectionEnd();
+  if (start > end) {
+    std::swap(start, end);
+  }
+  const String original = control.InnerEditorValue();
+  start = std::min<unsigned>(start, original.length());
+  end = std::min<unsigned>(end, original.length());
+  if (delete_backward && start == end && start > 0) {
+    --start;
+  } else if (delete_forward && start == end && end < original.length()) {
+    ++end;
+  }
+  if (replacement.empty() && start == end) {
+    return false;
+  }
+
+  StringBuilder edited;
+  edited.Append(StringView(original, 0, start));
+  edited.Append(replacement);
+  edited.Append(StringView(original, end));
+  const unsigned caret = start + replacement.length();
+
+  control.SetValueBeforeFirstUserEditIfNotSet();
+  control.SetValue(edited.ToString(),
+                   TextFieldEventBehavior::kDispatchInputEvent,
+                   TextControlSetValueSelection::kDoNotSet);
+  control.SetSelectionRange(caret, caret);
+  return true;
+}
+
+}  // namespace
+#endif
+
 bool Editor::HandleTextEvent(TextEvent* event) {
 #if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
   if (!frame_ || !frame_->GetDocument() || !event) {
     return false;
   }
-  TextControlElement* control = nullptr;
-  if (EventTarget* target = event->RawTarget()) {
-    if (Node* node = target->ToNode()) {
-      control = DynamicTo<TextControlElement>(node);
-    }
-  }
-  if (!control) {
-    control =
-        DynamicTo<TextControlElement>(frame_->GetDocument()->FocusedElement());
-  }
+  TextControlElement* control =
+      StandaloneTextControlFromEditingEvent(frame_.Get(), event);
   if (!control || control->IsDisabledOrReadOnly() || event->IsDrop() ||
       event->IsPaste() || event->IsIncrementalInsertion()) {
     return false;
@@ -9642,32 +9763,68 @@ bool Editor::HandleTextEvent(TextEvent* event) {
   if (data.empty()) {
     return false;
   }
-  unsigned start = control->selectionStart();
-  unsigned end = control->selectionEnd();
-  if (start > end) {
-    std::swap(start, end);
-  }
-  const String original = control->InnerEditorValue();
-  start = std::min<unsigned>(start, original.length());
-  end = std::min<unsigned>(end, original.length());
-
-  StringBuilder edited;
-  edited.Append(StringView(original, 0, start));
-  edited.Append(data);
-  edited.Append(StringView(original, end));
-  const unsigned caret = start + data.length();
-
-  control->SetValueBeforeFirstUserEditIfNotSet();
-  control->SetValue(edited.ToString(),
-                    TextFieldEventBehavior::kDispatchInputEvent,
-                    TextControlSetValueSelection::kDoNotSet);
-  control->SetSelectionRange(caret, caret);
-  return true;
+  return StandaloneApplyTextControlEditFromEditor(
+      *control, data, /*delete_backward=*/false, /*delete_forward=*/false);
 #else
   return false;
 #endif
 }
-void Editor::HandleKeyboardEvent(KeyboardEvent*) {}
+void Editor::HandleKeyboardEvent(KeyboardEvent* event) {
+#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
+  if (!event) {
+    return;
+  }
+  const WebKeyboardEvent* key_event = event->KeyEvent();
+  const bool is_editing_key_event =
+      event->type() == event_type_names::kKeydown ||
+      event->type() == event_type_names::kKeypress ||
+      (key_event &&
+       (key_event->GetType() == WebInputEvent::Type::kRawKeyDown ||
+        key_event->GetType() == WebInputEvent::Type::kKeyDown ||
+        key_event->GetType() == WebInputEvent::Type::kChar));
+  if (!is_editing_key_event) {
+    return;
+  }
+  TextControlElement* control =
+      StandaloneTextControlFromEditingEvent(frame_.Get(), event);
+  if (!control || control->IsDisabledOrReadOnly()) {
+    return;
+  }
+
+  bool handled = false;
+  int key_code = event->keyCode();
+  if (!key_code && key_event) {
+    key_code = key_event->windows_key_code;
+  }
+  if (!key_code) {
+    key_code = StandaloneCurrentKeyboardEventKeyCodeForEditor();
+  }
+  switch (key_code) {
+    case 8:
+      handled = StandaloneApplyTextControlEditFromEditor(
+          *control, g_empty_string, /*delete_backward=*/true,
+          /*delete_forward=*/false);
+      break;
+    case 46:
+      handled = StandaloneApplyTextControlEditFromEditor(
+          *control, g_empty_string, /*delete_backward=*/false,
+          /*delete_forward=*/true);
+      break;
+    case 13:
+      if (IsA<HTMLTextAreaElement>(*control)) {
+        handled = StandaloneApplyTextControlEditFromEditor(
+            *control, String("\n"), /*delete_backward=*/false,
+            /*delete_forward=*/false);
+      }
+      break;
+    default:
+      break;
+  }
+  if (handled) {
+    event->SetDefaultHandled();
+  }
+#endif
+}
 void Editor::SetBaseWritingDirection(mojo_base::mojom::TextDirection) {}
 FrameConsole::FrameConsole(LocalFrame& frame) : frame_(&frame) {}
 BrowserInterfaceBrokerProxyImpl::BrowserInterfaceBrokerProxyImpl(
