@@ -23,7 +23,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "clang-cl",
-        "CMAKE_CXX_COMPILER": "clang-cl"
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/vcpkg_manifest.cmake"
       }
     },
     {
@@ -43,7 +44,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "clang-cl",
-        "CMAKE_CXX_COMPILER": "clang-cl"
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/vcpkg_manifest.cmake"
       }
     },
     {
@@ -64,12 +66,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "clang-cl",
         "CMAKE_CXX_COMPILER": "clang-cl",
-        "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "Iconv_INCLUDE_DIR": "C:/vcpkg/installed/x64-windows-static/include",
-        "Iconv_LIBRARY": "C:/vcpkg/installed/x64-windows-static/lib/iconv.lib",
-        "ZLIB_DIR": "C:/vcpkg/installed/x64-windows-static/share/zlib",
-        "libxml2_DIR": "C:/vcpkg/installed/x64-windows-static/share/libxml2",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/vcpkg_manifest.cmake",
         "BLINK_STANDALONE_PERF_BUILD": "ON",
         "BLINK_STANDALONE_BUILD_SDL_VIEWER": "OFF",
         "BLINK_STANDALONE_FETCH_SDL3": "OFF"

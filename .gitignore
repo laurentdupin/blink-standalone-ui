@@ -4,6 +4,7 @@
 /cmake-build-*/
 /dist/
 /npm-cache/
+/vcpkg_installed/
 /.vs/
 /.vscode/
 

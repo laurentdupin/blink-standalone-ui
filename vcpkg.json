@@ -1,0 +1,9 @@
+{
+  "name": "blink-standalone-ui",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "libiconv",
+    "libxml2",
+    "zlib"
+  ]
+}
