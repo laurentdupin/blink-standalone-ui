@@ -97,8 +97,19 @@ For a fresh clone, use the generated-V8 preset sequence:
 git submodule update --init --recursive
 cmake --preset x64-Release-GeneratedV8
 cmake --build --preset x64-Release-GeneratedV8-v8-compat
-cmake --build --preset x64-Release-GeneratedV8-sdl-viewer
+cmake --preset x64-Release-GeneratedV8-ChromiumLLVM
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer
 ```
+
+This is intentionally a two-stage flow. The first configure/build uses the
+bootstrap ClangCL toolchain to sync dependencies and build the generated
+`v8_monolith.lib`, Chromium libc++ objects, and Chromium LLVM checkout under
+`build/cmake-generated-v8-release/v8_compat`. The second configure preset points
+the renderer at that generated Chromium LLVM `clang-cl.exe` / `lld-link.exe` and
+sets `BLINK_STANDALONE_V8_COMPAT_ACTION=plan` so the renderer build consumes
+the existing generated V8 output instead of syncing or rebuilding V8 again. The
+Chromium LLVM preset cannot configure from a fresh clone until the first stage
+has produced the generated toolchain and V8 output.
 
 The equivalent manual configuration shape is:
 
@@ -112,7 +123,17 @@ cmake -S . -B build\cmake-generated-v8-release -G Ninja `
   -DBLINK_STANDALONE_V8_SYNC_DEPS=ON `
   -DBLINK_STANDALONE_V8_COMPAT_JOBS=8
 ninja -C build\cmake-generated-v8-release -j8 blink_standalone_v8_compat
-ninja -C build\cmake-generated-v8-release -j8 blink_standalone_sdl_viewer_skia
+
+cmake -S . -B build\cmake-generated-v8-chromium-llvm -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_C_COMPILER=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat/src/v8/third_party/llvm-build/Release+Asserts/bin/clang-cl.exe `
+  -DCMAKE_CXX_COMPILER=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat/src/v8/third_party/llvm-build/Release+Asserts/bin/clang-cl.exe `
+  -DCMAKE_LINKER=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat/src/v8/third_party/llvm-build/Release+Asserts/bin/lld-link.exe `
+  -DCMAKE_TOOLCHAIN_FILE=C:/Repos/blink-standalone-ui/cmake/toolchains/vcpkg_manifest.cmake `
+  -DBLINK_STANDALONE_V8_COMPAT_WORK_ROOT=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat `
+  -DBLINK_STANDALONE_V8_COMPAT_OUT_DIR=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat/src/v8/out/chromium_static `
+  -DBLINK_STANDALONE_V8_COMPAT_ACTION=plan
+ninja -C build\cmake-generated-v8-chromium-llvm -j8 blink_standalone_sdl_viewer_skia
 ```
 
 Generated V8 work copies, depot_tools runtime checkouts, CIPD payloads,
@@ -172,9 +193,12 @@ colliding with tracked Chromium snapshot paths.
 V8/GN/depot_tools resolve clang; set it explicitly only when a known Chromium
 clang checkout should be forced.
 
-The latest generated-V8 renderer proof build used Visual Studio LLVM
-`clang-cl`. The generated V8 libc++ headers warned that they expect a newer
-Chromium Clang. That warning is a toolchain-alignment follow-up; it does not
+The generated-V8 renderer proof build has also been validated with the Chromium
+LLVM toolchain fetched by the generated V8 dependency checkout. That build
+removed the generated V8 libc++ Clang-version warning, linked the SDL viewer,
+and passed a screenshot smoke test. Visual Studio LLVM remains useful as the
+bootstrap/compiler fallback for producing the generated V8 compatibility output,
+but the Chromium LLVM preset is the cleaner renderer proof path. This does not
 change the no-public-JavaScript product direction.
 
 The renderer link consumes `BLINK_STANDALONE_V8_MONOLITH_LIB` and the Chromium

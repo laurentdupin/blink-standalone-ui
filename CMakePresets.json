@@ -74,6 +74,32 @@
       }
     },
     {
+      "name": "x64-Release-GeneratedV8-ChromiumLLVM",
+      "displayName": "x64 Release renderer with generated Chromium LLVM",
+      "description": "Consumes the generated V8 compatibility output and Chromium LLVM toolchain produced by x64-Release-GeneratedV8-v8-compat.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cmake-generated-v8-chromium-llvm",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "ClangCL",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "${sourceDir}/build/cmake-generated-v8-release/v8_compat/src/v8/third_party/llvm-build/Release+Asserts/bin/clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "${sourceDir}/build/cmake-generated-v8-release/v8_compat/src/v8/third_party/llvm-build/Release+Asserts/bin/clang-cl.exe",
+        "CMAKE_LINKER": "${sourceDir}/build/cmake-generated-v8-release/v8_compat/src/v8/third_party/llvm-build/Release+Asserts/bin/lld-link.exe",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/vcpkg_manifest.cmake",
+        "BLINK_STANDALONE_V8_COMPAT_WORK_ROOT": "${sourceDir}/build/cmake-generated-v8-release/v8_compat",
+        "BLINK_STANDALONE_V8_COMPAT_OUT_DIR": "${sourceDir}/build/cmake-generated-v8-release/v8_compat/src/v8/out/chromium_static",
+        "BLINK_STANDALONE_V8_COMPAT_ACTION": "plan"
+      }
+    },
+    {
       "name": "x64-Perf",
       "displayName": "x64 Perf Benchmark (clang-cl)",
       "generator": "Ninja",
@@ -120,6 +146,24 @@
       "name": "x64-Release-GeneratedV8-sdl-viewer",
       "displayName": "Build SDL viewer with generated V8 compatibility output",
       "configurePreset": "x64-Release-GeneratedV8",
+      "targets": [
+        "blink_standalone_sdl_viewer_skia"
+      ],
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-GeneratedV8-ChromiumLLVM-v8-validate",
+      "displayName": "Validate generated V8 compatibility output for Chromium LLVM renderer build",
+      "configurePreset": "x64-Release-GeneratedV8-ChromiumLLVM",
+      "targets": [
+        "blink_standalone_v8_compat_validate"
+      ],
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer",
+      "displayName": "Build SDL viewer with generated Chromium LLVM",
+      "configurePreset": "x64-Release-GeneratedV8-ChromiumLLVM",
       "targets": [
         "blink_standalone_sdl_viewer_skia"
       ],

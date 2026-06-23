@@ -57,13 +57,16 @@ monolith and expected libc++ objects before link, and waits for
 ## Build
 
 From a fresh clone with vcpkg installed, build the generated V8/CppGC
-compatibility output first, then build the renderer:
+compatibility output first with the bootstrap ClangCL compiler, then configure a
+renderer build that uses the Chromium LLVM toolchain fetched by that generated
+V8 stage:
 
 ```powershell
 git submodule update --init --recursive
 cmake --preset x64-Release-GeneratedV8
 cmake --build --preset x64-Release-GeneratedV8-v8-compat
-cmake --build --preset x64-Release-GeneratedV8-sdl-viewer
+cmake --preset x64-Release-GeneratedV8-ChromiumLLVM
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer
 ```
 
 The generated V8 work copy, generated depot_tools runtime checkout, CIPD
@@ -71,18 +74,18 @@ payloads, LLVM/toolchain downloads, `v8_monolith.lib`, libc++ objects, SDL
 FetchContent output, and renderer build products stay under `build/` and are
 ignored by Git. The default `x64-Release` preset does not enable V8 dependency
 sync; use the `x64-Release-GeneratedV8` preset only when you intend to run the
-source-built V8 compatibility flow.
+source-built V8 compatibility flow. The
+`x64-Release-GeneratedV8-ChromiumLLVM` preset consumes the generated V8 output
+and Chromium LLVM toolchain from that first stage; it is not expected to
+configure successfully until `x64-Release-GeneratedV8-v8-compat` has produced
+them.
 
 The build has a single renderer path: the live Blink path. On Windows this
-requires the Visual Studio Clang toolset. Visual Studio should pick up the
-checked-in `CMakePresets.json` or legacy `CMakeSettings.json` configurations;
-use `x64-Debug` or `x64-Release`. If configuring manually without presets, use
-a ClangCL environment/toolset.
-
-The latest generated-V8 proof build used Visual Studio LLVM `clang-cl` for the
-renderer. The generated V8 libc++ headers currently warn that they expect a
-newer Chromium Clang; that is a toolchain-alignment follow-up, not a public
-JavaScript feature.
+uses ClangCL. Visual Studio LLVM remains a bootstrap/compiler fallback for
+generating the V8 compatibility output. The validated renderer proof build uses
+the generated Chromium LLVM `clang-cl` / `lld-link`, which removes the generated
+V8 libc++ Clang-version warning and smoke-tested successfully. This remains an
+internal Blink/Oilpan runtime dependency, not a public JavaScript feature.
 
 All build products and fetched SDL sources live under `build/`, which is
 generated-only and ignored by Git.
