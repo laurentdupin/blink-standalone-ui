@@ -1,0 +1,61 @@
+set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_NAMES
+  algorithm.obj
+  any.obj
+  atomic.obj
+  barrier.obj
+  bind.obj
+  call_once.obj
+  charconv.obj
+  chrono.obj
+  condition_variable.obj
+  condition_variable_destructor.obj
+  d2fixed.obj
+  d2s.obj
+  directory_iterator.obj
+  error_category.obj
+  exception.obj
+  f2s.obj
+  filesystem_clock.obj
+  filesystem_error.obj
+  functional.obj
+  future.obj
+  hash.obj
+  ios.instantiations.obj
+  ios.obj
+  iostream.obj
+  locale.obj
+  locale_win32.obj
+  memory.obj
+  mutex.obj
+  mutex_destructor.obj
+  new.obj
+  new_handler.obj
+  new_helpers.obj
+  operations.obj
+  optional.obj
+  path.obj
+  random.obj
+  random_shuffle.obj
+  regex.obj
+  shared_mutex.obj
+  stdexcept.obj
+  string.obj
+  strstream.obj
+  support.obj
+  system_error.obj
+  thread.obj
+  thread_win32.obj
+  typeinfo.obj
+  valarray.obj
+  variant.obj
+  vector.obj
+  verbose_abort.obj
+)
+
+function(blink_standalone_resolve_libcxx_objects out_var object_dir)
+  set(resolved)
+  foreach(object_name IN LISTS BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_NAMES)
+    list(APPEND resolved "${object_dir}/${object_name}")
+  endforeach()
+  set(${out_var} ${resolved} PARENT_SCOPE)
+endfunction()

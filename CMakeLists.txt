@@ -4,6 +4,8 @@ project(blink_standalone_ui LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FetchContent)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include(cmake/v8_compat_libcxx_objects.cmake)
 option(BLINK_STANDALONE_BUILD_SDL_VIEWER
   "Build the optional SDL3 viewer executables." ON)
 option(BLINK_STANDALONE_FETCH_SDL3
@@ -20,6 +22,10 @@ option(BLINK_STANDALONE_OPTIMIZE_APP
   "Compile standalone benchmark/presenter application sources with release optimization." ON)
 option(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT
   "Require the prebuilt V8/CppGC compatibility library. Disable only after adding a buildable in-repo V8/CppGC target." ON)
+option(BLINK_STANDALONE_V8_SYNC_DEPS
+  "Allow the V8 compatibility wrapper to run gclient sync in its generated work root." OFF)
+option(BLINK_STANDALONE_V8_COMPAT_BUILD
+  "Make blink_standalone_v8_compat run gn/ninja instead of only printing the build plan." OFF)
 
 if(MSVC)
   # The V8 monolith is built with Chromium's clang-cl /MT configuration. Keep
@@ -32,6 +38,50 @@ set(BLINK_STANDALONE_CHROMIUM_ROOT
 )
 set(BLINK_STANDALONE_RENDERER_ROOT
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer
+)
+set(BLINK_STANDALONE_V8_SOURCE_ROOT
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8
+  CACHE PATH
+  "Pinned V8 source checkout used to create the generated V8/CppGC compatibility build."
+)
+set(BLINK_STANDALONE_V8_COMPAT_WORK_ROOT
+  ${CMAKE_BINARY_DIR}/v8_compat
+  CACHE PATH
+  "Generated work root for the V8/CppGC compatibility build. gclient sync, if enabled, runs only here."
+)
+set(BLINK_STANDALONE_V8_COMPAT_OUT_NAME
+  chromium_static
+  CACHE STRING
+  "GN output directory name for the generated V8/CppGC compatibility build."
+)
+set(BLINK_STANDALONE_V8_COMPAT_OUT_DIR
+  ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8/out/${BLINK_STANDALONE_V8_COMPAT_OUT_NAME}
+  CACHE PATH
+  "GN output directory for the generated V8/CppGC compatibility build."
+)
+find_program(BLINK_STANDALONE_V8_GN_EXECUTABLE
+  NAMES gn
+  DOC "GN executable for the optional V8/CppGC compatibility build target."
+)
+set(BLINK_STANDALONE_V8_NINJA_EXECUTABLE
+  ${CMAKE_MAKE_PROGRAM}
+  CACHE FILEPATH
+  "Ninja executable for the optional V8/CppGC compatibility build target."
+)
+set(_blink_standalone_default_v8_clang_base_path "")
+if(CMAKE_CXX_COMPILER)
+  get_filename_component(_blink_standalone_compiler_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  get_filename_component(_blink_standalone_default_v8_clang_base_path "${_blink_standalone_compiler_dir}" DIRECTORY)
+endif()
+set(BLINK_STANDALONE_V8_CLANG_BASE_PATH
+  ${_blink_standalone_default_v8_clang_base_path}
+  CACHE PATH
+  "Chromium clang base path passed to the optional V8/CppGC compatibility GN build. Leave empty to let GN resolve clang."
+)
+set(BLINK_STANDALONE_V8_COMPAT_JOBS
+  ""
+  CACHE STRING
+  "Optional -j value for the V8/CppGC compatibility ninja build."
 )
 set(BLINK_STANDALONE_V8_BUILD_ROOT
   ${CMAKE_CURRENT_SOURCE_DIR}/build/v8_mono2/v8
@@ -82,6 +132,46 @@ set(BLINK_STANDALONE_V8_ABI_DEFINES
   CPPGC_SLIM_WRITE_BARRIER
 )
 
+set(_blink_standalone_v8_compat_command
+  ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/build_v8_monolith.py
+  --source-v8-root ${BLINK_STANDALONE_V8_SOURCE_ROOT}
+  --work-root ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}
+  --out-name ${BLINK_STANDALONE_V8_COMPAT_OUT_NAME}
+  --out-dir ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}
+  --ninja ${BLINK_STANDALONE_V8_NINJA_EXECUTABLE}
+)
+if(BLINK_STANDALONE_V8_GN_EXECUTABLE)
+  list(APPEND _blink_standalone_v8_compat_command
+    --gn ${BLINK_STANDALONE_V8_GN_EXECUTABLE}
+  )
+endif()
+if(BLINK_STANDALONE_V8_CLANG_BASE_PATH)
+  list(APPEND _blink_standalone_v8_compat_command
+    --clang-base-path ${BLINK_STANDALONE_V8_CLANG_BASE_PATH}
+  )
+endif()
+if(BLINK_STANDALONE_V8_COMPAT_JOBS)
+  list(APPEND _blink_standalone_v8_compat_command
+    --jobs ${BLINK_STANDALONE_V8_COMPAT_JOBS}
+  )
+endif()
+if(BLINK_STANDALONE_V8_SYNC_DEPS)
+  list(APPEND _blink_standalone_v8_compat_command --sync-deps)
+else()
+  list(APPEND _blink_standalone_v8_compat_command --no-sync-deps)
+endif()
+if(BLINK_STANDALONE_V8_COMPAT_BUILD)
+  list(APPEND _blink_standalone_v8_compat_command --build)
+else()
+  list(APPEND _blink_standalone_v8_compat_command --print-plan)
+endif()
+add_custom_target(blink_standalone_v8_compat
+  COMMAND ${_blink_standalone_v8_compat_command}
+  USES_TERMINAL
+  COMMENT "V8/CppGC compatibility build wrapper"
+)
+
 if(MSVC)
   if(NOT BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT)
     message(FATAL_ERROR
@@ -103,13 +193,21 @@ if(MSVC)
       INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
     )
   endif()
-file(GLOB BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
-    "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}/*.obj"
+  blink_standalone_resolve_libcxx_objects(
+    BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
+    "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}"
   )
+  set(_blink_standalone_missing_libcxx_objects)
+  foreach(_blink_standalone_libcxx_object IN LISTS BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS)
+    if(NOT EXISTS "${_blink_standalone_libcxx_object}")
+      list(APPEND _blink_standalone_missing_libcxx_objects "${_blink_standalone_libcxx_object}")
+    endif()
+  endforeach()
   if(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT AND
-     NOT BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS)
+     _blink_standalone_missing_libcxx_objects)
     message(FATAL_ERROR
       "Chromium libc++ objects are missing: ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}\n"
+      "Missing objects: ${_blink_standalone_missing_libcxx_objects}\n"
       "These objects currently come from the same GN-built V8 compatibility tree as v8_monolith.lib. "
       "Make libc++ a CMake-owned target before disabling BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT.")
   endif()

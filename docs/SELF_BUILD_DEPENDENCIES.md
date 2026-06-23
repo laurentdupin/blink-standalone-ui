@@ -61,6 +61,52 @@ tree is still not acceptable as the final self-build story because the
 ignored by Git. The next build-system step is to make CMake invoke or depend on
 the pinned V8 GN build instead of assuming this scratch tree already exists.
 
+## V8 Compatibility Build Wrapper
+
+The repository has a source-controlled wrapper for the V8 compatibility build:
+
+```powershell
+cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_v8_compat
+```
+
+In the default configuration this target runs
+`tools/v8/build_v8_monolith.py --print-plan` only. It reports the pinned V8
+submodule revision, generated work root, GN output directory, and reduced GN
+arguments without cloning, syncing, or compiling V8.
+
+Relevant CMake cache variables:
+
+- `BLINK_STANDALONE_V8_SOURCE_ROOT`, default
+  `upstream/chromium/v8`
+- `BLINK_STANDALONE_V8_COMPAT_WORK_ROOT`, default
+  `${CMAKE_BINARY_DIR}/v8_compat`
+- `BLINK_STANDALONE_V8_COMPAT_OUT_NAME`, default `chromium_static`
+- `BLINK_STANDALONE_V8_COMPAT_OUT_DIR`, default under the generated V8 work
+  copy
+- `BLINK_STANDALONE_V8_GN_EXECUTABLE`
+- `BLINK_STANDALONE_V8_NINJA_EXECUTABLE`
+- `BLINK_STANDALONE_V8_CLANG_BASE_PATH`
+- `BLINK_STANDALONE_V8_SYNC_DEPS`, default `OFF`
+- `BLINK_STANDALONE_V8_COMPAT_BUILD`, default `OFF`
+
+When `BLINK_STANDALONE_V8_COMPAT_BUILD=ON`, the wrapper clones or updates a
+generated V8 work copy under `${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8`
+from the pinned submodule, writes a generated `.gclient` under that work root,
+optionally runs `gclient sync` if `BLINK_STANDALONE_V8_SYNC_DEPS=ON`, runs
+`gn gen`, and builds `v8_monolith` with Ninja. `gclient` must not run inside
+`upstream/chromium`; the generated work root exists specifically to avoid
+colliding with tracked Chromium snapshot paths.
+
+The current renderer link still consumes `BLINK_STANDALONE_V8_MONOLITH_LIB` and
+the Chromium libc++ object files from `BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR`.
+Those libc++ object filenames are now source-controlled in
+`cmake/v8_compat_libcxx_objects.cmake` so the next step can point the link at
+the generated compatibility output without relying on a configure-time glob.
+
+`depot_tools` is not vendored yet. If a future slice decides to vendor it, use
+`tools/depot_tools` pinned to a declared revision and keep CIPD payloads
+generated-only.
+
 ## Why V8 Cannot Be Stubbed Out Safely Yet
 
 The no-V8 link probe shows that `v8_monolith.lib` is not only satisfying public

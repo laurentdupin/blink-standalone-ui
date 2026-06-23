@@ -30,6 +30,20 @@ public JavaScript feature. The paths are explicit CMake cache variables:
 See `docs/SELF_BUILD_DEPENDENCIES.md` for the remaining work to replace this
 compatibility tree with self-built source targets.
 
+The repository now includes a source-controlled wrapper target for the V8
+compatibility build. By default it only prints the generated work-root plan and
+does not download dependencies or compile V8:
+
+```powershell
+cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_v8_compat
+```
+
+Configure with `BLINK_STANDALONE_V8_COMPAT_BUILD=ON` and, when needed,
+`BLINK_STANDALONE_V8_SYNC_DEPS=ON` to let that target prepare a generated V8
+work tree under the CMake binary directory and run GN/Ninja. The normal renderer
+link still uses `BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated output
+is proven and selected as the default.
+
 ## Build
 
 From a fresh clone with vcpkg installed and the temporary V8/CppGC
