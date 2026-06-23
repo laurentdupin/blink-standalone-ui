@@ -34,6 +34,21 @@ typedef enum hcsr_pixel_format {
   HCSR_PIXEL_FORMAT_BGRA8 = 2,
 } hcsr_pixel_format_t;
 
+typedef enum hcsr_mouse_button {
+  HCSR_MOUSE_BUTTON_NONE = 0,
+  HCSR_MOUSE_BUTTON_LEFT = 1,
+  HCSR_MOUSE_BUTTON_MIDDLE = 2,
+  HCSR_MOUSE_BUTTON_RIGHT = 3,
+} hcsr_mouse_button_t;
+
+typedef enum hcsr_key {
+  HCSR_KEY_UNKNOWN = 0,
+  HCSR_KEY_BACKSPACE = 8,
+  HCSR_KEY_TAB = 9,
+  HCSR_KEY_ENTER = 13,
+  HCSR_KEY_DELETE = 46,
+} hcsr_key_t;
+
 typedef struct hcsr_rect {
   float x;
   float y;
@@ -90,6 +105,45 @@ HCSR_C_API hcsr_status_code_t hcsr_renderer_advance_frame(
     hcsr_renderer_t* renderer,
     double timeline_time_seconds);
 
+HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_move(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    int modifiers);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_down(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    hcsr_mouse_button_t button,
+    int modifiers,
+    int click_count);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_up(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    hcsr_mouse_button_t button,
+    int modifiers,
+    int click_count);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_wheel(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    float delta_x,
+    float delta_y);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_key_down(
+    hcsr_renderer_t* renderer,
+    hcsr_key_t key,
+    int modifiers);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_key_up(
+    hcsr_renderer_t* renderer,
+    hcsr_key_t key,
+    int modifiers);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_text_input(
+    hcsr_renderer_t* renderer,
+    const char* utf8_text);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_reset_state(
+    hcsr_renderer_t* renderer);
+
 HCSR_C_API hcsr_status_code_t hcsr_renderer_get_latest_output(
     hcsr_renderer_t* renderer,
     hcsr_frame_output_t* output);
@@ -100,6 +154,11 @@ HCSR_C_API size_t hcsr_renderer_hit_metadata_count(
 HCSR_C_API hcsr_status_code_t hcsr_renderer_get_hit_metadata(
     const hcsr_renderer_t* renderer,
     size_t index,
+    hcsr_hit_metadata_t* hit);
+HCSR_C_API hcsr_status_code_t hcsr_renderer_hit_test(
+    const hcsr_renderer_t* renderer,
+    float x,
+    float y,
     hcsr_hit_metadata_t* hit);
 
 HCSR_C_API const char* hcsr_renderer_last_error(

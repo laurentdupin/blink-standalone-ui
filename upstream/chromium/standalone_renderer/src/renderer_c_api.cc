@@ -8,6 +8,7 @@
 #include <cctype>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -139,6 +140,55 @@ hcsr_pixel_format_t ToCPixelFormat(
   return HCSR_PIXEL_FORMAT_NONE;
 }
 
+html_css_renderer::MouseInputButton ToRuntimeMouseButton(
+    hcsr_mouse_button_t button) {
+  switch (button) {
+    case HCSR_MOUSE_BUTTON_LEFT:
+      return html_css_renderer::MouseInputButton::kLeft;
+    case HCSR_MOUSE_BUTTON_MIDDLE:
+      return html_css_renderer::MouseInputButton::kMiddle;
+    case HCSR_MOUSE_BUTTON_RIGHT:
+      return html_css_renderer::MouseInputButton::kRight;
+    case HCSR_MOUSE_BUTTON_NONE:
+      return html_css_renderer::MouseInputButton::kNone;
+  }
+  return html_css_renderer::MouseInputButton::kNone;
+}
+
+html_css_renderer::KeyboardInputKey ToRuntimeKeyboardKey(hcsr_key_t key) {
+  switch (key) {
+    case HCSR_KEY_BACKSPACE:
+      return html_css_renderer::KeyboardInputKey::kBackspace;
+    case HCSR_KEY_TAB:
+      return html_css_renderer::KeyboardInputKey::kTab;
+    case HCSR_KEY_ENTER:
+      return html_css_renderer::KeyboardInputKey::kEnter;
+    case HCSR_KEY_DELETE:
+      return html_css_renderer::KeyboardInputKey::kDelete;
+    case HCSR_KEY_UNKNOWN:
+      return html_css_renderer::KeyboardInputKey::kUnknown;
+  }
+  return html_css_renderer::KeyboardInputKey::kUnknown;
+}
+
+bool PointInRect(float x, float y, const html_css_renderer::Rect& rect) {
+  return x >= rect.x && y >= rect.y && x < rect.x + rect.width &&
+         y < rect.y + rect.height;
+}
+
+void CopyHitMetadata(const html_css_renderer::HitTestEntry& source,
+                     hcsr_hit_metadata_t* hit) {
+  *hit = hcsr_hit_metadata_t{};
+  hit->element_id = source.element_id.c_str();
+  hit->tag_name = source.tag_name.c_str();
+  hit->data_godot_action = source.data_godot_action.c_str();
+  hit->bounds = ToCRect(source.bounds);
+  hit->disabled = source.disabled ? 1 : 0;
+  hit->editable = source.editable ? 1 : 0;
+  hit->checked = source.checked ? 1 : 0;
+  hit->focused = source.focused ? 1 : 0;
+}
+
 }  // namespace
 
 struct hcsr_renderer {
@@ -151,8 +201,66 @@ struct hcsr_renderer {
   std::string resource_base_path;
   html_css_renderer::CompositorFrameResult latest_result;
   std::vector<hcsr_rect_t> dirty_rects;
+  std::vector<html_css_renderer::MouseInputEvent> pending_mouse_events;
+  std::vector<html_css_renderer::KeyboardInputEvent> pending_keyboard_events;
+  std::optional<html_css_renderer::WheelInput> pending_wheel;
   std::string last_error;
 };
+
+namespace {
+
+hcsr_status_code_t InitializeRuntime(hcsr_renderer* renderer) {
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = renderer->viewport;
+  create_info.renderer.device_scale_factor = renderer->device_scale_factor;
+  create_info.renderer.no_script_profile = renderer->no_script_profile;
+  create_info.no_script_profile = renderer->no_script_profile;
+  renderer->runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!renderer->runtime || !renderer->runtime->Initialize(&diagnostics)) {
+    renderer->last_error = "failed to initialize standalone compositor runtime";
+    return HCSR_STATUS_INITIALIZATION_FAILED;
+  }
+  return HCSR_STATUS_OK;
+}
+
+void ClearPendingInput(hcsr_renderer* renderer) {
+  renderer->pending_mouse_events.clear();
+  renderer->pending_keyboard_events.clear();
+  renderer->pending_wheel.reset();
+}
+
+void AppendMouseEvent(hcsr_renderer* renderer,
+                      html_css_renderer::MouseInputEventType type,
+                      float x,
+                      float y,
+                      hcsr_mouse_button_t button,
+                      int modifiers,
+                      int click_count) {
+  html_css_renderer::MouseInputEvent event;
+  event.type = type;
+  event.position = {x, y};
+  event.button = ToRuntimeMouseButton(button);
+  event.modifiers = modifiers;
+  event.click_count = click_count;
+  renderer->pending_mouse_events.push_back(event);
+}
+
+void AppendKeyboardEvent(hcsr_renderer* renderer,
+                         html_css_renderer::KeyboardInputEventType type,
+                         hcsr_key_t key,
+                         std::string text,
+                         int modifiers) {
+  html_css_renderer::KeyboardInputEvent event;
+  event.type = type;
+  event.key = ToRuntimeKeyboardKey(key);
+  event.text = std::move(text);
+  event.modifiers = modifiers;
+  renderer->pending_keyboard_events.push_back(std::move(event));
+}
+
+}  // namespace
 
 extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_create(
     const hcsr_renderer_config_t* config,
@@ -176,18 +284,10 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_create(
     renderer->no_script_profile = config->no_script_profile != 0;
   }
 
-  html_css_renderer::CompositorRuntimeCreateInfo create_info;
-  create_info.renderer.viewport = renderer->viewport;
-  create_info.renderer.device_scale_factor = renderer->device_scale_factor;
-  create_info.renderer.no_script_profile = renderer->no_script_profile;
-  create_info.no_script_profile = renderer->no_script_profile;
-  renderer->runtime =
-      html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
-  std::vector<std::string> diagnostics;
-  if (!renderer->runtime || !renderer->runtime->Initialize(&diagnostics)) {
-    renderer->last_error = "failed to initialize standalone compositor runtime";
+  hcsr_status_code_t status = InitializeRuntime(renderer.get());
+  if (status != HCSR_STATUS_OK) {
     *renderer_out = renderer.release();
-    return HCSR_STATUS_INITIALIZATION_FAILED;
+    return status;
   }
 
   *renderer_out = renderer.release();
@@ -220,6 +320,9 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_set_document_html(
   }
   renderer->resource_root = resource_root ? resource_root : "";
   renderer->resource_base_path = resource_base_path ? resource_base_path : "";
+  renderer->latest_result = html_css_renderer::CompositorFrameResult();
+  renderer->dirty_rects.clear();
+  ClearPendingInput(renderer);
   return HCSR_STATUS_OK;
 }
 
@@ -257,6 +360,10 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_advance_frame(
   input.timeline_time_seconds = timeline_time_seconds;
   input.request_raw_frame = true;
   input.result_collection = html_css_renderer::FrameResultCollection::kFull;
+  input.mouse_events = std::move(renderer->pending_mouse_events);
+  input.keyboard_events = std::move(renderer->pending_keyboard_events);
+  input.wheel = renderer->pending_wheel;
+  ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->dirty_rects.clear();
   for (const html_css_renderer::Rect& rect :
@@ -271,6 +378,119 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_advance_frame(
           ? "raw frame output was not produced"
           : renderer->latest_result.raw_frame_failure;
   return HCSR_STATUS_RENDER_FAILED;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_move(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    int modifiers) {
+  if (!renderer) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kMove, x, y,
+                   HCSR_MOUSE_BUTTON_NONE, modifiers, 0);
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_down(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    hcsr_mouse_button_t button,
+    int modifiers,
+    int click_count) {
+  if (!renderer || ToRuntimeMouseButton(button) ==
+                       html_css_renderer::MouseInputButton::kNone) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kDown, x, y,
+                   button, modifiers, click_count > 0 ? click_count : 1);
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_up(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    hcsr_mouse_button_t button,
+    int modifiers,
+    int click_count) {
+  if (!renderer || ToRuntimeMouseButton(button) ==
+                       html_css_renderer::MouseInputButton::kNone) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kUp, x, y,
+                   button, modifiers, click_count > 0 ? click_count : 1);
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_wheel(
+    hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    float delta_x,
+    float delta_y) {
+  if (!renderer) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  if (!renderer->pending_wheel) {
+    renderer->pending_wheel = html_css_renderer::WheelInput();
+  }
+  renderer->pending_wheel->position = {x, y};
+  renderer->pending_wheel->delta.x += delta_x;
+  renderer->pending_wheel->delta.y += delta_y;
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_key_down(
+    hcsr_renderer_t* renderer,
+    hcsr_key_t key,
+    int modifiers) {
+  if (!renderer || ToRuntimeKeyboardKey(key) ==
+                       html_css_renderer::KeyboardInputKey::kUnknown) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kKeyDown,
+                      key, std::string(), modifiers);
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_key_up(
+    hcsr_renderer_t* renderer,
+    hcsr_key_t key,
+    int modifiers) {
+  if (!renderer || ToRuntimeKeyboardKey(key) ==
+                       html_css_renderer::KeyboardInputKey::kUnknown) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kKeyUp,
+                      key, std::string(), modifiers);
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_text_input(
+    hcsr_renderer_t* renderer,
+    const char* utf8_text) {
+  if (!renderer || !utf8_text) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kText,
+                      HCSR_KEY_UNKNOWN, utf8_text, 0);
+  return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_reset_state(
+    hcsr_renderer_t* renderer) {
+  if (!renderer) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  renderer->last_error.clear();
+  renderer->runtime.reset();
+  renderer->latest_result = html_css_renderer::CompositorFrameResult();
+  renderer->dirty_rects.clear();
+  ClearPendingInput(renderer);
+  return InitializeRuntime(renderer);
 }
 
 extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_get_latest_output(
@@ -320,16 +540,26 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_get_hit_metadata(
   }
   const html_css_renderer::HitTestEntry& source =
       renderer->latest_result.hit_test_entries[index];
-  *hit = hcsr_hit_metadata_t{};
-  hit->element_id = source.element_id.c_str();
-  hit->tag_name = source.tag_name.c_str();
-  hit->data_godot_action = source.data_godot_action.c_str();
-  hit->bounds = ToCRect(source.bounds);
-  hit->disabled = source.disabled ? 1 : 0;
-  hit->editable = source.editable ? 1 : 0;
-  hit->checked = source.checked ? 1 : 0;
-  hit->focused = source.focused ? 1 : 0;
+  CopyHitMetadata(source, hit);
   return HCSR_STATUS_OK;
+}
+
+extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_hit_test(
+    const hcsr_renderer_t* renderer,
+    float x,
+    float y,
+    hcsr_hit_metadata_t* hit) {
+  if (!renderer || !hit) {
+    return HCSR_STATUS_INVALID_ARGUMENT;
+  }
+  const auto& entries = renderer->latest_result.hit_test_entries;
+  for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+    if (PointInRect(x, y, it->bounds)) {
+      CopyHitMetadata(*it, hit);
+      return HCSR_STATUS_OK;
+    }
+  }
+  return HCSR_STATUS_INVALID_ARGUMENT;
 }
 
 extern "C" HCSR_C_API const char* hcsr_renderer_last_error(

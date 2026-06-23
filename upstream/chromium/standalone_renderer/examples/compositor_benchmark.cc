@@ -158,9 +158,10 @@ int RunCApiSmoke() {
   }
   const char* html =
       "<!doctype html><style>body{margin:0}.card{width:80px;height:60px;"
-      "background:#2878d8;color:white}</style><div id='card' "
+      "background:#2878d8;color:white}input{margin:4px}</style><div id='card' "
       "class='card' data-godot-action='open'>Card</div><label><input "
-      "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label>";
+      "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label>"
+      "<input id='name' value='abc' data-godot-action='name'>";
   status = hcsr_renderer_set_document_html(renderer, html, "", "");
   if (status != HCSR_STATUS_OK) {
     std::fprintf(stderr, "c_api_smoke: set html failed status=%d error=%s\n",
@@ -191,6 +192,10 @@ int RunCApiSmoke() {
   }
   bool saw_card = false;
   bool saw_checkbox = false;
+  bool saw_input = false;
+  hcsr_rect_t card_bounds = {};
+  hcsr_rect_t checkbox_bounds = {};
+  hcsr_rect_t input_bounds = {};
   const size_t hit_count = hcsr_renderer_hit_metadata_count(renderer);
   for (size_t i = 0; i < hit_count; ++i) {
     hcsr_hit_metadata_t hit = {};
@@ -204,19 +209,107 @@ int RunCApiSmoke() {
     if (id == "card" && tag == "div" && action == "open" &&
         hit.bounds.width > 0.0f && hit.bounds.height > 0.0f) {
       saw_card = true;
+      card_bounds = hit.bounds;
     }
     if (id == "agree" && tag == "input" && action == "toggle" &&
         !hit.disabled && !hit.checked) {
       saw_checkbox = true;
+      checkbox_bounds = hit.bounds;
+    }
+    if (id == "name" && tag == "input" && action == "name" &&
+        hit.editable && !hit.focused && hit.bounds.width > 0.0f &&
+        hit.bounds.height > 0.0f) {
+      saw_input = true;
+      input_bounds = hit.bounds;
+    }
+  }
+  hcsr_hit_metadata_t point_hit = {};
+  if (saw_card &&
+      hcsr_renderer_hit_test(renderer, card_bounds.x + card_bounds.width * 0.5f,
+                             card_bounds.y + card_bounds.height * 0.5f,
+                             &point_hit) != HCSR_STATUS_OK) {
+    saw_card = false;
+  } else if (saw_card) {
+    const std::string id = point_hit.element_id ? point_hit.element_id : "";
+    saw_card = id == "card";
+  }
+  if (!saw_card || !saw_checkbox || !saw_input) {
+    std::fprintf(stderr,
+                 "c_api_smoke: expected hit metadata missing hit_count=%zu "
+                 "card=%d checkbox=%d input=%d\n",
+                 hit_count, saw_card ? 1 : 0, saw_checkbox ? 1 : 0,
+                 saw_input ? 1 : 0);
+    hcsr_renderer_release_latest_output(renderer);
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float checkbox_x = checkbox_bounds.x + checkbox_bounds.width * 0.5f;
+  const float checkbox_y = checkbox_bounds.y + checkbox_bounds.height * 0.5f;
+  hcsr_renderer_mouse_move(renderer, checkbox_x, checkbox_y, 0);
+  hcsr_renderer_mouse_down(renderer, checkbox_x, checkbox_y,
+                           HCSR_MOUSE_BUTTON_LEFT, 0, 1);
+  hcsr_renderer_mouse_up(renderer, checkbox_x, checkbox_y,
+                         HCSR_MOUSE_BUTTON_LEFT, 0, 1);
+  status = hcsr_renderer_advance_frame(renderer, 0.016);
+  if (status != HCSR_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_smoke: checkbox click advance failed status=%d "
+                 "error=%s\n",
+                 status, hcsr_renderer_last_error(renderer));
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+  bool checkbox_checked = false;
+  for (size_t i = 0; i < hcsr_renderer_hit_metadata_count(renderer); ++i) {
+    hcsr_hit_metadata_t hit = {};
+    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+      continue;
+    }
+    const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == "agree" && hit.checked) {
+      checkbox_checked = true;
+      break;
+    }
+  }
+  if (!checkbox_checked) {
+    std::fprintf(stderr, "c_api_smoke: checkbox did not toggle through C API\n");
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float input_x = input_bounds.x + input_bounds.width * 0.5f;
+  const float input_y = input_bounds.y + input_bounds.height * 0.5f;
+  hcsr_renderer_mouse_move(renderer, input_x, input_y, 0);
+  hcsr_renderer_mouse_down(renderer, input_x, input_y, HCSR_MOUSE_BUTTON_LEFT,
+                           0, 1);
+  hcsr_renderer_mouse_up(renderer, input_x, input_y, HCSR_MOUSE_BUTTON_LEFT, 0,
+                         1);
+  hcsr_renderer_text_input(renderer, "Z");
+  status = hcsr_renderer_advance_frame(renderer, 0.032);
+  if (status != HCSR_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_smoke: text focus advance failed status=%d error=%s\n",
+                 status, hcsr_renderer_last_error(renderer));
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+  bool input_focused = false;
+  for (size_t i = 0; i < hcsr_renderer_hit_metadata_count(renderer); ++i) {
+    hcsr_hit_metadata_t hit = {};
+    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+      continue;
+    }
+    const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == "name" && hit.focused) {
+      input_focused = true;
+      break;
     }
   }
   hcsr_renderer_release_latest_output(renderer);
   hcsr_renderer_destroy(renderer);
-  if (!saw_card || !saw_checkbox) {
-    std::fprintf(stderr,
-                 "c_api_smoke: expected hit metadata missing hit_count=%zu "
-                 "card=%d checkbox=%d\n",
-                 hit_count, saw_card ? 1 : 0, saw_checkbox ? 1 : 0);
+  if (!input_focused) {
+    std::fprintf(stderr, "c_api_smoke: input did not focus through C API\n");
     return 1;
   }
   std::printf(

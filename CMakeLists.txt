@@ -554,6 +554,37 @@ add_dependencies(blink_standalone_render_benchmark_skia
     LibXml2::LibXml2
   )
 
+  add_library(blink_standalone_renderer_c_api STATIC
+    ${BLINK_STANDALONE_LIVE_SOURCES}
+    ${BLINK_STANDALONE_LIVE_OBJECTS}
+  )
+  add_dependencies(blink_standalone_renderer_c_api
+    blink_angle_libEGL
+    blink_angle_libGLESv2
+  )
+  foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
+                                 COMPILE_OPTIONS LINK_LIBRARIES)
+    get_target_property(property_value blink_standalone_render_benchmark_skia
+      ${property_name})
+    if(property_value AND NOT property_value STREQUAL "property_value-NOTFOUND")
+      if(property_name STREQUAL "INCLUDE_DIRECTORIES")
+        target_include_directories(blink_standalone_renderer_c_api PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+        target_compile_definitions(blink_standalone_renderer_c_api PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "COMPILE_OPTIONS")
+        target_compile_options(blink_standalone_renderer_c_api PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "LINK_LIBRARIES")
+        target_link_libraries(blink_standalone_renderer_c_api PUBLIC
+          ${property_value})
+      endif()
+    endif()
+  endforeach()
+  set_property(TARGET blink_standalone_renderer_c_api PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia
       ${BLINK_STANDALONE_SDL_APP_SOURCES}
