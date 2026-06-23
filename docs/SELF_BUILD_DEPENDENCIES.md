@@ -31,8 +31,9 @@ generated build directory:
 - `third_party/blink`
 - `v8/include`
 
-CMake now prefers the tracked Abseil include root instead of the Abseil copy
-inside the V8 build scratch directory.
+CMake now builds the tracked Abseil source subset needed by the live renderer
+instead of consuming Abseil headers or object code from the V8 build scratch
+directory.
 
 ## Remaining Non-Self-Built Input
 
@@ -59,11 +60,11 @@ JavaScript execution symbols. It also currently supplies:
 
 - CppGC/Oilpan heap, cage, write-barrier, and liveness symbols
 - V8 handle-scope, context, traced-reference, and CppHeap APIs used by Blink
-- Abseil object-code symbols
 
 Chromium-prefixed zlib aliases such as `Cr_z_*` and PartitionAlloc support
-symbols are now linked from tracked Chromium sources by the CMake build instead
-of being supplied incidentally by `v8_monolith.lib`.
+symbols, plus the Abseil object-code used by the live renderer, are now linked
+from tracked Chromium sources by the CMake build instead of being supplied
+incidentally by `v8_monolith.lib`.
 
 Blink uses Oilpan object lifetime throughout the live document, layout, style,
 paint, and input paths. A local fake CppGC replacement would risk invalid object
@@ -103,9 +104,9 @@ or explicitly external targets:
 
 2. Make Chromium libc++ a declared source/build input instead of consuming
    object files from `build/v8_mono2`.
-3. Link Abseil from tracked source targets instead of incidentally through
-   `v8_monolith.lib`. Chromium zlib aliases and PartitionAlloc support are
-   already CMake-owned tracked-source inputs.
+3. Keep the tracked-source zlib, PartitionAlloc, and Abseil source targets in
+   the normal live renderer build graph while replacing the remaining V8/CppGC
+   compatibility library.
 4. Keep JavaScript disabled at the renderer API boundary. The V8/CppGC support
    target is currently an internal Blink lifetime/runtime requirement, not a
    public scripting feature.

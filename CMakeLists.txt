@@ -220,6 +220,7 @@ endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/angle_runtime.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/abseil_sources.cmake)
 
 set(BLINK_STANDALONE_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
@@ -479,8 +480,49 @@ target_include_directories(blink_live_modp_b64 PRIVATE
   ${BLINK_STANDALONE_CHROMIUM_ROOT}
 )
 
+add_library(blink_standalone_abseil OBJECT
+  ${BLINK_STANDALONE_ABSEIL_SOURCES}
+)
+target_include_directories(blink_standalone_abseil BEFORE PRIVATE
+  ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+  ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
+)
+target_include_directories(blink_standalone_abseil PRIVATE
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}
+)
+target_compile_definitions(blink_standalone_abseil PRIVATE
+  NOMINMAX
+  WIN32_LEAN_AND_MEAN
+  _CRT_NONSTDC_NO_WARNINGS
+  _CRT_SECURE_NO_DEPRECATE
+  _SCL_SECURE_NO_DEPRECATE
+  _WINSOCK_DEPRECATED_NO_WARNINGS
+  UNICODE
+  _UNICODE
+  ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+)
+set_property(TARGET blink_standalone_abseil PROPERTY
+  MSVC_RUNTIME_LIBRARY "MultiThreaded")
+if(MSVC)
+  target_compile_options(blink_standalone_abseil PRIVATE
+    /bigobj
+    /permissive-
+    /Zc:__cplusplus
+    /wd4005
+    /wd4068
+    /wd4100
+    /wd4127
+    /wd4267
+    /wd4324
+    /wd4800
+    /wd4996
+  )
+endif()
+
 set(BLINK_STANDALONE_LIVE_OBJECTS
   $<TARGET_OBJECTS:blink_live_modp_b64>
+  $<TARGET_OBJECTS:blink_standalone_abseil>
 )
 if(NOT MSVC)
   add_library(blink_live_compiler_rt_atomic OBJECT

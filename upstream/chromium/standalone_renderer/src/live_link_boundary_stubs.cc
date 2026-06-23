@@ -214,7 +214,6 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/platform_mime_util.h"
 #include "net/http/http_log_util.h"
-#include "third_party/abseil-cpp/absl/container/internal/hashtablez_sampler.h"
 #include <cstdarg>
 #include <cmath>
 #include <cstdio>
@@ -14231,16 +14230,6 @@ void UkmRecorderFactoryProxy::CreateUkmRecorder(
     mojo::PendingReceiver<UkmRecorderInterface>,
     mojo::PendingRemote<UkmRecorderClientInterface>) {}
 }  // namespace ukm::mojom
-
-namespace absl::container_internal {
-HashtablezInfoHandle ForcedTrySample(size_t, size_t, size_t, uint16_t) {
-  return HashtablezInfoHandle(nullptr);
-}
-}  // namespace absl::container_internal
-
-extern "C" bool AbslContainerInternalSampleEverything() {
-  return false;
-}
 
 namespace cppgc::internal {
 PersistentRegionLock::PersistentRegionLock() = default;
