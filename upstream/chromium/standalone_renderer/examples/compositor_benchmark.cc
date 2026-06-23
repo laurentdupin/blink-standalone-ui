@@ -17,6 +17,7 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/css_file_loader.h"
+#include "html_css_renderer/renderer_c_api.h"
 #include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
@@ -127,10 +128,102 @@ void PrintUsage() {
       "[--paint-artifact-dump <path>] [--resource-root <dir>] "
       "[--trace-stages] [--lifecycle-stop <stage>] "
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
-      "[--result-collection full|minimal] [--cc-scheduler-probe]\n"
+      "[--result-collection full|minimal] [--cc-scheduler-probe] "
+      "[--c-api-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
       "readback is removed from production; --out is intentionally unsupported "
       "until Viz/GPU readback is wired.\n");
+}
+
+int RunCApiSmoke() {
+  hcsr_renderer_config_t config = {};
+  config.width = 160;
+  config.height = 120;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  hcsr_renderer_t* renderer = nullptr;
+  hcsr_status_code_t status = hcsr_renderer_create(&config, &renderer);
+  if (status != HCSR_STATUS_OK || !renderer) {
+    std::fprintf(stderr, "c_api_smoke: create failed status=%d\n", status);
+    return 1;
+  }
+  const char* rejected_html = "<script>window.x=1</script>";
+  status = hcsr_renderer_set_document_html(renderer, rejected_html, "", "");
+  if (status != HCSR_STATUS_NO_SCRIPT_REJECTED) {
+    std::fprintf(stderr,
+                 "c_api_smoke: no-script rejection failed status=%d\n",
+                 status);
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>body{margin:0}.card{width:80px;height:60px;"
+      "background:#2878d8;color:white}</style><div id='card' "
+      "class='card' data-godot-action='open'>Card</div><label><input "
+      "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label>";
+  status = hcsr_renderer_set_document_html(renderer, html, "", "");
+  if (status != HCSR_STATUS_OK) {
+    std::fprintf(stderr, "c_api_smoke: set html failed status=%d error=%s\n",
+                 status, hcsr_renderer_last_error(renderer));
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+  status = hcsr_renderer_advance_frame(renderer, 0.0);
+  if (status != HCSR_STATUS_OK) {
+    std::fprintf(stderr, "c_api_smoke: advance failed status=%d error=%s\n",
+                 status, hcsr_renderer_last_error(renderer));
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+  hcsr_frame_output_t output = {};
+  status = hcsr_renderer_get_latest_output(renderer, &output);
+  if (status != HCSR_STATUS_OK || !output.pixels || output.width != 160 ||
+      output.height != 120 || output.stride < output.width * 4 ||
+      output.pixel_count == 0 || output.dirty_rect_count != 1) {
+    std::fprintf(stderr,
+                 "c_api_smoke: raw output invalid status=%d size=%dx%d "
+                 "stride=%d bytes=%zu dirty=%zu format=%d error=%s\n",
+                 status, output.width, output.height, output.stride,
+                 output.pixel_count, output.dirty_rect_count,
+                 output.pixel_format, hcsr_renderer_last_error(renderer));
+    hcsr_renderer_destroy(renderer);
+    return 1;
+  }
+  bool saw_card = false;
+  bool saw_checkbox = false;
+  const size_t hit_count = hcsr_renderer_hit_metadata_count(renderer);
+  for (size_t i = 0; i < hit_count; ++i) {
+    hcsr_hit_metadata_t hit = {};
+    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+      continue;
+    }
+    const std::string id = hit.element_id ? hit.element_id : "";
+    const std::string tag = hit.tag_name ? hit.tag_name : "";
+    const std::string action =
+        hit.data_godot_action ? hit.data_godot_action : "";
+    if (id == "card" && tag == "div" && action == "open" &&
+        hit.bounds.width > 0.0f && hit.bounds.height > 0.0f) {
+      saw_card = true;
+    }
+    if (id == "agree" && tag == "input" && action == "toggle" &&
+        !hit.disabled && !hit.checked) {
+      saw_checkbox = true;
+    }
+  }
+  hcsr_renderer_release_latest_output(renderer);
+  hcsr_renderer_destroy(renderer);
+  if (!saw_card || !saw_checkbox) {
+    std::fprintf(stderr,
+                 "c_api_smoke: expected hit metadata missing hit_count=%zu "
+                 "card=%d checkbox=%d\n",
+                 hit_count, saw_card ? 1 : 0, saw_checkbox ? 1 : 0);
+    return 1;
+  }
+  std::printf(
+      "c_api_smoke: ok raw=%dx%d stride=%d bytes=%zu dirty=%zu hits=%zu\n",
+      output.width, output.height, output.stride, output.pixel_count,
+      output.dirty_rect_count, hit_count);
+  return 0;
 }
 
 bool FeatureSwitchContains(const std::string& enabled_features,
@@ -633,7 +726,15 @@ int main(int argc, char** argv) {
   html_css_renderer::ConfigureStandaloneToolProcess();
   const auto process_start = std::chrono::steady_clock::now();
   base::CommandLine::Init(argc, argv);
-  ApplyStandaloneGpuDefaults();
+  bool c_api_smoke_requested = false;
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--c-api-smoke") {
+      c_api_smoke_requested = true;
+      break;
+    }
+  }
+  if (!c_api_smoke_requested)
+    ApplyStandaloneGpuDefaults();
   base::AtExitManager at_exit_manager;
   InitializeStandaloneFeatureList();
   base::SingleThreadTaskExecutor main_task_executor(
@@ -654,6 +755,7 @@ int main(int argc, char** argv) {
   std::string lifecycle_stop;
   bool unsupported_out_requested = false;
   bool cc_scheduler_probe = false;
+  bool c_api_smoke = false;
   int warm_iterations = 0;
   std::vector<std::string> warm_scenarios;
   html_css_renderer::FrameResultCollection result_collection =
@@ -751,6 +853,8 @@ int main(int argc, char** argv) {
       trace_stages = true;
     } else if (arg == "--cc-scheduler-probe") {
       cc_scheduler_probe = true;
+    } else if (arg == "--c-api-smoke") {
+      c_api_smoke = true;
     } else if (arg == "--lifecycle-stop") {
       const char* value = next_value();
       if (!value) {
@@ -852,6 +956,10 @@ int main(int argc, char** argv) {
     }
     std::printf("%s", json.c_str());
     return json.find("\"success\": true") != std::string::npos ? 0 : 6;
+  }
+
+  if (c_api_smoke) {
+    return RunCApiSmoke();
   }
 
   if (renderer.html.empty()) {

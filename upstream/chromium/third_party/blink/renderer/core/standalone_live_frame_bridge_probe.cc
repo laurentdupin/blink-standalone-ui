@@ -73,6 +73,7 @@
 #include "components/viz/service/display/display_scheduler_base.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
+#include "components/viz/service/display/overlay_processor_stub.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "components/viz/service/display_embedder/skia_output_surface_impl.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
@@ -617,12 +618,18 @@ struct LiveFinerCacheUnitDescriptor {
 
 struct LiveHitTestEntry {
   std::string element_id;
+  std::string tag_name;
+  std::string data_godot_action;
   DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
   int paint_order = -1;
   float x = 0.0f;
   float y = 0.0f;
   float width = 0.0f;
   float height = 0.0f;
+  bool disabled = false;
+  bool editable = false;
+  bool checked = false;
+  bool focused = false;
 };
 
 struct LiveScrollableElementEntry {
@@ -639,6 +646,15 @@ struct LiveScrollableElementEntry {
   float max_scroll_y = 0.0f;
   bool can_scroll_x = false;
   bool can_scroll_y = false;
+};
+
+struct LiveRawFrameOutput {
+  int width = 0;
+  int height = 0;
+  int stride = 0;
+  int pixel_format = 0;
+  bool premultiplied_alpha = true;
+  std::vector<uint8_t> pixels;
 };
 
 struct LiveElementScrollOffset {
@@ -1185,9 +1201,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       gfx::Size* submitted_output_size,
       gfx::Size* viz_display_output_size,
       bool* copy_output_requested,
+      bool* copy_output_png_requested,
+      bool* copy_output_raw_requested,
       bool* copy_output_completed,
       bool* copy_output_succeeded,
       std::vector<uint8_t>* copy_output_png,
+      LiveRawFrameOutput* copy_output_raw_frame,
       std::string* copy_output_failure,
       std::string* failure_reason,
       bool* begin_frame_source_set = nullptr,
@@ -1210,9 +1229,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         submitted_output_size_(submitted_output_size),
         viz_display_output_size_(viz_display_output_size),
         copy_output_requested_(copy_output_requested),
+        copy_output_png_requested_(copy_output_png_requested),
+        copy_output_raw_requested_(copy_output_raw_requested),
         copy_output_completed_(copy_output_completed),
         copy_output_succeeded_(copy_output_succeeded),
         copy_output_png_(copy_output_png),
+        copy_output_raw_frame_(copy_output_raw_frame),
         copy_output_failure_(copy_output_failure),
         failure_reason_(failure_reason),
         begin_frame_source_set_(begin_frame_source_set),
@@ -1306,7 +1328,11 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (submitted_output_size_) {
       *submitted_output_size_ = output_size;
     }
-    if (EnsureVizDisplay(output_size)) {
+    const bool should_copy_output =
+        copy_output_requested_ && *copy_output_requested_;
+    const bool needs_display =
+        g_standalone_native_window_handle || should_copy_output;
+    if (needs_display && EnsureVizDisplay(output_size)) {
       display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
       display_->Resize(output_size);
       if (viz_display_output_size_) {
@@ -1322,10 +1348,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         *compositor_frame_submitted_ = true;
       }
       SetFailure("");
-      const bool should_copy_output =
-          copy_output_requested_ && *copy_output_requested_;
       if (should_copy_output && display_) {
-        RequestCopyOutputPng(output_size);
+        RequestCopyOutput(output_size,
+                          copy_output_png_requested_ &&
+                              *copy_output_png_requested_,
+                          copy_output_raw_requested_ &&
+                              *copy_output_raw_requested_);
       }
       if (display_) {
         DrawVizDisplayNow();
@@ -1397,7 +1425,47 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return true;
     }
     if (!g_standalone_native_window_handle) {
-      return false;
+      if (!gpu_thread_holder_) {
+        SetFailure("Offscreen Viz Display cannot initialize without GPU thread holder");
+        return false;
+      }
+      if (!gpu_thread_holder_->GetTaskExecutor()) {
+        SetFailure("Offscreen Viz Display GPU thread holder failed to initialize");
+        return false;
+      }
+      auto display_controller =
+          std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
+              std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
+                  gpu_thread_holder_, gpu::kNullSurfaceHandle,
+                  failure_reason_));
+      std::unique_ptr<viz::OutputSurface> output_surface =
+          viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
+                                             renderer_settings_,
+                                             &debug_settings_);
+      if (!output_surface) {
+        SetFailure("Offscreen Viz Display SkiaOutputSurfaceImpl creation failed");
+        return false;
+      }
+      auto overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
+      display_ = std::make_unique<viz::Display>(
+          gpu_thread_holder_->shared_image_manager(),
+          gpu_thread_holder_->scheduler(),
+          renderer_settings_, &debug_settings_, frame_sink_id_,
+          std::move(display_controller), std::move(output_surface),
+          std::move(overlay_processor),
+          /*scheduler=*/nullptr,
+          base::SingleThreadTaskRunner::GetCurrentDefault());
+      display_->Initialize(&display_client_,
+                           frame_sink_manager_->surface_manager());
+      display_->SetVisible(true);
+      display_->Resize(output_size);
+      display_uses_software_output_ = false;
+      if (viz_display_created_) {
+        *viz_display_created_ = true;
+      }
+      TraceLiveFrameProbeStage(
+          "direct frame sink after offscreen Display initialize");
+      return true;
     }
     if (!gpu_thread_holder_) {
       SetFailure("Viz Display cannot initialize without GPU thread holder");
@@ -1447,6 +1515,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     display_->Initialize(&display_client_, frame_sink_manager_->surface_manager());
     display_->SetVisible(true);
     display_->Resize(output_size);
+    display_uses_software_output_ = false;
     if (viz_display_created_) {
       *viz_display_created_ = true;
     }
@@ -1473,12 +1542,14 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       SetFailure("Viz Display DrawAndSwap returned false");
       return;
     }
-    if (skia_gpu_reached_) {
+    if (!display_uses_software_output_ && skia_gpu_reached_) {
       *skia_gpu_reached_ = true;
     }
   }
 
-  void RequestCopyOutputPng(const gfx::Size& output_size) {
+  void RequestCopyOutput(const gfx::Size& output_size,
+                         bool wants_png,
+                         bool wants_raw) {
     if (!support_) {
       SetCopyOutputFailure("Viz CopyOutput cannot run without frame sink support");
       return;
@@ -1496,6 +1567,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (copy_output_png_) {
       copy_output_png_->clear();
     }
+    if (copy_output_raw_frame_) {
+      *copy_output_raw_frame_ = LiveRawFrameOutput();
+    }
     if (copy_output_failure_) {
       copy_output_failure_->clear();
     }
@@ -1503,15 +1577,17 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     auto request = std::make_unique<viz::CopyOutputRequest>(
         viz::CopyOutputRequest::ResultFormat::RGBA,
         viz::CopyOutputRequest::ResultDestination::kSystemMemory,
-        base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutputPng,
-                       base::Unretained(this)));
+        base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
+                       base::Unretained(this), wants_png, wants_raw));
     request->set_area(gfx::Rect(output_size));
     support_->RequestCopyOfOutput(
         std::make_unique<viz::PendingCopyOutputRequest>(
             local_surface_id_, viz::SubtreeCaptureId(), std::move(request)));
   }
 
-  void OnCopyOutputPng(std::unique_ptr<viz::CopyOutputResult> output) {
+  void OnCopyOutput(bool wants_png,
+                    bool wants_raw,
+                    std::unique_ptr<viz::CopyOutputResult> output) {
     if (!output) {
       SetCopyOutputFailure("Viz CopyOutput returned no result");
       return;
@@ -1553,15 +1629,47 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       std::memcpy(top_left_pixmap.writable_addr(0, y),
                   pixmap.addr(0, pixmap.height() - 1 - y), row_bytes);
     }
-    SkPngEncoder::Options options;
-    sk_sp<SkData> png = SkPngEncoder::Encode(top_left_pixmap, options);
-    if (!png || png->empty()) {
-      SetCopyOutputFailure("Viz CopyOutput PNG encoding failed");
+    if (wants_raw && copy_output_raw_frame_) {
+      LiveRawFrameOutput raw_frame;
+      raw_frame.width = top_left_pixmap.width();
+      raw_frame.height = top_left_pixmap.height();
+      raw_frame.stride = static_cast<int>(top_left_pixmap.rowBytes());
+      raw_frame.premultiplied_alpha =
+          top_left_pixmap.info().alphaType() == kPremul_SkAlphaType;
+      if (top_left_pixmap.info().colorType() == kRGBA_8888_SkColorType) {
+        raw_frame.pixel_format = 1;
+      } else if (top_left_pixmap.info().colorType() ==
+                 kBGRA_8888_SkColorType) {
+        raw_frame.pixel_format = 2;
+      }
+      if (raw_frame.pixel_format != 0 && raw_frame.width > 0 &&
+          raw_frame.height > 0 && raw_frame.stride > 0) {
+        const size_t byte_count =
+            static_cast<size_t>(raw_frame.stride) *
+            static_cast<size_t>(raw_frame.height);
+        const auto* pixels =
+            static_cast<const uint8_t*>(top_left_pixmap.addr(0, 0));
+        raw_frame.pixels.assign(pixels, pixels + byte_count);
+      }
+      *copy_output_raw_frame_ = std::move(raw_frame);
+    }
+    if (wants_raw && copy_output_raw_frame_ &&
+        copy_output_raw_frame_->pixels.empty()) {
+      SetCopyOutputFailure(
+          "Viz CopyOutput raw frame has unsupported pixel format");
       return;
     }
-    if (copy_output_png_) {
-      const auto* bytes = static_cast<const uint8_t*>(png->data());
-      copy_output_png_->assign(bytes, bytes + png->size());
+    if (wants_png) {
+      SkPngEncoder::Options options;
+      sk_sp<SkData> png = SkPngEncoder::Encode(top_left_pixmap, options);
+      if (!png || png->empty()) {
+        SetCopyOutputFailure("Viz CopyOutput PNG encoding failed");
+        return;
+      }
+      if (copy_output_png_) {
+        const auto* bytes = static_cast<const uint8_t*>(png->data());
+        copy_output_png_->assign(bytes, bytes + png->size());
+      }
     }
     if (copy_output_failure_) {
       copy_output_failure_->clear();
@@ -1580,6 +1688,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   void SetCopyOutputFailure(std::string reason) {
     if (copy_output_png_) {
       copy_output_png_->clear();
+    }
+    if (copy_output_raw_frame_) {
+      *copy_output_raw_frame_ = LiveRawFrameOutput();
     }
     if (copy_output_failure_) {
       *copy_output_failure_ = std::move(reason);
@@ -1607,6 +1718,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   std::unique_ptr<viz::Display> display_;
+  bool display_uses_software_output_ = false;
   uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
@@ -1614,9 +1726,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<gfx::Size> submitted_output_size_ = nullptr;
   raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<bool> copy_output_requested_ = nullptr;
+  raw_ptr<bool> copy_output_png_requested_ = nullptr;
+  raw_ptr<bool> copy_output_raw_requested_ = nullptr;
   raw_ptr<bool> copy_output_completed_ = nullptr;
   raw_ptr<bool> copy_output_succeeded_ = nullptr;
   raw_ptr<std::vector<uint8_t>> copy_output_png_ = nullptr;
+  raw_ptr<LiveRawFrameOutput> copy_output_raw_frame_ = nullptr;
   raw_ptr<std::string> copy_output_failure_ = nullptr;
   raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
@@ -1744,18 +1859,27 @@ class StandaloneCcLayerHost final
   const std::string& frame_sink_failure_reason() const {
     return frame_sink_failure_reason_;
   }
-  void RequestNextCopyOutputPng() {
+  void RequestNextCopyOutput(bool wants_png, bool wants_raw) {
     copy_output_requested_ = true;
+    copy_output_png_requested_ = wants_png;
+    copy_output_raw_requested_ = wants_raw;
     copy_output_completed_ = false;
     copy_output_succeeded_ = false;
     copy_output_png_.clear();
+    copy_output_raw_frame_ = LiveRawFrameOutput();
     copy_output_failure_.clear();
     next_composite_requires_forced_redraw_ = true;
+  }
+  void RequestNextCopyOutputPng() {
+    RequestNextCopyOutput(/*wants_png=*/true, /*wants_raw=*/false);
   }
   bool copy_output_completed() const { return copy_output_completed_; }
   bool copy_output_succeeded() const { return copy_output_succeeded_; }
   const std::vector<uint8_t>& copy_output_png() const {
     return copy_output_png_;
+  }
+  const LiveRawFrameOutput& copy_output_raw_frame() const {
+    return copy_output_raw_frame_;
   }
   const std::string& copy_output_failure() const {
     return copy_output_failure_;
@@ -2049,8 +2173,9 @@ class StandaloneCcLayerHost final
             &compositor_frame_submitted_, &viz_display_created_,
             &skia_gpu_reached_, &submitted_output_size_,
             &viz_display_output_size_, &copy_output_requested_,
+            &copy_output_png_requested_, &copy_output_raw_requested_,
             &copy_output_completed_, &copy_output_succeeded_,
-            &copy_output_png_, &copy_output_failure_,
+            &copy_output_png_, &copy_output_raw_frame_, &copy_output_failure_,
             &frame_sink_failure_reason_,
             /*begin_frame_source_set=*/nullptr,
             /*did_not_produce_count=*/nullptr,
@@ -2205,9 +2330,12 @@ class StandaloneCcLayerHost final
   gfx::Size submitted_output_size_;
   gfx::Size viz_display_output_size_;
   bool copy_output_requested_ = false;
+  bool copy_output_png_requested_ = false;
+  bool copy_output_raw_requested_ = false;
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
   std::vector<uint8_t> copy_output_png_;
+  LiveRawFrameOutput copy_output_raw_frame_;
   std::string copy_output_failure_;
   int commit_count_ = 0;
   std::string frame_sink_failure_reason_;
@@ -2369,8 +2497,11 @@ class StandaloneCcSchedulerParityProbe final
             viewport_, &compositor_frame_submitted_, &viz_display_created_,
             &skia_gpu_reached_, /*submitted_output_size=*/nullptr,
             /*viz_display_output_size=*/nullptr, &copy_output_requested_,
+            /*copy_output_png_requested=*/nullptr,
+            /*copy_output_raw_requested=*/nullptr,
             &copy_output_completed_, &copy_output_succeeded_,
-            &copy_output_png_, &copy_output_failure_, &failure_reason_,
+            &copy_output_png_, &copy_output_raw_frame_,
+            &copy_output_failure_, &failure_reason_,
             &begin_frame_source_set_, &did_not_produce_count_,
             &last_frame_skipped_reason_, &last_did_not_produce_has_damage_,
             /*async_compositor_frame_ack=*/true);
@@ -2589,9 +2720,12 @@ class StandaloneCcSchedulerParityProbe final
   bool viz_display_created_ = false;
   bool skia_gpu_reached_ = false;
   bool copy_output_requested_ = false;
+  bool copy_output_png_requested_ = false;
+  bool copy_output_raw_requested_ = false;
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
   std::vector<uint8_t> copy_output_png_;
+  LiveRawFrameOutput copy_output_raw_frame_;
   std::string copy_output_failure_;
   std::string failure_reason_;
 };
@@ -2630,10 +2764,12 @@ struct LiveFramePaintProbeCache {
   bool cc_skia_gpu_reached = false;
   gfx::Size cc_submitted_output_size;
   gfx::Size cc_viz_display_output_size;
+  bool copy_output_raw_requested = false;
   bool copy_output_png_requested = false;
   bool copy_output_png_completed = false;
   bool copy_output_png_succeeded = false;
   std::vector<uint8_t> copy_output_png;
+  LiveRawFrameOutput copy_output_raw_frame;
   std::string copy_output_failure;
   int cc_commit_count = 0;
   std::string cc_attach_failure_reason;
@@ -2855,9 +2991,11 @@ void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
   cache.copy_output_png_succeeded =
       cache.cc_layer_host->copy_output_succeeded();
   cache.copy_output_png = cache.cc_layer_host->copy_output_png();
+  cache.copy_output_raw_frame = cache.cc_layer_host->copy_output_raw_frame();
   cache.copy_output_failure = cache.cc_layer_host->copy_output_failure();
   if (cache.copy_output_png_completed) {
     cache.copy_output_png_requested = false;
+    cache.copy_output_raw_requested = false;
   }
 }
 
@@ -2925,8 +3063,9 @@ bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
 
   TraceLiveFrameProbeStage(before_stage);
   cache.cc_frame_sink_failure_reason.clear();
-  if (cache.copy_output_png_requested) {
-    cache.cc_layer_host->RequestNextCopyOutputPng();
+  if (cache.copy_output_png_requested || cache.copy_output_raw_requested) {
+    cache.cc_layer_host->RequestNextCopyOutput(
+        cache.copy_output_png_requested, cache.copy_output_raw_requested);
   }
   const auto composite_start = StandaloneProbeClock::now();
   const bool submitted =
@@ -4855,11 +4994,28 @@ void CollectLiveHitTestEntriesForStandaloneRenderer(
         LiveHitTestEntry entry;
         entry.element_id =
             BlinkStringToStdStringForStandaloneRenderer(String(id));
+        entry.tag_name = BlinkStringToStdStringForStandaloneRenderer(
+            String(element->localName()));
+        std::transform(entry.tag_name.begin(), entry.tag_name.end(),
+                       entry.tag_name.begin(), [](char c) {
+                         return static_cast<char>(std::tolower(
+                             static_cast<unsigned char>(c)));
+                       });
+        entry.data_godot_action = BlinkStringToStdStringForStandaloneRenderer(
+            element->getAttribute(AtomicString("data-godot-action")));
         entry.paint_client_id = element->GetLayoutObject()->Id();
         entry.x = rect.x();
         entry.y = rect.y();
         entry.width = rect.width();
         entry.height = rect.height();
+        entry.disabled = element->IsDisabledFormControl();
+        entry.editable =
+            element->IsTextControl() ||
+            element->FastHasAttribute(html_names::kContenteditableAttr);
+        if (auto* input = DynamicTo<HTMLInputElement>(element)) {
+          entry.checked = input->Checked();
+        }
+        entry.focused = element->GetDocument().FocusedElement() == element;
         entries.push_back(std::move(entry));
       }
     }
@@ -12450,8 +12606,9 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
     SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     return false;
   }
-  if (cache.copy_output_png_requested) {
-    cache.cc_layer_host->RequestNextCopyOutputPng();
+  if (cache.copy_output_png_requested || cache.copy_output_raw_requested) {
+    cache.cc_layer_host->RequestNextCopyOutput(
+        cache.copy_output_png_requested, cache.copy_output_raw_requested);
   }
 
   std::optional<LiveFramePaintProbeResult> lifecycle_stop_result;
@@ -13028,6 +13185,17 @@ void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer() {
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_png.clear();
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_failure.clear();
+  cache.initialized = false;
+}
+
+void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.copy_output_raw_requested = true;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_failure.clear();
   cache.initialized = false;
 }
@@ -13678,10 +13846,18 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
     int index,
     char* element_id,
     int element_id_capacity,
+    char* tag_name,
+    int tag_name_capacity,
+    char* data_godot_action,
+    int data_godot_action_capacity,
     float* x,
     float* y,
     float* width,
-    float* height) {
+    float* height,
+    int* disabled,
+    int* editable,
+    int* checked,
+    int* focused) {
   RunLiveFramePaintProbe(body_html);
   const auto& entries = ProbeCache().hit_test_entries;
   if (index < 0 || index >= static_cast<int>(entries.size())) {
@@ -13695,6 +13871,20 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
     std::memcpy(element_id, entry.element_id.data(), copied);
     element_id[copied] = '\0';
   }
+  if (tag_name && tag_name_capacity > 0) {
+    const size_t copied =
+        std::min(entry.tag_name.size(),
+                 static_cast<size_t>(tag_name_capacity - 1));
+    std::memcpy(tag_name, entry.tag_name.data(), copied);
+    tag_name[copied] = '\0';
+  }
+  if (data_godot_action && data_godot_action_capacity > 0) {
+    const size_t copied =
+        std::min(entry.data_godot_action.size(),
+                 static_cast<size_t>(data_godot_action_capacity - 1));
+    std::memcpy(data_godot_action, entry.data_godot_action.data(), copied);
+    data_godot_action[copied] = '\0';
+  }
   if (x) {
     *x = entry.x;
   }
@@ -13706,6 +13896,18 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
   }
   if (height) {
     *height = entry.height;
+  }
+  if (disabled) {
+    *disabled = entry.disabled ? 1 : 0;
+  }
+  if (editable) {
+    *editable = entry.editable ? 1 : 0;
+  }
+  if (checked) {
+    *checked = entry.checked ? 1 : 0;
+  }
+  if (focused) {
+    *focused = entry.focused ? 1 : 0;
   }
   return 1;
 }
@@ -14229,6 +14431,57 @@ int StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
   std::memcpy(buffer, failure.data(), static_cast<size_t>(copy_count));
   buffer[copy_count] = '\0';
   return copy_count;
+}
+
+int StandaloneBlinkLiveFrameBridgeRawFrameInfoForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height,
+    int* stride,
+    int* pixel_format,
+    int* premultiplied_alpha) {
+  RunLiveFramePaintProbe(body_html);
+  const LiveRawFrameOutput& raw = ProbeCache().copy_output_raw_frame;
+  if (raw.pixels.empty() || raw.width <= 0 || raw.height <= 0 ||
+      raw.stride <= 0 || raw.pixel_format == 0) {
+    return 0;
+  }
+  if (width) {
+    *width = raw.width;
+  }
+  if (height) {
+    *height = raw.height;
+  }
+  if (stride) {
+    *stride = raw.stride;
+  }
+  if (pixel_format) {
+    *pixel_format = raw.pixel_format;
+  }
+  if (premultiplied_alpha) {
+    *premultiplied_alpha = raw.premultiplied_alpha ? 1 : 0;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeRawFrameByteSizeForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().copy_output_raw_frame.pixels.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeRawFrameBytesForStandaloneRenderer(
+    const char* body_html,
+    uint8_t* destination,
+    int destination_size) {
+  RunLiveFramePaintProbe(body_html);
+  const std::vector<uint8_t>& pixels = ProbeCache().copy_output_raw_frame.pixels;
+  if (!destination || destination_size <= 0 ||
+      destination_size < static_cast<int>(pixels.size())) {
+    return 0;
+  }
+  std::memcpy(destination, pixels.data(), pixels.size());
+  return static_cast<int>(pixels.size());
 }
 
 int StandaloneBlinkLiveFrameBridgeChunkStableKeyAtForStandaloneRenderer(

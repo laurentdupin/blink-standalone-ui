@@ -67,6 +67,7 @@ void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
     int width,
     int height);
 void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -168,10 +169,18 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
     int index,
     char* element_id,
     int element_id_capacity,
+    char* tag_name,
+    int tag_name_capacity,
+    char* data_godot_action,
+    int data_godot_action_capacity,
     float* x,
     float* y,
     float* width,
-    float* height);
+    float* height,
+    int* disabled,
+    int* editable,
+    int* checked,
+    int* focused);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
@@ -207,6 +216,19 @@ int StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
     const char* body_html,
     char* buffer,
     int buffer_size);
+int StandaloneBlinkLiveFrameBridgeRawFrameInfoForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height,
+    int* stride,
+    int* pixel_format,
+    int* premultiplied_alpha);
+int StandaloneBlinkLiveFrameBridgeRawFrameByteSizeForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeRawFrameBytesForStandaloneRenderer(
+    const char* body_html,
+    uint8_t* destination,
+    int destination_size);
 }  // namespace blink::standalone_renderer_probe
 
 namespace html_css_renderer {
@@ -674,6 +696,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   explicit StandaloneCompositorRuntimeImpl(CompositorRuntimeCreateInfo create_info)
       : audit_enabled_(create_info.enable_paint_artifact_audit),
         trace_stages_(create_info.trace_stages),
+        no_script_profile_(create_info.no_script_profile ||
+                           create_info.renderer.no_script_profile),
         lifecycle_stop_(std::move(create_info.lifecycle_stop)) {
     snapshot_.html = create_info.renderer.html;
     snapshot_.stylesheets = create_info.renderer.stylesheets;
@@ -701,6 +725,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
           "live Blink bridge recipe version: " +
           std::to_string(
               probe::StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer()));
+      if (no_script_profile_) {
+        diagnostics->push_back(
+            "no-script profile requested by embedder configuration");
+      }
     }
     return probe::StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer() &&
            probe::StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -735,9 +763,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
     CompositorFrameResult result;
     result.png_snapshot_requested = input.request_png_snapshot;
+    result.raw_frame_requested = input.request_raw_frame;
     result.successor_snapshot = snapshot_;
     const bool collect_full_result =
-        input.request_png_snapshot ||
+        input.request_png_snapshot || input.request_raw_frame ||
         input.result_collection == FrameResultCollection::kFull;
     probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
         collect_full_result ? 1 : 0);
@@ -745,6 +774,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         BuildLiveBlinkProbeHtml(snapshot_.html, snapshot_.stylesheets);
     if (input.request_png_snapshot) {
       probe::StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
+    }
+    if (input.request_raw_frame) {
+      probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
     }
 
     if (last_probe_html_ != probe_html) {
@@ -918,6 +950,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       CopyRawAudit(probe_html, result);
     }
     CopyPngSnapshot(probe_html, result);
+    CopyRawFrame(probe_html, result);
     if (collect_full_result) {
       AppendFrameDiagnostics(probe_html, result);
     } else if (!result.cc_root_layer_attached ||
@@ -990,7 +1023,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   bool NeedsFrameForInput(const FrameInput& input) const {
     if (!last_frame_result_)
       return true;
-    if (input.request_png_snapshot)
+    if (input.request_png_snapshot || input.request_raw_frame)
       return true;
     if (last_frame_result_->needs_begin_frame)
       return true;
@@ -1042,9 +1075,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.frame_advanced = false;
     result.frame_skipped_due_to_no_demand = true;
     result.png_snapshot_requested = input.request_png_snapshot;
+    result.raw_frame_requested = input.request_raw_frame;
     result.png_snapshot_available = false;
     result.png_snapshot_failure.clear();
     result.png_snapshot_bytes.clear();
+    result.raw_frame_failure.clear();
+    result.raw_frame = RawFrameOutput();
     if (input.result_collection == FrameResultCollection::kMinimal) {
       result.raw_paint_artifact_audit_json.clear();
       result.hit_test_entries.clear();
@@ -1079,20 +1115,37 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             probe_html.c_str());
     for (int i = 0; i < entry_count && i < 4096; ++i) {
       std::array<char, 256> element_id{};
+      std::array<char, 64> tag_name{};
+      std::array<char, 256> data_godot_action{};
       float x = 0.0f;
       float y = 0.0f;
       float width = 0.0f;
       float height = 0.0f;
+      int disabled = 0;
+      int editable = 0;
+      int checked = 0;
+      int focused = 0;
       if (!probe::StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
               probe_html.c_str(), i, element_id.data(),
-              static_cast<int>(element_id.size()), &x, &y, &width, &height)) {
+              static_cast<int>(element_id.size()), tag_name.data(),
+              static_cast<int>(tag_name.size()), data_godot_action.data(),
+              static_cast<int>(data_godot_action.size()), &x, &y, &width,
+              &height, &disabled, &editable, &checked, &focused)) {
         continue;
       }
       const size_t id_length = std::strlen(element_id.data());
       if (id_length == 0 || width <= 0.0f || height <= 0.0f)
         continue;
-      result.hit_test_entries.push_back(
-          {std::string(element_id.data(), id_length), Rect{x, y, width, height}});
+      HitTestEntry entry;
+      entry.element_id = std::string(element_id.data(), id_length);
+      entry.tag_name = tag_name.data();
+      entry.data_godot_action = data_godot_action.data();
+      entry.bounds = Rect{x, y, width, height};
+      entry.disabled = disabled != 0;
+      entry.editable = editable != 0;
+      entry.checked = checked != 0;
+      entry.focused = focused != 0;
+      result.hit_test_entries.push_back(std::move(entry));
     }
   }
 
@@ -1191,6 +1244,62 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
   }
 
+  static void CopyRawFrame(const std::string& probe_html,
+                           CompositorFrameResult& result) {
+    if (!result.raw_frame_requested)
+      return;
+    namespace probe = ::blink::standalone_renderer_probe;
+    int width = 0;
+    int height = 0;
+    int stride = 0;
+    int pixel_format = 0;
+    int premultiplied_alpha = 0;
+    if (!probe::StandaloneBlinkLiveFrameBridgeRawFrameInfoForStandaloneRenderer(
+            probe_html.c_str(), &width, &height, &stride, &pixel_format,
+            &premultiplied_alpha)) {
+      result.raw_frame_failure = "Viz CopyOutput raw frame info was not produced";
+      return;
+    }
+    const int byte_size =
+        probe::StandaloneBlinkLiveFrameBridgeRawFrameByteSizeForStandaloneRenderer(
+            probe_html.c_str());
+    if (byte_size <= 0) {
+      std::array<char, 256> failure{};
+      const int copied =
+          probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
+              probe_html.c_str(), failure.data(),
+              static_cast<int>(failure.size()));
+      result.raw_frame_failure =
+          copied > 0 ? failure.data()
+                     : "Viz CopyOutput raw frame bytes were not produced";
+      return;
+    }
+    RawFrameOutput raw_frame;
+    raw_frame.width = width;
+    raw_frame.height = height;
+    raw_frame.stride = stride;
+    raw_frame.premultiplied_alpha = premultiplied_alpha != 0;
+    raw_frame.pixel_format =
+        pixel_format == 1
+            ? RawFramePixelFormat::kRGBA8
+            : (pixel_format == 2 ? RawFramePixelFormat::kBGRA8
+                                 : RawFramePixelFormat::kNone);
+    raw_frame.pixels.resize(static_cast<size_t>(byte_size));
+    const int copied =
+        probe::StandaloneBlinkLiveFrameBridgeRawFrameBytesForStandaloneRenderer(
+            probe_html.c_str(), raw_frame.pixels.data(), byte_size);
+    if (copied != byte_size ||
+        raw_frame.pixel_format == RawFramePixelFormat::kNone) {
+      result.raw_frame_failure =
+          "Viz CopyOutput raw frame bytes could not be copied";
+      return;
+    }
+    raw_frame.dirty_rects.push_back(
+        Rect{0.0f, 0.0f, static_cast<float>(width),
+             static_cast<float>(height)});
+    result.raw_frame = std::move(raw_frame);
+  }
+
   static void AppendFrameFailures(const std::string& probe_html,
                                   CompositorFrameResult& result) {
     namespace probe = ::blink::standalone_renderer_probe;
@@ -1268,6 +1377,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   RendererSnapshot snapshot_;
   bool audit_enabled_ = false;
   bool trace_stages_ = false;
+  bool no_script_profile_ = false;
   std::string lifecycle_stop_;
   bool last_pointer_pressed_ = false;
   std::optional<PointerState> previous_pointer_;

@@ -26,6 +26,22 @@ struct Rect {
   float height = 0.0f;
 };
 
+enum class RawFramePixelFormat {
+  kNone = 0,
+  kRGBA8 = 1,
+  kBGRA8 = 2,
+};
+
+struct RawFrameOutput {
+  RawFramePixelFormat pixel_format = RawFramePixelFormat::kNone;
+  int width = 0;
+  int height = 0;
+  int stride = 0;
+  bool premultiplied_alpha = true;
+  std::vector<uint8_t> pixels;
+  std::vector<Rect> dirty_rects;
+};
+
 struct Stylesheet {
   std::string id;
   std::string css;
@@ -50,6 +66,7 @@ struct RendererCreateInfo {
   float device_scale_factor = 1.0f;
   std::string asset_namespace;
   AssetProvider* asset_provider = nullptr;
+  bool no_script_profile = false;
 };
 
 struct PointerState {
@@ -118,6 +135,7 @@ struct FrameInput {
   double delta_time_seconds = 0.0;
   double timeline_time_seconds = 0.0;
   bool request_png_snapshot = false;
+  bool request_raw_frame = false;
   FrameResultCollection result_collection = FrameResultCollection::kFull;
   std::optional<Size> viewport;
   std::optional<std::string> html_override;
@@ -152,7 +170,13 @@ struct RendererSnapshot {
 
 struct HitTestEntry {
   std::string element_id;
+  std::string tag_name;
+  std::string data_godot_action;
   Rect bounds;
+  bool disabled = false;
+  bool editable = false;
+  bool checked = false;
+  bool focused = false;
 };
 
 struct ScrollableElementEntry {

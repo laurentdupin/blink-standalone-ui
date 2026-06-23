@@ -13,6 +13,7 @@ struct CompositorRuntimeCreateInfo {
   RendererCreateInfo renderer;
   bool enable_paint_artifact_audit = false;
   bool trace_stages = false;
+  bool no_script_profile = false;
   std::string lifecycle_stop;
 };
 
@@ -63,6 +64,9 @@ struct CompositorFrameResult {
   bool png_snapshot_available = false;
   std::string png_snapshot_failure;
   std::vector<uint8_t> png_snapshot_bytes;
+  bool raw_frame_requested = false;
+  std::string raw_frame_failure;
+  RawFrameOutput raw_frame;
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<ScrollableElementEntry> scrollable_element_entries;
