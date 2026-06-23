@@ -221,6 +221,20 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/angle_runtime.cmake)
 
+set(BLINK_STANDALONE_ZLIB_C_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/compress.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/crc32.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/deflate.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/infback.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inffast.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inflate.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inftrees.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/trees.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/uncompr.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/zutil.c
+)
+
 set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngerror.c
@@ -236,16 +250,11 @@ set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/crc32.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/infback.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inffast.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inflate.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/inftrees.c
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/zutil.c
+  ${BLINK_STANDALONE_ZLIB_C_SOURCES}
 )
 set_source_files_properties(${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES}
   PROPERTIES LANGUAGE CXX)
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES ${BLINK_STANDALONE_ZLIB_C_SOURCES})
 
 if(BLINK_STANDALONE_PERF_BUILD)
   set(BLINK_STANDALONE_PERF_SKIA_SOURCES
