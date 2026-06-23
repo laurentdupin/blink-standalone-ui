@@ -73,9 +73,9 @@ cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_v8
 ```
 
 In the default configuration this target runs
-`tools/v8/build_v8_monolith.py --print-plan` only. It reports the pinned V8
+`tools/v8/build_v8_monolith.py --action plan` only. It reports the pinned V8
 submodule revision, generated work root, GN output directory, and reduced GN
-arguments without cloning, syncing, or compiling V8.
+arguments without cloning, syncing, running GN, or compiling V8.
 
 Relevant CMake cache variables:
 
@@ -93,14 +93,27 @@ Relevant CMake cache variables:
 - `BLINK_STANDALONE_V8_CLANG_BASE_PATH`
 - `BLINK_STANDALONE_V8_SYNC_DEPS`, default `OFF`
 - `BLINK_STANDALONE_V8_COMPAT_BUILD`, default `OFF`
+- `BLINK_STANDALONE_V8_COMPAT_ACTION`, default `auto`
 
-When `BLINK_STANDALONE_V8_COMPAT_BUILD=ON`, the wrapper clones or updates a
-generated V8 work copy under `${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8`
-from the pinned submodule, writes a generated `.gclient` under that work root,
-optionally runs `gclient sync` if `BLINK_STANDALONE_V8_SYNC_DEPS=ON`, runs
-`gn gen`, and builds `v8_monolith` with Ninja. `gclient` must not run inside
-`upstream/chromium`; the generated work root exists specifically to avoid
-colliding with tracked Chromium snapshot paths.
+`BLINK_STANDALONE_V8_COMPAT_ACTION` selects the wrapper stage:
+
+- `auto`: preserve the older `BLINK_STANDALONE_V8_COMPAT_BUILD` behavior.
+- `plan`: print paths, tool resolution, and GN arguments only.
+- `prepare`: clone or update the generated V8 work copy, write `.gclient`,
+  optionally run `gclient sync`, write `args.gn`, and stop before `gn gen`.
+- `gn-gen`: run `prepare`, then run `gn gen`, and stop before Ninja.
+- `build`: run `prepare`, `gn gen`, and `ninja v8_monolith`.
+
+When the action reaches `prepare`, the wrapper clones or updates a generated V8
+work copy under `${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8` from the pinned
+submodule, writes a generated `.gclient` under that work root, and optionally
+runs `gclient sync` if `BLINK_STANDALONE_V8_SYNC_DEPS=ON`. `gclient` must not
+run inside `upstream/chromium`; the generated work root exists specifically to
+avoid colliding with tracked Chromium snapshot paths.
+
+`BLINK_STANDALONE_V8_CLANG_BASE_PATH` defaults to empty. Leave it empty to let
+V8/GN/depot_tools resolve clang; set it explicitly only when a known Chromium
+clang checkout should be forced.
 
 The current renderer link still consumes `BLINK_STANDALONE_V8_MONOLITH_LIB` and
 the Chromium libc++ object files from `BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR`.

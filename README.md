@@ -32,20 +32,24 @@ See `docs/SELF_BUILD_DEPENDENCIES.md` for the remaining work to replace this
 compatibility tree with self-built source targets.
 
 The repository now includes a source-controlled wrapper target for the V8
-compatibility build. By default it only prints the generated work-root plan and
-does not download dependencies or compile V8:
+compatibility build. By default it runs the `plan` action, which only prints
+the generated work-root plan and does not download dependencies, run GN, or
+compile V8:
 
 ```powershell
 cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_v8_compat
 ```
 
-Configure with `BLINK_STANDALONE_V8_COMPAT_BUILD=ON` and, when needed,
-`BLINK_STANDALONE_V8_SYNC_DEPS=ON` to let that target prepare a generated V8
-work tree under the CMake binary directory and run GN/Ninja. Tool lookup uses
-the declared `tools/depot_tools` submodule by default, while generated depot
-tools payloads and V8 dependencies stay under the build directory. The normal
-renderer link still uses `BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated
-output is proven and selected as the default.
+Set `BLINK_STANDALONE_V8_COMPAT_ACTION` to `prepare`, `gn-gen`, or `build` to
+stop after checkout/args generation, stop after `gn gen`, or build
+`v8_monolith`. The default `auto` value preserves the older
+`BLINK_STANDALONE_V8_COMPAT_BUILD=ON` behavior as a full build request. Use
+`BLINK_STANDALONE_V8_SYNC_DEPS=ON` only when the generated work tree should run
+`gclient sync`. Tool lookup uses the declared `tools/depot_tools` submodule by
+default, while generated depot tools payloads and V8 dependencies stay under
+the build directory. The normal renderer link still uses
+`BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated output is proven and
+selected as the default.
 
 ## Build
 

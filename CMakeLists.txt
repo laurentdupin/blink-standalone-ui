@@ -26,6 +26,12 @@ option(BLINK_STANDALONE_V8_SYNC_DEPS
   "Allow the V8 compatibility wrapper to run gclient sync in its generated work root." OFF)
 option(BLINK_STANDALONE_V8_COMPAT_BUILD
   "Make blink_standalone_v8_compat run gn/ninja instead of only printing the build plan." OFF)
+set(BLINK_STANDALONE_V8_COMPAT_ACTION
+  auto
+  CACHE STRING
+  "V8 compatibility wrapper action: auto, plan, prepare, gn-gen, or build. auto preserves BLINK_STANDALONE_V8_COMPAT_BUILD."
+)
+set_property(CACHE BLINK_STANDALONE_V8_COMPAT_ACTION PROPERTY STRINGS auto plan prepare gn-gen build)
 
 if(MSVC)
   # The V8 monolith is built with Chromium's clang-cl /MT configuration. Keep
@@ -105,16 +111,21 @@ set(BLINK_STANDALONE_V8_NINJA_EXECUTABLE
   CACHE FILEPATH
   "Ninja executable for the optional V8/CppGC compatibility build target."
 )
-set(_blink_standalone_default_v8_clang_base_path "")
-if(CMAKE_CXX_COMPILER)
-  get_filename_component(_blink_standalone_compiler_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
-  get_filename_component(_blink_standalone_default_v8_clang_base_path "${_blink_standalone_compiler_dir}" DIRECTORY)
-endif()
 set(BLINK_STANDALONE_V8_CLANG_BASE_PATH
-  ${_blink_standalone_default_v8_clang_base_path}
+  ""
   CACHE PATH
-  "Chromium clang base path passed to the optional V8/CppGC compatibility GN build. Leave empty to let GN resolve clang."
+  "Chromium clang base path passed to the optional V8/CppGC compatibility GN build. Empty lets GN/depot_tools resolve clang."
 )
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_CLANG_BASE_PATH}" _blink_standalone_v8_clang_base_path_normalized)
+if(_blink_standalone_v8_clang_base_path_normalized MATCHES "/build/v8_mono2/chromium_clang$")
+  message(STATUS "Clearing legacy auto-derived BLINK_STANDALONE_V8_CLANG_BASE_PATH; leave empty to let V8/GN resolve clang.")
+  set(BLINK_STANDALONE_V8_CLANG_BASE_PATH
+    ""
+    CACHE PATH
+    "Chromium clang base path passed to the optional V8/CppGC compatibility GN build. Empty lets GN/depot_tools resolve clang."
+    FORCE
+  )
+endif()
 set(BLINK_STANDALONE_V8_COMPAT_JOBS
   ""
   CACHE STRING
@@ -208,15 +219,33 @@ if(BLINK_STANDALONE_V8_SYNC_DEPS)
 else()
   list(APPEND _blink_standalone_v8_compat_command --no-sync-deps)
 endif()
-if(BLINK_STANDALONE_V8_COMPAT_BUILD)
-  list(APPEND _blink_standalone_v8_compat_command --build)
+set(_blink_standalone_v8_compat_action "${BLINK_STANDALONE_V8_COMPAT_ACTION}")
+if(_blink_standalone_v8_compat_action STREQUAL "" OR
+   _blink_standalone_v8_compat_action STREQUAL "auto")
+  if(BLINK_STANDALONE_V8_COMPAT_BUILD)
+    set(_blink_standalone_v8_compat_action build)
+  else()
+    set(_blink_standalone_v8_compat_action plan)
+  endif()
+endif()
+if(NOT _blink_standalone_v8_compat_action MATCHES "^(plan|prepare|gn-gen|build)$")
+  message(FATAL_ERROR
+    "BLINK_STANDALONE_V8_COMPAT_ACTION must be one of auto, plan, prepare, gn-gen, or build.")
+endif()
+list(APPEND _blink_standalone_v8_compat_command --action ${_blink_standalone_v8_compat_action})
+if(_blink_standalone_v8_compat_action STREQUAL "build")
+  set(_blink_standalone_v8_compat_comment "V8/CppGC compatibility full build")
+elseif(_blink_standalone_v8_compat_action STREQUAL "gn-gen")
+  set(_blink_standalone_v8_compat_comment "V8/CppGC compatibility GN generation")
+elseif(_blink_standalone_v8_compat_action STREQUAL "prepare")
+  set(_blink_standalone_v8_compat_comment "V8/CppGC compatibility prepare")
 else()
-  list(APPEND _blink_standalone_v8_compat_command --print-plan)
+  set(_blink_standalone_v8_compat_comment "V8/CppGC compatibility build plan")
 endif()
 add_custom_target(blink_standalone_v8_compat
   COMMAND ${_blink_standalone_v8_compat_command}
   USES_TERMINAL
-  COMMENT "V8/CppGC compatibility build wrapper"
+  COMMENT "${_blink_standalone_v8_compat_comment}"
 )
 
 if(MSVC)

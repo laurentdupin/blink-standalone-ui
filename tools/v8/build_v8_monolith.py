@@ -19,6 +19,7 @@ from typing import Iterable
 
 
 DEFAULT_OUT_NAME = "chromium_static"
+V8_ACTIONS = ("plan", "prepare", "gn-gen", "build")
 
 GN_ARG_VALUES: list[tuple[str, object]] = [
     ("is_debug", False),
@@ -122,21 +123,35 @@ def tool_names(name: str) -> list[str]:
     return names
 
 
-def find_tool(explicit: str | None, name: str, depot_tools: Path | None) -> str | None:
-    if explicit:
-        return explicit
+def find_tool(explicit: str | None, name: str, depot_tools: Path | None) -> list[str] | None:
     if depot_tools:
+        depot_tools = depot_tools.resolve()
+    if explicit:
+        explicit_path = Path(explicit).resolve()
+        python_payload_marker = depot_tools / "python3_bin_reldir.txt" if depot_tools else None
+        python_entrypoint = depot_tools / f"{name}.py" if depot_tools else None
+        if (os.name == "nt" and depot_tools and
+                explicit_path.suffix.lower() in (".bat", ".cmd") and
+                python_entrypoint and python_entrypoint.exists() and
+                python_payload_marker and not python_payload_marker.exists()):
+            return [sys.executable, str(python_entrypoint)]
+        return [str(explicit_path)]
+    if depot_tools:
+        python_payload_marker = depot_tools / "python3_bin_reldir.txt"
+        python_entrypoint = depot_tools / f"{name}.py"
+        if os.name == "nt" and python_entrypoint.exists() and not python_payload_marker.exists():
+            return [sys.executable, str(python_entrypoint)]
         for candidate in tool_names(name):
             path = depot_tools / candidate
             if path.exists():
-                return str(path)
+                return [str(path)]
     search_path = os.environ.get("PATH", "")
     if depot_tools:
         search_path = str(depot_tools) + os.pathsep + search_path
     for candidate in tool_names(name):
         found = shutil.which(candidate, path=search_path)
         if found:
-            return found
+            return [found]
     return None
 
 
@@ -168,8 +183,13 @@ def write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
-def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], tools: dict[str, str | None]) -> None:
+def format_tool(command: list[str] | None) -> str:
+    return " ".join(command) if command else "<not found>"
+
+
+def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], tools: dict[str, list[str] | None]) -> None:
     print("V8 compatibility build plan")
+    print(f"  action: {args.action}")
     print(f"  source_v8_root: {paths['source_v8_root']}")
     print(f"  source_commit: {commit}")
     print(f"  work_root: {paths['work_root']}")
@@ -177,10 +197,9 @@ def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], to
     print(f"  generated_v8_work_copy: {paths['v8_work_root']}")
     print(f"  output_dir: {paths['out_dir']}")
     print(f"  sync_deps: {args.sync_deps}")
-    print(f"  build: {args.build}")
-    print(f"  gclient: {tools['gclient'] or '<not found>'}")
-    print(f"  gn: {tools['gn'] or '<not found>'}")
-    print(f"  ninja: {tools['ninja'] or '<not found>'}")
+    print(f"  gclient: {format_tool(tools['gclient'])}")
+    print(f"  gn: {format_tool(tools['gn'])}")
+    print(f"  ninja: {format_tool(tools['ninja'])}")
     print("  gn_args:")
     for line in gn_args_text(args.clang_base_path).splitlines():
         print(f"    {line}")
@@ -201,9 +220,42 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument("--sync-deps", dest="sync_deps", action="store_true")
     parser.add_argument("--no-sync-deps", dest="sync_deps", action="store_false")
     parser.set_defaults(sync_deps=False)
-    parser.add_argument("--build", action="store_true", help="Run gn gen and ninja v8_monolith.")
-    parser.add_argument("--print-plan", action="store_true", help="Print paths and GN args without cloning, syncing, or building.")
-    return parser.parse_args(list(argv))
+    parser.add_argument(
+        "--action",
+        choices=V8_ACTIONS,
+        help=(
+            "Wrapper stage to run: plan prints paths only; prepare creates the "
+            "generated work copy, .gclient, optional sync, and args.gn; gn-gen "
+            "also runs gn gen; build also runs ninja v8_monolith."
+        ),
+    )
+    parser.add_argument(
+        "--build",
+        action="store_true",
+        help="Compatibility alias for --action build.",
+    )
+    parser.add_argument(
+        "--print-plan",
+        action="store_true",
+        help="Compatibility alias for --action plan.",
+    )
+    args = parser.parse_args(list(argv))
+
+    requested_actions = []
+    if args.action:
+        requested_actions.append(args.action)
+    if args.build:
+        requested_actions.append("build")
+    if args.print_plan:
+        requested_actions.append("plan")
+    if requested_actions:
+        selected = requested_actions[0]
+        if any(action != selected for action in requested_actions):
+            parser.error("--action, --build, and --print-plan requested conflicting actions")
+        args.action = selected
+    else:
+        args.action = "plan"
+    return args
 
 
 def main(argv: Iterable[str]) -> int:
@@ -232,10 +284,9 @@ def main(argv: Iterable[str]) -> int:
         "out_dir": out_dir,
     }
 
-    if args.print_plan or not args.build:
+    if args.action == "plan":
         print_plan(args, commit, paths, tools)
-        if not args.build:
-            return 0
+        return 0
 
     ensure_work_copy(source_v8_root, v8_work_root, commit)
     write_file(gclient_root / ".gclient", gclient_text("https://chromium.googlesource.com/v8/v8.git"))
@@ -243,16 +294,21 @@ def main(argv: Iterable[str]) -> int:
     if args.sync_deps:
         if not tools["gclient"]:
             raise RuntimeError("gclient is required for --sync-deps; pass --gclient or --depot-tools.")
-        run([tools["gclient"], "sync", "--no-history"], cwd=gclient_root)
-
-    if not tools["gn"]:
-        raise RuntimeError("gn is required for --build; pass --gn or put gn on PATH.")
-    if not tools["ninja"]:
-        raise RuntimeError("ninja is required for --build; pass --ninja or put ninja on PATH.")
+        run([*tools["gclient"], "sync", "--no-history"], cwd=gclient_root)
 
     write_file(out_dir / "args.gn", gn_args_text(args.clang_base_path))
-    run([tools["gn"], "gen", str(out_dir)], cwd=v8_work_root)
-    ninja_cmd = [tools["ninja"], "-C", str(out_dir)]
+    if args.action == "prepare":
+        return 0
+
+    if not tools["gn"]:
+        raise RuntimeError(f"gn is required for --action {args.action}; pass --gn or put gn on PATH.")
+    run([*tools["gn"], "gen", str(out_dir)], cwd=v8_work_root)
+    if args.action == "gn-gen":
+        return 0
+
+    if not tools["ninja"]:
+        raise RuntimeError("ninja is required for --action build; pass --ninja or put ninja on PATH.")
+    ninja_cmd = [*tools["ninja"], "-C", str(out_dir)]
     if args.jobs:
         ninja_cmd.append(f"-j{args.jobs}")
     ninja_cmd.append("v8_monolith")
