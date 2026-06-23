@@ -10,6 +10,11 @@ compatibility dependency that is not yet self-built by CMake.
   `upstream/chromium/third_party/freetype/src`
 - HarfBuzz submodule:
   `upstream/chromium/third_party/harfbuzz/src`
+- V8 submodule:
+  `upstream/chromium/v8` at
+  `d169ad0897a003432b64510f216f0b8365c78957`, from Chromium DEPS
+  `v8_revision` at Chromium commit
+  `e78920c00cfbfae3856eb6369ad339a4fb2b804e`
 - vcpkg manifest packages:
   `libiconv`, `libxml2`, and `zlib`
 - SDL3:
@@ -29,11 +34,11 @@ generated build directory:
 - `components/viz`
 - `gpu`
 - `third_party/blink`
-- `v8/include`
 
 CMake now builds the tracked Abseil source subset needed by the live renderer
 instead of consuming Abseil headers or object code from the V8 build scratch
-directory.
+directory. The old tracked `v8/include` header subset was removed because it
+reported V8 14.9 while the working Blink/V8 compatibility boundary is V8 15.1.
 
 ## Remaining Non-Self-Built Input
 
@@ -50,8 +55,11 @@ The default compatibility path is:
 build/v8_mono2/v8
 ```
 
-This is not acceptable as the final self-build story because `build/` is
-generated and ignored by Git.
+The V8 source dependency is now explicit as a submodule, but this compatibility
+tree is still not acceptable as the final self-build story because the
+`v8_monolith.lib` and Chromium libc++ objects are generated under `build/` and
+ignored by Git. The next build-system step is to make CMake invoke or depend on
+the pinned V8 GN build instead of assuming this scratch tree already exists.
 
 ## Why V8 Cannot Be Stubbed Out Safely Yet
 
@@ -75,8 +83,8 @@ lifetime and is not a valid renderer foundation.
 The next dependency work should replace the compatibility tree with CMake-owned
 or explicitly external targets:
 
-1. Build real V8/CppGC from a pinned V8 source dependency with the current
-   reduced GN args:
+1. Build real V8/CppGC from the pinned V8 submodule with the current reduced
+   GN args:
 
    ```text
    is_debug=false

@@ -9,6 +9,7 @@ dependencies that are already external to Chromium are tracked as submodules:
 
 - `upstream/chromium/third_party/freetype/src`
 - `upstream/chromium/third_party/harfbuzz/src`
+- `upstream/chromium/v8`
 
 SDL3 is not vendored. The CMake build first tries `find_package(SDL3)` and then
 fetches SDL3 into the generated build directory when needed. libxml2, Iconv,
@@ -16,9 +17,11 @@ and zlib are declared in `vcpkg.json`; configure with `VCPKG_ROOT` pointing at a
 vcpkg checkout, or install vcpkg at `C:/vcpkg`.
 
 The current Windows build still requires a GN-built V8/CppGC compatibility
-library and matching Chromium libc++ objects. This is an internal Blink
-Oilpan/runtime dependency, not a public JavaScript feature. The paths are
-explicit CMake cache variables:
+library and matching Chromium libc++ objects. The V8 source is declared as a
+submodule at `upstream/chromium/v8`, pinned from Chromium DEPS. The build still
+links a prebuilt/GN-built `v8_monolith.lib` until the CMake/GN orchestration
+target is added. This is an internal Blink Oilpan/runtime dependency, not a
+public JavaScript feature. The paths are explicit CMake cache variables:
 
 - `BLINK_STANDALONE_V8_BUILD_ROOT`
 - `BLINK_STANDALONE_V8_MONOLITH_LIB`
