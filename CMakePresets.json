@@ -49,6 +49,31 @@
       }
     },
     {
+      "name": "x64-Release-GeneratedV8",
+      "displayName": "x64 Release with generated V8 compatibility (sync deps)",
+      "description": "Configures the self-build flow that can run gclient sync and build v8_monolith from the pinned V8 submodule under the generated build directory.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cmake-generated-v8-release",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "ClangCL",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/vcpkg_manifest.cmake",
+        "BLINK_STANDALONE_V8_COMPAT_ACTION": "build",
+        "BLINK_STANDALONE_V8_SYNC_DEPS": "ON",
+        "BLINK_STANDALONE_V8_COMPAT_JOBS": "8"
+      }
+    },
+    {
       "name": "x64-Perf",
       "displayName": "x64 Perf Benchmark (clang-cl)",
       "generator": "Ninja",
@@ -81,6 +106,24 @@
     {
       "name": "x64-Release",
       "configurePreset": "x64-Release"
+    },
+    {
+      "name": "x64-Release-GeneratedV8-v8-compat",
+      "displayName": "Build generated V8 compatibility output",
+      "configurePreset": "x64-Release-GeneratedV8",
+      "targets": [
+        "blink_standalone_v8_compat"
+      ],
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-GeneratedV8-sdl-viewer",
+      "displayName": "Build SDL viewer with generated V8 compatibility output",
+      "configurePreset": "x64-Release-GeneratedV8",
+      "targets": [
+        "blink_standalone_sdl_viewer_skia"
+      ],
+      "jobs": 8
     },
     {
       "name": "x64-Perf",

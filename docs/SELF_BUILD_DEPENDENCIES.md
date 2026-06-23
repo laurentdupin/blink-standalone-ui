@@ -91,6 +91,36 @@ The repository has a source-controlled wrapper for the V8 compatibility build:
 cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_v8_compat
 ```
 
+For a fresh clone, use the generated-V8 preset sequence:
+
+```powershell
+git submodule update --init --recursive
+cmake --preset x64-Release-GeneratedV8
+cmake --build --preset x64-Release-GeneratedV8-v8-compat
+cmake --build --preset x64-Release-GeneratedV8-sdl-viewer
+```
+
+The equivalent manual configuration shape is:
+
+```powershell
+cmake -S . -B build\cmake-generated-v8-release -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_C_COMPILER=clang-cl `
+  -DCMAKE_CXX_COMPILER=clang-cl `
+  -DCMAKE_TOOLCHAIN_FILE=C:/Repos/blink-standalone-ui/cmake/toolchains/vcpkg_manifest.cmake `
+  -DBLINK_STANDALONE_V8_COMPAT_ACTION=build `
+  -DBLINK_STANDALONE_V8_SYNC_DEPS=ON `
+  -DBLINK_STANDALONE_V8_COMPAT_JOBS=8
+ninja -C build\cmake-generated-v8-release -j8 blink_standalone_v8_compat
+ninja -C build\cmake-generated-v8-release -j8 blink_standalone_sdl_viewer_skia
+```
+
+Generated V8 work copies, depot_tools runtime checkouts, CIPD payloads,
+LLVM/toolchain downloads, `v8_monolith.lib`, Chromium libc++ objects, and
+renderer build products must stay under `build/` and remain ignored by Git.
+The default `x64-Release` preset remains plan/default and does not run V8
+dependency sync unexpectedly.
+
 In the default configuration this target runs
 `tools/v8/build_v8_monolith.py --action plan` only. It reports the pinned V8
 submodule revision, generated work root, GN output directory, and reduced GN
@@ -141,6 +171,11 @@ colliding with tracked Chromium snapshot paths.
 `BLINK_STANDALONE_V8_CLANG_BASE_PATH` defaults to empty. Leave it empty to let
 V8/GN/depot_tools resolve clang; set it explicitly only when a known Chromium
 clang checkout should be forced.
+
+The latest generated-V8 renderer proof build used Visual Studio LLVM
+`clang-cl`. The generated V8 libc++ headers warned that they expect a newer
+Chromium Clang. That warning is a toolchain-alignment follow-up; it does not
+change the no-public-JavaScript product direction.
 
 The renderer link consumes `BLINK_STANDALONE_V8_MONOLITH_LIB` and the Chromium
 libc++ object files from `BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR`. Those

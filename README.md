@@ -56,20 +56,33 @@ monolith and expected libc++ objects before link, and waits for
 
 ## Build
 
-From a fresh clone with vcpkg installed and the V8/CppGC compatibility output
-built:
+From a fresh clone with vcpkg installed, build the generated V8/CppGC
+compatibility output first, then build the renderer:
 
 ```powershell
 git submodule update --init --recursive
-cmake --preset x64-Release
-cmake --build --preset x64-Release -- /m:8
+cmake --preset x64-Release-GeneratedV8
+cmake --build --preset x64-Release-GeneratedV8-v8-compat
+cmake --build --preset x64-Release-GeneratedV8-sdl-viewer
 ```
+
+The generated V8 work copy, generated depot_tools runtime checkout, CIPD
+payloads, LLVM/toolchain downloads, `v8_monolith.lib`, libc++ objects, SDL
+FetchContent output, and renderer build products stay under `build/` and are
+ignored by Git. The default `x64-Release` preset does not enable V8 dependency
+sync; use the `x64-Release-GeneratedV8` preset only when you intend to run the
+source-built V8 compatibility flow.
 
 The build has a single renderer path: the live Blink path. On Windows this
 requires the Visual Studio Clang toolset. Visual Studio should pick up the
 checked-in `CMakePresets.json` or legacy `CMakeSettings.json` configurations;
 use `x64-Debug` or `x64-Release`. If configuring manually without presets, use
 a ClangCL environment/toolset.
+
+The latest generated-V8 proof build used Visual Studio LLVM `clang-cl` for the
+renderer. The generated V8 libc++ headers currently warn that they expect a
+newer Chromium Clang; that is a toolchain-alignment follow-up, not a public
+JavaScript feature.
 
 All build products and fetched SDL sources live under `build/`, which is
 generated-only and ignored by Git.
