@@ -70,15 +70,17 @@ def run(
     cmd: list[str],
     *,
     cwd: Path | None = None,
-    extra_path: Path | None = None,
+    extra_paths: Iterable[Path] = (),
     extra_env: dict[str, str] | None = None,
 ) -> None:
     print("+ " + " ".join(cmd), flush=True)
     env = None
-    if extra_path or extra_env:
+    extra_paths = list(extra_paths)
+    if extra_paths or extra_env:
         env = os.environ.copy()
-        if extra_path:
-            env["PATH"] = str(extra_path) + os.pathsep + env.get("PATH", "")
+        if extra_paths:
+            path_prefix = os.pathsep.join(str(path) for path in extra_paths)
+            env["PATH"] = path_prefix + os.pathsep + env.get("PATH", "")
         if extra_env:
             env.update(extra_env)
     subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=env, check=True)
@@ -221,6 +223,14 @@ def ensure_windows_git_bat(depot_tools_root: Path) -> None:
     write_file(git_bat, f'@echo off\n"{git_exe}" %*\n')
 
 
+def ensure_python_shims(shim_root: Path) -> None:
+    if os.name != "nt":
+        return
+    python_executable = sys.executable
+    write_file(shim_root / "python.bat", f'@echo off\n"{python_executable}" %*\n')
+    write_file(shim_root / "python3.bat", f'@echo off\n"{python_executable}" %*\n')
+
+
 def write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8", newline="\n")
@@ -263,6 +273,7 @@ def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], to
     if paths.get("effective_depot_tools_commit"):
         print(f"  effective_depot_tools_commit: {paths['effective_depot_tools_commit']}")
     print(f"  git_cache_root: {paths['git_cache_root']}")
+    print(f"  tool_shim_root: {paths['tool_shim_root']}")
     print(f"  sync_deps: {args.sync_deps}")
     print(f"  gclient: {format_tool(tools['gclient'])}")
     print(f"  gn: {format_tool(tools['gn'])}")
@@ -335,6 +346,7 @@ def main(argv: Iterable[str]) -> int:
     v8_work_root = gclient_root / "v8"
     depot_tools_work_root = work_root / DEPOT_TOOLS_WORK_DIR_NAME
     git_cache_root = work_root / "git_cache"
+    shim_root = work_root / "tool_shims"
     out_dir = (args.out_dir.resolve() if args.out_dir else v8_work_root / "out" / args.out_name)
 
     if not (source_v8_root / "include" / "v8-version.h").exists():
@@ -387,6 +399,7 @@ def main(argv: Iterable[str]) -> int:
         "effective_depot_tools_root": effective_depot_tools_root,
         "effective_depot_tools_commit": effective_depot_tools_commit,
         "git_cache_root": git_cache_root,
+        "tool_shim_root": shim_root,
         "work_root": work_root,
         "gclient_root": gclient_root,
         "v8_work_root": v8_work_root,
@@ -400,9 +413,13 @@ def main(argv: Iterable[str]) -> int:
 
     ensure_work_copy(source_v8_root, v8_work_root, commit)
     write_file(gclient_root / ".gclient", gclient_text("https://chromium.googlesource.com/v8/v8.git"))
+    ensure_python_shims(shim_root)
     generated_env = {
         "GIT_CACHE_PATH": str(git_cache_root),
     }
+    generated_paths = [shim_root]
+    if effective_depot_tools_root:
+        generated_paths.append(effective_depot_tools_root)
 
     if args.sync_deps:
         if not tools["gclient"]:
@@ -410,7 +427,7 @@ def main(argv: Iterable[str]) -> int:
         run(
             [*tools["gclient"], "sync", "--no-history"],
             cwd=gclient_root,
-            extra_path=effective_depot_tools_root,
+            extra_paths=generated_paths,
             extra_env=generated_env,
         )
 
@@ -423,7 +440,7 @@ def main(argv: Iterable[str]) -> int:
     run(
         [*tools["gn"], "gen", str(out_dir)],
         cwd=v8_work_root,
-        extra_path=effective_depot_tools_root,
+        extra_paths=generated_paths,
         extra_env=generated_env,
     )
     if args.action == "gn-gen":
@@ -435,7 +452,7 @@ def main(argv: Iterable[str]) -> int:
     if args.jobs:
         ninja_cmd.append(f"-j{args.jobs}")
     ninja_cmd.append("v8_monolith")
-    run(ninja_cmd, cwd=v8_work_root, extra_path=effective_depot_tools_root, extra_env=generated_env)
+    run(ninja_cmd, cwd=v8_work_root, extra_paths=generated_paths, extra_env=generated_env)
     return 0
 
 

@@ -112,7 +112,8 @@ submodule. It also clones or updates a generated depot_tools work copy under
 that generated depot_tools copy so bootstrap/CIPD payloads do not dirty the
 tracked submodule. The wrapper writes a generated `.gclient` under the V8 work
 root, uses a generated Git cache under
-`${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/git_cache`, and optionally runs
+`${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/git_cache`, uses generated tool shims
+under `${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/tool_shims`, and optionally runs
 `gclient sync` if
 `BLINK_STANDALONE_V8_SYNC_DEPS=ON`. `gclient` must not run inside
 `upstream/chromium`; the generated work root exists specifically to avoid
@@ -133,8 +134,10 @@ the generated compatibility output without relying on a configure-time glob.
 source input, but generated CIPD payloads from depot_tools must remain
 generated-only under the V8 compatibility work root. On Windows, the wrapper may
 create generated helper shims such as `git.bat` in the generated depot_tools
-copy when the local Git install exposes only `git.exe`. Do not run depot_tools
-bootstrap or `gclient sync` inside the tracked source checkout.
+copy when the local Git install exposes only `git.exe`, plus `python.bat` and
+`python3.bat` under `tool_shims` so generated Ninja files do not pick up the
+WindowsApps Python manager launcher. Do not run depot_tools bootstrap or
+`gclient sync` inside the tracked source checkout.
 
 ## Why V8 Cannot Be Stubbed Out Safely Yet
 

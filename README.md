@@ -49,7 +49,8 @@ stop after checkout/args generation, stop after `gn gen`, or build
 the pinned source input. For non-plan actions the wrapper clones that checkout
 into the generated V8 work root and executes depot_tools from there, so
 bootstrap/CIPD payloads, the generated Git cache, and V8 dependencies stay under
-the build directory. The normal renderer link still uses
+the build directory. The wrapper also uses generated tool shims there so Windows
+build commands resolve the intended Python/Git tools. The normal renderer link still uses
 `BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated output is proven and
 selected as the default.
 
