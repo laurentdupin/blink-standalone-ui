@@ -112,13 +112,32 @@ target_os = []
 """
 
 
+def tool_names(name: str) -> list[str]:
+    suffixes = [".bat", ".cmd", ".exe", "", ".py"] if os.name == "nt" else ["", ".py"]
+    names = []
+    for suffix in suffixes:
+        candidate = name if not suffix else f"{name}{suffix}"
+        if candidate not in names:
+            names.append(candidate)
+    return names
+
+
 def find_tool(explicit: str | None, name: str, depot_tools: Path | None) -> str | None:
     if explicit:
         return explicit
+    if depot_tools:
+        for candidate in tool_names(name):
+            path = depot_tools / candidate
+            if path.exists():
+                return str(path)
     search_path = os.environ.get("PATH", "")
     if depot_tools:
         search_path = str(depot_tools) + os.pathsep + search_path
-    return shutil.which(name, path=search_path)
+    for candidate in tool_names(name):
+        found = shutil.which(candidate, path=search_path)
+        if found:
+            return found
+    return None
 
 
 def source_commit(source_v8_root: Path) -> str:

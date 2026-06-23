@@ -7,3 +7,6 @@
 [submodule "upstream/chromium/v8"]
 	path = upstream/chromium/v8
 	url = https://chromium.googlesource.com/v8/v8
+[submodule "tools/depot_tools"]
+	path = tools/depot_tools
+	url = https://chromium.googlesource.com/chromium/tools/depot_tools

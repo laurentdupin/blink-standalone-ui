@@ -241006,6 +241006,13 @@
                                       "source":  "Chromium DEPS v8_revision at e78920c00cfbfae3856eb6369ad339a4fb2b804e"
                                   },
                                   {
+                                      "name":  "depot_tools",
+                                      "path":  "tools/depot_tools",
+                                      "url":  "https://chromium.googlesource.com/chromium/tools/depot_tools",
+                                      "revision":  "ea253a3e3ae7653cafd343be001dc5cbe69b3ad0",
+                                      "source":  "Pinned helper toolchain for the generated V8 compatibility build wrapper"
+                                  },
+                                  {
                                       "name":  "SDL3",
                                       "path":  "build/_deps/sdl3-src",
                                       "url":  "https://github.com/libsdl-org/SDL/releases/download/release-3.4.4/SDL3-3.4.4.tar.gz",

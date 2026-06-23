@@ -10,6 +10,7 @@ dependencies that are already external to Chromium are tracked as submodules:
 - `upstream/chromium/third_party/freetype/src`
 - `upstream/chromium/third_party/harfbuzz/src`
 - `upstream/chromium/v8`
+- `tools/depot_tools`
 
 SDL3 is not vendored. The CMake build first tries `find_package(SDL3)` and then
 fetches SDL3 into the generated build directory when needed. libxml2, Iconv,
@@ -40,9 +41,11 @@ cmake --build build\cmake-live-image-png-ninja-vs18 --target blink_standalone_v8
 
 Configure with `BLINK_STANDALONE_V8_COMPAT_BUILD=ON` and, when needed,
 `BLINK_STANDALONE_V8_SYNC_DEPS=ON` to let that target prepare a generated V8
-work tree under the CMake binary directory and run GN/Ninja. The normal renderer
-link still uses `BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated output
-is proven and selected as the default.
+work tree under the CMake binary directory and run GN/Ninja. Tool lookup uses
+the declared `tools/depot_tools` submodule by default, while generated depot
+tools payloads and V8 dependencies stay under the build directory. The normal
+renderer link still uses `BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated
+output is proven and selected as the default.
 
 ## Build
 

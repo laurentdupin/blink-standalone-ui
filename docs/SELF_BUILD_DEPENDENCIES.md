@@ -15,6 +15,9 @@ compatibility dependency that is not yet self-built by CMake.
   `d169ad0897a003432b64510f216f0b8365c78957`, from Chromium DEPS
   `v8_revision` at Chromium commit
   `e78920c00cfbfae3856eb6369ad339a4fb2b804e`
+- depot_tools submodule:
+  `tools/depot_tools` at
+  `ea253a3e3ae7653cafd343be001dc5cbe69b3ad0`
 - vcpkg manifest packages:
   `libiconv`, `libxml2`, and `zlib`
 - SDL3:
@@ -83,6 +86,8 @@ Relevant CMake cache variables:
 - `BLINK_STANDALONE_V8_COMPAT_OUT_NAME`, default `chromium_static`
 - `BLINK_STANDALONE_V8_COMPAT_OUT_DIR`, default under the generated V8 work
   copy
+- `BLINK_STANDALONE_DEPOT_TOOLS_ROOT`, default `tools/depot_tools`
+- `BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE`
 - `BLINK_STANDALONE_V8_GN_EXECUTABLE`
 - `BLINK_STANDALONE_V8_NINJA_EXECUTABLE`
 - `BLINK_STANDALONE_V8_CLANG_BASE_PATH`
@@ -103,9 +108,10 @@ Those libc++ object filenames are now source-controlled in
 `cmake/v8_compat_libcxx_objects.cmake` so the next step can point the link at
 the generated compatibility output without relying on a configure-time glob.
 
-`depot_tools` is not vendored yet. If a future slice decides to vendor it, use
-`tools/depot_tools` pinned to a declared revision and keep CIPD payloads
-generated-only.
+`tools/depot_tools` is a declared submodule for locating `gclient` and `gn`.
+The wrapper and CMake target prefer that submodule, but generated CIPD payloads
+from depot_tools must remain generated-only. Do not run depot_tools bootstrap or
+`gclient sync` outside the generated V8 compatibility work root.
 
 ## Why V8 Cannot Be Stubbed Out Safely Yet
 

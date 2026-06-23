@@ -39,6 +39,11 @@ set(BLINK_STANDALONE_CHROMIUM_ROOT
 set(BLINK_STANDALONE_RENDERER_ROOT
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer
 )
+set(BLINK_STANDALONE_DEPOT_TOOLS_ROOT
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/depot_tools
+  CACHE PATH
+  "Pinned depot_tools checkout used by optional source-built V8/CppGC compatibility orchestration."
+)
 set(BLINK_STANDALONE_V8_SOURCE_ROOT
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8
   CACHE PATH
@@ -60,9 +65,41 @@ set(BLINK_STANDALONE_V8_COMPAT_OUT_DIR
   "GN output directory for the generated V8/CppGC compatibility build."
 )
 find_program(BLINK_STANDALONE_V8_GN_EXECUTABLE
-  NAMES gn
+  NAMES gn.bat gn.cmd gn.exe gn
+  HINTS ${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}
+  NO_DEFAULT_PATH
   DOC "GN executable for the optional V8/CppGC compatibility build target."
 )
+if(NOT BLINK_STANDALONE_V8_GN_EXECUTABLE)
+  find_program(BLINK_STANDALONE_V8_GN_EXECUTABLE
+    NAMES gn.bat gn.cmd gn.exe gn
+    DOC "GN executable for the optional V8/CppGC compatibility build target."
+  )
+endif()
+find_program(BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE
+  NAMES gclient.bat gclient.cmd gclient.exe gclient gclient.py
+  HINTS ${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}
+  NO_DEFAULT_PATH
+  DOC "gclient executable for the optional V8/CppGC compatibility dependency sync."
+)
+if(NOT BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE)
+  find_program(BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE
+    NAMES gclient.bat gclient.cmd gclient.exe gclient gclient.py
+    DOC "gclient executable for the optional V8/CppGC compatibility dependency sync."
+  )
+endif()
+set(_blink_standalone_v8_gn_executable "${BLINK_STANDALONE_V8_GN_EXECUTABLE}")
+set(_blink_standalone_v8_gclient_executable "${BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE}")
+if(WIN32)
+  if(_blink_standalone_v8_gn_executable AND
+     EXISTS "${_blink_standalone_v8_gn_executable}.bat")
+    set(_blink_standalone_v8_gn_executable "${_blink_standalone_v8_gn_executable}.bat")
+  endif()
+  if(_blink_standalone_v8_gclient_executable AND
+     EXISTS "${_blink_standalone_v8_gclient_executable}.bat")
+    set(_blink_standalone_v8_gclient_executable "${_blink_standalone_v8_gclient_executable}.bat")
+  endif()
+endif()
 set(BLINK_STANDALONE_V8_NINJA_EXECUTABLE
   ${CMAKE_MAKE_PROGRAM}
   CACHE FILEPATH
@@ -141,9 +178,19 @@ set(_blink_standalone_v8_compat_command
   --out-dir ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}
   --ninja ${BLINK_STANDALONE_V8_NINJA_EXECUTABLE}
 )
-if(BLINK_STANDALONE_V8_GN_EXECUTABLE)
+if(EXISTS "${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}")
   list(APPEND _blink_standalone_v8_compat_command
-    --gn ${BLINK_STANDALONE_V8_GN_EXECUTABLE}
+    --depot-tools ${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}
+  )
+endif()
+if(_blink_standalone_v8_gn_executable)
+  list(APPEND _blink_standalone_v8_compat_command
+    --gn ${_blink_standalone_v8_gn_executable}
+  )
+endif()
+if(_blink_standalone_v8_gclient_executable)
+  list(APPEND _blink_standalone_v8_compat_command
+    --gclient ${_blink_standalone_v8_gclient_executable}
   )
 endif()
 if(BLINK_STANDALONE_V8_CLANG_BASE_PATH)
