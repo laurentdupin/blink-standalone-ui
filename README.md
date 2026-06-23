@@ -45,8 +45,10 @@ stop after checkout/args generation, stop after `gn gen`, or build
 `v8_monolith`. The default `auto` value preserves the older
 `BLINK_STANDALONE_V8_COMPAT_BUILD=ON` behavior as a full build request. Use
 `BLINK_STANDALONE_V8_SYNC_DEPS=ON` only when the generated work tree should run
-`gclient sync`. Tool lookup uses the declared `tools/depot_tools` submodule by
-default, while generated depot tools payloads and V8 dependencies stay under
+`gclient sync`. Tool lookup uses the declared `tools/depot_tools` submodule as
+the pinned source input. For non-plan actions the wrapper clones that checkout
+into the generated V8 work root and executes depot_tools from there, so
+bootstrap/CIPD payloads, the generated Git cache, and V8 dependencies stay under
 the build directory. The normal renderer link still uses
 `BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated output is proven and
 selected as the default.

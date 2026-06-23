@@ -20,6 +20,7 @@ from typing import Iterable
 
 DEFAULT_OUT_NAME = "chromium_static"
 V8_ACTIONS = ("plan", "prepare", "gn-gen", "build")
+DEPOT_TOOLS_WORK_DIR_NAME = "depot_tools"
 
 GN_ARG_VALUES: list[tuple[str, object]] = [
     ("is_debug", False),
@@ -65,9 +66,22 @@ GCLIENT_CUSTOM_VARS: dict[str, object] = {
 }
 
 
-def run(cmd: list[str], *, cwd: Path | None = None) -> None:
+def run(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    extra_path: Path | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> None:
     print("+ " + " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
+    env = None
+    if extra_path or extra_env:
+        env = os.environ.copy()
+        if extra_path:
+            env["PATH"] = str(extra_path) + os.pathsep + env.get("PATH", "")
+        if extra_env:
+            env.update(extra_env)
+    subprocess.run(cmd, cwd=str(cwd) if cwd else None, env=env, check=True)
 
 
 def capture(cmd: list[str], *, cwd: Path | None = None) -> str:
@@ -123,14 +137,20 @@ def tool_names(name: str) -> list[str]:
     return names
 
 
-def find_tool(explicit: str | None, name: str, depot_tools: Path | None) -> list[str] | None:
+def find_tool(
+    explicit: str | None,
+    name: str,
+    depot_tools: Path | None,
+    *,
+    allow_python_entrypoint: bool,
+) -> list[str] | None:
     if depot_tools:
         depot_tools = depot_tools.resolve()
     if explicit:
         explicit_path = Path(explicit).resolve()
         python_payload_marker = depot_tools / "python3_bin_reldir.txt" if depot_tools else None
         python_entrypoint = depot_tools / f"{name}.py" if depot_tools else None
-        if (os.name == "nt" and depot_tools and
+        if (allow_python_entrypoint and os.name == "nt" and depot_tools and
                 explicit_path.suffix.lower() in (".bat", ".cmd") and
                 python_entrypoint and python_entrypoint.exists() and
                 python_payload_marker and not python_payload_marker.exists()):
@@ -139,7 +159,8 @@ def find_tool(explicit: str | None, name: str, depot_tools: Path | None) -> list
     if depot_tools:
         python_payload_marker = depot_tools / "python3_bin_reldir.txt"
         python_entrypoint = depot_tools / f"{name}.py"
-        if os.name == "nt" and python_entrypoint.exists() and not python_payload_marker.exists():
+        if (allow_python_entrypoint and os.name == "nt" and
+                python_entrypoint.exists() and not python_payload_marker.exists()):
             return [sys.executable, str(python_entrypoint)]
         for candidate in tool_names(name):
             path = depot_tools / candidate
@@ -159,23 +180,45 @@ def source_commit(source_v8_root: Path) -> str:
     return capture(["git", "-C", str(source_v8_root), "rev-parse", "HEAD"])
 
 
-def ensure_work_copy(source_v8_root: Path, v8_work_root: Path, commit: str) -> None:
-    if not v8_work_root.exists():
-        v8_work_root.parent.mkdir(parents=True, exist_ok=True)
+def ensure_git_work_copy(source_root: Path, work_copy_root: Path, commit: str, label: str) -> None:
+    if not work_copy_root.exists():
+        work_copy_root.parent.mkdir(parents=True, exist_ok=True)
         run([
             "git",
             "clone",
             "--shared",
             "--no-checkout",
-            str(source_v8_root),
-            str(v8_work_root),
+            str(source_root),
+            str(work_copy_root),
         ])
-    elif not (v8_work_root / ".git").exists():
-        raise RuntimeError(f"V8 work copy exists but is not a git checkout: {v8_work_root}")
+    elif not (work_copy_root / ".git").exists():
+        raise RuntimeError(f"{label} work copy exists but is not a git checkout: {work_copy_root}")
 
-    run(["git", "-C", str(v8_work_root), "remote", "set-url", "origin", str(source_v8_root)])
-    run(["git", "-C", str(v8_work_root), "fetch", "origin", commit, "--depth=1"])
-    run(["git", "-C", str(v8_work_root), "checkout", "--detach", commit])
+    run(["git", "-C", str(work_copy_root), "remote", "set-url", "origin", str(source_root)])
+    run(["git", "-C", str(work_copy_root), "fetch", "origin", commit, "--depth=1"])
+    run(["git", "-C", str(work_copy_root), "checkout", "--detach", commit])
+
+
+def ensure_work_copy(source_v8_root: Path, v8_work_root: Path, commit: str) -> None:
+    ensure_git_work_copy(source_v8_root, v8_work_root, commit, "V8")
+
+
+def ensure_depot_tools_work_copy(source_depot_tools_root: Path, depot_tools_work_root: Path) -> str:
+    commit = source_commit(source_depot_tools_root)
+    ensure_git_work_copy(source_depot_tools_root, depot_tools_work_root, commit, "depot_tools")
+    return commit
+
+
+def ensure_windows_git_bat(depot_tools_root: Path) -> None:
+    if os.name != "nt":
+        return
+    git_bat = depot_tools_root / "git.bat"
+    if git_bat.exists():
+        return
+    git_exe = shutil.which("git.exe") or shutil.which("git")
+    if not git_exe:
+        raise RuntimeError("git is required, and no git.exe was found on PATH.")
+    write_file(git_bat, f'@echo off\n"{git_exe}" %*\n')
 
 
 def write_file(path: Path, content: str) -> None:
@@ -187,6 +230,23 @@ def format_tool(command: list[str] | None) -> str:
     return " ".join(command) if command else "<not found>"
 
 
+def remap_depot_tools_explicit(
+    explicit: str | None,
+    source_depot_tools_root: Path | None,
+    effective_depot_tools_root: Path | None,
+) -> str | None:
+    if not explicit or not source_depot_tools_root or not effective_depot_tools_root:
+        return explicit
+    if source_depot_tools_root == effective_depot_tools_root:
+        return explicit
+    explicit_path = Path(explicit).resolve()
+    try:
+        relative_path = explicit_path.relative_to(source_depot_tools_root)
+    except ValueError:
+        return explicit
+    return str(effective_depot_tools_root / relative_path)
+
+
 def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], tools: dict[str, list[str] | None]) -> None:
     print("V8 compatibility build plan")
     print(f"  action: {args.action}")
@@ -196,6 +256,13 @@ def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], to
     print(f"  generated_gclient_root: {paths['gclient_root']}")
     print(f"  generated_v8_work_copy: {paths['v8_work_root']}")
     print(f"  output_dir: {paths['out_dir']}")
+    if paths.get("source_depot_tools_root"):
+        print(f"  source_depot_tools_root: {paths['source_depot_tools_root']}")
+    if paths.get("effective_depot_tools_root"):
+        print(f"  effective_depot_tools_root: {paths['effective_depot_tools_root']}")
+    if paths.get("effective_depot_tools_commit"):
+        print(f"  effective_depot_tools_commit: {paths['effective_depot_tools_commit']}")
+    print(f"  git_cache_root: {paths['git_cache_root']}")
     print(f"  sync_deps: {args.sync_deps}")
     print(f"  gclient: {format_tool(tools['gclient'])}")
     print(f"  gn: {format_tool(tools['gn'])}")
@@ -262,22 +329,64 @@ def main(argv: Iterable[str]) -> int:
     args = parse_args(argv)
 
     source_v8_root = args.source_v8_root.resolve()
+    source_depot_tools_root = args.depot_tools.resolve() if args.depot_tools else None
     work_root = args.work_root.resolve()
     gclient_root = work_root / "src"
     v8_work_root = gclient_root / "v8"
+    depot_tools_work_root = work_root / DEPOT_TOOLS_WORK_DIR_NAME
+    git_cache_root = work_root / "git_cache"
     out_dir = (args.out_dir.resolve() if args.out_dir else v8_work_root / "out" / args.out_name)
 
     if not (source_v8_root / "include" / "v8-version.h").exists():
         raise RuntimeError(f"--source-v8-root does not look like a V8 checkout: {source_v8_root}")
+    if source_depot_tools_root and not (source_depot_tools_root / "gclient.py").exists():
+        raise RuntimeError(f"--depot-tools does not look like a depot_tools checkout: {source_depot_tools_root}")
 
     commit = source_commit(source_v8_root)
+    effective_depot_tools_root = source_depot_tools_root
+    effective_depot_tools_commit: str | None = None
+    allow_python_entrypoint = True
+    if args.action != "plan" and source_depot_tools_root:
+        effective_depot_tools_commit = ensure_depot_tools_work_copy(source_depot_tools_root, depot_tools_work_root)
+        effective_depot_tools_root = depot_tools_work_root
+        ensure_windows_git_bat(effective_depot_tools_root)
+        allow_python_entrypoint = False
+    gclient_explicit = remap_depot_tools_explicit(
+        args.gclient,
+        source_depot_tools_root,
+        effective_depot_tools_root,
+    )
+    gn_explicit = remap_depot_tools_explicit(
+        args.gn,
+        source_depot_tools_root,
+        effective_depot_tools_root,
+    )
     tools = {
-        "gclient": find_tool(args.gclient, "gclient", args.depot_tools),
-        "gn": find_tool(args.gn, "gn", args.depot_tools),
-        "ninja": find_tool(args.ninja, "ninja", args.depot_tools),
+        "gclient": find_tool(
+            gclient_explicit,
+            "gclient",
+            effective_depot_tools_root,
+            allow_python_entrypoint=allow_python_entrypoint,
+        ),
+        "gn": find_tool(
+            gn_explicit,
+            "gn",
+            effective_depot_tools_root,
+            allow_python_entrypoint=True,
+        ),
+        "ninja": find_tool(
+            args.ninja,
+            "ninja",
+            effective_depot_tools_root,
+            allow_python_entrypoint=allow_python_entrypoint,
+        ),
     }
     paths = {
         "source_v8_root": source_v8_root,
+        "source_depot_tools_root": source_depot_tools_root,
+        "effective_depot_tools_root": effective_depot_tools_root,
+        "effective_depot_tools_commit": effective_depot_tools_commit,
+        "git_cache_root": git_cache_root,
         "work_root": work_root,
         "gclient_root": gclient_root,
         "v8_work_root": v8_work_root,
@@ -287,14 +396,23 @@ def main(argv: Iterable[str]) -> int:
     if args.action == "plan":
         print_plan(args, commit, paths, tools)
         return 0
+    print_plan(args, commit, paths, tools)
 
     ensure_work_copy(source_v8_root, v8_work_root, commit)
     write_file(gclient_root / ".gclient", gclient_text("https://chromium.googlesource.com/v8/v8.git"))
+    generated_env = {
+        "GIT_CACHE_PATH": str(git_cache_root),
+    }
 
     if args.sync_deps:
         if not tools["gclient"]:
             raise RuntimeError("gclient is required for --sync-deps; pass --gclient or --depot-tools.")
-        run([*tools["gclient"], "sync", "--no-history"], cwd=gclient_root)
+        run(
+            [*tools["gclient"], "sync", "--no-history"],
+            cwd=gclient_root,
+            extra_path=effective_depot_tools_root,
+            extra_env=generated_env,
+        )
 
     write_file(out_dir / "args.gn", gn_args_text(args.clang_base_path))
     if args.action == "prepare":
@@ -302,7 +420,12 @@ def main(argv: Iterable[str]) -> int:
 
     if not tools["gn"]:
         raise RuntimeError(f"gn is required for --action {args.action}; pass --gn or put gn on PATH.")
-    run([*tools["gn"], "gen", str(out_dir)], cwd=v8_work_root)
+    run(
+        [*tools["gn"], "gen", str(out_dir)],
+        cwd=v8_work_root,
+        extra_path=effective_depot_tools_root,
+        extra_env=generated_env,
+    )
     if args.action == "gn-gen":
         return 0
 
@@ -312,7 +435,7 @@ def main(argv: Iterable[str]) -> int:
     if args.jobs:
         ninja_cmd.append(f"-j{args.jobs}")
     ninja_cmd.append("v8_monolith")
-    run(ninja_cmd, cwd=v8_work_root)
+    run(ninja_cmd, cwd=v8_work_root, extra_path=effective_depot_tools_root, extra_env=generated_env)
     return 0
 
 

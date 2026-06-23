@@ -106,10 +106,17 @@ Relevant CMake cache variables:
 
 When the action reaches `prepare`, the wrapper clones or updates a generated V8
 work copy under `${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8` from the pinned
-submodule, writes a generated `.gclient` under that work root, and optionally
-runs `gclient sync` if `BLINK_STANDALONE_V8_SYNC_DEPS=ON`. `gclient` must not
-run inside `upstream/chromium`; the generated work root exists specifically to
-avoid colliding with tracked Chromium snapshot paths.
+submodule. It also clones or updates a generated depot_tools work copy under
+`${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/depot_tools` from the pinned
+`tools/depot_tools` submodule. Non-plan actions execute `gclient` and `gn` from
+that generated depot_tools copy so bootstrap/CIPD payloads do not dirty the
+tracked submodule. The wrapper writes a generated `.gclient` under the V8 work
+root, uses a generated Git cache under
+`${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/git_cache`, and optionally runs
+`gclient sync` if
+`BLINK_STANDALONE_V8_SYNC_DEPS=ON`. `gclient` must not run inside
+`upstream/chromium`; the generated work root exists specifically to avoid
+colliding with tracked Chromium snapshot paths.
 
 `BLINK_STANDALONE_V8_CLANG_BASE_PATH` defaults to empty. Leave it empty to let
 V8/GN/depot_tools resolve clang; set it explicitly only when a known Chromium
@@ -121,10 +128,13 @@ Those libc++ object filenames are now source-controlled in
 `cmake/v8_compat_libcxx_objects.cmake` so the next step can point the link at
 the generated compatibility output without relying on a configure-time glob.
 
-`tools/depot_tools` is a declared submodule for locating `gclient` and `gn`.
-The wrapper and CMake target prefer that submodule, but generated CIPD payloads
-from depot_tools must remain generated-only. Do not run depot_tools bootstrap or
-`gclient sync` outside the generated V8 compatibility work root.
+`tools/depot_tools` is a declared submodule for locating and pinning
+`gclient` and `gn`. The wrapper and CMake target prefer that submodule as the
+source input, but generated CIPD payloads from depot_tools must remain
+generated-only under the V8 compatibility work root. On Windows, the wrapper may
+create generated helper shims such as `git.bat` in the generated depot_tools
+copy when the local Git install exposes only `git.exe`. Do not run depot_tools
+bootstrap or `gclient sync` inside the tracked source checkout.
 
 ## Why V8 Cannot Be Stubbed Out Safely Yet
 
