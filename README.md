@@ -67,6 +67,7 @@ cmake --preset x64-Release-GeneratedV8
 cmake --build --preset x64-Release-GeneratedV8-v8-compat
 cmake --preset x64-Release-GeneratedV8-ChromiumLLVM
 cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-c-api
 ```
 
 The generated V8 work copy, generated depot_tools runtime checkout, CIPD
@@ -86,6 +87,34 @@ generating the V8 compatibility output. The validated renderer proof build uses
 the generated Chromium LLVM `clang-cl` / `lld-link`, which removes the generated
 V8 libc++ Clang-version warning and smoke-tested successfully. This remains an
 internal Blink/Oilpan runtime dependency, not a public JavaScript feature.
+
+The recommended C API artifacts for embedders are the DLL and import library:
+
+```text
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.dll
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.lib
+```
+
+This DLL boundary is the intended Godot-facing package because it seals
+Chromium/V8/libc++ implementation details behind the C ABI. The static archive
+is still buildable for internal/advanced use as
+`blink_standalone_renderer_c_api_static.lib`, but it is not the recommended
+Godot artifact: Windows static archives do not fold all transitive static
+dependencies and can conflict with the host runtime/STL linkage.
+
+The intended public ABI surface is the `hcsr_renderer_*` C API declared in
+`renderer_c_api.h`. On Windows, `dumpbin /exports` can also show two
+implementation-support exports from Chromium/V8 (`GetHandleVerifier` and
+`CrashForExceptionInNonABICompliantCodeRange`). Embedders should treat those as
+sealed runtime support details and link only against the import library for the
+documented `hcsr_renderer_*` API.
+
+The generated dependency manifest records both artifacts and the static-link
+contract:
+
+```text
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_link_manifest.json
+```
 
 All build products and fetched SDL sources live under `build/`, which is
 generated-only and ignored by Git.

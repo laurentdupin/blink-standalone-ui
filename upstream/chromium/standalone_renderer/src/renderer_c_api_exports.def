@@ -1,0 +1,21 @@
+LIBRARY blink_standalone_renderer_c_api
+EXPORTS
+  hcsr_renderer_create
+  hcsr_renderer_destroy
+  hcsr_renderer_set_document_html
+  hcsr_renderer_set_viewport
+  hcsr_renderer_advance_frame
+  hcsr_renderer_mouse_move
+  hcsr_renderer_mouse_down
+  hcsr_renderer_mouse_up
+  hcsr_renderer_wheel
+  hcsr_renderer_key_down
+  hcsr_renderer_key_up
+  hcsr_renderer_text_input
+  hcsr_renderer_reset_state
+  hcsr_renderer_get_latest_output
+  hcsr_renderer_release_latest_output
+  hcsr_renderer_hit_metadata_count
+  hcsr_renderer_get_hit_metadata
+  hcsr_renderer_hit_test
+  hcsr_renderer_last_error

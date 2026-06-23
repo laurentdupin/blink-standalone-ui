@@ -8,8 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#if defined(_WIN32)
+#if defined(_WIN32) && defined(HCSR_C_API_STATIC)
+#define HCSR_C_API
+#elif defined(_WIN32) && defined(HCSR_C_API_IMPLEMENTATION)
 #define HCSR_C_API __declspec(dllexport)
+#elif defined(_WIN32)
+#define HCSR_C_API __declspec(dllimport)
 #else
 #define HCSR_C_API
 #endif

@@ -99,6 +99,7 @@ cmake --preset x64-Release-GeneratedV8
 cmake --build --preset x64-Release-GeneratedV8-v8-compat
 cmake --preset x64-Release-GeneratedV8-ChromiumLLVM
 cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-c-api
 ```
 
 This is intentionally a two-stage flow. The first configure/build uses the
@@ -110,6 +111,43 @@ sets `BLINK_STANDALONE_V8_COMPAT_ACTION=plan` so the renderer build consumes
 the existing generated V8 output instead of syncing or rebuilding V8 again. The
 Chromium LLVM preset cannot configure from a fresh clone until the first stage
 has produced the generated toolchain and V8 output.
+
+The C API preset writes the recommended Godot-facing DLL and import library to:
+
+```text
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.dll
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.lib
+```
+
+The DLL is the recommended artifact for Godot and other external embedders
+because it seals Chromium/V8/libc++ implementation details behind the C ABI
+boundary. The static archive remains available for internal/advanced use as:
+
+```text
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_static.lib
+```
+
+That static archive is not link-complete by itself on Windows because static
+archives do not fold all transitive static dependencies, and it can conflict
+with the host runtime/STL linkage.
+
+The intended public ABI surface is the `hcsr_renderer_*` C API declared in
+`renderer_c_api.h`. The Windows DLL export table can still include two
+Chromium/V8 runtime-support exports, `GetHandleVerifier` and
+`CrashForExceptionInNonABICompliantCodeRange`, because those are explicitly
+exported by linked implementation objects. They are not part of the supported
+embedder API; Godot and other hosts should link only the import library and call
+the documented `hcsr_renderer_*` functions. The build also generates:
+
+```text
+build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_link_manifest.json
+```
+
+The manifest records the current DLL and static dependency contract: the DLL and
+import library, the internal static archive, generated `v8_monolith.lib`,
+Chromium libc++ object directory and object-list file, third-party CMake targets,
+and Windows system libraries. Godot should link the DLL import library rather
+than the static archive.
 
 The equivalent manual configuration shape is:
 
@@ -134,6 +172,7 @@ cmake -S . -B build\cmake-generated-v8-chromium-llvm -G Ninja `
   -DBLINK_STANDALONE_V8_COMPAT_OUT_DIR=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat/src/v8/out/chromium_static `
   -DBLINK_STANDALONE_V8_COMPAT_ACTION=plan
 ninja -C build\cmake-generated-v8-chromium-llvm -j8 blink_standalone_sdl_viewer_skia
+ninja -C build\cmake-generated-v8-chromium-llvm -j8 blink_standalone_renderer_c_api_dll blink_standalone_renderer_c_api_link_manifest
 ```
 
 Generated V8 work copies, depot_tools runtime checkouts, CIPD payloads,

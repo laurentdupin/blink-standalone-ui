@@ -607,11 +607,15 @@ endif()
 
 set(BLINK_STANDALONE_APP_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/compositor_benchmark.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
 )
 set(BLINK_STANDALONE_SDL_APP_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/examples/compositor_sdl_viewer.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
+)
+set(BLINK_STANDALONE_C_API_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/renderer_c_api.cc
+)
+set(BLINK_STANDALONE_C_API_EXPORTS_DEF
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/renderer_c_api_exports.def
 )
 set(BLINK_STANDALONE_BOUNDARY_SOURCES)
 set(BLINK_STANDALONE_CODEC_SOURCES ${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES})
@@ -767,9 +771,21 @@ if(NOT MSVC)
   )
 endif()
 
+add_library(blink_standalone_live_renderer_objects OBJECT
+  ${BLINK_STANDALONE_LIVE_SOURCES}
+)
+add_dependencies(blink_standalone_live_renderer_objects
+  blink_angle_libEGL
+  blink_angle_libGLESv2
+)
+blink_standalone_add_v8_compat_dependency(blink_standalone_live_renderer_objects)
+set_property(TARGET blink_standalone_live_renderer_objects PROPERTY
+  MSVC_RUNTIME_LIBRARY "MultiThreaded")
+
 add_executable(blink_standalone_render_benchmark_skia
   ${BLINK_STANDALONE_APP_SOURCES}
-  ${BLINK_STANDALONE_LIVE_SOURCES}
+  ${BLINK_STANDALONE_C_API_SOURCES}
+  $<TARGET_OBJECTS:blink_standalone_live_renderer_objects>
   ${BLINK_STANDALONE_LIVE_OBJECTS}
 )
 add_dependencies(blink_standalone_render_benchmark_skia
@@ -939,8 +955,37 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     LibXml2::LibXml2
   )
 
+  foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
+                                 COMPILE_OPTIONS)
+    get_target_property(property_value blink_standalone_render_benchmark_skia
+      ${property_name})
+    if(property_value AND NOT property_value STREQUAL "property_value-NOTFOUND")
+      if(property_name STREQUAL "INCLUDE_DIRECTORIES")
+        target_include_directories(blink_standalone_live_renderer_objects PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+        target_compile_definitions(blink_standalone_live_renderer_objects PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "COMPILE_OPTIONS")
+        target_compile_options(blink_standalone_live_renderer_objects PRIVATE
+          ${property_value})
+      endif()
+    endif()
+  endforeach()
+
+  target_compile_definitions(blink_standalone_live_renderer_objects PRIVATE
+    LIBXML_STATIC
+  )
+  target_link_libraries(blink_standalone_live_renderer_objects PRIVATE
+    LibXml2::LibXml2
+  )
+  target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
+    HCSR_C_API_STATIC=1
+  )
+
   add_library(blink_standalone_renderer_c_api STATIC
-    ${BLINK_STANDALONE_LIVE_SOURCES}
+    ${BLINK_STANDALONE_C_API_SOURCES}
+    $<TARGET_OBJECTS:blink_standalone_live_renderer_objects>
     ${BLINK_STANDALONE_LIVE_OBJECTS}
   )
   add_dependencies(blink_standalone_renderer_c_api
@@ -968,13 +1013,126 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       endif()
     endif()
   endforeach()
+  target_compile_definitions(blink_standalone_renderer_c_api PRIVATE
+    HCSR_C_API_STATIC=1)
   set_property(TARGET blink_standalone_renderer_c_api PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded")
+  set_target_properties(blink_standalone_renderer_c_api PROPERTIES
+    OUTPUT_NAME blink_standalone_renderer_c_api_static)
 
+  add_library(blink_standalone_renderer_c_api_dll SHARED
+    ${BLINK_STANDALONE_C_API_SOURCES}
+    ${BLINK_STANDALONE_C_API_EXPORTS_DEF}
+    $<TARGET_OBJECTS:blink_standalone_live_renderer_objects>
+    ${BLINK_STANDALONE_LIVE_OBJECTS}
+  )
+  add_dependencies(blink_standalone_renderer_c_api_dll
+    blink_angle_libEGL
+    blink_angle_libGLESv2
+  )
+  blink_standalone_add_v8_compat_dependency(blink_standalone_renderer_c_api_dll)
+  foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
+                                 COMPILE_OPTIONS LINK_LIBRARIES)
+    get_target_property(property_value blink_standalone_render_benchmark_skia
+      ${property_name})
+    if(property_value AND NOT property_value STREQUAL "property_value-NOTFOUND")
+      if(property_name STREQUAL "INCLUDE_DIRECTORIES")
+        target_include_directories(blink_standalone_renderer_c_api_dll PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+        target_compile_definitions(blink_standalone_renderer_c_api_dll PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "COMPILE_OPTIONS")
+        target_compile_options(blink_standalone_renderer_c_api_dll PRIVATE
+          ${property_value})
+      elseif(property_name STREQUAL "LINK_LIBRARIES")
+        target_link_libraries(blink_standalone_renderer_c_api_dll PRIVATE
+          ${property_value})
+      endif()
+    endif()
+  endforeach()
+  target_compile_definitions(blink_standalone_renderer_c_api_dll PRIVATE
+    HCSR_C_API_IMPLEMENTATION=1)
+  set_property(TARGET blink_standalone_renderer_c_api_dll PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded")
+  set_target_properties(blink_standalone_renderer_c_api_dll PROPERTIES
+    OUTPUT_NAME blink_standalone_renderer_c_api)
+  if(MSVC)
+    target_link_options(blink_standalone_renderer_c_api_dll PRIVATE
+      /MAP:${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_dll.map
+      /DEF:${BLINK_STANDALONE_C_API_EXPORTS_DEF}
+      /exclude-all-symbols
+      /exclude-symbols:CrashForExceptionInNonABICompliantCodeRange,GetHandleVerifier
+    )
+  endif()
+
+  set(BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST
+    ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_link_manifest.json
+  )
+  set(_blink_standalone_renderer_c_api_link_manifest_content [=[
+{
+  "schema_version": 1,
+  "recommended_target": "blink_standalone_renderer_c_api_dll",
+  "recommended_artifact": "$<TARGET_FILE:blink_standalone_renderer_c_api_dll>",
+  "recommended_import_library": "$<TARGET_LINKER_FILE:blink_standalone_renderer_c_api_dll>",
+  "recommended_kind": "shared_library",
+  "static_target": "blink_standalone_renderer_c_api",
+  "static_archive": "$<TARGET_FILE:blink_standalone_renderer_c_api>",
+  "static_link_complete_by_itself": false,
+  "contract": "Godot and other external embedders should link the DLL import library, not the static archive. The supported public ABI is the hcsr_renderer_* C API. On Windows the DLL export table can also contain Chromium/V8 runtime-support exports such as GetHandleVerifier and CrashForExceptionInNonABICompliantCodeRange; those are sealed implementation details, not supported embedder API. The static archive is internal/advanced because Windows static libraries do not fold all transitive static dependencies and can conflict with the host runtime/STL.",
+  "v8_monolith": "@BLINK_STANDALONE_V8_MONOLITH_LIB@",
+  "chromium_libcxx_object_dir": "@BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR@",
+  "chromium_libcxx_object_list": "@_blink_standalone_libcxx_object_list@",
+  "third_party_targets": [
+    "freetype",
+    "harfbuzz",
+    "LibXml2::LibXml2"
+  ],
+  "windows_system_libraries": [
+    "d3d11",
+    "dcomp",
+    "dwmapi",
+    "dxcore",
+    "dxgi",
+    "kernel32",
+    "mincore",
+    "ole32",
+    "oleaut32",
+    "propsys",
+    "runtimeobject",
+    "shell32",
+    "shcore",
+    "winmm",
+    "windowscodecs",
+    "wbemuuid",
+    "advapi32",
+    "dbghelp",
+    "ntdll",
+    "psapi",
+    "setupapi",
+    "shlwapi",
+    "ws2_32",
+    "delayimp"
+  ],
+  "todo": "Promote this manifest into a generated response file or install/export package once the C API distribution packaging is defined."
+}
+]=])
+  string(CONFIGURE
+    "${_blink_standalone_renderer_c_api_link_manifest_content}"
+    _blink_standalone_renderer_c_api_link_manifest_content
+    @ONLY
+  )
+  file(GENERATE OUTPUT "${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
+    CONTENT "${_blink_standalone_renderer_c_api_link_manifest_content}")
+  add_custom_target(blink_standalone_renderer_c_api_link_manifest
+    DEPENDS blink_standalone_renderer_c_api_dll
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "C API link manifest: ${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
+  )
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia
       ${BLINK_STANDALONE_SDL_APP_SOURCES}
-      ${BLINK_STANDALONE_LIVE_SOURCES}
+      $<TARGET_OBJECTS:blink_standalone_live_renderer_objects>
       ${BLINK_STANDALONE_LIVE_OBJECTS}
     )
     add_dependencies(blink_standalone_sdl_viewer_skia

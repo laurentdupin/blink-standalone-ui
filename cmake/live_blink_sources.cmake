@@ -245,9 +245,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_core_initializer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_link_boundary_stubs.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/renderer_c_api.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_native_theme.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_element_resource_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/mojo_phase1_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/network_feature_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_process.cc
