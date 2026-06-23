@@ -20,8 +20,7 @@ option(BLINK_STANDALONE_OPTIMIZE_BOUNDARY
   "Compile standalone Blink boundary/stub/resource bridge sources with release optimization." ON)
 option(BLINK_STANDALONE_OPTIMIZE_APP
   "Compile standalone benchmark/presenter application sources with release optimization." ON)
-option(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT
-  "Require the prebuilt V8/CppGC compatibility library. Disable only after adding a buildable in-repo V8/CppGC target." ON)
+unset(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT CACHE)
 option(BLINK_STANDALONE_V8_SYNC_DEPS
   "Allow the V8 compatibility wrapper to run gclient sync in its generated work root." OFF)
 option(BLINK_STANDALONE_V8_COMPAT_BUILD
@@ -131,15 +130,18 @@ set(BLINK_STANDALONE_V8_COMPAT_JOBS
   CACHE STRING
   "Optional -j value for the V8/CppGC compatibility ninja build."
 )
-set(BLINK_STANDALONE_V8_BUILD_ROOT
+set(_blink_standalone_legacy_v8_build_root
   ${CMAKE_CURRENT_SOURCE_DIR}/build/v8_mono2/v8
+)
+set(BLINK_STANDALONE_V8_BUILD_ROOT
+  ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8
   CACHE PATH
-  "GN-built V8 checkout/output root used until V8/CppGC is built by this CMake project."
+  "Generated V8 work copy used by the V8/CppGC compatibility build."
 )
 set(BLINK_STANDALONE_V8_MONOLITH_LIB
-  ${BLINK_STANDALONE_V8_BUILD_ROOT}/out/chromium_static/obj/v8_monolith.lib
+  ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
   CACHE FILEPATH
-  "Prebuilt V8/CppGC compatibility library for the live Blink renderer."
+  "Source-built V8/CppGC compatibility library for the live Blink renderer."
 )
 set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
   ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
@@ -161,10 +163,63 @@ set(BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES
   _HAS_NODISCARD
 )
 set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
-  ${BLINK_STANDALONE_V8_BUILD_ROOT}/out/chromium_static/obj/buildtools/third_party/libc++/libc++
+  ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/buildtools/third_party/libc++/libc++
   CACHE PATH
   "Directory containing Chromium libc++ object files built with the V8/CppGC compatibility library."
 )
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_BUILD_ROOT}" _blink_standalone_v8_build_root_normalized)
+if(_blink_standalone_v8_build_root_normalized MATCHES "/build/v8_mono2/v8$")
+  message(STATUS "Migrating legacy BLINK_STANDALONE_V8_BUILD_ROOT cache value to the generated V8 compatibility work root.")
+  set(BLINK_STANDALONE_V8_BUILD_ROOT
+    ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8
+    CACHE PATH
+    "Generated V8 work copy used by the V8/CppGC compatibility build."
+    FORCE
+  )
+endif()
+set(_blink_standalone_legacy_v8_monolith_lib
+  ${_blink_standalone_legacy_v8_build_root}/out/chromium_static/obj/v8_monolith.lib
+)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_MONOLITH_LIB}" _blink_standalone_v8_monolith_lib_normalized)
+if(_blink_standalone_v8_monolith_lib_normalized MATCHES "/build/v8_mono2/v8/out/chromium_static/obj/v8_monolith\\.lib$")
+  message(STATUS "Migrating legacy BLINK_STANDALONE_V8_MONOLITH_LIB cache value to the generated V8 compatibility output.")
+  set(BLINK_STANDALONE_V8_MONOLITH_LIB
+    ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
+    CACHE FILEPATH
+    "Source-built V8/CppGC compatibility library for the live Blink renderer."
+    FORCE
+  )
+endif()
+set(_blink_standalone_legacy_libcxx_object_dir
+  ${_blink_standalone_legacy_v8_build_root}/out/chromium_static/obj/buildtools/third_party/libc++/libc++
+)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}" _blink_standalone_libcxx_object_dir_normalized)
+if(_blink_standalone_libcxx_object_dir_normalized MATCHES "/build/v8_mono2/v8/out/chromium_static/obj/buildtools/third_party/libc\\+\\+/libc\\+\\+$")
+  message(STATUS "Migrating legacy BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR cache value to the generated V8 compatibility output.")
+  set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
+    ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/buildtools/third_party/libc++/libc++
+    CACHE PATH
+    "Directory containing Chromium libc++ object files built with the V8/CppGC compatibility library."
+    FORCE
+  )
+endif()
+set(_blink_standalone_legacy_libcxx_include_dirs
+  ${_blink_standalone_legacy_v8_build_root}/buildtools/third_party/libc++
+  ${_blink_standalone_legacy_v8_build_root}/third_party/libc++/src/include
+)
+set(_blink_standalone_libcxx_include_dirs_normalized "${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}")
+string(REPLACE "\\" "/" _blink_standalone_libcxx_include_dirs_normalized "${_blink_standalone_libcxx_include_dirs_normalized}")
+string(FIND "${_blink_standalone_libcxx_include_dirs_normalized}" "build/v8_mono2/v8" _blink_standalone_legacy_libcxx_include_pos)
+if(NOT _blink_standalone_legacy_libcxx_include_pos EQUAL -1)
+  message(STATUS "Migrating legacy BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS cache value to the generated V8 compatibility work root.")
+  set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
+    CACHE STRING
+    "Chromium libc++ include roots used for ABI compatibility with the V8/CppGC library."
+    FORCE
+  )
+endif()
 set(BLINK_STANDALONE_V8_ABI_DEFINES
   V8_COMPRESS_POINTERS
   V8_COMPRESS_POINTERS_IN_SHARED_CAGE
@@ -248,44 +303,47 @@ add_custom_target(blink_standalone_v8_compat
   COMMENT "${_blink_standalone_v8_compat_comment}"
 )
 
+function(blink_standalone_add_v8_compat_dependency target_name)
+  if(MSVC)
+    add_dependencies(${target_name} blink_standalone_v8_compat_validate)
+  endif()
+endfunction()
+
 if(MSVC)
-  if(NOT BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT)
-    message(FATAL_ERROR
-      "BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT=OFF is not implemented yet. "
-      "Add a CMake-owned V8/CppGC compatibility target before disabling the prebuilt compatibility library.")
-  endif()
-  if(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT AND
-     NOT EXISTS "${BLINK_STANDALONE_V8_MONOLITH_LIB}")
-    message(FATAL_ERROR
-      "V8/CppGC compatibility library is missing: ${BLINK_STANDALONE_V8_MONOLITH_LIB}\n"
-      "The live Blink renderer still needs real CppGC/Oilpan and V8 API support even when public JavaScript is disabled. "
-      "Set BLINK_STANDALONE_V8_BUILD_ROOT/BLINK_STANDALONE_V8_MONOLITH_LIB to a GN-built V8 checkout, or add an in-repo "
-      "V8/CppGC build target before disabling BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT.")
-  endif()
-  if(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT)
-    add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
-    set_target_properties(blink_standalone_v8_monolith PROPERTIES
-      IMPORTED_LOCATION "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
-      INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
-    )
-  endif()
+  add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
+  set_target_properties(blink_standalone_v8_monolith PROPERTIES
+    IMPORTED_LOCATION "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
+    INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
+  )
   blink_standalone_resolve_libcxx_objects(
     BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
     "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}"
   )
-  set(_blink_standalone_missing_libcxx_objects)
-  foreach(_blink_standalone_libcxx_object IN LISTS BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS)
-    if(NOT EXISTS "${_blink_standalone_libcxx_object}")
-      list(APPEND _blink_standalone_missing_libcxx_objects "${_blink_standalone_libcxx_object}")
-    endif()
+  set_source_files_properties(${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
+    PROPERTIES
+      GENERATED TRUE
+      EXTERNAL_OBJECT TRUE
+  )
+  set(_blink_standalone_libcxx_object_list
+    ${CMAKE_BINARY_DIR}/v8_compat_libcxx_objects.txt
+  )
+  file(WRITE "${_blink_standalone_libcxx_object_list}" "")
+  foreach(_blink_standalone_libcxx_object_name IN LISTS BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_NAMES)
+    file(APPEND "${_blink_standalone_libcxx_object_list}" "${_blink_standalone_libcxx_object_name}\n")
   endforeach()
-  if(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT AND
-     _blink_standalone_missing_libcxx_objects)
-    message(FATAL_ERROR
-      "Chromium libc++ objects are missing: ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}\n"
-      "Missing objects: ${_blink_standalone_missing_libcxx_objects}\n"
-      "These objects currently come from the same GN-built V8 compatibility tree as v8_monolith.lib. "
-      "Make libc++ a CMake-owned target before disabling BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT.")
+  set(_blink_standalone_v8_compat_validation_command
+    ${Python3_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/validate_v8_compat_output.py
+    --monolith-lib ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+    --libcxx-object-dir ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}
+    --object-list ${_blink_standalone_libcxx_object_list}
+  )
+  add_custom_target(blink_standalone_v8_compat_validate
+    COMMAND ${_blink_standalone_v8_compat_validation_command}
+    COMMENT "Validate V8/CppGC compatibility link outputs"
+  )
+  if(_blink_standalone_v8_compat_action STREQUAL "build")
+    add_dependencies(blink_standalone_v8_compat_validate blink_standalone_v8_compat)
   endif()
   add_library(blink_standalone_chromium_libcxx INTERFACE)
   target_sources(blink_standalone_chromium_libcxx INTERFACE
@@ -719,6 +777,7 @@ add_dependencies(blink_standalone_render_benchmark_skia
   blink_angle_libEGL
   blink_angle_libGLESv2
 )
+blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia)
 
   target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
     ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
@@ -889,6 +948,7 @@ add_dependencies(blink_standalone_render_benchmark_skia
     blink_angle_libEGL
     blink_angle_libGLESv2
   )
+  blink_standalone_add_v8_compat_dependency(blink_standalone_renderer_c_api)
   foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
                                  COMPILE_OPTIONS LINK_LIBRARIES)
     get_target_property(property_value blink_standalone_render_benchmark_skia
@@ -922,6 +982,7 @@ add_dependencies(blink_standalone_render_benchmark_skia
       blink_angle_libEGL
       blink_angle_libGLESv2
     )
+    blink_standalone_add_v8_compat_dependency(blink_standalone_sdl_viewer_skia)
 
     target_include_directories(blink_standalone_sdl_viewer_skia BEFORE PRIVATE
       ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}

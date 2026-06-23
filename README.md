@@ -17,21 +17,18 @@ fetches SDL3 into the generated build directory when needed. libxml2, Iconv,
 and zlib are declared in `vcpkg.json`; configure with `VCPKG_ROOT` pointing at a
 vcpkg checkout, or install vcpkg at `C:/vcpkg`.
 
-The current Windows build still requires a GN-built V8/CppGC compatibility
-library and matching Chromium libc++ objects. The V8 source is declared as a
-submodule at `upstream/chromium/v8`, pinned from Chromium DEPS. The build still
-links a prebuilt/GN-built `v8_monolith.lib` until the CMake/GN orchestration
-target is added. This is an internal Blink Oilpan/runtime dependency, not a
-public JavaScript feature. The paths are explicit CMake cache variables:
+The current Windows build requires a source-built V8/CppGC compatibility
+library and matching Chromium libc++ objects generated from the pinned V8
+submodule at `upstream/chromium/v8`. This is an internal Blink Oilpan/runtime
+dependency, not a public JavaScript feature. The paths are explicit CMake cache
+variables:
 
 - `BLINK_STANDALONE_V8_BUILD_ROOT`
+- `BLINK_STANDALONE_V8_COMPAT_OUT_DIR`
 - `BLINK_STANDALONE_V8_MONOLITH_LIB`
 - `BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR`
 
-See `docs/SELF_BUILD_DEPENDENCIES.md` for the remaining work to replace this
-compatibility tree with self-built source targets.
-
-The repository now includes a source-controlled wrapper target for the V8
+The repository includes a source-controlled wrapper target for the V8
 compatibility build. By default it runs the `plan` action, which only prints
 the generated work-root plan and does not download dependencies, run GN, or
 compile V8:
@@ -50,14 +47,17 @@ the pinned source input. For non-plan actions the wrapper clones that checkout
 into the generated V8 work root and executes depot_tools from there, so
 bootstrap/CIPD payloads, the generated Git cache, and V8 dependencies stay under
 the build directory. The wrapper also uses generated tool shims there so Windows
-build commands resolve the intended Python/Git tools. The normal renderer link still uses
-`BLINK_STANDALONE_V8_MONOLITH_LIB` until that generated output is proven and
-selected as the default.
+build commands resolve the intended Python/Git tools. The normal renderer link
+consumes `BLINK_STANDALONE_V8_MONOLITH_LIB` and Chromium libc++ objects from
+that generated compatibility output. Configure can generate build files before
+the output exists; renderer targets depend on a validation step that checks the
+monolith and expected libc++ objects before link, and waits for
+`blink_standalone_v8_compat` first when the selected action is `build`.
 
 ## Build
 
-From a fresh clone with vcpkg installed and the temporary V8/CppGC
-compatibility tree available:
+From a fresh clone with vcpkg installed and the V8/CppGC compatibility output
+built:
 
 ```powershell
 git submodule update --init --recursive
