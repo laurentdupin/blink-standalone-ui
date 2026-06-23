@@ -41,8 +41,12 @@ generated build directory:
 
 CMake now builds the tracked Abseil source subset needed by the live renderer
 instead of consuming Abseil headers or object code from the V8 build scratch
-directory. The old tracked `v8/include` header subset was removed because it
-reported V8 14.9 while the working Blink/V8 compatibility boundary is V8 15.1.
+directory. PartitionAlloc sources remain tracked for diagnostics and future
+source ownership, but the normal V8-backed renderer does not link those
+implementation objects because the source-built `v8_monolith.lib` already
+contains the real PartitionAlloc implementation required by V8/CppGC. The old
+tracked `v8/include` header subset was removed because it reported V8 14.9 while
+the working Blink/V8 compatibility boundary is V8 15.1.
 
 ## Generated V8/CppGC Compatibility Output
 
@@ -162,10 +166,11 @@ JavaScript execution symbols. It also currently supplies:
 - CppGC/Oilpan heap, cage, write-barrier, and liveness symbols
 - V8 handle-scope, context, traced-reference, and CppHeap APIs used by Blink
 
-Chromium-prefixed zlib aliases such as `Cr_z_*` and PartitionAlloc support
-symbols, plus the Abseil object-code used by the live renderer, are now linked
-from tracked Chromium sources by the CMake build instead of being supplied
-incidentally by `v8_monolith.lib`.
+Chromium-prefixed zlib aliases such as `Cr_z_*`, plus the Abseil object-code
+used by the live renderer, are now linked from tracked Chromium sources by the
+CMake build instead of being supplied incidentally by `v8_monolith.lib`.
+PartitionAlloc is still supplied by `v8_monolith.lib` in the normal V8-backed
+link to avoid duplicate allocator definitions.
 
 Blink uses Oilpan object lifetime throughout the live document, layout, style,
 paint, and input paths. A local fake CppGC replacement would risk invalid object
@@ -206,9 +211,10 @@ fresh configure can build the compatibility output on demand:
 2. Continue tightening the dependency tracking around generated `v8_monolith.lib`
    and Chromium libc++ object files so incremental builds can avoid unnecessary
    renderer rebuilds while still validating missing outputs before link.
-3. Keep the tracked-source zlib, PartitionAlloc, and Abseil source targets in
-   the normal live renderer build graph while replacing the remaining V8/CppGC
-   compatibility library.
+3. Keep the tracked-source zlib and Abseil source targets in the normal live
+   renderer build graph. PartitionAlloc source ownership should be revisited
+   only together with the V8/CppGC build configuration so the allocator is not
+   linked twice.
 4. Keep JavaScript disabled at the renderer API boundary. The V8/CppGC support
    target is currently an internal Blink lifetime/runtime requirement, not a
    public scripting feature.

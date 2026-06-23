@@ -560,10 +560,9 @@ set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
 set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
   PROPERTIES COMPILE_DEFINITIONS IS_PARTITION_ALLOC_IMPL=1)
 list(APPEND BLINK_STANDALONE_LIVE_SOURCES ${BLINK_STANDALONE_ZLIB_C_SOURCES})
-list(APPEND BLINK_STANDALONE_LIVE_SOURCES
-  ${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
-  ${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
-)
+# Source-built v8_monolith contains the real PartitionAlloc implementation used
+# by V8/CppGC. Do not link the tracked implementation objects into the normal
+# V8-backed renderer as well, or lld reports duplicate PartitionAlloc symbols.
 
 if(BLINK_STANDALONE_PERF_BUILD)
   set(BLINK_STANDALONE_PERF_SKIA_SOURCES
