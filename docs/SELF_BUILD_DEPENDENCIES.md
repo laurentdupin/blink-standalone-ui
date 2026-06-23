@@ -59,9 +59,11 @@ JavaScript execution symbols. It also currently supplies:
 
 - CppGC/Oilpan heap, cage, write-barrier, and liveness symbols
 - V8 handle-scope, context, traced-reference, and CppHeap APIs used by Blink
-- PartitionAlloc support symbols
 - Abseil object-code symbols
-- Chromium-prefixed zlib aliases such as `Cr_z_*`
+
+Chromium-prefixed zlib aliases such as `Cr_z_*` and PartitionAlloc support
+symbols are now linked from tracked Chromium sources by the CMake build instead
+of being supplied incidentally by `v8_monolith.lib`.
 
 Blink uses Oilpan object lifetime throughout the live document, layout, style,
 paint, and input paths. A local fake CppGC replacement would risk invalid object
@@ -101,8 +103,9 @@ or explicitly external targets:
 
 2. Make Chromium libc++ a declared source/build input instead of consuming
    object files from `build/v8_mono2`.
-3. Link Abseil, PartitionAlloc, and Chromium zlib aliases from tracked source
-   targets instead of incidentally through `v8_monolith.lib`.
+3. Link Abseil from tracked source targets instead of incidentally through
+   `v8_monolith.lib`. Chromium zlib aliases and PartitionAlloc support are
+   already CMake-owned tracked-source inputs.
 4. Keep JavaScript disabled at the renderer API boundary. The V8/CppGC support
    target is currently an internal Blink lifetime/runtime requirement, not a
    public scripting feature.

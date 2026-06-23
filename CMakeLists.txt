@@ -235,6 +235,74 @@ set(BLINK_STANDALONE_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/zutil.c
 )
 
+set(BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/check.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/cpu.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/alias.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/stack_trace.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/debug/stack_trace_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/log_message.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/logging.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/memory/page_size_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/memory/ref_counted.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/process/process_handle_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/rand_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/rand_util_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/scoped_clear_last_error_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/strings/cstring_builder.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/strings/safe_sprintf.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/strings/string_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/strings/stringprintf.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/threading/platform_thread.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/threading/platform_thread_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time_override.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_base/time/time_win.cc
+)
+
+set(BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/address_pool_manager.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/address_pool_manager_bitmap.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/address_space_randomization.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/allocation_guard.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/allocator_config.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/bounds_checks.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/compressed_pointer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/dangling_raw_ptr_checks.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/gwp_asan_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/in_slot_metadata.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/internal_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/oom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/oom_callback.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/page_allocator.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_address_space.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc_hooks.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_bucket.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_cookie.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_dcheck_helper.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_freelist_entry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_oom.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_page.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_root.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_stats.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_tls_win.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/random.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/reservation_offset_table.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/scheduler_loop_quarantine.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/scheduler_loop_quarantine_support.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/slot_address_and_size.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/slot_start.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/spinning_mutex.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/stack/asm/x64/push_registers_asm.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/stack/stack.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/tagging.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/thread_cache.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/thread_isolation/pkey.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.cc
+)
+
 set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngerror.c
@@ -254,7 +322,15 @@ set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
 )
 set_source_files_properties(${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES}
   PROPERTIES LANGUAGE CXX)
+set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
+  PROPERTIES COMPILE_DEFINITIONS IS_PARTITION_ALLOC_BASE_IMPL=1)
+set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
+  PROPERTIES COMPILE_DEFINITIONS IS_PARTITION_ALLOC_IMPL=1)
 list(APPEND BLINK_STANDALONE_LIVE_SOURCES ${BLINK_STANDALONE_ZLIB_C_SOURCES})
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
+  ${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
+)
 
 if(BLINK_STANDALONE_PERF_BUILD)
   set(BLINK_STANDALONE_PERF_SKIA_SOURCES
