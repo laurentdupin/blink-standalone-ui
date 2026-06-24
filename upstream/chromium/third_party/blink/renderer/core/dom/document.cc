@@ -2686,7 +2686,7 @@ static void AssertLayoutTreeUpdated(
 
 #endif
 
-#if EXPENSIVE_DCHECKS_ARE_ON()
+#if DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
 void Document::AssertLayoutTreeUpdatedAfterLayout() {
   AssertLayoutTreeUpdated(*this, /*allow_dirty_container_subtrees=*/false);
   DCHECK(!GetStyleEngine().SkippedContainerRecalc());
@@ -2795,7 +2795,7 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
   }
 #endif
 
-#if EXPENSIVE_DCHECKS_ARE_ON()
+#if DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
   if (HTMLFrameOwnerElement* owner = LocalOwner()) {
     DCHECK(!owner->GetDocument()
                 .GetSlotAssignmentEngine()
@@ -2803,7 +2803,7 @@ void Document::UpdateStyleAndLayoutTreeForThisDocument() {
     DCHECK(!owner->GetDocument().NeedsLayoutTreeUpdate());
     AssertLayoutTreeUpdated(owner->GetDocument());
   }
-#endif  // EXPENSIVE_DCHECKS_ARE_ON()
+#endif  // DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
 
   ProcessScheduledShadowTreeCreationsNow();
 #if defined(HTML_CSS_RENDERER_STANDALONE)

@@ -99,6 +99,7 @@ cmake --preset x64-Release-GeneratedV8
 cmake --build --preset x64-Release-GeneratedV8-v8-compat
 cmake --preset x64-Release-GeneratedV8-ChromiumLLVM
 cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer-release
 cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-c-api
 ```
 
@@ -111,6 +112,22 @@ sets `BLINK_STANDALONE_V8_COMPAT_ACTION=plan` so the renderer build consumes
 the existing generated V8 output instead of syncing or rebuilding V8 again. The
 Chromium LLVM preset cannot configure from a fresh clone until the first stage
 has produced the generated toolchain and V8 output.
+
+The generated-V8 preset and build preset set `DEPOT_TOOLS_WIN_TOOLCHAIN=0` for
+local Windows self-builds. This keeps Chromium `vs_toolchain.py` on the locally
+installed Visual Studio toolchain instead of trying to download Google's private
+`chrome-wintoolchain` package, which fails for normal users with a GCS 401.
+
+The release-level SDL viewer preset is:
+
+```powershell
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer-release
+```
+
+It uses the Chromium LLVM renderer build, disables forced `DCHECK_ALWAYS_ON`,
+overrides generated debug buildflags so expensive DCHECKs are off, and removes
+the old standalone `SK_ENABLE_OPTIMIZE_SIZE`, `CPU_NO_SIMD`,
+`SKCMS_DISABLE_HSW`, and `SKCMS_DISABLE_SKX` restrictions.
 
 The C API preset writes the recommended Godot-facing DLL and import library to:
 
@@ -148,6 +165,15 @@ import library, the internal static archive, generated `v8_monolith.lib`,
 Chromium libc++ object directory and object-list file, third-party CMake targets,
 and Windows system libraries. Godot should link the DLL import library rather
 than the static archive.
+
+At runtime, embedders must deploy the C API DLL together with the ANGLE sidecar
+DLLs from the same build directory:
+
+```text
+blink_standalone_renderer_c_api.dll
+libEGL.dll
+libGLESv2.dll
+```
 
 The equivalent manual configuration shape is:
 

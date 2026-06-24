@@ -1458,7 +1458,7 @@ void RuleSet::AddFilteredRulesFromOtherSet(
     need_compaction_ = true;
   }
 
-#if EXPENSIVE_DCHECKS_ARE_ON()
+#if DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
   allow_unsorted_ = true;
 #endif
 }
@@ -1802,7 +1802,7 @@ void RuleSet::CompactRules() {
   view_transition_rules_.shrink_to_fit();
   bloom_hash_backing_.shrink_to_fit();
 
-#if EXPENSIVE_DCHECKS_ARE_ON()
+#if DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
   if (!allow_unsorted_) {
     AssertRuleListsSorted();
   }
@@ -1810,7 +1810,7 @@ void RuleSet::CompactRules() {
   need_compaction_ = false;
 }
 
-#if EXPENSIVE_DCHECKS_ARE_ON()
+#if DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
 
 namespace {
 
@@ -1869,7 +1869,7 @@ void RuleSet::AssertRuleListsSorted() const {
   DCHECK(IsRuleListSorted(overscroll_target_rules_));
 }
 
-#endif  // EXPENSIVE_DCHECKS_ARE_ON()
+#endif  // DCHECK_IS_ON() && EXPENSIVE_DCHECKS_ARE_ON()
 
 bool RuleSet::DidMediaQueryResultsChange(
     const MediaQueryEvaluator& evaluator) const {

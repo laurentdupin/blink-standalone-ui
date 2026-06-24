@@ -45,7 +45,22 @@ The perf preset removes these forced benchmark-hostile defines from the benchmar
 - `SKCMS_DISABLE_HSW=1`
 - `SKCMS_DISABLE_SKX=1`
 
-The perf preset still keeps `DCHECK_ALWAYS_ON=1`. A no-DCHECK build is not wired yet: prior testing of the perf preset without that define in this workspace failed while compiling `upstream/chromium/standalone_renderer/src/live_link_boundary_stubs.cc` because `base::subtle::RefCountedBase::CalledOnValidSequence` and the out-of-line `RefCountedBase` destructor no longer matched declarations when debug-only declarations were compiled out. This status was not changed during the post-`1640521e` validation pass; removing that define safely still requires a separate narrow compatibility pass, not broad Blink-core edits during this configuration milestone.
+The perf preset still keeps `DCHECK_ALWAYS_ON=1`.
+
+### Release-level SDL viewer
+
+- Build preset: `cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer-release`
+- CMake option: `BLINK_STANDALONE_RELEASE_LEVEL_VIEWER=ON`
+- CMake build type: `Release`
+- Compiler/linker: generated Chromium LLVM `clang-cl` / `lld-link`
+- Output directory: `build/cmake-generated-v8-chromium-llvm-viewer-release`
+
+This viewer preset is the no-DCHECK, release-level SDL viewer path. It disables
+forced `DCHECK_ALWAYS_ON`, overrides generated debugging buildflags so expensive
+DCHECKs are off, and removes the standalone size/SIMD restrictions
+(`SK_ENABLE_OPTIMIZE_SIZE`, `CPU_NO_SIMD`, `SKCMS_DISABLE_HSW`,
+`SKCMS_DISABLE_SKX`). It also includes the Skia/skcms optimized and utility
+sources required when those restrictions are removed.
 
 ## Chromium Comparison Notes
 
@@ -59,7 +74,7 @@ The comparison below is based on the Chromium sources vendored under `upstream/c
 
 ## Measurement Risks
 
-- `DCHECK_ALWAYS_ON=1` remains active in both checked/current and perf builds, so assertion overhead can still perturb benchmark numbers.
+- `DCHECK_ALWAYS_ON=1` remains active in checked/current and perf builds, so assertion overhead can still perturb benchmark numbers. Use the release-level SDL viewer preset when measuring the interactive viewer without forced DCHECKs.
 - The perf preset is optimized (`Release`, clang-cl `/O2`) but does not claim Chromium official-build parity: no PGO, no LTO audit, no component/official-build GN equivalence, and no full Chromium allocator/process configuration match.
 - The standalone CMake source manifest is still manually maintained rather than generated from GN target graphs.
 - The strict benchmark path uses the Chromium compositor runtime: Blink lifecycle, PaintArtifactCompositor, cc, GPU raster/shared image, and Viz submission.

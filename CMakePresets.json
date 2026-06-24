@@ -71,6 +71,9 @@
         "BLINK_STANDALONE_V8_COMPAT_ACTION": "build",
         "BLINK_STANDALONE_V8_SYNC_DEPS": "ON",
         "BLINK_STANDALONE_V8_COMPAT_JOBS": "8"
+      },
+      "environment": {
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0"
       }
     },
     {
@@ -97,6 +100,16 @@
         "BLINK_STANDALONE_V8_COMPAT_WORK_ROOT": "${sourceDir}/build/cmake-generated-v8-release/v8_compat",
         "BLINK_STANDALONE_V8_COMPAT_OUT_DIR": "${sourceDir}/build/cmake-generated-v8-release/v8_compat/src/v8/out/chromium_static",
         "BLINK_STANDALONE_V8_COMPAT_ACTION": "plan"
+      }
+    },
+    {
+      "name": "x64-Release-GeneratedV8-ChromiumLLVM-ViewerRelease",
+      "displayName": "x64 Release-level SDL viewer with generated Chromium LLVM",
+      "description": "Builds the SDL viewer with Chromium LLVM, release optimization, forced DCHECK_ALWAYS_ON disabled, and standalone size/SIMD debug restrictions disabled.",
+      "inherits": "x64-Release-GeneratedV8-ChromiumLLVM",
+      "binaryDir": "${sourceDir}/build/cmake-generated-v8-chromium-llvm-viewer-release",
+      "cacheVariables": {
+        "BLINK_STANDALONE_RELEASE_LEVEL_VIEWER": "ON"
       }
     },
     {
@@ -140,6 +153,9 @@
       "targets": [
         "blink_standalone_v8_compat"
       ],
+      "environment": {
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0"
+      },
       "jobs": 8
     },
     {
@@ -174,6 +190,15 @@
       "name": "x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer",
       "displayName": "Build SDL viewer with generated Chromium LLVM",
       "configurePreset": "x64-Release-GeneratedV8-ChromiumLLVM",
+      "targets": [
+        "blink_standalone_sdl_viewer_skia"
+      ],
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer-release",
+      "displayName": "Build release-level SDL viewer with generated Chromium LLVM",
+      "configurePreset": "x64-Release-GeneratedV8-ChromiumLLVM-ViewerRelease",
       "targets": [
         "blink_standalone_sdl_viewer_skia"
       ],

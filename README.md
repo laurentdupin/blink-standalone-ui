@@ -67,6 +67,7 @@ cmake --preset x64-Release-GeneratedV8
 cmake --build --preset x64-Release-GeneratedV8-v8-compat
 cmake --preset x64-Release-GeneratedV8-ChromiumLLVM
 cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer-release
 cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-c-api
 ```
 
@@ -81,6 +82,10 @@ and Chromium LLVM toolchain from that first stage; it is not expected to
 configure successfully until `x64-Release-GeneratedV8-v8-compat` has produced
 them.
 
+The generated-V8 preset sets `DEPOT_TOOLS_WIN_TOOLCHAIN=0` for local Windows
+self-builds. Without that environment value, Chromium depot_tools can try to
+download Google's private Windows toolchain package and fail with a GCS 401.
+
 The build has a single renderer path: the live Blink path. On Windows this
 uses ClangCL. Visual Studio LLVM remains a bootstrap/compiler fallback for
 generating the V8 compatibility output. The validated renderer proof build uses
@@ -88,11 +93,29 @@ the generated Chromium LLVM `clang-cl` / `lld-link`, which removes the generated
 V8 libc++ Clang-version warning and smoke-tested successfully. This remains an
 internal Blink/Oilpan runtime dependency, not a public JavaScript feature.
 
+For a release-level SDL viewer, build:
+
+```powershell
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer-release
+```
+
+That preset uses Chromium LLVM, Release optimization, disables forced
+`DCHECK_ALWAYS_ON`, disables expensive DCHECK buildflags, and removes the old
+standalone size/SIMD restrictions.
+
 The recommended C API artifacts for embedders are the DLL and import library:
 
 ```text
 build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.dll
 build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.lib
+```
+
+The runtime package for hosts that use the C API DLL must also include the
+ANGLE sidecar DLLs from the same build directory:
+
+```text
+libEGL.dll
+libGLESv2.dll
 ```
 
 This DLL boundary is the intended Godot-facing package because it seals

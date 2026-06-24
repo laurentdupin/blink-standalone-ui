@@ -9567,7 +9567,9 @@ String TrustedTypesCheckForHTML(const V8UnionStringOrTrustedHTML*,
                                 ExceptionState&) {
   return String();
 }
+#if EXPENSIVE_DCHECKS_ARE_ON()
 void TextDiffRange::CheckValid(const String&, const String&) const {}
+#endif
 void ProcessingInstruction::DidChangeData() {}
 
 const QualifiedName Attr::GetQualifiedName() const { return name_; }
