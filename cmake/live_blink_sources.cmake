@@ -236,11 +236,9 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/content_security_policy_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/css_file_loader.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/devtools_instrumentation_unsupported.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/document_loader_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/file_chooser_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/fetch_initiator_type_names_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/generated_name_atoms_standalone.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/history_item_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_boundary_value_standalone.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_core_initializer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
@@ -260,10 +258,14 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_mouse_wheel_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_pointer_event.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/input/web_touch_event.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/scheme_registry.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/document_policy.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/common/permissions_policy/policy_value_mojom_traits.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/pointer_event_factory.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/events/pointer_event_util.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/execution_context/window_agent_factory.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/frame/cached_permission_status.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/animation/element_smil_animations.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/trustedtypes/trusted_script_url.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/bitmap_image.cc
@@ -682,6 +684,19 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/patch.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/preload_request.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/parser/resource_preloader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/document_loader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/document_load_timing.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/frame_loader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/frame_load_request.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/old_document_info_for_commit.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/history_item_standalone.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/frame/policy_container.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/progress_tracker.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/permissions_policy/document_policy_parser.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/third_party/blink/public/mojom/blob/blob_url_store.mojom-shared.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/data_pipe_getter.mojom-blink.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/generated/blink_live/gen/services/network/public/mojom/data_pipe_getter.mojom-shared.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/shadow/shadow_element_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/window_name_collection.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/anchor_map.cc
@@ -1180,11 +1195,17 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/properties/svg_list_property.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/properties/svg_animated_property.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/svg/properties/svg_property_tear_off.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/exported/web_agent_cluster_key.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/exported/web_navigation_params.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/trustedtypes/trusted_script_url.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/testing/dummy_page_holder.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/view_transition/view_transition_utils.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/exported/file_path_conversion.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/exported/web_data.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/exported/web_http_body.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/exported/web_url.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/loader/static_data_navigation_body_loader.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/weborigin/scheme_registry.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_fallback_iterator.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_height.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/fonts/font_metrics.cc

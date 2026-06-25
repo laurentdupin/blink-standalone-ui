@@ -593,6 +593,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/svg/svg_document_resource_tracker.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_scheduler_registry.h"
 #include "third_party/blink/renderer/core/sanitizer/sanitizer.h"
+#include "third_party/blink/public/common/navigation/navigation_params.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
@@ -729,6 +730,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/fileapi/file_list.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/fragment_directive/fragment_directive.h"
+#include "third_party/blink/renderer/core/fragment_directive/text_fragment_anchor.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
@@ -1135,6 +1137,8 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/platform/json/json_values.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
+#include "third_party/blink/public/common/permissions_policy/document_policy_features.h"
+#include "third_party/blink/renderer/platform/network/form_data_encoder.h"
 #include "third_party/blink/renderer/platform/bindings/v8_histogram_accumulator.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
 #include "third_party/blink/renderer/platform/mojo/browser_interface_broker_proxy_impl.h"
@@ -3747,12 +3751,6 @@ const WrapperTypeInfo& PageTransitionEvent::wrapper_type_info_ =
 const WrapperTypeInfo& TrustedTypePolicyFactory::wrapper_type_info_ =
     StandaloneDummyWrapperTypeInfo();
 
-FrameLoadRequest::FrameLoadRequest(LocalDOMWindow* origin_window,
-                                   const ResourceRequest&)
-    : origin_window_(origin_window),
-      should_send_referrer_(kMaybeSendReferrer),
-      creation_time_(base::TimeTicks::Now()) {}
-
 ScriptFetchOptions::ScriptFetchOptions()
     : nonce_(),
       integrity_metadata_(),
@@ -6315,10 +6313,6 @@ void ElementInternals::SetBehaviors(HeapVector<Member<ElementBehavior>>,
 Element* HTMLFormElement::FindDefaultButton() const {
   return nullptr;
 }
-
-void FrameLoader::DispatchDocumentElementAvailable() {}
-
-void FrameLoader::RunScriptsAtDocumentElementAvailable() {}
 
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 void LayoutTextFragment::SetContentString(const String& content) {
@@ -9800,84 +9794,23 @@ PhysicalRect LayoutReplaced::ReplacedContentRect() const {
 FragmentAnchor* FragmentAnchor::TryCreate(const KURL&, LocalFrame&, bool) {
   return nullptr;
 }
+bool TextFragmentAnchor::GenerateNewToken(const DocumentLoader&) {
+  return false;
+}
+bool TextFragmentAnchor::GenerateNewTokenForSameDocument(
+    const DocumentLoader&,
+    WebFrameLoadType,
+    mojom::blink::SameDocumentNavigationType) {
+  return false;
+}
+TextFragmentAnchor* TextFragmentAnchor::TryCreate(const KURL&,
+                                                  LocalFrame&,
+                                                  bool) {
+  return nullptr;
+}
 void HTMLPlugInElement::UpdatePlugin() {}
 WebPluginContainerImpl* PluginDocument::GetPluginView() {
   return nullptr;
-}
-HTMLFormElement* FrameLoadRequest::Form() const {
-  return nullptr;
-}
-FrameLoader::FrameLoader(LocalFrame* frame)
-    : frame_(frame),
-      progress_tracker_(nullptr),
-      dispatching_did_clear_window_object_in_main_world_(false) {}
-bool FrameLoader::AllowPlugins() {
-  return false;
-}
-String FrameLoader::UserAgent() const {
-  return String();
-}
-std::optional<UserAgentMetadata> FrameLoader::UserAgentMetadata() const {
-  return std::nullopt;
-}
-void FrameLoader::SetDefersLoading(LoaderFreezeMode) {}
-void FrameLoader::Trace(Visitor* visitor) const {
-  visitor->Trace(frame_);
-  visitor->Trace(progress_tracker_);
-  visitor->Trace(document_loader_);
-}
-void FrameLoader::StartNavigation(FrameLoadRequest&, WebFrameLoadType) {}
-void FrameLoader::Init(const DocumentToken& document_token,
-                       std::unique_ptr<PolicyContainer>,
-                       const StorageKey&,
-                       ukm::SourceId document_ukm_source_id,
-                       const KURL&,
-                       std::unique_ptr<base::UnguessableToken>) {
-  AgentClusterKey agent_cluster_key = AgentClusterKey::CreateUniversalFileAgent();
-  WindowAgent* agent =
-      frame_->window_agent_factory().GetAgentForAgentClusterKey(
-          false, agent_cluster_key);
-  if (!agent) {
-    Page* page = frame_->GetPage();
-    AgentGroupScheduler& agent_group_scheduler = page->GetAgentGroupScheduler();
-    agent = MakeGarbageCollected<WindowAgent>(
-        agent_group_scheduler, agent_cluster_key);
-  }
-  frame_->SetDOMWindow(MakeGarbageCollected<LocalDOMWindow>(*frame_, agent));
-  frame_->DomWindow()->SetContentSecurityPolicy(
-      MakeGarbageCollected<ContentSecurityPolicy>());
-  DocumentInit init = DocumentInit::Create()
-                          .WithWindow(frame_->DomWindow(), nullptr)
-                          .WithToken(document_token)
-                          .ForInitialEmptyDocument(true)
-                          .WithTypeFrom("text/html")
-                          .WithUkmSourceId(document_ukm_source_id);
-  Document* document = frame_->DomWindow()->InstallNewDocument(init);
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  Element* html = MakeGarbageCollected<HTMLHtmlElement>(*document);
-  Element* body = MakeGarbageCollected<HTMLBodyElement>(*document);
-  document->ParserAppendChild(html);
-  html->ParserAppendChild(body);
-  SetStandaloneDocumentBodyForStandaloneRenderer(document, To<HTMLElement>(body));
-#else
-#endif
-  state_ = State::kInitialized;
-}
-void FrameLoader::DispatchUnloadEventAndFillOldDocumentInfoIfNeeded(bool) {}
-void FrameLoader::Detach() {}
-bool FrameLoader::DetachDocument() {
-  return true;
-}
-bool FrameLoader::ShouldClose(bool, bool, base::TimeTicks&, base::TimeTicks&) {
-  return true;
-}
-ResourceRequest FrameLoader::ResourceRequestForReload(WebFrameLoadType,
-                                                      ClientRedirectPolicy) {
-  return ResourceRequest();
-}
-FrameLoader::~FrameLoader() = default;
-bool IsReloadLoadType(WebFrameLoadType) {
-  return false;
 }
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::DidLayout() {}
@@ -10424,6 +10357,7 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView&) {}
 #endif
 void PageAnimator::ReportFrameAnimations(cc::AnimationHost*) {}
 void WebPluginContainerImpl::UpdateAllLifecyclePhases() {}
+void WebPluginContainerImpl::DidFailLoading(const ResourceError&) {}
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
 void FrameSelection::UpdateStyleAndLayoutIfNeeded() {}
 #endif
@@ -10490,6 +10424,12 @@ bool SoftNavigationHeuristics::ModifiedNode(Node*) {
   return false;
 }
 void SoftNavigationHeuristics::Shutdown() {}
+void SoftNavigationHeuristics::SameDocumentNavigationCommitted(
+    const KURL&,
+    const KURL&,
+    WebFrameLoadType,
+    base::UnguessableToken,
+    PerformanceTimelineEntryIdInfo) {}
 void HTMLAnchorElement::UpdateScrollTargetGroupMembership() {}
 namespace focusgroup {
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
@@ -10717,6 +10657,9 @@ SVGDocumentResourceTracker* SVGResourceSchedulerRegistry::GetTracker(
 void PluginData::Trace(Visitor*) const {}
 void PluginData::UpdatePluginList() {}
 void PluginData::ResetPluginData() {}
+bool PluginData::SupportsMimeType(const String&) const {
+  return false;
+}
 FeatureAndJSLocationBlockingBFCache::~FeatureAndJSLocationBlockingBFCache() =
     default;
 #if !HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
@@ -10945,7 +10888,21 @@ String GetDomainAndRegistry(const StringView&, PrivateRegistryFilter) {
 Vector<char> ParseMultipartBoundary(const AtomicString&) {
   return Vector<char>();
 }
+bool IsDataURLMimeTypeSupported(const KURL&,
+                                std::string*,
+                                std::string*) {
+  return false;
+}
 }  // namespace network_utils
+const base::flat_map<std::string, mojom::DocumentPolicyFeature>&
+GetDocumentPolicyNameFeatureMap() {
+  static const base::flat_map<std::string, mojom::DocumentPolicyFeature>* map =
+      new base::flat_map<std::string, mojom::DocumentPolicyFeature>();
+  return *map;
+}
+Vector<char> FormDataEncoder::GenerateUniqueBoundaryString() {
+  return Vector<char>();
+}
 bool IsInflightNetworkRequestBackForwardCacheSupportEnabled() {
   return false;
 }
@@ -10957,7 +10914,6 @@ WebFrame* WebFrame::FromCoreFrame(Frame*) {
 }
 void ModelContext::DidFinishParsing() {}
 void FontPerformance::MarkDomContentLoaded() {}
-void FrameLoader::FinishedParsing() {}
 IconURL IconURL::DefaultFavicon(const KURL&) {
   return IconURL(KURL(), Vector<gfx::Size>(), String(),
                  mojom::blink::FaviconIconType::kFavicon);
@@ -11010,7 +10966,6 @@ void LiveNodeListRegistry::Trace(Visitor*) const {}
 bool Frame::IsDescendantOf(const Frame*) const {
   return false;
 }
-void ProgressTracker::ProgressStarted() {}
 BeforeUnloadEventListener::BeforeUnloadEventListener(Document* document)
     : doc_(document), show_dialog_(false) {}
 void BeforeUnloadEventListener::Trace(Visitor* visitor) const {
@@ -11290,7 +11245,6 @@ String ExceptionMessages::ArgumentNullOrIncorrectType(int,
 void ResourceLoadScheduler::LoosenThrottlingPolicy() {}
 void ViewTransitionSupplement::WillInsertBody() {}
 void RenderBlockingResourceManager::WillInsertDocumentBody() {}
-void FrameLoader::DidFinishNavigation(FrameLoader::NavigationFinishState) {}
 void HttpRefreshScheduler::MaybeStartTimer() {}
 void DetectJavascriptFrameworksOnLoad(Document&) {}
 bool EventListenerMap::Contains(const AtomicString&) const {
@@ -11760,10 +11714,6 @@ void HTMLInputElement::EndEditing() {}
 bool HTMLMenuItemElement::ShouldHaveExpandIcon() const {
   return false;
 }
-bool FrameLoader::NeedsHistoryItemRestore(WebFrameLoadType) {
-  return false;
-}
-void FrameLoader::SaveScrollAnchor() {}
 void PaintLayerScrollableArea::ApplyPendingHistoryRestoreScrollOffset() {}
 PhysicalSize PaintLayerScrollableArea::Size() const {
   return PhysicalSize();
@@ -12385,13 +12335,6 @@ bool SecurityContext::IsSandboxed(
     network::mojom::blink::WebSandboxFlags) const {
   return false;
 }
-bool SchemeRegistry::IsDomainRelaxationForbiddenForURLScheme(const String&) {
-  return true;
-}
-bool SchemeRegistry::ShouldTreatURLSchemeAsNotAllowingJavascriptURLs(
-    const String&) {
-  return true;
-}
 SecurityContext::SecurityContext(ExecutionContext* context)
     : sandbox_flags_(network::mojom::blink::WebSandboxFlags::kNone),
       execution_context_(context),
@@ -12440,18 +12383,6 @@ ContentSecurityPolicy* IsolatedWorldCSP::CreateIsolatedWorldCSP(
     int32_t) {
   return nullptr;
 }
-bool SchemeRegistry::IsWebUIScheme(const String&) {
-  return false;
-}
-bool SchemeRegistry::ShouldTreatURLSchemeAsFirstPartyWhenTopLevel(
-    const String&) {
-  return false;
-}
-bool SchemeRegistry::ShouldTreatURLAsFirstPartyWhenTopLevelEmbeddingSecure(
-    const SecurityOrigin*,
-    const String&) {
-  return false;
-}
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 const AtomicString& QualifiedName::LocalNameUpperSlow() const {
   return LocalName();
@@ -12473,7 +12404,6 @@ void DocumentParserTiming::Trace(Visitor*) const {}
 CustomCountHistogram::CustomCountHistogram(const char*, int, int, int)
     : histogram_(nullptr) {}
 void CustomCountHistogram::CountMicroseconds(base::TimeDelta) {}
-void ProgressTracker::Trace(Visitor*) const {}
 bool HttpRefreshScheduler::IsScheduledWithin(base::TimeDelta) const {
   return false;
 }
@@ -12567,17 +12497,12 @@ SmartClip::SmartClip(LocalFrame* frame) : frame_(frame) {}
 SmartClipData SmartClip::DataForRect(const gfx::Rect&) {
   return SmartClipData();
 }
-void FrameLoader::DidExplicitOpen() {}
-void FrameLoader::RestoreScrollPositionAndViewState() {}
-void FrameLoader::StopAllLoaders(bool) {}
-void DocumentLoadTiming::SetRandomizedConfidence(
-    const std::optional<std::pair<double, mojom::blink::ConfidenceLevel>>&) {}
-void DocumentLoadTiming::MarkLoadEventStart() {}
-void DocumentLoadTiming::MarkLoadEventEnd() {}
 bool IsFetchLaterUseDeferredFetchPolicyEnabled() {
   return false;
 }
 void HTMLFrameOwnerElement::MaybeClearDeferredFetchPolicy() {}
+void HTMLFrameOwnerElement::UpdateDeferredFetchPolicy(
+    scoped_refptr<const SecurityOrigin>) {}
 bool HTMLFrameOwnerElement::LoadImmediatelyIfLazy() {
   return false;
 }
@@ -12702,6 +12627,11 @@ const AtomicString& NavigationApi::InterfaceName() const {
   static const AtomicString* name = new AtomicString("Navigation");
   return *name;
 }
+void NavigationApi::UpdateForNavigation(HistoryItem&, WebFrameLoadType) {}
+bool NavigationApi::HasNonDroppedOngoingNavigation() const {
+  return false;
+}
+void NavigationApi::InformAboutCanceledNavigation(CancelNavigationReason) {}
 void NavigationApi::AddedEventListener(const AtomicString&,
                                        RegisteredEventListener&) {}
 void NavigationApi::RemovedEventListener(const AtomicString&,
@@ -12805,6 +12735,9 @@ PopStateEvent* PopStateEvent::Create(scoped_refptr<SerializedScriptValue>,
 NavigationEventTiming::NavigationEventTiming(LocalFrame*, const Event&) {}
 EventTiming::~EventTiming() = default;
 SerializedScriptValue::~SerializedScriptValue() = default;
+scoped_refptr<SerializedScriptValue> SerializedScriptValue::NullValue() {
+  return nullptr;
+}
 ArrayBufferContents::~ArrayBufferContents() = default;
 BlobDataHandle::~BlobDataHandle() = default;
 v8::Local<v8::Value> bindings::DictionaryBase::ToV8(ScriptState*) const {
@@ -12831,14 +12764,6 @@ void BackForwardCacheBufferLimitTracker::
 Fence::Fence(LocalDOMWindow& window) : ExecutionContextClient(&window) {}
 CrashReportContext::CrashReportContext(LocalDOMWindow& window)
     : ExecutionContextClient(&window) {}
-PolicyValue DocumentPolicy::GetFeatureValue(
-    mojom::blink::DocumentPolicyFeature) const {
-  return PolicyValue();
-}
-const std::optional<std::string> DocumentPolicy::GetFeatureEndpoint(
-    mojom::blink::DocumentPolicyFeature) const {
-  return std::nullopt;
-}
 void ViewTransitionSupplement::SendOptInStatusToHost() {}
 std::unique_ptr<mojom::blink::PolicyContainerPolicies>
 FromWebPolicyContainerPolicies(const WebPolicyContainerPolicies&) {
@@ -13493,16 +13418,35 @@ void CustomElementRegistry::Trace(Visitor*) const {}
 void HTMLFormElement::Trace(Visitor* visitor) const {
   HTMLElement::Trace(visitor);
 }
-WebNavigationParams::~WebNavigationParams() = default;
-std::unique_ptr<WebNavigationParams>
-WebNavigationParams::CreateWithEmptyHTMLForTesting(const WebURL&) {
-  return nullptr;
+mojom::RendererContentSettingsPtr CreateDefaultRendererContentSettings() {
+  return mojom::RendererContentSettings::New(
+      /*allow_script=*/true, /*allow_image=*/true, /*allow_popup=*/false,
+      /*allow_mixed_content=*/false, /*allow_controlled_frame=*/false);
 }
-void WebHTTPBody::Reset() {}
-void FrameLoader::CommitNavigation(
-    std::unique_ptr<WebNavigationParams>,
-    std::unique_ptr<WebDocumentLoader::ExtraData>,
-    CommitReason) {}
+WebURL WebURLRequest::Url() const {
+  return WebURL();
+}
+WebString WebURLRequest::HttpMethod() const {
+  return WebString();
+}
+WebString WebURLRequest::ReferrerString() const {
+  return WebString();
+}
+network::mojom::ReferrerPolicy WebURLRequest::GetReferrerPolicy() const {
+  return network::mojom::ReferrerPolicy::kDefault;
+}
+WebHTTPBody WebURLRequest::HttpBody() const {
+  return WebHTTPBody();
+}
+WebString WebURLRequest::HttpHeaderField(const WebString&) const {
+  return WebString();
+}
+WebSecurityOrigin WebURLRequest::RequestorOrigin() const {
+  return WebSecurityOrigin();
+}
+bool WebURLRequest::HasUserGesture() const {
+  return false;
+}
 void test::RunPendingTasks() {}
 MainThread* Thread::MainThread() {
   return &StandaloneMainThread();
@@ -14188,6 +14132,9 @@ ReceiverSetState::Entry::~Entry() = default;
 ReceiverId ReceiverSetState::Add(std::unique_ptr<ReceiverState>,
                                  std::unique_ptr<MessageFilter>) {
   return 0;
+}
+bool ReceiverSetState::Remove(ReceiverId) {
+  return false;
 }
 namespace internal {
 #if !defined(HTML_CSS_RENDERER_STANDALONE)

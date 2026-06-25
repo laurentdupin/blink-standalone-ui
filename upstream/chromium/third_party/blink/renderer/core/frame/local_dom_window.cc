@@ -40,6 +40,7 @@
 #include "cc/input/snap_selection_strategy.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/storage_access_api/status.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/common/switches.h"
@@ -181,6 +182,9 @@ namespace blink {
 
 namespace {
 void TraceStandaloneLocalDOMWindowStage(const char* stage) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+#endif
 }
 
 template <typename T>

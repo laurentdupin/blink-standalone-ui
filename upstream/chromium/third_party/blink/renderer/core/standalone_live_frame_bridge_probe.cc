@@ -34,6 +34,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -87,6 +88,8 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/in_process_gpu_thread_holder.h"
+#include "third_party/blink/public/web/web_navigation_params.h"
+#include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/ipc/raster_in_process_context.h"
 #include "gpu/ipc/service/image_transport_surface.h"
@@ -159,6 +162,7 @@
 #include "third_party/blink/renderer/core/events/text_event.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource_content.h"
+#include "third_party/blink/renderer/platform/heap/thread_state.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
@@ -1971,7 +1975,7 @@ class StandaloneCcLayerHost final
         base::BindOnce(
             &StandaloneCcLayerHost::
                 RequestPendingSchedulerCommitAfterFrameSinkInit,
-            base::Unretained(this)));
+            weak_factory_.GetWeakPtr()));
     commit_requested_ = true;
     TraceLiveFrameProbeStage("cc host scheduler before run loop");
     run_loop.Run();
@@ -2254,7 +2258,7 @@ class StandaloneCcLayerHost final
           base::BindOnce(
               &StandaloneCcLayerHost::
                   RequestPendingSchedulerCommitAfterFrameSinkInit,
-              base::Unretained(this)));
+              weak_factory_.GetWeakPtr()));
     }
   }
   void DidFailToInitializeLayerTreeFrameSink() override {
@@ -2346,6 +2350,7 @@ class StandaloneCcLayerHost final
   bool inside_scheduler_layer_tree_update_ = false;
   raw_ptr<base::RunLoop> scheduler_frame_run_loop_ = nullptr;
   raw_ptr<base::RunLoop> frame_sink_init_run_loop_ = nullptr;
+  base::WeakPtrFactory<StandaloneCcLayerHost> weak_factory_{this};
 };
 
 class StandaloneCcSchedulerParityProbe final
@@ -2934,6 +2939,66 @@ bool RectsMatchForStandaloneRenderer(const gfx::Rect& a, const gfx::Rect& b) {
 LiveFramePaintProbeCache& ProbeCache() {
   static LiveFramePaintProbeCache* cache = new LiveFramePaintProbeCache();
   return *cache;
+}
+
+void RunStandaloneMainThreadTasksForNavigationReset() {
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+  run_loop.RunUntilIdle();
+}
+
+void CollectStandaloneBlinkGarbageForNavigationReset() {
+  ThreadState::Current()->CollectAllGarbageForTesting(
+      ThreadState::StackState::kMayContainHeapPointers);
+}
+
+void ClearStandaloneFrameDiagnosticState(LiveFramePaintProbeCache& cache) {
+  cache.result = LiveFramePaintProbeResult();
+  cache.body_html.clear();
+  cache.element_attributes_changed_since_probe = false;
+  cache.original_element_attribute_values.clear();
+  cache.applied_element_attributes_by_id_and_name.clear();
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.hit_test_entries.clear();
+  cache.scrollable_element_entries.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+  cache.sticky_position_diagnostics_json.clear();
+  cache.compositor_root_layer_available = false;
+  cache.compositor_layer_count = 0;
+  cache.cc_attach_attempted = false;
+  cache.cc_root_layer_attached = false;
+  cache.cc_commit_requested = false;
+  cache.cc_frame_sink_requested = false;
+  cache.cc_frame_sink_bound = false;
+  cache.cc_compositor_frame_submitted = false;
+  cache.cc_gpu_context_created = false;
+  cache.cc_raster_context_created = false;
+  cache.cc_shared_image_interface_available = false;
+  cache.cc_viz_display_created = false;
+  cache.cc_skia_gpu_reached = false;
+  cache.cc_submitted_output_size = gfx::Size();
+  cache.cc_viz_display_output_size = gfx::Size();
+  cache.cc_commit_count = 0;
+  cache.cc_attach_failure_reason.clear();
+  cache.cc_frame_sink_failure_reason.clear();
+  cache.initialized = false;
+}
+
+void ResetStandaloneLiveDocumentForFullHtmlReplacement(
+    LiveFramePaintProbeCache& cache) {
+  RunStandaloneMainThreadTasksForNavigationReset();
+  cache.cc_layer_host.reset();
+  RunStandaloneMainThreadTasksForNavigationReset();
+  delete cache.holder;
+  cache.holder = nullptr;
+  RunStandaloneMainThreadTasksForNavigationReset();
+  CollectStandaloneBlinkGarbageForNavigationReset();
+  RunStandaloneMainThreadTasksForNavigationReset();
+  ClearStandaloneFrameDiagnosticState(cache);
 }
 
 extern "C" void StandaloneRendererNoteImagePaintIntoRect(
@@ -9312,22 +9377,8 @@ void StartStandaloneImageLoadsForStaticRenderFromNode(Node& node) {
                             AtomicString(file_url.c_str()));
         StandaloneRendererSetDeferImageAttributeLoads(false);
       }
-      TraceLiveFrameProbeStage("static image load before direct src load");
-      image->ForceReload();
-      TraceLiveFrameProbeStage("static image load after direct src load");
-    } else {
-      TraceLiveFrameProbeStage("static image load before SelectSourceURL");
-      image->SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
-      TraceLiveFrameProbeStage("static image load after SelectSourceURL");
     }
-    TraceLiveFrameProbeStage("static image load before CachedImage");
-    ImageResourceContent* content = image->CachedImage();
-    TraceLiveFrameProbeStage("static image load after CachedImage");
-    if (content && content->ErrorOccurred()) {
-      TraceLiveFrameProbeStage("static image load before ForceReload");
-      image->ForceReload();
-      TraceLiveFrameProbeStage("static image load after ForceReload");
-    }
+    TraceLiveFrameProbeStage("static image load source normalized");
   }
   for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
     StartStandaloneImageLoadsForStaticRenderFromNode(*child);
@@ -9473,33 +9524,6 @@ std::vector<std::string> ExtractStyleElementTextForStandaloneRenderer(
     search_offset = close + 8;
   }
   return styles;
-}
-
-std::string RemoveStyleElementBlocksForStandaloneRenderer(
-    const std::string& html) {
-  std::string lower = LowerAsciiForStandaloneRenderer(html);
-  std::string output;
-  size_t search_offset = 0;
-  while (true) {
-    const size_t open = lower.find("<style", search_offset);
-    if (open == std::string::npos) {
-      output += html.substr(search_offset);
-      break;
-    }
-    const size_t open_end = lower.find('>', open);
-    if (open_end == std::string::npos) {
-      output += html.substr(search_offset);
-      break;
-    }
-    const size_t close = lower.find("</style>", open_end + 1);
-    if (close == std::string::npos) {
-      output += html.substr(search_offset);
-      break;
-    }
-    output += html.substr(search_offset, open - search_offset);
-    search_offset = close + 8;
-  }
-  return output;
 }
 
 std::string ExtractHtmlAttributeForStandaloneRenderer(
@@ -12269,28 +12293,6 @@ std::string BuildRetainedMetadataTimingJsonForStandaloneRenderer(
   return json.str();
 }
 
-void InstallStyleElementsForStandaloneRenderer(Document& document,
-                                               Element& head,
-                                               const std::string& head_html) {
-  if (head_html.empty()) {
-    return;
-  }
-  const std::vector<std::string> style_texts =
-      ExtractStyleElementTextForStandaloneRenderer(head_html);
-  if (style_texts.empty()) {
-    head.SetInnerHTMLWithoutTrustedTypes(String::FromUtf8(head_html));
-    return;
-  }
-
-  head.SetInnerHTMLWithoutTrustedTypes(String());
-  for (const std::string& css : style_texts) {
-    auto* style = MakeGarbageCollected<HTMLStyleElement>(
-        document, CreateElementFlags::ByCreateElement());
-    style->setTextContent(String::FromUtf8(css));
-    head.appendChild(style);
-  }
-}
-
 void ExportDrawOpsForStandaloneRenderer(const PaintArtifact& artifact,
                                         LiveFramePaintProbeCache& cache) {
   TraceLiveFrameProbeStage("export begin");
@@ -12710,105 +12712,42 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   if (!cache.holder) {
     cache.chrome_client =
         MakeGarbageCollected<StandaloneCompositorChromeClient>(&cache);
-    cache.holder = new DummyPageHolder(
-        gfx::Size(cache.viewport_width, cache.viewport_height),
-        cache.chrome_client.Get());
+    cache.holder =
+        std::make_unique<DummyPageHolder>(
+            gfx::Size(cache.viewport_width, cache.viewport_height),
+            cache.chrome_client.Get())
+            .release();
+    Document::SetForceSynchronousParsingForTesting(true);
+    StandaloneRendererSetDeferImageAttributeLoads(true);
+    cache.holder->GetFrame().Loader().CommitNavigation(
+        WebNavigationParams::CreateWithHTMLStringForTesting(
+            base::span<const char>(input_html.data(), input_html.size()),
+            KURL("file:///standalone-renderer-document.html")),
+        /*extra_data=*/nullptr);
+    blink::test::RunPendingTasks();
+    StandaloneRendererSetDeferImageAttributeLoads(false);
+    Document::SetForceSynchronousParsingForTesting(false);
   }
   TraceLiveFrameProbeStage("after DummyPageHolder");
-  Document& document = cache.holder->GetDocument();
-  document.GetStyleEngine().UpdateViewportSize();
+  Document* document_ptr = &cache.holder->GetDocument();
+  document_ptr->GetStyleEngine().UpdateViewportSize();
   TraceLiveFrameProbeStage("after GetDocument");
   cache.timing_input_setup_ms =
       StandaloneProbeElapsedMs(setup_start, StandaloneProbeClock::now());
 
-  if (!document.documentElement() || !document.body()) {
+  if (!document_ptr->documentElement() || !document_ptr->body()) {
     TraceLiveFrameProbeStage("missing body");
     return result;
   }
 
-  Element* head = document.head();
-  if (!head) {
-    head = document.CreateRawElement(html_names::kHeadTag,
-                                     CreateElementFlags::ByCreateElement());
-    if (document.body()) {
-      document.documentElement()->ParserInsertBefore(head, *document.body());
-    } else {
-      document.documentElement()->ParserAppendChild(head);
-    }
-  }
-
-  TraceLiveFrameProbeStage("before SetInnerHTML");
+  TraceLiveFrameProbeStage("before document setup");
   const auto html_setup_start = StandaloneProbeClock::now();
   g_standalone_blink_saw_font_draw_text = false;
   if (!html_content_already_loaded) {
     cache.original_element_attribute_values.clear();
     cache.applied_element_attributes_by_id_and_name.clear();
-    const std::string head_open = "<head>";
-    const std::string head_close = "</head>";
-    const std::string body_close = "</body>";
-    const size_t head_start = input_html.find(head_open);
-    const size_t head_end = input_html.find(head_close);
-    const size_t body_start =
-        head_end == std::string::npos
-            ? std::string::npos
-            : input_html.find("<body", head_end + head_close.size());
-    if (head_start != std::string::npos && head_end != std::string::npos &&
-        body_start != std::string::npos) {
-      const size_t head_content_start = head_start + head_open.size();
-      const std::string head_html =
-          input_html.substr(head_content_start, head_end - head_content_start);
-      const size_t body_open_end = input_html.find('>', body_start);
-      const size_t body_content_start =
-          body_open_end == std::string::npos ? input_html.size()
-                                             : body_open_end + 1;
-      size_t body_end = input_html.rfind(body_close);
-      if (body_end == std::string::npos || body_end < body_content_start) {
-        body_end = input_html.size();
-      }
-      const std::string body_open_tag =
-          body_open_end == std::string::npos
-              ? std::string()
-              : input_html.substr(body_start, body_open_end - body_start + 1);
-      const std::string body_fragment =
-          input_html.substr(body_content_start, body_end - body_content_start);
-      TraceLiveFrameProbeStage("before InstallStyleElements full html");
-      InstallStyleElementsForStandaloneRenderer(document, *head, head_html);
-      TraceLiveFrameProbeStage("after InstallStyleElements full html");
-      const std::string body_class =
-          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "class");
-      if (!body_class.empty()) {
-        document.body()->setAttribute(
-            html_names::kClassAttr, AtomicString(String::FromUtf8(body_class)));
-      }
-      const std::string body_id =
-          ExtractHtmlAttributeForStandaloneRenderer(body_open_tag, "id");
-      if (!body_id.empty()) {
-        document.body()->setAttribute(html_names::kIdAttr,
-                                      AtomicString(String::FromUtf8(body_id)));
-      }
-      String body_string = String::FromUtf8(body_fragment);
-      if (!body_fragment.empty() && body_string.empty()) {
-        body_string = String(body_fragment);
-      }
-      TraceLiveFrameProbeStage("before body SetInnerHTML full html");
-      StandaloneRendererSetDeferImageAttributeLoads(true);
-      document.body()->SetInnerHTMLWithoutTrustedTypes(body_string);
-      StandaloneRendererSetDeferImageAttributeLoads(false);
-      TraceLiveFrameProbeStage("after body SetInnerHTML full html");
-    } else {
-      TraceLiveFrameProbeStage("before InstallStyleElements fragment");
-      InstallStyleElementsForStandaloneRenderer(document, *head, input_html);
-      TraceLiveFrameProbeStage("after InstallStyleElements fragment");
-      const std::string body_fragment =
-          RemoveStyleElementBlocksForStandaloneRenderer(input_html);
-      TraceLiveFrameProbeStage("before body SetInnerHTML fragment");
-      StandaloneRendererSetDeferImageAttributeLoads(true);
-      document.body()->SetInnerHTMLWithoutTrustedTypes(
-          String::FromUtf8(body_fragment));
-      StandaloneRendererSetDeferImageAttributeLoads(false);
-      TraceLiveFrameProbeStage("after body SetInnerHTML fragment");
-    }
   }
+  Document& document = *document_ptr;
   TraceLiveFrameProbeStage("before ApplyElementAttributes");
   ApplyElementAttributesForStandaloneRenderer(
       document, cache.requested_element_attributes_by_id_and_name,
@@ -12816,7 +12755,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
       &cache.applied_element_attributes_by_id_and_name);
   TraceLiveFrameProbeStage("after ApplyElementAttributes");
   cache.element_attributes_changed_since_probe = false;
-  TraceLiveFrameProbeStage("after SetInnerHTML");
+  TraceLiveFrameProbeStage("after document setup");
   cache.timing_html_document_setup_ms =
       StandaloneProbeElapsedMs(html_setup_start, StandaloneProbeClock::now());
   const bool static_image_loads_needed =
@@ -13151,14 +13090,7 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
 
 void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
-  cache.initialized = false;
-  cache.exported_draw_ops.clear();
-  cache.chunk_property_states.clear();
-  cache.chunk_stable_keys.clear();
-  cache.chunk_id_strings.clear();
-  cache.finer_cache_units_by_chunk.clear();
-  cache.artifact_audit_lines.clear();
-  cache.raw_paint_artifact_audit_json.clear();
+  ResetStandaloneLiveDocumentForFullHtmlReplacement(cache);
 }
 
 void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(

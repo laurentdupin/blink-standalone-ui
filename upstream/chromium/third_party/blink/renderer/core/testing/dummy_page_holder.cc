@@ -51,12 +51,16 @@
 #include "third_party/blink/renderer/platform/scheduler/public/main_thread_scheduler.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/url_loader_mock_factory.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 
 namespace blink {
 
 namespace {
 
 void TraceStandaloneDummyPageHolderStage(const char* stage) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+#endif
 }
 
 class DummyLocalFrameClient : public EmptyLocalFrameClient {

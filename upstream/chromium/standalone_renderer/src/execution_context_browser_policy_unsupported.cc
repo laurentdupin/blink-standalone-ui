@@ -28,11 +28,6 @@
 
 namespace blink {
 
-bool SchemeRegistry::ShouldTreatURLSchemeAsAllowingSharedArrayBuffers(
-    const String&) {
-  return false;
-}
-
 void AuditsIssue::ReportSharedArrayBufferIssue(
     ExecutionContext*,
     bool,

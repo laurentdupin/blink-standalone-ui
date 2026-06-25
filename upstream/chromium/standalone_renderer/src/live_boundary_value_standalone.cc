@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <ostream>
 
 #include "base/metrics/histogram_functions.h"
@@ -25,6 +26,7 @@
 #include "third_party/blink/public/common/origin_trials/trial_token.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_error.h"
+#include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -636,13 +638,6 @@ String SecurityPolicy::ReferrerPolicyAsString(
   return String();
 }
 
-bool SchemeRegistry::CanDisplayOnlyIfCanRequest(const String&) {
-  return false;
-}
-bool SchemeRegistry::ShouldTreatURLSchemeAsDisplayIsolated(const String&) {
-  return false;
-}
-
 Vector<network::mojom::blink::ContentSecurityPolicyPtr>
 ParseContentSecurityPolicies(
     const String&,
@@ -940,15 +935,6 @@ void WebScopedVirtualTimePauser::DecrementVirtualTimePauseCount() {
   paused_ = false;
 }
 
-void ProgressTracker::WillStartLoading(uint64_t, ResourceLoadPriority) {}
-void ProgressTracker::IncrementProgress(uint64_t, const ResourceResponse&) {}
-void ProgressTracker::IncrementProgress(uint64_t, uint64_t) {}
-void ProgressTracker::CompleteProgress(uint64_t) {}
-
-void DocumentLoadTiming::MarkNavigationStart() {}
-void DocumentLoadTiming::SetResponseEnd(base::TimeTicks) {}
-void DocumentLoadTiming::AddRedirect(const KURL&, const KURL&) {}
-
 void FrameConsole::DidFailLoading(DocumentLoader*, uint64_t,
                                   const ResourceError&) {}
 void WindowPerformance::OnBodyLoadFinished(int64_t, int64_t) {}
@@ -956,14 +942,6 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
     NavigateEventDispatchParams*) {
   return DispatchResult::kContinue;
 }
-void FrameLoader::SaveScrollState() {}
-void FrameLoader::ProcessScrollForSameDocumentNavigation(
-    const KURL&,
-    WebFrameLoadType,
-    std::optional<HistoryItem::ViewState>,
-    mojom::blink::ScrollRestorationType,
-    mojom::blink::ScrollBehavior) {}
-void FrameLoader::DispatchDidClearDocumentOfWindowObject() {}
 void ScriptController::UpdateDocument() {}
 DOMWindow* DOMWindow::parent() const {
   return const_cast<DOMWindow*>(this);
@@ -1090,8 +1068,6 @@ void ViewTransitionSupplement::CreateFromSnapshotForNavigation(
     Document&,
     ViewTransitionState) {}
 void InteractiveDetector::SetNavigationStartTime(base::TimeTicks) {}
-ScopedOldDocumentInfoForCommitCapturer*
-    ScopedOldDocumentInfoForCommitCapturer::current_capturer_ = nullptr;
 base::TimeDelta FontPerformance::primary_font_;
 base::TimeDelta FontPerformance::primary_font_in_style_;
 base::TimeDelta FontPerformance::system_fallback_;
@@ -1355,15 +1331,6 @@ Frame* FrameTree::FindFrameForNavigationInternal(
 void FrameTree::Trace(Visitor* visitor) const {
   visitor->Trace(this_frame_);
 }
-WindowAgentFactory::WindowAgentFactory(AgentGroupScheduler& scheduler)
-    : agent_group_scheduler_(&scheduler) {}
-WindowAgent* WindowAgentFactory::GetAgentForAgentClusterKey(
-    bool,
-    const AgentClusterKey&) {
-  return nullptr;
-}
-void WindowAgentFactory::Trace(Visitor* visitor) const {
-}
 BlinkSchemefulSite::BlinkSchemefulSite()
     : site_as_origin_(SecurityOrigin::CreateUniqueOpaque()) {}
 BlinkSchemefulSite::BlinkSchemefulSite(scoped_refptr<const SecurityOrigin> origin)
@@ -1538,11 +1505,6 @@ void ConsoleMessage::Trace(Visitor* visitor) const {
   visitor->Trace(location_);
   visitor->Trace(frame_);
 }
-std::optional<std::string> DocumentPolicy::Serialize(
-    const DocumentPolicyFeatureState&) {
-  return std::nullopt;
-}
-
 WebURLError WebURLError::Create(const network::URLLoaderCompletionStatus&,
                                 const WebURL& url) {
   return WebURLError(-2, url);
@@ -1738,16 +1700,48 @@ WebString::operator AtomicString() const {
 }
 
 WebURLResponse::~WebURLResponse() = default;
-WebURLResponse::WebURLResponse() : resource_response_(nullptr) {}
-WebURLResponse::WebURLResponse(const WebURLResponse&)
-    : resource_response_(nullptr) {}
-WebURLResponse::WebURLResponse(const WebURL&) : resource_response_(nullptr) {}
+WebURLResponse::WebURLResponse()
+    : owned_resource_response_(std::make_unique<ResourceResponse>()),
+      resource_response_(owned_resource_response_.get()) {}
+WebURLResponse::WebURLResponse(const WebURLResponse& other)
+    : owned_resource_response_(
+          std::make_unique<ResourceResponse>(other.ToResourceResponse())),
+      resource_response_(owned_resource_response_.get()) {}
+WebURLResponse::WebURLResponse(const WebURL& url)
+    : owned_resource_response_(
+          std::make_unique<ResourceResponse>(static_cast<KURL>(url))),
+      resource_response_(owned_resource_response_.get()) {}
+WebURLResponse::WebURLResponse(ResourceResponse& response)
+    : owned_resource_response_(nullptr), resource_response_(&response) {}
 WebURLResponse& WebURLResponse::operator=(const WebURLResponse&) {
   return *this;
 }
 bool WebURLResponse::IsNull() const {
   return resource_response_ == nullptr;
 }
+const ResourceResponse& WebURLResponse::ToResourceResponse() const {
+  return *resource_response_;
+}
+WebURL WebURLResponse::CurrentRequestUrl() const {
+  return resource_response_ ? WebURL(resource_response_->CurrentRequestUrl())
+                            : WebURL();
+}
+WebString WebURLResponse::MimeType() const {
+  return resource_response_ ? WebString(resource_response_->MimeType())
+                            : WebString();
+}
+WebString WebURLResponse::HttpHeaderField(const WebString& name) const {
+  return resource_response_ ? WebString(resource_response_->HttpHeaderField(
+                                  AtomicString(name)))
+                            : WebString();
+}
+int WebURLResponse::HttpStatusCode() const {
+  return resource_response_ ? resource_response_->HttpStatusCode() : 200;
+}
+void WebURLResponse::SetMimeType(const WebString&) {}
+void WebURLResponse::SetTextEncodingName(const WebString&) {}
+void WebURLResponse::SetHttpStatusCode(int) {}
+void WebURLResponse::SetExpectedContentLength(int64_t) {}
 
 NavigatorLanguage::NavigatorLanguage(ExecutionContext*) {}
 AtomicString NavigatorLanguage::language() {
@@ -1797,10 +1791,6 @@ void UseCounterImpl::ClearMeasurementForTesting(WebDXFeature) {}
 void UseCounterImpl::ReportTotalTakenTime(const LocalFrame*, bool) {}
 void UseCounterImpl::Trace(Visitor*) const {}
 
-void DocumentLoadTiming::SetActivationStart(base::TimeTicks value) {
-  document_load_timing_values_->activation_start = value;
-}
-
 std::unique_ptr<CodeCacheHost> CodeCacheHost::Create(
     mojo::Remote<mojom::blink::CodeCacheHost>) {
   return nullptr;
@@ -1813,23 +1803,6 @@ CodeCacheHost& BackgroundCodeCacheHost::GetCodeCacheHost(
     scoped_refptr<base::SequencedTaskRunner>) {
   CHECK(false);
 }
-
-WebNavigationParams::PrefetchedSignedExchange::PrefetchedSignedExchange() =
-    default;
-WebNavigationParams::PrefetchedSignedExchange::PrefetchedSignedExchange(
-    const WebURL& input_outer_url,
-    const WebString& input_header_integrity,
-    const WebURL& input_inner_url,
-    const WebURLResponse& input_inner_response,
-    CrossVariantMojoRemote<network::mojom::URLLoaderFactoryInterfaceBase>
-        input_loader_factory)
-    : outer_url(input_outer_url),
-      header_integrity(input_header_integrity),
-      inner_url(input_inner_url),
-      inner_response(input_inner_response),
-      loader_factory(std::move(input_loader_factory)) {}
-WebNavigationParams::PrefetchedSignedExchange::~PrefetchedSignedExchange() =
-    default;
 
 SecurityContextInit::SecurityContextInit(ExecutionContext* execution_context)
     : execution_context_(execution_context) {}

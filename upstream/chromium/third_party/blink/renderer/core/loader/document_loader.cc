@@ -59,6 +59,7 @@
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/url_response_head.mojom-shared.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 #include "third_party/blink/public/common/client_hints/client_hints.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/javascript_framework_detection.h"
@@ -200,6 +201,12 @@
 
 namespace blink {
 namespace {
+
+void TraceStandaloneDocumentLoaderStage(const char* stage) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+#endif
+}
 
 Vector<mojom::blink::OriginTrialFeature> CopyInitiatorOriginTrials(
     const std::vector<int>& initiator_origin_trial_features) {
@@ -945,6 +952,12 @@ void DocumentLoader::DidObserveJavaScriptFrameworks(
 
 void DocumentLoader::InjectAutoSpeculationRules(
     const JavaScriptFrameworkDetectionResult& result) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Browser-injected speculation rules are a preload optimization and require
+  // browser-side configuration/plumbing that the standalone renderer does not
+  // expose.
+  return;
+#else
   if (!base::FeatureList::IsEnabled(features::kAutoSpeculationRules)) {
     return;
   }
@@ -965,11 +978,15 @@ void DocumentLoader::InjectAutoSpeculationRules(
           speculation_rules, BrowserInjectedSpeculationRuleOptOut::kRespect);
     }
   }
+#endif
 }
 
 void DocumentLoader::InjectSpeculationRulesFromString(
     const String& string,
     BrowserInjectedSpeculationRuleOptOut opt_out) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   auto* source =
       SpeculationRuleSet::Source::FromBrowserInjected(string, Url(), opt_out);
   auto* rule_set = SpeculationRuleSet::Parse(source, frame_->DomWindow());
@@ -983,6 +1000,7 @@ void DocumentLoader::InjectSpeculationRulesFromString(
   }
 
   DocumentSpeculationRules::From(*frame_->GetDocument()).AddRuleSet(rule_set);
+#endif
 }
 
 // static
@@ -1281,6 +1299,7 @@ void DocumentLoader::SetHistoryItemStateForCommit(
 }
 
 void DocumentLoader::BodyDataReceived(base::span<const char> data) {
+  TraceStandaloneDocumentLoaderStage("BodyDataReceived entry");
   EncodedBodyData body_data(data);
   BodyDataReceivedImpl(body_data);
 }
@@ -1310,8 +1329,10 @@ DocumentLoader::TakeProcessBackgroundDataCallback() {
 void DocumentLoader::BodyDataReceivedImpl(BodyData& data) {
   TRACE_EVENT("loading", "DocumentLoader::BodyDataReceivedImpl",
               perfetto::Flow::FromPointer(this));
+  TraceStandaloneDocumentLoaderStage("BodyDataReceivedImpl entry");
   base::SpanOrSize<const char> encoded_data = data.EncodedData();
   if (encoded_data.size()) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (response_.WasFetchedViaServiceWorker()) {
       total_body_size_from_service_worker_ += encoded_data.size();
     }
@@ -1319,6 +1340,7 @@ void DocumentLoader::BodyDataReceivedImpl(BodyData& data) {
                                                   encoded_data.size());
     probe::DidReceiveData(probe::ToCoreProbeSink(GetFrame()),
                           main_resource_identifier_, this, encoded_data);
+#endif
   }
 
   TRACE_EVENT("loading", "DocumentLoader::HandleData",
@@ -1336,7 +1358,9 @@ void DocumentLoader::BodyDataReceivedImpl(BodyData& data) {
     return;
   }
 
+  TraceStandaloneDocumentLoaderStage("BodyDataReceivedImpl before ProcessDataBuffer");
   ProcessDataBuffer(&data);
+  TraceStandaloneDocumentLoaderStage("BodyDataReceivedImpl after ProcessDataBuffer");
 }
 
 void DocumentLoader::BodyLoadingFinished(
@@ -1347,13 +1371,23 @@ void DocumentLoader::BodyLoadingFinished(
     const std::optional<WebURLError>& error) {
   TRACE_EVENT("loading", "DocumentLoader::BodyLoadingFinished",
               perfetto::Flow::FromPointer(this));
+  TraceStandaloneDocumentLoaderStage("BodyLoadingFinished entry");
 
   DCHECK(frame_);
   if (!error) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished before CompleteProgress");
     GetFrameLoader().Progress().CompleteProgress(main_resource_identifier_);
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished after CompleteProgress");
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished before probe DidFinishLoading");
     probe::DidFinishLoading(
         probe::ToCoreProbeSink(GetFrame()), main_resource_identifier_, this,
         completion_time, total_encoded_data_length, total_decoded_body_length);
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished after probe DidFinishLoading");
 
     if (response_.WasFetchedViaServiceWorker()) {
       // See https://w3c.github.io/ServiceWorker/#dom-fetchevent-respondwith
@@ -1363,10 +1397,16 @@ void DocumentLoader::BodyLoadingFinished(
       total_decoded_body_length = total_body_size_from_service_worker_;
     }
 
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished before performance body finish");
     DOMWindowPerformance::performance(*frame_->DomWindow())
         ->OnBodyLoadFinished(total_encoded_body_length,
                              total_decoded_body_length);
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished after performance body finish");
 
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished before parent resource timing");
     if (resource_timing_info_for_parent_) {
       // Note that we already checked for Timing-Allow-Origin, otherwise we
       // wouldn't have a resource_timing_info_for_parent_ in the first place
@@ -1388,7 +1428,14 @@ void DocumentLoader::BodyLoadingFinished(
       frame_->Owner()->AddResourceTiming(
           std::move(resource_timing_info_for_parent_));
     }
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished after parent resource timing");
+#endif
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished before FinishedLoading");
     FinishedLoading(completion_time);
+    TraceStandaloneDocumentLoaderStage(
+        "BodyLoadingFinished after FinishedLoading");
     return;
   }
 
@@ -1440,8 +1487,12 @@ void DocumentLoader::LoadFailed(const ResourceError& error) {
 void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
   TRACE_EVENT("loading", "DocumentLoader::FinishedLoading",
               perfetto::Flow::FromPointer(this));
+  TraceStandaloneDocumentLoaderStage("FinishedLoading entry");
   body_loader_.reset();
+  TraceStandaloneDocumentLoaderStage("FinishedLoading after body_loader reset");
   virtual_time_pauser_.UnpauseVirtualTime();
+  TraceStandaloneDocumentLoaderStage(
+      "FinishedLoading after virtual time unpause");
 
   DCHECK(commit_reason_ == CommitReason::kInitialization ||
          !frame_->GetPage()->Paused() ||
@@ -1464,22 +1515,40 @@ void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
   if (!loading_main_document_from_mhtml_archive_)
     DCHECK_GE(state_, kCommitted);
 
+  TraceStandaloneDocumentLoaderStage("FinishedLoading before response end");
   base::TimeTicks response_end_time = finish_time;
   if (response_end_time.is_null())
     response_end_time = time_of_last_data_received_;
   if (response_end_time.is_null())
     response_end_time = clock_->NowTicks();
   GetTiming().SetResponseEnd(response_end_time);
+  TraceStandaloneDocumentLoaderStage("FinishedLoading after response end");
 
   if (!frame_)
     return;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (loading_url_as_empty_document_ &&
+      commit_reason_ == CommitReason::kInitialization) {
+    TraceStandaloneDocumentLoaderStage(
+        "FinishedLoading clearing standalone empty document parser");
+    parser_.Clear();
+  }
+#endif
+
   if (parser_) {
     if (parser_blocked_count_) {
+      TraceStandaloneDocumentLoaderStage(
+          "FinishedLoading before parser blocked flag");
       finish_loading_when_parser_resumed_ = true;
+      TraceStandaloneDocumentLoaderStage(
+          "FinishedLoading after parser blocked flag");
     } else {
+      TraceStandaloneDocumentLoaderStage("FinishedLoading before parser Finish");
       parser_->Finish();
+      TraceStandaloneDocumentLoaderStage("FinishedLoading after parser Finish");
       parser_.Clear();
+      TraceStandaloneDocumentLoaderStage("FinishedLoading after parser clear");
     }
   }
 }
@@ -2084,6 +2153,7 @@ void DocumentLoader::StartLoadingInternal() {
 void DocumentLoader::StartLoadingResponse() {
   TRACE_EVENT("loading", "DocumentLoader::StartLoadingResponse",
               perfetto::Flow::FromPointer(this));
+  TraceStandaloneDocumentLoaderStage("StartLoadingResponse entry");
   // TODO(dcheng): Clean up the null checks in this helper.
   if (!frame_)
     return;
@@ -2093,6 +2163,8 @@ void DocumentLoader::StartLoadingResponse() {
   if (base::FeatureList::IsEnabled(features::kStreamlineRendererInit) &&
       frame_->IsMainFrame() && loading_url_as_empty_document_ &&
       commit_reason_ == CommitReason::kInitialization) {
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse before streamlined empty document");
     // We know this is an empty document, so explicitly set empty content
     // without going through the parser, which has a lot of overhead.
     Document* document = frame_->GetDocument();
@@ -2102,12 +2174,18 @@ void DocumentLoader::StartLoadingResponse() {
     html->AppendChild(MakeGarbageCollected<HTMLBodyElement>(*document));
 
     FinishedLoading(base::TimeTicks::Now());
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse after streamlined empty document");
     return;
   }
 
   CHECK_GE(state_, kCommitted);
 
+  TraceStandaloneDocumentLoaderStage(
+      "StartLoadingResponse before CreateParserPostCommit");
   CreateParserPostCommit();
+  TraceStandaloneDocumentLoaderStage(
+      "StartLoadingResponse after CreateParserPostCommit");
 
   // The main document from an MHTML archive is not loaded from its HTTP
   // response, but from the main resource within the archive (in the response).
@@ -2136,7 +2214,11 @@ void DocumentLoader::StartLoadingResponse() {
 
   // Empty documents are empty by definition. Nothing to load.
   if (loading_url_as_empty_document_) {
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse before empty FinishedLoading");
     FinishedLoading(base::TimeTicks::Now());
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse after empty FinishedLoading");
     return;
   }
 
@@ -2151,8 +2233,12 @@ void DocumentLoader::StartLoadingResponse() {
   // TODO(dcheng): Barring something really strange and unusual, there should
   // always be a frame here.
   if (frame_ && frame_->GetDocument()->IsMediaDocument()) {
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse before media parser finish");
     parser_->Finish();
     StopLoading();
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse after media parser finish");
     return;
   }
 
@@ -2162,16 +2248,28 @@ void DocumentLoader::StartLoadingResponse() {
     return;
 
   if (!url_.ProtocolIsInHttpFamily()) {
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse before non-http StartLoadingBody");
     body_loader_->StartLoadingBody(this);
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse after non-http StartLoadingBody");
     return;
   }
 
   if (parser_->IsPreloading()) {
     // If we were waiting for the document loader, the body has already
     // started loading and it is safe to continue parsing.
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse before CommitPreloadedData");
     parser_->CommitPreloadedData();
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse after CommitPreloadedData");
   } else {
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse before http StartLoadingBody");
     body_loader_->StartLoadingBody(this);
+    TraceStandaloneDocumentLoaderStage(
+        "StartLoadingResponse after http StartLoadingBody");
   }
 }
 
@@ -2561,31 +2659,49 @@ bool ShouldReuseDOMWindow(LocalDOMWindow* window,
                           SecurityOrigin* security_origin,
                           bool window_anonymous_matching,
                           const AgentClusterKey& agent_cluster_key) {
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow entry");
   if (!window) {
     return false;
   }
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow after window");
+  if (!window->document()) {
+    return false;
+  }
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow after document");
 
   // Anonymous is tracked per-Window, so if it does not match, do not reuse it.
   if (!window_anonymous_matching) {
     return false;
   }
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow after anonymous");
 
   // Only navigations from the initial empty document can reuse the window.
   if (!window->document()->IsInitialEmptyDocument()) {
     return false;
   }
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow after initial doc");
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#endif
 
   // The new origin must match the origin of the initial empty document.
   if (!window->GetSecurityOrigin()->CanAccess(security_origin)) {
     return false;
   }
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow after origin access");
 
   // The cross-origin isolation status of the window and the navigation should
   // match.
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow before window COI");
   const auto* window_coi_key =
       window->GetAgent()->GetAgentClusterKey().GetCrossOriginIsolationKey();
+  TraceStandaloneDocumentLoaderStage("ShouldReuseDOMWindow after window COI");
+  TraceStandaloneDocumentLoaderStage(
+      "ShouldReuseDOMWindow before navigation COI");
   const auto* navigation_coi_key =
       agent_cluster_key.GetCrossOriginIsolationKey();
+  TraceStandaloneDocumentLoaderStage(
+      "ShouldReuseDOMWindow after navigation COI");
 
   // If both are null, they match.
   if (!window_coi_key && !navigation_coi_key) {
@@ -2640,6 +2756,7 @@ bool DocumentLoader::IsSameOriginInitiator() const {
 void DocumentLoader::InitializeWindow(Document* owner_document) {
   TRACE_EVENT("loading", "DocumentLoader::InitializeWindow",
               perfetto::Flow::FromPointer(this));
+  TraceStandaloneDocumentLoaderStage("InitializeWindow entry");
   // Javascript URLs, XSLT committed document and discarded documents must not
   // pass a new policy_container_, since they must keep the previous document
   // one.
@@ -2649,11 +2766,15 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
 
   // The old window's PolicyContainer must be accessed before being potentially
   // extracted below.
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow before old policy container");
   const bool old_window_is_credentialless =
       frame_->DomWindow() && frame_->DomWindow()
                                  ->GetPolicyContainer()
                                  ->GetPolicies()
                                  .is_credentialless;
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow after old policy container");
 
   // DocumentLoader::InitializeWindow is called either on FrameLoader::Init or
   // on FrameLoader::CommitNavigation. FrameLoader::Init always initializes a
@@ -2669,7 +2790,11 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
   // not know about this and is not changing the RenderFrameHost's
   // PolicyContainerHost).
   if (frame_->DomWindow() && !policy_container_) {
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow before TakePolicyContainer");
     policy_container_ = frame_->DomWindow()->TakePolicyContainer();
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow after TakePolicyContainer");
   }
 
   // Every window must have a policy container.
@@ -2679,7 +2804,9 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
       old_window_is_credentialless ==
       policy_container_->GetPolicies().is_credentialless;
 
+  TraceStandaloneDocumentLoaderStage("InitializeWindow before CreateCSP");
   ContentSecurityPolicy* csp = CreateCSP();
+  TraceStandaloneDocumentLoaderStage("InitializeWindow after CreateCSP");
 
   scoped_refptr<SecurityOrigin> security_origin;
   if (frame_->IsProvisional()) {
@@ -2698,11 +2825,19 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
     // cause the origin to no longer be aliased).
     security_origin = frame_->DomWindow()->GetSecurityOrigin()->IsolatedCopy();
   } else {
+    TraceStandaloneDocumentLoaderStage("InitializeWindow before CalculateOrigin");
     security_origin = CalculateOrigin(owner_document);
+    TraceStandaloneDocumentLoaderStage("InitializeWindow after CalculateOrigin");
   }
 
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow before agent cluster key copy");
   AgentClusterKey agent_cluster_key = agent_cluster_key_;
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow after agent cluster key copy");
   if (IsPagePopupRunningInWebTest(frame_)) {
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow before page popup agent cluster");
     // Additionally, if we are a page popup in LayoutTests ensure we use the
     // popup owner's AgentClusterKey so the tests can possibly access the
     // document via internals API.
@@ -2710,42 +2845,60 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
                             ->GetExecutionContext()
                             ->GetAgent()
                             ->GetAgentClusterKey();
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow after page popup agent cluster");
 
     // Note: this code must be kept in sync with
     // WindowAgentFactory::GetAgentForOrigin(), as the two conditions below hand
     // out universal WindowAgent objects, and thus override the AgentClusterKey
     // provided by the browser process.
-  } else if (HasPotentialUniversalAccessPrivilege(frame_.Get()) ||
-             security_origin->IsLocal()) {
-    // In this case we either have AllowUniversalAccessFromFileURLs enabled, or
-    // WebSecurity is disabled, or it's a local scheme such as file://; any of
-    // these cases forces us to use a common WindowAgent for all origins, so
-    // don't attempt to pass the AgentClusterKey sent from the browser. Note:
-    // AllowUniversalAccessFromFileURLs is deprecated as of Android R, so
-    // eventually this use case will diminish.
-    agent_cluster_key = AgentClusterKey::CreateUniversalFileAgent();
-  } else if (ShouldInheritAgentClusterKey(Url(), commit_reason_) &&
-             owner_document && owner_document->domWindow()) {
-    // Since we're inheriting the owner document's origin, we should also use
-    // its AgentClusterKey to determine which WindowAgent to use, overriding the
-    // AgentClusterKey sent in the commit params. This happens mainly in two
-    // cases:
-    //   1. about:blank documents with an owner, which inherit both
-    //   SecurityOrigin and AgentClusterKey from their owner.
-    //   2. JavaScript URLs also inherit their SecurityOrigin and
-    //   AgentClusterKey from their owner (and don't pass an AgentClusterKey in
-    //   their commit params).
-    //
-    // TODO(wjmaclean,domenic): we're currently verifying that the OAC
-    // inheritance is correct for both XSLT documents and non-initial
-    // about:blank cases. Given the relationship between OAC, SecurityOrigin,
-    // and COOP/COEP, a single inheritance pathway would make sense; this work
-    // is being tracked in https://crbug.com/1183935.
-    agent_cluster_key =
-        owner_document->domWindow()->GetAgent()->GetAgentClusterKey();
+  } else {
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow before universal access check");
+    const bool use_universal_file_agent =
+        HasPotentialUniversalAccessPrivilege(frame_.Get()) ||
+        security_origin->IsLocal();
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow after universal access check");
+    if (use_universal_file_agent) {
+      // In this case we either have AllowUniversalAccessFromFileURLs enabled, or
+      // WebSecurity is disabled, or it's a local scheme such as file://; any of
+      // these cases forces us to use a common WindowAgent for all origins, so
+      // don't attempt to pass the AgentClusterKey sent from the browser. Note:
+      // AllowUniversalAccessFromFileURLs is deprecated as of Android R, so
+      // eventually this use case will diminish.
+      TraceStandaloneDocumentLoaderStage(
+          "InitializeWindow before universal file agent key");
+      agent_cluster_key = AgentClusterKey::CreateUniversalFileAgent();
+      TraceStandaloneDocumentLoaderStage(
+          "InitializeWindow after universal file agent key");
+    } else if (ShouldInheritAgentClusterKey(Url(), commit_reason_) &&
+               owner_document && owner_document->domWindow()) {
+      // Since we're inheriting the owner document's origin, we should also use
+      // its AgentClusterKey to determine which WindowAgent to use, overriding
+      // the AgentClusterKey sent in the commit params. This happens mainly in
+      // two cases:
+      //   1. about:blank documents with an owner, which inherit both
+      //   SecurityOrigin and AgentClusterKey from their owner.
+      //   2. JavaScript URLs also inherit their SecurityOrigin and
+      //   AgentClusterKey from their owner (and don't pass an AgentClusterKey
+      //   in their commit params).
+      //
+      // TODO(wjmaclean,domenic): we're currently verifying that the OAC
+      // inheritance is correct for both XSLT documents and non-initial
+      // about:blank cases. Given the relationship between OAC, SecurityOrigin,
+      // and COOP/COEP, a single inheritance pathway would make sense; this work
+      // is being tracked in https://crbug.com/1183935.
+      agent_cluster_key =
+          owner_document->domWindow()->GetAgent()->GetAgentClusterKey();
+    }
   }
 
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow before inherited storage access");
   bool inherited_has_storage_access = false;
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow after inherited storage access");
   // In some rare cases, we'll re-use a LocalDOMWindow for a new Document. For
   // example, when a script calls window.open("..."), the browser gives
   // JavaScript a window synchronously but kicks off the load in the window
@@ -2754,11 +2907,36 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
   // commits. To make that happen, we "securely transition" the existing
   // LocalDOMWindow to the Document that results from the network load. See also
   // Document::IsSecureTransitionTo.
-  if (!ShouldReuseDOMWindow(frame_->DomWindow(), security_origin.get(),
-                            window_anonymous_matching, agent_cluster_key)) {
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow before reuse DomWindow arg");
+  LocalDOMWindow* current_window = frame_->DomWindow();
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow after reuse DomWindow arg");
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow before reuse origin arg");
+  SecurityOrigin* current_security_origin = security_origin.get();
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow after reuse origin arg");
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow before ShouldReuseDOMWindow");
+  const bool should_reuse_dom_window = ShouldReuseDOMWindow(
+      current_window, current_security_origin, window_anonymous_matching,
+      agent_cluster_key);
+  TraceStandaloneDocumentLoaderStage(
+      "InitializeWindow after ShouldReuseDOMWindow");
+  if (!should_reuse_dom_window) {
+    TraceStandaloneDocumentLoaderStage("InitializeWindow before GetWindowAgent");
     auto* agent =
         GetWindowAgentForAgentClusterKey(frame_.Get(), agent_cluster_key);
-    frame_->SetDOMWindow(MakeGarbageCollected<LocalDOMWindow>(*frame_, agent));
+    TraceStandaloneDocumentLoaderStage("InitializeWindow after GetWindowAgent");
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow before LocalDOMWindow allocation");
+    auto* new_window = MakeGarbageCollected<LocalDOMWindow>(*frame_, agent);
+    TraceStandaloneDocumentLoaderStage(
+        "InitializeWindow after LocalDOMWindow allocation");
+    TraceStandaloneDocumentLoaderStage("InitializeWindow before SetDOMWindow");
+    frame_->SetDOMWindow(new_window);
+    TraceStandaloneDocumentLoaderStage("InitializeWindow after SetDOMWindow");
 
     frame_->DomWindow()->SetStorageAccessApiStatus(storage_access_api_status_);
     inherited_has_storage_access = [this]() -> bool {
@@ -2780,7 +2958,9 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
       frame_->DomWindow()->ResetWindowAgent(
           GetWindowAgentForAgentClusterKey(frame_.Get(), agent_cluster_key));
     }
+    TraceStandaloneDocumentLoaderStage("InitializeWindow before ClearForReuse");
     frame_->DomWindow()->ClearForReuse();
+    TraceStandaloneDocumentLoaderStage("InitializeWindow after ClearForReuse");
 
     // If one of the two following things is true:
     // 1. JS called window.open(), Blink created a new auxiliary browsing
@@ -2894,6 +3074,7 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
 void DocumentLoader::CommitNavigation() {
   TRACE_EVENT("loading", "DocumentLoader::CommitNavigation",
               perfetto::Flow::FromPointer(this));
+  TraceStandaloneDocumentLoaderStage("DocumentLoader CommitNavigation entry");
   base::ScopedUmaHistogramTimer histogram_timer(
       "Navigation.DocumentLoader.CommitNavigation");
   base::ElapsedTimer timer;
@@ -2918,29 +3099,47 @@ void DocumentLoader::CommitNavigation() {
   }
 
   LocalDOMWindow* previous_window = frame_->DomWindow();
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before InitializeWindow");
   InitializeWindow(owner_document);
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after InitializeWindow");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before runtime feature overrides");
   frame_->DomWindow()
       ->GetRuntimeFeatureStateOverrideContext()
       ->ApplyOverrideValuesFromParams(modified_runtime_features_);
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after runtime feature overrides");
 
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before canvas noise token");
   frame_->DomWindow()->SetCanvasNoiseToken(std::nullopt);
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after canvas noise token");
 
   // Previous same-document navigation tasks are not relevant once a
   // cross-document navigation has happened.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before task tracker reset");
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (auto* tracker = scheduler::TaskAttributionTracker::From(
           frame_->DomWindow()->GetIsolate())) {
     tracker->ResetSameDocumentNavigationTasks();
   }
+#endif
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after task tracker reset");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before MaybeStartLoadingBodyInBackground");
   MaybeStartLoadingBodyInBackground(body_loader_.get(), frame_, url_,
                                     response_);
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after MaybeStartLoadingBodyInBackground");
 
   // Record if we have navigated to a non-secure page served from a IP address
   // in the local address space.
   //
   // Use response_.AddressSpace() instead of frame_->DomWindow()->AddressSpace()
   // since the latter isn't populated in unit tests.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before private address space metrics");
   if (frame_->IsOutermostMainFrame()) {
     auto address_space = response_.AddressSpace();
     if ((address_space == network::mojom::blink::IPAddressSpace::kLocal ||
@@ -2949,9 +3148,14 @@ void DocumentLoader::CommitNavigation() {
       CountUse(WebFeature::kMainFrameNonSecurePrivateAddressSpace);
     }
   }
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after private address space metrics");
 
   // Temporary measurement to evaluate the change proposed in
   // https://github.com/w3c/webappsec-mixed-content/issues/73.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before mixed content metrics");
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (!frame_->GetSecurityContext()
            ->GetSecurityOrigin()
            ->IsPotentiallyTrustworthy() &&
@@ -2966,8 +3170,14 @@ void DocumentLoader::CommitNavigation() {
           ->IsLocalhost()) {
     CountUse(WebFeature::kMixedFrameEmbeddedByLocalhost);
   }
+#endif
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after mixed content metrics");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before SecurityContextInit");
   SecurityContextInit security_init(frame_->DomWindow());
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after SecurityContextInit");
 
   // The document constructed by XSLTProcessor and ScriptController should
   // inherit Permissions Policy and Document Policy from the previous Document.
@@ -2985,9 +3195,13 @@ void DocumentLoader::CommitNavigation() {
     // PermissionsPolicy and DocumentPolicy require SecurityOrigin and origin
     // trials to be initialized.
     // TODO(iclelland): Add Permissions-Policy-Report-Only to Origin Policy.
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader before ApplyPermissionsPolicy");
     security_init.ApplyPermissionsPolicy(*frame_.Get(), response_,
                                          frame_policy_, isolated_app_policy_,
                                          FencedFrameProperties(), url_);
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after ApplyPermissionsPolicy");
 
     // |document_policy_| is parsed in document loader because it is
     // compared with |frame_policy.required_document_policy| to decide
@@ -2996,17 +3210,28 @@ void DocumentLoader::CommitNavigation() {
     // initialization is delayed to
     // SecurityContextInit::InitializeDocumentPolicy(), similar to
     // |report_only_permissions_policy|.
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader before ApplyDocumentPolicy");
     security_init.ApplyDocumentPolicy(
         document_policy_,
         response_.HttpHeaderField(http_names::kDocumentPolicyReportOnly));
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after ApplyDocumentPolicy");
   }
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before navigation scroll policy");
   navigation_scroll_allowed_ = !frame_->DomWindow()->IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature::kForceLoadAtTop);
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after navigation scroll policy");
 
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before WillCommitNavigation");
   WillCommitNavigation();
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after WillCommitNavigation");
 
   is_prerendering_ = frame_->GetPage()->IsPrerendering();
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before InstallNewDocument");
   Document* document = frame_->DomWindow()->InstallNewDocument(
       DocumentInit::Create()
           .WithWindow(frame_->DomWindow(), owner_document)
@@ -3022,11 +3247,26 @@ void DocumentLoader::CommitNavigation() {
           .WithFallbackBaseURL(fallback_base_url_)
           .WithUkmSourceId(ukm_source_id_)
           .WithBaseAuctionNonce(base_auction_nonce_));
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after InstallNewDocument");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before RecordUseCountersForCommit");
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   RecordUseCountersForCommit();
+#endif
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after RecordUseCountersForCommit");
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before RecordConsoleMessagesForCommit");
   RecordConsoleMessagesForCommit();
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after RecordConsoleMessagesForCommit");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before ClearPostLayoutSnapshotClients");
   frame_->ClearPostLayoutSnapshotClients();
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after ClearPostLayoutSnapshotClients");
 
   // Determine whether to give the frame sticky user activation. These checks
   // mirror the check in Navigator::DidNavigate(). Main frame navigations and
@@ -3037,25 +3277,48 @@ void DocumentLoader::CommitNavigation() {
   // See: crbug.com/41493458
   // TODO(crbug.com/736415): Clear this bit unconditionally for all frames.
   if (!should_have_sticky_user_activation_) {
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader before ClearUserActivation");
     frame_->ClearUserActivation();
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after ClearUserActivation");
   } else {
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader before SetStickyUserActivationState");
     frame_->SetStickyUserActivationState();
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after SetStickyUserActivationState");
   }
 
   // The DocumentLoader was flagged as activated if it needs to notify the frame
   // that it was activated before navigation. Update the frame state based on
   // the new value.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before old document info lookup");
   OldDocumentInfoForCommit* old_document_info_for_commit =
       (commit_reason_ == CommitReason::kRegular)
           ? ScopedOldDocumentInfoForCommitCapturer::CurrentInfo()
           : nullptr;
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after old document info lookup");
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before sticky activation compare");
   if (frame_->HadStickyUserActivationBeforeNavigation() !=
       had_sticky_activation_) {
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after sticky activation compare");
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader before sticky activation host notify");
     frame_->SetHadStickyUserActivationBeforeNavigation(had_sticky_activation_);
     frame_->GetLocalFrameHostRemote()
         .HadStickyUserActivationBeforeNavigationChanged(had_sticky_activation_);
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after sticky activation host notify");
   }
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after sticky activation block");
 
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before focus old info");
   if (old_document_info_for_commit) {
     frame_->GetPage()->GetFocusController().UpdateFocusOnNavigationCommit(
         frame_, old_document_info_for_commit->was_focused_frame);
@@ -3064,7 +3327,9 @@ void DocumentLoader::CommitNavigation() {
           old_document_info_for_commit->overlay_color.value());
     }
   }
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after focus old info");
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   bool should_clear_window_name =
       previous_window && frame_->IsOutermostMainFrame() && !frame_->Opener() &&
       !frame_->DomWindow()->GetSecurityOrigin()->IsSameOriginWith(
@@ -3087,30 +3352,38 @@ void DocumentLoader::CommitNavigation() {
     // after we will fire a UseCounter.
     frame_->Tree().CrossSiteCrossBrowsingContextGroupSetNulledName();
   }
+#endif
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after window name blocks");
 
   // MHTML archive's URL is usually a local file. However the main resource
   // within the archive has a public URL and must be used to resolve all the
   // relative links.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before MHTML base URL");
   if (loading_main_document_from_mhtml_archive_) {
     ArchiveResource* main_resource = archive_->MainResource();
     KURL main_resource_url = main_resource ? main_resource->Url() : KURL();
     if (!main_resource_url.IsEmpty())
       document->SetBaseURLOverride(main_resource_url);
   }
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after MHTML base URL");
 
   // For any navigations which have a per-origin salt, we need to notify the
   // resulting `document`. The `visited_link_salt_` allows the `document` to
   // hash and identify which links should be styled as :visited. Without the
   // salt, the hashtable is unreadable to the Document.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before visited link salt");
   if (visited_link_salt_.has_value()) {
     if (base::FeatureList::IsEnabled(
             blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks)) {
       document->GetVisitedLinkState().UpdateSalt(visited_link_salt_.value());
     }
   }
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after visited link salt");
 
   // The navigation API is not initialized on the initial about:blank document
   // or opaque-origin documents.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before navigation API init");
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   if (commit_reason_ != CommitReason::kInitialization &&
       !frame_->DomWindow()->GetSecurityOrigin()->IsOpaque()) {
     frame_->DomWindow()->navigation()->InitializeForNewWindow(
@@ -3123,6 +3396,8 @@ void DocumentLoader::CommitNavigation() {
     navigation_api_forward_entries_.clear();
     navigation_api_previous_entry_ = WebHistoryItem();
   }
+#endif
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after navigation API init");
 
   if (commit_reason_ == CommitReason::kXSLT)
     DocumentXSLT::SetHasTransformSource(*document);
@@ -3137,40 +3412,61 @@ void DocumentLoader::CommitNavigation() {
         browsing_context_group_token_.value());
   }
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before DidInstallNewDocument");
   DidInstallNewDocument(document);
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after DidInstallNewDocument");
 
   // This must be called before the document is opened, otherwise HTML parser
   // will use stale values from HTMLParserOption.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before DidCommitNavigation");
   DidCommitNavigation();
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after DidCommitNavigation");
 
   // This must be called after DidInstallNewDocument which sets the content
   // language for the document.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before content language metrics");
   if (url_.ProtocolIsInHttpFamily()) {
     RecordAcceptLanguageAndContentLanguageMetric();
     RecordParentAndChildContentLanguageMetric();
   }
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after content language metrics");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before same origin initiator");
   bool is_same_origin_initiator = IsSameOriginInitiator();
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after same origin initiator");
 
   // No requestor origin means it's browser-initiated (which includes *all*
   // history navigations, including those initiated from `window.history`
   // API).
   last_navigation_had_trusted_initiator_ =
       !requestor_origin_ || is_same_origin_initiator;
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after trusted initiator");
 
   // The PaintHolding feature defers compositor commits until content has been
   // painted or 500ms have passed, whichever comes first. We require that this
   // be an html document served via http.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before paint holding policy");
   if (base::FeatureList::IsEnabled(blink::features::kPaintHolding) &&
       IsA<HTMLDocument>(document) && Url().ProtocolIsInHttpFamily()) {
     document->SetDeferredCompositorCommitIsAllowed(true);
   } else {
     document->SetDeferredCompositorCommitIsAllowed(false);
   }
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after paint holding policy");
 
   // We only report resource timing info to the parent if:
   // 1. The navigation is container-initiated (e.g. iframe changed src)
   // 2. TAO passed.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before parent resource timing");
   if ((response_.ShouldPopulateResourceTiming() ||
        is_error_page_for_failed_navigation_) &&
       parent_resource_timing_access_ !=
@@ -3191,11 +3487,15 @@ void DocumentLoader::CommitNavigation() {
     resource_timing_info_for_parent_->last_redirect_end_time =
         document_load_timing_.RedirectEnd();
   }
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after parent resource timing");
 
   // TimingAllowPassed only applies to resource
   // timing reporting. Navigation timing is always same-origin with the
   // document that holds to the timing entry, as navigation timing represents
   // the timing of that document itself.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before navigation timing info");
   response_.SetTimingAllowPassed(true);
   mojom::blink::ResourceTimingInfoPtr navigation_timing_info =
       CreateResourceTimingInfo(base::TimeTicks(),
@@ -3205,20 +3505,30 @@ void DocumentLoader::CommitNavigation() {
                                &response_);
   navigation_timing_info->last_redirect_end_time =
       document_load_timing_.RedirectEnd();
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after navigation timing info");
 
   DCHECK(frame_->DomWindow());
 
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before h3 counter");
   if (navigation_timing_info->alpn_negotiated_protocol == "h3") {
     CountUse(WebFeature::kHttp3);
   }
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after h3 counter");
 
   // TODO(crbug.com/1476866): We should check for protocols and not emit
   // performance timeline entries for file protocol navigations.
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before navigation timing instance");
   DOMWindowPerformance::performance(*frame_->DomWindow())
       ->CreateNavigationTimingInstance(std::move(navigation_timing_info));
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after navigation timing instance");
 
   {
     // Notify the browser process about the commit.
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader before client commit notify");
     FrameNavigationDisabler navigation_disabler(*frame_);
     if (commit_reason_ == CommitReason::kInitialization) {
       // There's no observers yet so nothing to notify.
@@ -3233,20 +3543,30 @@ void DocumentLoader::CommitNavigation() {
     }
     // TODO(dgozman): make DidCreateScriptContext notification call currently
     // triggered by installing new document happen here, after commit.
+    TraceStandaloneDocumentLoaderStage(
+        "DocumentLoader after client commit notify");
   }
   // Note: this must be called after DispatchDidCommitLoad() for
   // metrics to be correctly sent to the browser process.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before use counter commit");
   if (commit_reason_ != CommitReason::kInitialization)
     use_counter_.DidCommitLoad(frame_);
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after use counter commit");
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before BFCache unpause");
   if (IsBackForwardOrRestore(load_type_)) {
     if (Page* page = frame_->GetPage())
       page->HistoryNavigationVirtualTimePauser().UnpauseVirtualTime();
   }
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after BFCache unpause");
 
   // If profiling is enabled by document policy, ensure that profiling metadata
   // is available by tracking the execution context's lifetime.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before ProfilerGroup");
   ProfilerGroup::InitializeIfEnabled(frame_->DomWindow());
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after ProfilerGroup");
 
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader before commit-to-response histogram");
   if (Url().ProtocolIsInHttpFamily() && frame_->IsOutermostMainFrame() &&
       ShouldEmitNewNavigationHistogram(navigation_type_)) {
     base::UmaHistogramTimes(
@@ -3254,9 +3574,13 @@ void DocumentLoader::CommitNavigation() {
         ".OutermostMainFrame.NewNavigation.IsHTTPOrHTTPS",
         timer.Elapsed());
   }
+  TraceStandaloneDocumentLoaderStage(
+      "DocumentLoader after commit-to-response histogram");
 
   // Load the document if needed.
+  TraceStandaloneDocumentLoaderStage("DocumentLoader before StartLoadingResponse");
   StartLoadingResponse();
+  TraceStandaloneDocumentLoaderStage("DocumentLoader after StartLoadingResponse");
 }
 
 void DocumentLoader::CreateParserPostCommit() {
@@ -3646,9 +3970,9 @@ void DocumentLoader::RecordUseCountersForCommit() {
   PolicyContainer* policy_container = frame_->DomWindow()->GetPolicyContainer();
   if (policy_container &&
       (policy_container->GetPolicies()
-           .connection_allowlists.enforced.has_value() ||
+           .connection_allowlists->enforced ||
        policy_container->GetPolicies()
-           .connection_allowlists.report_only.has_value())) {
+           .connection_allowlists->report_only)) {
     CountUse(WebFeature::kConnectionAllowlist);
   }
 }

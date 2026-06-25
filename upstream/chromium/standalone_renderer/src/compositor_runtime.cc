@@ -518,6 +518,36 @@ std::string RewriteStandaloneHtmlStyleBlocksToFileUrls(
   return output;
 }
 
+std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
+  std::string output;
+  const std::string lower = LowerAscii(html);
+  size_t search_offset = 0;
+  while (true) {
+    const size_t open = lower.find("<link", search_offset);
+    if (open == std::string::npos) {
+      output += html.substr(search_offset);
+      break;
+    }
+    const size_t open_end = lower.find('>', open);
+    if (open_end == std::string::npos) {
+      output += html.substr(search_offset);
+      break;
+    }
+    const std::string tag = lower.substr(open, open_end - open + 1);
+    const bool rel_stylesheet =
+        tag.find("rel=\"stylesheet\"") != std::string::npos ||
+        tag.find("rel='stylesheet'") != std::string::npos ||
+        tag.find("rel=stylesheet") != std::string::npos;
+    if (rel_stylesheet) {
+      output += html.substr(search_offset, open - search_offset);
+    } else {
+      output += html.substr(search_offset, open_end + 1 - search_offset);
+    }
+    search_offset = open_end + 1;
+  }
+  return output;
+}
+
 std::string BuildLiveBlinkProbeHtml(const std::string& html,
                                     const std::vector<Stylesheet>& stylesheets) {
   const auto extract_style_blocks = [&](const std::string& input) {
@@ -583,7 +613,8 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
   const bool has_html = html.find("<html") != std::string::npos ||
                         html.find("<HTML") != std::string::npos;
   if (has_head) {
-    std::string output = RewriteStandaloneHtmlStyleBlocksToFileUrls(html);
+    std::string output = RemoveStandaloneStylesheetLinkTags(
+        RewriteStandaloneHtmlStyleBlocksToFileUrls(html));
     const size_t head_close = output.find("</head>");
     const size_t head_close_upper = output.find("</HEAD>");
     const size_t insert_at =
@@ -596,7 +627,8 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
   }
   if (has_body || has_html)
     return "<head>" + base_html + stylesheet_html + "</head>" +
-           RewriteStandaloneHtmlStyleBlocksToFileUrls(html);
+           RemoveStandaloneStylesheetLinkTags(
+               RewriteStandaloneHtmlStyleBlocksToFileUrls(html));
   return "<head>" + base_html + stylesheet_html + extract_style_blocks(html) +
          "</head><body>" + remove_style_blocks(html) + "</body>";
 }
@@ -706,6 +738,11 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     snapshot_.asset_namespace = create_info.renderer.asset_namespace;
   }
 
+  ~StandaloneCompositorRuntimeImpl() override {
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+  }
+
   bool Initialize(std::vector<std::string>* diagnostics) override {
     namespace probe = ::blink::standalone_renderer_probe;
     EnsureStandaloneDiscardableMemoryAllocator();
@@ -779,7 +816,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
     }
 
-    if (last_probe_html_ != probe_html) {
+    if (input.force_document_reload || last_probe_html_ != probe_html) {
       ResetTypefaceResourceRegistryForFrame();
       probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
       last_probe_html_ = probe_html;
@@ -1024,6 +1061,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!last_frame_result_)
       return true;
     if (input.request_png_snapshot || input.request_raw_frame)
+      return true;
+    if (input.force_document_reload)
       return true;
     if (last_frame_result_->needs_begin_frame)
       return true;

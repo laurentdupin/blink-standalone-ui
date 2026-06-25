@@ -48,6 +48,7 @@
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/network/public/cpp/features.h"
@@ -280,6 +281,9 @@ namespace blink {
 namespace {
 
 void TraceStandaloneLocalFrameStage(const char* stage) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+#endif
 }
 
 LocalFrame* TraceStandaloneLocalFrameThis(const char* stage, LocalFrame* frame) {
@@ -465,22 +469,39 @@ void LocalFrame::Init(
     ukm::SourceId document_ukm_source_id,
     const KURL& creator_base_url,
     std::unique_ptr<base::UnguessableToken> sandbox_origin_token) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb("LocalFrame::Init entry");
+#endif
   if (!policy_container)
     policy_container = PolicyContainer::CreateEmpty();
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb("LocalFrame::Init before CoreInitializer");
+#endif
   CoreInitializer::GetInstance().InitLocalFrame(*this);
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   GetInterfaceRegistry()->AddInterface(BindRepeating(
       &LocalFrame::BindTextFragmentReceiver, WrapWeakPersistent(this)));
+#endif
   DCHECK(!mojo_handler_);
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
   mojo_handler_ = MakeGarbageCollected<LocalFrameMojoHandler>(*this);
 #endif
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb("LocalFrame::Init before opener");
+#endif
   SetOpenerDoNotNotify(opener);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb("LocalFrame::Init before loader Init");
+#endif
   loader_.Init(document_token, std::move(policy_container), storage_key,
                document_ukm_source_id, creator_base_url,
                std::move(sandbox_origin_token));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb("LocalFrame::Init after loader Init");
+#endif
 }
 
 void LocalFrame::SetView(LocalFrameView* view) {

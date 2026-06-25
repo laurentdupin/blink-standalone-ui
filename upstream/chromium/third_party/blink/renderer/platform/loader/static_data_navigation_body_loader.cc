@@ -4,7 +4,19 @@
 
 #include "third_party/blink/renderer/platform/loader/static_data_navigation_body_loader.h"
 
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
+
 namespace blink {
+
+namespace {
+
+void TraceStandaloneStaticBodyLoaderStage(const char* stage) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+#endif
+}
+
+}  // namespace
 
 // static
 std::unique_ptr<StaticDataNavigationBodyLoader>
@@ -47,11 +59,13 @@ void StaticDataNavigationBodyLoader::SetDefersLoading(LoaderFreezeMode mode) {
 void StaticDataNavigationBodyLoader::StartLoadingBody(
     WebNavigationBodyLoader::Client* client) {
   DCHECK(!is_in_continue_);
+  TraceStandaloneStaticBodyLoaderStage("StaticBodyLoader StartLoadingBody");
   client_ = client;
   Continue();
 }
 
 void StaticDataNavigationBodyLoader::Continue() {
+  TraceStandaloneStaticBodyLoaderStage("StaticBodyLoader Continue entry");
   if (freeze_mode_ != LoaderFreezeMode::kNone || !client_ || is_in_continue_)
     return;
 
@@ -71,7 +85,11 @@ void StaticDataNavigationBodyLoader::Continue() {
       scoped_refptr<SharedBuffer> data = std::move(data_);
 
       for (const auto& span : *data) {
+        TraceStandaloneStaticBodyLoaderStage(
+            "StaticBodyLoader before BodyDataReceived");
         client_->BodyDataReceived(span);
+        TraceStandaloneStaticBodyLoaderStage(
+            "StaticBodyLoader after BodyDataReceived");
         // |this| can be destroyed from BodyDataReceived.
         if (!weak_self)
           return;
@@ -90,9 +108,13 @@ void StaticDataNavigationBodyLoader::Continue() {
     // Clear |client_| to avoid any extra notifications from reentrancy.
     WebNavigationBodyLoader::Client* client = client_;
     client_ = nullptr;
+    TraceStandaloneStaticBodyLoaderStage(
+        "StaticBodyLoader before BodyLoadingFinished");
     client->BodyLoadingFinished(
         base::TimeTicks::Now(), total_encoded_data_length_,
         total_encoded_data_length_, total_encoded_data_length_, std::nullopt);
+    TraceStandaloneStaticBodyLoaderStage(
+        "StaticBodyLoader after BodyLoadingFinished");
     // |this| can be destroyed from BodyLoadingFinished.
     if (!weak_self)
       return;

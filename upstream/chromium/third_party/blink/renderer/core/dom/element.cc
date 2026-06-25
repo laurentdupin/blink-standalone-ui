@@ -36,6 +36,7 @@
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
 #include "cc/input/snap_selection_strategy.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/scroll/scroll_enums.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
@@ -3758,27 +3759,41 @@ void Element::ProcessElementRenderBlocking(const AtomicString& id_or_name) {
 DISABLE_CFI_PERF
 void Element::AttributeChanged(const AttributeModificationParams& params) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element AttributeChanged entry");
 #endif
   ParseAttribute(params);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element AttributeChanged after ParseAttribute");
 #endif
 
   GetDocument().IncDOMTreeVersion();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element AttributeChanged after IncDOMTreeVersion");
 #endif
-  GetDocument().NotifyAttributeChanged(*this, params.name, params.old_value,
-                                       params.new_value);
+  const QualifiedName name = params.name;
+  const AtomicString old_value = params.old_value;
+  const AtomicString new_value = params.new_value;
+  const AttributeModificationReason reason = params.reason;
+  GetDocument().NotifyAttributeChanged(*this, name, old_value, new_value);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element AttributeChanged after NotifyAttributeChanged");
 #endif
 
-  const QualifiedName& name = params.name;
   if (name == html_names::kIdAttr) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element AttributeChanged id branch");
+#endif
     AtomicString lowercase_id;
     if (GetDocument().InQuirksMode() &&
-        !params.new_value.ContainsNoAsciiUpper()) {
-      lowercase_id = params.new_value.ToAsciiLower();
+        !new_value.ContainsNoAsciiUpper()) {
+      lowercase_id = new_value.ToAsciiLower();
     }
-    const AtomicString& new_id = lowercase_id ? lowercase_id : params.new_value;
+    const AtomicString& new_id = lowercase_id ? lowercase_id : new_value;
     if (new_id != GetElementData()->IdForStyleResolution()) {
       AtomicString old_id = GetElementData()->SetIdForStyleResolution(new_id);
       GetDocument().GetStyleEngine().IdChangedForElement(old_id, new_id, *this);
@@ -3795,19 +3810,39 @@ void Element::AttributeChanged(const AttributeModificationParams& params) {
     }
 
     if (isConnected() &&
-        (!params.old_value.empty() || !params.new_value.empty())) {
+        (!old_value.empty() || !new_value.empty())) {
       GetDocument().MarkOverscrollCommandTargetsDirty();
     }
   } else if (name == html_names::kClassAttr) {
-    if (params.old_value == params.new_value &&
-        params.reason != AttributeModificationReason::kByMoveToNewDocument &&
-        params.reason != AttributeModificationReason::kByCloning) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element AttributeChanged class branch");
+#endif
+    if (old_value == new_value &&
+        reason != AttributeModificationReason::kByMoveToNewDocument &&
+        reason != AttributeModificationReason::kByCloning) {
       return;
     }
-    ClassAttributeChanged(params.new_value);
-    UpdateClassList(params.old_value, params.new_value);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element AttributeChanged before ClassAttributeChanged");
+#endif
+    ClassAttributeChanged(new_value);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element AttributeChanged before UpdateClassList");
+#endif
+    UpdateClassList(old_value, new_value);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element AttributeChanged before SoftNavigationHeuristics");
+#endif
     SoftNavigationHeuristics::ModifiedAttribute(this, name);
   } else if (name == html_names::kNameAttr) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element AttributeChanged name branch");
+#endif
     SetHasName(!params.new_value.IsNull());
   } else if (HasTagName(html_names::kATag) && name == html_names::kHrefAttr) {
     // <a> element's href changed - update its scroll target group membership.
@@ -4100,6 +4135,8 @@ void Element::StripScriptingAttributes(
 void Element::ParserSetAttributes(
     const Vector<Attribute, kAttributePrealloc>& attribute_vector) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element ParserSetAttributes entry");
 #endif
   DCHECK(!isConnected());
   DCHECK(!parentNode());
@@ -4107,16 +4144,22 @@ void Element::ParserSetAttributes(
 
   if (!attribute_vector.empty()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    for (const Attribute& attribute : attribute_vector) {
-    }
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element ParserSetAttributes before UniqueElementData");
     // Standalone does not currently support the variable-sized
-    // ShareableElementData allocation path reliably. Use the real Blink
+    // ShareableElementData allocation path reliably. Use Blink's
     // UniqueElementData storage instead of dropping parser-set attributes.
     element_data_ = MakeGarbageCollected<UniqueElementData>();
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element ParserSetAttributes after UniqueElementData");
     for (const Attribute& attribute : attribute_vector) {
+      html_css_renderer::SetStandaloneCrashBreadcrumb(
+          "Element ParserSetAttributes before Append");
       To<UniqueElementData>(element_data_.Get())
           ->Attributes()
           .Append(attribute.GetName(), attribute.Value());
+      html_css_renderer::SetStandaloneCrashBreadcrumb(
+          "Element ParserSetAttributes after Append");
     }
 #else
     if (ElementDataCache* cache = GetDocument().GetElementDataCache()) {
@@ -4127,8 +4170,6 @@ void Element::ParserSetAttributes(
           ShareableElementData::CreateWithAttributes(attribute_vector);
     }
 #endif
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
 
     DCHECK_EQ(nullptr, ElementTraversal::FirstChild(*this));
 
@@ -4136,33 +4177,53 @@ void Element::ParserSetAttributes(
     // so it is safe to reset the filter here.
     attribute_or_class_bloom_ = 0;
     for (const Attribute& attribute : attribute_vector) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+      html_css_renderer::SetStandaloneCrashBreadcrumb(
+          "Element ParserSetAttributes before FilterForAttribute");
+ #endif
       attribute_or_class_bloom_ |= FilterForAttribute(attribute.GetName());
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+      html_css_renderer::SetStandaloneCrashBreadcrumb(
+          "Element ParserSetAttributes after FilterForAttribute");
+ #endif
     }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element ParserSetAttributes before UpdateSubtreeBloom");
+ #endif
     UpdateSubtreeBloomFilterAfterInsert();
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+    html_css_renderer::SetStandaloneCrashBreadcrumb(
+        "Element ParserSetAttributes after UpdateSubtreeBloom");
+ #endif
   }
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element ParserSetAttributes before ParserDidSetAttributes");
+ #endif
   ParserDidSetAttributes();
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
+ #if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "Element ParserSetAttributes after ParserDidSetAttributes");
+ #endif
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Parser-created standalone elements are disconnected here. The full
+  // AttributeChanged path fans out into browser/script/navigation side effects
+  // that are not part of the no-script standalone embedder boundary and can
+  // observe transient parser-owned attribute storage during rapid document
+  // replacement. Attributes are already stored on element_data_ for style
+  // matching and the standalone static resource pass.
+  return;
+#else
   // Use attribute_vector instead of element_data_ because AttributeChanged
   // might modify element_data_.
   for (const auto& attribute : attribute_vector) {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
     AttributeChanged(AttributeModificationParams(
         attribute.GetName(), g_null_atom, attribute.Value(),
         AttributeModificationReason::kByParser));
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-#endif
   }
-#if defined(HTML_CSS_RENDERER_STANDALONE)
 #endif
 }
 

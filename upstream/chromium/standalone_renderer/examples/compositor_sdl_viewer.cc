@@ -30,8 +30,10 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/run_loop.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "html_css_renderer/compositor_runtime.h"
@@ -44,6 +46,8 @@
 namespace {
 
 namespace fs = std::filesystem;
+
+constexpr int kNavigationDeferralsAfterReset = 10;
 
 bool ReadTextFile(const std::string& path, std::string* out) {
   std::ifstream file(path, std::ios::binary);
@@ -380,6 +384,24 @@ bool SamePointerState(const html_css_renderer::PointerState& lhs,
          static_cast<int>(lhs.position.x) == static_cast<int>(rhs.position.x) &&
          static_cast<int>(lhs.position.y) == static_cast<int>(rhs.position.y) &&
          lhs.pressed == rhs.pressed;
+}
+
+bool IsDirectoryNavigationKeyDownEventForCompositorViewer(
+    const SDL_Event& event) {
+  return event.type == SDL_EVENT_KEY_DOWN &&
+         (event.key.key == SDLK_F1 || event.key.key == SDLK_F2 ||
+          event.key.key == SDLK_F5);
+}
+
+void DrainStandaloneViewerTaskQueueForNavigation() {
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+  run_loop.RunUntilIdle();
+}
+
+void QuiesceStandaloneViewerAfterDocumentTeardown() {
+  DrainStandaloneViewerTaskQueueForNavigation();
+  base::PlatformThread::Sleep(base::Milliseconds(200));
+  DrainStandaloneViewerTaskQueueForNavigation();
 }
 
 int MouseButtonModifierForCompositorViewer(
@@ -1245,9 +1267,16 @@ int main(int argc, char** argv) {
 
   uint64_t document_start_ms = SDL_GetTicks();
   int document_load_error_code = 1;
+  std::string current_document_html;
+  std::vector<html_css_renderer::Stylesheet> current_document_stylesheets;
   auto load_current_document = [&](const char* reason,
-                                   bool request_png_snapshot) {
+                                   bool request_png_snapshot,
+                                   bool force_document_reload = false) {
     document_load_error_code = 1;
+    if (runtime) {
+      runtime.reset();
+      QuiesceStandaloneViewerAfterDocumentTeardown();
+    }
     html_css_renderer::RendererCreateInfo document_renderer = renderer;
     document_renderer.viewport = SdlWindowPixelViewport(window);
     std::string effective_resource_root = resource_root;
@@ -1275,12 +1304,13 @@ int main(int argc, char** argv) {
       html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
           effective_resource_base_path);
     }
+    current_document_html = document_renderer.html;
+    current_document_stylesheets = document_renderer.stylesheets;
 
     html_css_renderer::CompositorRuntimeCreateInfo create_info;
     create_info.renderer = std::move(document_renderer);
     create_info.enable_paint_artifact_audit = !paint_artifact_dump_path.empty();
     create_info.trace_stages = trace_stages;
-    runtime.reset();
     runtime =
         html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
     std::vector<std::string> init_diagnostics;
@@ -1330,6 +1360,7 @@ int main(int argc, char** argv) {
         return false;
       }
     }
+    QuiesceStandaloneViewerAfterDocumentTeardown();
     return true;
   };
 
@@ -1342,9 +1373,19 @@ int main(int argc, char** argv) {
     return document_load_error_code;
   }
 
+  int post_reset_navigation_deferrals = 0;
+
   auto navigate_to_file = [&](int offset, const char* reason) {
     if (html_files.empty()) {
       std::fprintf(stderr, "navigation ignored for inline HTML input\n");
+      return true;
+    }
+    if (post_reset_navigation_deferrals > 0) {
+      --post_reset_navigation_deferrals;
+      QuiesceStandaloneViewerAfterDocumentTeardown();
+      std::fprintf(stderr,
+                   "navigation deferred after reset: %s\n",
+                   reason ? reason : "unknown");
       return true;
     }
     const int count = static_cast<int>(html_files.size());
@@ -1357,7 +1398,12 @@ int main(int argc, char** argv) {
   };
 
   auto reset_current_document = [&]() {
-    return load_current_document("reset", false);
+    if (!load_current_document("reset", false, true))
+      return false;
+    post_reset_navigation_deferrals = kNavigationDeferralsAfterReset;
+    QuiesceStandaloneViewerAfterDocumentTeardown();
+    std::fprintf(stderr, "reset current document state: reloaded current document\n");
+    return true;
   };
 
   float initial_mouse_x = 0.0f;
@@ -1764,6 +1810,52 @@ int main(int argc, char** argv) {
       return false;
     };
 
+    auto drain_pending_navigation_events =
+        [&](NavigationAction initial_action) {
+          bool reset_requested = initial_action == NavigationAction::kReset;
+          int navigation_offset = 0;
+          if (initial_action == NavigationAction::kPrevious) {
+            navigation_offset = -1;
+          } else if (initial_action == NavigationAction::kNext) {
+            navigation_offset = 1;
+          }
+
+          SDL_Event pending_event;
+          while (SDL_PollEvent(&pending_event)) {
+            if (pending_event.type == SDL_EVENT_QUIT ||
+                (pending_event.type == SDL_EVENT_KEY_DOWN &&
+                 pending_event.key.key == SDLK_ESCAPE)) {
+              running = false;
+              continue;
+            }
+            if (!IsDirectoryNavigationKeyDownEventForCompositorViewer(
+                    pending_event)) {
+              continue;
+            }
+            if (pending_event.key.key == SDLK_F5) {
+              reset_requested = true;
+              navigation_offset = 0;
+            } else if (!reset_requested &&
+                       pending_event.key.key == SDLK_F1) {
+              --navigation_offset;
+            } else if (!reset_requested &&
+                       pending_event.key.key == SDLK_F2) {
+              ++navigation_offset;
+            }
+          }
+
+          if (reset_requested) {
+            return NavigationAction::kReset;
+          }
+          if (navigation_offset < 0) {
+            return NavigationAction::kPrevious;
+          }
+          if (navigation_offset > 0) {
+            return NavigationAction::kNext;
+          }
+          return NavigationAction::kNone;
+        };
+
     auto screenshot_due = [&]() {
       return !screenshot_out.empty() && !screenshot_written &&
              screenshot_after_ms > 0 &&
@@ -1826,13 +1918,16 @@ int main(int argc, char** argv) {
     }
 
     if (navigation_action != NavigationAction::kNone) {
+      navigation_action = drain_pending_navigation_events(navigation_action);
       bool navigation_ok = false;
       if (navigation_action == NavigationAction::kPrevious) {
         navigation_ok = navigate_to_file(-1, "previous");
       } else if (navigation_action == NavigationAction::kNext) {
         navigation_ok = navigate_to_file(1, "next");
-      } else {
+      } else if (navigation_action == NavigationAction::kReset) {
         navigation_ok = reset_current_document();
+      } else {
+        continue;
       }
       if (!navigation_ok) {
         runtime.reset();

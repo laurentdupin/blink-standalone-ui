@@ -32,8 +32,6 @@
 #include "third_party/blink/renderer/core/inspector/inspector_web_mcp_agent.h"
 #include "third_party/blink/renderer/core/inspector/invalidation_set_to_selector_map.h"
 #include "third_party/blink/renderer/core/lcp_critical_path_predictor/lcp_script_observer.h"
-#include "third_party/blink/renderer/core/loader/document_loader.h"
-
 #include <atomic>
 
 namespace blink {
@@ -45,10 +43,6 @@ CoreProbeSink::CoreProbeSink() = default;
 CoreProbeSink::~CoreProbeSink() = default;
 
 void CoreProbeSink::Trace(Visitor*) const {}
-
-uint64_t DocumentLoader::MainResourceIdentifier() const {
-  return 0;
-}
 
 #define DEFINE_UNSUPPORTED_PROBE_AGENT_ACCESSORS(method_suffix, agent_type) \
   void CoreProbeSink::Add##method_suffix(agent_type*) {}                    \
@@ -710,5 +704,11 @@ InvalidationSetToSelectorMap::GetInstanceReference() {
   DEFINE_STATIC_LOCAL(Persistent<InvalidationSetToSelectorMap>, instance, ());
   return instance;
 }
+
+namespace inspector_commit_load_event {
+
+void Data(perfetto::TracedValue, LocalFrame*) {}
+
+}  // namespace inspector_commit_load_event
 
 }  // namespace blink

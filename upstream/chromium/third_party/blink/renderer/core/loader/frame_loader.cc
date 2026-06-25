@@ -45,6 +45,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/typed_macros.h"
 #include "base/unguessable_token.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -248,6 +249,9 @@ void FrameLoader::Init(
     ukm::SourceId document_ukm_source_id,
     const KURL& creator_base_url,
     std::unique_ptr<base::UnguessableToken> sandbox_origin_token) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb("FrameLoader::Init entry");
+#endif
   DCHECK(policy_container);
   ScriptForbiddenScope forbid_scripts;
 
@@ -272,13 +276,25 @@ void FrameLoader::Init(
     }
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "FrameLoader::Init before DocumentLoader");
+#endif
   DocumentLoader* new_document_loader = MakeGarbageCollected<DocumentLoader>(
       frame_, kWebNavigationTypeOther, std::move(navigation_params),
       std::move(policy_container), nullptr /* extra_data */);
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "FrameLoader::Init before CommitDocumentLoader");
+#endif
   CommitDocumentLoader(new_document_loader, nullptr,
                        CommitReason::kInitialization);
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "FrameLoader::Init after CommitDocumentLoader");
+#endif
   frame_->GetDocument()->CancelParsing();
 
   // Suppress finish notifications for initial empty documents, since they don't
@@ -1293,6 +1309,7 @@ void FrameLoader::CommitNavigation(
   RestoreScrollPositionAndViewState();
 
   if (!frame_->IsDetached() && frame_->IsOutermostMainFrame()) {
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     ukm::builders::PageLifecycleMetricsOnNewPageCommit(
         frame_->GetDocument()->UkmSourceID())
         .SetPageLifecycleEventsTotalProcessingTime(
@@ -1301,6 +1318,7 @@ void FrameLoader::CommitNavigation(
                     ->total_lifecycle_events_processing_time_on_commit
                     .InMilliseconds()))
         .Record(frame_->GetDocument()->UkmRecorder());
+#endif
   }
 
   TakeObjectSnapshot();
@@ -1440,7 +1458,15 @@ void FrameLoader::CommitDocumentLoader(DocumentLoader* document_loader,
   CHECK(document_loader_);
 
   document_loader_->SetCommitReason(commit_reason);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "CommitDocumentLoader before StartLoading");
+#endif
   document_loader_->StartLoading();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "CommitDocumentLoader after StartLoading");
+#endif
 
   if (commit_reason != CommitReason::kInitialization) {
     // Following the call to StartLoading, the DocumentLoader state has taken
@@ -1471,15 +1497,29 @@ void FrameLoader::CommitDocumentLoader(DocumentLoader* document_loader,
 
   TakeObjectSnapshot();
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "CommitDocumentLoader before client transition");
+#endif
   Client()->TransitionToCommittedForNewPage();
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "CommitDocumentLoader before DocumentLoader CommitNavigation");
+#endif
   document_loader_->CommitNavigation();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  HtmlCssRendererStandaloneSetCrashBreadcrumb(
+      "CommitDocumentLoader after DocumentLoader CommitNavigation");
+#endif
 
   base::UmaHistogramTimes("Blink.CommitDocumentLoaderTime", timer.Elapsed());
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   ukm::builders::Blink_FrameLoader(frame_->GetDocument()->UkmSourceID())
       .SetCommitDocumentLoaderTime(ukm::GetExponentialBucketMinForUserTiming(
           timer.Elapsed().InMicroseconds()))
       .Record(frame_->GetDocument()->UkmRecorder());
+#endif
 }
 
 void FrameLoader::RestoreScrollPositionAndViewState() {
@@ -1793,6 +1833,12 @@ void FrameLoader::CancelClientNavigation(CancelNavigationReason reason) {
 void FrameLoader::DispatchDocumentElementAvailable() {
   ScriptForbiddenScope forbid_scripts;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "FrameLoader DispatchDocumentElementAvailable standalone");
+  Client()->DocumentElementAvailable();
+  return;
+#else
   // Notify the browser about documents loading in the top frame.
   if (frame_->GetDocument()->Url().IsValid() && frame_->IsMainFrame()) {
     // For now, don't remember plugin zoom values.  We don't want to mix them
@@ -1803,9 +1849,15 @@ void FrameLoader::DispatchDocumentElementAvailable() {
   }
 
   Client()->DocumentElementAvailable();
+#endif
 }
 
 void FrameLoader::RunScriptsAtDocumentElementAvailable() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "FrameLoader RunScriptsAtDocumentElementAvailable standalone skip");
+  return;
+#endif
   Client()->RunScriptsAtDocumentElementAvailable();
   // The frame might be detached at this point.
 }

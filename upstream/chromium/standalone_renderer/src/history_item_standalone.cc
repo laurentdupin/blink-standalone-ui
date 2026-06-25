@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
 #include "third_party/blink/renderer/platform/network/encoded_form_data.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 
@@ -38,6 +39,14 @@ network::mojom::ReferrerPolicy HistoryItem::GetReferrerPolicy() const {
 
 EncodedFormData* HistoryItem::FormData() const {
   return form_data_.get();
+}
+
+ResourceRequest HistoryItem::GenerateResourceRequest(
+    mojom::FetchCacheMode cache_mode) {
+  ResourceRequest request(Url());
+  request.SetHttpMethod(http_names::kGET);
+  request.SetCacheMode(cache_mode);
+  return request;
 }
 
 const AtomicString& HistoryItem::FormContentType() const {

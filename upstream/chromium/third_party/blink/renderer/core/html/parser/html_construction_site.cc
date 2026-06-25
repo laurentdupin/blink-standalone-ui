@@ -50,7 +50,8 @@
 #include "third_party/blink/renderer/core/dom/throw_on_dynamic_markup_insertion_count_incrementer.h"
 #include "third_party/blink/renderer/core/dom/tree_scope.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -79,7 +80,8 @@
 #include "third_party/blink/renderer/core/html/parser/patch.h"
 #include "third_party/blink/renderer/core/html_element_factory.h"
 #include "third_party/blink/renderer/core/html_names.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #endif
 #include "third_party/blink/renderer/core/sanitizer/sanitizer.h"
@@ -91,17 +93,26 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/text/text_break_iterator.h"
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/platform/wtf/allocator/partitions.h"
 #endif
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 
 namespace blink {
 
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void TraceStandaloneHTMLConstructionSiteStage(const char* stage) {
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+}
+#endif
+
+#if defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
 namespace {
 
 bool StandaloneDomTraceEnabledForConstructionSite() {
@@ -120,23 +131,49 @@ void TraceStandaloneConstructionSite(const char* stage,
   std::fflush(stderr);
 }
 
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
 template <typename T, typename... Args>
 T* StandaloneAllocateTreeBuilderNode(Args&&... args) {
   void* storage =
       Partitions::FastMalloc(sizeof(T), WTF_HEAP_PROFILER_TYPE_NAME(T));
   return ::new (storage) T(std::forward<Args>(args)...);
 }
+#endif
 
 }  // namespace
 #endif
 
 void HTMLConstructionSite::SetAttributes(Element* element,
                                          AtomicHTMLToken* token) {
-  if (!is_scripting_content_allowed_)
-    element->StripScriptingAttributes(token->Attributes());
-  element->ParserSetAttributes(token->Attributes());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite SetAttributes entry");
+#endif
+  Vector<Attribute, kAttributePrealloc> attribute_vector = token->Attributes();
+  if (!is_scripting_content_allowed_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite SetAttributes before StripScriptingAttributes");
+#endif
+    element->StripScriptingAttributes(attribute_vector);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite SetAttributes after StripScriptingAttributes");
+#endif
+  }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite SetAttributes before ParserSetAttributes");
+#endif
+  element->ParserSetAttributes(attribute_vector);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite SetAttributes after ParserSetAttributes");
+#endif
   if (token->HasDuplicateAttribute()) {
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
     // UseCounter is not free, and only the first call matters. Only call to it
     // if necessary.
     if (!reported_duplicate_attribute_) {
@@ -271,7 +308,8 @@ static inline void Insert(HTMLConstructionSiteTask& task) {
 
   // https://html.spec.whatwg.org/C/#insert-a-foreign-element
   // 3.1, (3) Push (pop) an element queue
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   CEReactionsScope reactions(task.child->GetDocument().GetAgent().isolate());
 #endif
   if (task.next_child) {
@@ -404,10 +442,17 @@ static unsigned FindBreakIndexBetween(const StringBuilder& string,
 }
 
 void HTMLConstructionSite::FlushPendingText() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText entry");
+#endif
   if (pending_text_.IsEmpty())
     return;
 
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText nonempty");
+#endif
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneConstructionSite("FlushPendingText.before",
                                   pending_text_.parent,
                                   pending_text_.next_child);
@@ -436,8 +481,14 @@ void HTMLConstructionSite::FlushPendingText() {
   unsigned current_position = 0;
   const StringBuilder& string = pending_text_.string_builder;
   while (current_position < string.length()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText before break position");
+#endif
     unsigned proposed_break_index = NextTextBreakPositionForContainer(
         *pending_text_.parent, current_position, string.length(), length_limit);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText after break position");
+#endif
     unsigned break_index =
         FindBreakIndexBetween(string, current_position, proposed_break_index);
     DCHECK_LE(break_index, string.length());
@@ -463,8 +514,17 @@ void HTMLConstructionSite::FlushPendingText() {
     HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kInsertText);
     task.parent = pending_text_.parent;
     task.next_child = pending_text_.next_child;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText before text create");
+#endif
     task.child = Text::Create(task.parent->GetDocument(), std::move(substring));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText before queue text task");
+#endif
     QueueTask(task, false);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite FlushPendingText after queue text task");
+#endif
     DCHECK_EQ(To<Text>(task.child.Get())->length(),
               break_index - current_position);
     current_position = break_index;
@@ -475,7 +535,11 @@ void HTMLConstructionSite::FlushPendingText() {
 
 void HTMLConstructionSite::QueueTask(HTMLConstructionSiteTask& task,
                                      bool flush_pending_text) {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite QueueTask entry");
+#endif
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneConstructionSite("QueueTask.before", task.parent,
                                   task.child.Get());
   if (task.parent && task.child) {
@@ -497,6 +561,9 @@ void HTMLConstructionSite::QueueTask(HTMLConstructionSiteTask& task,
   if (flush_pending_text)
     FlushPendingText();
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite QueueTask before sanitizer");
+#endif
   if (sanitizer_ && task.child && task.parent &&
       !task.parent->IsDocumentNode() &&
       task.operation !=
@@ -508,15 +575,28 @@ void HTMLConstructionSite::QueueTask(HTMLConstructionSiteTask& task,
     }
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite QueueTask before adjust");
+#endif
   AdjustInsertionLocation(task);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite QueueTask before push");
+#endif
   task_queue_.push_back(task);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite QueueTask after push");
+#endif
 #endif
 }
 
 void HTMLConstructionSite::AttachLater(InsertionLocation location,
                                        Node* child,
                                        bool self_closing) {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater entry");
+#endif
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneConstructionSite("AttachLater.before", location.parent, child);
   HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kInsert);
   task.parent = location.parent;
@@ -528,6 +608,9 @@ void HTMLConstructionSite::AttachLater(InsertionLocation location,
   return;
 #else
   auto* element = DynamicTo<Element>(child);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater after DynamicTo");
+#endif
   DCHECK(is_scripting_content_allowed_ || !element ||
          !element->IsScriptElement());
   DCHECK(PluginContentIsAllowed(parser_content_policy_) ||
@@ -539,16 +622,26 @@ void HTMLConstructionSite::AttachLater(InsertionLocation location,
   task.child = child;
   task.self_closing = self_closing;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater before foster check");
+#endif
   if (ShouldFosterParent()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater before foster parent");
+#endif
     FosterParent(task.child);
     return;
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater before depth check");
+#endif
   // Add as a sibling of the parent if we have reached the maximum depth
   // allowed.
   if (open_elements_.StackDepth() > kMaximumHTMLParserDOMTreeDepth &&
       task.parent->parentNode()) {
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
     UseCounter::Count(OwnerDocumentForCurrentNode(),
                       WebFeature::kMaximumHTMLParserDOMTreeDepthHit);
 #endif
@@ -556,11 +649,20 @@ void HTMLConstructionSite::AttachLater(InsertionLocation location,
   }
 
   DCHECK(task.parent);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater before queue");
+#endif
   QueueTask(task, true);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite AttachLater after queue");
+#endif
 #endif
 }
 
 void HTMLConstructionSite::ExecuteQueuedTasks() {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite ExecuteQueuedTasks entry");
+#endif
   // This has no affect on pendingText, and we may have pendingText remaining
   // after executing all other queued tasks.
   const size_t size = task_queue_.size();
@@ -569,9 +671,15 @@ void HTMLConstructionSite::ExecuteQueuedTasks() {
 
   // Fast path for when |size| is 1, which is the common case
   if (size == 1) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite ExecuteQueuedTasks before single task");
+#endif
     HTMLConstructionSiteTask task = task_queue_.front();
     task_queue_.pop_back();
     ExecuteTask(task);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite ExecuteQueuedTasks after single task");
+#endif
     return;
   }
 
@@ -582,6 +690,9 @@ void HTMLConstructionSite::ExecuteQueuedTasks() {
 
   for (auto& task : queue)
     ExecuteTask(task);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite ExecuteQueuedTasks after queue");
+#endif
 
   // We might be detached now.
 }
@@ -606,14 +717,16 @@ HTMLConstructionSite::HTMLConstructionSite(
           ScriptingContentIsAllowed(parser_content_policy)),
       is_parsing_fragment_(fragment_target),
       redirect_attach_to_foster_parent_(false),
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
       in_quirks_mode_(false),
 #else
       in_quirks_mode_(document.InQuirksMode()),
 #endif
       custom_element_registry_(registry),
       sanitizer_(sanitizer) {
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   DCHECK(document_->IsHTMLDocument() || document_->IsXHTMLDocument() ||
          is_parsing_fragment_);
 #endif
@@ -669,9 +782,13 @@ HTMLFormElement* HTMLConstructionSite::TakeForm() {
 
 void HTMLConstructionSite::InsertHTMLHtmlStartTagBeforeHTML(
     AtomicHTMLToken* token) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML entry");
+#endif
   DCHECK(document_);
   HTMLHtmlElement* element;
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   element = StandaloneAllocateTreeBuilderNode<HTMLHtmlElement>(*document_);
 #else
   if (const auto* is_attribute = token->GetAttributeItem(html_names::kIsAttr)) {
@@ -679,15 +796,39 @@ void HTMLConstructionSite::InsertHTMLHtmlStartTagBeforeHTML(
         html_names::kHTMLTag, GetCreateElementFlags(), is_attribute->Value(),
         CustomElementRegistry::DefaultRegistry(*document_)));
   } else {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML before MakeGarbageCollected");
+#endif
     element = MakeGarbageCollected<HTMLHtmlElement>(*document_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML after MakeGarbageCollected");
+#endif
   }
 #endif
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML before attributes");
+#endif
   SetAttributes(element, token);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML before attach");
+#endif
   AttachLater(attachment_root_, element);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML before push");
+#endif
   open_elements_.PushHTMLHtmlElement(HTMLStackItem::Create(element, token));
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML before execute tasks");
+#endif
   ExecuteQueuedTasks();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML before InsertedByParser");
+#endif
   element->InsertedByParser();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage("HTMLConstructionSite InsertHTMLHtmlStartTagBeforeHTML exit");
+#endif
 }
 
 void HTMLConstructionSite::MergeAttributesFromTokenIntoElement(
@@ -729,7 +870,8 @@ void HTMLConstructionSite::SetDefaultCompatibilityMode() {
 void HTMLConstructionSite::SetCompatibilityMode(
     Document::CompatibilityMode mode) {
   in_quirks_mode_ = (mode == Document::kQuirksMode);
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   document_->SetCompatibilityMode(mode);
 #endif
 }
@@ -886,7 +1028,8 @@ void HTMLConstructionSite::FinishedParsing() {
   // need to promote to tasks and execute.
   DCHECK(task_queue_.empty());
   Flush();
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   document_->FinishedParsing();
 #endif
 }
@@ -1029,7 +1172,8 @@ void HTMLConstructionSite::InsertHTMLBodyElement(AtomicHTMLToken* token) {
   Element* body = CreateElement(token, html_names::xhtmlNamespaceURI);
   AttachLater(CurrentInsertionLocation(), body);
   open_elements_.PushHTMLBodyElement(HTMLStackItem::Create(body, token));
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   if (document_)
     document_->WillInsertBody();
 #endif
@@ -1045,7 +1189,8 @@ void HTMLConstructionSite::InsertHTMLFormElement(
     form_ = form_element;
   }
   if (is_demoted) {
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
     UseCounter::Count(OwnerDocumentForCurrentNode(),
                       WebFeature::kDemotedFormElement);
 #endif
@@ -1121,7 +1266,8 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
     // a "normal" template element gets attached to the DOM tree.
     if (success) {
       DCHECK(host->AuthorShadowRoot());
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
       UseCounter::Count(host->GetDocument(),
                         WebFeature::kStreamingDeclarativeShadowDOM);
 #endif
@@ -1140,7 +1286,8 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
     if (auto* patch =
             Patch::Prepare(current_insertion_location.parent, patch_target)) {
       CHECK(RuntimeEnabledFeatures::DocumentPatchingEnabled());
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
       UseCounter::Count(OwnerDocumentForCurrentNode(),
                         WebFeature::kHTMLPatching);
 #endif
@@ -1153,16 +1300,36 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
 }
 
 void HTMLConstructionSite::InsertHTMLElement(AtomicHTMLToken* token) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite InsertHTMLElement before CreateElement");
+#endif
   TraceStandaloneConstructionSite("InsertHTMLElement.before_create");
   Element* element = CreateElement(token, html_names::xhtmlNamespaceURI);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite InsertHTMLElement after CreateElement");
+#endif
   TraceStandaloneConstructionSite("InsertHTMLElement.after_create", nullptr,
                                   element);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite InsertHTMLElement before AttachLater");
+#endif
   TraceStandaloneConstructionSite("InsertHTMLElement.before_location", nullptr,
                                   element);
   AttachLater(CurrentInsertionLocation(), element);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite InsertHTMLElement after AttachLater");
+#endif
   TraceStandaloneConstructionSite("InsertHTMLElement.after_attach", nullptr,
                                   element);
   open_elements_.Push(HTMLStackItem::Create(element, token));
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite InsertHTMLElement after Push");
+#endif
   TraceStandaloneConstructionSite("InsertHTMLElement.after_push", nullptr,
                                   element);
 }
@@ -1334,7 +1501,8 @@ CreateElementFlags HTMLConstructionSite::GetCreateElementFlags() const {
 }
 
 Document& HTMLConstructionSite::OwnerDocumentForCurrentNode() {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   DCHECK(document_);
   return *document_;
 #else
@@ -1362,7 +1530,8 @@ CustomElementDefinition* HTMLConstructionSite::LookUpCustomElementDefinition(
     const QualifiedName& tag_name,
     const AtomicString& is,
     CustomElementRegistry* registry) {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   return nullptr;
 #else
   // "2. If namespace is not the HTML namespace, return null."
@@ -1404,9 +1573,15 @@ Element* HTMLConstructionSite::CreateElement(
     AtomicHTMLToken* token,
     const AtomicString& namespace_uri) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite CreateElement entry");
 #endif
   // "3. Let document be intended parent's node document."
   Document& document = OwnerDocumentForCurrentNode();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite CreateElement after owner document");
+#endif
 
   // "4. Let local name be the tag name of the token."
   QualifiedName tag_name =
@@ -1416,13 +1591,15 @@ Element* HTMLConstructionSite::CreateElement(
                  html_names::TagToQualifiedName(token->GetHTMLTag()))
            : QualifiedName(g_null_atom, token->GetName(), namespace_uri));
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (tag_name == html_names::kImgTag) {
-  }
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite CreateElement after tag name");
 #endif
   // "5. Let is be the value of the "is" attribute in the given token ..." etc.
   const Attribute* is_attribute = token->GetAttributeItem(html_names::kIsAttr);
   const AtomicString& is = is_attribute ? is_attribute->Value() : g_null_atom;
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite CreateElement after is attr");
 #endif
   // "6. Let registry be the result of looking up a custom element registry
   // given intended parent."
@@ -1474,6 +1651,8 @@ Element* HTMLConstructionSite::CreateElement(
   auto* definition =
       LookUpCustomElementDefinition(document, tag_name, is, registry);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite CreateElement after definition lookup");
 #endif
   // "5. If definition is non-null and the parser was not originally created
   // for the HTML fragment parsing algorithm, then let will execute script
@@ -1529,6 +1708,8 @@ Element* HTMLConstructionSite::CreateElement(
                                           GetCreateElementFlags());
     } else {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLConstructionSiteStage(
+          "HTMLConstructionSite CreateElement before uncustomized");
 #endif
       // It is possible that we want to set the uncustomized element to null
       // registry during fragment parsing. Set wait_for_registry flag to true
@@ -1537,14 +1718,24 @@ Element* HTMLConstructionSite::CreateElement(
           document, tag_name, GetCreateElementFlags(), is, registry,
           /*wait_for_registry=*/!registry);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLConstructionSiteStage(
+          "HTMLConstructionSite CreateElement after uncustomized");
 #endif
     }
     // Definition for the created element does not exist here and it cannot be
     // custom, precustomized, or failed.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement before custom state checks");
+#endif
     DCHECK_NE(element->GetCustomElementState(), CustomElementState::kCustom);
     DCHECK_NE(element->GetCustomElementState(),
               CustomElementState::kPreCustomized);
     DCHECK_NE(element->GetCustomElementState(), CustomElementState::kFailed);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement after custom state checks");
+#endif
 
     // TODO(dominicc): Move these steps so they happen for custom
     // elements as well as built-in elements when customized built in
@@ -1568,9 +1759,25 @@ Element* HTMLConstructionSite::CreateElement(
     // element pointer is not null, and there is no template element
     // on the stack of open elements, ...
     auto* html_element = DynamicTo<HTMLElement>(element);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement after DynamicTo HTMLElement");
+#endif
     FormAssociated* form_associated_element =
         html_element ? html_element->ToFormAssociatedOrNull() : nullptr;
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement after ToFormAssociated");
+#endif
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement before form association condition");
+#endif
     if (form_associated_element && document.GetFrame() && form_.Get()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLConstructionSiteStage(
+          "HTMLConstructionSite CreateElement before AssociateWith");
+#endif
       // ... and element is either not listed or doesn't have a form
       // attribute, and the intended parent is in the same tree as the
       // element pointed to by the form element pointer, associate
@@ -1594,16 +1801,26 @@ Element* HTMLConstructionSite::CreateElement(
       //   we set attributes (step 8) out of order, after this step,
       //   to reset the form association.
       form_associated_element->AssociateWith(form_.Get());
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLConstructionSiteStage(
+          "HTMLConstructionSite CreateElement after AssociateWith");
+#endif
     }
     // "8. Append each attribute in the given token to element."
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement before SetAttributes");
 #endif
     SetAttributes(element, token);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLConstructionSiteStage(
+        "HTMLConstructionSite CreateElement after SetAttributes");
 #endif
   }
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLConstructionSiteStage(
+      "HTMLConstructionSite CreateElement exit");
 #endif
   return element;
 }

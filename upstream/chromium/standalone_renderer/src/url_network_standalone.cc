@@ -160,23 +160,6 @@ bool IsCorsCrossOriginResponseType(mojom::FetchResponseType type) {
 
 namespace blink {
 
-bool SchemeRegistry::IsSpecialScheme(const String& scheme) {
-  return EqualIgnoringAsciiCase(scheme, "http") ||
-         EqualIgnoringAsciiCase(scheme, "https") ||
-         EqualIgnoringAsciiCase(scheme, "file") ||
-         EqualIgnoringAsciiCase(scheme, "ftp") ||
-         EqualIgnoringAsciiCase(scheme, "ws") ||
-         EqualIgnoringAsciiCase(scheme, "wss");
-}
-
-bool SchemeRegistry::ShouldTreatURLSchemeAsAllowedForReferrer(
-    const String& scheme) {
-  return EqualIgnoringAsciiCase(scheme, "http") ||
-         EqualIgnoringAsciiCase(scheme, "https") ||
-         EqualIgnoringAsciiCase(scheme, "file") ||
-         EqualIgnoringAsciiCase(scheme, "data");
-}
-
 WebSecurityOrigin WebSecurityOrigin::CreateFromString(const WebString&) {
   return WebSecurityOrigin();
 }
@@ -238,6 +221,10 @@ const SecurityOrigin* WebSecurityOrigin::Get() const {
 WebSecurityOrigin::WebSecurityOrigin(const url::Origin&) {}
 WebSecurityOrigin::operator url::Origin() const {
   return url::Origin();
+}
+
+bool IsContentDispositionAttachment(const String&) {
+  return false;
 }
 
 }  // namespace blink

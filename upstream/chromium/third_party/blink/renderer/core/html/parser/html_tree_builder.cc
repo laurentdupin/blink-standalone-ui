@@ -26,6 +26,7 @@
 
 #include "third_party/blink/renderer/core/html/parser/html_tree_builder.h"
 
+#include <cstdio>
 #include <memory>
 
 #include "base/feature_list.h"
@@ -69,8 +70,24 @@
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_buffer.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void TraceStandaloneHTMLTreeBuilderStage(const char* stage) {
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+}
+
+void TraceStandaloneHTMLTreeBuilderStartTag(const char* stage,
+                                            int insertion_mode,
+                                            int tag) {
+  char buffer[160];
+  std::snprintf(buffer, sizeof(buffer), "%s mode=%d tag=%d", stage,
+                insertion_mode, tag);
+  html_css_renderer::SetStandaloneCrashBreadcrumb(buffer);
+}
+#endif
 
 using HTMLTag = html_names::HTMLTag;
 
@@ -348,7 +365,8 @@ HTMLTreeBuilder::HTMLTreeBuilder(HTMLDocumentParser* parser,
                                  StreamingSanitizer* sanitizer,
                                  ParserRootInsertionPoint* root_insertion_point)
     : tree_(
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
           parser ? parser->ReentryPermit() : nullptr,
 #else
           parser->ReentryPermit(),
@@ -469,16 +487,21 @@ Element* HTMLTreeBuilder::TakeScriptToProcess(
 }
 
 void HTMLTreeBuilder::ConstructTree(AtomicHTMLToken* token) {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
-  ProcessToken(token);
-  tree_.ExecuteQueuedTasks();
-#else
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ConstructTree entry");
+#endif
+#if !defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
   RUNTIME_CALL_TIMER_SCOPE(parser_->GetDocument()->GetAgent().isolate(),
                            RuntimeCallStats::CounterId::kConstructTree);
+#endif
   if (ShouldProcessTokenInForeignContent(token))
     ProcessTokenInForeignContent(token);
   else
     ProcessToken(token);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ConstructTree after ProcessToken");
+#endif
 
   if (parser_->IsDetached())
     return;
@@ -497,12 +520,18 @@ void HTMLTreeBuilder::ConstructTree(AtomicHTMLToken* token) {
   parser_->tokenizer().SetShouldAllowCDATA(in_foreign_content);
 
   tree_.ExecuteQueuedTasks();
-  // We might be detached now.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ConstructTree after queued tasks");
 #endif
+  // We might be detached now.
 }
 
 void HTMLTreeBuilder::ProcessToken(AtomicHTMLToken* token) {
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken entry");
+#endif
+#if !defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
   if (!options_.scripting_flag && tree_.OpenElements() &&
       tree_.OpenElements()->Topmost(HTMLTag::kNoscript)) {
     bool is_markup = token->GetType() == HTMLToken::kStartTag ||
@@ -537,6 +566,9 @@ void HTMLTreeBuilder::ProcessToken(AtomicHTMLToken* token) {
 #endif
 
   if (token->GetType() == HTMLToken::kCharacter) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken character");
+#endif
     ProcessCharacter(token);
     return;
   }
@@ -544,7 +576,13 @@ void HTMLTreeBuilder::ProcessToken(AtomicHTMLToken* token) {
   // Any non-character token needs to cause us to flush any pending text
   // immediately. NOTE: flush() can cause any queued tasks to execute, possibly
   // re-entering the parser.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken before tree Flush");
+#endif
   tree_.Flush();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken after tree Flush");
+#endif
   should_skip_leading_newline_ = false;
 
   switch (token->GetType()) {
@@ -552,21 +590,39 @@ void HTMLTreeBuilder::ProcessToken(AtomicHTMLToken* token) {
     case HTMLToken::kCharacter:
       NOTREACHED();
     case HTMLToken::DOCTYPE:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken doctype");
+#endif
       ProcessDoctypeToken(token);
       break;
     case HTMLToken::kStartTag:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken start tag");
+#endif
       ProcessStartTag(token);
       break;
     case HTMLToken::kEndTag:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken end tag");
+#endif
       ProcessEndTag(token);
       break;
     case HTMLToken::kComment:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken comment");
+#endif
       ProcessComment(token);
       break;
     case HTMLToken::kEndOfFile:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken eof");
+#endif
       ProcessEndOfFile(token);
       break;
     case HTMLToken::kProcessingInstruction:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessToken processing instruction");
+#endif
       ProcessProcessingInstruction(token);
       break;
   }
@@ -864,8 +920,26 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
     case HTMLTag::kSummary:
     case HTMLTag::kUl:
       // https://html.spec.whatwg.org/multipage/parsing.html#:~:text=A%20start%20tag%20whose%20tag%20name%20is%20one%20of%3A%20%22address%22%2C
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStartTag(
+          "HTMLTreeBuilder InBody block before fake p end",
+          static_cast<int>(GetInsertionMode()),
+          static_cast<int>(token->GetHTMLTag()));
+#endif
       ProcessFakePEndTagIfPInButtonScope();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStartTag(
+          "HTMLTreeBuilder InBody block before InsertHTMLElement",
+          static_cast<int>(GetInsertionMode()),
+          static_cast<int>(token->GetHTMLTag()));
+#endif
       tree_.InsertHTMLElement(token);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStartTag(
+          "HTMLTreeBuilder InBody block after InsertHTMLElement",
+          static_cast<int>(GetInsertionMode()),
+          static_cast<int>(token->GetHTMLTag()));
+#endif
       break;
     case HTMLTag::kLi:
       ProcessCloseWhenNestedTag<IsLi>(token);
@@ -1397,6 +1471,11 @@ void HTMLTreeBuilder::ProcessStartTagForInTable(AtomicHTMLToken* token) {
 void HTMLTreeBuilder::ProcessStartTag(AtomicHTMLToken* token) {
   DCHECK_EQ(token->GetType(), HTMLToken::kStartTag);
   const HTMLTag tag = token->GetHTMLTag();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStartTag(
+      "HTMLTreeBuilder ProcessStartTag entry", static_cast<int>(GetInsertionMode()),
+      static_cast<int>(tag));
+#endif
   switch (GetInsertionMode()) {
     case kInitialMode:
       DefaultForInitial();
@@ -2784,27 +2863,48 @@ void HTMLTreeBuilder::ProcessCharacterBufferForInBody(
 }
 
 void HTMLTreeBuilder::ProcessEndOfFile(AtomicHTMLToken* token) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessEndOfFile entry");
+#endif
   DCHECK_EQ(token->GetType(), HTMLToken::kEndOfFile);
   switch (GetInsertionMode()) {
     case kInitialMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF initial mode");
+#endif
       DefaultForInitial();
       [[fallthrough]];
     case kBeforeHTMLMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF before html mode");
+#endif
       DefaultForBeforeHTML();
       [[fallthrough]];
     case kBeforeHeadMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF before head mode");
+#endif
       DefaultForBeforeHead();
       [[fallthrough]];
     case kInHeadMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF in head mode");
+#endif
       DefaultForInHead();
       [[fallthrough]];
     case kAfterHeadMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF after head mode");
+#endif
       DefaultForAfterHead();
       [[fallthrough]];
     case kInBodyMode:
     case kInCellMode:
     case kInCaptionMode:
     case kInRowMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF body-like mode");
+#endif
       // Emit parse error based on what elements are still open.
       DVLOG(1) << "Not implemented.";
       if (!template_insertion_modes_.empty() &&
@@ -2813,15 +2913,27 @@ void HTMLTreeBuilder::ProcessEndOfFile(AtomicHTMLToken* token) {
       break;
     case kAfterBodyMode:
     case kAfterAfterBodyMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF after body mode");
+#endif
       break;
     case kInHeadNoscriptMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF in head noscript mode");
+#endif
       DefaultForInHeadNoscript();
       ProcessEndOfFile(token);
       return;
     case kAfterFramesetMode:
     case kAfterAfterFramesetMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF after frameset mode");
+#endif
       break;
     case kInColumnGroupMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF column group mode");
+#endif
       if (tree_.CurrentIsRootNode()) {
         DCHECK(IsParsingFragment());
         return;  // FIXME: Should we break here instead of returning?
@@ -2833,6 +2945,9 @@ void HTMLTreeBuilder::ProcessEndOfFile(AtomicHTMLToken* token) {
     case kInFramesetMode:
     case kInTableMode:
     case kInTableBodyMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF table-like mode");
+#endif
       if (tree_.CurrentNode() != tree_.OpenElements()->RootNode())
         ParseError(token);
       if (!template_insertion_modes_.empty() &&
@@ -2840,10 +2955,16 @@ void HTMLTreeBuilder::ProcessEndOfFile(AtomicHTMLToken* token) {
         return;
       break;
     case kInTableTextMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF table text mode");
+#endif
       DefaultForInTableText();
       ProcessEndOfFile(token);
       return;
     case kTextMode: {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF text mode");
+#endif
       ParseError(token);
       if (tree_.CurrentStackItem()->MatchesHTMLTag(HTMLTag::kScript)) {
         // Mark the script element as "already started".
@@ -2859,11 +2980,20 @@ void HTMLTreeBuilder::ProcessEndOfFile(AtomicHTMLToken* token) {
       return;
     }
     case kTemplateContentsMode:
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder EOF template contents mode");
+#endif
       if (ProcessEndOfFileForInTemplateContents(token))
         return;
       break;
   }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessEndOfFile before construction site EOF");
+#endif
   tree_.ProcessEndOfFile();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLTreeBuilderStage("HTMLTreeBuilder ProcessEndOfFile after construction site EOF");
+#endif
 }
 
 void HTMLTreeBuilder::DefaultForInitial() {

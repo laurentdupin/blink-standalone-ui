@@ -88,8 +88,15 @@
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
 #include "third_party/perfetto/include/perfetto/tracing/track_event_args.h"
+#include "standalone_renderer/include/html_css_renderer/standalone_process.h"
 
 namespace blink {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void TraceStandaloneHTMLParserStage(const char* stage) {
+  html_css_renderer::SetStandaloneCrashBreadcrumb(stage);
+}
+#endif
 
 // This sets the (default) maximum number of tokens which the foreground HTML
 // parser should try to process in one go. Lower values generally mean faster
@@ -538,6 +545,7 @@ void HTMLDocumentParser::StopParsing() {
 // http://www.whatwg.org/specs/web-apps/current-work/multipage/the-end.html#the-end
 void HTMLDocumentParser::PrepareToStopParsing() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser PrepareToStopParsing entry");
 #else
   TRACE_EVENT("blink", "HTMLDocumentParser::PrepareToStopParsing",
               perfetto::Flow::FromPointer(this), "parser", (void*)this);
@@ -554,11 +562,13 @@ void HTMLDocumentParser::PrepareToStopParsing() {
   // NOTE: This pump should only ever emit buffered character tokens.
   if (!GetDocument()->IsPrefetchOnly()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PrepareToStopParsing before PumpTokenizerIfPossible");
 #endif
     ShouldCompleteScope should_complete(task_runner_state_);
     EndIfDelayedForbiddenScope should_not_end_if_delayed(task_runner_state_);
     PumpTokenizerIfPossible();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PrepareToStopParsing after PumpTokenizerIfPossible");
 #endif
   }
 
@@ -580,6 +590,7 @@ void HTMLDocumentParser::PrepareToStopParsing() {
 
   DocumentParser::PrepareToStopParsing();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser PrepareToStopParsing after DocumentParser");
 #endif
 
   // We will not have a scriptRunner when parsing a DocumentFragment.
@@ -602,6 +613,9 @@ void HTMLDocumentParser::PrepareToStopParsing() {
 
   GetDocument()->OnPrepareToStopParsing();
 
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser PrepareToStopParsing before deferred scripts/end");
+#endif
   AttemptToRunDeferredScriptsAndEnd();
 
   base::TimeDelta elapsed_time = timer.Elapsed();
@@ -669,6 +683,7 @@ void HTMLDocumentParser::PumpTokenizerIfPossible() {
   // This method is called synchronously, builds the HTML document up to
   // the current budget, and optionally completes.
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizerIfPossible entry");
 #else
   TRACE_EVENT("blink", "HTMLDocumentParser::PumpTokenizerIfPossible",
               perfetto::Flow::FromPointer(this), "parser", (void*)this);
@@ -679,9 +694,11 @@ void HTMLDocumentParser::PumpTokenizerIfPossible() {
   if (!IsStopped() &&
       (!IsPaused() || task_runner_state_->ShouldEndIfDelayed())) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizerIfPossible before PumpTokenizer");
 #endif
     yielded = PumpTokenizer();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizerIfPossible after PumpTokenizer");
 #endif
   }
 
@@ -698,6 +715,9 @@ void HTMLDocumentParser::PumpTokenizerIfPossible() {
     if (metrics_reporter_) {
       metrics_reporter_->ReportMetricsAtParseEnd();
     }
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizerIfPossible before AttemptToEnd");
+#endif
     AttemptToEnd();
   } else if (task_runner_state_->ShouldEndIfDelayed()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
@@ -742,6 +762,7 @@ void HTMLDocumentParser::ForcePlaintextForTextDocument() {
 
 bool HTMLDocumentParser::PumpTokenizer() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer entry");
 #endif
   DCHECK(!GetDocument()->IsPrefetchOnly());
   DCHECK(!IsStopped());
@@ -836,16 +857,19 @@ bool HTMLDocumentParser::PumpTokenizer() {
 #endif
       if (!token) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+        TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer no token");
 #endif
         break;
       }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+      TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer have token");
 #endif
       budget--;
       tokens_parsed++;
     }
     AtomicHTMLToken atomic_html_token(*token);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer before ConstructTreeFromToken");
 #endif
     // Clear the HTMLToken in case ConstructTree() synchronously re-enters the
     // parser. This has to happen after creating AtomicHTMLToken as it needs
@@ -853,6 +877,7 @@ bool HTMLDocumentParser::PumpTokenizer() {
     tokenizer_.ClearToken();
     ConstructTreeFromToken(atomic_html_token);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer after ConstructTreeFromToken");
 #endif
 
     // Late preload for anything deferred due to CSP
@@ -906,7 +931,13 @@ bool HTMLDocumentParser::PumpTokenizer() {
     // There should only be PendingText left since the tree-builder always
     // flushes the task queue before returning. In case that ever changes,
     // crash.
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer before tree_builder Flush");
+#endif
     tree_builder_->Flush();
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser PumpTokenizer after tree_builder Flush");
+#endif
     CHECK(!IsStopped());
   }
 
@@ -1204,6 +1235,7 @@ void HTMLDocumentParser::AttemptToEnd() {
   // finish() indicates we will not receive any more data. If we are waiting on
   // an external script to load, we can't finish parsing quite yet.
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser AttemptToEnd entry");
 #else
   TRACE_EVENT("blink", "HTMLDocumentParser::AttemptToEnd",
               perfetto::Flow::FromPointer(this), "parser", (void*)this);
@@ -1219,14 +1251,17 @@ void HTMLDocumentParser::AttemptToEnd() {
   // EndIfDelayed.
   if (ShouldDelayEnd()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser AttemptToEnd delayed");
 #endif
     task_runner_state_->SetEndWasDelayed(true);
     return;
   }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser AttemptToEnd before PrepareToStopParsing");
 #endif
   PrepareToStopParsing();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser AttemptToEnd after PrepareToStopParsing");
 #endif
 }
 
@@ -1253,13 +1288,16 @@ void HTMLDocumentParser::EndIfDelayed() {
 
 void HTMLDocumentParser::Finish() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser Finish entry");
 #endif
   ShouldCompleteScope should_complete(task_runner_state_);
   EndIfDelayedForbiddenScope should_not_end_if_delayed(task_runner_state_);
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser Finish before Flush");
 #endif
   Flush();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser Finish after Flush");
 #endif
   if (IsDetached()) {
     return;
@@ -1558,15 +1596,25 @@ void HTMLDocumentParser::AppendBytes(base::span<const uint8_t> data) {
 
 void HTMLDocumentParser::Flush() {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser Flush entry");
 #else
   TRACE_EVENT("blink", "HTMLDocumentParser::Flush",
               perfetto::Flow::FromPointer(this), "parser", (void*)this);
 #endif
   // If we've got no decoder, we never received any data.
   if (IsDetached() || NeedsDecoder()) {
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+    TraceStandaloneHTMLParserStage("HTMLDocumentParser Flush early return");
+#endif
     return;
   }
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser Flush before DecodedDataDocumentParser");
+#endif
   DecodedDataDocumentParser::Flush();
+  #if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneHTMLParserStage("HTMLDocumentParser Flush after DecodedDataDocumentParser");
+#endif
 }
 
 void HTMLDocumentParser::SetDecoder(
