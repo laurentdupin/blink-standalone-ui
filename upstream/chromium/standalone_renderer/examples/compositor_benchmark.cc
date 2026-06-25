@@ -20,6 +20,8 @@
 #include "html_css_renderer/renderer_c_api.h"
 #include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
+#include "html_css_renderer/typeface_resource_registry.h"
+#include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 #include "ui/gl/gl_switches.h"
 
@@ -129,7 +131,8 @@ void PrintUsage() {
       "[--trace-stages] [--lifecycle-stop <stage>] "
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
-      "[--c-api-smoke] [--c-api-two-instance-smoke]\n"
+      "[--c-api-smoke] [--c-api-two-instance-smoke] "
+      "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
       "readback is removed from production; --out is intentionally unsupported "
       "until Viz/GPU readback is wired.\n");
@@ -552,6 +555,67 @@ int RunCApiTwoInstanceSmoke() {
   hcsr_renderer_release_latest_output(renderer_b);
   hcsr_renderer_destroy(renderer_b);
   hcsr_renderer_destroy(renderer_a);
+  return 0;
+}
+
+int RunTypefaceIsolationSmoke() {
+  const uint64_t context_a =
+      html_css_renderer::CreateTypefaceResourceRegistryContext();
+  const uint64_t context_b =
+      html_css_renderer::CreateTypefaceResourceRegistryContext();
+  sk_sp<SkTypeface> typeface = SkTypeface::MakeEmpty();
+  if (!typeface) {
+    std::fprintf(stderr, "typeface_isolation_smoke: default typeface missing\n");
+    html_css_renderer::DestroyTypefaceResourceRegistryContext(context_b);
+    html_css_renderer::DestroyTypefaceResourceRegistryContext(context_a);
+    return 1;
+  }
+
+  html_css_renderer::SetCurrentTypefaceResourceRegistryContext(context_a);
+  html_css_renderer::ResetTypefaceResourceRegistryForFrame();
+  const uint64_t id_a =
+      html_css_renderer::RegisterSameProcessTypefaceResource(typeface.get());
+  const size_t count_a_initial =
+      html_css_renderer::SnapshotTypefaceResources().size();
+
+  html_css_renderer::SetCurrentTypefaceResourceRegistryContext(context_b);
+  html_css_renderer::ResetTypefaceResourceRegistryForFrame();
+  const size_t count_b_before =
+      html_css_renderer::SnapshotTypefaceResources().size();
+  const bool a_id_missing_from_b =
+      !html_css_renderer::LookupSameProcessTypefaceResource(id_a);
+  const uint64_t id_b =
+      html_css_renderer::RegisterSameProcessTypefaceResource(typeface.get());
+  const size_t count_b_after =
+      html_css_renderer::SnapshotTypefaceResources().size();
+
+  html_css_renderer::SetCurrentTypefaceResourceRegistryContext(context_a);
+  const size_t count_a_after_b =
+      html_css_renderer::SnapshotTypefaceResources().size();
+  const bool a_lookup_still_valid =
+      !!html_css_renderer::LookupSameProcessTypefaceResource(id_a);
+
+  html_css_renderer::SetCurrentTypefaceResourceRegistryContext(0);
+  html_css_renderer::DestroyTypefaceResourceRegistryContext(context_b);
+  html_css_renderer::DestroyTypefaceResourceRegistryContext(context_a);
+
+  const bool ok = id_a != 0 && id_b != 0 && count_a_initial == 1 &&
+                  count_b_before == 0 && a_id_missing_from_b &&
+                  count_b_after == 1 && count_a_after_b == 1 &&
+                  a_lookup_still_valid;
+  if (!ok) {
+    std::fprintf(stderr,
+                 "typeface_isolation_smoke: failed id_a=%llu id_b=%llu "
+                 "A_initial=%zu B_before=%zu A_missing_from_B=%d "
+                 "B_after=%zu A_after_B=%zu A_lookup=%d\n",
+                 static_cast<unsigned long long>(id_a),
+                 static_cast<unsigned long long>(id_b), count_a_initial,
+                 count_b_before, a_id_missing_from_b ? 1 : 0, count_b_after,
+                 count_a_after_b, a_lookup_still_valid ? 1 : 0);
+    return 1;
+  }
+  std::printf("typeface_isolation_smoke: ok A_count=%zu B_count=%zu\n",
+              count_a_after_b, count_b_after);
   return 0;
 }
 
@@ -1058,7 +1122,8 @@ int main(int argc, char** argv) {
   bool c_api_smoke_requested = false;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    if (arg == "--c-api-smoke" || arg == "--c-api-two-instance-smoke") {
+    if (arg == "--c-api-smoke" || arg == "--c-api-two-instance-smoke" ||
+        arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
       break;
     }
@@ -1087,6 +1152,7 @@ int main(int argc, char** argv) {
   bool cc_scheduler_probe = false;
   bool c_api_smoke = false;
   bool c_api_two_instance_smoke = false;
+  bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
   std::vector<std::string> warm_scenarios;
   html_css_renderer::FrameResultCollection result_collection =
@@ -1188,6 +1254,8 @@ int main(int argc, char** argv) {
       c_api_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
+    } else if (arg == "--typeface-isolation-smoke") {
+      typeface_isolation_smoke = true;
     } else if (arg == "--lifecycle-stop") {
       const char* value = next_value();
       if (!value) {
@@ -1297,6 +1365,10 @@ int main(int argc, char** argv) {
 
   if (c_api_two_instance_smoke) {
     return RunCApiTwoInstanceSmoke();
+  }
+
+  if (typeface_isolation_smoke) {
+    return RunTypefaceIsolationSmoke();
   }
 
   if (renderer.html.empty()) {

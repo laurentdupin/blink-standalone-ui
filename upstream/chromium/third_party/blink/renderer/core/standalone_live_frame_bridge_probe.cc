@@ -253,6 +253,7 @@ extern "C" int StandaloneRendererFontResolutionDiagnosticCount();
 extern "C" int StandaloneRendererFontResolutionDiagnosticJsonAt(int,
                                                                  char*,
                                                                  int);
+extern "C" void StandaloneRendererResetFontResolutionDiagnostics();
 extern "C" void StandaloneRendererResetImageReachabilityDiagnostics();
 extern "C" int StandaloneRendererImageResourceContentFetchCalled();
 extern "C" int StandaloneRendererLayoutImageSetResourceCalled();
@@ -12718,6 +12719,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   const auto setup_start = StandaloneProbeClock::now();
   html_css_renderer::ResetStandaloneResourceProviderDiagnostics();
   StandaloneRendererResetImageReachabilityDiagnostics();
+  StandaloneRendererResetFontResolutionDiagnostics();
   StandaloneRendererResetOutOfFlowDiagnostics();
   StandaloneRendererResetMediaQueryDiagnostics();
   StandaloneRendererResetListItemFactoryDiagnostics();

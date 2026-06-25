@@ -14550,6 +14550,10 @@ StandaloneFontResolutionDiagnostics() {
   return *diagnostics;
 }
 
+extern "C" void StandaloneRendererResetFontResolutionDiagnostics() {
+  StandaloneFontResolutionDiagnostics().clear();
+}
+
 std::string StandaloneEscapeJsonString(const std::string& value) {
   std::string escaped;
   escaped.reserve(value.size() + 8);

@@ -34,6 +34,9 @@ struct TextBlobReplayDiagnostics {
 };
 
 void ResetTypefaceResourceRegistryForFrame();
+uint64_t CreateTypefaceResourceRegistryContext();
+void DestroyTypefaceResourceRegistryContext(uint64_t context_id);
+void SetCurrentTypefaceResourceRegistryContext(uint64_t context_id);
 uint64_t RegisterSameProcessTypefaceResource(SkTypeface* typeface);
 bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface);
 void FreezeTypefaceResourcesForReplay();

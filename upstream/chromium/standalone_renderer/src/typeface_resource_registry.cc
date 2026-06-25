@@ -29,16 +29,59 @@ RegistryState& Registry() {
   return *registry;
 }
 
+std::unordered_map<uint64_t, RegistryState>& Registries() {
+  static auto* registries = new std::unordered_map<uint64_t, RegistryState>();
+  return *registries;
+}
+
+uint64_t& NextRegistryContextId() {
+  static uint64_t* next_id = new uint64_t(1);
+  return *next_id;
+}
+
+thread_local uint64_t g_current_registry_context_id = 0;
+
+RegistryState& CurrentRegistryLocked() {
+  if (g_current_registry_context_id != 0) {
+    auto it = Registries().find(g_current_registry_context_id);
+    if (it != Registries().end())
+      return it->second;
+  }
+  return Registry();
+}
+
 }  // namespace
 
 void ResetTypefaceResourceRegistryForFrame() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  Registry().resources.clear();
-  Registry().ids.clear();
-  Registry().next_id = 1;
-  Registry().diagnostics = TextBlobReplayDiagnostics{
-      .enabled = Registry().diagnostics.enabled,
+  auto& registry = CurrentRegistryLocked();
+  registry.resources.clear();
+  registry.ids.clear();
+  registry.next_id = 1;
+  registry.diagnostics = TextBlobReplayDiagnostics{
+      .enabled = registry.diagnostics.enabled,
   };
+}
+
+uint64_t CreateTypefaceResourceRegistryContext() {
+  std::lock_guard<std::mutex> lock(RegistryMutex());
+  const uint64_t context_id = NextRegistryContextId()++;
+  Registries().emplace(context_id, RegistryState());
+  return context_id;
+}
+
+void DestroyTypefaceResourceRegistryContext(uint64_t context_id) {
+  std::lock_guard<std::mutex> lock(RegistryMutex());
+  Registries().erase(context_id);
+  if (g_current_registry_context_id == context_id)
+    g_current_registry_context_id = 0;
+}
+
+void SetCurrentTypefaceResourceRegistryContext(uint64_t context_id) {
+  std::lock_guard<std::mutex> lock(RegistryMutex());
+  if (context_id != 0 && Registries().find(context_id) == Registries().end())
+    context_id = 0;
+  g_current_registry_context_id = context_id;
 }
 
 uint64_t RegisterSameProcessTypefaceResource(SkTypeface* typeface) {
@@ -46,7 +89,7 @@ uint64_t RegisterSameProcessTypefaceResource(SkTypeface* typeface) {
     return 0;
   }
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  auto& registry = Registry();
+  auto& registry = CurrentRegistryLocked();
   if (const auto found = registry.ids.find(typeface);
       found != registry.ids.end()) {
     return found->second;
@@ -71,7 +114,7 @@ bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface) {
     return false;
   }
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  auto& registry = Registry();
+  auto& registry = CurrentRegistryLocked();
   SkString family;
   typeface->getFamilyName(&family);
   TypefaceResource resource;
@@ -91,12 +134,13 @@ bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface) {
 
 void FreezeTypefaceResourcesForReplay() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  Registry().replay_resources = Registry().resources;
+  auto& registry = CurrentRegistryLocked();
+  registry.replay_resources = registry.resources;
 }
 
 sk_sp<SkTypeface> LookupSameProcessTypefaceResource(uint64_t id) {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  auto& registry = Registry();
+  auto& registry = CurrentRegistryLocked();
   ++registry.diagnostics.typeface_lookup_attempt_count;
   const auto found = registry.resources.find(id);
   if (found != registry.resources.end() && found->second.typeface) {
@@ -116,8 +160,9 @@ sk_sp<SkTypeface> LookupSameProcessTypefaceResource(uint64_t id) {
 std::vector<TypefaceResource> SnapshotTypefaceResources() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
   std::vector<TypefaceResource> resources;
-  resources.reserve(Registry().resources.size());
-  for (const auto& [id, resource] : Registry().resources) {
+  auto& registry = CurrentRegistryLocked();
+  resources.reserve(registry.resources.size());
+  for (const auto& [id, resource] : registry.resources) {
     resources.push_back(resource);
   }
   std::sort(resources.begin(), resources.end(),
@@ -129,32 +174,32 @@ std::vector<TypefaceResource> SnapshotTypefaceResources() {
 
 void SetTextBlobReplayDiagnosticsEnabled(bool enabled) {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  Registry().diagnostics.enabled = enabled;
+  CurrentRegistryLocked().diagnostics.enabled = enabled;
 }
 
 TextBlobReplayDiagnostics SnapshotTextBlobReplayDiagnostics() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  return Registry().diagnostics;
+  return CurrentRegistryLocked().diagnostics;
 }
 
 void RecordTextBlobDeserializeAttempt() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  ++Registry().diagnostics.deserialize_attempt_count;
+  ++CurrentRegistryLocked().diagnostics.deserialize_attempt_count;
 }
 
 void RecordTextBlobDeserializeSuccess() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  ++Registry().diagnostics.deserialize_success_count;
+  ++CurrentRegistryLocked().diagnostics.deserialize_success_count;
 }
 
 void RecordTextBlobDeserializeFailure() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  ++Registry().diagnostics.deserialize_failure_count;
+  ++CurrentRegistryLocked().diagnostics.deserialize_failure_count;
 }
 
 void RecordDiagnosticTypefaceFallback() {
   std::lock_guard<std::mutex> lock(RegistryMutex());
-  ++Registry().diagnostics.diagnostic_typeface_fallback_count;
+  ++CurrentRegistryLocked().diagnostics.diagnostic_typeface_fallback_count;
 }
 
 }  // namespace html_css_renderer

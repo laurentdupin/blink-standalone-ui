@@ -772,6 +772,26 @@ class ScopedStandaloneResourceProviderContext {
   uint64_t context_id_ = 0;
 };
 
+class ScopedTypefaceResourceRegistryContext {
+ public:
+  explicit ScopedTypefaceResourceRegistryContext(uint64_t context_id)
+      : context_id_(context_id) {
+    SetCurrentTypefaceResourceRegistryContext(context_id_);
+  }
+
+  ScopedTypefaceResourceRegistryContext(
+      const ScopedTypefaceResourceRegistryContext&) = delete;
+  ScopedTypefaceResourceRegistryContext& operator=(
+      const ScopedTypefaceResourceRegistryContext&) = delete;
+
+  ~ScopedTypefaceResourceRegistryContext() {
+    SetCurrentTypefaceResourceRegistryContext(0);
+  }
+
+ private:
+  uint64_t context_id_ = 0;
+};
+
 class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime {
  public:
   explicit StandaloneCompositorRuntimeImpl(CompositorRuntimeCreateInfo create_info)
@@ -783,6 +803,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         resource_provider_context_id_(CreateStandaloneResourceProviderContext()),
         resource_root_(GetStandaloneResourceProviderResourceRoot()),
         resource_base_path_(GetStandaloneResourceProviderDocumentBasePath()),
+        typeface_registry_context_id_(CreateTypefaceResourceRegistryContext()),
         bridge_instance_id_(
             ::blink::standalone_renderer_probe::
                 StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer()) {
@@ -796,10 +817,13 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   ~StandaloneCompositorRuntimeImpl() override {
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeDestroyInstanceForStandaloneRenderer(
             bridge_instance_id_);
+    DestroyTypefaceResourceRegistryContext(typeface_registry_context_id_);
     DestroyStandaloneResourceProviderContext(resource_provider_context_id_);
   }
 
@@ -807,6 +831,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     namespace probe = ::blink::standalone_renderer_probe;
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     ApplyResourceProviderContext();
     EnsureStandaloneDiscardableMemoryAllocator();
@@ -839,6 +865,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       const NativeWindowConfig& config) override {
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     ApplyResourceProviderContext();
     native_window_config_ = config;
@@ -855,6 +883,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     namespace probe = ::blink::standalone_renderer_probe;
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     if (!NeedsFrameForInput(input))
       return MakeSkippedFrameResult(input);
@@ -1514,6 +1544,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   uint64_t resource_provider_context_id_ = 0;
   std::string resource_root_;
   std::string resource_base_path_;
+  uint64_t typeface_registry_context_id_ = 0;
   uint64_t bridge_instance_id_ = 0;
 };
 
