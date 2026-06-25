@@ -35,7 +35,7 @@ void EnsureStandaloneCApiProcessInitialized() {
   std::call_once(once, [] {
     html_css_renderer::ConfigureStandaloneToolProcess();
     if (!base::CommandLine::InitializedForCurrentProcess()) {
-      const char* argv[] = {"hcsr_renderer"};
+      const char* argv[] = {"blink_standalone_renderer"};
       base::CommandLine::Init(1, argv);
     }
     const bool need_task_executor =
@@ -58,7 +58,7 @@ void EnsureStandaloneCApiProcessInitialized() {
     }
     if (!base::ThreadPoolInstance::Get()) {
       base::ThreadPoolInstance::CreateAndStartWithDefaultParams(
-          "HcsrRendererCApi");
+          "BlinkStandaloneRendererCApi");
     }
     if (!perfetto::Tracing::IsInitialized()) {
       base::trace_event::InitializeInProcessPerfettoBackend();
@@ -123,49 +123,49 @@ bool ViolatesNoScriptProfile(const std::string& html) {
          HasInlineEventHandlerAttribute(lower);
 }
 
-hcsr_rect_t ToCRect(const html_css_renderer::Rect& rect) {
-  return hcsr_rect_t{rect.x, rect.y, rect.width, rect.height};
+blink_standalone_rect_t ToCRect(const html_css_renderer::Rect& rect) {
+  return blink_standalone_rect_t{rect.x, rect.y, rect.width, rect.height};
 }
 
-hcsr_pixel_format_t ToCPixelFormat(
+blink_standalone_pixel_format_t ToCPixelFormat(
     html_css_renderer::RawFramePixelFormat format) {
   switch (format) {
     case html_css_renderer::RawFramePixelFormat::kRGBA8:
-      return HCSR_PIXEL_FORMAT_RGBA8;
+      return BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
     case html_css_renderer::RawFramePixelFormat::kBGRA8:
-      return HCSR_PIXEL_FORMAT_BGRA8;
+      return BLINK_STANDALONE_PIXEL_FORMAT_BGRA8;
     case html_css_renderer::RawFramePixelFormat::kNone:
-      return HCSR_PIXEL_FORMAT_NONE;
+      return BLINK_STANDALONE_PIXEL_FORMAT_NONE;
   }
-  return HCSR_PIXEL_FORMAT_NONE;
+  return BLINK_STANDALONE_PIXEL_FORMAT_NONE;
 }
 
 html_css_renderer::MouseInputButton ToRuntimeMouseButton(
-    hcsr_mouse_button_t button) {
+    blink_standalone_mouse_button_t button) {
   switch (button) {
-    case HCSR_MOUSE_BUTTON_LEFT:
+    case BLINK_STANDALONE_MOUSE_BUTTON_LEFT:
       return html_css_renderer::MouseInputButton::kLeft;
-    case HCSR_MOUSE_BUTTON_MIDDLE:
+    case BLINK_STANDALONE_MOUSE_BUTTON_MIDDLE:
       return html_css_renderer::MouseInputButton::kMiddle;
-    case HCSR_MOUSE_BUTTON_RIGHT:
+    case BLINK_STANDALONE_MOUSE_BUTTON_RIGHT:
       return html_css_renderer::MouseInputButton::kRight;
-    case HCSR_MOUSE_BUTTON_NONE:
+    case BLINK_STANDALONE_MOUSE_BUTTON_NONE:
       return html_css_renderer::MouseInputButton::kNone;
   }
   return html_css_renderer::MouseInputButton::kNone;
 }
 
-html_css_renderer::KeyboardInputKey ToRuntimeKeyboardKey(hcsr_key_t key) {
+html_css_renderer::KeyboardInputKey ToRuntimeKeyboardKey(blink_standalone_key_t key) {
   switch (key) {
-    case HCSR_KEY_BACKSPACE:
+    case BLINK_STANDALONE_KEY_BACKSPACE:
       return html_css_renderer::KeyboardInputKey::kBackspace;
-    case HCSR_KEY_TAB:
+    case BLINK_STANDALONE_KEY_TAB:
       return html_css_renderer::KeyboardInputKey::kTab;
-    case HCSR_KEY_ENTER:
+    case BLINK_STANDALONE_KEY_ENTER:
       return html_css_renderer::KeyboardInputKey::kEnter;
-    case HCSR_KEY_DELETE:
+    case BLINK_STANDALONE_KEY_DELETE:
       return html_css_renderer::KeyboardInputKey::kDelete;
-    case HCSR_KEY_UNKNOWN:
+    case BLINK_STANDALONE_KEY_UNKNOWN:
       return html_css_renderer::KeyboardInputKey::kUnknown;
   }
   return html_css_renderer::KeyboardInputKey::kUnknown;
@@ -177,8 +177,8 @@ bool PointInRect(float x, float y, const html_css_renderer::Rect& rect) {
 }
 
 void CopyHitMetadata(const html_css_renderer::HitTestEntry& source,
-                     hcsr_hit_metadata_t* hit) {
-  *hit = hcsr_hit_metadata_t{};
+                     blink_standalone_hit_metadata_t* hit) {
+  *hit = blink_standalone_hit_metadata_t{};
   hit->element_id = source.element_id.c_str();
   hit->tag_name = source.tag_name.c_str();
   hit->data_godot_action = source.data_godot_action.c_str();
@@ -191,7 +191,7 @@ void CopyHitMetadata(const html_css_renderer::HitTestEntry& source,
 
 }  // namespace
 
-struct hcsr_renderer {
+struct blink_standalone_renderer {
   std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime;
   html_css_renderer::Size viewport = {800.0f, 600.0f};
   float device_scale_factor = 1.0f;
@@ -200,7 +200,7 @@ struct hcsr_renderer {
   std::string resource_root;
   std::string resource_base_path;
   html_css_renderer::CompositorFrameResult latest_result;
-  std::vector<hcsr_rect_t> dirty_rects;
+  std::vector<blink_standalone_rect_t> dirty_rects;
   std::vector<html_css_renderer::MouseInputEvent> pending_mouse_events;
   std::vector<html_css_renderer::KeyboardInputEvent> pending_keyboard_events;
   std::optional<html_css_renderer::WheelInput> pending_wheel;
@@ -209,7 +209,7 @@ struct hcsr_renderer {
 
 namespace {
 
-hcsr_status_code_t InitializeRuntime(hcsr_renderer* renderer) {
+blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* renderer) {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer.viewport = renderer->viewport;
   create_info.renderer.device_scale_factor = renderer->device_scale_factor;
@@ -220,22 +220,22 @@ hcsr_status_code_t InitializeRuntime(hcsr_renderer* renderer) {
   std::vector<std::string> diagnostics;
   if (!renderer->runtime || !renderer->runtime->Initialize(&diagnostics)) {
     renderer->last_error = "failed to initialize standalone compositor runtime";
-    return HCSR_STATUS_INITIALIZATION_FAILED;
+    return BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED;
   }
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-void ClearPendingInput(hcsr_renderer* renderer) {
+void ClearPendingInput(blink_standalone_renderer* renderer) {
   renderer->pending_mouse_events.clear();
   renderer->pending_keyboard_events.clear();
   renderer->pending_wheel.reset();
 }
 
-void AppendMouseEvent(hcsr_renderer* renderer,
+void AppendMouseEvent(blink_standalone_renderer* renderer,
                       html_css_renderer::MouseInputEventType type,
                       float x,
                       float y,
-                      hcsr_mouse_button_t button,
+                      blink_standalone_mouse_button_t button,
                       int modifiers,
                       int click_count) {
   html_css_renderer::MouseInputEvent event;
@@ -247,9 +247,9 @@ void AppendMouseEvent(hcsr_renderer* renderer,
   renderer->pending_mouse_events.push_back(event);
 }
 
-void AppendKeyboardEvent(hcsr_renderer* renderer,
+void AppendKeyboardEvent(blink_standalone_renderer* renderer,
                          html_css_renderer::KeyboardInputEventType type,
-                         hcsr_key_t key,
+                         blink_standalone_key_t key,
                          std::string text,
                          int modifiers) {
   html_css_renderer::KeyboardInputEvent event;
@@ -262,15 +262,15 @@ void AppendKeyboardEvent(hcsr_renderer* renderer,
 
 }  // namespace
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_create(
-    const hcsr_renderer_config_t* config,
-    hcsr_renderer_t** renderer_out) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
+    const blink_standalone_renderer_config_t* config,
+    blink_standalone_renderer_t** renderer_out) {
   if (!renderer_out) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   *renderer_out = nullptr;
   EnsureStandaloneCApiProcessInitialized();
-  auto renderer = std::make_unique<hcsr_renderer>();
+  auto renderer = std::make_unique<blink_standalone_renderer>();
   if (config) {
     if (config->width > 0) {
       renderer->viewport.width = static_cast<float>(config->width);
@@ -284,31 +284,31 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_create(
     renderer->no_script_profile = config->no_script_profile != 0;
   }
 
-  hcsr_status_code_t status = InitializeRuntime(renderer.get());
-  if (status != HCSR_STATUS_OK) {
+  blink_standalone_status_code_t status = InitializeRuntime(renderer.get());
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     *renderer_out = renderer.release();
     return status;
   }
 
   *renderer_out = renderer.release();
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API void hcsr_renderer_destroy(
-    hcsr_renderer_t* renderer) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_destroy(
+    blink_standalone_renderer_t* renderer) {
   if (!renderer) {
     return;
   }
   delete renderer;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_set_document_html(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_document_html(
+    blink_standalone_renderer_t* renderer,
     const char* html,
     const char* resource_root,
     const char* resource_base_path) {
   if (!renderer || !html) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   renderer->last_error.clear();
   renderer->html = html;
@@ -316,34 +316,34 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_set_document_html(
     renderer->last_error =
         "document rejected by no-script profile (script/event handler/navigation surface)";
     renderer->html.clear();
-    return HCSR_STATUS_NO_SCRIPT_REJECTED;
+    return BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED;
   }
   renderer->resource_root = resource_root ? resource_root : "";
   renderer->resource_base_path = resource_base_path ? resource_base_path : "";
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
   renderer->dirty_rects.clear();
   ClearPendingInput(renderer);
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_set_viewport(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_viewport(
+    blink_standalone_renderer_t* renderer,
     int width,
     int height,
     float device_scale_factor) {
   if (!renderer || width <= 0 || height <= 0 || device_scale_factor <= 0.0f) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   renderer->viewport = {static_cast<float>(width), static_cast<float>(height)};
   renderer->device_scale_factor = device_scale_factor;
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_advance_frame(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_advance_frame(
+    blink_standalone_renderer_t* renderer,
     double timeline_time_seconds) {
   if (!renderer || !renderer->runtime) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   renderer->last_error.clear();
   html_css_renderer::FrameInput input;
@@ -365,68 +365,73 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_advance_frame(
     renderer->dirty_rects.push_back(ToCRect(rect));
   }
   if (!renderer->latest_result.raw_frame.pixels.empty()) {
-    return HCSR_STATUS_OK;
+    return BLINK_STANDALONE_STATUS_OK;
   }
   renderer->last_error =
       renderer->latest_result.raw_frame_failure.empty()
           ? "raw frame output was not produced"
           : renderer->latest_result.raw_frame_failure;
-  return HCSR_STATUS_RENDER_FAILED;
+  return BLINK_STANDALONE_STATUS_RENDER_FAILED;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_move(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
+    const blink_standalone_renderer_t* renderer) {
+  return renderer && renderer->latest_result.needs_begin_frame ? 1 : 0;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(
+    blink_standalone_renderer_t* renderer,
     float x,
     float y,
     int modifiers) {
   if (!renderer) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kMove, x, y,
-                   HCSR_MOUSE_BUTTON_NONE, modifiers, 0);
-  return HCSR_STATUS_OK;
+                   BLINK_STANDALONE_MOUSE_BUTTON_NONE, modifiers, 0);
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_down(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_down(
+    blink_standalone_renderer_t* renderer,
     float x,
     float y,
-    hcsr_mouse_button_t button,
+    blink_standalone_mouse_button_t button,
     int modifiers,
     int click_count) {
   if (!renderer || ToRuntimeMouseButton(button) ==
                        html_css_renderer::MouseInputButton::kNone) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kDown, x, y,
                    button, modifiers, click_count > 0 ? click_count : 1);
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_mouse_up(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_up(
+    blink_standalone_renderer_t* renderer,
     float x,
     float y,
-    hcsr_mouse_button_t button,
+    blink_standalone_mouse_button_t button,
     int modifiers,
     int click_count) {
   if (!renderer || ToRuntimeMouseButton(button) ==
                        html_css_renderer::MouseInputButton::kNone) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kUp, x, y,
                    button, modifiers, click_count > 0 ? click_count : 1);
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_wheel(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_wheel(
+    blink_standalone_renderer_t* renderer,
     float x,
     float y,
     float delta_x,
     float delta_y) {
   if (!renderer) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   if (!renderer->pending_wheel) {
     renderer->pending_wheel = html_css_renderer::WheelInput();
@@ -434,50 +439,50 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_wheel(
   renderer->pending_wheel->position = {x, y};
   renderer->pending_wheel->delta.x += delta_x;
   renderer->pending_wheel->delta.y += delta_y;
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_key_down(
-    hcsr_renderer_t* renderer,
-    hcsr_key_t key,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_key_down(
+    blink_standalone_renderer_t* renderer,
+    blink_standalone_key_t key,
     int modifiers) {
   if (!renderer || ToRuntimeKeyboardKey(key) ==
                        html_css_renderer::KeyboardInputKey::kUnknown) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kKeyDown,
                       key, std::string(), modifiers);
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_key_up(
-    hcsr_renderer_t* renderer,
-    hcsr_key_t key,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_key_up(
+    blink_standalone_renderer_t* renderer,
+    blink_standalone_key_t key,
     int modifiers) {
   if (!renderer || ToRuntimeKeyboardKey(key) ==
                        html_css_renderer::KeyboardInputKey::kUnknown) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kKeyUp,
                       key, std::string(), modifiers);
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_text_input(
-    hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_text_input(
+    blink_standalone_renderer_t* renderer,
     const char* utf8_text) {
   if (!renderer || !utf8_text) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kText,
-                      HCSR_KEY_UNKNOWN, utf8_text, 0);
-  return HCSR_STATUS_OK;
+                      BLINK_STANDALONE_KEY_UNKNOWN, utf8_text, 0);
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_reset_state(
-    hcsr_renderer_t* renderer) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(
+    blink_standalone_renderer_t* renderer) {
   if (!renderer) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   renderer->last_error.clear();
   renderer->runtime.reset();
@@ -487,15 +492,15 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_reset_state(
   return InitializeRuntime(renderer);
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_get_latest_output(
-    hcsr_renderer_t* renderer,
-    hcsr_frame_output_t* output) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_latest_output(
+    blink_standalone_renderer_t* renderer,
+    blink_standalone_frame_output_t* output) {
   if (!renderer || !output) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   const html_css_renderer::RawFrameOutput& raw =
       renderer->latest_result.raw_frame;
-  *output = hcsr_frame_output_t{};
+  *output = blink_standalone_frame_output_t{};
   output->pixels = raw.pixels.empty() ? nullptr : raw.pixels.data();
   output->pixel_count = raw.pixels.size();
   output->width = raw.width;
@@ -506,11 +511,11 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_get_latest_output(
   output->dirty_rects =
       renderer->dirty_rects.empty() ? nullptr : renderer->dirty_rects.data();
   output->dirty_rect_count = renderer->dirty_rects.size();
-  return output->pixels ? HCSR_STATUS_OK : HCSR_STATUS_RENDER_FAILED;
+  return output->pixels ? BLINK_STANDALONE_STATUS_OK : BLINK_STANDALONE_STATUS_RENDER_FAILED;
 }
 
-extern "C" HCSR_C_API void hcsr_renderer_release_latest_output(
-    hcsr_renderer_t* renderer) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_release_latest_output(
+    blink_standalone_renderer_t* renderer) {
   if (!renderer) {
     return;
   }
@@ -519,45 +524,45 @@ extern "C" HCSR_C_API void hcsr_renderer_release_latest_output(
   renderer->dirty_rects.clear();
 }
 
-extern "C" HCSR_C_API size_t hcsr_renderer_hit_metadata_count(
-    const hcsr_renderer_t* renderer) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_hit_metadata_count(
+    const blink_standalone_renderer_t* renderer) {
   return renderer ? renderer->latest_result.hit_test_entries.size() : 0;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_get_hit_metadata(
-    const hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_hit_metadata(
+    const blink_standalone_renderer_t* renderer,
     size_t index,
-    hcsr_hit_metadata_t* hit) {
+    blink_standalone_hit_metadata_t* hit) {
   if (!renderer || !hit ||
       index >= renderer->latest_result.hit_test_entries.size()) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   const html_css_renderer::HitTestEntry& source =
       renderer->latest_result.hit_test_entries[index];
   CopyHitMetadata(source, hit);
-  return HCSR_STATUS_OK;
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
-extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_hit_test(
-    const hcsr_renderer_t* renderer,
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_hit_test(
+    const blink_standalone_renderer_t* renderer,
     float x,
     float y,
-    hcsr_hit_metadata_t* hit) {
+    blink_standalone_hit_metadata_t* hit) {
   if (!renderer || !hit) {
-    return HCSR_STATUS_INVALID_ARGUMENT;
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   const auto& entries = renderer->latest_result.hit_test_entries;
   for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
     if (PointInRect(x, y, it->bounds)) {
       CopyHitMetadata(*it, hit);
-      return HCSR_STATUS_OK;
+      return BLINK_STANDALONE_STATUS_OK;
     }
   }
-  return HCSR_STATUS_INVALID_ARGUMENT;
+  return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
 }
 
-extern "C" HCSR_C_API const char* hcsr_renderer_last_error(
-    const hcsr_renderer_t* renderer) {
+extern "C" BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_last_error(
+    const blink_standalone_renderer_t* renderer) {
   if (!renderer || renderer->last_error.empty()) {
     return "";
   }

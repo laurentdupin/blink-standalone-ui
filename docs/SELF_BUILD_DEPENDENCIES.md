@@ -148,13 +148,13 @@ That static archive is not link-complete by itself on Windows because static
 archives do not fold all transitive static dependencies, and it can conflict
 with the host runtime/STL linkage.
 
-The intended public ABI surface is the `hcsr_renderer_*` C API declared in
+The intended public ABI surface is the `blink_standalone_renderer_*` C API declared in
 `renderer_c_api.h`. The Windows DLL export table can still include two
 Chromium/V8 runtime-support exports, `GetHandleVerifier` and
 `CrashForExceptionInNonABICompliantCodeRange`, because those are explicitly
 exported by linked implementation objects. They are not part of the supported
 embedder API; Godot and other hosts should link only the import library and call
-the documented `hcsr_renderer_*` functions. The build also generates:
+the documented `blink_standalone_renderer_*` functions. The build also generates:
 
 ```text
 build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_link_manifest.json

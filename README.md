@@ -125,12 +125,12 @@ is still buildable for internal/advanced use as
 Godot artifact: Windows static archives do not fold all transitive static
 dependencies and can conflict with the host runtime/STL linkage.
 
-The intended public ABI surface is the `hcsr_renderer_*` C API declared in
+The intended public ABI surface is the `blink_standalone_renderer_*` C API declared in
 `renderer_c_api.h`. On Windows, `dumpbin /exports` can also show two
 implementation-support exports from Chromium/V8 (`GetHandleVerifier` and
 `CrashForExceptionInNonABICompliantCodeRange`). Embedders should treat those as
 sealed runtime support details and link only against the import library for the
-documented `hcsr_renderer_*` API.
+documented `blink_standalone_renderer_*` API.
 
 The generated dependency manifest records both artifacts and the static-link
 contract:

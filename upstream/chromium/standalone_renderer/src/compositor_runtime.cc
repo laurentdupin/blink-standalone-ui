@@ -911,17 +911,16 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         collect_full_result ? 1 : 0);
     const std::string probe_html =
         BuildLiveBlinkProbeHtml(snapshot_.html, snapshot_.stylesheets);
+    if (input.force_document_reload || last_probe_html_ != probe_html) {
+      ResetTypefaceResourceRegistryForFrame();
+      probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+      last_probe_html_ = probe_html;
+    }
     if (input.request_png_snapshot) {
       probe::StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
     }
     if (input.request_raw_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
-    }
-
-    if (input.force_document_reload || last_probe_html_ != probe_html) {
-      ResetTypefaceResourceRegistryForFrame();
-      probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
-      last_probe_html_ = probe_html;
     }
     probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(snapshot_.viewport.width),

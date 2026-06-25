@@ -1104,7 +1104,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     LibXml2::LibXml2
   )
   target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
-    HCSR_C_API_STATIC=1
+    BLINK_STANDALONE_RENDERER_C_API_STATIC=1
   )
 
   add_library(blink_standalone_renderer_c_api STATIC
@@ -1138,7 +1138,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     endif()
   endforeach()
   target_compile_definitions(blink_standalone_renderer_c_api PRIVATE
-    HCSR_C_API_STATIC=1)
+    BLINK_STANDALONE_RENDERER_C_API_STATIC=1)
   set_property(TARGET blink_standalone_renderer_c_api PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded")
   set_target_properties(blink_standalone_renderer_c_api PROPERTIES
@@ -1176,7 +1176,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     endif()
   endforeach()
   target_compile_definitions(blink_standalone_renderer_c_api_dll PRIVATE
-    HCSR_C_API_IMPLEMENTATION=1)
+    BLINK_STANDALONE_RENDERER_C_API_IMPLEMENTATION=1)
   set_property(TARGET blink_standalone_renderer_c_api_dll PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded")
   set_target_properties(blink_standalone_renderer_c_api_dll PROPERTIES
@@ -1203,7 +1203,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "static_target": "blink_standalone_renderer_c_api",
   "static_archive": "$<TARGET_FILE:blink_standalone_renderer_c_api>",
   "static_link_complete_by_itself": false,
-  "contract": "Godot and other external embedders should link the DLL import library, not the static archive. The supported public ABI is the hcsr_renderer_* C API. On Windows the DLL export table can also contain Chromium/V8 runtime-support exports such as GetHandleVerifier and CrashForExceptionInNonABICompliantCodeRange; those are sealed implementation details, not supported embedder API. The static archive is internal/advanced because Windows static libraries do not fold all transitive static dependencies and can conflict with the host runtime/STL.",
+  "contract": "Godot and other external embedders should link the DLL import library, not the static archive. The supported public ABI is the blink_standalone_renderer_* C API. On Windows the DLL export table can also contain Chromium/V8 runtime-support exports such as GetHandleVerifier and CrashForExceptionInNonABICompliantCodeRange; those are sealed implementation details, not supported embedder API. The static archive is internal/advanced because Windows static libraries do not fold all transitive static dependencies and can conflict with the host runtime/STL.",
   "v8_monolith": "@BLINK_STANDALONE_V8_MONOLITH_LIB@",
   "chromium_libcxx_object_dir": "@BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR@",
   "chromium_libcxx_object_list": "@_blink_standalone_libcxx_object_list@",
@@ -1256,12 +1256,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia
       ${BLINK_STANDALONE_SDL_APP_SOURCES}
-      $<TARGET_OBJECTS:blink_standalone_live_renderer_objects>
-      ${BLINK_STANDALONE_LIVE_OBJECTS}
     )
     add_dependencies(blink_standalone_sdl_viewer_skia
       blink_angle_libEGL
       blink_angle_libGLESv2
+      blink_standalone_renderer_c_api
     )
     blink_standalone_add_v8_compat_dependency(blink_standalone_sdl_viewer_skia)
     if(BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
@@ -1359,6 +1358,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       PNG_INTEL_SSE=1
       ZLIB_IMPLEMENTATION=1
       SDL_STATIC_LIB=1
+      BLINK_STANDALONE_RENDERER_C_API_STATIC=1
       ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
       ${BLINK_STANDALONE_V8_ABI_DEFINES}
     )
@@ -1381,6 +1381,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     endif()
 
     target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
+    blink_standalone_renderer_c_api
     blink_standalone_chromium_libcxx
     blink_standalone_v8_monolith
     d3d11

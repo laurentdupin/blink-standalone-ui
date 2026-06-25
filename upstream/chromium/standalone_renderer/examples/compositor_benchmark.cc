@@ -139,24 +139,24 @@ void PrintUsage() {
 }
 
 int RunCApiSmoke() {
-  hcsr_renderer_config_t config = {};
+  blink_standalone_renderer_config_t config = {};
   config.width = 160;
   config.height = 120;
   config.device_scale_factor = 1.0f;
   config.no_script_profile = 1;
-  hcsr_renderer_t* renderer = nullptr;
-  hcsr_status_code_t status = hcsr_renderer_create(&config, &renderer);
-  if (status != HCSR_STATUS_OK || !renderer) {
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status = blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
     std::fprintf(stderr, "c_api_smoke: create failed status=%d\n", status);
     return 1;
   }
   const char* rejected_html = "<script>window.x=1</script>";
-  status = hcsr_renderer_set_document_html(renderer, rejected_html, "", "");
-  if (status != HCSR_STATUS_NO_SCRIPT_REJECTED) {
+  status = blink_standalone_renderer_set_document_html(renderer, rejected_html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
     std::fprintf(stderr,
                  "c_api_smoke: no-script rejection failed status=%d\n",
                  status);
-    hcsr_renderer_destroy(renderer);
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
   const char* html =
@@ -165,23 +165,23 @@ int RunCApiSmoke() {
       "class='card' data-godot-action='open'>Card</div><label><input "
       "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label>"
       "<input id='name' value='abc' data-godot-action='name'>";
-  status = hcsr_renderer_set_document_html(renderer, html, "", "");
-  if (status != HCSR_STATUS_OK) {
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr, "c_api_smoke: set html failed status=%d error=%s\n",
-                 status, hcsr_renderer_last_error(renderer));
-    hcsr_renderer_destroy(renderer);
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
-  status = hcsr_renderer_advance_frame(renderer, 0.0);
-  if (status != HCSR_STATUS_OK) {
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr, "c_api_smoke: advance failed status=%d error=%s\n",
-                 status, hcsr_renderer_last_error(renderer));
-    hcsr_renderer_destroy(renderer);
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
-  hcsr_frame_output_t output = {};
-  status = hcsr_renderer_get_latest_output(renderer, &output);
-  if (status != HCSR_STATUS_OK || !output.pixels || output.width != 160 ||
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK || !output.pixels || output.width != 160 ||
       output.height != 120 || output.stride < output.width * 4 ||
       output.pixel_count == 0 || output.dirty_rect_count != 1) {
     std::fprintf(stderr,
@@ -189,20 +189,20 @@ int RunCApiSmoke() {
                  "stride=%d bytes=%zu dirty=%zu format=%d error=%s\n",
                  status, output.width, output.height, output.stride,
                  output.pixel_count, output.dirty_rect_count,
-                 output.pixel_format, hcsr_renderer_last_error(renderer));
-    hcsr_renderer_destroy(renderer);
+                 output.pixel_format, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
   bool saw_card = false;
   bool saw_checkbox = false;
   bool saw_input = false;
-  hcsr_rect_t card_bounds = {};
-  hcsr_rect_t checkbox_bounds = {};
-  hcsr_rect_t input_bounds = {};
-  const size_t hit_count = hcsr_renderer_hit_metadata_count(renderer);
+  blink_standalone_rect_t card_bounds = {};
+  blink_standalone_rect_t checkbox_bounds = {};
+  blink_standalone_rect_t input_bounds = {};
+  const size_t hit_count = blink_standalone_renderer_hit_metadata_count(renderer);
   for (size_t i = 0; i < hit_count; ++i) {
-    hcsr_hit_metadata_t hit = {};
-    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+    blink_standalone_hit_metadata_t hit = {};
+    if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) != BLINK_STANDALONE_STATUS_OK) {
       continue;
     }
     const std::string id = hit.element_id ? hit.element_id : "";
@@ -226,11 +226,11 @@ int RunCApiSmoke() {
       input_bounds = hit.bounds;
     }
   }
-  hcsr_hit_metadata_t point_hit = {};
+  blink_standalone_hit_metadata_t point_hit = {};
   if (saw_card &&
-      hcsr_renderer_hit_test(renderer, card_bounds.x + card_bounds.width * 0.5f,
+      blink_standalone_renderer_hit_test(renderer, card_bounds.x + card_bounds.width * 0.5f,
                              card_bounds.y + card_bounds.height * 0.5f,
-                             &point_hit) != HCSR_STATUS_OK) {
+                             &point_hit) != BLINK_STANDALONE_STATUS_OK) {
     saw_card = false;
   } else if (saw_card) {
     const std::string id = point_hit.element_id ? point_hit.element_id : "";
@@ -242,31 +242,31 @@ int RunCApiSmoke() {
                  "card=%d checkbox=%d input=%d\n",
                  hit_count, saw_card ? 1 : 0, saw_checkbox ? 1 : 0,
                  saw_input ? 1 : 0);
-    hcsr_renderer_release_latest_output(renderer);
-    hcsr_renderer_destroy(renderer);
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
 
   const float checkbox_x = checkbox_bounds.x + checkbox_bounds.width * 0.5f;
   const float checkbox_y = checkbox_bounds.y + checkbox_bounds.height * 0.5f;
-  hcsr_renderer_mouse_move(renderer, checkbox_x, checkbox_y, 0);
-  hcsr_renderer_mouse_down(renderer, checkbox_x, checkbox_y,
-                           HCSR_MOUSE_BUTTON_LEFT, 0, 1);
-  hcsr_renderer_mouse_up(renderer, checkbox_x, checkbox_y,
-                         HCSR_MOUSE_BUTTON_LEFT, 0, 1);
-  status = hcsr_renderer_advance_frame(renderer, 0.016);
-  if (status != HCSR_STATUS_OK) {
+  blink_standalone_renderer_mouse_move(renderer, checkbox_x, checkbox_y, 0);
+  blink_standalone_renderer_mouse_down(renderer, checkbox_x, checkbox_y,
+                           BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  blink_standalone_renderer_mouse_up(renderer, checkbox_x, checkbox_y,
+                         BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  status = blink_standalone_renderer_advance_frame(renderer, 0.016);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
                  "c_api_smoke: checkbox click advance failed status=%d "
                  "error=%s\n",
-                 status, hcsr_renderer_last_error(renderer));
-    hcsr_renderer_destroy(renderer);
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
   bool checkbox_checked = false;
-  for (size_t i = 0; i < hcsr_renderer_hit_metadata_count(renderer); ++i) {
-    hcsr_hit_metadata_t hit = {};
-    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+  for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer); ++i) {
+    blink_standalone_hit_metadata_t hit = {};
+    if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) != BLINK_STANDALONE_STATUS_OK) {
       continue;
     }
     const std::string id = hit.element_id ? hit.element_id : "";
@@ -277,30 +277,30 @@ int RunCApiSmoke() {
   }
   if (!checkbox_checked) {
     std::fprintf(stderr, "c_api_smoke: checkbox did not toggle through C API\n");
-    hcsr_renderer_destroy(renderer);
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
 
   const float input_x = input_bounds.x + input_bounds.width * 0.5f;
   const float input_y = input_bounds.y + input_bounds.height * 0.5f;
-  hcsr_renderer_mouse_move(renderer, input_x, input_y, 0);
-  hcsr_renderer_mouse_down(renderer, input_x, input_y, HCSR_MOUSE_BUTTON_LEFT,
+  blink_standalone_renderer_mouse_move(renderer, input_x, input_y, 0);
+  blink_standalone_renderer_mouse_down(renderer, input_x, input_y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT,
                            0, 1);
-  hcsr_renderer_mouse_up(renderer, input_x, input_y, HCSR_MOUSE_BUTTON_LEFT, 0,
+  blink_standalone_renderer_mouse_up(renderer, input_x, input_y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
                          1);
-  hcsr_renderer_text_input(renderer, "Z");
-  status = hcsr_renderer_advance_frame(renderer, 0.032);
-  if (status != HCSR_STATUS_OK) {
+  blink_standalone_renderer_text_input(renderer, "Z");
+  status = blink_standalone_renderer_advance_frame(renderer, 0.032);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
                  "c_api_smoke: text focus advance failed status=%d error=%s\n",
-                 status, hcsr_renderer_last_error(renderer));
-    hcsr_renderer_destroy(renderer);
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
   bool input_focused = false;
-  for (size_t i = 0; i < hcsr_renderer_hit_metadata_count(renderer); ++i) {
-    hcsr_hit_metadata_t hit = {};
-    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+  for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer); ++i) {
+    blink_standalone_hit_metadata_t hit = {};
+    if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) != BLINK_STANDALONE_STATUS_OK) {
       continue;
     }
     const std::string id = hit.element_id ? hit.element_id : "";
@@ -309,8 +309,8 @@ int RunCApiSmoke() {
       break;
     }
   }
-  hcsr_renderer_release_latest_output(renderer);
-  hcsr_renderer_destroy(renderer);
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
   if (!input_focused) {
     std::fprintf(stderr, "c_api_smoke: input did not focus through C API\n");
     return 1;
@@ -322,7 +322,7 @@ int RunCApiSmoke() {
   return 0;
 }
 
-uint64_t HashFramePixels(const hcsr_frame_output_t& output) {
+uint64_t HashFramePixels(const blink_standalone_frame_output_t& output) {
   uint64_t hash = 1469598103934665603ull;
   for (size_t i = 0; output.pixels && i < output.pixel_count; ++i) {
     hash ^= static_cast<uint64_t>(output.pixels[i]);
@@ -331,7 +331,7 @@ uint64_t HashFramePixels(const hcsr_frame_output_t& output) {
   return hash;
 }
 
-bool FrameHasNonUniformPixels(const hcsr_frame_output_t& output) {
+bool FrameHasNonUniformPixels(const blink_standalone_frame_output_t& output) {
   if (!output.pixels || output.pixel_count < 8) {
     return false;
   }
@@ -344,10 +344,10 @@ bool FrameHasNonUniformPixels(const hcsr_frame_output_t& output) {
   return false;
 }
 
-bool HasHitId(hcsr_renderer_t* renderer, const char* expected_id) {
-  for (size_t i = 0; i < hcsr_renderer_hit_metadata_count(renderer); ++i) {
-    hcsr_hit_metadata_t hit = {};
-    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+bool HasHitId(blink_standalone_renderer_t* renderer, const char* expected_id) {
+  for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer); ++i) {
+    blink_standalone_hit_metadata_t hit = {};
+    if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) != BLINK_STANDALONE_STATUS_OK) {
       continue;
     }
     const std::string id = hit.element_id ? hit.element_id : "";
@@ -396,32 +396,32 @@ bool WriteSolidBmp(const std::filesystem::path& path,
 }
 
 int RunCApiTwoInstanceSmoke() {
-  hcsr_renderer_config_t config_a = {};
+  blink_standalone_renderer_config_t config_a = {};
   config_a.width = 180;
   config_a.height = 120;
   config_a.device_scale_factor = 1.0f;
   config_a.no_script_profile = 1;
-  hcsr_renderer_config_t config_b = {};
+  blink_standalone_renderer_config_t config_b = {};
   config_b.width = 96;
   config_b.height = 64;
   config_b.device_scale_factor = 1.0f;
   config_b.no_script_profile = 1;
 
-  hcsr_renderer_t* renderer_a = nullptr;
-  hcsr_renderer_t* renderer_b = nullptr;
-  hcsr_status_code_t status = hcsr_renderer_create(&config_a, &renderer_a);
-  if (status != HCSR_STATUS_OK || !renderer_a) {
+  blink_standalone_renderer_t* renderer_a = nullptr;
+  blink_standalone_renderer_t* renderer_b = nullptr;
+  blink_standalone_status_code_t status = blink_standalone_renderer_create(&config_a, &renderer_a);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer_a) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: create A failed status=%d\n",
                  status);
     return 1;
   }
-  status = hcsr_renderer_create(&config_b, &renderer_b);
-  if (status != HCSR_STATUS_OK || !renderer_b) {
+  status = blink_standalone_renderer_create(&config_b, &renderer_b);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer_b) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: create B failed status=%d\n",
                  status);
-    hcsr_renderer_destroy(renderer_a);
+    blink_standalone_renderer_destroy(renderer_a);
     return 1;
   }
 
@@ -442,8 +442,8 @@ int RunCApiTwoInstanceSmoke() {
                  "c_api_two_instance_smoke: failed to create resource roots "
                  "under %s\n",
                  resource_root.string().c_str());
-    hcsr_renderer_destroy(renderer_b);
-    hcsr_renderer_destroy(renderer_a);
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
     return 1;
   }
 
@@ -458,66 +458,66 @@ int RunCApiTwoInstanceSmoke() {
 
   const std::string root_a_string = root_a.string();
   const std::string root_b_string = root_b.string();
-  status = hcsr_renderer_set_document_html(
+  status = blink_standalone_renderer_set_document_html(
       renderer_a, html_a, root_a_string.c_str(), root_a_string.c_str());
-  if (status == HCSR_STATUS_OK) {
-    status = hcsr_renderer_set_document_html(
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_set_document_html(
         renderer_b, html_b, root_b_string.c_str(), root_b_string.c_str());
   }
-  if (status != HCSR_STATUS_OK) {
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: set html failed status=%d A=%s B=%s\n",
-                 status, hcsr_renderer_last_error(renderer_a),
-                 hcsr_renderer_last_error(renderer_b));
-    hcsr_renderer_destroy(renderer_b);
-    hcsr_renderer_destroy(renderer_a);
+                 status, blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
     return 1;
   }
 
-  status = hcsr_renderer_advance_frame(renderer_a, 0.0);
-  hcsr_frame_output_t first_output_a = {};
+  status = blink_standalone_renderer_advance_frame(renderer_a, 0.0);
+  blink_standalone_frame_output_t first_output_a = {};
   uint64_t first_hash_a = 0;
-  if (status == HCSR_STATUS_OK &&
-      hcsr_renderer_get_latest_output(renderer_a, &first_output_a) ==
-          HCSR_STATUS_OK) {
+  if (status == BLINK_STANDALONE_STATUS_OK &&
+      blink_standalone_renderer_get_latest_output(renderer_a, &first_output_a) ==
+          BLINK_STANDALONE_STATUS_OK) {
     first_hash_a = HashFramePixels(first_output_a);
-    hcsr_renderer_release_latest_output(renderer_a);
+    blink_standalone_renderer_release_latest_output(renderer_a);
   }
-  if (status == HCSR_STATUS_OK) {
-    status = hcsr_renderer_advance_frame(renderer_b, 0.0);
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_advance_frame(renderer_b, 0.0);
   }
   const char* html_a_reload =
       "<!doctype html><!--reload--><style>body{margin:0;background:white}.a{"
       "width:64px;height:64px;background-image:url(icon.bmp);"
       "background-size:64px 64px}</style><div id='alpha' class='a' "
       "data-godot-action='alpha'>Alpha</div>";
-  if (status == HCSR_STATUS_OK) {
-    status = hcsr_renderer_set_document_html(
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_set_document_html(
         renderer_a, html_a_reload, root_a_string.c_str(), root_a_string.c_str());
   }
-  if (status == HCSR_STATUS_OK) {
-    status = hcsr_renderer_advance_frame(renderer_a, 0.016);
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_advance_frame(renderer_a, 0.016);
   }
-  if (status != HCSR_STATUS_OK) {
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: advance failed status=%d A=%s B=%s\n",
-                 status, hcsr_renderer_last_error(renderer_a),
-                 hcsr_renderer_last_error(renderer_b));
-    hcsr_renderer_destroy(renderer_b);
-    hcsr_renderer_destroy(renderer_a);
+                 status, blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
     return 1;
   }
 
-  hcsr_frame_output_t output_a = {};
-  hcsr_frame_output_t output_b = {};
-  const hcsr_status_code_t output_a_status =
-      hcsr_renderer_get_latest_output(renderer_a, &output_a);
-  const hcsr_status_code_t output_b_status =
-      hcsr_renderer_get_latest_output(renderer_b, &output_b);
+  blink_standalone_frame_output_t output_a = {};
+  blink_standalone_frame_output_t output_b = {};
+  const blink_standalone_status_code_t output_a_status =
+      blink_standalone_renderer_get_latest_output(renderer_a, &output_a);
+  const blink_standalone_status_code_t output_b_status =
+      blink_standalone_renderer_get_latest_output(renderer_b, &output_b);
   const uint64_t hash_a = HashFramePixels(output_a);
   const uint64_t hash_b = HashFramePixels(output_b);
   const bool ok =
-      output_a_status == HCSR_STATUS_OK && output_b_status == HCSR_STATUS_OK &&
+      output_a_status == BLINK_STANDALONE_STATUS_OK && output_b_status == BLINK_STANDALONE_STATUS_OK &&
       output_a.width == 180 && output_a.height == 120 && output_b.width == 96 &&
       output_b.height == 64 && output_a.pixel_count > 0 &&
       output_b.pixel_count > 0 && FrameHasNonUniformPixels(output_a) &&
@@ -534,13 +534,13 @@ int RunCApiTwoInstanceSmoke() {
         output_a_status, output_a.width, output_a.height, output_a.pixel_count,
         static_cast<unsigned long long>(hash_a),
         static_cast<unsigned long long>(first_hash_a),
-        hcsr_renderer_hit_metadata_count(renderer_a), output_b_status,
+        blink_standalone_renderer_hit_metadata_count(renderer_a), output_b_status,
         output_b.width, output_b.height, output_b.pixel_count,
         static_cast<unsigned long long>(hash_b),
-        hcsr_renderer_hit_metadata_count(renderer_b),
-        hcsr_renderer_last_error(renderer_a), hcsr_renderer_last_error(renderer_b));
-    hcsr_renderer_destroy(renderer_b);
-    hcsr_renderer_destroy(renderer_a);
+        blink_standalone_renderer_hit_metadata_count(renderer_b),
+        blink_standalone_renderer_last_error(renderer_a), blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
     return 1;
   }
 
@@ -548,13 +548,13 @@ int RunCApiTwoInstanceSmoke() {
       "c_api_two_instance_smoke: ok A=%dx%d hash=%llu hits=%zu B=%dx%d "
       "hash=%llu hits=%zu\n",
       output_a.width, output_a.height, static_cast<unsigned long long>(hash_a),
-      hcsr_renderer_hit_metadata_count(renderer_a), output_b.width,
+      blink_standalone_renderer_hit_metadata_count(renderer_a), output_b.width,
       output_b.height, static_cast<unsigned long long>(hash_b),
-      hcsr_renderer_hit_metadata_count(renderer_b));
-  hcsr_renderer_release_latest_output(renderer_a);
-  hcsr_renderer_release_latest_output(renderer_b);
-  hcsr_renderer_destroy(renderer_b);
-  hcsr_renderer_destroy(renderer_a);
+      blink_standalone_renderer_hit_metadata_count(renderer_b));
+  blink_standalone_renderer_release_latest_output(renderer_a);
+  blink_standalone_renderer_release_latest_output(renderer_b);
+  blink_standalone_renderer_destroy(renderer_b);
+  blink_standalone_renderer_destroy(renderer_a);
   return 0;
 }
 

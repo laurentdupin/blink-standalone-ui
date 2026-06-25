@@ -38,9 +38,14 @@
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/css_file_loader.h"
+#include "html_css_renderer/renderer_c_api.h"
 #include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
+#include "third_party/skia/include/core/SkData.h"
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkPixmap.h"
+#include "third_party/skia/include/encode/SkPngEncoder.h"
 #include "ui/gl/gl_switches.h"
 
 namespace {
@@ -386,6 +391,54 @@ bool SamePointerState(const html_css_renderer::PointerState& lhs,
          lhs.pressed == rhs.pressed;
 }
 
+blink_standalone_mouse_button_t CApiMouseButtonFromRuntimeButton(
+    html_css_renderer::MouseInputButton button) {
+  switch (button) {
+    case html_css_renderer::MouseInputButton::kLeft:
+      return BLINK_STANDALONE_MOUSE_BUTTON_LEFT;
+    case html_css_renderer::MouseInputButton::kMiddle:
+      return BLINK_STANDALONE_MOUSE_BUTTON_MIDDLE;
+    case html_css_renderer::MouseInputButton::kRight:
+      return BLINK_STANDALONE_MOUSE_BUTTON_RIGHT;
+    case html_css_renderer::MouseInputButton::kNone:
+      return BLINK_STANDALONE_MOUSE_BUTTON_NONE;
+  }
+  return BLINK_STANDALONE_MOUSE_BUTTON_NONE;
+}
+
+blink_standalone_key_t CApiKeyFromRuntimeKey(
+    html_css_renderer::KeyboardInputKey key) {
+  switch (key) {
+    case html_css_renderer::KeyboardInputKey::kBackspace:
+      return BLINK_STANDALONE_KEY_BACKSPACE;
+    case html_css_renderer::KeyboardInputKey::kTab:
+      return BLINK_STANDALONE_KEY_TAB;
+    case html_css_renderer::KeyboardInputKey::kEnter:
+      return BLINK_STANDALONE_KEY_ENTER;
+    case html_css_renderer::KeyboardInputKey::kDelete:
+      return BLINK_STANDALONE_KEY_DELETE;
+    case html_css_renderer::KeyboardInputKey::kUnknown:
+      return BLINK_STANDALONE_KEY_UNKNOWN;
+  }
+  return BLINK_STANDALONE_KEY_UNKNOWN;
+}
+
+const char* CApiStatusName(blink_standalone_status_code_t status) {
+  switch (status) {
+    case BLINK_STANDALONE_STATUS_OK:
+      return "ok";
+    case BLINK_STANDALONE_STATUS_INVALID_ARGUMENT:
+      return "invalid_argument";
+    case BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED:
+      return "initialization_failed";
+    case BLINK_STANDALONE_STATUS_RENDER_FAILED:
+      return "render_failed";
+    case BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED:
+      return "no_script_rejected";
+  }
+  return "unknown";
+}
+
 bool IsDirectoryNavigationKeyDownEventForCompositorViewer(
     const SDL_Event& event) {
   return event.type == SDL_EVENT_KEY_DOWN &&
@@ -545,6 +598,88 @@ void AccumulateWheelInput(std::optional<html_css_renderer::WheelInput>* wheel,
     return;
   }
   *wheel = html_css_renderer::WheelInput{position, delta};
+}
+
+std::string HtmlWithInlineStylesForCompositorViewer(
+    const std::string& html,
+    const std::vector<html_css_renderer::Stylesheet>& stylesheets) {
+  if (stylesheets.empty()) {
+    return html;
+  }
+  std::ostringstream style_markup;
+  for (const html_css_renderer::Stylesheet& stylesheet : stylesheets) {
+    style_markup << "<style data-standalone-source=\"";
+    for (char c : stylesheet.id) {
+      if (c == '"')
+        style_markup << "&quot;";
+      else
+        style_markup << c;
+    }
+    style_markup << "\">\n" << stylesheet.css << "\n</style>\n";
+  }
+  std::string combined = html;
+  const std::string lower = LowerAsciiForCompositorViewer(combined);
+  const size_t head_end = lower.find("</head>");
+  if (head_end != std::string::npos) {
+    combined.insert(head_end, style_markup.str());
+    return combined;
+  }
+  const size_t html_start = lower.find("<html");
+  if (html_start != std::string::npos) {
+    const size_t html_tag_end = lower.find('>', html_start);
+    if (html_tag_end != std::string::npos) {
+      combined.insert(html_tag_end + 1,
+                      std::string("<head>\n") + style_markup.str() +
+                          "</head>\n");
+      return combined;
+    }
+  }
+  return style_markup.str() + combined;
+}
+
+std::optional<std::vector<uint8_t>> EncodeRawFramePngForCompositorViewer(
+    const blink_standalone_frame_output_t& output) {
+  if (!output.pixels || output.width <= 0 || output.height <= 0 ||
+      output.stride <= 0) {
+    return std::nullopt;
+  }
+  SkColorType color_type = kUnknown_SkColorType;
+  switch (output.pixel_format) {
+    case BLINK_STANDALONE_PIXEL_FORMAT_RGBA8:
+      color_type = kRGBA_8888_SkColorType;
+      break;
+    case BLINK_STANDALONE_PIXEL_FORMAT_BGRA8:
+      color_type = kBGRA_8888_SkColorType;
+      break;
+    case BLINK_STANDALONE_PIXEL_FORMAT_NONE:
+      return std::nullopt;
+  }
+  const SkImageInfo info = SkImageInfo::Make(
+      output.width, output.height, color_type,
+      output.premultiplied_alpha ? kPremul_SkAlphaType
+                                 : kUnpremul_SkAlphaType);
+  const SkPixmap pixmap(info, output.pixels,
+                        static_cast<size_t>(output.stride));
+  SkPngEncoder::Options options;
+  sk_sp<SkData> png = SkPngEncoder::Encode(pixmap, options);
+  if (!png) {
+    return std::nullopt;
+  }
+  const uint8_t* data = static_cast<const uint8_t*>(png->data());
+  return std::vector<uint8_t>(data, data + png->size());
+}
+
+SDL_PixelFormat SdlPixelFormatForCompositorViewer(
+    blink_standalone_pixel_format_t pixel_format) {
+  switch (pixel_format) {
+    case BLINK_STANDALONE_PIXEL_FORMAT_RGBA8:
+      return SDL_PIXELFORMAT_RGBA8888;
+    case BLINK_STANDALONE_PIXEL_FORMAT_BGRA8:
+      return SDL_PIXELFORMAT_BGRA8888;
+    case BLINK_STANDALONE_PIXEL_FORMAT_NONE:
+      return SDL_PIXELFORMAT_UNKNOWN;
+  }
+  return SDL_PIXELFORMAT_UNKNOWN;
 }
 
 void AppendSyntheticSdlClickEventsForCompositorViewer(
@@ -1175,71 +1310,52 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "SDL_StartTextInput failed: %s\n", SDL_GetError());
   }
 
-  SDL_PropertiesID window_properties = SDL_GetWindowProperties(window);
-  void* win32_hwnd = SDL_GetPointerProperty(
-      window_properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-  renderer.viewport = SdlWindowPixelViewport(window);
-  const auto result_collection_for_frame = [&](bool request_png_snapshot) {
-    return (full_frame_diagnostics || !paint_artifact_dump_path.empty() ||
-            request_png_snapshot)
-               ? html_css_renderer::FrameResultCollection::kFull
-               : html_css_renderer::FrameResultCollection::kMinimal;
+  SDL_Renderer* sdl_renderer = SDL_CreateRenderer(window, nullptr);
+  if (!sdl_renderer) {
+    std::fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
+    SDL_StopTextInput(window);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    return 1;
+  }
+
+  struct ViewerCApiRenderer {
+    blink_standalone_renderer_t* renderer = nullptr;
+    blink_standalone_frame_output_t latest_output = {};
+    bool output_valid = false;
+    SDL_Texture* texture = nullptr;
+    int texture_width = 0;
+    int texture_height = 0;
+    blink_standalone_pixel_format_t texture_format =
+        BLINK_STANDALONE_PIXEL_FORMAT_NONE;
+  } c_api;
+
+  auto clear_c_api_output = [&]() {
+    if (c_api.renderer && c_api.output_valid) {
+      blink_standalone_renderer_release_latest_output(c_api.renderer);
+    }
+    c_api.latest_output = blink_standalone_frame_output_t{};
+    c_api.output_valid = false;
   };
 
-  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime;
-  html_css_renderer::NativePresentationResult presentation;
-  html_css_renderer::FrameInput input;
-  html_css_renderer::CompositorFrameResult result;
-  uint64_t frame_count = 0;
-  bool screenshot_written = false;
-  auto write_current_paint_artifact_dump = [&]() {
-    if (paint_artifact_dump_path.empty()) {
-      return;
+  auto destroy_c_api_renderer = [&]() {
+    clear_c_api_output();
+    if (c_api.renderer) {
+      blink_standalone_renderer_destroy(c_api.renderer);
+      c_api.renderer = nullptr;
+      QuiesceStandaloneViewerAfterDocumentTeardown();
     }
-    std::ofstream audit_file(paint_artifact_dump_path, std::ios::binary);
-    if (audit_file)
-      audit_file << result.raw_paint_artifact_audit_json << "\n";
-  };
-  auto write_current_screenshot = [&]() {
-    if (!result.png_snapshot_available) {
-      std::fprintf(stderr, "screenshot capture failed: %s\n",
-                   result.png_snapshot_failure.empty()
-                       ? "Viz CopyOutput PNG snapshot was not produced"
-                       : result.png_snapshot_failure.c_str());
-      return false;
-    }
-    if (!WriteBinaryFileForCompositorViewer(screenshot_out,
-                                            result.png_snapshot_bytes)) {
-      return false;
-    }
-    std::fprintf(stderr, "wrote compositor screenshot: %s\n",
-                 fs::absolute(fs::path(screenshot_out)).string().c_str());
-    screenshot_written = true;
-    return true;
   };
 
-  auto frame_and_present_succeeded =
-      [](const html_css_renderer::CompositorFrameResult& frame_result,
-         const html_css_renderer::NativePresentationResult& present_result) {
-        return frame_result.paint_clean && frame_result.root_layer_available &&
-               frame_result.cc_frame_sink_bound &&
-               frame_result.gpu_context_created &&
-               frame_result.raster_context_created &&
-               frame_result.shared_image_interface_available &&
-               frame_result.compositor_frame_submitted &&
-               present_result.vulkan_presented &&
-               present_result.compositor_frame_submitted &&
-               present_result.viz_display_created &&
-               present_result.skia_renderer_gpu_path_reached;
-      };
-  const auto include_presentation_diagnostics =
-      [&](const html_css_renderer::NativePresentationResult& present_result) {
-        return full_frame_diagnostics || !present_result.failure_reason.empty() ||
-               !present_result.vulkan_presented ||
-               !present_result.compositor_frame_submitted ||
-               !present_result.viz_display_created ||
-               !present_result.skia_renderer_gpu_path_reached;
-      };
+  auto destroy_texture = [&]() {
+    if (c_api.texture) {
+      SDL_DestroyTexture(c_api.texture);
+      c_api.texture = nullptr;
+    }
+    c_api.texture_width = 0;
+    c_api.texture_height = 0;
+    c_api.texture_format = BLINK_STANDALONE_PIXEL_FORMAT_NONE;
+  };
 
   auto current_document_label = [&]() {
     if (inline_html_input)
@@ -1259,24 +1375,175 @@ int main(int argc, char** argv) {
   };
 
   auto update_window_title = [&]() {
-    std::string title = "Chromium Vulkan host: ";
-    title += presentation.vulkan_presented ? "presented " : "presentation blocked ";
+    std::string title = "Blink standalone C API SDL host: ";
+    title += c_api.output_valid ? "presented " : "waiting ";
     title += current_document_label();
     SDL_SetWindowTitle(window, title.c_str());
   };
 
-  uint64_t document_start_ms = SDL_GetTicks();
+  uint64_t frame_count = 0;
+  bool screenshot_written = false;
   int document_load_error_code = 1;
+  uint64_t document_start_ms = SDL_GetTicks();
   std::string current_document_html;
   std::vector<html_css_renderer::Stylesheet> current_document_stylesheets;
+  std::string current_resource_root;
+  std::string current_resource_base_path;
+  html_css_renderer::Size current_viewport = SdlWindowPixelViewport(window);
+
+  auto present_latest_output = [&](const char* reason) {
+    clear_c_api_output();
+    const blink_standalone_status_code_t output_status =
+        blink_standalone_renderer_get_latest_output(c_api.renderer,
+                                                    &c_api.latest_output);
+    if (output_status != BLINK_STANDALONE_STATUS_OK ||
+        !c_api.latest_output.pixels) {
+      std::fprintf(stderr, "C API output failed after %s: %s (%s)\n",
+                   reason ? reason : "frame", CApiStatusName(output_status),
+                   blink_standalone_renderer_last_error(c_api.renderer));
+      return false;
+    }
+    const SDL_PixelFormat sdl_format =
+        SdlPixelFormatForCompositorViewer(c_api.latest_output.pixel_format);
+    if (sdl_format == SDL_PIXELFORMAT_UNKNOWN) {
+      std::fprintf(stderr, "unsupported C API pixel format: %d\n",
+                   static_cast<int>(c_api.latest_output.pixel_format));
+      return false;
+    }
+    if (!c_api.texture || c_api.texture_width != c_api.latest_output.width ||
+        c_api.texture_height != c_api.latest_output.height ||
+        c_api.texture_format != c_api.latest_output.pixel_format) {
+      destroy_texture();
+      c_api.texture = SDL_CreateTexture(
+          sdl_renderer, sdl_format, SDL_TEXTUREACCESS_STREAMING,
+          c_api.latest_output.width, c_api.latest_output.height);
+      if (!c_api.texture) {
+        std::fprintf(stderr, "SDL_CreateTexture failed: %s\n", SDL_GetError());
+        return false;
+      }
+      c_api.texture_width = c_api.latest_output.width;
+      c_api.texture_height = c_api.latest_output.height;
+      c_api.texture_format = c_api.latest_output.pixel_format;
+    }
+    if (!SDL_UpdateTexture(c_api.texture, nullptr, c_api.latest_output.pixels,
+                           c_api.latest_output.stride)) {
+      std::fprintf(stderr, "SDL_UpdateTexture failed: %s\n", SDL_GetError());
+      return false;
+    }
+    SDL_SetRenderDrawColor(sdl_renderer, 255, 255, 255, 255);
+    SDL_RenderClear(sdl_renderer);
+    SDL_RenderTexture(sdl_renderer, c_api.texture, nullptr, nullptr);
+    SDL_RenderPresent(sdl_renderer);
+    c_api.output_valid = true;
+    return true;
+  };
+
+  auto write_current_paint_artifact_dump = [&]() {
+    if (!paint_artifact_dump_path.empty()) {
+      std::fprintf(stderr,
+                   "paint artifact dump is unavailable through the public C API viewer path\n");
+    }
+  };
+
+  auto write_current_screenshot = [&]() {
+    if (!c_api.output_valid) {
+      std::fprintf(stderr, "screenshot capture failed: no C API raw frame output\n");
+      return false;
+    }
+    std::optional<std::vector<uint8_t>> png =
+        EncodeRawFramePngForCompositorViewer(c_api.latest_output);
+    if (!png) {
+      std::fprintf(stderr, "screenshot capture failed: raw frame PNG encoding failed\n");
+      return false;
+    }
+    if (!WriteBinaryFileForCompositorViewer(screenshot_out, *png)) {
+      return false;
+    }
+    std::fprintf(stderr, "wrote compositor screenshot: %s\n",
+                 fs::absolute(fs::path(screenshot_out)).string().c_str());
+    screenshot_written = true;
+    return true;
+  };
+
+  auto print_c_api_frame_status = [&](const char* reason) {
+    const size_t hit_count = c_api.renderer
+                                 ? blink_standalone_renderer_hit_metadata_count(
+                                       c_api.renderer)
+                                 : 0;
+    std::fprintf(stderr,
+                 "frame=%llu reason=%s raw_output=%dx%d stride=%d bytes=%zu "
+                 "dirty=%zu hits=%zu begin_frame=%d\n",
+                 static_cast<unsigned long long>(frame_count),
+                 reason ? reason : "unknown", c_api.latest_output.width,
+                 c_api.latest_output.height, c_api.latest_output.stride,
+                 c_api.latest_output.pixel_count,
+                 c_api.latest_output.dirty_rect_count, hit_count,
+                 c_api.renderer
+                     ? blink_standalone_renderer_needs_begin_frame(c_api.renderer)
+                     : 0);
+  };
+
+  auto advance_c_api_frame = [&](const char* reason, double timeline_seconds) {
+    const blink_standalone_status_code_t status =
+        blink_standalone_renderer_advance_frame(c_api.renderer,
+                                                timeline_seconds);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr, "C API frame failed for %s: %s (%s)\n",
+                   reason ? reason : "frame", CApiStatusName(status),
+                   blink_standalone_renderer_last_error(c_api.renderer));
+      return false;
+    }
+    ++frame_count;
+    if (!present_latest_output(reason)) {
+      return false;
+    }
+    print_c_api_frame_status(reason);
+    write_current_paint_artifact_dump();
+    update_window_title();
+    return true;
+  };
+
+  auto create_c_api_renderer_for_viewport =
+      [&](html_css_renderer::Size viewport) {
+    destroy_c_api_renderer();
+    current_viewport = viewport;
+    blink_standalone_renderer_config_t config = {};
+    config.width = std::max(1, static_cast<int>(current_viewport.width));
+    config.height = std::max(1, static_cast<int>(current_viewport.height));
+    config.device_scale_factor = renderer.device_scale_factor;
+    const blink_standalone_status_code_t create_status =
+        blink_standalone_renderer_create(&config, &c_api.renderer);
+    if (create_status != BLINK_STANDALONE_STATUS_OK || !c_api.renderer) {
+      std::fprintf(stderr, "failed to create C API renderer: %s\n",
+                   CApiStatusName(create_status));
+      return false;
+    }
+    return true;
+  };
+  auto create_c_api_renderer = [&]() {
+    return create_c_api_renderer_for_viewport(SdlWindowPixelViewport(window));
+  };
+
+  auto set_current_document_on_c_api_renderer = [&]() {
+    const std::string html_for_api = HtmlWithInlineStylesForCompositorViewer(
+        current_document_html, current_document_stylesheets);
+    const blink_standalone_status_code_t document_status =
+        blink_standalone_renderer_set_document_html(
+            c_api.renderer, html_for_api.c_str(), current_resource_root.c_str(),
+            current_resource_base_path.c_str());
+    if (document_status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr, "failed to set C API document: %s (%s)\n",
+                   CApiStatusName(document_status),
+                   blink_standalone_renderer_last_error(c_api.renderer));
+      return false;
+    }
+    return true;
+  };
+
   auto load_current_document = [&](const char* reason,
                                    bool request_png_snapshot,
                                    bool force_document_reload = false) {
     document_load_error_code = 1;
-    if (runtime) {
-      runtime.reset();
-      QuiesceStandaloneViewerAfterDocumentTeardown();
-    }
     html_css_renderer::RendererCreateInfo document_renderer = renderer;
     document_renderer.viewport = SdlWindowPixelViewport(window);
     std::string effective_resource_root = resource_root;
@@ -1296,77 +1563,32 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "loaded HTML file: %s\n", loaded_html_file.c_str());
     }
 
-    if (!effective_resource_root.empty()) {
-      html_css_renderer::SetStandaloneResourceProviderResourceRoot(
-          effective_resource_root);
-    }
-    if (!effective_resource_base_path.empty()) {
-      html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
-          effective_resource_base_path);
-    }
     current_document_html = document_renderer.html;
     current_document_stylesheets = document_renderer.stylesheets;
+    current_resource_root = effective_resource_root;
+    current_resource_base_path = effective_resource_base_path;
 
-    html_css_renderer::CompositorRuntimeCreateInfo create_info;
-    create_info.renderer = std::move(document_renderer);
-    create_info.enable_paint_artifact_audit = !paint_artifact_dump_path.empty();
-    create_info.trace_stages = trace_stages;
-    runtime =
-        html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
-    std::vector<std::string> init_diagnostics;
-    if (!runtime || !runtime->Initialize(&init_diagnostics)) {
-      std::fprintf(stderr, "failed to initialize Chromium compositor runtime\n");
+    if (!create_c_api_renderer() || !set_current_document_on_c_api_renderer()) {
       document_load_error_code = 1;
       return false;
     }
-    for (const std::string& diagnostic : init_diagnostics)
-      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
-
-    html_css_renderer::NativeWindowConfig native_window;
-    native_window.win32_hwnd = win32_hwnd;
-    native_window.viewport = SdlWindowPixelViewport(window);
-    presentation = runtime->InitializeNativeWindow(native_window);
-    PrintPresentationStatus("initialize", presentation);
-
-    input = html_css_renderer::FrameInput();
-    input.viewport = native_window.viewport;
-    input.request_png_snapshot = request_png_snapshot;
-    input.result_collection =
-        result_collection_for_frame(input.request_png_snapshot);
-    result = runtime->AdvanceFrame(input);
-    for (const std::string& diagnostic : result.diagnostics)
-      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
-    write_current_paint_artifact_dump();
-
-    input.scroll_offsets_by_element_id =
-        result.successor_snapshot.scroll_offsets_by_element_id;
-    input.viewport = result.successor_snapshot.viewport;
-    input.request_png_snapshot = false;
-    input.wheel = std::nullopt;
-    input.mouse_events.clear();
-    input.pointers.clear();
-    input.keyboard_events.clear();
-
-    ++frame_count;
-    PrintFrameStatus(reason, frame_count, result);
-    presentation = runtime->PresentToNativeWindow(result);
-    PrintPresentationStatus(reason, presentation,
-                            include_presentation_diagnostics(presentation));
     document_start_ms = SDL_GetTicks();
-    update_window_title();
-    if (request_png_snapshot && result.png_snapshot_requested) {
-      if (!write_current_screenshot()) {
-        document_load_error_code = 3;
-        return false;
-      }
+    if (!advance_c_api_frame(reason, 0.0)) {
+      document_load_error_code = 3;
+      return false;
     }
-    QuiesceStandaloneViewerAfterDocumentTeardown();
+    if (request_png_snapshot && !write_current_screenshot()) {
+      document_load_error_code = 3;
+      return false;
+    }
     return true;
   };
 
   if (!load_current_document(
           "initial", !screenshot_out.empty() && screenshot_after_ms <= 0)) {
-    runtime.reset();
+    destroy_c_api_renderer();
+    destroy_texture();
+    SDL_DestroyRenderer(sdl_renderer);
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -1383,8 +1605,7 @@ int main(int argc, char** argv) {
     if (post_reset_navigation_deferrals > 0) {
       --post_reset_navigation_deferrals;
       QuiesceStandaloneViewerAfterDocumentTeardown();
-      std::fprintf(stderr,
-                   "navigation deferred after reset: %s\n",
+      std::fprintf(stderr, "navigation deferred after reset: %s\n",
                    reason ? reason : "unknown");
       return true;
     }
@@ -1398,8 +1619,11 @@ int main(int argc, char** argv) {
   };
 
   auto reset_current_document = [&]() {
-    if (!load_current_document("reset", false, true))
+    if (!create_c_api_renderer_for_viewport(current_viewport) ||
+        !set_current_document_on_c_api_renderer() ||
+        !advance_c_api_frame("reset", 0.0)) {
       return false;
+    }
     post_reset_navigation_deferrals = kNavigationDeferralsAfterReset;
     QuiesceStandaloneViewerAfterDocumentTeardown();
     std::fprintf(stderr, "reset current document state: reloaded current document\n");
@@ -1418,111 +1642,127 @@ int main(int argc, char** argv) {
                                                initial_mouse_y}),
           (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
 
-  auto apply_sdl_mouse_event =
-      [&](const SDL_Event& event, html_css_renderer::FrameInput* next_input,
-          bool* needs_frame) {
-        if (event.type == SDL_EVENT_MOUSE_MOTION) {
-          const html_css_renderer::Point pixel_position =
-              SdlWindowPointToPixelViewport(
-                  window,
-                  html_css_renderer::Point{event.motion.x, event.motion.y});
-          html_css_renderer::PointerState pointer{
-              1,
-              pixel_position,
-              (event.motion.state & SDL_BUTTON_LMASK) != 0};
-          if (!last_sdl_pointer ||
-              !SamePointerState(pointer, *last_sdl_pointer)) {
-            AppendMouseInputEventForCompositorViewer(
-                next_input,
-                html_css_renderer::MouseInputEventType::kMove,
-                pointer.position,
-                pointer.pressed ? html_css_renderer::MouseInputButton::kLeft
-                                : html_css_renderer::MouseInputButton::kNone,
-                pointer.pressed
-                    ? MouseButtonModifierForCompositorViewer(
-                          html_css_renderer::MouseInputButton::kLeft)
-                    : 0,
-                0);
-            last_sdl_pointer = pointer;
-            *needs_frame = true;
-          }
-          return true;
+  auto send_mouse_move = [&](html_css_renderer::Point point, int modifiers) {
+    return blink_standalone_renderer_mouse_move(c_api.renderer, point.x, point.y,
+                                                modifiers) ==
+           BLINK_STANDALONE_STATUS_OK;
+  };
+  auto send_mouse_button = [&](bool down, html_css_renderer::Point point,
+                               html_css_renderer::MouseInputButton button,
+                               int modifiers, int click_count) {
+    const blink_standalone_mouse_button_t c_button =
+        CApiMouseButtonFromRuntimeButton(button);
+    if (down) {
+      return blink_standalone_renderer_mouse_down(c_api.renderer, point.x,
+                                                  point.y, c_button, modifiers,
+                                                  click_count) ==
+             BLINK_STANDALONE_STATUS_OK;
+    }
+    return blink_standalone_renderer_mouse_up(c_api.renderer, point.x, point.y,
+                                              c_button, modifiers,
+                                              click_count) ==
+           BLINK_STANDALONE_STATUS_OK;
+  };
+  auto send_wheel = [&](html_css_renderer::Point point,
+                        html_css_renderer::Point delta) {
+    return blink_standalone_renderer_wheel(c_api.renderer, point.x, point.y,
+                                           delta.x, delta.y) ==
+           BLINK_STANDALONE_STATUS_OK;
+  };
+  auto send_key = [&](bool down, html_css_renderer::KeyboardInputKey key,
+                      int modifiers) {
+    const blink_standalone_key_t c_key = CApiKeyFromRuntimeKey(key);
+    if (c_key == BLINK_STANDALONE_KEY_UNKNOWN) {
+      return false;
+    }
+    if (down) {
+      return blink_standalone_renderer_key_down(c_api.renderer, c_key,
+                                                modifiers) ==
+             BLINK_STANDALONE_STATUS_OK;
+    }
+    return blink_standalone_renderer_key_up(c_api.renderer, c_key, modifiers) ==
+           BLINK_STANDALONE_STATUS_OK;
+  };
+  auto send_text = [&](const std::string& text) {
+    if (text.empty()) {
+      return true;
+    }
+    return blink_standalone_renderer_text_input(c_api.renderer, text.c_str()) ==
+           BLINK_STANDALONE_STATUS_OK;
+  };
+
+  auto apply_sdl_mouse_event = [&](const SDL_Event& event, bool* needs_frame) {
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+      const html_css_renderer::Point pixel_position =
+          SdlWindowPointToPixelViewport(
+              window,
+              html_css_renderer::Point{event.motion.x, event.motion.y});
+      html_css_renderer::PointerState pointer{
+          1, pixel_position, (event.motion.state & SDL_BUTTON_LMASK) != 0};
+      if (!last_sdl_pointer || !SamePointerState(pointer, *last_sdl_pointer)) {
+        if (!send_mouse_move(
+                pixel_position,
+                pointer.pressed ? MouseButtonModifierForCompositorViewer(
+                                      html_css_renderer::MouseInputButton::kLeft)
+                                : 0)) {
+          return false;
         }
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
-            event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-          const html_css_renderer::MouseInputButton button =
-              MouseButtonFromSdlForCompositorViewer(event.button.button);
-          const html_css_renderer::Point pixel_position =
-              SdlWindowPointToPixelViewport(
-                  window,
-                  html_css_renderer::Point{event.button.x, event.button.y});
-          html_css_renderer::PointerState pointer{
-              1,
-              pixel_position,
-              event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
-          if (!last_sdl_pointer ||
-              !SamePointerState(pointer, *last_sdl_pointer)) {
-            AppendMouseInputEventForCompositorViewer(
-                next_input,
-                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
-                    ? html_css_renderer::MouseInputEventType::kDown
-                    : html_css_renderer::MouseInputEventType::kUp,
-                pointer.position, button,
+        last_sdl_pointer = pointer;
+        *needs_frame = true;
+      }
+      return true;
+    }
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+        event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+      const html_css_renderer::MouseInputButton button =
+          MouseButtonFromSdlForCompositorViewer(event.button.button);
+      const html_css_renderer::Point pixel_position =
+          SdlWindowPointToPixelViewport(
+              window,
+              html_css_renderer::Point{event.button.x, event.button.y});
+      html_css_renderer::PointerState pointer{
+          1, pixel_position, event.type == SDL_EVENT_MOUSE_BUTTON_DOWN};
+      if (!last_sdl_pointer || !SamePointerState(pointer, *last_sdl_pointer)) {
+        if (!send_mouse_button(
+                event.type == SDL_EVENT_MOUSE_BUTTON_DOWN, pixel_position,
+                button,
                 event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
                     ? MouseButtonModifierForCompositorViewer(button)
                     : 0,
-                1);
-            last_sdl_pointer = pointer;
-            *needs_frame = true;
-          }
-          return true;
+                1)) {
+          return false;
         }
-        if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-          float mouse_x = 0.0f;
-          float mouse_y = 0.0f;
-          SDL_GetMouseState(&mouse_x, &mouse_y);
-          const html_css_renderer::Point pixel_position =
-              SdlWindowPointToPixelViewport(
-                  window, html_css_renderer::Point{mouse_x, mouse_y});
-          AccumulateWheelInput(
-              &next_input->wheel, pixel_position,
-              html_css_renderer::Point{-event.wheel.x * 48.0f,
-                                       -event.wheel.y * 48.0f});
-          *needs_frame = true;
-          return true;
-        }
+        last_sdl_pointer = pointer;
+        *needs_frame = true;
+      }
+      return true;
+    }
+    if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+      float mouse_x = 0.0f;
+      float mouse_y = 0.0f;
+      SDL_GetMouseState(&mouse_x, &mouse_y);
+      const html_css_renderer::Point pixel_position =
+          SdlWindowPointToPixelViewport(
+              window, html_css_renderer::Point{mouse_x, mouse_y});
+      if (!send_wheel(pixel_position,
+                      html_css_renderer::Point{-event.wheel.x * 48.0f,
+                                               -event.wheel.y * 48.0f})) {
         return false;
-      };
+      }
+      *needs_frame = true;
+      return true;
+    }
+    return false;
+  };
 
-  auto run_update_frame =
-      [&](const char* reason, html_css_renderer::FrameInput next_input,
-          double timeline_seconds) {
-        next_input.delta_time_seconds = 1.0 / 60.0;
-        next_input.timeline_time_seconds = timeline_seconds;
-        next_input.result_collection =
-            result_collection_for_frame(next_input.request_png_snapshot);
-        result = runtime->AdvanceFrame(next_input);
-        next_input.scroll_offsets_by_element_id =
-            result.successor_snapshot.scroll_offsets_by_element_id;
-        next_input.wheel = std::nullopt;
-        next_input.mouse_events.clear();
-        next_input.pointers.clear();
-        next_input.keyboard_events.clear();
-        input = std::move(next_input);
-        ++frame_count;
-        PrintFrameStatus(reason, frame_count, result);
-        write_current_paint_artifact_dump();
-        presentation = runtime->PresentToNativeWindow(result);
-        PrintPresentationStatus(reason, presentation,
-                                include_presentation_diagnostics(presentation));
-        update_window_title();
-        return frame_and_present_succeeded(result, presentation);
-      };
+  auto run_update_frame = [&](const char* reason, double timeline_seconds) {
+    return advance_c_api_frame(reason, timeline_seconds);
+  };
 
   if (synthetic_input_smoke || synthetic_resize || synthetic_wheel_burst ||
       synthetic_navigation_smoke || synthetic_navigation_stress > 0 ||
       !synthetic_click_points.empty()) {
-    bool synthetic_ok = frame_and_present_succeeded(result, presentation);
+    bool synthetic_ok = c_api.output_valid;
     double synthetic_time = 1.0 / 60.0;
     if (synthetic_navigation_smoke) {
       synthetic_ok = navigate_to_file(1, "synthetic_next") && synthetic_ok;
@@ -1547,51 +1787,34 @@ int main(int argc, char** argv) {
         break;
       }
       if (synthetic_input_smoke) {
-        const float x = 32.0f + static_cast<float>((i * 37) % 320);
-        const float y = 32.0f + static_cast<float>((i * 23) % 220);
-        const html_css_renderer::Point point{x, y};
-        html_css_renderer::FrameInput next_input = input;
-        AppendMouseInputEventForCompositorViewer(
-            &next_input, html_css_renderer::MouseInputEventType::kMove, point,
-            html_css_renderer::MouseInputButton::kNone, 0, 0);
-        synthetic_ok =
-            run_update_frame("synthetic_stress_pointer_move",
-                             std::move(next_input), synthetic_time) &&
-            synthetic_ok;
+        const html_css_renderer::Point point{
+            32.0f + static_cast<float>((i * 37) % 320),
+            32.0f + static_cast<float>((i * 23) % 220)};
+        synthetic_ok = send_mouse_move(point, 0) &&
+                       run_update_frame("synthetic_stress_pointer_move",
+                                        synthetic_time) &&
+                       synthetic_ok;
         synthetic_time += 1.0 / 60.0;
-
-        next_input = input;
-        AppendMouseInputEventForCompositorViewer(
-            &next_input, html_css_renderer::MouseInputEventType::kDown, point,
-            html_css_renderer::MouseInputButton::kLeft,
-            MouseButtonModifierForCompositorViewer(
-                html_css_renderer::MouseInputButton::kLeft),
-            1);
-        synthetic_ok =
-            run_update_frame("synthetic_stress_pointer_down",
-                             std::move(next_input), synthetic_time) &&
-            synthetic_ok;
+        synthetic_ok = send_mouse_button(
+                           true, point, html_css_renderer::MouseInputButton::kLeft,
+                           MouseButtonModifierForCompositorViewer(
+                               html_css_renderer::MouseInputButton::kLeft),
+                           1) &&
+                       run_update_frame("synthetic_stress_pointer_down",
+                                        synthetic_time) &&
+                       synthetic_ok;
         synthetic_time += 1.0 / 60.0;
-
-        next_input = input;
-        AppendMouseInputEventForCompositorViewer(
-            &next_input, html_css_renderer::MouseInputEventType::kUp, point,
-            html_css_renderer::MouseInputButton::kLeft, 0, 1);
-        synthetic_ok =
-            run_update_frame("synthetic_stress_pointer_up",
-                             std::move(next_input), synthetic_time) &&
-            synthetic_ok;
+        synthetic_ok = send_mouse_button(
+                           false, point,
+                           html_css_renderer::MouseInputButton::kLeft, 0, 1) &&
+                       run_update_frame("synthetic_stress_pointer_up",
+                                        synthetic_time) &&
+                       synthetic_ok;
         synthetic_time += 1.0 / 60.0;
-
-        next_input = input;
-        next_input.wheel =
-            html_css_renderer::WheelInput{point,
-                                          html_css_renderer::Point{0.0f,
-                                                                   48.0f}};
-        synthetic_ok =
-            run_update_frame("synthetic_stress_wheel", std::move(next_input),
-                             synthetic_time) &&
-            synthetic_ok;
+        synthetic_ok = send_wheel(point, html_css_renderer::Point{0.0f, 48.0f}) &&
+                       run_update_frame("synthetic_stress_wheel",
+                                        synthetic_time) &&
+                       synthetic_ok;
         synthetic_time += 1.0 / 60.0;
         if (!synthetic_ok) {
           break;
@@ -1601,117 +1824,83 @@ int main(int argc, char** argv) {
     if (synthetic_resize) {
       SDL_SetWindowSize(window, static_cast<int>(synthetic_resize->width),
                         static_cast<int>(synthetic_resize->height));
-      html_css_renderer::FrameInput next_input = input;
-      next_input.viewport = SdlWindowPixelViewport(window);
-      const bool capture_resized_screenshot =
-          !screenshot_out.empty() && !screenshot_written;
-      next_input.request_png_snapshot = capture_resized_screenshot;
-      synthetic_ok = run_update_frame("synthetic_resize", std::move(next_input),
-                                      synthetic_time) &&
+      current_viewport = *synthetic_resize;
+      synthetic_ok = create_c_api_renderer_for_viewport(current_viewport) &&
+                     set_current_document_on_c_api_renderer() &&
+                     run_update_frame("synthetic_resize", synthetic_time) &&
                      synthetic_ok;
-      if (capture_resized_screenshot && !write_current_screenshot()) {
+      if (!screenshot_out.empty() && !screenshot_written &&
+          !write_current_screenshot()) {
         synthetic_ok = false;
       }
       synthetic_time += 1.0 / 60.0;
     }
     if (synthetic_wheel_burst) {
-      html_css_renderer::FrameInput next_input = input;
       const html_css_renderer::Point position{32.0f, 32.0f};
-      std::optional<html_css_renderer::WheelInput> wheel;
       for (int i = 0; i < synthetic_wheel_burst->count; ++i) {
-        AccumulateWheelInput(&wheel, position, synthetic_wheel_burst->delta);
+        synthetic_ok = send_wheel(position, synthetic_wheel_burst->delta) &&
+                       synthetic_ok;
       }
-      next_input.wheel = wheel;
-      synthetic_ok = run_update_frame("synthetic_wheel_burst",
-                                      std::move(next_input),
-                                      synthetic_time) &&
+      synthetic_ok = run_update_frame("synthetic_wheel_burst", synthetic_time) &&
                      synthetic_ok;
-      const html_css_renderer::Point scroll =
-          DocumentScrollForCompositorViewer(result);
       std::fprintf(stderr,
                    "synthetic_wheel_burst_result count=%d unit_delta=%.3f,%.3f "
-                   "document_scroll=%.3f,%.3f\n",
+                   "raw_output=%dx%d\n",
                    synthetic_wheel_burst->count,
                    synthetic_wheel_burst->delta.x,
-                   synthetic_wheel_burst->delta.y, scroll.x, scroll.y);
+                   synthetic_wheel_burst->delta.y, c_api.latest_output.width,
+                   c_api.latest_output.height);
       synthetic_time += 1.0 / 60.0;
     }
     for (const html_css_renderer::Point& point : synthetic_click_points) {
-      html_css_renderer::FrameInput next_input = input;
-      AppendMouseInputEventForCompositorViewer(
-          &next_input, html_css_renderer::MouseInputEventType::kMove, point,
-          html_css_renderer::MouseInputButton::kNone, 0, 0);
-      synthetic_ok = run_update_frame("synthetic_click_move",
-                                      std::move(next_input), synthetic_time) &&
+      synthetic_ok = send_mouse_move(point, 0) &&
+                     run_update_frame("synthetic_click_move", synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
-
-      next_input = input;
-      AppendMouseInputEventForCompositorViewer(
-          &next_input, html_css_renderer::MouseInputEventType::kDown, point,
-          html_css_renderer::MouseInputButton::kLeft,
-          MouseButtonModifierForCompositorViewer(
-              html_css_renderer::MouseInputButton::kLeft),
-          1);
-      synthetic_ok = run_update_frame("synthetic_click_down",
-                                      std::move(next_input), synthetic_time) &&
+      synthetic_ok = send_mouse_button(
+                         true, point, html_css_renderer::MouseInputButton::kLeft,
+                         MouseButtonModifierForCompositorViewer(
+                             html_css_renderer::MouseInputButton::kLeft),
+                         1) &&
+                     run_update_frame("synthetic_click_down", synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
-
-      next_input = input;
-      AppendMouseInputEventForCompositorViewer(
-          &next_input, html_css_renderer::MouseInputEventType::kUp, point,
-          html_css_renderer::MouseInputButton::kLeft, 0, 1);
-      synthetic_ok = run_update_frame("synthetic_click_up",
-                                      std::move(next_input), synthetic_time) &&
+      synthetic_ok = send_mouse_button(
+                         false, point,
+                         html_css_renderer::MouseInputButton::kLeft, 0, 1) &&
+                     run_update_frame("synthetic_click_up", synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
     }
     if (synthetic_input_smoke) {
-      html_css_renderer::FrameInput next_input = input;
-      AppendMouseInputEventForCompositorViewer(
-          &next_input, html_css_renderer::MouseInputEventType::kMove,
-          html_css_renderer::Point{32.0f, 32.0f},
-          html_css_renderer::MouseInputButton::kNone, 0, 0);
-      synthetic_ok = run_update_frame("synthetic_pointer_move",
-                                      std::move(next_input), synthetic_time) &&
+      const html_css_renderer::Point point{32.0f, 32.0f};
+      synthetic_ok = send_mouse_move(point, 0) &&
+                     run_update_frame("synthetic_pointer_move", synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
-
-      next_input = input;
-      AppendMouseInputEventForCompositorViewer(
-          &next_input, html_css_renderer::MouseInputEventType::kDown,
-          html_css_renderer::Point{32.0f, 32.0f},
-          html_css_renderer::MouseInputButton::kLeft,
-          MouseButtonModifierForCompositorViewer(
-              html_css_renderer::MouseInputButton::kLeft),
-          1);
-      synthetic_ok = run_update_frame("synthetic_pointer_down",
-                                      std::move(next_input), synthetic_time) &&
+      synthetic_ok = send_mouse_button(
+                         true, point, html_css_renderer::MouseInputButton::kLeft,
+                         MouseButtonModifierForCompositorViewer(
+                             html_css_renderer::MouseInputButton::kLeft),
+                         1) &&
+                     run_update_frame("synthetic_pointer_down", synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
-
-      next_input = input;
-      AppendMouseInputEventForCompositorViewer(
-          &next_input, html_css_renderer::MouseInputEventType::kUp,
-          html_css_renderer::Point{32.0f, 32.0f},
-          html_css_renderer::MouseInputButton::kLeft, 0, 1);
-      synthetic_ok = run_update_frame("synthetic_pointer_up",
-                                      std::move(next_input), synthetic_time) &&
+      synthetic_ok = send_mouse_button(
+                         false, point,
+                         html_css_renderer::MouseInputButton::kLeft, 0, 1) &&
+                     run_update_frame("synthetic_pointer_up", synthetic_time) &&
                      synthetic_ok;
       synthetic_time += 1.0 / 60.0;
-
-      next_input = input;
-      next_input.wheel = html_css_renderer::WheelInput{
-          html_css_renderer::Point{32.0f, 32.0f},
-          html_css_renderer::Point{0.0f, 48.0f}};
-      synthetic_ok = run_update_frame("synthetic_wheel", std::move(next_input),
-                                      synthetic_time) &&
+      synthetic_ok = send_wheel(point, html_css_renderer::Point{0.0f, 48.0f}) &&
+                     run_update_frame("synthetic_wheel", synthetic_time) &&
                      synthetic_ok;
     }
 
     const int exit_code = synthetic_ok ? 0 : 5;
-    runtime.reset();
+    destroy_c_api_renderer();
+    destroy_texture();
+    SDL_DestroyRenderer(sdl_renderer);
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -1745,12 +1934,10 @@ int main(int argc, char** argv) {
   bool running = true;
   while (running) {
     SDL_Event event;
-    bool needs_frame = result.needs_begin_frame;
+    bool needs_frame =
+        blink_standalone_renderer_needs_begin_frame(c_api.renderer) != 0;
     NavigationAction navigation_action = NavigationAction::kNone;
-    html_css_renderer::FrameInput next_input = input;
-    next_input.request_png_snapshot = false;
-    next_input.delta_time_seconds = 1.0 / 60.0;
-    next_input.timeline_time_seconds =
+    double timeline_seconds =
         static_cast<double>(SDL_GetTicks() - document_start_ms) / 1000.0;
 
     auto handle_event = [&](const SDL_Event& event) {
@@ -1758,22 +1945,19 @@ int main(int argc, char** argv) {
           (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE)) {
         running = false;
         return false;
-      } else if (event.type == SDL_EVENT_KEY_DOWN &&
-                 event.key.key == SDLK_F1) {
+      } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F1) {
         navigation_action = NavigationAction::kPrevious;
         return false;
-      } else if (event.type == SDL_EVENT_KEY_DOWN &&
-                 event.key.key == SDLK_F2) {
+      } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F2) {
         navigation_action = NavigationAction::kNext;
         return false;
-      } else if (event.type == SDL_EVENT_KEY_DOWN &&
-                 event.key.key == SDLK_F5) {
+      } else if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F5) {
         navigation_action = NavigationAction::kReset;
         return false;
       } else if (event.type == SDL_EVENT_TEXT_INPUT) {
-        AppendKeyboardTextInputEventForCompositorViewer(
-            &next_input, event.text.text ? event.text.text : "",
-            KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()));
+        if (!send_text(event.text.text ? event.text.text : "")) {
+          return false;
+        }
         needs_frame = true;
         return true;
       } else if (event.type == SDL_EVENT_KEY_DOWN ||
@@ -1781,13 +1965,11 @@ int main(int argc, char** argv) {
         const html_css_renderer::KeyboardInputKey key =
             KeyboardInputKeyFromSdlForCompositorViewer(event.key.key);
         if (key != html_css_renderer::KeyboardInputKey::kUnknown) {
-          AppendKeyboardKeyInputEventForCompositorViewer(
-              &next_input,
-              event.type == SDL_EVENT_KEY_DOWN
-                  ? html_css_renderer::KeyboardInputEventType::kKeyDown
-                  : html_css_renderer::KeyboardInputEventType::kKeyUp,
-              key,
-              KeyboardModifiersFromSdlForCompositorViewer(event.key.mod));
+          if (!send_key(event.type == SDL_EVENT_KEY_DOWN, key,
+                        KeyboardModifiersFromSdlForCompositorViewer(
+                            event.key.mod))) {
+            return false;
+          }
           needs_frame = true;
           return event.type == SDL_EVENT_KEY_DOWN;
         }
@@ -1796,14 +1978,18 @@ int main(int argc, char** argv) {
                  event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
         const html_css_renderer::Size new_viewport =
             SdlWindowPixelViewport(window);
-        const html_css_renderer::Size current_viewport =
-            input.viewport.value_or(result.successor_snapshot.viewport);
         if (!SameViewportSize(new_viewport, current_viewport)) {
-          next_input.viewport = new_viewport;
+          current_viewport = new_viewport;
+          if (!create_c_api_renderer_for_viewport(current_viewport) ||
+              !set_current_document_on_c_api_renderer()) {
+            std::fprintf(stderr,
+                         "C API viewport renderer recreation failed\n");
+            return false;
+          }
           needs_frame = true;
         }
         return false;
-      } else if (apply_sdl_mouse_event(event, &next_input, &needs_frame)) {
+      } else if (apply_sdl_mouse_event(event, &needs_frame)) {
         return needs_frame && (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
                                event.type == SDL_EVENT_MOUSE_BUTTON_UP);
       }
@@ -1835,11 +2021,9 @@ int main(int argc, char** argv) {
             if (pending_event.key.key == SDLK_F5) {
               reset_requested = true;
               navigation_offset = 0;
-            } else if (!reset_requested &&
-                       pending_event.key.key == SDLK_F1) {
+            } else if (!reset_requested && pending_event.key.key == SDLK_F1) {
               --navigation_offset;
-            } else if (!reset_requested &&
-                       pending_event.key.key == SDLK_F2) {
+            } else if (!reset_requested && pending_event.key.key == SDLK_F2) {
               ++navigation_offset;
             }
           }
@@ -1871,20 +2055,19 @@ int main(int argc, char** argv) {
     } else if (!pending_synthetic_sdl_text_inputs.empty()) {
       const std::string text = pending_synthetic_sdl_text_inputs.front();
       pending_synthetic_sdl_text_inputs.pop_front();
-      AppendKeyboardTextInputEventForCompositorViewer(
-          &next_input, text,
-          KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()));
-      needs_frame = true;
-      flush_frame_now = true;
+      if (send_text(text)) {
+        needs_frame = true;
+        flush_frame_now = true;
+      }
     } else if (!pending_synthetic_sdl_key_inputs.empty()) {
       const html_css_renderer::KeyboardInputKey key =
           pending_synthetic_sdl_key_inputs.front();
       pending_synthetic_sdl_key_inputs.pop_front();
-      AppendKeyboardKeyInputEventForCompositorViewer(
-          &next_input, html_css_renderer::KeyboardInputEventType::kKeyDown,
-          key, KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()));
-      needs_frame = true;
-      flush_frame_now = true;
+      if (send_key(true, key,
+                   KeyboardModifiersFromSdlForCompositorViewer(SDL_GetModState()))) {
+        needs_frame = true;
+        flush_frame_now = true;
+      }
     } else if (!needs_frame && !screenshot_due()) {
       int wait_ms = 50;
       const uint64_t now_ms = SDL_GetTicks();
@@ -1930,7 +2113,9 @@ int main(int argc, char** argv) {
         continue;
       }
       if (!navigation_ok) {
-        runtime.reset();
+        destroy_c_api_renderer();
+        destroy_texture();
+        SDL_DestroyRenderer(sdl_renderer);
         SDL_StopTextInput(window);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -1941,38 +2126,18 @@ int main(int argc, char** argv) {
     }
 
     if (screenshot_due()) {
-      next_input.request_png_snapshot = true;
-      next_input.result_collection = result_collection_for_frame(true);
-      next_input.timeline_time_seconds =
-          static_cast<double>(screenshot_after_ms) / 1000.0;
-      needs_frame = true;
+      if (!write_current_screenshot()) {
+        return 3;
+      }
     }
 
     if (needs_frame) {
-      const bool requested_png_snapshot = next_input.request_png_snapshot;
-      next_input.result_collection =
-          result_collection_for_frame(requested_png_snapshot);
-      result = runtime->AdvanceFrame(next_input);
-      next_input.scroll_offsets_by_element_id =
-          result.successor_snapshot.scroll_offsets_by_element_id;
-      next_input.wheel = std::nullopt;
-      next_input.mouse_events.clear();
-      next_input.pointers.clear();
-      next_input.keyboard_events.clear();
-      input = std::move(next_input);
-      ++frame_count;
-      ++advanced_update_frames;
-      PrintFrameStatus("update", frame_count, result);
-      write_current_paint_artifact_dump();
-      presentation = runtime->PresentToNativeWindow(result);
-      PrintPresentationStatus("update", presentation,
-                              include_presentation_diagnostics(presentation));
-      update_window_title();
-      if (requested_png_snapshot) {
-        if (!write_current_screenshot()) {
-          return 3;
-        }
+      timeline_seconds =
+          static_cast<double>(SDL_GetTicks() - document_start_ms) / 1000.0;
+      if (!run_update_frame("update", timeline_seconds)) {
+        return 4;
       }
+      ++advanced_update_frames;
     } else {
       ++idle_no_frame_ticks;
     }
@@ -2012,9 +2177,10 @@ int main(int argc, char** argv) {
                static_cast<unsigned long long>(idle_waits),
                static_cast<unsigned long long>(idle_no_frame_ticks));
 
-  const int exit_code =
-      result.paint_clean && result.root_layer_available ? 0 : 4;
-  runtime.reset();
+  const int exit_code = c_api.output_valid ? 0 : 4;
+  destroy_c_api_renderer();
+  destroy_texture();
+  SDL_DestroyRenderer(sdl_renderer);
   SDL_StopTextInput(window);
   SDL_DestroyWindow(window);
   SDL_Quit();
