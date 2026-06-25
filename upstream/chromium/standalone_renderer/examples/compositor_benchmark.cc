@@ -129,7 +129,7 @@ void PrintUsage() {
       "[--trace-stages] [--lifecycle-stop <stage>] "
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
-      "[--c-api-smoke]\n"
+      "[--c-api-smoke] [--c-api-two-instance-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
       "readback is removed from production; --out is intentionally unsupported "
       "until Viz/GPU readback is wired.\n");
@@ -316,6 +316,144 @@ int RunCApiSmoke() {
       "c_api_smoke: ok raw=%dx%d stride=%d bytes=%zu dirty=%zu hits=%zu\n",
       output.width, output.height, output.stride, output.pixel_count,
       output.dirty_rect_count, hit_count);
+  return 0;
+}
+
+uint64_t HashFramePixels(const hcsr_frame_output_t& output) {
+  uint64_t hash = 1469598103934665603ull;
+  for (size_t i = 0; output.pixels && i < output.pixel_count; ++i) {
+    hash ^= static_cast<uint64_t>(output.pixels[i]);
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+bool FrameHasNonUniformPixels(const hcsr_frame_output_t& output) {
+  if (!output.pixels || output.pixel_count < 8) {
+    return false;
+  }
+  const uint8_t first = output.pixels[0];
+  for (size_t i = 1; i < output.pixel_count; ++i) {
+    if (output.pixels[i] != first) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int RunCApiTwoInstanceSmoke() {
+  hcsr_renderer_config_t config_a = {};
+  config_a.width = 180;
+  config_a.height = 120;
+  config_a.device_scale_factor = 1.0f;
+  config_a.no_script_profile = 1;
+  hcsr_renderer_config_t config_b = {};
+  config_b.width = 96;
+  config_b.height = 64;
+  config_b.device_scale_factor = 1.0f;
+  config_b.no_script_profile = 1;
+
+  hcsr_renderer_t* renderer_a = nullptr;
+  hcsr_renderer_t* renderer_b = nullptr;
+  hcsr_status_code_t status = hcsr_renderer_create(&config_a, &renderer_a);
+  if (status != HCSR_STATUS_OK || !renderer_a) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: create A failed status=%d\n",
+                 status);
+    return 1;
+  }
+  status = hcsr_renderer_create(&config_b, &renderer_b);
+  if (status != HCSR_STATUS_OK || !renderer_b) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: create B failed status=%d\n",
+                 status);
+    hcsr_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  const char* html_a =
+      "<!doctype html><style>body{margin:0;background:#123456}.a{width:140px;"
+      "height:80px;background:#e84;color:white}</style><div id='alpha' "
+      "class='a' data-godot-action='alpha'>Alpha</div>";
+  const char* html_b =
+      "<!doctype html><style>body{margin:0;background:#f7eec2}.b{width:70px;"
+      "height:40px;background:#237a57;color:white}</style><div id='beta' "
+      "class='b' data-godot-action='beta'>Beta</div>";
+
+  status = hcsr_renderer_set_document_html(renderer_a, html_a, "", "");
+  if (status == HCSR_STATUS_OK) {
+    status = hcsr_renderer_set_document_html(renderer_b, html_b, "", "");
+  }
+  if (status != HCSR_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: set html failed status=%d A=%s B=%s\n",
+                 status, hcsr_renderer_last_error(renderer_a),
+                 hcsr_renderer_last_error(renderer_b));
+    hcsr_renderer_destroy(renderer_b);
+    hcsr_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  status = hcsr_renderer_advance_frame(renderer_a, 0.0);
+  if (status == HCSR_STATUS_OK) {
+    status = hcsr_renderer_advance_frame(renderer_b, 0.0);
+  }
+  if (status == HCSR_STATUS_OK) {
+    status = hcsr_renderer_advance_frame(renderer_a, 0.016);
+  }
+  if (status != HCSR_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: advance failed status=%d A=%s B=%s\n",
+                 status, hcsr_renderer_last_error(renderer_a),
+                 hcsr_renderer_last_error(renderer_b));
+    hcsr_renderer_destroy(renderer_b);
+    hcsr_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  hcsr_frame_output_t output_a = {};
+  hcsr_frame_output_t output_b = {};
+  const hcsr_status_code_t output_a_status =
+      hcsr_renderer_get_latest_output(renderer_a, &output_a);
+  const hcsr_status_code_t output_b_status =
+      hcsr_renderer_get_latest_output(renderer_b, &output_b);
+  const uint64_t hash_a = HashFramePixels(output_a);
+  const uint64_t hash_b = HashFramePixels(output_b);
+  const bool ok =
+      output_a_status == HCSR_STATUS_OK && output_b_status == HCSR_STATUS_OK &&
+      output_a.width == 180 && output_a.height == 120 && output_b.width == 96 &&
+      output_b.height == 64 && output_a.pixel_count > 0 &&
+      output_b.pixel_count > 0 && FrameHasNonUniformPixels(output_a) &&
+      FrameHasNonUniformPixels(output_b) && hash_a != hash_b;
+  if (!ok) {
+    std::fprintf(
+        stderr,
+        "c_api_two_instance_smoke: failed A_status=%d A=%dx%d bytes=%zu "
+        "hash=%llu hits=%zu B_status=%d B=%dx%d bytes=%zu hash=%llu hits=%zu "
+        "Aerr=%s Berr=%s\n",
+        output_a_status, output_a.width, output_a.height, output_a.pixel_count,
+        static_cast<unsigned long long>(hash_a),
+        hcsr_renderer_hit_metadata_count(renderer_a), output_b_status,
+        output_b.width, output_b.height, output_b.pixel_count,
+        static_cast<unsigned long long>(hash_b),
+        hcsr_renderer_hit_metadata_count(renderer_b),
+        hcsr_renderer_last_error(renderer_a), hcsr_renderer_last_error(renderer_b));
+    hcsr_renderer_destroy(renderer_b);
+    hcsr_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  std::printf(
+      "c_api_two_instance_smoke: ok A=%dx%d hash=%llu hits=%zu B=%dx%d "
+      "hash=%llu hits=%zu\n",
+      output_a.width, output_a.height, static_cast<unsigned long long>(hash_a),
+      hcsr_renderer_hit_metadata_count(renderer_a), output_b.width,
+      output_b.height, static_cast<unsigned long long>(hash_b),
+      hcsr_renderer_hit_metadata_count(renderer_b));
+  hcsr_renderer_release_latest_output(renderer_a);
+  hcsr_renderer_release_latest_output(renderer_b);
+  hcsr_renderer_destroy(renderer_b);
+  hcsr_renderer_destroy(renderer_a);
   return 0;
 }
 
@@ -821,7 +959,8 @@ int main(int argc, char** argv) {
   base::CommandLine::Init(argc, argv);
   bool c_api_smoke_requested = false;
   for (int i = 1; i < argc; ++i) {
-    if (std::string(argv[i]) == "--c-api-smoke") {
+    const std::string arg = argv[i];
+    if (arg == "--c-api-smoke" || arg == "--c-api-two-instance-smoke") {
       c_api_smoke_requested = true;
       break;
     }
@@ -849,6 +988,7 @@ int main(int argc, char** argv) {
   bool unsupported_out_requested = false;
   bool cc_scheduler_probe = false;
   bool c_api_smoke = false;
+  bool c_api_two_instance_smoke = false;
   int warm_iterations = 0;
   std::vector<std::string> warm_scenarios;
   html_css_renderer::FrameResultCollection result_collection =
@@ -948,6 +1088,8 @@ int main(int argc, char** argv) {
       cc_scheduler_probe = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
+    } else if (arg == "--c-api-two-instance-smoke") {
+      c_api_two_instance_smoke = true;
     } else if (arg == "--lifecycle-stop") {
       const char* value = next_value();
       if (!value) {
@@ -1053,6 +1195,10 @@ int main(int argc, char** argv) {
 
   if (c_api_smoke) {
     return RunCApiSmoke();
+  }
+
+  if (c_api_two_instance_smoke) {
+    return RunCApiTwoInstanceSmoke();
   }
 
   if (renderer.html.empty()) {

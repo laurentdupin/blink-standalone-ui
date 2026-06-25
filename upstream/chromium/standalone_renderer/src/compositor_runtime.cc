@@ -5,6 +5,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -22,6 +23,11 @@
 #include "html_css_renderer/vulkan_window_host.h"
 
 namespace blink::standalone_renderer_probe {
+uint64_t StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeSetCurrentInstanceForStandaloneRenderer(
+    uint64_t instance_id);
+void StandaloneBlinkLiveFrameBridgeDestroyInstanceForStandaloneRenderer(
+    uint64_t instance_id);
 void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
                                                                     int height);
 void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
@@ -723,6 +729,29 @@ std::string SerializeElementAttributes(
   return out.str();
 }
 
+class ScopedStandaloneBridgeInstance {
+ public:
+  explicit ScopedStandaloneBridgeInstance(uint64_t instance_id)
+      : instance_id_(instance_id) {
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetCurrentInstanceForStandaloneRenderer(
+            instance_id_);
+  }
+
+  ScopedStandaloneBridgeInstance(const ScopedStandaloneBridgeInstance&) =
+      delete;
+  ScopedStandaloneBridgeInstance& operator=(
+      const ScopedStandaloneBridgeInstance&) = delete;
+
+  ~ScopedStandaloneBridgeInstance() {
+    ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeSetCurrentInstanceForStandaloneRenderer(0);
+  }
+
+ private:
+  uint64_t instance_id_ = 0;
+};
+
 class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime {
  public:
   explicit StandaloneCompositorRuntimeImpl(CompositorRuntimeCreateInfo create_info)
@@ -730,7 +759,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         trace_stages_(create_info.trace_stages),
         no_script_profile_(create_info.no_script_profile ||
                            create_info.renderer.no_script_profile),
-        lifecycle_stop_(std::move(create_info.lifecycle_stop)) {
+        lifecycle_stop_(std::move(create_info.lifecycle_stop)),
+        bridge_instance_id_(
+            ::blink::standalone_renderer_probe::
+                StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer()) {
     snapshot_.html = create_info.renderer.html;
     snapshot_.stylesheets = create_info.renderer.stylesheets;
     snapshot_.viewport = create_info.renderer.viewport;
@@ -739,12 +771,15 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   }
 
   ~StandaloneCompositorRuntimeImpl() override {
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     ::blink::standalone_renderer_probe::
-        StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+        StandaloneBlinkLiveFrameBridgeDestroyInstanceForStandaloneRenderer(
+            bridge_instance_id_);
   }
 
   bool Initialize(std::vector<std::string>* diagnostics) override {
     namespace probe = ::blink::standalone_renderer_probe;
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     EnsureStandaloneDiscardableMemoryAllocator();
     probe::StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
         audit_enabled_ ? 1 : 0);
@@ -773,6 +808,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
 
   NativePresentationResult InitializeNativeWindow(
       const NativeWindowConfig& config) override {
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     native_window_config_ = config;
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
@@ -785,6 +821,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
 
   CompositorFrameResult AdvanceFrame(const FrameInput& input) override {
     namespace probe = ::blink::standalone_renderer_probe;
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     if (!NeedsFrameForInput(input))
       return MakeSkippedFrameResult(input);
 
@@ -1424,6 +1461,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   std::unique_ptr<VulkanWindowHost> vulkan_window_host_;
   std::string last_probe_html_;
   std::optional<CompositorFrameResult> last_frame_result_;
+  uint64_t bridge_instance_id_ = 0;
 };
 
 }  // namespace

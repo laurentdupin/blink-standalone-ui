@@ -2936,9 +2936,42 @@ bool RectsMatchForStandaloneRenderer(const gfx::Rect& a, const gfx::Rect& b) {
          a.height() == b.height();
 }
 
-LiveFramePaintProbeCache& ProbeCache() {
+std::unordered_map<uint64_t, std::unique_ptr<LiveFramePaintProbeCache>>&
+ProbeCachesByInstance() {
+  static auto* caches =
+      new std::unordered_map<uint64_t, std::unique_ptr<LiveFramePaintProbeCache>>();
+  return *caches;
+}
+
+uint64_t& CurrentProbeInstanceId() {
+  static thread_local uint64_t instance_id = 0;
+  return instance_id;
+}
+
+uint64_t& NextProbeInstanceId() {
+  static uint64_t* next_id = new uint64_t(1);
+  return *next_id;
+}
+
+LiveFramePaintProbeCache& DefaultProbeCache() {
   static LiveFramePaintProbeCache* cache = new LiveFramePaintProbeCache();
   return *cache;
+}
+
+LiveFramePaintProbeCache& ProbeCache() {
+  const uint64_t instance_id = CurrentProbeInstanceId();
+  if (!instance_id) {
+    return DefaultProbeCache();
+  }
+  auto& caches = ProbeCachesByInstance();
+  auto it = caches.find(instance_id);
+  if (it == caches.end()) {
+    it = caches
+             .emplace(instance_id,
+                      std::make_unique<LiveFramePaintProbeCache>())
+             .first;
+  }
+  return *it->second;
 }
 
 void RunStandaloneMainThreadTasksForNavigationReset() {
@@ -2999,6 +3032,24 @@ void ResetStandaloneLiveDocumentForFullHtmlReplacement(
   CollectStandaloneBlinkGarbageForNavigationReset();
   RunStandaloneMainThreadTasksForNavigationReset();
   ClearStandaloneFrameDiagnosticState(cache);
+}
+
+void DestroyProbeCacheInstance(uint64_t instance_id) {
+  if (!instance_id) {
+    return;
+  }
+  auto& caches = ProbeCachesByInstance();
+  auto it = caches.find(instance_id);
+  if (it == caches.end()) {
+    return;
+  }
+  const uint64_t previous_instance_id = CurrentProbeInstanceId();
+  CurrentProbeInstanceId() = instance_id;
+  ResetStandaloneLiveDocumentForFullHtmlReplacement(*it->second);
+  CurrentProbeInstanceId() = previous_instance_id == instance_id
+                                 ? 0
+                                 : previous_instance_id;
+  caches.erase(it);
 }
 
 extern "C" void StandaloneRendererNoteImagePaintIntoRect(
@@ -12961,6 +13012,23 @@ StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
   probe_json =
       RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(width, height);
   return probe_json.c_str();
+}
+
+uint64_t StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer() {
+  const uint64_t instance_id = NextProbeInstanceId()++;
+  ProbeCachesByInstance().emplace(
+      instance_id, std::make_unique<LiveFramePaintProbeCache>());
+  return instance_id;
+}
+
+void StandaloneBlinkLiveFrameBridgeSetCurrentInstanceForStandaloneRenderer(
+    uint64_t instance_id) {
+  CurrentProbeInstanceId() = instance_id;
+}
+
+void StandaloneBlinkLiveFrameBridgeDestroyInstanceForStandaloneRenderer(
+    uint64_t instance_id) {
+  DestroyProbeCacheInstance(instance_id);
 }
 
 void ResetStandaloneStackingPaintProvenanceForProbe() {
