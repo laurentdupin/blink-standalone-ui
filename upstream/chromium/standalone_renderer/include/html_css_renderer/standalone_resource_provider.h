@@ -101,6 +101,9 @@ class StandaloneResourceProvider {
 };
 
 StandaloneResourceProvider& DefaultStandaloneResourceProvider();
+uint64_t CreateStandaloneResourceProviderContext();
+void DestroyStandaloneResourceProviderContext(uint64_t context_id);
+void SetCurrentStandaloneResourceProviderContext(uint64_t context_id);
 void SetStandaloneResourceProviderResourceRoot(std::string root_path);
 std::string GetStandaloneResourceProviderResourceRoot();
 void SetStandaloneResourceProviderDocumentBasePath(std::string base_path);

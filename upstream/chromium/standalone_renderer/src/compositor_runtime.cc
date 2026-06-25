@@ -752,6 +752,26 @@ class ScopedStandaloneBridgeInstance {
   uint64_t instance_id_ = 0;
 };
 
+class ScopedStandaloneResourceProviderContext {
+ public:
+  explicit ScopedStandaloneResourceProviderContext(uint64_t context_id)
+      : context_id_(context_id) {
+    SetCurrentStandaloneResourceProviderContext(context_id_);
+  }
+
+  ScopedStandaloneResourceProviderContext(
+      const ScopedStandaloneResourceProviderContext&) = delete;
+  ScopedStandaloneResourceProviderContext& operator=(
+      const ScopedStandaloneResourceProviderContext&) = delete;
+
+  ~ScopedStandaloneResourceProviderContext() {
+    SetCurrentStandaloneResourceProviderContext(0);
+  }
+
+ private:
+  uint64_t context_id_ = 0;
+};
+
 class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime {
  public:
   explicit StandaloneCompositorRuntimeImpl(CompositorRuntimeCreateInfo create_info)
@@ -760,6 +780,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         no_script_profile_(create_info.no_script_profile ||
                            create_info.renderer.no_script_profile),
         lifecycle_stop_(std::move(create_info.lifecycle_stop)),
+        resource_provider_context_id_(CreateStandaloneResourceProviderContext()),
+        resource_root_(GetStandaloneResourceProviderResourceRoot()),
+        resource_base_path_(GetStandaloneResourceProviderDocumentBasePath()),
         bridge_instance_id_(
             ::blink::standalone_renderer_probe::
                 StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer()) {
@@ -771,15 +794,21 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   }
 
   ~StandaloneCompositorRuntimeImpl() override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeDestroyInstanceForStandaloneRenderer(
             bridge_instance_id_);
+    DestroyStandaloneResourceProviderContext(resource_provider_context_id_);
   }
 
   bool Initialize(std::vector<std::string>* diagnostics) override {
     namespace probe = ::blink::standalone_renderer_probe;
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    ApplyResourceProviderContext();
     EnsureStandaloneDiscardableMemoryAllocator();
     probe::StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRenderer(
         audit_enabled_ ? 1 : 0);
@@ -808,7 +837,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
 
   NativePresentationResult InitializeNativeWindow(
       const NativeWindowConfig& config) override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    ApplyResourceProviderContext();
     native_window_config_ = config;
     ::blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
@@ -821,6 +853,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
 
   CompositorFrameResult AdvanceFrame(const FrameInput& input) override {
     namespace probe = ::blink::standalone_renderer_probe;
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
     ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
     if (!NeedsFrameForInput(input))
       return MakeSkippedFrameResult(input);
@@ -828,6 +862,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     const auto runtime_start = RuntimeClock::now();
     const auto apply_state_start = RuntimeClock::now();
     ApplyInput(input);
+    ApplyResourceProviderContext();
     if (native_window_config_) {
       native_window_config_->viewport = snapshot_.viewport;
       probe::StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
@@ -1111,6 +1146,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         !SameStylesheets(*input.stylesheets_override, snapshot_.stylesheets)) {
       return true;
     }
+    if (input.resource_root && *input.resource_root != resource_root_)
+      return true;
+    if (input.resource_base_path &&
+        *input.resource_base_path != resource_base_path_) {
+      return true;
+    }
     if (!SameStringMap(input.element_attributes_by_id_and_name,
                        snapshot_.element_attributes_by_id_and_name)) {
       return true;
@@ -1177,10 +1218,19 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       snapshot_.html = *input.html_override;
     if (input.stylesheets_override)
       snapshot_.stylesheets = *input.stylesheets_override;
+    if (input.resource_root)
+      resource_root_ = *input.resource_root;
+    if (input.resource_base_path)
+      resource_base_path_ = *input.resource_base_path;
     snapshot_.element_attributes_by_id_and_name =
         input.element_attributes_by_id_and_name;
     snapshot_.scroll_offsets_by_element_id = input.scroll_offsets_by_element_id;
     snapshot_.form_values_by_element_id = input.form_values_by_element_id;
+  }
+
+  void ApplyResourceProviderContext() {
+    SetStandaloneResourceProviderResourceRoot(resource_root_);
+    SetStandaloneResourceProviderDocumentBasePath(resource_base_path_);
   }
 
   static void ImportHitTestEntries(const std::string& probe_html,
@@ -1461,6 +1511,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   std::unique_ptr<VulkanWindowHost> vulkan_window_host_;
   std::string last_probe_html_;
   std::optional<CompositorFrameResult> last_frame_result_;
+  uint64_t resource_provider_context_id_ = 0;
+  std::string resource_root_;
+  std::string resource_base_path_;
   uint64_t bridge_instance_id_ = 0;
 };
 

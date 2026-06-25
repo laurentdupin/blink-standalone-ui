@@ -10,6 +10,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 #if defined(_WIN32)
 #include <objbase.h>
@@ -24,10 +25,21 @@
 namespace html_css_renderer {
 namespace {
 
-StandaloneResourceProviderDiagnostics& MutableDiagnostics() {
-  static StandaloneResourceProviderDiagnostics* diagnostics =
-      new StandaloneResourceProviderDiagnostics();
-  return *diagnostics;
+struct ResourceProviderContextState {
+  StandaloneResourceProviderDiagnostics diagnostics;
+  std::string resource_root;
+  std::string document_base_path;
+};
+
+ResourceProviderContextState& GlobalContextState() {
+  static ResourceProviderContextState* state = new ResourceProviderContextState();
+  return *state;
+}
+
+std::unordered_map<uint64_t, ResourceProviderContextState>& MutableContexts() {
+  static auto* contexts =
+      new std::unordered_map<uint64_t, ResourceProviderContextState>();
+  return *contexts;
 }
 
 std::mutex& DiagnosticsMutex() {
@@ -35,14 +47,32 @@ std::mutex& DiagnosticsMutex() {
   return *mutex;
 }
 
+uint64_t& NextContextId() {
+  static uint64_t* next_id = new uint64_t(1);
+  return *next_id;
+}
+
+thread_local uint64_t g_current_context_id = 0;
+
+ResourceProviderContextState& CurrentContextStateLocked() {
+  if (g_current_context_id != 0) {
+    auto it = MutableContexts().find(g_current_context_id);
+    if (it != MutableContexts().end())
+      return it->second;
+  }
+  return GlobalContextState();
+}
+
+StandaloneResourceProviderDiagnostics& MutableDiagnostics() {
+  return CurrentContextStateLocked().diagnostics;
+}
+
 std::string& MutableResourceRoot() {
-  static std::string* root = new std::string();
-  return *root;
+  return CurrentContextStateLocked().resource_root;
 }
 
 std::string& MutableDocumentBasePath() {
-  static std::string* base_path = new std::string();
-  return *base_path;
+  return CurrentContextStateLocked().document_base_path;
 }
 
 std::string LowerAscii(std::string value) {
@@ -635,6 +665,29 @@ class DefaultProvider final : public StandaloneResourceProvider {
 StandaloneResourceProvider& DefaultStandaloneResourceProvider() {
   static DefaultProvider* provider = new DefaultProvider();
   return *provider;
+}
+
+uint64_t CreateStandaloneResourceProviderContext() {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  const uint64_t context_id = NextContextId()++;
+  MutableContexts().emplace(context_id, ResourceProviderContextState());
+  return context_id;
+}
+
+void DestroyStandaloneResourceProviderContext(uint64_t context_id) {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  MutableContexts().erase(context_id);
+  if (g_current_context_id == context_id)
+    g_current_context_id = 0;
+}
+
+void SetCurrentStandaloneResourceProviderContext(uint64_t context_id) {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  if (context_id != 0 &&
+      MutableContexts().find(context_id) == MutableContexts().end()) {
+    context_id = 0;
+  }
+  g_current_context_id = context_id;
 }
 
 void SetStandaloneResourceProviderResourceRoot(std::string root_path) {

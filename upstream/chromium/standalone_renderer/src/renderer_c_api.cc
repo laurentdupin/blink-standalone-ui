@@ -346,17 +346,11 @@ extern "C" HCSR_C_API hcsr_status_code_t hcsr_renderer_advance_frame(
     return HCSR_STATUS_INVALID_ARGUMENT;
   }
   renderer->last_error.clear();
-  if (!renderer->resource_root.empty()) {
-    html_css_renderer::SetStandaloneResourceProviderResourceRoot(
-        renderer->resource_root);
-  }
-  if (!renderer->resource_base_path.empty()) {
-    html_css_renderer::SetStandaloneResourceProviderDocumentBasePath(
-        renderer->resource_base_path);
-  }
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
   input.html_override = renderer->html;
+  input.resource_root = renderer->resource_root;
+  input.resource_base_path = renderer->resource_base_path;
   input.timeline_time_seconds = timeline_time_seconds;
   input.request_raw_frame = true;
   input.result_collection = html_css_renderer::FrameResultCollection::kFull;

@@ -355,6 +355,43 @@ bool HasHitId(hcsr_renderer_t* renderer, const char* expected_id) {
   return false;
 }
 
+bool WriteSolidBmp(const std::filesystem::path& path,
+                   uint8_t red,
+                   uint8_t green,
+                   uint8_t blue) {
+  constexpr int kWidth = 8;
+  constexpr int kHeight = 8;
+  constexpr int kBytesPerPixel = 3;
+  constexpr int kRowStride = ((kWidth * kBytesPerPixel + 3) / 4) * 4;
+  constexpr int kPixelBytes = kRowStride * kHeight;
+  constexpr int kFileSize = 54 + kPixelBytes;
+  std::vector<uint8_t> bytes(kFileSize, 0);
+  bytes[0] = 'B';
+  bytes[1] = 'M';
+  bytes[2] = static_cast<uint8_t>(kFileSize);
+  bytes[3] = static_cast<uint8_t>(kFileSize >> 8);
+  bytes[10] = 54;
+  bytes[14] = 40;
+  bytes[18] = static_cast<uint8_t>(kWidth);
+  bytes[22] = static_cast<uint8_t>(kHeight);
+  bytes[26] = 1;
+  bytes[28] = 24;
+  for (int y = 0; y < kHeight; ++y) {
+    for (int x = 0; x < kWidth; ++x) {
+      const int offset = 54 + y * kRowStride + x * kBytesPerPixel;
+      bytes[offset + 0] = blue;
+      bytes[offset + 1] = green;
+      bytes[offset + 2] = red;
+    }
+  }
+  std::ofstream file(path, std::ios::binary);
+  if (!file)
+    return false;
+  file.write(reinterpret_cast<const char*>(bytes.data()),
+             static_cast<std::streamsize>(bytes.size()));
+  return file.good();
+}
+
 int RunCApiTwoInstanceSmoke() {
   hcsr_renderer_config_t config_a = {};
   config_a.width = 180;
@@ -385,18 +422,44 @@ int RunCApiTwoInstanceSmoke() {
     return 1;
   }
 
-  const char* html_a =
-      "<!doctype html><style>body{margin:0;background:#123456}.a{width:140px;"
-      "height:80px;background:#e84;color:white}</style><div id='alpha' "
-      "class='a' data-godot-action='alpha'>Alpha</div>";
-  const char* html_b =
-      "<!doctype html><style>body{margin:0;background:#f7eec2}.b{width:70px;"
-      "height:40px;background:#237a57;color:white}</style><div id='beta' "
-      "class='b' data-godot-action='beta'>Beta</div>";
+  const auto resource_root =
+      std::filesystem::temp_directory_path() /
+      ("blink_standalone_two_instance_resources_" +
+       std::to_string(std::chrono::steady_clock::now()
+                          .time_since_epoch()
+                          .count()));
+  const auto root_a = resource_root / "a";
+  const auto root_b = resource_root / "b";
+  std::error_code fs_error;
+  std::filesystem::create_directories(root_a, fs_error);
+  std::filesystem::create_directories(root_b, fs_error);
+  if (fs_error || !WriteSolidBmp(root_a / "icon.bmp", 232, 68, 68) ||
+      !WriteSolidBmp(root_b / "icon.bmp", 35, 122, 87)) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: failed to create resource roots "
+                 "under %s\n",
+                 resource_root.string().c_str());
+    hcsr_renderer_destroy(renderer_b);
+    hcsr_renderer_destroy(renderer_a);
+    return 1;
+  }
 
-  status = hcsr_renderer_set_document_html(renderer_a, html_a, "", "");
+  const char* html_a =
+      "<!doctype html><style>body{margin:0;background:white}.a{width:64px;"
+      "height:64px;background-image:url(icon.bmp);background-size:64px 64px}"
+      "</style><div id='alpha' class='a' data-godot-action='alpha'>Alpha</div>";
+  const char* html_b =
+      "<!doctype html><style>body{margin:0;background:white}.b{width:48px;"
+      "height:48px;background-image:url(icon.bmp);background-size:48px 48px}"
+      "</style><div id='beta' class='b' data-godot-action='beta'>Beta</div>";
+
+  const std::string root_a_string = root_a.string();
+  const std::string root_b_string = root_b.string();
+  status = hcsr_renderer_set_document_html(
+      renderer_a, html_a, root_a_string.c_str(), root_a_string.c_str());
   if (status == HCSR_STATUS_OK) {
-    status = hcsr_renderer_set_document_html(renderer_b, html_b, "", "");
+    status = hcsr_renderer_set_document_html(
+        renderer_b, html_b, root_b_string.c_str(), root_b_string.c_str());
   }
   if (status != HCSR_STATUS_OK) {
     std::fprintf(stderr,
@@ -409,8 +472,25 @@ int RunCApiTwoInstanceSmoke() {
   }
 
   status = hcsr_renderer_advance_frame(renderer_a, 0.0);
+  hcsr_frame_output_t first_output_a = {};
+  uint64_t first_hash_a = 0;
+  if (status == HCSR_STATUS_OK &&
+      hcsr_renderer_get_latest_output(renderer_a, &first_output_a) ==
+          HCSR_STATUS_OK) {
+    first_hash_a = HashFramePixels(first_output_a);
+    hcsr_renderer_release_latest_output(renderer_a);
+  }
   if (status == HCSR_STATUS_OK) {
     status = hcsr_renderer_advance_frame(renderer_b, 0.0);
+  }
+  const char* html_a_reload =
+      "<!doctype html><!--reload--><style>body{margin:0;background:white}.a{"
+      "width:64px;height:64px;background-image:url(icon.bmp);"
+      "background-size:64px 64px}</style><div id='alpha' class='a' "
+      "data-godot-action='alpha'>Alpha</div>";
+  if (status == HCSR_STATUS_OK) {
+    status = hcsr_renderer_set_document_html(
+        renderer_a, html_a_reload, root_a_string.c_str(), root_a_string.c_str());
   }
   if (status == HCSR_STATUS_OK) {
     status = hcsr_renderer_advance_frame(renderer_a, 0.016);
@@ -438,17 +518,19 @@ int RunCApiTwoInstanceSmoke() {
       output_a.width == 180 && output_a.height == 120 && output_b.width == 96 &&
       output_b.height == 64 && output_a.pixel_count > 0 &&
       output_b.pixel_count > 0 && FrameHasNonUniformPixels(output_a) &&
-      FrameHasNonUniformPixels(output_b) && hash_a != hash_b &&
+      FrameHasNonUniformPixels(output_b) && first_hash_a != 0 &&
+      hash_a == first_hash_a && hash_a != hash_b &&
       HasHitId(renderer_a, "alpha") && !HasHitId(renderer_a, "beta") &&
       HasHitId(renderer_b, "beta") && !HasHitId(renderer_b, "alpha");
   if (!ok) {
     std::fprintf(
         stderr,
         "c_api_two_instance_smoke: failed A_status=%d A=%dx%d bytes=%zu "
-        "hash=%llu hits=%zu B_status=%d B=%dx%d bytes=%zu hash=%llu hits=%zu "
+        "hash=%llu first_hash=%llu hits=%zu B_status=%d B=%dx%d bytes=%zu hash=%llu hits=%zu "
         "Aerr=%s Berr=%s\n",
         output_a_status, output_a.width, output_a.height, output_a.pixel_count,
         static_cast<unsigned long long>(hash_a),
+        static_cast<unsigned long long>(first_hash_a),
         hcsr_renderer_hit_metadata_count(renderer_a), output_b_status,
         output_b.width, output_b.height, output_b.pixel_count,
         static_cast<unsigned long long>(hash_b),

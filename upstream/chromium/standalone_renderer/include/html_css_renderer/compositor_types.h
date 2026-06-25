@@ -141,6 +141,8 @@ struct FrameInput {
   std::optional<Size> viewport;
   std::optional<std::string> html_override;
   std::optional<std::vector<Stylesheet>> stylesheets_override;
+  std::optional<std::string> resource_root;
+  std::optional<std::string> resource_base_path;
   std::unordered_map<std::string, std::string> element_attributes_by_id_and_name;
   std::vector<MouseInputEvent> mouse_events;
   std::vector<PointerState> pointers;
