@@ -1484,6 +1484,7 @@ int main(int argc, char** argv) {
   };
 
   auto advance_c_api_frame = [&](const char* reason, double timeline_seconds) {
+    clear_c_api_output();
     const blink_standalone_status_code_t status =
         blink_standalone_renderer_advance_frame(c_api.renderer,
                                                 timeline_seconds);
@@ -1825,10 +1826,12 @@ int main(int argc, char** argv) {
       SDL_SetWindowSize(window, static_cast<int>(synthetic_resize->width),
                         static_cast<int>(synthetic_resize->height));
       current_viewport = *synthetic_resize;
-      synthetic_ok = create_c_api_renderer_for_viewport(current_viewport) &&
-                     set_current_document_on_c_api_renderer() &&
-                     run_update_frame("synthetic_resize", synthetic_time) &&
-                     synthetic_ok;
+      synthetic_ok =
+          blink_standalone_renderer_set_viewport(
+              c_api.renderer, static_cast<int>(current_viewport.width),
+              static_cast<int>(current_viewport.height),
+              renderer.device_scale_factor) == BLINK_STANDALONE_STATUS_OK &&
+          run_update_frame("synthetic_resize", synthetic_time) && synthetic_ok;
       if (!screenshot_out.empty() && !screenshot_written &&
           !write_current_screenshot()) {
         synthetic_ok = false;
@@ -1980,10 +1983,15 @@ int main(int argc, char** argv) {
             SdlWindowPixelViewport(window);
         if (!SameViewportSize(new_viewport, current_viewport)) {
           current_viewport = new_viewport;
-          if (!create_c_api_renderer_for_viewport(current_viewport) ||
-              !set_current_document_on_c_api_renderer()) {
-            std::fprintf(stderr,
-                         "C API viewport renderer recreation failed\n");
+          const blink_standalone_status_code_t viewport_status =
+              blink_standalone_renderer_set_viewport(
+                  c_api.renderer, static_cast<int>(current_viewport.width),
+                  static_cast<int>(current_viewport.height),
+                  renderer.device_scale_factor);
+          if (viewport_status != BLINK_STANDALONE_STATUS_OK) {
+            std::fprintf(stderr, "C API viewport update failed: %s (%s)\n",
+                         CApiStatusName(viewport_status),
+                         blink_standalone_renderer_last_error(c_api.renderer));
             return false;
           }
           needs_frame = true;

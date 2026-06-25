@@ -131,7 +131,8 @@ void PrintUsage() {
       "[--trace-stages] [--lifecycle-stop <stage>] "
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
-      "[--c-api-smoke] [--c-api-two-instance-smoke] "
+      "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
+      "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
       "readback is removed from production; --out is intentionally unsupported "
@@ -319,6 +320,162 @@ int RunCApiSmoke() {
       "c_api_smoke: ok raw=%dx%d stride=%d bytes=%zu dirty=%zu hits=%zu\n",
       output.width, output.height, output.stride, output.pixel_count,
       output.dirty_rect_count, hit_count);
+  return 0;
+}
+
+int RunCApiViewportResizeSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 320;
+  config.height = 240;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>body{margin:0;font:16px sans-serif}"
+      "#box{width:100vw;height:100vh;background:linear-gradient(90deg,#135,#fa4)}"
+      "label{position:absolute;left:16px;top:16px;background:white;padding:8px}"
+      "</style><div id='box' data-godot-action='box'><label><input "
+      "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: set html failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: initial advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 320 ||
+      output.height != 240 || !output.pixels || output.pixel_count == 0) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: initial raw output invalid "
+                 "status=%d size=%dx%d bytes=%zu error=%s\n",
+                 status, output.width, output.height, output.pixel_count,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_rect_t checkbox_bounds = {};
+  bool saw_checkbox = false;
+  for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer);
+       ++i) {
+    blink_standalone_hit_metadata_t hit = {};
+    if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) !=
+        BLINK_STANDALONE_STATUS_OK) {
+      continue;
+    }
+    const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == "agree") {
+      checkbox_bounds = hit.bounds;
+      saw_checkbox = checkbox_bounds.width > 0.0f &&
+                     checkbox_bounds.height > 0.0f;
+      break;
+    }
+  }
+  if (!saw_checkbox) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: checkbox metadata missing\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  const float checkbox_x = checkbox_bounds.x + checkbox_bounds.width * 0.5f;
+  const float checkbox_y = checkbox_bounds.y + checkbox_bounds.height * 0.5f;
+  blink_standalone_renderer_mouse_move(renderer, checkbox_x, checkbox_y, 0);
+  blink_standalone_renderer_mouse_down(renderer, checkbox_x, checkbox_y,
+                                       BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
+                                       1);
+  blink_standalone_renderer_mouse_up(renderer, checkbox_x, checkbox_y,
+                                     BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  status = blink_standalone_renderer_advance_frame(renderer, 0.016);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: checkbox advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status =
+      blink_standalone_renderer_set_viewport(renderer, 640, 480, 1.0f);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: set viewport failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.032);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: resized advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 640 ||
+      output.height != 480 || !output.pixels || output.pixel_count == 0) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: resized raw output invalid "
+                 "status=%d size=%dx%d bytes=%zu error=%s\n",
+                 status, output.width, output.height, output.pixel_count,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  bool checkbox_still_checked = false;
+  for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer);
+       ++i) {
+    blink_standalone_hit_metadata_t hit = {};
+    if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) !=
+        BLINK_STANDALONE_STATUS_OK) {
+      continue;
+    }
+    const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == "agree" && hit.checked) {
+      checkbox_still_checked = true;
+      break;
+    }
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  if (!checkbox_still_checked) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: checkbox state was not "
+                 "preserved across resize\n");
+    return 1;
+  }
+  std::printf(
+      "c_api_viewport_resize_smoke: ok initial=320x240 resized=%dx%d "
+      "bytes=%zu\n",
+      output.width, output.height, output.pixel_count);
   return 0;
 }
 
@@ -1122,7 +1279,9 @@ int main(int argc, char** argv) {
   bool c_api_smoke_requested = false;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
-    if (arg == "--c-api-smoke" || arg == "--c-api-two-instance-smoke" ||
+    if (arg == "--c-api-smoke" ||
+        arg == "--c-api-viewport-resize-smoke" ||
+        arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
       break;
@@ -1151,6 +1310,7 @@ int main(int argc, char** argv) {
   bool unsupported_out_requested = false;
   bool cc_scheduler_probe = false;
   bool c_api_smoke = false;
+  bool c_api_viewport_resize_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -1252,6 +1412,8 @@ int main(int argc, char** argv) {
       cc_scheduler_probe = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
+    } else if (arg == "--c-api-viewport-resize-smoke") {
+      c_api_viewport_resize_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -1361,6 +1523,10 @@ int main(int argc, char** argv) {
 
   if (c_api_smoke) {
     return RunCApiSmoke();
+  }
+
+  if (c_api_viewport_resize_smoke) {
+    return RunCApiViewportResizeSmoke();
   }
 
   if (c_api_two_instance_smoke) {
