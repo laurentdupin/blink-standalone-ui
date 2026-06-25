@@ -341,6 +341,20 @@ bool FrameHasNonUniformPixels(const hcsr_frame_output_t& output) {
   return false;
 }
 
+bool HasHitId(hcsr_renderer_t* renderer, const char* expected_id) {
+  for (size_t i = 0; i < hcsr_renderer_hit_metadata_count(renderer); ++i) {
+    hcsr_hit_metadata_t hit = {};
+    if (hcsr_renderer_get_hit_metadata(renderer, i, &hit) != HCSR_STATUS_OK) {
+      continue;
+    }
+    const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == expected_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int RunCApiTwoInstanceSmoke() {
   hcsr_renderer_config_t config_a = {};
   config_a.width = 180;
@@ -424,7 +438,9 @@ int RunCApiTwoInstanceSmoke() {
       output_a.width == 180 && output_a.height == 120 && output_b.width == 96 &&
       output_b.height == 64 && output_a.pixel_count > 0 &&
       output_b.pixel_count > 0 && FrameHasNonUniformPixels(output_a) &&
-      FrameHasNonUniformPixels(output_b) && hash_a != hash_b;
+      FrameHasNonUniformPixels(output_b) && hash_a != hash_b &&
+      HasHitId(renderer_a, "alpha") && !HasHitId(renderer_a, "beta") &&
+      HasHitId(renderer_b, "beta") && !HasHitId(renderer_b, "alpha");
   if (!ok) {
     std::fprintf(
         stderr,

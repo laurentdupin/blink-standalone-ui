@@ -4161,6 +4161,34 @@ void Element::ParserSetAttributes(
       html_css_renderer::SetStandaloneCrashBreadcrumb(
           "Element ParserSetAttributes after Append");
     }
+    for (const Attribute& attribute : attribute_vector) {
+      const QualifiedName& name = attribute.GetName();
+      const AtomicString& value = attribute.Value();
+      if (name == html_names::kIdAttr) {
+        AtomicString lowercase_id;
+        if (GetDocument().InQuirksMode() && !value.ContainsNoAsciiUpper()) {
+          lowercase_id = value.ToAsciiLower();
+        }
+        const AtomicString& id_for_style =
+            lowercase_id ? lowercase_id : value;
+        element_data_->SetIdForStyleResolution(id_for_style);
+        if (!id_for_style.empty()) {
+          attribute_or_class_bloom_ |= FilterForString(id_for_style);
+        }
+      } else if (name == html_names::kClassAttr) {
+        if (!value.empty()) {
+          if (GetDocument().InQuirksMode()) {
+            element_data_->SetClassFoldingCase(value);
+          } else {
+            element_data_->SetClass(value);
+          }
+          for (const AtomicString& class_name :
+               element_data_->ClassNames()) {
+            attribute_or_class_bloom_ |= FilterForString(class_name);
+          }
+        }
+      }
+    }
 #else
     if (ElementDataCache* cache = GetDocument().GetElementDataCache()) {
       element_data_ = cache->CachedShareableElementDataWithAttributes(
