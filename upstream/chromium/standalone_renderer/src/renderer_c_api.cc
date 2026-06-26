@@ -44,6 +44,7 @@ void EnsureStandaloneCApiProcessInitialized() {
       static base::AtExitManager* at_exit_manager = new base::AtExitManager();
       (void)at_exit_manager;
     }
+    html_css_renderer::InitializeStandaloneIcu();
     if (!base::FeatureList::GetInstance()) {
       const base::CommandLine* command_line =
           base::CommandLine::ForCurrentProcess();

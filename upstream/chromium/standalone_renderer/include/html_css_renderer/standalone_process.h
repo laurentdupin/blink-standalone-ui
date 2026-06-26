@@ -8,6 +8,7 @@
 namespace html_css_renderer {
 
 void ConfigureStandaloneToolProcess();
+void InitializeStandaloneIcu();
 void SetStandaloneCrashBreadcrumb(const char* stage);
 
 }  // namespace html_css_renderer

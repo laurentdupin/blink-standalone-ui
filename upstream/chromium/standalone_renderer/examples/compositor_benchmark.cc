@@ -869,9 +869,10 @@ int RunCApiSeparatedClickSmoke() {
       return 1;
     }
 
+    const int click_count = click_index + 1;
     blink_standalone_renderer_mouse_down(renderer, x, y,
                                          BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
-                                         1);
+                                         click_count);
     status =
         blink_standalone_renderer_advance_frame(renderer,
                                                 0.032 + click_index * 0.050);
@@ -887,7 +888,7 @@ int RunCApiSeparatedClickSmoke() {
     }
 
     blink_standalone_renderer_mouse_up(
-        renderer, x, y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+        renderer, x, y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, click_count);
     status =
         blink_standalone_renderer_advance_frame(renderer,
                                                 0.048 + click_index * 0.050);
@@ -1989,6 +1990,7 @@ int main(int argc, char** argv) {
   if (!c_api_smoke_requested)
     ApplyStandaloneGpuDefaults();
   base::AtExitManager at_exit_manager;
+  html_css_renderer::InitializeStandaloneIcu();
   InitializeStandaloneFeatureList();
   base::SingleThreadTaskExecutor main_task_executor(
       base::MessagePumpType::DEFAULT, /*is_main_thread=*/true);

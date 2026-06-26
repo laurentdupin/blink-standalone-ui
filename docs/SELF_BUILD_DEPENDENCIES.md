@@ -166,13 +166,14 @@ Chromium libc++ object directory and object-list file, third-party CMake targets
 and Windows system libraries. Godot should link the DLL import library rather
 than the static archive.
 
-At runtime, embedders must deploy the C API DLL together with the ANGLE sidecar
-DLLs from the same build directory:
+At runtime, embedders must deploy the C API DLL together with the ANGLE and ICU
+sidecar files from the same build directory:
 
 ```text
 blink_standalone_renderer_c_api.dll
 libEGL.dll
 libGLESv2.dll
+icudtl.dat
 ```
 
 The equivalent manual configuration shape is:

@@ -814,6 +814,7 @@ int main(int argc, char** argv) {
   base::CommandLine::Init(argc, argv);
   ApplyStandaloneGpuDefaults();
   base::AtExitManager at_exit_manager;
+  html_css_renderer::InitializeStandaloneIcu();
   InitializeStandaloneFeatureList();
   base::SingleThreadTaskExecutor main_task_executor(
       base::MessagePumpType::UI, /*is_main_thread=*/true);

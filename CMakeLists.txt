@@ -244,6 +244,34 @@ set(BLINK_STANDALONE_V8_BUILD_ROOT
   CACHE PATH
   "Generated V8 work copy used by the V8/CppGC compatibility build."
 )
+set(_blink_standalone_default_icu_source_root
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu
+)
+if(EXISTS "${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu/source/common/unicode/uvernum.h")
+  set(_blink_standalone_default_icu_source_root
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu
+  )
+endif()
+set(BLINK_STANDALONE_ICU_SOURCE_ROOT
+  ${_blink_standalone_default_icu_source_root}
+  CACHE PATH
+  "ICU source root used by the standalone renderer. Generated V8 ICU is preferred when present so compiled ICU and icudtl.dat versions match."
+)
+set(BLINK_STANDALONE_ICU_DATA_FILE
+  ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/common/icudtl.dat
+  CACHE FILEPATH
+  "ICU data sidecar matching BLINK_STANDALONE_ICU_SOURCE_ROOT."
+)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_ICU_DATA_FILE}" _blink_standalone_icu_data_file_normalized)
+if(_blink_standalone_icu_data_file_normalized MATCHES "/out/.*/icudtl\\.dat$")
+  message(STATUS "Migrating BLINK_STANDALONE_ICU_DATA_FILE from generated out dir to the matching ICU source data bundle.")
+  set(BLINK_STANDALONE_ICU_DATA_FILE
+    ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/common/icudtl.dat
+    CACHE FILEPATH
+    "ICU data sidecar matching BLINK_STANDALONE_ICU_SOURCE_ROOT."
+    FORCE
+  )
+endif()
 set(BLINK_STANDALONE_V8_MONOLITH_LIB
   ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
   CACHE FILEPATH
@@ -415,6 +443,15 @@ function(blink_standalone_add_v8_compat_dependency target_name)
   endif()
 endfunction()
 
+function(blink_standalone_copy_icu_data target_name)
+  add_custom_command(TARGET ${target_name} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_ICU_DATA_FILE}"
+      "$<TARGET_FILE_DIR:${target_name}>/icudtl.dat"
+    COMMENT "Copying ICU data sidecar for ${target_name}"
+  )
+endfunction()
+
 if(MSVC)
   add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
   set_target_properties(blink_standalone_v8_monolith PROPERTIES
@@ -560,6 +597,25 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/angle_runtime.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/abseil_sources.cmake)
 
+if(NOT BLINK_STANDALONE_ICU_SOURCE_ROOT STREQUAL
+   "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu")
+  set(_blink_standalone_rebased_live_sources)
+  foreach(source IN LISTS BLINK_STANDALONE_LIVE_SOURCES)
+    string(REPLACE
+      "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/"
+      "${BLINK_STANDALONE_ICU_SOURCE_ROOT}/"
+      rebased_source
+      "${source}"
+    )
+    list(APPEND _blink_standalone_rebased_live_sources "${rebased_source}")
+  endforeach()
+  set(BLINK_STANDALONE_LIVE_SOURCES
+    ${_blink_standalone_rebased_live_sources}
+  )
+  list(FILTER BLINK_STANDALONE_LIVE_SOURCES EXCLUDE REGEX
+    "/third_party/icu/source/common/fixedstring\\.cpp$")
+endif()
+
 set(BLINK_STANDALONE_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/adler32.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/compress.c
@@ -665,7 +721,11 @@ set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
   PROPERTIES COMPILE_DEFINITIONS IS_PARTITION_ALLOC_BASE_IMPL=1)
 set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
   PROPERTIES COMPILE_DEFINITIONS IS_PARTITION_ALLOC_IMPL=1)
-list(APPEND BLINK_STANDALONE_LIVE_SOURCES ${BLINK_STANDALONE_ZLIB_C_SOURCES})
+list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_util.cc
+  ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/stubdata/stubdata.cpp
+  ${BLINK_STANDALONE_ZLIB_C_SOURCES}
+)
 # Source-built v8_monolith contains the real PartitionAlloc implementation used
 # by V8/CppGC. Do not link the tracked implementation objects into the normal
 # V8-backed renderer as well, or lld reports duplicate PartitionAlloc symbols.
@@ -948,8 +1008,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/harfbuzz/src/src
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/highway/src
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/common
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/i18n
+    ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/common
+    ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/i18n
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libwebm/source
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src/include
@@ -996,6 +1056,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     U_STATIC_IMPLEMENTATION
     U_I18N_IMPLEMENTATION
     U_COMMON_IMPLEMENTATION
+    ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_FILE
     PNG_SET_OPTION_SUPPORTED=1
     PNG_WRITE_SUPPORTED=1
     PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1
@@ -1078,6 +1139,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     harfbuzz
     LibXml2::LibXml2
   )
+  blink_standalone_copy_icu_data(blink_standalone_render_benchmark_skia)
 
   foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
                                  COMPILE_OPTIONS)
@@ -1191,6 +1253,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       /exclude-symbols:CrashForExceptionInNonABICompliantCodeRange,GetHandleVerifier
     )
   endif()
+  blink_standalone_copy_icu_data(blink_standalone_renderer_c_api_dll)
 
   set(BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST
     ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_link_manifest.json
@@ -1209,6 +1272,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "v8_monolith": "@BLINK_STANDALONE_V8_MONOLITH_LIB@",
   "chromium_libcxx_object_dir": "@BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR@",
   "chromium_libcxx_object_list": "@_blink_standalone_libcxx_object_list@",
+  "runtime_sidecars": [
+    "$<TARGET_FILE:blink_angle_libEGL>",
+    "$<TARGET_FILE:blink_angle_libGLESv2>",
+    "@BLINK_STANDALONE_ICU_DATA_FILE@"
+  ],
   "third_party_targets": [
     "freetype",
     "harfbuzz",
@@ -1306,8 +1374,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/boringssl/src/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/harfbuzz/src/src
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/highway/src
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/common
-      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu/source/i18n
+      ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/common
+      ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/i18n
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libyuv/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libwebm/source
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src/include
@@ -1354,6 +1422,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       U_STATIC_IMPLEMENTATION
       U_I18N_IMPLEMENTATION
       U_COMMON_IMPLEMENTATION
+      ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_FILE
       PNG_SET_OPTION_SUPPORTED=1
       PNG_WRITE_SUPPORTED=1
       PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1
@@ -1429,4 +1498,5 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       oleaut32.lib version.lib uuid.lib advapi32.lib setupapi.lib shell32.lib
       dbghelp.lib dinput8.lib ntdll.lib psapi.lib shlwapi.lib ws2_32.lib
     )
+    blink_standalone_copy_icu_data(blink_standalone_sdl_viewer_skia)
   endif()

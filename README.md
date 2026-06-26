@@ -111,11 +111,12 @@ build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.lib
 ```
 
 The runtime package for hosts that use the C API DLL must also include the
-ANGLE sidecar DLLs from the same build directory:
+ANGLE and ICU sidecar files from the same build directory:
 
 ```text
 libEGL.dll
 libGLESv2.dll
+icudtl.dat
 ```
 
 This DLL boundary is the intended Godot-facing package because it seals

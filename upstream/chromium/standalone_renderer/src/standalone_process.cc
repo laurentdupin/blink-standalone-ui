@@ -6,6 +6,10 @@
 
 #include <cstdio>
 #include <cstring>
+#include <mutex>
+
+#include "base/check.h"
+#include "base/i18n/icu_util.h"
 
 #if defined(_WIN32)
 #include <cstdlib>
@@ -79,6 +83,11 @@ void ConfigureStandaloneToolProcess() {
     g_exception_handler_installed = true;
   }
 #endif
+}
+
+void InitializeStandaloneIcu() {
+  static std::once_flag once;
+  std::call_once(once, [] { CHECK(base::i18n::InitializeICU()); });
 }
 
 }  // namespace html_css_renderer
