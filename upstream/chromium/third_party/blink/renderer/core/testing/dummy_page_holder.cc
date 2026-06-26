@@ -169,7 +169,8 @@ DummyPageHolder::DummyPageHolder(
                /*document_ukm_source_id=*/ukm::kInvalidSourceId,
 #if defined(HTML_CSS_RENDERER_STANDALONE)
                /*creator_base_url=*/KURL(
-                   "file:///standalone-renderer-document.html"));
+                   BlankUrl(),
+                   String("file:///standalone-renderer-document.html")));
 #else
                /*creator_base_url=*/KURL());
 #endif

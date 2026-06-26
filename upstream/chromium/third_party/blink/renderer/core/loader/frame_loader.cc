@@ -257,7 +257,11 @@ void FrameLoader::Init(
 
   // Load the initial empty document:
   auto navigation_params = std::make_unique<WebNavigationParams>();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  navigation_params->url = BlankUrl();
+#else
   navigation_params->url = KURL(g_empty_string);
+#endif
   if (!creator_base_url.IsEmpty()) {
     navigation_params->fallback_base_url = creator_base_url;
   }
