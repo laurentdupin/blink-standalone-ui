@@ -67,6 +67,8 @@ void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
     const char* lifecycle_stop);
+void StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
+    int enabled);
 void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
     void* native_window_handle,
@@ -814,6 +816,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         trace_stages_(create_info.trace_stages),
         no_script_profile_(create_info.no_script_profile ||
                            create_info.renderer.no_script_profile),
+        transparent_background_(create_info.transparent_background ||
+                                create_info.renderer.transparent_background),
         lifecycle_stop_(std::move(create_info.lifecycle_stop)),
         resource_provider_context_id_(CreateStandaloneResourceProviderContext()),
         resource_root_(GetStandaloneResourceProviderResourceRoot()),
@@ -857,6 +861,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         trace_stages_ ? 1 : 0);
     probe::StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
         lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
+    probe::StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
+        transparent_background_ ? 1 : 0);
     const int prewarm_width =
         std::max(1, static_cast<int>(std::round(snapshot_.viewport.width)));
     const int prewarm_height =
@@ -933,6 +939,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         input.result_collection == FrameResultCollection::kFull;
     probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
         collect_full_result ? 1 : 0);
+    probe::StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
+        transparent_background_ ? 1 : 0);
     const std::string probe_html =
         BuildLiveBlinkProbeHtml(snapshot_.html, snapshot_.stylesheets);
     if (input.force_document_reload || last_probe_html_ != probe_html) {
@@ -1575,6 +1583,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   bool audit_enabled_ = false;
   bool trace_stages_ = false;
   bool no_script_profile_ = false;
+  bool transparent_background_ = false;
   std::string lifecycle_stop_;
   bool last_pointer_pressed_ = false;
   std::optional<PointerState> previous_pointer_;

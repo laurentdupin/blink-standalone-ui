@@ -113,10 +113,23 @@ bool HasInlineEventHandlerAttribute(const std::string& lower_html) {
   return false;
 }
 
+bool ContainsJavaScriptScheme(const std::string& lower_html) {
+  std::string compact;
+  compact.reserve(lower_html.size());
+  for (char c : lower_html) {
+    const unsigned char byte = static_cast<unsigned char>(c);
+    if (std::isspace(byte) || c == '\0') {
+      continue;
+    }
+    compact.push_back(c);
+  }
+  return compact.find("javascript:") != std::string::npos;
+}
+
 bool ViolatesNoScriptProfile(const std::string& html) {
   const std::string lower = LowerAscii(html);
   return lower.find("<script") != std::string::npos ||
-         lower.find("javascript:") != std::string::npos ||
+         ContainsJavaScriptScheme(lower) ||
          lower.find("<iframe") != std::string::npos ||
          lower.find("<object") != std::string::npos ||
          lower.find("<embed") != std::string::npos ||
@@ -214,7 +227,9 @@ blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* rend
   create_info.renderer.viewport = renderer->viewport;
   create_info.renderer.device_scale_factor = renderer->device_scale_factor;
   create_info.renderer.no_script_profile = renderer->no_script_profile;
+  create_info.renderer.transparent_background = renderer->no_script_profile;
   create_info.no_script_profile = renderer->no_script_profile;
+  create_info.transparent_background = renderer->no_script_profile;
   renderer->runtime =
       html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
   std::vector<std::string> diagnostics;

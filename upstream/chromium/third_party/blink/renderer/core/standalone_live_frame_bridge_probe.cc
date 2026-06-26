@@ -142,6 +142,8 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/css/post_style_update_scope.h"
+#include "third_party/blink/renderer/core/css/css_property_value_set.h"
+#include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
@@ -1251,6 +1253,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     // coordinates. Disable Viz backing/output-surface padding that is useful
     // for production buffer reuse but changes observable CopyOutput bounds.
     renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
+    renderer_settings_.requires_alpha_channel = true;
     viz_client_.SetAsyncCompositorFrameAck(async_compositor_frame_ack);
   }
 
@@ -1850,6 +1853,21 @@ class StandaloneCcLayerHost final
   }
 
   bool host_created() const { return layer_tree_host_ != nullptr; }
+  void SetTransparentBackground(bool enabled) {
+    if (transparent_background_ == enabled) {
+      return;
+    }
+    transparent_background_ = enabled;
+    if (layer_tree_host_) {
+      layer_tree_host_->set_background_color(
+          transparent_background_ ? SkColors::kTransparent : SkColors::kWhite);
+      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+      if (!inside_scheduler_layer_tree_update_) {
+        layer_tree_host_->SetNeedsCommit();
+      }
+      commit_requested_ = true;
+    }
+  }
   bool attach_attempted() const { return attach_attempted_; }
   bool root_layer_attached() const { return root_layer_attached_; }
   bool commit_requested() const { return commit_requested_; }
@@ -2064,6 +2082,8 @@ class StandaloneCcLayerHost final
       return false;
     }
     layer_tree_host_->SetVisible(true);
+    layer_tree_host_->set_background_color(
+        transparent_background_ ? SkColors::kTransparent : SkColors::kWhite);
     return true;
   }
 
@@ -2391,6 +2411,7 @@ class StandaloneCcLayerHost final
   viz::BeginFrameArgs last_begin_main_frame_args_;
   bool scheduler_begin_main_frame_seen_ = false;
   bool scheduler_pending_update_ran_ = false;
+  bool transparent_background_ = false;
   bool inside_scheduler_layer_tree_update_ = false;
   raw_ptr<base::RunLoop> scheduler_frame_run_loop_ = nullptr;
   raw_ptr<base::RunLoop> frame_sink_init_run_loop_ = nullptr;
@@ -2921,6 +2942,7 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveElementScrollDiagnostic> element_scroll_diagnostics;
   int viewport_width = 320;
   int viewport_height = 200;
+  bool transparent_background = false;
   float requested_scroll_x = 0.0f;
   float requested_scroll_y = 0.0f;
   float applied_scroll_x = 0.0f;
@@ -3240,6 +3262,7 @@ bool PrewarmStandaloneCcFrameSinkForStandaloneRenderer(
   if (!cache.cc_layer_host) {
     cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
   }
+  cache.cc_layer_host->SetTransparentBackground(cache.transparent_background);
   cache.cc_frame_sink_failure_reason.clear();
   const auto prewarm_start = StandaloneProbeClock::now();
   const bool host_ok = cache.cc_layer_host->EnsureHostForScheduler(
@@ -3293,6 +3316,8 @@ class StandaloneCompositorChromeClient final : public EmptyChromeClient {
     if (!cache_->cc_layer_host) {
       cache_->cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
     }
+    cache_->cc_layer_host->SetTransparentBackground(
+        cache_->transparent_background);
     cache_->cc_attach_failure_reason.clear();
     const bool attached = cache_->cc_layer_host->AttachRootLayer(
         std::move(layer), gfx::Size(cache_->viewport_width,
@@ -5806,6 +5831,11 @@ std::string ElementEvidenceJsonForStandaloneRenderer(Element* element) {
        << JsonStringForStandaloneRenderer(
               BlinkStringToStdStringForStandaloneRenderer(
                   element->getAttribute(html_names::kClassAttr)));
+  const CSSPropertyValueSet* inline_style = element->InlineStyle();
+  json << ",\"inline_style_present\":"
+       << (inline_style ? "true" : "false")
+       << ",\"inline_style_property_count\":"
+       << (inline_style ? inline_style->PropertyCount() : 0);
   if (const ComputedStyle* style = element->GetComputedStyle()) {
     json << ",\"computed_style\":{\"opacity\":" << style->Opacity()
          << ",\"display\":" << static_cast<int>(style->Display())
@@ -6065,8 +6095,35 @@ std::string PageEvidenceJsonForStandaloneRenderer(Document& document) {
   Element* table =
       body ? FindElementByTagForStandaloneRenderer(*body, html_names::kTableTag)
            : nullptr;
+  size_t style_element_count = 0;
+  size_t style_element_text_length = 0;
+  size_t style_element_sheet_count = 0;
+  size_t generic_style_tag_count = 0;
+  for (HTMLStyleElement& style_element :
+       Traversal<HTMLStyleElement>::DescendantsOf(document)) {
+    ++style_element_count;
+    style_element_text_length +=
+        static_cast<size_t>(style_element.TextFromChildren().length());
+    if (style_element.sheet()) {
+      ++style_element_sheet_count;
+    }
+  }
+  for (Element& element : Traversal<Element>::DescendantsOf(document)) {
+    if (element.HasTagName(html_names::kStyleTag)) {
+      ++generic_style_tag_count;
+    }
+  }
+  const ActiveStyleSheetVector active_style_sheets =
+      document.GetStyleEngine().ActiveStyleSheetsForInspector();
   std::ostringstream json;
   json << "{\"document\":" << DocumentEvidenceJsonForStandaloneRenderer(document)
+       << ",\"style_sheets\":{\"style_element_count\":"
+       << style_element_count
+       << ",\"generic_style_tag_count\":" << generic_style_tag_count
+       << ",\"style_element_text_length\":" << style_element_text_length
+       << ",\"style_element_sheet_count\":" << style_element_sheet_count
+       << ",\"active_style_sheet_count\":" << active_style_sheets.size()
+       << "}"
        << ",\"html\":" << ElementEvidenceJsonForStandaloneRenderer(html)
        << ",\"body\":" << ElementEvidenceJsonForStandaloneRenderer(body)
        << ",\"card\":" << ElementEvidenceJsonForStandaloneRenderer(card)
@@ -12861,6 +12918,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
             gfx::Size(cache.viewport_width, cache.viewport_height),
             cache.chrome_client.Get())
             .release();
+    cache.holder->GetFrameView().SetBaseBackgroundColor(
+        cache.transparent_background ? Color::kTransparent : Color::kWhite);
     Document::SetForceSynchronousParsingForTesting(true);
     StandaloneRendererSetDeferImageAttributeLoads(true);
     cache.holder->GetFrame().Loader().CommitNavigation(
@@ -13254,6 +13313,26 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
   cache.chunk_stable_keys.clear();
   cache.chunk_id_strings.clear();
   cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
+    int enabled) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool transparent = enabled != 0;
+  if (cache.transparent_background == transparent) {
+    return;
+  }
+  cache.transparent_background = transparent;
+  if (cache.holder) {
+    cache.holder->GetFrameView().SetBaseBackgroundColor(
+        transparent ? Color::kTransparent : Color::kWhite);
+  }
+  if (cache.cc_layer_host) {
+    cache.cc_layer_host->SetTransparentBackground(transparent);
+  }
+  cache.initialized = false;
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
 }

@@ -3310,6 +3310,12 @@ HTMLElement* HTMLElementFactory::Create(const AtomicString& local_name,
     TraceStandaloneHtmlFactory(local_name, "after");
     return element;
   }
+  if (local_name == html_names::kStyleTag.LocalName()) {
+    HTMLElement* element =
+        MakeGarbageCollected<HTMLStyleElement>(document, flags);
+    TraceStandaloneHtmlFactory(local_name, "after");
+    return element;
+  }
   if (local_name == html_names::kBrTag.LocalName()) {
     HTMLElement* element = MakeGarbageCollected<HTMLBRElement>(document);
     TraceStandaloneHtmlFactory(local_name, "after");

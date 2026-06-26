@@ -201,15 +201,16 @@ StyleElement::ProcessingResult StyleElement::CreateSheetOrModule(
                 ->GetContentSecurityPolicyForCurrentWorld()
           : nullptr;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const bool passes_style_csp = true;
+#else
   // CSP is bypassed for style elements in user agent shadow DOM.
   const bool passes_style_csp =
       IsInUserAgentShadowDOM(element) ||
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-      !csp ||
-#endif
       (csp && csp->AllowInline(ContentSecurityPolicy::InlineType::kStyle,
                                &element, text, element.nonce(), document.Url(),
                                start_position_.line_));
+#endif
 
   // Declarative CSS Modules impact the module map, so they must also respect
   // `script-src` CSP. The strictest union applies: the module is blocked if

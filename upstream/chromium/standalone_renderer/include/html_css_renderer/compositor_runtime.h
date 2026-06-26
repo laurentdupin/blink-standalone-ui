@@ -14,6 +14,7 @@ struct CompositorRuntimeCreateInfo {
   bool enable_paint_artifact_audit = false;
   bool trace_stages = false;
   bool no_script_profile = false;
+  bool transparent_background = false;
   std::string lifecycle_stop;
 };
 

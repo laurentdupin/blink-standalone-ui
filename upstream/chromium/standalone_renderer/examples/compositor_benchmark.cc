@@ -133,6 +133,7 @@ void PrintUsage() {
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-empty-resource-smoke] "
+      "[--c-api-transparent-background-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
@@ -143,10 +144,33 @@ void PrintUsage() {
 struct FramePixelContentStats {
   size_t nontransparent = 0;
   size_t nonwhite_colored = 0;
+  size_t transparent = 0;
+  size_t opaque_white = 0;
+  size_t dark_blue_112233 = 0;
+  size_t dark_blue_123456 = 0;
+  size_t blue_2878d8 = 0;
+  size_t blue_144a80 = 0;
+  size_t orange_dd7744 = 0;
+  size_t orange_d06329 = 0;
 };
 
 FramePixelContentStats AnalyzeFramePixelContent(
     const blink_standalone_frame_output_t& output);
+
+bool ExpectNoScriptRejected(blink_standalone_renderer_t* renderer,
+                            const char* label,
+                            const char* html) {
+  const blink_standalone_status_code_t status =
+      blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status == BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+    return true;
+  }
+  std::fprintf(stderr,
+               "c_api_smoke: no-script rejection failed for %s status=%d "
+               "error=%s\n",
+               label, status, blink_standalone_renderer_last_error(renderer));
+  return false;
+}
 
 int RunCApiSmoke() {
   blink_standalone_renderer_config_t config = {};
@@ -160,15 +184,76 @@ int RunCApiSmoke() {
     std::fprintf(stderr, "c_api_smoke: create failed status=%d\n", status);
     return 1;
   }
-  const char* rejected_html = "<script>window.x=1</script>";
-  status = blink_standalone_renderer_set_document_html(renderer, rejected_html, "", "");
-  if (status != BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+  struct RejectedCase {
+    const char* label;
+    const char* html;
+  };
+  const RejectedCase rejected_cases[] = {
+      {"script", "<script>window.x=1</script>"},
+      {"inline-event", "<button onclick=\"window.x=1\">Run</button>"},
+      {"javascript-url", "<a href=\"javascript:alert(1)\">Run</a>"},
+      {"javascript-url-case",
+       "<a href=\"JaVaScRiPt:alert(1)\">Run</a>"},
+      {"javascript-url-whitespace",
+       "<a href=\"java\n\t script:alert(1)\">Run</a>"},
+      {"iframe", "<iframe src=\"about:blank\"></iframe>"},
+      {"object", "<object data=\"data:text/html,boom\"></object>"},
+      {"embed", "<embed src=\"data:text/html,boom\">"},
+  };
+  for (const RejectedCase& rejected : rejected_cases) {
+    if (!ExpectNoScriptRejected(renderer, rejected.label, rejected.html)) {
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+  }
+  const char* remote_image_html =
+      "<!doctype html><style>body{margin:0;background:#144a80}"
+      "#box{width:80px;height:60px;background:#d06329}</style>"
+      "<img src=\"https://example.invalid/standalone-denied.png\" alt=\"remote\">"
+      "<div id='box'>No network</div>";
+  status =
+      blink_standalone_renderer_set_document_html(renderer, remote_image_html,
+                                                  "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
-                 "c_api_smoke: no-script rejection failed status=%d\n",
-                 status);
+                 "c_api_smoke: remote-image html failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_destroy(renderer);
     return 1;
   }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_smoke: remote-image advance failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_frame_output_t remote_output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &remote_output);
+  const FramePixelContentStats remote_pixel_stats =
+      AnalyzeFramePixelContent(remote_output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      remote_pixel_stats.blue_144a80 < 4000 ||
+      remote_pixel_stats.orange_d06329 < 3000) {
+    std::fprintf(
+        stderr,
+        "c_api_smoke: remote-image/no-network raw output invalid status=%d "
+        "colored=%zu bg144a80=%zu orange_d06329=%zu opaque_white=%zu "
+        "error=%s\n",
+        status, remote_pixel_stats.nonwhite_colored,
+        remote_pixel_stats.blue_144a80,
+        remote_pixel_stats.orange_d06329,
+        remote_pixel_stats.opaque_white,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  // Public WASM execution requires a JavaScript entry point in this profile;
+  // script, javascript: URL, object, and embed surfaces are rejected above.
   const char* html =
       "<!doctype html><style>body{margin:0}.card{width:80px;height:60px;"
       "background:#2878d8;color:white}input{margin:4px}</style><div id='card' "
@@ -205,12 +290,14 @@ int RunCApiSmoke() {
   }
   const FramePixelContentStats pixel_stats =
       AnalyzeFramePixelContent(output);
-  if (pixel_stats.nonwhite_colored == 0) {
+  if (pixel_stats.blue_2878d8 < 3000) {
     std::fprintf(stderr,
-                 "c_api_smoke: raw output has no non-white painted pixels "
-                 "format=%d nontransparent=%zu colored=%zu sample=%u,%u,%u,%u\n",
+                 "c_api_smoke: raw output missing expected blue card pixels "
+                 "format=%d nontransparent=%zu colored=%zu blue2878d8=%zu "
+                 "opaque_white=%zu sample=%u,%u,%u,%u\n",
                  output.pixel_format, pixel_stats.nontransparent,
-                 pixel_stats.nonwhite_colored,
+                 pixel_stats.nonwhite_colored, pixel_stats.blue_2878d8,
+                 pixel_stats.opaque_white,
                  output.pixel_count >= 4 ? output.pixels[0] : 0,
                  output.pixel_count >= 4 ? output.pixels[1] : 0,
                  output.pixel_count >= 4 ? output.pixels[2] : 0,
@@ -343,9 +430,10 @@ int RunCApiSmoke() {
   }
   std::printf(
       "c_api_smoke: ok raw=%dx%d stride=%d bytes=%zu dirty=%zu hits=%zu "
-      "colored=%zu\n",
+      "colored=%zu blue2878d8=%zu\n",
       output.width, output.height, output.stride, output.pixel_count,
-      output.dirty_rect_count, hit_count, pixel_stats.nonwhite_colored);
+      output.dirty_rect_count, hit_count, pixel_stats.nonwhite_colored,
+      pixel_stats.blue_2878d8);
   return 0;
 }
 
@@ -538,6 +626,20 @@ FramePixelContentStats AnalyzeFramePixelContent(
       output.pixel_format != BLINK_STANDALONE_PIXEL_FORMAT_BGRA8) {
     return stats;
   }
+  auto near_color = [](uint8_t actual, uint8_t expected) {
+    const int delta = static_cast<int>(actual) - static_cast<int>(expected);
+    return delta >= -12 && delta <= 12;
+  };
+  auto matches = [&](uint8_t red,
+                     uint8_t green,
+                     uint8_t blue,
+                     uint8_t expected_red,
+                     uint8_t expected_green,
+                     uint8_t expected_blue) {
+    return near_color(red, expected_red) &&
+           near_color(green, expected_green) &&
+           near_color(blue, expected_blue);
+  };
   for (int y = 0; y < output.height; ++y) {
     const uint8_t* row =
         output.pixels + static_cast<size_t>(y) * output.stride;
@@ -552,11 +654,32 @@ FramePixelContentStats AnalyzeFramePixelContent(
                                                                      : pixel[0];
       const uint8_t alpha = pixel[3];
       if (alpha == 0) {
+        ++stats.transparent;
         continue;
       }
       ++stats.nontransparent;
-      if (!(red >= 245 && green >= 245 && blue >= 245)) {
+      if (red >= 245 && green >= 245 && blue >= 245) {
+        ++stats.opaque_white;
+      } else {
         ++stats.nonwhite_colored;
+      }
+      if (matches(red, green, blue, 0x11, 0x22, 0x33)) {
+        ++stats.dark_blue_112233;
+      }
+      if (matches(red, green, blue, 0x12, 0x34, 0x56)) {
+        ++stats.dark_blue_123456;
+      }
+      if (matches(red, green, blue, 0x28, 0x78, 0xd8)) {
+        ++stats.blue_2878d8;
+      }
+      if (matches(red, green, blue, 0x14, 0x4a, 0x80)) {
+        ++stats.blue_144a80;
+      }
+      if (matches(red, green, blue, 0xdd, 0x77, 0x44)) {
+        ++stats.orange_dd7744;
+      }
+      if (matches(red, green, blue, 0xd0, 0x63, 0x29)) {
+        ++stats.orange_d06329;
       }
     }
   }
@@ -672,14 +795,17 @@ int RunCApiEmptyResourceSmoke() {
       output.width == 180 && output.height == 100 && output.pixel_count > 0;
   const FramePixelContentStats pixel_stats =
       AnalyzeFramePixelContent(output);
-  if (!output_ok || hit_count == 0 || pixel_stats.nonwhite_colored == 0) {
+  if (!output_ok || hit_count == 0 || pixel_stats.dark_blue_112233 < 5000 ||
+      pixel_stats.orange_dd7744 < 3000) {
     std::fprintf(stderr,
                  "c_api_empty_resource_smoke: output/metadata invalid "
                  "status=%d size=%dx%d bytes=%zu hits=%zu format=%d "
-                 "nontransparent=%zu colored=%zu sample=%u,%u,%u,%u\n",
+                 "nontransparent=%zu colored=%zu bg112233=%zu "
+                 "orange_dd7744=%zu opaque_white=%zu sample=%u,%u,%u,%u\n",
                  status, output.width, output.height, output.pixel_count,
                  hit_count, output.pixel_format, pixel_stats.nontransparent,
-                 pixel_stats.nonwhite_colored,
+                 pixel_stats.nonwhite_colored, pixel_stats.dark_blue_112233,
+                 pixel_stats.orange_dd7744, pixel_stats.opaque_white,
                  output.pixel_count >= 4 ? output.pixels[0] : 0,
                  output.pixel_count >= 4 ? output.pixels[1] : 0,
                  output.pixel_count >= 4 ? output.pixels[2] : 0,
@@ -691,9 +817,86 @@ int RunCApiEmptyResourceSmoke() {
 
   std::printf(
       "c_api_empty_resource_smoke: ok raw=%dx%d stride=%d bytes=%zu hits=%zu "
-      "colored=%zu\n",
+      "colored=%zu bg112233=%zu orange_dd7744=%zu\n",
       output.width, output.height, output.stride, output.pixel_count,
-      hit_count, pixel_stats.nonwhite_colored);
+      hit_count, pixel_stats.nonwhite_colored, pixel_stats.dark_blue_112233,
+      pixel_stats.orange_dd7744);
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  return 0;
+}
+
+int RunCApiTransparentBackgroundSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 180;
+  config.height = 100;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_transparent_background_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>html,body{margin:0;background:transparent}"
+      "#panel{width:100px;height:40px;background:#d06329}</style>"
+      "<div id='panel' data-godot-action='panel'></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_transparent_background_smoke: set html failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_transparent_background_smoke: advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats pixel_stats =
+      AnalyzeFramePixelContent(output);
+  const bool output_ok =
+      status == BLINK_STANDALONE_STATUS_OK && output.pixels &&
+      output.width == 180 && output.height == 100 && output.pixel_count > 0;
+  if (!output_ok || pixel_stats.transparent < 8000 ||
+      pixel_stats.orange_d06329 < 3000) {
+    std::fprintf(stderr,
+                 "c_api_transparent_background_smoke: output invalid "
+                 "status=%d size=%dx%d bytes=%zu format=%d transparent=%zu "
+                 "opaque_white=%zu colored=%zu orange_d06329=%zu "
+                 "sample=%u,%u,%u,%u error=%s\n",
+                 status, output.width, output.height, output.pixel_count,
+                 output.pixel_format, pixel_stats.transparent,
+                 pixel_stats.opaque_white, pixel_stats.nonwhite_colored,
+                 pixel_stats.orange_d06329,
+                 output.pixel_count >= 4 ? output.pixels[0] : 0,
+                 output.pixel_count >= 4 ? output.pixels[1] : 0,
+                 output.pixel_count >= 4 ? output.pixels[2] : 0,
+                 output.pixel_count >= 4 ? output.pixels[3] : 0,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  std::printf(
+      "c_api_transparent_background_smoke: ok raw=%dx%d transparent=%zu "
+      "opaque_white=%zu colored=%zu orange_d06329=%zu\n",
+      output.width, output.height, pixel_stats.transparent,
+      pixel_stats.opaque_white, pixel_stats.nonwhite_colored,
+      pixel_stats.orange_d06329);
   blink_standalone_renderer_release_latest_output(renderer);
   blink_standalone_renderer_destroy(renderer);
   return 0;
@@ -1507,6 +1710,7 @@ int main(int argc, char** argv) {
     if (arg == "--c-api-smoke" ||
         arg == "--c-api-viewport-resize-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
+        arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -1538,6 +1742,7 @@ int main(int argc, char** argv) {
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_empty_resource_smoke = false;
+  bool c_api_transparent_background_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -1643,6 +1848,8 @@ int main(int argc, char** argv) {
       c_api_viewport_resize_smoke = true;
     } else if (arg == "--c-api-empty-resource-smoke") {
       c_api_empty_resource_smoke = true;
+    } else if (arg == "--c-api-transparent-background-smoke") {
+      c_api_transparent_background_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -1760,6 +1967,10 @@ int main(int argc, char** argv) {
 
   if (c_api_empty_resource_smoke) {
     return RunCApiEmptyResourceSmoke();
+  }
+
+  if (c_api_transparent_background_smoke) {
+    return RunCApiTransparentBackgroundSmoke();
   }
 
   if (c_api_two_instance_smoke) {

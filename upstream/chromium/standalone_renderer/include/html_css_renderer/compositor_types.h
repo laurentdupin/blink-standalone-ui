@@ -67,6 +67,7 @@ struct RendererCreateInfo {
   std::string asset_namespace;
   AssetProvider* asset_provider = nullptr;
   bool no_script_profile = false;
+  bool transparent_background = false;
 };
 
 struct PointerState {

@@ -1164,6 +1164,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
         target_include_directories(blink_standalone_renderer_c_api_dll PRIVATE
           ${property_value})
       elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+        list(FILTER property_value EXCLUDE REGEX
+          "^BLINK_STANDALONE_RENDERER_C_API_STATIC(=|$)")
         target_compile_definitions(blink_standalone_renderer_c_api_dll PRIVATE
           ${property_value})
       elseif(property_name STREQUAL "COMPILE_OPTIONS")

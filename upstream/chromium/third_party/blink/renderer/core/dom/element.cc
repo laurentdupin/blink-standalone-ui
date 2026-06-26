@@ -4236,15 +4236,6 @@ void Element::ParserSetAttributes(
       "Element ParserSetAttributes after ParserDidSetAttributes");
  #endif
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  // Parser-created standalone elements are disconnected here. The full
-  // AttributeChanged path fans out into browser/script/navigation side effects
-  // that are not part of the no-script standalone embedder boundary and can
-  // observe transient parser-owned attribute storage during rapid document
-  // replacement. Attributes are already stored on element_data_ for style
-  // matching and the standalone static resource pass.
-  return;
-#else
   // Use attribute_vector instead of element_data_ because AttributeChanged
   // might modify element_data_.
   for (const auto& attribute : attribute_vector) {
@@ -4252,7 +4243,6 @@ void Element::ParserSetAttributes(
         attribute.GetName(), g_null_atom, attribute.Value(),
         AttributeModificationReason::kByParser));
   }
-#endif
 }
 
 bool Element::HasEquivalentAttributes(const Element& other) const {
@@ -12426,6 +12416,9 @@ inline void Element::SetInlineStyleFromString(
 }
 
 bool Element::IsStyleAttributeChangeAllowed(const AtomicString& style_string) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return true;
+#endif
   if (auto* shadow_root = ContainingShadowRoot()) {
     if (shadow_root->IsUserAgent()) {
       return true;
