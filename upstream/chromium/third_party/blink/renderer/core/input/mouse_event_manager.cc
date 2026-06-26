@@ -886,7 +886,7 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mousepress before standalone prepaint update");
-  UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kInput);
+  UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kTest);
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mousepress after standalone prepaint update");
 #else
@@ -903,8 +903,10 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mousepress before sequential focus lifecycle update");
+  Node* lifecycle_node = event.GetHitTestResult().InnerPossiblyPseudoNode();
   UpdateStandaloneMouseInputLifecycleForHitNode(
-      *frame_, inner_node, DocumentUpdateReason::kInput);
+      *frame_, lifecycle_node ? lifecycle_node : inner_node,
+      DocumentUpdateReason::kTest);
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mousepress after sequential focus lifecycle update");
 #endif
@@ -950,7 +952,7 @@ WebInputEventResult MouseEventManager::HandleMouseReleaseEvent(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mouserelease before standalone prepaint update");
-  UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kInput);
+  UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kTest);
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mouserelease after standalone prepaint update");
 #else

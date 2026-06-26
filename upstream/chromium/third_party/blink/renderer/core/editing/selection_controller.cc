@@ -33,6 +33,9 @@
 #include "base/trace_event/trace_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_impl.h"
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "third_party/blink/renderer/core/css/post_style_update_scope.h"
+#endif
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
@@ -83,6 +86,49 @@ void SelectionController::Trace(Visitor* visitor) const {
 }
 
 namespace {
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(
+    const char*);
+
+void TraceStandaloneSelectionControllerStage(const char* stage) {
+  StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+bool UpdateStandaloneSelectionLifecycle(Document& document,
+                                        DocumentUpdateReason reason) {
+  LocalFrame* frame = document.GetFrame();
+  if (!frame)
+    return false;
+
+  LocalFrameView* frame_view = frame->View();
+  if (!frame_view)
+    return false;
+
+  bool reached_prepaint_clean = false;
+  PostStyleUpdateScope post_style_update_scope(document);
+  do {
+    reached_prepaint_clean =
+        frame_view->UpdateAllLifecyclePhasesExceptPaint(reason) ||
+        reached_prepaint_clean;
+  } while (post_style_update_scope.Apply());
+  return reached_prepaint_clean;
+}
+
+bool UpdateStandaloneSelectionLifecycleForHitResult(
+    LocalFrame* fallback_frame,
+    const HitTestResult& hit_test_result,
+    DocumentUpdateReason reason) {
+  if (Node* node = hit_test_result.InnerPossiblyPseudoNode())
+    return UpdateStandaloneSelectionLifecycle(node->GetDocument(), reason);
+  if (fallback_frame && fallback_frame->GetDocument())
+    return UpdateStandaloneSelectionLifecycle(*fallback_frame->GetDocument(),
+                                              reason);
+  return false;
+}
+#else
+void TraceStandaloneSelectionControllerStage(const char*) {}
+#endif
 
 DispatchEventResult DispatchSelectStart(Node* node) {
   if (!node || !node->GetLayoutObject())
@@ -1159,6 +1205,14 @@ bool SelectionController::HandleMousePressEvent(
             Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
   }
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneSelectionControllerStage(
+      "selection_controller mousepress before standalone prepaint update");
+  UpdateStandaloneSelectionLifecycleForHitResult(
+      frame_, event.GetHitTestResult(), DocumentUpdateReason::kTest);
+  TraceStandaloneSelectionControllerStage(
+      "selection_controller mousepress after standalone prepaint update");
+#endif
   if (event.Event().click_count >= 3)
     return HandleTripleClick(event);
   if (event.Event().click_count == 2)

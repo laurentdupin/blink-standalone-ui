@@ -1058,7 +1058,7 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
 #if defined(HTML_CSS_RENDERER_STANDALONE)
     TraceStandaloneEventHandlerStage(
         "event_handler mousepress before standalone prepaint update");
-    UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kInput);
+    UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kTest);
     TraceStandaloneEventHandlerStage(
         "event_handler mousepress after standalone prepaint update");
 #endif

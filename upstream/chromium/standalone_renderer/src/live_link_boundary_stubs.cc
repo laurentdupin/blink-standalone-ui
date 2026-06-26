@@ -11911,10 +11911,28 @@ void HitTestResult::CacheValues(const HitTestResult& other) {
   hit_test_request_ =
       other.hit_test_request_.GetType() & ~HitTestRequest::kAvoidCache;
 }
+
+namespace {
+
+void UpdateStandaloneLifecycleBeforeHitTestPosition(Node& node) {
+  Document& document = node.GetDocument();
+  LocalFrameView* view = document.View();
+  if (!view)
+    return;
+
+  PostStyleUpdateScope post_style_update_scope(document);
+  do {
+    view->UpdateAllLifecyclePhasesExceptPaint(DocumentUpdateReason::kTest);
+  } while (post_style_update_scope.Apply());
+}
+
+}  // namespace
+
 PositionWithAffinity HitTestResult::GetPosition() const {
-  const Node* node = inner_possibly_pseudo_node_;
+  Node* node = inner_possibly_pseudo_node_;
   if (!node)
     return PositionWithAffinity();
+  UpdateStandaloneLifecycleBeforeHitTestPosition(*node);
   DCHECK_GE(node->GetDocument().Lifecycle().GetState(),
             DocumentLifecycle::kPrePaintClean);
   LayoutObject* layout_object = node->GetLayoutObject();
