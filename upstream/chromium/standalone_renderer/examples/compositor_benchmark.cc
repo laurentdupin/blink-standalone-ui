@@ -148,6 +148,7 @@ void PrintUsage() {
       "[--c-api-text-input-smoke] "
       "[--c-api-form-control-mutation-smoke] "
       "[--c-api-absolute-form-mutation-smoke] "
+      "[--c-api-fragment-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
@@ -1186,6 +1187,236 @@ int RunCApiDomMutationSmoke() {
       "state=persisted\n",
       initial_stats.blue_2878d8, orange_stats.orange_d06329,
       green_stats.resource_green_237a57);
+  return 0;
+}
+
+int RunCApiFragmentMutationSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 300;
+  config.height = 180;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style id='theme'>body{margin:0;font:16px monospace}"
+      "#target{position:absolute;left:10px;top:10px;width:150px;height:62px}"
+      "#old{position:absolute;left:0;top:0;width:120px;height:46px;"
+      "background:#2878d8;color:white}"
+      "#name{position:absolute;left:10px;top:92px;width:140px}"
+      "label{position:absolute;left:10px;top:128px}</style>"
+      "<div id='target'><div id='old' data-godot-action='old'>Old</div></div>"
+      "<input id='name' value='seed' data-godot-action='name'>"
+      "<label><input id='agree' type='checkbox' "
+      "data-godot-action='toggle'>Agree</label>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: set html failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_fragment_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats initial_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      initial_stats.blue_2878d8 < 2000 || !HasHitId(renderer, "old") ||
+      !HasHitId(renderer, "target")) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: initial output invalid "
+                 "status=%d blue=%zu old=%d target=%d\n",
+                 status, initial_stats.blue_2878d8,
+                 HasHitId(renderer, "old") ? 1 : 0,
+                 HasHitId(renderer, "target") ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  if (blink_standalone_renderer_set_element_inner_html(
+          renderer, "missing-target", "<span>Missing</span>") !=
+      BLINK_STANDALONE_STATUS_INVALID_ARGUMENT) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: missing target was accepted\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_form_control_value(renderer, "name",
+                                                            "persisted");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_form_control_checked(
+                     renderer, "agree", 1)
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_focus_element(renderer, "name")
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_fragment_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: state setup failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+
+  if (blink_standalone_renderer_set_element_inner_html(
+          renderer, "target", "<script>alert(1)</script>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_set_element_inner_html(
+          renderer, "target", "<button onclick='alert(1)'>Bad</button>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_set_element_inner_html(
+          renderer, "target", "<a href=' javaScript:alert(1)'>Bad</a>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: no-script fragment rejection "
+                 "failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_element_inner_html(
+      renderer, "target",
+      "<section id='panel' data-godot-action='panel' "
+      "style='position:absolute;left:0;top:0;width:130px;height:50px;"
+      "background:#e84444;color:white'><span id='child'>New</span></section>");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_fragment_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: fragment mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats replaced_stats = AnalyzeFramePixelContent(output);
+  blink_standalone_form_control_state_t name_state = {};
+  blink_standalone_hit_metadata_t panel_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      replaced_stats.resource_red_e84444 < 3000 || HasHitId(renderer, "old") ||
+      !GetHitById(renderer, "panel", &panel_hit) ||
+      std::string(panel_hit.data_godot_action ? panel_hit.data_godot_action
+                                              : "") != "panel" ||
+      !HasHitId(renderer, "child") ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" || name_state.focused == 0 ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: replacement not reflected "
+                 "status=%d red=%zu old=%d panel=%d child=%d value=%s "
+                 "focused=%d checked=%d action=%s\n",
+                 status, replaced_stats.resource_red_e84444,
+                 HasHitId(renderer, "old") ? 1 : 0,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 HasHitId(renderer, "child") ? 1 : 0,
+                 FormStateValue(name_state).c_str(), name_state.focused,
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0,
+                 panel_hit.data_godot_action ? panel_hit.data_godot_action : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_element_inner_html(
+      renderer, "target",
+      "<input id='inner' value='inside' style='position:absolute;left:0;top:0;"
+      "width:120px;height:24px'>");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_focus_element(renderer, "inner")
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_fragment_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: focused subtree setup failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_form_control_state_t inner_state = {};
+  if (!GetFormStateById(renderer, "inner", &inner_state) ||
+      inner_state.focused == 0) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: inner focus setup invalid\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_element_inner_html(
+      renderer, "target",
+      "<section id='panel2' data-godot-action='panel2' "
+      "style='position:absolute;left:0;top:0;width:110px;height:44px;"
+      "background:#d06329;color:white'>Done</section>");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_fragment_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: focused subtree replace "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats final_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      final_stats.orange_d06329 < 2000 || HasHitId(renderer, "inner") ||
+      !HasHitId(renderer, "panel2") ||
+      GetFormStateById(renderer, "inner", &inner_state) ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_fragment_mutation_smoke: focused subtree replacement "
+                 "invalid status=%d orange=%zu inner_hit=%d inner_state=%d "
+                 "panel2=%d value=%s checked=%d\n",
+                 status, final_stats.orange_d06329,
+                 HasHitId(renderer, "inner") ? 1 : 0,
+                 GetFormStateById(renderer, "inner", &inner_state) ? 1 : 0,
+                 HasHitId(renderer, "panel2") ? 1 : 0,
+                 FormStateValue(name_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_fragment_mutation_smoke: ok blue=%zu red=%zu orange=%zu "
+      "state=persisted\n",
+      initial_stats.blue_2878d8, replaced_stats.resource_red_e84444,
+      final_stats.orange_d06329);
   return 0;
 }
 
@@ -3026,6 +3257,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
         arg == "--c-api-dom-mutation-smoke" ||
+        arg == "--c-api-fragment-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
         arg == "--c-api-absolute-form-mutation-smoke" ||
@@ -3064,6 +3296,7 @@ int main(int argc, char** argv) {
   bool c_api_transparent_background_smoke = false;
   bool c_api_separated_click_smoke = false;
   bool c_api_dom_mutation_smoke = false;
+  bool c_api_fragment_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
   bool c_api_absolute_form_mutation_smoke = false;
@@ -3178,6 +3411,8 @@ int main(int argc, char** argv) {
       c_api_separated_click_smoke = true;
     } else if (arg == "--c-api-dom-mutation-smoke") {
       c_api_dom_mutation_smoke = true;
+    } else if (arg == "--c-api-fragment-mutation-smoke") {
+      c_api_fragment_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
       c_api_text_input_smoke = true;
     } else if (arg == "--c-api-form-control-mutation-smoke") {
@@ -3313,6 +3548,10 @@ int main(int argc, char** argv) {
 
   if (c_api_dom_mutation_smoke) {
     return RunCApiDomMutationSmoke();
+  }
+
+  if (c_api_fragment_mutation_smoke) {
+    return RunCApiFragmentMutationSmoke();
   }
 
   if (c_api_text_input_smoke) {

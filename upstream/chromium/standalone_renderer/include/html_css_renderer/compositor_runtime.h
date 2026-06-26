@@ -126,6 +126,7 @@ class StandaloneCompositorRuntime {
   virtual NativePresentationResult PresentToNativeWindow(
       const CompositorFrameResult& frame) = 0;
   virtual RendererSnapshot Snapshot() const = 0;
+  virtual bool HasLiveElement(const std::string& element_id) const = 0;
 };
 
 std::unique_ptr<StandaloneCompositorRuntime> CreateStandaloneCompositorRuntime(

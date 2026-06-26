@@ -78,6 +78,8 @@ void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
 void StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
+int StandaloneBlinkLiveFrameBridgeHasLiveElementForStandaloneRenderer(
+    const char* element_id);
 void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
     void* native_window_handle,
     int width,
@@ -1239,6 +1241,20 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   }
 
   RendererSnapshot Snapshot() const override { return snapshot_; }
+
+  bool HasLiveElement(const std::string& element_id) const override {
+    if (element_id.empty()) {
+      return false;
+    }
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    return ::blink::standalone_renderer_probe::
+               StandaloneBlinkLiveFrameBridgeHasLiveElementForStandaloneRenderer(
+                   element_id.c_str()) != 0;
+  }
 
  private:
   bool NeedsFrameForInput(const FrameInput& input) const {

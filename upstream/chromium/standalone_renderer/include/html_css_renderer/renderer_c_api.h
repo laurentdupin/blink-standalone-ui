@@ -166,6 +166,10 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     const char* element_id,
     const char* utf8_text);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_inner_html(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* html_fragment);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(
     blink_standalone_renderer_t* renderer,
     const char* element_id,

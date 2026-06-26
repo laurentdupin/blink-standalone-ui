@@ -294,6 +294,8 @@ blink_standalone_status_code_t QueueDomMutation(
     const bool rejected =
         type == html_css_renderer::DomMutationType::kSetAttribute
             ? MutationViolatesNoScriptProfile(mutation_name, mutation_value)
+            : type == html_css_renderer::DomMutationType::kSetElementInnerHtml
+                  ? ViolatesNoScriptProfile(mutation_value)
             : type == html_css_renderer::DomMutationType::kSetStyleAttribute
                   ? MutationViolatesNoScriptProfile("style", mutation_value)
                   : type ==
@@ -579,6 +581,28 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetTextContent,
                           element_id, "", utf8_text);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_inner_html(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* html_fragment) {
+  if (!html_fragment) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  if (!renderer || !renderer->runtime ||
+      !renderer->runtime->HasLiveElement(element_id ? element_id : "")) {
+    if (renderer) {
+      renderer->last_error = "element not found in current live document";
+    }
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kSetElementInnerHtml,
+                          element_id, "", html_fragment);
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(

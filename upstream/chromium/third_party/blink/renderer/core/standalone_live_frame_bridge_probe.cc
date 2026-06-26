@@ -10139,6 +10139,10 @@ void ApplyDomMutationsForStandaloneRenderer(
       case 1:
         element->setTextContent(String::FromUtf8(mutation.value));
         break;
+      case 11:
+        element->SetInnerHTMLWithoutTrustedTypes(
+            String::FromUtf8(mutation.value));
+        break;
       case 2:
         if (mutation.name.empty()) {
           continue;
@@ -13979,6 +13983,21 @@ void StandaloneBlinkLiveFrameBridgeAppendDomMutationForStandaloneRenderer(
   cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
+}
+
+int StandaloneBlinkLiveFrameBridgeHasLiveElementForStandaloneRenderer(
+    const char* element_id) {
+  if (!element_id || !*element_id) {
+    return 0;
+  }
+  DummyPageHolder* holder = ProbeCache().holder;
+  if (!holder || !holder->GetDocument().documentElement()) {
+    return 0;
+  }
+  return holder->GetDocument()
+             .getElementById(AtomicString(String::FromUtf8(element_id)))
+             ? 1
+             : 0;
 }
 
 void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(
