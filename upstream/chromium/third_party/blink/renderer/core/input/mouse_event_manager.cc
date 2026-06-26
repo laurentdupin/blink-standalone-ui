@@ -68,24 +68,44 @@ void TraceStandaloneMouseEventManagerStage(const char* stage) {
   StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
 }
 
-bool UpdateStandaloneMouseInputLifecycle(LocalFrame& frame,
+bool UpdateStandaloneMouseInputLifecycle(Document& document,
                                          DocumentUpdateReason reason) {
-  LocalFrameView* frame_view = frame.View();
+  LocalFrame* frame = document.GetFrame();
+  if (!frame)
+    return false;
+
+  LocalFrameView* frame_view = frame->View();
   if (!frame_view)
     return false;
 
-  Document* document = frame.GetDocument();
-  if (!document)
-    return frame_view->UpdateAllLifecyclePhasesExceptPaint(reason);
-
   bool reached_prepaint_clean = false;
-  PostStyleUpdateScope post_style_update_scope(*document);
+  PostStyleUpdateScope post_style_update_scope(document);
   do {
     reached_prepaint_clean =
         frame_view->UpdateAllLifecyclePhasesExceptPaint(reason) ||
         reached_prepaint_clean;
   } while (post_style_update_scope.Apply());
   return reached_prepaint_clean;
+}
+
+bool UpdateStandaloneMouseInputLifecycle(LocalFrame& frame,
+                                         DocumentUpdateReason reason) {
+  Document* document = frame.GetDocument();
+  if (document)
+    return UpdateStandaloneMouseInputLifecycle(*document, reason);
+
+  LocalFrameView* frame_view = frame.View();
+  return frame_view ? frame_view->UpdateAllLifecyclePhasesExceptPaint(reason)
+                    : false;
+}
+
+bool UpdateStandaloneMouseInputLifecycleForHitNode(
+    LocalFrame& fallback_frame,
+    Node* hit_node,
+    DocumentUpdateReason reason) {
+  if (hit_node)
+    return UpdateStandaloneMouseInputLifecycle(hit_node->GetDocument(), reason);
+  return UpdateStandaloneMouseInputLifecycle(fallback_frame, reason);
 }
 #else
 void TraceStandaloneMouseEventManagerStage(const char*) {}
@@ -860,8 +880,9 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
     FocusDocumentView();
 
   // |SelectionController| calls |PositionForPoint()| which requires
-  // |kPrePaintClean|. |FocusDocumentView| above is the last possible
-  // modifications before we call |SelectionController|.
+  // |kPrePaintClean|. The standalone path drains again after sequential-focus
+  // state updates below because they can dirty lifecycle in an embedder-driven
+  // mouse press sequence.
 #if defined(HTML_CSS_RENDERER_STANDALONE)
   TraceStandaloneMouseEventManagerStage(
       "mouse_event_manager mousepress before standalone prepaint update");
@@ -879,14 +900,30 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
 
   mouse_press_node_ = inner_node;
   frame_->GetDocument()->SetSequentialFocusNavigationStartingPoint(inner_node);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mousepress before sequential focus lifecycle update");
+  UpdateStandaloneMouseInputLifecycleForHitNode(
+      *frame_, inner_node, DocumentUpdateReason::kInput);
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mousepress after sequential focus lifecycle update");
+#endif
   drag_start_pos_in_root_frame_ =
       PhysicalOffset(gfx::ToFlooredPoint(event.Event().PositionInRootFrame()));
 
   mouse_pressed_ = true;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mousepress before selection controller press");
+#endif
   bool swallow_event =
       frame_->GetEventHandler().GetSelectionController().HandleMousePressEvent(
           event);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mousepress after selection controller press");
+#endif
 
   // TODO(crbug.com/1324667): Ensure that autoscroll handles mouse_press_node_
   // removal correctly, allowing scrolling the still attached ancestor.
