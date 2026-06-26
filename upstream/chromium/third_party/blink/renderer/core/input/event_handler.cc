@@ -1032,6 +1032,15 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
       mev = frame_->GetDocument()->PerformMouseEventHitTest(
           read_only_request, document_point, mouse_event);
     }
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (LocalFrameView* view = frame_->View()) {
+      TraceStandaloneEventHandlerStage(
+          "event_handler mousepress before standalone prepaint update");
+      view->UpdateAllLifecyclePhasesExceptPaint(DocumentUpdateReason::kInput);
+      TraceStandaloneEventHandlerStage(
+          "event_handler mousepress after standalone prepaint update");
+    }
+#endif
     TraceStandaloneEventHandlerStage(
         "event_handler mousepress before mouse manager press");
     event_result = mouse_event_manager_->HandleMousePressEvent(mev);

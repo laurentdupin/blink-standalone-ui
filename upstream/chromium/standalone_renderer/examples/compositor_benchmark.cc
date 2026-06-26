@@ -144,6 +144,7 @@ void PrintUsage() {
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
+      "[--c-api-separated-click-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
@@ -770,6 +771,119 @@ bool WriteSolidBmp(const std::filesystem::path& path,
   file.write(reinterpret_cast<const char*>(bytes.data()),
              static_cast<std::streamsize>(bytes.size()));
   return file.good();
+}
+
+int RunCApiSeparatedClickSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 240;
+  config.height = 120;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_separated_click_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>html,body{margin:0;background:transparent}"
+      "button{font-size:32px;padding:12px 24px;background:#d06329;color:#fff;"
+      "border:2px solid #112233}</style><button id='play' "
+      "data-godot-action='play'>Play</button>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_separated_click_smoke: set html failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const auto capture_and_check = [&](const char* phase) -> bool {
+    blink_standalone_frame_output_t output = {};
+    const blink_standalone_status_code_t output_status =
+        blink_standalone_renderer_get_latest_output(renderer, &output);
+    const FramePixelContentStats stats = AnalyzeFramePixelContent(output);
+    const bool ok = output_status == BLINK_STANDALONE_STATUS_OK &&
+                    output.width == 240 && output.height == 120 &&
+                    output.stride >= output.width * 4 && output.pixels &&
+                    output.pixel_count > 0 && stats.orange_d06329 > 2000 &&
+                    HasHitId(renderer, "play");
+    if (!ok) {
+      std::fprintf(stderr,
+                   "c_api_separated_click_smoke: %s output invalid "
+                   "status=%d size=%dx%d bytes=%zu orange=%zu hits=%zu "
+                   "error=%s\n",
+                   phase, output_status, output.width, output.height,
+                   output.pixel_count, stats.orange_d06329,
+                   blink_standalone_renderer_hit_metadata_count(renderer),
+                   blink_standalone_renderer_last_error(renderer));
+    }
+    blink_standalone_renderer_release_latest_output(renderer);
+    return ok;
+  };
+
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK || !capture_and_check("initial")) {
+    std::fprintf(stderr,
+                 "c_api_separated_click_smoke: initial advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_hit_metadata_t play_hit = {};
+  if (!GetHitById(renderer, "play", &play_hit) ||
+      std::string(play_hit.tag_name ? play_hit.tag_name : "") != "button" ||
+      std::string(play_hit.data_godot_action ? play_hit.data_godot_action
+                                             : "") != "play") {
+    std::fprintf(stderr,
+                 "c_api_separated_click_smoke: button metadata missing\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float x = play_hit.bounds.x + play_hit.bounds.width * 0.5f;
+  const float y = play_hit.bounds.y + play_hit.bounds.height * 0.5f;
+  blink_standalone_renderer_mouse_move(renderer, x, y, 0);
+  blink_standalone_renderer_mouse_down(renderer, x, y,
+                                       BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
+                                       1);
+  status = blink_standalone_renderer_advance_frame(renderer, 0.016);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_and_check("after down")) {
+    std::fprintf(stderr,
+                 "c_api_separated_click_smoke: mouse-down advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_mouse_up(renderer, x, y,
+                                     BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  status = blink_standalone_renderer_advance_frame(renderer, 0.032);
+  if (status != BLINK_STANDALONE_STATUS_OK || !capture_and_check("after up") ||
+      !HasHitId(renderer, "play")) {
+    std::fprintf(stderr,
+                 "c_api_separated_click_smoke: mouse-up advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  std::printf(
+      "c_api_separated_click_smoke: ok raw=240x120 hits=%zu action=play\n",
+      blink_standalone_renderer_hit_metadata_count(renderer));
+  blink_standalone_renderer_destroy(renderer);
+  return 0;
 }
 
 int RunCApiEmptyResourceSmoke() {
@@ -1839,6 +1953,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-viewport-resize-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
+        arg == "--c-api-separated-click-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -1871,6 +1986,7 @@ int main(int argc, char** argv) {
   bool c_api_viewport_resize_smoke = false;
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
+  bool c_api_separated_click_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -1978,6 +2094,8 @@ int main(int argc, char** argv) {
       c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-transparent-background-smoke") {
       c_api_transparent_background_smoke = true;
+    } else if (arg == "--c-api-separated-click-smoke") {
+      c_api_separated_click_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -2099,6 +2217,10 @@ int main(int argc, char** argv) {
 
   if (c_api_transparent_background_smoke) {
     return RunCApiTransparentBackgroundSmoke();
+  }
+
+  if (c_api_separated_click_smoke) {
+    return RunCApiSeparatedClickSmoke();
   }
 
   if (c_api_two_instance_smoke) {
