@@ -639,6 +639,17 @@ struct LiveHitTestEntry {
   bool focused = false;
 };
 
+struct LiveFormControlEntry {
+  std::string element_id;
+  std::string tag_name;
+  std::string value;
+  bool checked = false;
+  bool focused = false;
+  bool selection_offsets_present = false;
+  unsigned selection_start = 0;
+  unsigned selection_end = 0;
+};
+
 struct LiveScrollableElementEntry {
   std::string element_id;
   DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
@@ -2925,6 +2936,7 @@ struct LiveFramePaintProbeCache {
   std::vector<std::vector<LiveFinerCacheUnitDescriptor>>
       finer_cache_units_by_chunk;
   std::vector<LiveHitTestEntry> hit_test_entries;
+  std::vector<LiveFormControlEntry> form_control_entries;
   std::vector<LiveScrollableElementEntry> scrollable_element_entries;
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
@@ -3074,6 +3086,7 @@ void ClearStandaloneFrameDiagnosticState(LiveFramePaintProbeCache& cache) {
   cache.chunk_id_strings.clear();
   cache.finer_cache_units_by_chunk.clear();
   cache.hit_test_entries.clear();
+  cache.form_control_entries.clear();
   cache.scrollable_element_entries.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
@@ -7575,6 +7588,7 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   bool absolute_bounds_present = false;
   bool is_connected = false;
   bool checked = false;
+  bool focused = false;
   bool radio_group_scope_present = false;
   bool radio_group_checked = false;
   bool user_agent_shadow_root_present = false;
@@ -7719,6 +7733,7 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
       item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kValueAttr));
       item.is_connected = element->isConnected();
+      item.focused = element->IsFocused();
       item.placeholder_attr_present =
           element->FastHasAttribute(html_names::kPlaceholderAttr);
       if (auto* input = DynamicTo<HTMLInputElement>(element)) {
@@ -7893,6 +7908,30 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
 
   for (Node* child = node->firstChild(); child; child = child->nextSibling()) {
     CollectFormControlDomDiagnosticsForStandaloneRenderer(child, diagnostics);
+  }
+}
+
+void CollectFormControlEntriesForStandaloneRenderer(
+    Document& document,
+    std::vector<LiveFormControlEntry>& entries) {
+  FormControlDiagnosticsForStandaloneRenderer diagnostics;
+  CollectFormControlDomDiagnosticsForStandaloneRenderer(&document,
+                                                       diagnostics);
+  entries.clear();
+  for (const auto& item : diagnostics.controls) {
+    if (item.element_id.empty()) {
+      continue;
+    }
+    LiveFormControlEntry entry;
+    entry.element_id = item.element_id;
+    entry.tag_name = item.tag_name;
+    entry.value = item.live_value;
+    entry.checked = item.checked;
+    entry.focused = item.focused;
+    entry.selection_offsets_present = item.selection_offsets_present;
+    entry.selection_start = item.selection_start;
+    entry.selection_end = item.selection_end;
+    entries.push_back(std::move(entry));
   }
 }
 
@@ -12689,6 +12728,8 @@ UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
         frame_view, DocumentUpdateReason::kTest);
     TraceLiveFrameProbeStage("after post-keyboard lifecycle update");
   }
+  CollectFormControlEntriesForStandaloneRenderer(document,
+                                                cache.form_control_entries);
   cache.timing_layout_lifecycle_ms = StandaloneProbeElapsedMs(
       layout_lifecycle_start, StandaloneProbeClock::now());
   if (g_standalone_oof_unsupported_inline_containing_block > 0 &&
@@ -14143,6 +14184,70 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
   }
   if (focused) {
     *focused = entry.focused ? 1 : 0;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeFormControlEntryCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().form_control_entries.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    char* element_id,
+    int element_id_capacity,
+    char* tag_name,
+    int tag_name_capacity,
+    char* value,
+    int value_capacity,
+    int* checked,
+    int* focused,
+    int* selection_offsets_present,
+    unsigned* selection_start,
+    unsigned* selection_end) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& entries = ProbeCache().form_control_entries;
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return 0;
+  }
+  const LiveFormControlEntry& entry = entries[static_cast<size_t>(index)];
+  if (element_id && element_id_capacity > 0) {
+    const size_t copied =
+        std::min(entry.element_id.size(),
+                 static_cast<size_t>(element_id_capacity - 1));
+    std::memcpy(element_id, entry.element_id.data(), copied);
+    element_id[copied] = '\0';
+  }
+  if (tag_name && tag_name_capacity > 0) {
+    const size_t copied =
+        std::min(entry.tag_name.size(),
+                 static_cast<size_t>(tag_name_capacity - 1));
+    std::memcpy(tag_name, entry.tag_name.data(), copied);
+    tag_name[copied] = '\0';
+  }
+  if (value && value_capacity > 0) {
+    const size_t copied =
+        std::min(entry.value.size(), static_cast<size_t>(value_capacity - 1));
+    std::memcpy(value, entry.value.data(), copied);
+    value[copied] = '\0';
+  }
+  if (checked) {
+    *checked = entry.checked ? 1 : 0;
+  }
+  if (focused) {
+    *focused = entry.focused ? 1 : 0;
+  }
+  if (selection_offsets_present) {
+    *selection_offsets_present = entry.selection_offsets_present ? 1 : 0;
+  }
+  if (selection_start) {
+    *selection_start = entry.selection_start;
+  }
+  if (selection_end) {
+    *selection_end = entry.selection_end;
   }
   return 1;
 }

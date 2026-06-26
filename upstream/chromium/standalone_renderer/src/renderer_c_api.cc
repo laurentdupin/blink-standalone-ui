@@ -203,6 +203,20 @@ void CopyHitMetadata(const html_css_renderer::HitTestEntry& source,
   hit->focused = source.focused ? 1 : 0;
 }
 
+void CopyFormControlState(const html_css_renderer::FormControlEntry& source,
+                          blink_standalone_form_control_state_t* state) {
+  *state = blink_standalone_form_control_state_t{};
+  state->element_id = source.element_id.c_str();
+  state->tag_name = source.tag_name.c_str();
+  state->value = source.value.c_str();
+  state->checked = source.checked ? 1 : 0;
+  state->focused = source.focused ? 1 : 0;
+  state->selection_offsets_present =
+      source.selection_offsets_present ? 1 : 0;
+  state->selection_start = source.selection_start;
+  state->selection_end = source.selection_end;
+}
+
 }  // namespace
 
 struct blink_standalone_renderer {
@@ -571,6 +585,41 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
     if (PointInRect(x, y, it->bounds)) {
       CopyHitMetadata(*it, hit);
+      return BLINK_STANDALONE_STATUS_OK;
+    }
+  }
+  return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_state_count(
+    const blink_standalone_renderer_t* renderer) {
+  return renderer ? renderer->latest_result.form_control_entries.size() : 0;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_form_control_state(
+    const blink_standalone_renderer_t* renderer,
+    size_t index,
+    blink_standalone_form_control_state_t* state) {
+  if (!renderer || !state ||
+      index >= renderer->latest_result.form_control_entries.size()) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  CopyFormControlState(renderer->latest_result.form_control_entries[index],
+                       state);
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_form_control_state_by_id(
+    const blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    blink_standalone_form_control_state_t* state) {
+  if (!renderer || !element_id || !state) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  for (const html_css_renderer::FormControlEntry& entry :
+       renderer->latest_result.form_control_entries) {
+    if (entry.element_id == element_id) {
+      CopyFormControlState(entry, state);
       return BLINK_STANDALONE_STATUS_OK;
     }
   }

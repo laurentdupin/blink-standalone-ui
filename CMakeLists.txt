@@ -723,9 +723,13 @@ set_source_files_properties(${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
   PROPERTIES COMPILE_DEFINITIONS IS_PARTITION_ALLOC_IMPL=1)
 list(APPEND BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/i18n/icu_util.cc
-  ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/stubdata/stubdata.cpp
   ${BLINK_STANDALONE_ZLIB_C_SOURCES}
 )
+if(EXISTS "${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/stubdata/stubdata.cpp")
+  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/source/stubdata/stubdata.cpp
+  )
+endif()
 # Source-built v8_monolith contains the real PartitionAlloc implementation used
 # by V8/CppGC. Do not link the tracked implementation objects into the normal
 # V8-backed renderer as well, or lld reports duplicate PartitionAlloc symbols.

@@ -183,6 +183,17 @@ struct HitTestEntry {
   bool focused = false;
 };
 
+struct FormControlEntry {
+  std::string element_id;
+  std::string tag_name;
+  std::string value;
+  bool checked = false;
+  bool focused = false;
+  bool selection_offsets_present = false;
+  unsigned selection_start = 0;
+  unsigned selection_end = 0;
+};
+
 struct ScrollableElementEntry {
   std::string element_id;
   Rect bounds;

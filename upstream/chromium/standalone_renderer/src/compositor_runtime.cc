@@ -204,6 +204,22 @@ int StandaloneBlinkLiveFrameBridgeHitTestEntryAtForStandaloneRenderer(
     int* editable,
     int* checked,
     int* focused);
+int StandaloneBlinkLiveFrameBridgeFormControlEntryCountForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    char* element_id,
+    int element_id_capacity,
+    char* tag_name,
+    int tag_name_capacity,
+    char* value,
+    int value_capacity,
+    int* checked,
+    int* focused,
+    int* selection_offsets_present,
+    unsigned* selection_start,
+    unsigned* selection_end);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
@@ -1116,6 +1132,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
 
     if (collect_full_result) {
       ImportHitTestEntries(probe_html, result);
+      ImportFormControlEntries(probe_html, result);
       ImportScrollableElementEntries(probe_html, result);
       CopyRawAudit(probe_html, result);
     }
@@ -1280,6 +1297,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (input.result_collection == FrameResultCollection::kMinimal) {
       result.raw_paint_artifact_audit_json.clear();
       result.hit_test_entries.clear();
+      result.form_control_entries.clear();
       result.scrollable_element_entries.clear();
       result.diagnostics.clear();
     }
@@ -1351,6 +1369,47 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       entry.checked = checked != 0;
       entry.focused = focused != 0;
       result.hit_test_entries.push_back(std::move(entry));
+    }
+  }
+
+  static void ImportFormControlEntries(const std::string& probe_html,
+                                       CompositorFrameResult& result) {
+    namespace probe = ::blink::standalone_renderer_probe;
+    const int entry_count =
+        probe::StandaloneBlinkLiveFrameBridgeFormControlEntryCountForStandaloneRenderer(
+            probe_html.c_str());
+    for (int i = 0; i < entry_count && i < 4096; ++i) {
+      std::array<char, 256> element_id{};
+      std::array<char, 64> tag_name{};
+      std::array<char, 2048> value{};
+      int checked = 0;
+      int focused = 0;
+      int selection_offsets_present = 0;
+      unsigned selection_start = 0;
+      unsigned selection_end = 0;
+      if (!probe::
+              StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
+                  probe_html.c_str(), i, element_id.data(),
+                  static_cast<int>(element_id.size()), tag_name.data(),
+                  static_cast<int>(tag_name.size()), value.data(),
+                  static_cast<int>(value.size()), &checked, &focused,
+                  &selection_offsets_present, &selection_start,
+                  &selection_end)) {
+        continue;
+      }
+      const size_t id_length = std::strlen(element_id.data());
+      if (id_length == 0)
+        continue;
+      FormControlEntry entry;
+      entry.element_id = std::string(element_id.data(), id_length);
+      entry.tag_name = tag_name.data();
+      entry.value = value.data();
+      entry.checked = checked != 0;
+      entry.focused = focused != 0;
+      entry.selection_offsets_present = selection_offsets_present != 0;
+      entry.selection_start = selection_start;
+      entry.selection_end = selection_end;
+      result.form_control_entries.push_back(std::move(entry));
     }
   }
 

@@ -19,4 +19,7 @@ EXPORTS
   blink_standalone_renderer_hit_metadata_count
   blink_standalone_renderer_get_hit_metadata
   blink_standalone_renderer_hit_test
+  blink_standalone_renderer_form_control_state_count
+  blink_standalone_renderer_get_form_control_state
+  blink_standalone_renderer_get_form_control_state_by_id
   blink_standalone_renderer_last_error

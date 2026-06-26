@@ -90,6 +90,17 @@ typedef struct blink_standalone_hit_metadata {
   int focused;
 } blink_standalone_hit_metadata_t;
 
+typedef struct blink_standalone_form_control_state {
+  const char* element_id;
+  const char* tag_name;
+  const char* value;
+  int checked;
+  int focused;
+  int selection_offsets_present;
+  unsigned selection_start;
+  unsigned selection_end;
+} blink_standalone_form_control_state_t;
+
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
     const blink_standalone_renderer_config_t* config,
     blink_standalone_renderer_t** renderer_out);
@@ -166,6 +177,16 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     float x,
     float y,
     blink_standalone_hit_metadata_t* hit);
+BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_state_count(
+    const blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_form_control_state(
+    const blink_standalone_renderer_t* renderer,
+    size_t index,
+    blink_standalone_form_control_state_t* state);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_form_control_state_by_id(
+    const blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    blink_standalone_form_control_state_t* state);
 
 BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_last_error(
     const blink_standalone_renderer_t* renderer);

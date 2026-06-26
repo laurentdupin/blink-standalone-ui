@@ -145,6 +145,7 @@ void PrintUsage() {
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
       "[--c-api-separated-click-smoke] "
+      "[--c-api-text-input-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
@@ -736,6 +737,104 @@ bool HitCheckedStateIs(blink_standalone_renderer_t* renderer,
          ((hit.checked != 0) == checked);
 }
 
+bool GetFormStateById(blink_standalone_renderer_t* renderer,
+                      const char* expected_id,
+                      blink_standalone_form_control_state_t* out) {
+  return blink_standalone_renderer_get_form_control_state_by_id(
+             renderer, expected_id, out) == BLINK_STANDALONE_STATUS_OK;
+}
+
+std::string FormStateValue(
+    const blink_standalone_form_control_state_t& state) {
+  return state.value ? state.value : "";
+}
+
+bool AdvanceCApiFrameForSmoke(blink_standalone_renderer_t* renderer,
+                              double time,
+                              const char* label) {
+  const blink_standalone_status_code_t status =
+      blink_standalone_renderer_advance_frame(renderer, time);
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    return true;
+  }
+  std::fprintf(stderr, "%s: advance failed status=%d error=%s\n", label,
+               status, blink_standalone_renderer_last_error(renderer));
+  return false;
+}
+
+bool ClickPointForSmoke(blink_standalone_renderer_t* renderer,
+                        float x,
+                        float y,
+                        int click_count,
+                        double* time,
+                        const char* label) {
+  blink_standalone_renderer_mouse_move(renderer, x, y, 0);
+  if (!AdvanceCApiFrameForSmoke(renderer, *time, label)) {
+    return false;
+  }
+  *time += 0.016;
+  blink_standalone_renderer_mouse_down(
+      renderer, x, y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, click_count);
+  if (!AdvanceCApiFrameForSmoke(renderer, *time, label)) {
+    return false;
+  }
+  *time += 0.016;
+  blink_standalone_renderer_mouse_up(renderer, x, y,
+                                     BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
+                                     click_count);
+  if (!AdvanceCApiFrameForSmoke(renderer, *time, label)) {
+    return false;
+  }
+  *time += 0.016;
+  return true;
+}
+
+bool TextInputForSmoke(blink_standalone_renderer_t* renderer,
+                       const char* text,
+                       double* time,
+                       const char* label) {
+  const blink_standalone_status_code_t status =
+      blink_standalone_renderer_text_input(renderer, text);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: text_input failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  if (!AdvanceCApiFrameForSmoke(renderer, *time, label)) {
+    return false;
+  }
+  *time += 0.016;
+  return true;
+}
+
+bool KeyPressForSmoke(blink_standalone_renderer_t* renderer,
+                      blink_standalone_key_t key,
+                      double* time,
+                      const char* label) {
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_key_down(renderer, key, 0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: key_down failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  if (!AdvanceCApiFrameForSmoke(renderer, *time, label)) {
+    return false;
+  }
+  *time += 0.016;
+  status = blink_standalone_renderer_key_up(renderer, key, 0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: key_up failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  if (!AdvanceCApiFrameForSmoke(renderer, *time, label)) {
+    return false;
+  }
+  *time += 0.016;
+  return true;
+}
+
 bool WriteSolidBmp(const std::filesystem::path& path,
                    uint8_t red,
                    uint8_t green,
@@ -910,6 +1009,217 @@ int RunCApiSeparatedClickSmoke() {
       "action=play\n",
       blink_standalone_renderer_hit_metadata_count(renderer));
   blink_standalone_renderer_destroy(renderer);
+  return 0;
+}
+
+int RunCApiTextInputSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 520;
+  config.height = 260;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr, "c_api_text_input_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;padding:12px;font:20px monospace;"
+      "background:#112233;color:#fff}.row{margin:10px 0}input,textarea{"
+      "font:20px monospace;padding:4px;border:2px solid #d06329;background:#fff;"
+      "color:#111}#name{width:260px}#bio{width:360px;height:70px}</style>"
+      "<div class='row'><input id='name' value='abcdef' "
+      "data-godot-action='name'></div>"
+      "<div class='row'><textarea id='bio' data-godot-action='bio'></textarea>"
+      "</div><label><input id='agree' type='checkbox' "
+      "data-godot-action='agree'>Agree</label>"
+      "<label><input id='r1' type='radio' name='mode' checked "
+      "data-godot-action='r1'>One</label>"
+      "<label><input id='r2' type='radio' name='mode' "
+      "data-godot-action='r2'>Two</label>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: set html failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time, "c_api_text_input_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_hit_metadata_t name_hit = {};
+  blink_standalone_hit_metadata_t bio_hit = {};
+  blink_standalone_hit_metadata_t agree_hit = {};
+  blink_standalone_hit_metadata_t r2_hit = {};
+  if (!GetHitById(renderer, "name", &name_hit) ||
+      !GetHitById(renderer, "bio", &bio_hit) ||
+      !GetHitById(renderer, "agree", &agree_hit) ||
+      !GetHitById(renderer, "r2", &r2_hit)) {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: expected hit metadata missing "
+                 "hits=%zu\n",
+                 blink_standalone_renderer_hit_metadata_count(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_form_control_state_t state = {};
+  if (!GetFormStateById(renderer, "name", &state) ||
+      FormStateValue(state) != "abcdef" || state.selection_offsets_present == 0) {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: initial input state invalid "
+                 "value=%s selection=%d\n",
+                 state.value ? state.value : "(null)",
+                 state.selection_offsets_present);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float name_y = name_hit.bounds.y + name_hit.bounds.height * 0.5f;
+  const float name_left_x = name_hit.bounds.x + 8.0f;
+  const float name_right_x = name_hit.bounds.x + name_hit.bounds.width - 8.0f;
+  if (!ClickPointForSmoke(renderer, name_left_x, name_y, 1, &time,
+                          "c_api_text_input_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  if (!GetFormStateById(renderer, "name", &state) || state.focused == 0) {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: input did not focus after click\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  if (!TextInputForSmoke(renderer, "Z", &time, "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "name", &state)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const std::string after_left_insert = FormStateValue(state);
+  if (after_left_insert != "Zabcdef") {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: left caret insertion failed "
+                 "value=%s\n",
+                 after_left_insert.c_str());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (!ClickPointForSmoke(renderer, name_right_x, name_y, 1, &time,
+                          "c_api_text_input_smoke") ||
+      !TextInputForSmoke(renderer, "Y", &time, "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "name", &state)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  if (FormStateValue(state) != "ZabcdefY") {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: right caret insertion failed "
+                 "value=%s\n",
+                 FormStateValue(state).c_str());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (!KeyPressForSmoke(renderer, BLINK_STANDALONE_KEY_BACKSPACE, &time,
+                        "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "name", &state) ||
+      FormStateValue(state) != "Zabcdef") {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: Backspace failed value=%s\n",
+                 state.value ? state.value : "(null)");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (!ClickPointForSmoke(renderer, name_left_x, name_y, 1, &time,
+                          "c_api_text_input_smoke") ||
+      !KeyPressForSmoke(renderer, BLINK_STANDALONE_KEY_DELETE, &time,
+                        "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "name", &state) ||
+      FormStateValue(state) != "abcdef") {
+    std::fprintf(stderr, "c_api_text_input_smoke: Delete failed value=%s\n",
+                 state.value ? state.value : "(null)");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float bio_x = bio_hit.bounds.x + 8.0f;
+  const float bio_y = bio_hit.bounds.y + 12.0f;
+  if (!ClickPointForSmoke(renderer, bio_x, bio_y, 1, &time,
+                          "c_api_text_input_smoke") ||
+      !TextInputForSmoke(renderer, "h\xC3\xA9", &time,
+                         "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "bio", &state) ||
+      FormStateValue(state) != "h\xC3\xA9") {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: textarea text insert failed "
+                 "value=%s\n",
+                 state.value ? state.value : "(null)");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  if (!KeyPressForSmoke(renderer, BLINK_STANDALONE_KEY_ENTER, &time,
+                        "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "bio", &state) ||
+      FormStateValue(state).find('\n') == std::string::npos) {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: textarea Enter failed value=%s\n",
+                 state.value ? state.value : "(null)");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float agree_x = agree_hit.bounds.x + agree_hit.bounds.width * 0.5f;
+  const float agree_y = agree_hit.bounds.y + agree_hit.bounds.height * 0.5f;
+  if (!ClickPointForSmoke(renderer, agree_x, agree_y, 1, &time,
+                          "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "agree", &state) || state.checked == 0) {
+    std::fprintf(stderr,
+                 "c_api_text_input_smoke: checkbox activation failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const float r2_x = r2_hit.bounds.x + r2_hit.bounds.width * 0.5f;
+  const float r2_y = r2_hit.bounds.y + r2_hit.bounds.height * 0.5f;
+  if (!ClickPointForSmoke(renderer, r2_x, r2_y, 1, &time,
+                          "c_api_text_input_smoke") ||
+      !GetFormStateById(renderer, "r2", &state) || state.checked == 0 ||
+      !GetFormStateById(renderer, "r1", &state) || state.checked != 0) {
+    std::fprintf(stderr, "c_api_text_input_smoke: radio activation failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  for (int i = 0; i < 3; ++i) {
+    if (!ClickPointForSmoke(renderer, name_left_x, name_y, i + 1, &time,
+                            "c_api_text_input_smoke") ||
+        !GetFormStateById(renderer, "name", &state) || state.focused == 0) {
+      std::fprintf(stderr,
+                   "c_api_text_input_smoke: repeated text-control click failed "
+                   "iteration=%d\n",
+                   i + 1);
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+  }
+
+  const std::string final_name = FormStateValue(state);
+  const size_t form_control_count =
+      blink_standalone_renderer_form_control_state_count(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_text_input_smoke: ok name=%s textarea=%s form_controls=%zu\n",
+      final_name.c_str(), "utf8+newline", form_control_count);
   return 0;
 }
 
@@ -1981,6 +2291,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
+        arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -2015,6 +2326,7 @@ int main(int argc, char** argv) {
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
   bool c_api_separated_click_smoke = false;
+  bool c_api_text_input_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -2124,6 +2436,8 @@ int main(int argc, char** argv) {
       c_api_transparent_background_smoke = true;
     } else if (arg == "--c-api-separated-click-smoke") {
       c_api_separated_click_smoke = true;
+    } else if (arg == "--c-api-text-input-smoke") {
+      c_api_text_input_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -2249,6 +2563,10 @@ int main(int argc, char** argv) {
 
   if (c_api_separated_click_smoke) {
     return RunCApiSeparatedClickSmoke();
+  }
+
+  if (c_api_text_input_smoke) {
+    return RunCApiTextInputSmoke();
   }
 
   if (c_api_two_instance_smoke) {

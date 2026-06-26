@@ -417,28 +417,6 @@ void TextControlElement::setRangeText(const String& replacement,
                                       unsigned end,
                                       const V8SelectionMode& selection_mode,
                                       ExceptionState& exception_state) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (start > end) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kIndexSizeError,
-        "The provided start value is larger than the provided end value.");
-    return;
-  }
-  if (OpenShadowRoot())
-    return;
-  String original_text = InnerEditorValue();
-  start = std::min(start, original_text.length());
-  end = std::min(end, original_text.length());
-  StringBuilder text;
-  text.Append(StringView(original_text, 0, start));
-  text.Append(replacement);
-  text.Append(StringView(original_text, end));
-  SetValue(text.ToString(), TextFieldEventBehavior::kDispatchNoEvent,
-           TextControlSetValueSelection::kDoNotSet);
-  setSelectionRangeForBinding(start + replacement.length(),
-                              start + replacement.length());
-  return;
-#else
   if (start > end) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
@@ -504,7 +482,6 @@ void TextControlElement::setRangeText(const String& replacement,
   }
 
   setSelectionRangeForBinding(new_selection_start, new_selection_end);
-#endif
 }
 
 void TextControlElement::setSelectionRangeForBinding(
@@ -602,17 +579,6 @@ bool TextControlElement::SetSelectionRange(
     unsigned start,
     unsigned end,
     TextFieldSelectionDirection direction) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (OpenShadowRoot() || !IsTextControl())
-    return false;
-  const unsigned editor_value_length = InnerEditorValue().length();
-  end = std::min(end, editor_value_length);
-  start = std::min(start, end);
-  bool did_change = CacheSelection(start, end, direction);
-  if (did_change)
-    ScheduleSelectionchangeEventOnThisOrDocument();
-  return did_change;
-#else
   if (OpenShadowRoot() || !IsTextControl())
     return false;
   HTMLElement* inner_editor = EnsureInnerEditorElement();
@@ -671,7 +637,6 @@ bool TextControlElement::SetSelectionRange(
           .SetIsDirectional(direction != kSelectionHasNoDirection)
           .Build());
   return did_change;
-#endif
 }
 
 bool TextControlElement::CacheSelection(unsigned start,
@@ -688,9 +653,6 @@ bool TextControlElement::CacheSelection(unsigned start,
 }
 
 VisiblePosition TextControlElement::VisiblePositionForIndex(int index) const {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return VisiblePosition();
-#else
   if (index <= 0)
     return VisiblePosition::FirstPositionInNode(*InnerEditorElement());
   Position start, end;
@@ -700,7 +662,6 @@ VisiblePosition TextControlElement::VisiblePositionForIndex(int index) const {
   CharacterIterator it(start, end);
   it.Advance(index - 1);
   return CreateVisiblePosition(it.EndPosition(), TextAffinity::kUpstream);
-#endif
 }
 
 unsigned TextControlElement::selectionStart() const {
@@ -717,15 +678,6 @@ unsigned TextControlElement::selectionStart() const {
 void TextControlElement::ComputeSelection(
     uint32_t flags,
     ComputedSelection& computed_selection) const {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (flags & kStart)
-    computed_selection.start = cached_selection_start_;
-  if (flags & kEnd)
-    computed_selection.end = cached_selection_end_;
-  if (flags & kDirection)
-    computed_selection.direction = cached_selection_direction_;
-  return;
-#else
   DCHECK(IsTextControl());
 #if DCHECK_IS_ON()
   // This code does not set all values of `computed_selection`. Ensure they
@@ -762,7 +714,6 @@ void TextControlElement::ComputeSelection(
                                        ? kSelectionHasForwardDirection
                                        : kSelectionHasBackwardDirection;
   }
-#endif
 }
 
 unsigned TextControlElement::selectionEnd() const {
@@ -794,9 +745,6 @@ static const AtomicString& DirectionString(
 }
 
 const AtomicString& TextControlElement::selectionDirection() const {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return DirectionString(cached_selection_direction_);
-#else
   // Ensured by HTMLInputElement::selectionDirectionForBinding().
   DCHECK(IsTextControl());
   if (ShouldApplySelectionCache())
@@ -804,7 +752,6 @@ const AtomicString& TextControlElement::selectionDirection() const {
   ComputedSelection computed_selection;
   ComputeSelection(kDirection, computed_selection);
   return DirectionString(computed_selection.direction);
-#endif
 }
 
 static inline void SetContainerAndOffsetForRange(Node* node,
@@ -821,9 +768,6 @@ static inline void SetContainerAndOffsetForRange(Node* node,
 }
 
 SelectionInDOMTree TextControlElement::Selection() const {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return SelectionInDOMTree();
-#else
   if (!GetLayoutObject() || !IsTextControl())
     return SelectionInDOMTree();
 
@@ -874,7 +818,6 @@ SelectionInDOMTree TextControlElement::Selection() const {
       .SetBaseAndExtent(Position(start_node, start), Position(end_node, end))
       .SetAffinity(affinity)
       .Build();
-#endif
 }
 
 int TextControlElement::maxLength() const {
@@ -934,11 +877,6 @@ void TextControlElement::RestoreCachedSelection() {
 }
 
 void TextControlElement::SelectionChanged(bool user_triggered) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  if (!GetLayoutObject() || !IsTextControl())
-    return;
-  return;
-#else
   if (!GetLayoutObject() || !IsTextControl())
     return;
 
@@ -957,7 +895,6 @@ void TextControlElement::SelectionChanged(bool user_triggered) {
   if (!selection.IsRange())
     return;
   DispatchEvent(*Event::CreateBubble(event_type_names::kSelect));
-#endif
 }
 
 void TextControlElement::ScheduleSelectEvent() {
@@ -967,9 +904,6 @@ void TextControlElement::ScheduleSelectEvent() {
 }
 
 void TextControlElement::ScheduleSelectionchangeEventOnThisOrDocument() {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return;
-#else
   if (RuntimeEnabledFeatures::DispatchSelectionchangeEventPerElementEnabled()) {
     if (!IsInShadowTree()) {
       ScheduleSelectionchangeEvent();
@@ -977,7 +911,6 @@ void TextControlElement::ScheduleSelectionchangeEventOnThisOrDocument() {
       GetDocument().ScheduleSelectionchangeEvent();
     }
   }
-#endif
 }
 
 void TextControlElement::ParseAttribute(
@@ -1273,29 +1206,21 @@ String TextControlElement::ValueWithHardLineBreaks() const {
 }
 
 TextControlElement* EnclosingTextControl(const Position& position) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return nullptr;
-#else
   DCHECK(position.IsNull() || position.IsOffsetInAnchor() ||
          position.ComputeContainerNode() ||
          !position.AnchorNode()->OwnerShadowHost() ||
          (position.AnchorNode()->parentNode() &&
           position.AnchorNode()->parentNode()->IsShadowRoot()));
   return EnclosingTextControl(position.ComputeContainerNode());
-#endif
 }
 
 TextControlElement* EnclosingTextControl(const PositionInFlatTree& position) {
-#if HTML_CSS_RENDERER_STANDALONE_TEXT_INPUT
-  return nullptr;
-#else
   Node* container = position.ComputeContainerNode();
   if (IsTextControl(container)) {
     // For example, #inner-editor@beforeAnchor reaches here.
     return ToTextControl(container);
   }
   return EnclosingTextControl(container);
-#endif
 }
 
 TextControlElement* EnclosingTextControl(const Node* container) {

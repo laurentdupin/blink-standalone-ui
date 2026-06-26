@@ -19342,8 +19342,10 @@ void SVGMaskPainter::PaintSVGMaskLayer(GraphicsContext&,
                                        float,
                                        SkBlendMode,
                                        bool) {}
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
 extern const int32_t kSerializedCharacterDataSize = 0;
 alignas(4) extern const uint8_t kSerializedCharacterData[] = {};
+#endif
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
 CharacterBreakIterator::CharacterBreakIterator(const StringView&)
     : is_8bit_(true), charaters8_(nullptr), offset_(0), length_(0) {}
