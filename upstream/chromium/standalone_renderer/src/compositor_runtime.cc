@@ -108,6 +108,16 @@ StandaloneBlinkLiveFrameBridgeTimingPaintArtifactExtractionMsForStandaloneRender
     const char* body_html);
 double StandaloneBlinkLiveFrameBridgeTimingCcCompositeMsForStandaloneRenderer(
     const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcFrameSinkWarmupMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcRootPreattachMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcPendingUpdateMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcSchedulerRunLoopMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcSubmitWaitMsForStandaloneRenderer(
+    const char* body_html);
 int StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeTimingReusedLiveDocumentForStandaloneRenderer(
@@ -1125,6 +1135,21 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             probe_html.c_str());
     result.timing.bridge_cc_composite_ms =
         probe::StandaloneBlinkLiveFrameBridgeTimingCcCompositeMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_frame_sink_warmup_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcFrameSinkWarmupMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_root_preattach_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcRootPreattachMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_pending_update_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcPendingUpdateMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_scheduler_run_loop_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcSchedulerRunLoopMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_submit_wait_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcSubmitWaitMsForStandaloneRenderer(
             probe_html.c_str());
     result.timing.bridge_cache_hit =
         probe::StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(

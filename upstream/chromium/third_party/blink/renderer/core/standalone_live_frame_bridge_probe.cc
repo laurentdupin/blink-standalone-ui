@@ -1751,6 +1751,13 @@ struct OriginalElementAttributeValue {
   std::string value;
 };
 
+using StandaloneProbeClock = std::chrono::steady_clock;
+
+double StandaloneProbeElapsedMs(StandaloneProbeClock::time_point start,
+                                StandaloneProbeClock::time_point end) {
+  return std::chrono::duration<double, std::milli>(end - start).count();
+}
+
 class StandaloneCcLayerHost final
     : public cc::LayerTreeHostDelegate,
       public cc::LayerTreeHostSingleThreadDelegate,
@@ -1889,6 +1896,19 @@ class StandaloneCcLayerHost final
   const std::string& copy_output_failure() const {
     return copy_output_failure_;
   }
+  double timing_frame_sink_warmup_ms() const {
+    return timing_frame_sink_warmup_ms_;
+  }
+  double timing_root_preattach_ms() const {
+    return timing_root_preattach_ms_;
+  }
+  double timing_pending_update_ms() const {
+    return timing_pending_update_ms_;
+  }
+  double timing_scheduler_run_loop_ms() const {
+    return timing_scheduler_run_loop_ms_;
+  }
+  double timing_submit_wait_ms() const { return timing_submit_wait_ms_; }
 
   cc::AnimationHost* animation_host() const { return animation_host_.get(); }
 
@@ -1910,6 +1930,7 @@ class StandaloneCcLayerHost final
     if (frame_sink_bound_) {
       return true;
     }
+    const auto warmup_start = StandaloneProbeClock::now();
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     frame_sink_init_run_loop_ = &run_loop;
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
@@ -1917,6 +1938,8 @@ class StandaloneCcLayerHost final
     TraceLiveFrameProbeStage("cc host scheduler before frame sink warm-up");
     layer_tree_host_->SetShouldWarmUp();
     run_loop.Run();
+    timing_frame_sink_warmup_ms_ =
+        StandaloneProbeElapsedMs(warmup_start, StandaloneProbeClock::now());
     TraceLiveFrameProbeStage("cc host scheduler after frame sink warm-up");
     frame_sink_init_run_loop_ = nullptr;
     if (!frame_sink_bound_) {
@@ -1949,12 +1972,19 @@ class StandaloneCcLayerHost final
     compositor_frame_submitted_ = false;
     scheduler_begin_main_frame_seen_ = false;
     scheduler_pending_update_ran_ = false;
+    timing_root_preattach_ms_ = 0.0;
+    timing_pending_update_ms_ = 0.0;
+    timing_scheduler_run_loop_ms_ = 0.0;
+    timing_submit_wait_ms_ = 0.0;
     if (!root_layer_attached_) {
       TraceLiveFrameProbeStage(
           "cc host scheduler bootstrap before PAC root preattach");
+      const auto preattach_start = StandaloneProbeClock::now();
       base::AutoReset<bool> inside_update(&inside_scheduler_layer_tree_update_,
                                           true);
       pre_attach_root_update();
+      timing_root_preattach_ms_ =
+          StandaloneProbeElapsedMs(preattach_start, StandaloneProbeClock::now());
       TraceLiveFrameProbeStage(
           "cc host scheduler bootstrap after PAC root preattach");
       if (!root_layer_attached_) {
@@ -1979,9 +2009,14 @@ class StandaloneCcLayerHost final
             weak_factory_.GetWeakPtr()));
     commit_requested_ = true;
     TraceLiveFrameProbeStage("cc host scheduler before run loop");
+    scheduler_frame_start_time_ = StandaloneProbeClock::now();
+    const auto run_loop_start = StandaloneProbeClock::now();
     run_loop.Run();
+    timing_scheduler_run_loop_ms_ =
+        StandaloneProbeElapsedMs(run_loop_start, StandaloneProbeClock::now());
     TraceLiveFrameProbeStage("cc host scheduler after run loop");
     scheduler_frame_run_loop_ = nullptr;
+    scheduler_frame_start_time_.reset();
     ClearPendingLayerTreeUpdateForScheduler();
     if (!scheduler_pending_update_ran_) {
       SetFailure(failure_reason,
@@ -2221,7 +2256,10 @@ class StandaloneCcLayerHost final
     pending_scheduler_layer_tree_update_ = nullptr;
     base::AutoReset<bool> inside_update(&inside_scheduler_layer_tree_update_,
                                         true);
+    const auto update_start = StandaloneProbeClock::now();
     update();
+    timing_pending_update_ms_ =
+        StandaloneProbeElapsedMs(update_start, StandaloneProbeClock::now());
     scheduler_pending_update_ran_ = true;
   }
   void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override {
@@ -2298,6 +2336,10 @@ class StandaloneCcLayerHost final
       return;
     }
     compositor_frame_submitted_ = true;
+    if (scheduler_frame_start_time_) {
+      timing_submit_wait_ms_ = StandaloneProbeElapsedMs(
+          *scheduler_frame_start_time_, StandaloneProbeClock::now());
+    }
     if (scheduler_frame_run_loop_) {
       scheduler_frame_run_loop_->Quit();
     }
@@ -2351,6 +2393,12 @@ class StandaloneCcLayerHost final
   bool inside_scheduler_layer_tree_update_ = false;
   raw_ptr<base::RunLoop> scheduler_frame_run_loop_ = nullptr;
   raw_ptr<base::RunLoop> frame_sink_init_run_loop_ = nullptr;
+  std::optional<StandaloneProbeClock::time_point> scheduler_frame_start_time_;
+  double timing_frame_sink_warmup_ms_ = 0.0;
+  double timing_root_preattach_ms_ = 0.0;
+  double timing_pending_update_ms_ = 0.0;
+  double timing_scheduler_run_loop_ms_ = 0.0;
+  double timing_submit_wait_ms_ = 0.0;
   base::WeakPtrFactory<StandaloneCcLayerHost> weak_factory_{this};
 };
 
@@ -2920,6 +2968,11 @@ struct LiveFramePaintProbeCache {
   double timing_paint_artifact_audit_ms = 0.0;
   double timing_paint_artifact_extraction_ms = 0.0;
   double timing_cc_composite_ms = 0.0;
+  double timing_cc_frame_sink_warmup_ms = 0.0;
+  double timing_cc_root_preattach_ms = 0.0;
+  double timing_cc_pending_update_ms = 0.0;
+  double timing_cc_scheduler_run_loop_ms = 0.0;
+  double timing_cc_submit_wait_ms = 0.0;
   bool timing_cache_hit = false;
   bool timing_reused_live_document = false;
   bool timing_rebuilt_for_attributes = false;
@@ -3162,11 +3215,21 @@ void SyncStandaloneCcHostStateForStandaloneRenderer(
       cache.cc_layer_host->frame_sink_failure_reason();
 }
 
-using StandaloneProbeClock = std::chrono::steady_clock;
-
-double StandaloneProbeElapsedMs(StandaloneProbeClock::time_point start,
-                                StandaloneProbeClock::time_point end) {
-  return std::chrono::duration<double, std::milli>(end - start).count();
+void SyncStandaloneCcTimingForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache) {
+  if (!cache.cc_layer_host) {
+    return;
+  }
+  cache.timing_cc_frame_sink_warmup_ms =
+      cache.cc_layer_host->timing_frame_sink_warmup_ms();
+  cache.timing_cc_root_preattach_ms =
+      cache.cc_layer_host->timing_root_preattach_ms();
+  cache.timing_cc_pending_update_ms =
+      cache.cc_layer_host->timing_pending_update_ms();
+  cache.timing_cc_scheduler_run_loop_ms =
+      cache.cc_layer_host->timing_scheduler_run_loop_ms();
+  cache.timing_cc_submit_wait_ms =
+      cache.cc_layer_host->timing_submit_wait_ms();
 }
 
 bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
@@ -12687,6 +12750,7 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
       cache.cc_layer_host->ScheduleFrameWithPendingLayerTreeUpdateForScheduler(
           std::move(pre_attach_root), std::move(update),
           &cache.cc_frame_sink_failure_reason);
+  SyncStandaloneCcTimingForStandaloneRenderer(cache);
   cache.timing_cc_composite_ms +=
       StandaloneProbeElapsedMs(scheduler_start, StandaloneProbeClock::now());
   ImportCopyOutputPngFromCcHostForStandaloneRenderer(cache);
@@ -12741,6 +12805,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.timing_paint_artifact_audit_ms = 0.0;
   cache.timing_paint_artifact_extraction_ms = 0.0;
   cache.timing_cc_composite_ms = 0.0;
+  cache.timing_cc_frame_sink_warmup_ms = 0.0;
+  cache.timing_cc_root_preattach_ms = 0.0;
+  cache.timing_cc_pending_update_ms = 0.0;
+  cache.timing_cc_scheduler_run_loop_ms = 0.0;
+  cache.timing_cc_submit_wait_ms = 0.0;
   cache.timing_cache_hit = false;
   cache.timing_reused_live_document = false;
   cache.timing_rebuilt_for_attributes = false;
@@ -13641,6 +13710,40 @@ double StandaloneBlinkLiveFrameBridgeTimingCcCompositeMsForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);
   return ProbeCache().timing_cc_composite_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingCcFrameSinkWarmupMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_frame_sink_warmup_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingCcRootPreattachMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_root_preattach_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingCcPendingUpdateMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_pending_update_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingCcSchedulerRunLoopMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_scheduler_run_loop_ms;
+}
+
+double StandaloneBlinkLiveFrameBridgeTimingCcSubmitWaitMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_submit_wait_ms;
 }
 
 int StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(

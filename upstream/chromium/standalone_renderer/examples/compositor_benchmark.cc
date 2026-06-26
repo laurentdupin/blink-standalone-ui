@@ -1068,6 +1068,16 @@ void WriteFrameTimingJsonFields(
        << timing.bridge_paint_artifact_extraction_ms << ",\n";
   file << indent << "  \"bridge_cc_composite_ms\": "
        << timing.bridge_cc_composite_ms << ",\n";
+  file << indent << "  \"bridge_cc_frame_sink_warmup_ms\": "
+       << timing.bridge_cc_frame_sink_warmup_ms << ",\n";
+  file << indent << "  \"bridge_cc_root_preattach_ms\": "
+       << timing.bridge_cc_root_preattach_ms << ",\n";
+  file << indent << "  \"bridge_cc_pending_update_ms\": "
+       << timing.bridge_cc_pending_update_ms << ",\n";
+  file << indent << "  \"bridge_cc_scheduler_run_loop_ms\": "
+       << timing.bridge_cc_scheduler_run_loop_ms << ",\n";
+  file << indent << "  \"bridge_cc_submit_wait_ms\": "
+       << timing.bridge_cc_submit_wait_ms << ",\n";
   file << indent << "  \"bridge_cache_hit\": "
        << (timing.bridge_cache_hit ? "true" : "false") << ",\n";
   file << indent << "  \"bridge_reused_live_document\": "
