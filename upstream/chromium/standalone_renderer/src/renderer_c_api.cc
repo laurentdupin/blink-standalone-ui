@@ -378,6 +378,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->last_error.clear();
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
+  input.device_scale_factor = renderer->device_scale_factor;
   input.html_override = renderer->html;
   input.resource_root = renderer->resource_root;
   input.resource_base_path = renderer->resource_base_path;

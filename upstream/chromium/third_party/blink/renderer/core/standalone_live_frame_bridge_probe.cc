@@ -349,6 +349,18 @@ void TraceLiveFrameProbeStagef(const char* format,
                                wtf_size_t second);
 std::string JsonStringForStandaloneRenderer(const std::string& value);
 
+gfx::Size StandalonePhysicalViewportForDeviceScale(
+    const gfx::Size& logical_viewport,
+    float device_scale_factor) {
+  const float clamped_scale =
+      device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+  return gfx::Size(
+      std::max(1, static_cast<int>(
+                      std::ceil(logical_viewport.width() * clamped_scale))),
+      std::max(1, static_cast<int>(
+                      std::ceil(logical_viewport.height() * clamped_scale))));
+}
+
 std::string DescribeGLInitializationFailure(const char* prefix) {
   std::ostringstream out;
   out << prefix;
@@ -1798,6 +1810,7 @@ class StandaloneCcLayerHost final
 
   bool AttachRootLayer(scoped_refptr<cc::Layer> root_layer,
                        const gfx::Size& viewport,
+                       float device_scale_factor,
                        std::string* failure_reason) {
     attach_attempted_ = true;
     if (!root_layer) {
@@ -1810,18 +1823,25 @@ class StandaloneCcLayerHost final
       root_layer_attached_ = false;
       return false;
     }
-    const bool viewport_changed = viewport_ != viewport;
+    const gfx::Size physical_viewport =
+        StandalonePhysicalViewportForDeviceScale(viewport, device_scale_factor);
+    const bool viewport_changed = logical_viewport_ != viewport ||
+                                  physical_viewport_ != physical_viewport ||
+                                  device_scale_factor_ != device_scale_factor;
     const bool root_layer_changed = root_layer_ptr != attached_root_layer_;
     if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
       surface_id_allocator_.GenerateId();
     }
-    viewport_ = viewport;
+    logical_viewport_ = viewport;
+    physical_viewport_ = physical_viewport;
+    device_scale_factor_ = device_scale_factor;
     TraceLiveFrameProbeStage("cc host AttachRootLayer before viewport surface");
     layer_tree_host_->SetViewportRectAndScale(
-        gfx::Rect(viewport), /*device_scale_factor=*/1.0f,
+        gfx::Rect(physical_viewport_), device_scale_factor_,
         surface_id_allocator_.GetCurrentLocalSurfaceId());
-    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(gfx::Rect(viewport));
-    layer_tree_host_->SetVisualDeviceViewportSize(viewport);
+    layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
+        gfx::Rect(physical_viewport_));
+    layer_tree_host_->SetVisualDeviceViewportSize(physical_viewport_);
     TraceLiveFrameProbeStage("cc host AttachRootLayer after viewport surface");
     root_layer->SetBounds(viewport);
     layer_tree_host_->SetRootLayer(std::move(root_layer));
@@ -1872,7 +1892,7 @@ class StandaloneCcLayerHost final
     if (layer_tree_host_) {
       layer_tree_host_->set_background_color(
           transparent_background_ ? SkColors::kTransparent : SkColors::kWhite);
-      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(physical_viewport_));
       if (!inside_scheduler_layer_tree_update_) {
         layer_tree_host_->SetNeedsCommit();
       }
@@ -1942,11 +1962,12 @@ class StandaloneCcLayerHost final
   cc::AnimationHost* animation_host() const { return animation_host_.get(); }
 
   bool EnsureHostForScheduler(const gfx::Size& viewport,
+                              float device_scale_factor,
                               std::string* failure_reason) {
     if (!EnsureHost(failure_reason)) {
       return false;
     }
-    UpdateViewportForScheduler(viewport);
+    UpdateViewportForScheduler(viewport, device_scale_factor);
     return true;
   }
 
@@ -2023,7 +2044,7 @@ class StandaloneCcLayerHost final
         return false;
       }
     }
-    UpdateViewportForScheduler(viewport_);
+    UpdateViewportForScheduler(logical_viewport_, device_scale_factor_);
     SetPendingLayerTreeUpdateForScheduler(std::move(update));
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     scheduler_frame_run_loop_ = &run_loop;
@@ -2133,36 +2154,51 @@ class StandaloneCcLayerHost final
       layer_tree_host_->SetNeedsRecalculateRasterScales();
     }
     layer_tree_host_->SetNeedsUpdateLayers();
-    layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+    layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(physical_viewport_));
     layer_tree_host_->SetNeedsCommit();
     next_composite_requires_forced_redraw_ = false;
     commit_requested_ = true;
   }
 
-  void UpdateViewportForScheduler(const gfx::Size& viewport) {
+  void UpdateViewportForScheduler(const gfx::Size& viewport,
+                                  float device_scale_factor) {
     if (!layer_tree_host_) {
-      viewport_ = viewport;
+      logical_viewport_ = viewport;
+      device_scale_factor_ =
+          device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+      physical_viewport_ = StandalonePhysicalViewportForDeviceScale(
+          logical_viewport_, device_scale_factor_);
       return;
     }
-    const bool viewport_changed = viewport_ != viewport;
+    const float clamped_device_scale_factor =
+        device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+    const gfx::Size physical_viewport =
+        StandalonePhysicalViewportForDeviceScale(
+            viewport, clamped_device_scale_factor);
+    const bool viewport_changed = logical_viewport_ != viewport ||
+                                  physical_viewport_ != physical_viewport ||
+                                  device_scale_factor_ !=
+                                      clamped_device_scale_factor;
     if (!surface_id_allocator_.HasValidLocalSurfaceId() || viewport_changed) {
       surface_id_allocator_.GenerateId();
     }
-    viewport_ = viewport;
+    logical_viewport_ = viewport;
+    physical_viewport_ = physical_viewport;
+    device_scale_factor_ = clamped_device_scale_factor;
     TraceLiveFrameProbeStage("cc host scheduler before viewport surface");
     layer_tree_host_->SetViewportRectAndScale(
-        gfx::Rect(viewport_), /*device_scale_factor=*/1.0f,
+        gfx::Rect(physical_viewport_), device_scale_factor_,
         surface_id_allocator_.GetCurrentLocalSurfaceId());
     layer_tree_host_->SetVisualDeviceViewportIntersectionRect(
-        gfx::Rect(viewport_));
-    layer_tree_host_->SetVisualDeviceViewportSize(viewport_);
+        gfx::Rect(physical_viewport_));
+    layer_tree_host_->SetVisualDeviceViewportSize(physical_viewport_);
     if (attached_root_layer_) {
-      attached_root_layer_->SetBounds(viewport_);
+      attached_root_layer_->SetBounds(logical_viewport_);
     }
     if (viewport_changed) {
       next_composite_requires_forced_redraw_ = true;
       layer_tree_host_->SetNeedsUpdateLayers();
-      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(viewport_));
+      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(physical_viewport_));
       if (!inside_scheduler_layer_tree_update_) {
         layer_tree_host_->SetNeedsCommit();
       }
@@ -2240,8 +2276,9 @@ class StandaloneCcLayerHost final
             frame_sink_manager_.get(), frame_sink_id, gpu_thread_holder_,
             std::move(compositor_context_provider),
             std::move(worker_context_provider), std::move(main_task_runner),
-            g_standalone_native_window_size.IsEmpty() ? gfx::Size(1, 1)
-                                                      : g_standalone_native_window_size,
+            g_standalone_native_window_size.IsEmpty()
+                ? physical_viewport_
+                : g_standalone_native_window_size,
             &compositor_frame_submitted_, &viz_display_created_,
             &skia_gpu_reached_, &submitted_output_size_,
             &viz_display_output_size_, &copy_output_requested_,
@@ -2392,7 +2429,9 @@ class StandaloneCcLayerHost final
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
   raw_ptr<cc::Layer> attached_root_layer_ = nullptr;
-  gfx::Size viewport_;
+  gfx::Size logical_viewport_;
+  gfx::Size physical_viewport_;
+  float device_scale_factor_ = 1.0f;
   bool attach_attempted_ = false;
   bool root_layer_attached_ = false;
   bool next_composite_requires_forced_redraw_ = true;
@@ -2954,6 +2993,7 @@ struct LiveFramePaintProbeCache {
   std::vector<LiveElementScrollDiagnostic> element_scroll_diagnostics;
   int viewport_width = 320;
   int viewport_height = 200;
+  float device_scale_factor = 1.0f;
   bool transparent_background = false;
   float requested_scroll_x = 0.0f;
   float requested_scroll_y = 0.0f;
@@ -3279,7 +3319,7 @@ bool PrewarmStandaloneCcFrameSinkForStandaloneRenderer(
   cache.cc_frame_sink_failure_reason.clear();
   const auto prewarm_start = StandaloneProbeClock::now();
   const bool host_ok = cache.cc_layer_host->EnsureHostForScheduler(
-      viewport, &cache.cc_frame_sink_failure_reason);
+      viewport, cache.device_scale_factor, &cache.cc_frame_sink_failure_reason);
   const bool sink_ok =
       host_ok && cache.cc_layer_host->EnsureFrameSinkReadyForScheduler(
                      &cache.cc_frame_sink_failure_reason);
@@ -3335,6 +3375,7 @@ class StandaloneCompositorChromeClient final : public EmptyChromeClient {
     const bool attached = cache_->cc_layer_host->AttachRootLayer(
         std::move(layer), gfx::Size(cache_->viewport_width,
                                     cache_->viewport_height),
+        cache_->device_scale_factor,
         &cache_->cc_attach_failure_reason);
     SyncStandaloneCcHostStateForStandaloneRenderer(*cache_);
     cache_->cc_root_layer_attached = attached;
@@ -6978,7 +7019,7 @@ std::string MediaQueryDiagnosticsJsonForStandaloneRenderer(
   std::ostringstream json;
   json << "{\"viewport\":{\"width\":" << cache.viewport_width
        << ",\"height\":" << cache.viewport_height << "}"
-       << ",\"device_scale_factor\":1"
+       << ",\"device_scale_factor\":" << cache.device_scale_factor
        << ",\"media_values\":{\"viewport_width\":" << cache.viewport_width
        << ",\"viewport_height\":" << cache.viewport_height
        << ",\"device_width\":" << cache.viewport_width
@@ -11809,7 +11850,7 @@ void BuildPaintArtifactAudit(const PaintArtifact& artifact,
        << ",\"caveat\":\"probe timings exclude process startup and CPU replay; "
           "PaintArtifact extraction is reported by the caller after audit "
           "serialization in some paths\"}"
-       << ",\"device_scale_factor\":1"
+       << ",\"device_scale_factor\":" << cache.device_scale_factor
        << ",\"media_query_diagnostics\":"
        << media_query_diagnostics_json
        << ",\"list_marker_diagnostics\":"
@@ -12834,6 +12875,7 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
   cache.cc_frame_sink_failure_reason.clear();
   if (!cache.cc_layer_host->EnsureHostForScheduler(
           gfx::Size(cache.viewport_width, cache.viewport_height),
+          cache.device_scale_factor,
           &cache.cc_frame_sink_failure_reason)) {
     SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     return false;
@@ -13343,6 +13385,31 @@ void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
     frame_view.Resize(viewport_size);
     frame_view.SetNeedsUpdateGeometries();
     cache.holder->GetPage().GetVisualViewport().SetSize(viewport_size);
+    cache.holder->GetDocument().GetStyleEngine().UpdateViewportSize();
+  }
+  cache.initialized = false;
+  cache.cc_attach_failure_reason.clear();
+  cache.cc_frame_sink_failure_reason.clear();
+  cache.element_attributes_changed_since_probe = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetDeviceScaleFactorForStandaloneRenderer(
+    float device_scale_factor) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const float clamped_device_scale_factor =
+      device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
+  if (cache.device_scale_factor == clamped_device_scale_factor) {
+    return;
+  }
+  cache.device_scale_factor = clamped_device_scale_factor;
+  if (cache.holder) {
     cache.holder->GetDocument().GetStyleEngine().UpdateViewportSize();
   }
   cache.initialized = false;

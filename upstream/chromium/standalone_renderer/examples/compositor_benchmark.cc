@@ -451,10 +451,29 @@ int RunCApiSmoke() {
   return 0;
 }
 
+bool HasHitId(blink_standalone_renderer_t* renderer, const char* expected_id);
+bool HitCheckedStateIs(blink_standalone_renderer_t* renderer,
+                       const char* expected_id,
+                       bool checked);
+bool GetFormStateById(blink_standalone_renderer_t* renderer,
+                      const char* expected_id,
+                      blink_standalone_form_control_state_t* out);
+std::string FormStateValue(
+    const blink_standalone_form_control_state_t& state);
+bool AdvanceCApiFrameForSmoke(blink_standalone_renderer_t* renderer,
+                              double time,
+                              const char* label);
+bool ClickPointForSmoke(blink_standalone_renderer_t* renderer,
+                        float x,
+                        float y,
+                        int click_count,
+                        double* time,
+                        const char* label);
+
 int RunCApiViewportResizeSmoke() {
   blink_standalone_renderer_config_t config = {};
-  config.width = 320;
-  config.height = 240;
+  config.width = 256;
+  config.height = 128;
   config.device_scale_factor = 1.0f;
   config.no_script_profile = 1;
   blink_standalone_renderer_t* renderer = nullptr;
@@ -467,11 +486,14 @@ int RunCApiViewportResizeSmoke() {
     return 1;
   }
   const char* html =
-      "<!doctype html><style>body{margin:0;font:16px sans-serif}"
+      "<!doctype html><style>body{margin:0;font:16px monospace}"
       "#box{width:100vw;height:100vh;background:linear-gradient(90deg,#135,#fa4)}"
-      "label{position:absolute;left:16px;top:16px;background:white;padding:8px}"
-      "</style><div id='box' data-godot-action='box'><label><input "
-      "id='agree' type='checkbox' data-godot-action='toggle'>Agree</label></div>";
+      "label{position:absolute;left:12px;top:52px;background:white;padding:6px}"
+      "#name{position:absolute;left:12px;top:14px;width:150px;font:16px monospace}"
+      "</style><div id='box' data-godot-action='box'>"
+      "<input id='name' value='persist' data-godot-action='name'>"
+      "<label><input id='agree' type='checkbox' "
+      "data-godot-action='toggle'>Agree</label></div>";
   status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
   if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
@@ -492,8 +514,8 @@ int RunCApiViewportResizeSmoke() {
   }
   blink_standalone_frame_output_t output = {};
   status = blink_standalone_renderer_get_latest_output(renderer, &output);
-  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 320 ||
-      output.height != 240 || !output.pixels || output.pixel_count == 0) {
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 256 ||
+      output.height != 128 || !output.pixels || output.pixel_count == 0) {
     std::fprintf(stderr,
                  "c_api_viewport_resize_smoke: initial raw output invalid "
                  "status=%d size=%dx%d bytes=%zu error=%s\n",
@@ -503,8 +525,10 @@ int RunCApiViewportResizeSmoke() {
     return 1;
   }
 
+  blink_standalone_hit_metadata_t name_hit = {};
   blink_standalone_rect_t checkbox_bounds = {};
   bool saw_checkbox = false;
+  bool saw_name = false;
   for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer);
        ++i) {
     blink_standalone_hit_metadata_t hit = {};
@@ -513,16 +537,53 @@ int RunCApiViewportResizeSmoke() {
       continue;
     }
     const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == "name") {
+      name_hit = hit;
+      saw_name = hit.bounds.width > 0.0f && hit.bounds.height > 0.0f;
+    }
     if (id == "agree") {
       checkbox_bounds = hit.bounds;
       saw_checkbox = checkbox_bounds.width > 0.0f &&
                      checkbox_bounds.height > 0.0f;
-      break;
     }
   }
-  if (!saw_checkbox) {
+  if (!saw_name || !saw_checkbox) {
     std::fprintf(stderr,
-                 "c_api_viewport_resize_smoke: checkbox metadata missing\n");
+                 "c_api_viewport_resize_smoke: form metadata missing "
+                 "name=%d checkbox=%d\n",
+                 saw_name ? 1 : 0, saw_checkbox ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  double time = 0.016;
+  const float name_x = name_hit.bounds.x + name_hit.bounds.width - 8.0f;
+  const float name_y = name_hit.bounds.y + name_hit.bounds.height * 0.5f;
+  if (!ClickPointForSmoke(renderer, name_x, name_y, 1, &time,
+                          "c_api_viewport_resize_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_text_input(renderer, "Z");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_viewport_resize_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: text input failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_form_control_state_t form_state = {};
+  if (!GetFormStateById(renderer, "name", &form_state) ||
+      FormStateValue(form_state).find('Z') == std::string::npos) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: input state did not update "
+                 "before resize value=%s\n",
+                 FormStateValue(form_state).c_str());
     blink_standalone_renderer_destroy(renderer);
     return 1;
   }
@@ -548,7 +609,7 @@ int RunCApiViewportResizeSmoke() {
   blink_standalone_renderer_release_latest_output(renderer);
 
   status =
-      blink_standalone_renderer_set_viewport(renderer, 640, 480, 1.0f);
+      blink_standalone_renderer_set_viewport(renderer, 256, 128, 2.0f);
   if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
                  "c_api_viewport_resize_smoke: set viewport failed status=%d "
@@ -568,16 +629,17 @@ int RunCApiViewportResizeSmoke() {
   }
   output = {};
   status = blink_standalone_renderer_get_latest_output(renderer, &output);
-  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 640 ||
-      output.height != 480 || !output.pixels || output.pixel_count == 0) {
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 512 ||
+      output.height != 256 || !output.pixels || output.pixel_count == 0) {
     std::fprintf(stderr,
-                 "c_api_viewport_resize_smoke: resized raw output invalid "
+                 "c_api_viewport_resize_smoke: dsf raw output invalid "
                  "status=%d size=%dx%d bytes=%zu error=%s\n",
                  status, output.width, output.height, output.pixel_count,
                  blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_destroy(renderer);
     return 1;
   }
+  bool box_bounds_remain_logical = false;
   bool checkbox_still_checked = false;
   for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer);
        ++i) {
@@ -587,23 +649,84 @@ int RunCApiViewportResizeSmoke() {
       continue;
     }
     const std::string id = hit.element_id ? hit.element_id : "";
+    if (id == "box" && hit.bounds.width <= 257.0f &&
+        hit.bounds.height <= 129.0f) {
+      box_bounds_remain_logical = true;
+    }
     if (id == "agree" && hit.checked) {
       checkbox_still_checked = true;
-      break;
     }
   }
-  blink_standalone_renderer_release_latest_output(renderer);
-  blink_standalone_renderer_destroy(renderer);
-  if (!checkbox_still_checked) {
+  if (!GetFormStateById(renderer, "name", &form_state) ||
+      FormStateValue(form_state).find('Z') == std::string::npos) {
     std::fprintf(stderr,
-                 "c_api_viewport_resize_smoke: checkbox state was not "
-                 "preserved across resize\n");
+                 "c_api_viewport_resize_smoke: input state was not preserved "
+                 "across dsf change value=%s\n",
+                 FormStateValue(form_state).c_str());
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
+  if (!box_bounds_remain_logical || !checkbox_still_checked) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: state/logical metadata failed "
+                 "after dsf change box_logical=%d checked=%d\n",
+                 box_bounds_remain_logical ? 1 : 0,
+                 checkbox_still_checked ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status =
+      blink_standalone_renderer_set_viewport(renderer, 300, 160, 1.5f);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: second set viewport failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.048);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: second resized advance failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 450 ||
+      output.height != 240 || !output.pixels || output.pixel_count == 0) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: second resized raw output "
+                 "invalid status=%d size=%dx%d bytes=%zu error=%s\n",
+                 status, output.width, output.height, output.pixel_count,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  if (!GetFormStateById(renderer, "name", &form_state) ||
+      FormStateValue(form_state).find('Z') == std::string::npos ||
+      !HitCheckedStateIs(renderer, "agree", true) || !HasHitId(renderer, "box")) {
+    std::fprintf(stderr,
+                 "c_api_viewport_resize_smoke: state was not preserved across "
+                 "second resize value=%s\n",
+                 FormStateValue(form_state).c_str());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const int final_width = output.width;
+  const int final_height = output.height;
+  const size_t final_bytes = output.pixel_count;
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
   std::printf(
-      "c_api_viewport_resize_smoke: ok initial=320x240 resized=%dx%d "
-      "bytes=%zu\n",
-      output.width, output.height, output.pixel_count);
+      "c_api_viewport_resize_smoke: ok initial=256x128 dsf2=512x256 "
+      "resized=%dx%d bytes=%zu state=persisted\n",
+      final_width, final_height, final_bytes);
   return 0;
 }
 

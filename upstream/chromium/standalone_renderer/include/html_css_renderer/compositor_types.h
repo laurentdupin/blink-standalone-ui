@@ -140,6 +140,7 @@ struct FrameInput {
   bool force_document_reload = false;
   FrameResultCollection result_collection = FrameResultCollection::kFull;
   std::optional<Size> viewport;
+  std::optional<float> device_scale_factor;
   std::optional<std::string> html_override;
   std::optional<std::vector<Stylesheet>> stylesheets_override;
   std::optional<std::string> resource_root;

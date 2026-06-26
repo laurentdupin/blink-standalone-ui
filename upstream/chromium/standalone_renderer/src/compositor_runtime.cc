@@ -30,6 +30,8 @@ void StandaloneBlinkLiveFrameBridgeDestroyInstanceForStandaloneRenderer(
     uint64_t instance_id);
 void StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(int width,
                                                                     int height);
+void StandaloneBlinkLiveFrameBridgeSetDeviceScaleFactorForStandaloneRenderer(
+    float device_scale_factor);
 void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(
     float x,
     float y);
@@ -970,6 +972,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (input.request_raw_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
     }
+    probe::StandaloneBlinkLiveFrameBridgeSetDeviceScaleFactorForStandaloneRenderer(
+        snapshot_.device_scale_factor);
     probe::StandaloneBlinkLiveFrameBridgeSetViewportForStandaloneRenderer(
         static_cast<int>(snapshot_.viewport.width),
         static_cast<int>(snapshot_.viewport.height));
@@ -1236,6 +1240,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       return true;
     if (input.viewport && !SameSize(*input.viewport, snapshot_.viewport))
       return true;
+    if (input.device_scale_factor &&
+        *input.device_scale_factor != snapshot_.device_scale_factor) {
+      return true;
+    }
     if (input.html_override && *input.html_override != snapshot_.html)
       return true;
     if (input.stylesheets_override &&
@@ -1311,6 +1319,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             : snapshot_.timeline_time_seconds + input.delta_time_seconds;
     if (input.viewport)
       snapshot_.viewport = *input.viewport;
+    if (input.device_scale_factor)
+      snapshot_.device_scale_factor = *input.device_scale_factor;
     if (input.html_override)
       snapshot_.html = *input.html_override;
     if (input.stylesheets_override)
