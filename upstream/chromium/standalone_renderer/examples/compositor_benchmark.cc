@@ -140,6 +140,14 @@ void PrintUsage() {
       "until Viz/GPU readback is wired.\n");
 }
 
+struct FramePixelContentStats {
+  size_t nontransparent = 0;
+  size_t nonwhite_colored = 0;
+};
+
+FramePixelContentStats AnalyzeFramePixelContent(
+    const blink_standalone_frame_output_t& output);
+
 int RunCApiSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 160;
@@ -192,6 +200,22 @@ int RunCApiSmoke() {
                  status, output.width, output.height, output.stride,
                  output.pixel_count, output.dirty_rect_count,
                  output.pixel_format, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const FramePixelContentStats pixel_stats =
+      AnalyzeFramePixelContent(output);
+  if (pixel_stats.nonwhite_colored == 0) {
+    std::fprintf(stderr,
+                 "c_api_smoke: raw output has no non-white painted pixels "
+                 "format=%d nontransparent=%zu colored=%zu sample=%u,%u,%u,%u\n",
+                 output.pixel_format, pixel_stats.nontransparent,
+                 pixel_stats.nonwhite_colored,
+                 output.pixel_count >= 4 ? output.pixels[0] : 0,
+                 output.pixel_count >= 4 ? output.pixels[1] : 0,
+                 output.pixel_count >= 4 ? output.pixels[2] : 0,
+                 output.pixel_count >= 4 ? output.pixels[3] : 0);
+    blink_standalone_renderer_release_latest_output(renderer);
     blink_standalone_renderer_destroy(renderer);
     return 1;
   }
@@ -318,9 +342,10 @@ int RunCApiSmoke() {
     return 1;
   }
   std::printf(
-      "c_api_smoke: ok raw=%dx%d stride=%d bytes=%zu dirty=%zu hits=%zu\n",
+      "c_api_smoke: ok raw=%dx%d stride=%d bytes=%zu dirty=%zu hits=%zu "
+      "colored=%zu\n",
       output.width, output.height, output.stride, output.pixel_count,
-      output.dirty_rect_count, hit_count);
+      output.dirty_rect_count, hit_count, pixel_stats.nonwhite_colored);
   return 0;
 }
 
@@ -502,6 +527,42 @@ bool FrameHasNonUniformPixels(const blink_standalone_frame_output_t& output) {
   return false;
 }
 
+FramePixelContentStats AnalyzeFramePixelContent(
+    const blink_standalone_frame_output_t& output) {
+  FramePixelContentStats stats;
+  if (!output.pixels || output.width <= 0 || output.height <= 0 ||
+      output.stride < output.width * 4) {
+    return stats;
+  }
+  if (output.pixel_format != BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 &&
+      output.pixel_format != BLINK_STANDALONE_PIXEL_FORMAT_BGRA8) {
+    return stats;
+  }
+  for (int y = 0; y < output.height; ++y) {
+    const uint8_t* row =
+        output.pixels + static_cast<size_t>(y) * output.stride;
+    for (int x = 0; x < output.width; ++x) {
+      const uint8_t* pixel = row + static_cast<size_t>(x) * 4;
+      const uint8_t red =
+          output.pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 ? pixel[0]
+                                                                     : pixel[2];
+      const uint8_t green = pixel[1];
+      const uint8_t blue =
+          output.pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 ? pixel[2]
+                                                                     : pixel[0];
+      const uint8_t alpha = pixel[3];
+      if (alpha == 0) {
+        continue;
+      }
+      ++stats.nontransparent;
+      if (!(red >= 245 && green >= 245 && blue >= 245)) {
+        ++stats.nonwhite_colored;
+      }
+    }
+  }
+  return stats;
+}
+
 bool HasHitId(blink_standalone_renderer_t* renderer, const char* expected_id) {
   for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer); ++i) {
     blink_standalone_hit_metadata_t hit = {};
@@ -609,21 +670,32 @@ int RunCApiEmptyResourceSmoke() {
   const bool output_ok =
       status == BLINK_STANDALONE_STATUS_OK && output.pixels &&
       output.width == 180 && output.height == 100 && output.pixel_count > 0;
-  blink_standalone_renderer_release_latest_output(renderer);
-  blink_standalone_renderer_destroy(renderer);
-  if (!output_ok || hit_count == 0) {
+  const FramePixelContentStats pixel_stats =
+      AnalyzeFramePixelContent(output);
+  if (!output_ok || hit_count == 0 || pixel_stats.nonwhite_colored == 0) {
     std::fprintf(stderr,
                  "c_api_empty_resource_smoke: output/metadata invalid "
-                 "status=%d size=%dx%d bytes=%zu hits=%zu\n",
+                 "status=%d size=%dx%d bytes=%zu hits=%zu format=%d "
+                 "nontransparent=%zu colored=%zu sample=%u,%u,%u,%u\n",
                  status, output.width, output.height, output.pixel_count,
-                 hit_count);
+                 hit_count, output.pixel_format, pixel_stats.nontransparent,
+                 pixel_stats.nonwhite_colored,
+                 output.pixel_count >= 4 ? output.pixels[0] : 0,
+                 output.pixel_count >= 4 ? output.pixels[1] : 0,
+                 output.pixel_count >= 4 ? output.pixels[2] : 0,
+                 output.pixel_count >= 4 ? output.pixels[3] : 0);
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
     return 1;
   }
 
   std::printf(
-      "c_api_empty_resource_smoke: ok raw=%dx%d stride=%d bytes=%zu hits=%zu\n",
+      "c_api_empty_resource_smoke: ok raw=%dx%d stride=%d bytes=%zu hits=%zu "
+      "colored=%zu\n",
       output.width, output.height, output.stride, output.pixel_count,
-      hit_count);
+      hit_count, pixel_stats.nonwhite_colored);
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
   return 0;
 }
 

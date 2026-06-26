@@ -167,7 +167,12 @@ DummyPageHolder::DummyPageHolder(
   frame_->Init(/*opener=*/nullptr, DocumentToken(),
                /*policy_container=*/nullptr, StorageKey(),
                /*document_ukm_source_id=*/ukm::kInvalidSourceId,
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+               /*creator_base_url=*/KURL(
+                   "file:///standalone-renderer-document.html"));
+#else
                /*creator_base_url=*/KURL());
+#endif
   TraceStandaloneDummyPageHolderStage("after frame Init");
 
   TraceStandaloneDummyPageHolderStage("before ProvideModulesToPage");
