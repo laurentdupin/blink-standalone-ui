@@ -629,13 +629,13 @@ int RunCApiEmptyResourceSmoke() {
 
 int RunCApiTwoInstanceSmoke() {
   blink_standalone_renderer_config_t config_a = {};
-  config_a.width = 180;
-  config_a.height = 120;
+  config_a.width = 256;
+  config_a.height = 128;
   config_a.device_scale_factor = 1.0f;
   config_a.no_script_profile = 1;
   blink_standalone_renderer_config_t config_b = {};
-  config_b.width = 96;
-  config_b.height = 64;
+  config_b.width = 180;
+  config_b.height = 100;
   config_b.device_scale_factor = 1.0f;
   config_b.no_script_profile = 1;
 
@@ -706,71 +706,135 @@ int RunCApiTwoInstanceSmoke() {
     return 1;
   }
 
+  struct CapturedFrame {
+    blink_standalone_frame_output_t output = {};
+    uint64_t hash = 0;
+  };
+  const auto capture_frame = [](blink_standalone_renderer_t* renderer,
+                                const char* label,
+                                int expected_width,
+                                int expected_height,
+                                CapturedFrame* captured) -> bool {
+    const blink_standalone_status_code_t output_status =
+        blink_standalone_renderer_get_latest_output(renderer,
+                                                    &captured->output);
+    captured->hash = HashFramePixels(captured->output);
+    const bool ok =
+        output_status == BLINK_STANDALONE_STATUS_OK &&
+        captured->output.width == expected_width &&
+        captured->output.height == expected_height &&
+        captured->output.stride >= expected_width * 4 &&
+        captured->output.pixel_count >=
+            static_cast<size_t>(expected_width * expected_height * 4) &&
+        captured->hash != 0 && FrameHasNonUniformPixels(captured->output);
+    if (!ok) {
+      std::fprintf(stderr,
+                   "c_api_two_instance_smoke: %s output invalid status=%d "
+                   "size=%dx%d stride=%d bytes=%zu hash=%llu hits=%zu "
+                   "error=%s\n",
+                   label, output_status, captured->output.width,
+                   captured->output.height, captured->output.stride,
+                   captured->output.pixel_count,
+                   static_cast<unsigned long long>(captured->hash),
+                   blink_standalone_renderer_hit_metadata_count(renderer),
+                   blink_standalone_renderer_last_error(renderer));
+    }
+    blink_standalone_renderer_release_latest_output(renderer);
+    return ok;
+  };
+
   status = blink_standalone_renderer_advance_frame(renderer_a, 0.0);
-  blink_standalone_frame_output_t first_output_a = {};
-  uint64_t first_hash_a = 0;
-  if (status == BLINK_STANDALONE_STATUS_OK &&
-      blink_standalone_renderer_get_latest_output(renderer_a, &first_output_a) ==
-          BLINK_STANDALONE_STATUS_OK) {
-    first_hash_a = HashFramePixels(first_output_a);
-    blink_standalone_renderer_release_latest_output(renderer_a);
-  }
-  if (status == BLINK_STANDALONE_STATUS_OK) {
-    status = blink_standalone_renderer_advance_frame(renderer_b, 0.0);
-  }
-  const char* html_a_reload =
-      "<!doctype html><!--reload--><style>body{margin:0;background:white}.a{"
-      "width:64px;height:64px;background-image:url(icon.bmp);"
-      "background-size:64px 64px}</style><div id='alpha' class='a' "
-      "data-godot-action='alpha'>Alpha</div>";
-  if (status == BLINK_STANDALONE_STATUS_OK) {
-    status = blink_standalone_renderer_set_document_html(
-        renderer_a, html_a_reload, root_a_string.c_str(), root_a_string.c_str());
-  }
-  if (status == BLINK_STANDALONE_STATUS_OK) {
-    status = blink_standalone_renderer_advance_frame(renderer_a, 0.016);
-  }
-  if (status != BLINK_STANDALONE_STATUS_OK) {
+  CapturedFrame first_a;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_frame(renderer_a, "A first", 256, 128, &first_a) ||
+      !HasHitId(renderer_a, "alpha") || HasHitId(renderer_a, "beta")) {
     std::fprintf(stderr,
-                 "c_api_two_instance_smoke: advance failed status=%d A=%s B=%s\n",
-                 status, blink_standalone_renderer_last_error(renderer_a),
+                 "c_api_two_instance_smoke: A first advance failed status=%d "
+                 "Aerr=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer_a));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_advance_frame(renderer_b, 0.0);
+  CapturedFrame first_b;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_frame(renderer_b, "B first", 180, 100, &first_b) ||
+      !HasHitId(renderer_b, "beta") || HasHitId(renderer_b, "alpha") ||
+      first_a.hash == first_b.hash) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: B first advance failed status=%d "
+                 "A_hash=%llu B_hash=%llu Aerr=%s Berr=%s\n",
+                 status, static_cast<unsigned long long>(first_a.hash),
+                 static_cast<unsigned long long>(first_b.hash),
+                 blink_standalone_renderer_last_error(renderer_a),
                  blink_standalone_renderer_last_error(renderer_b));
     blink_standalone_renderer_destroy(renderer_b);
     blink_standalone_renderer_destroy(renderer_a);
     return 1;
   }
 
-  blink_standalone_frame_output_t output_a = {};
-  blink_standalone_frame_output_t output_b = {};
-  const blink_standalone_status_code_t output_a_status =
-      blink_standalone_renderer_get_latest_output(renderer_a, &output_a);
-  const blink_standalone_status_code_t output_b_status =
-      blink_standalone_renderer_get_latest_output(renderer_b, &output_b);
-  const uint64_t hash_a = HashFramePixels(output_a);
-  const uint64_t hash_b = HashFramePixels(output_b);
-  const bool ok =
-      output_a_status == BLINK_STANDALONE_STATUS_OK && output_b_status == BLINK_STANDALONE_STATUS_OK &&
-      output_a.width == 180 && output_a.height == 120 && output_b.width == 96 &&
-      output_b.height == 64 && output_a.pixel_count > 0 &&
-      output_b.pixel_count > 0 && FrameHasNonUniformPixels(output_a) &&
-      FrameHasNonUniformPixels(output_b) && first_hash_a != 0 &&
-      hash_a == first_hash_a && hash_a != hash_b &&
-      HasHitId(renderer_a, "alpha") && !HasHitId(renderer_a, "beta") &&
-      HasHitId(renderer_b, "beta") && !HasHitId(renderer_b, "alpha");
-  if (!ok) {
+  const char* html_a_reload =
+      "<!doctype html><!--reload--><style>body{margin:0;background:white}.a{"
+      "width:64px;height:64px;background-image:url(icon.bmp);"
+      "background-size:64px 64px}</style><div id='alpha' class='a' "
+      "data-godot-action='alpha'>Alpha</div>";
+  status = blink_standalone_renderer_set_document_html(
+      renderer_a, html_a_reload, root_a_string.c_str(), root_a_string.c_str());
+  if (status == BLINK_STANDALONE_STATUS_OK)
+    status = blink_standalone_renderer_advance_frame(renderer_a, 0.016);
+  CapturedFrame second_a;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_frame(renderer_a, "A second", 256, 128, &second_a) ||
+      second_a.hash != first_a.hash || !HasHitId(renderer_a, "alpha") ||
+      HasHitId(renderer_a, "beta")) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: A second advance failed status=%d "
+                 "first_hash=%llu second_hash=%llu Aerr=%s Berr=%s\n",
+                 status, static_cast<unsigned long long>(first_a.hash),
+                 static_cast<unsigned long long>(second_a.hash),
+                 blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  const char* html_b_reload =
+      "<!doctype html><!--reload--><style>body{margin:0;background:#102030}"
+      ".c{width:72px;height:54px;background-image:url(icon.bmp);"
+      "background-size:72px 54px;color:white}</style><div id='gamma' "
+      "class='c' data-godot-action='gamma'>Gamma</div>";
+  status = blink_standalone_renderer_set_viewport(renderer_b, 128, 96, 1.0f);
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_set_document_html(
+        renderer_b, html_b_reload, root_b_string.c_str(),
+        root_b_string.c_str());
+  }
+  if (status == BLINK_STANDALONE_STATUS_OK)
+    status = blink_standalone_renderer_advance_frame(renderer_b, 0.032);
+  CapturedFrame second_b;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_frame(renderer_b, "B second", 128, 96, &second_b) ||
+      second_b.hash == first_b.hash || second_b.hash == second_a.hash ||
+      !HasHitId(renderer_b, "gamma") || HasHitId(renderer_b, "alpha") ||
+      HasHitId(renderer_b, "beta") || !HasHitId(renderer_a, "alpha") ||
+      HasHitId(renderer_a, "gamma")) {
     std::fprintf(
         stderr,
-        "c_api_two_instance_smoke: failed A_status=%d A=%dx%d bytes=%zu "
-        "hash=%llu first_hash=%llu hits=%zu B_status=%d B=%dx%d bytes=%zu hash=%llu hits=%zu "
+        "c_api_two_instance_smoke: B second advance failed status=%d "
+        "A=%dx%d hash=%llu hits=%zu B=%dx%d hash=%llu first_b=%llu hits=%zu "
         "Aerr=%s Berr=%s\n",
-        output_a_status, output_a.width, output_a.height, output_a.pixel_count,
-        static_cast<unsigned long long>(hash_a),
-        static_cast<unsigned long long>(first_hash_a),
-        blink_standalone_renderer_hit_metadata_count(renderer_a), output_b_status,
-        output_b.width, output_b.height, output_b.pixel_count,
-        static_cast<unsigned long long>(hash_b),
+        status, second_a.output.width, second_a.output.height,
+        static_cast<unsigned long long>(second_a.hash),
+        blink_standalone_renderer_hit_metadata_count(renderer_a),
+        second_b.output.width, second_b.output.height,
+        static_cast<unsigned long long>(second_b.hash),
+        static_cast<unsigned long long>(first_b.hash),
         blink_standalone_renderer_hit_metadata_count(renderer_b),
-        blink_standalone_renderer_last_error(renderer_a), blink_standalone_renderer_last_error(renderer_b));
+        blink_standalone_renderer_last_error(renderer_a),
+        blink_standalone_renderer_last_error(renderer_b));
     blink_standalone_renderer_destroy(renderer_b);
     blink_standalone_renderer_destroy(renderer_a);
     return 1;
@@ -778,13 +842,15 @@ int RunCApiTwoInstanceSmoke() {
 
   std::printf(
       "c_api_two_instance_smoke: ok A=%dx%d hash=%llu hits=%zu B=%dx%d "
-      "hash=%llu hits=%zu\n",
-      output_a.width, output_a.height, static_cast<unsigned long long>(hash_a),
-      blink_standalone_renderer_hit_metadata_count(renderer_a), output_b.width,
-      output_b.height, static_cast<unsigned long long>(hash_b),
-      blink_standalone_renderer_hit_metadata_count(renderer_b));
-  blink_standalone_renderer_release_latest_output(renderer_a);
-  blink_standalone_renderer_release_latest_output(renderer_b);
+      "hash=%llu hits=%zu B_reloaded=%dx%d hash=%llu\n",
+      second_a.output.width, second_a.output.height,
+      static_cast<unsigned long long>(second_a.hash),
+      blink_standalone_renderer_hit_metadata_count(renderer_a),
+      first_b.output.width, first_b.output.height,
+      static_cast<unsigned long long>(first_b.hash),
+      blink_standalone_renderer_hit_metadata_count(renderer_b),
+      second_b.output.width, second_b.output.height,
+      static_cast<unsigned long long>(second_b.hash));
   blink_standalone_renderer_destroy(renderer_b);
   blink_standalone_renderer_destroy(renderer_a);
   return 0;
