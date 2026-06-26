@@ -12,6 +12,10 @@
 #include "third_party/blink/renderer/core/clipboard/data_object.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer_access_policy.h"
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "third_party/blink/renderer/core/css/post_style_update_scope.h"
+#endif
+#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
@@ -62,6 +66,26 @@ extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRender
 
 void TraceStandaloneMouseEventManagerStage(const char* stage) {
   StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+bool UpdateStandaloneMouseInputLifecycle(LocalFrame& frame,
+                                         DocumentUpdateReason reason) {
+  LocalFrameView* frame_view = frame.View();
+  if (!frame_view)
+    return false;
+
+  Document* document = frame.GetDocument();
+  if (!document)
+    return frame_view->UpdateAllLifecyclePhasesExceptPaint(reason);
+
+  bool reached_prepaint_clean = false;
+  PostStyleUpdateScope post_style_update_scope(*document);
+  do {
+    reached_prepaint_clean =
+        frame_view->UpdateAllLifecyclePhasesExceptPaint(reason) ||
+        reached_prepaint_clean;
+  } while (post_style_update_scope.Apply());
+  return reached_prepaint_clean;
 }
 #else
 void TraceStandaloneMouseEventManagerStage(const char*) {}
@@ -838,10 +862,18 @@ WebInputEventResult MouseEventManager::HandleMousePressEvent(
   // |SelectionController| calls |PositionForPoint()| which requires
   // |kPrePaintClean|. |FocusDocumentView| above is the last possible
   // modifications before we call |SelectionController|.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mousepress before standalone prepaint update");
+  UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kInput);
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mousepress after standalone prepaint update");
+#else
   if (LocalFrameView* frame_view = frame_->View()) {
     frame_view->UpdateAllLifecyclePhasesExceptPaint(
         DocumentUpdateReason::kInput);
   }
+#endif
 
   Node* inner_node = event.InnerNode();
 
@@ -878,10 +910,18 @@ WebInputEventResult MouseEventManager::HandleMouseReleaseEvent(
   // |SelectionController| calls |PositionForPoint()| which requires
   // |kPrePaintClean|. |FocusDocumentView| above is the last possible
   // modifications before we call |SelectionController|.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mouserelease before standalone prepaint update");
+  UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kInput);
+  TraceStandaloneMouseEventManagerStage(
+      "mouse_event_manager mouserelease after standalone prepaint update");
+#else
   if (LocalFrameView* frame_view = frame_->View()) {
     frame_view->UpdateAllLifecyclePhasesExceptPaint(
         DocumentUpdateReason::kInput);
   }
+#endif
 
   return frame_->GetEventHandler()
                  .GetSelectionController()

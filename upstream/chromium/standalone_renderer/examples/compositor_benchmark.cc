@@ -851,36 +851,62 @@ int RunCApiSeparatedClickSmoke() {
 
   const float x = play_hit.bounds.x + play_hit.bounds.width * 0.5f;
   const float y = play_hit.bounds.y + play_hit.bounds.height * 0.5f;
-  blink_standalone_renderer_mouse_move(renderer, x, y, 0);
-  blink_standalone_renderer_mouse_down(renderer, x, y,
-                                       BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
-                                       1);
-  status = blink_standalone_renderer_advance_frame(renderer, 0.016);
-  if (status != BLINK_STANDALONE_STATUS_OK ||
-      !capture_and_check("after down")) {
-    std::fprintf(stderr,
-                 "c_api_separated_click_smoke: mouse-down advance failed "
-                 "status=%d error=%s\n",
-                 status, blink_standalone_renderer_last_error(renderer));
-    blink_standalone_renderer_destroy(renderer);
-    return 1;
-  }
+  for (int click_index = 0; click_index < 3; ++click_index) {
+    char phase[64];
 
-  blink_standalone_renderer_mouse_up(renderer, x, y,
-                                     BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
-  status = blink_standalone_renderer_advance_frame(renderer, 0.032);
-  if (status != BLINK_STANDALONE_STATUS_OK || !capture_and_check("after up") ||
-      !HasHitId(renderer, "play")) {
-    std::fprintf(stderr,
-                 "c_api_separated_click_smoke: mouse-up advance failed "
-                 "status=%d error=%s\n",
-                 status, blink_standalone_renderer_last_error(renderer));
-    blink_standalone_renderer_destroy(renderer);
-    return 1;
+    blink_standalone_renderer_mouse_move(renderer, x, y, 0);
+    status =
+        blink_standalone_renderer_advance_frame(renderer,
+                                                0.016 + click_index * 0.050);
+    std::snprintf(phase, sizeof(phase), "after move %d", click_index + 1);
+    if (status != BLINK_STANDALONE_STATUS_OK || !capture_and_check(phase)) {
+      std::fprintf(stderr,
+                   "c_api_separated_click_smoke: mouse-move advance failed "
+                   "click=%d status=%d error=%s\n",
+                   click_index + 1, status,
+                   blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+
+    blink_standalone_renderer_mouse_down(renderer, x, y,
+                                         BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
+                                         1);
+    status =
+        blink_standalone_renderer_advance_frame(renderer,
+                                                0.032 + click_index * 0.050);
+    std::snprintf(phase, sizeof(phase), "after down %d", click_index + 1);
+    if (status != BLINK_STANDALONE_STATUS_OK || !capture_and_check(phase)) {
+      std::fprintf(stderr,
+                   "c_api_separated_click_smoke: mouse-down advance failed "
+                   "click=%d status=%d error=%s\n",
+                   click_index + 1, status,
+                   blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+
+    blink_standalone_renderer_mouse_up(
+        renderer, x, y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+    status =
+        blink_standalone_renderer_advance_frame(renderer,
+                                                0.048 + click_index * 0.050);
+    std::snprintf(phase, sizeof(phase), "after up %d", click_index + 1);
+    if (status != BLINK_STANDALONE_STATUS_OK || !capture_and_check(phase) ||
+        !HasHitId(renderer, "play")) {
+      std::fprintf(stderr,
+                   "c_api_separated_click_smoke: mouse-up advance failed "
+                   "click=%d status=%d error=%s\n",
+                   click_index + 1, status,
+                   blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
   }
 
   std::printf(
-      "c_api_separated_click_smoke: ok raw=240x120 hits=%zu action=play\n",
+      "c_api_separated_click_smoke: ok raw=240x120 clicks=3 hits=%zu "
+      "action=play\n",
       blink_standalone_renderer_hit_metadata_count(renderer));
   blink_standalone_renderer_destroy(renderer);
   return 0;

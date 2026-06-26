@@ -42,6 +42,9 @@
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/clipboard/data_transfer.h"
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "third_party/blink/renderer/core/css/post_style_update_scope.h"
+#endif
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
@@ -136,6 +139,26 @@ extern "C" void StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRender
 
 void TraceStandaloneEventHandlerStage(const char* stage) {
   StandaloneBlinkLiveFrameBridgeTraceStageForCcForStandaloneRenderer(stage);
+}
+
+bool UpdateStandaloneMouseInputLifecycle(LocalFrame& frame,
+                                         DocumentUpdateReason reason) {
+  LocalFrameView* view = frame.View();
+  if (!view)
+    return false;
+
+  Document* document = frame.GetDocument();
+  if (!document)
+    return view->UpdateAllLifecyclePhasesExceptPaint(reason);
+
+  bool reached_prepaint_clean = false;
+  PostStyleUpdateScope post_style_update_scope(*document);
+  do {
+    reached_prepaint_clean =
+        view->UpdateAllLifecyclePhasesExceptPaint(reason) ||
+        reached_prepaint_clean;
+  } while (post_style_update_scope.Apply());
+  return reached_prepaint_clean;
 }
 #else
 void TraceStandaloneEventHandlerStage(const char*) {}
@@ -1033,13 +1056,11 @@ WebInputEventResult EventHandler::HandleMousePressEvent(
           read_only_request, document_point, mouse_event);
     }
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    if (LocalFrameView* view = frame_->View()) {
-      TraceStandaloneEventHandlerStage(
-          "event_handler mousepress before standalone prepaint update");
-      view->UpdateAllLifecyclePhasesExceptPaint(DocumentUpdateReason::kInput);
-      TraceStandaloneEventHandlerStage(
-          "event_handler mousepress after standalone prepaint update");
-    }
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress before standalone prepaint update");
+    UpdateStandaloneMouseInputLifecycle(*frame_, DocumentUpdateReason::kInput);
+    TraceStandaloneEventHandlerStage(
+        "event_handler mousepress after standalone prepaint update");
 #endif
     TraceStandaloneEventHandlerStage(
         "event_handler mousepress before mouse manager press");
