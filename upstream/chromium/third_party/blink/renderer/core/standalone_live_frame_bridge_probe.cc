@@ -12896,6 +12896,15 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
     const gfx::Size view_size = document.GetLayoutView()->GetLayoutSize();
   }
   DumpNodeForStandaloneRenderer(*document.body(), 0);
+  if (document.Lifecycle().GetState() < DocumentLifecycle::kPaintClean) {
+    TraceLiveFrameProbeStage(
+        "before final lifecycle update before GetPaintArtifact");
+    result.lifecycle_reached_paint_clean =
+        UpdateAllLifecyclePhasesForTestForStandaloneRenderer(frame_view) ? 1
+                                                                         : 0;
+    TraceLiveFrameProbeStage(
+        "after final lifecycle update before GetPaintArtifact");
+  }
   const auto paint_artifact_start = StandaloneProbeClock::now();
   const PaintArtifact& artifact = frame_view.GetPaintArtifact();
   TraceLiveFrameProbeStage("after GetPaintArtifact");
