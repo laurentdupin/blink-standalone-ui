@@ -13,6 +13,10 @@ EXPORTS
   blink_standalone_renderer_key_down
   blink_standalone_renderer_key_up
   blink_standalone_renderer_text_input
+  blink_standalone_renderer_set_element_text
+  blink_standalone_renderer_set_element_attribute
+  blink_standalone_renderer_remove_element_attribute
+  blink_standalone_renderer_set_element_style
   blink_standalone_renderer_reset_state
   blink_standalone_renderer_get_latest_output
   blink_standalone_renderer_release_latest_output

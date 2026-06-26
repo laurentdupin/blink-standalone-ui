@@ -146,6 +146,7 @@ void PrintUsage() {
       "[--c-api-transparent-background-smoke] "
       "[--c-api-separated-click-smoke] "
       "[--c-api-text-input-smoke] "
+      "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
@@ -956,6 +957,227 @@ bool KeyPressForSmoke(blink_standalone_renderer_t* renderer,
   }
   *time += 0.016;
   return true;
+}
+
+int RunCApiDomMutationSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 260;
+  config.height = 170;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style id='theme'>body{margin:0;font:16px monospace}"
+      "#card{position:absolute;left:12px;top:12px;width:130px;height:58px;"
+      "background:#2878d8;color:white;padding:8px}"
+      "#name{position:absolute;left:12px;top:92px;width:150px}"
+      "label{position:absolute;left:12px;top:124px}</style>"
+      "<div id='card' data-godot-action='start'>Before</div>"
+      "<input id='name' value='persist' data-godot-action='name'>"
+      "<label><input id='agree' type='checkbox' "
+      "data-godot-action='toggle'>Agree</label>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: set html failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_dom_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats initial_stats = AnalyzeFramePixelContent(output);
+  const uint64_t initial_hash = HashFramePixels(output);
+  blink_standalone_hit_metadata_t card_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      initial_stats.blue_2878d8 < 3000 ||
+      !GetHitById(renderer, "card", &card_hit) ||
+      std::string(card_hit.data_godot_action ? card_hit.data_godot_action
+                                             : "") != "start") {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: initial state invalid "
+                 "status=%d blue=%zu action=%s\n",
+                 status, initial_stats.blue_2878d8,
+                 card_hit.data_godot_action ? card_hit.data_godot_action : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_hit_metadata_t name_hit = {};
+  blink_standalone_hit_metadata_t checkbox_hit = {};
+  if (!GetHitById(renderer, "name", &name_hit) ||
+      !GetHitById(renderer, "agree", &checkbox_hit)) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: form hit metadata missing\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  const float name_x = name_hit.bounds.x + name_hit.bounds.width - 8.0f;
+  const float name_y = name_hit.bounds.y + name_hit.bounds.height * 0.5f;
+  if (!ClickPointForSmoke(renderer, name_x, name_y, 1, &time,
+                          "c_api_dom_mutation_smoke") ||
+      !TextInputForSmoke(renderer, "Z", &time,
+                         "c_api_dom_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const float checkbox_x =
+      checkbox_hit.bounds.x + checkbox_hit.bounds.width * 0.5f;
+  const float checkbox_y =
+      checkbox_hit.bounds.y + checkbox_hit.bounds.height * 0.5f;
+  if (!ClickPointForSmoke(renderer, checkbox_x, checkbox_y, 1, &time,
+                          "c_api_dom_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (blink_standalone_renderer_set_element_attribute(
+          renderer, "card", "onclick", "alert(1)") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_set_element_attribute(
+          renderer, "card", "href", " javascript:alert(1)") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: no-script mutation rejection "
+                 "failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_element_text(renderer, "card", "After");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_element_attribute(
+                     renderer, "card", "data-godot-action", "updated")
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_element_style(
+                     renderer,
+                     "card",
+                     "position:absolute;left:12px;top:12px;width:130px;"
+                     "height:58px;background:#d06329;color:white;padding:8px")
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: first mutation failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats orange_stats = AnalyzeFramePixelContent(output);
+  const uint64_t orange_hash = HashFramePixels(output);
+  card_hit = {};
+  blink_standalone_form_control_state_t form_state = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      orange_stats.orange_d06329 < 3000 || orange_hash == initial_hash ||
+      !GetHitById(renderer, "card", &card_hit) ||
+      std::string(card_hit.data_godot_action ? card_hit.data_godot_action
+                                             : "") != "updated" ||
+      !GetFormStateById(renderer, "name", &form_state) ||
+      FormStateValue(form_state).find('Z') == std::string::npos ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: first mutation not reflected "
+                 "status=%d orange=%zu action=%s value=%s checked=%d\n",
+                 status, orange_stats.orange_d06329,
+                 card_hit.data_godot_action ? card_hit.data_godot_action : "",
+                 FormStateValue(form_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_remove_element_attribute(
+      renderer, "card", "data-godot-action");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: remove attribute failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  card_hit = {};
+  if (!GetHitById(renderer, "card", &card_hit) ||
+      (card_hit.data_godot_action && *card_hit.data_godot_action)) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: action attribute still present "
+                 "action=%s\n",
+                 card_hit.data_godot_action ? card_hit.data_godot_action : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_element_style(
+      renderer,
+      "card",
+      "position:absolute;left:12px;top:12px;width:130px;"
+      "height:58px;background:#237a57;color:white;padding:8px");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: second style mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats green_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      green_stats.resource_green_237a57 < 3000 ||
+      !GetFormStateById(renderer, "name", &form_state) ||
+      FormStateValue(form_state).find('Z') == std::string::npos ||
+      !HitCheckedStateIs(renderer, "agree", true) ||
+      !HasHitId(renderer, "card")) {
+    std::fprintf(stderr,
+                 "c_api_dom_mutation_smoke: second style mutation not reflected "
+                 "status=%d green=%zu orange=%zu blue=%zu value=%s "
+                 "checked=%d\n",
+                 status, green_stats.resource_green_237a57,
+                 green_stats.orange_d06329, green_stats.blue_2878d8,
+                 FormStateValue(form_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_dom_mutation_smoke: ok blue=%zu orange=%zu green=%zu "
+      "state=persisted\n",
+      initial_stats.blue_2878d8, orange_stats.orange_d06329,
+      green_stats.resource_green_237a57);
+  return 0;
 }
 
 bool WriteSolidBmp(const std::filesystem::path& path,
@@ -2414,6 +2636,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
+        arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
@@ -2449,6 +2672,7 @@ int main(int argc, char** argv) {
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
   bool c_api_separated_click_smoke = false;
+  bool c_api_dom_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
@@ -2559,6 +2783,8 @@ int main(int argc, char** argv) {
       c_api_transparent_background_smoke = true;
     } else if (arg == "--c-api-separated-click-smoke") {
       c_api_separated_click_smoke = true;
+    } else if (arg == "--c-api-dom-mutation-smoke") {
+      c_api_dom_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
       c_api_text_input_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
@@ -2686,6 +2912,10 @@ int main(int argc, char** argv) {
 
   if (c_api_separated_click_smoke) {
     return RunCApiSeparatedClickSmoke();
+  }
+
+  if (c_api_dom_mutation_smoke) {
+    return RunCApiDomMutationSmoke();
   }
 
   if (c_api_text_input_smoke) {

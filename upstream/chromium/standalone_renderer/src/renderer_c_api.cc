@@ -137,6 +137,16 @@ bool ViolatesNoScriptProfile(const std::string& html) {
          HasInlineEventHandlerAttribute(lower);
 }
 
+bool MutationViolatesNoScriptProfile(const std::string& attribute_name,
+                                     const std::string& value) {
+  const std::string lower_name = LowerAscii(attribute_name);
+  if (lower_name.size() >= 2 && lower_name[0] == 'o' &&
+      lower_name[1] == 'n') {
+    return true;
+  }
+  return ContainsJavaScriptScheme(LowerAscii(value));
+}
+
 blink_standalone_rect_t ToCRect(const html_css_renderer::Rect& rect) {
   return blink_standalone_rect_t{rect.x, rect.y, rect.width, rect.height};
 }
@@ -231,6 +241,7 @@ struct blink_standalone_renderer {
   std::vector<blink_standalone_rect_t> dirty_rects;
   std::vector<html_css_renderer::MouseInputEvent> pending_mouse_events;
   std::vector<html_css_renderer::KeyboardInputEvent> pending_keyboard_events;
+  std::vector<html_css_renderer::DomMutation> pending_dom_mutations;
   std::optional<html_css_renderer::WheelInput> pending_wheel;
   std::string last_error;
 };
@@ -258,7 +269,46 @@ blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* rend
 void ClearPendingInput(blink_standalone_renderer* renderer) {
   renderer->pending_mouse_events.clear();
   renderer->pending_keyboard_events.clear();
+  renderer->pending_dom_mutations.clear();
   renderer->pending_wheel.reset();
+}
+
+blink_standalone_status_code_t QueueDomMutation(
+    blink_standalone_renderer_t* renderer,
+    html_css_renderer::DomMutationType type,
+    const char* element_id,
+    const char* name,
+    const char* value) {
+  if (!renderer || !element_id || !*element_id) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  const std::string mutation_name = name ? name : "";
+  const std::string mutation_value = value ? value : "";
+  if ((type == html_css_renderer::DomMutationType::kSetAttribute ||
+       type == html_css_renderer::DomMutationType::kRemoveAttribute) &&
+      mutation_name.empty()) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer->no_script_profile) {
+    const bool rejected =
+        type == html_css_renderer::DomMutationType::kSetAttribute
+            ? MutationViolatesNoScriptProfile(mutation_name, mutation_value)
+            : type == html_css_renderer::DomMutationType::kSetStyleAttribute
+                  ? MutationViolatesNoScriptProfile("style", mutation_value)
+                  : false;
+    if (rejected) {
+      renderer->last_error =
+          "mutation rejected by no-script profile (event handler/javascript surface)";
+      return BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED;
+    }
+  }
+  html_css_renderer::DomMutation mutation;
+  mutation.type = type;
+  mutation.element_id = element_id;
+  mutation.name = mutation_name;
+  mutation.value = mutation_value;
+  renderer->pending_dom_mutations.push_back(std::move(mutation));
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
 void AppendMouseEvent(blink_standalone_renderer* renderer,
@@ -387,6 +437,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   input.result_collection = html_css_renderer::FrameResultCollection::kFull;
   input.mouse_events = std::move(renderer->pending_mouse_events);
   input.keyboard_events = std::move(renderer->pending_keyboard_events);
+  input.dom_mutations = std::move(renderer->pending_dom_mutations);
   input.wheel = renderer->pending_wheel;
   ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
@@ -508,6 +559,64 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kText,
                       BLINK_STANDALONE_KEY_UNKNOWN, utf8_text, 0);
   return BLINK_STANDALONE_STATUS_OK;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_text(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* utf8_text) {
+  if (!utf8_text) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kSetTextContent,
+                          element_id, "", utf8_text);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* attribute_name,
+    const char* attribute_value) {
+  if (!attribute_value) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kSetAttribute,
+                          element_id, attribute_name, attribute_value);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_remove_element_attribute(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* attribute_name) {
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kRemoveAttribute,
+                          element_id, attribute_name, "");
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_style(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* style_attribute_value) {
+  if (!style_attribute_value) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(
+      renderer, html_css_renderer::DomMutationType::kSetStyleAttribute,
+      element_id, "style", style_attribute_value);
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(

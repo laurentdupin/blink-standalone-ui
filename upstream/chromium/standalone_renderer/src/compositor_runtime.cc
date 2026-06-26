@@ -55,6 +55,12 @@ void StandaloneBlinkLiveFrameBridgeAppendKeyboardInputEventForStandaloneRenderer
     int key,
     const char* text,
     int modifiers);
+void StandaloneBlinkLiveFrameBridgeClearDomMutationsForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeAppendDomMutationForStandaloneRenderer(
+    int type,
+    const char* element_id,
+    const char* name,
+    const char* value);
 void StandaloneBlinkLiveFrameBridgeSetWheelScrollForStandaloneRenderer(
     float x,
     float y,
@@ -1035,6 +1041,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
           static_cast<int>(event.type), static_cast<int>(event.key),
           event.text.c_str(), event.modifiers);
     }
+    probe::StandaloneBlinkLiveFrameBridgeClearDomMutationsForStandaloneRenderer();
+    for (const DomMutation& mutation : input.dom_mutations) {
+      probe::StandaloneBlinkLiveFrameBridgeAppendDomMutationForStandaloneRenderer(
+          static_cast<int>(mutation.type), mutation.element_id.c_str(),
+          mutation.name.c_str(), mutation.value.c_str());
+    }
     result.timing.runtime_apply_state_ms =
         RuntimeElapsedMs(apply_state_start, RuntimeClock::now());
 
@@ -1275,6 +1287,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!input.keyboard.pressed_key_codes.empty())
       return true;
     if (!input.keyboard_events.empty())
+      return true;
+    if (!input.dom_mutations.empty())
       return true;
     if (input.pointers.empty()) {
       if (previous_pointer_)

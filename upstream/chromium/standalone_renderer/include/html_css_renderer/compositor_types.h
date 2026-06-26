@@ -127,6 +127,20 @@ struct KeyboardInputEvent {
   int modifiers = 0;
 };
 
+enum class DomMutationType {
+  kSetTextContent = 1,
+  kSetAttribute = 2,
+  kRemoveAttribute = 3,
+  kSetStyleAttribute = 4,
+};
+
+struct DomMutation {
+  DomMutationType type = DomMutationType::kSetTextContent;
+  std::string element_id;
+  std::string name;
+  std::string value;
+};
+
 enum class FrameResultCollection {
   kFull,
   kMinimal,
@@ -151,6 +165,7 @@ struct FrameInput {
   std::optional<WheelInput> wheel;
   KeyboardState keyboard;
   std::vector<KeyboardInputEvent> keyboard_events;
+  std::vector<DomMutation> dom_mutations;
   std::unordered_map<std::string, Point> scroll_offsets_by_element_id;
   std::string focused_element_id;
   std::string hovered_element_id;

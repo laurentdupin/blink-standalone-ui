@@ -2872,6 +2872,13 @@ struct StandaloneKeyboardInputEventForRenderer {
   int modifiers = 0;
 };
 
+struct StandaloneDomMutationForRenderer {
+  int type = 0;
+  std::string element_id;
+  std::string name;
+  std::string value;
+};
+
 struct LiveFramePaintProbeCache {
   DummyPageHolder* holder = nullptr;
   Persistent<ChromeClient> chrome_client;
@@ -2930,6 +2937,9 @@ struct LiveFramePaintProbeCache {
   bool keyboard_input_events_dispatched = false;
   int keyboard_input_event_dispatch_count = 0;
   std::string keyboard_input_status = "not_requested";
+  std::vector<StandaloneDomMutationForRenderer> requested_dom_mutations;
+  bool dom_mutations_applied = false;
+  int dom_mutation_apply_count = 0;
   bool pointer_state_applied = false;
   std::string pointer_state_status = "not_requested";
   std::string pointer_hit_element_id;
@@ -9953,6 +9963,47 @@ void ApplyElementAttributesForStandaloneRenderer(
   }
 }
 
+void ApplyDomMutationsForStandaloneRenderer(
+    Document& document,
+    const std::vector<StandaloneDomMutationForRenderer>& mutations) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.dom_mutations_applied = false;
+  cache.dom_mutation_apply_count = 0;
+  for (const StandaloneDomMutationForRenderer& mutation : mutations) {
+    Element* element = document.getElementById(
+        AtomicString(String::FromUtf8(mutation.element_id)));
+    if (!element) {
+      continue;
+    }
+    switch (mutation.type) {
+      case 1:
+        element->setTextContent(String::FromUtf8(mutation.value));
+        break;
+      case 2:
+        if (mutation.name.empty()) {
+          continue;
+        }
+        element->setAttribute(AtomicString(String::FromUtf8(mutation.name)),
+                              AtomicString(String::FromUtf8(mutation.value)));
+        break;
+      case 3:
+        if (mutation.name.empty()) {
+          continue;
+        }
+        element->removeAttribute(AtomicString(String::FromUtf8(mutation.name)));
+        break;
+      case 4:
+        element->setAttribute(html_names::kStyleAttr,
+                              AtomicString(String::FromUtf8(mutation.value)));
+        break;
+      default:
+        continue;
+    }
+    cache.dom_mutations_applied = true;
+    ++cache.dom_mutation_apply_count;
+  }
+}
+
 Element* ElementByIdForStandaloneRenderer(Document& document,
                                           const std::string& element_id) {
   if (element_id.empty()) {
@@ -13040,6 +13091,10 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
       &cache.original_element_attribute_values,
       &cache.applied_element_attributes_by_id_and_name);
   TraceLiveFrameProbeStage("after ApplyElementAttributes");
+  TraceLiveFrameProbeStage("before ApplyDomMutations");
+  ApplyDomMutationsForStandaloneRenderer(document,
+                                         cache.requested_dom_mutations);
+  TraceLiveFrameProbeStage("after ApplyDomMutations");
   cache.element_attributes_changed_since_probe = false;
   TraceLiveFrameProbeStage("after document setup");
   cache.timing_html_document_setup_ms =
@@ -13648,6 +13703,37 @@ void StandaloneBlinkLiveFrameBridgeSetElementAttributesForStandaloneRenderer(
   cache.requested_element_attributes_by_id_and_name =
       ParseElementAttributesForStandaloneRenderer(value);
   cache.element_attributes_changed_since_probe = true;
+  cache.initialized = false;
+  cache.exported_draw_ops.clear();
+  cache.chunk_property_states.clear();
+  cache.chunk_stable_keys.clear();
+  cache.chunk_id_strings.clear();
+  cache.finer_cache_units_by_chunk.clear();
+  cache.artifact_audit_lines.clear();
+  cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeClearDomMutationsForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.requested_dom_mutations.empty()) {
+    return;
+  }
+  cache.requested_dom_mutations.clear();
+  cache.initialized = false;
+}
+
+void StandaloneBlinkLiveFrameBridgeAppendDomMutationForStandaloneRenderer(
+    int type,
+    const char* element_id,
+    const char* name,
+    const char* value) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  StandaloneDomMutationForRenderer mutation;
+  mutation.type = type;
+  mutation.element_id = element_id ? element_id : "";
+  mutation.name = name ? name : "";
+  mutation.value = value ? value : "";
+  cache.requested_dom_mutations.push_back(std::move(mutation));
   cache.initialized = false;
   cache.exported_draw_ops.clear();
   cache.chunk_property_states.clear();

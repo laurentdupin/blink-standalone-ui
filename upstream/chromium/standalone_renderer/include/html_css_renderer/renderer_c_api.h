@@ -158,6 +158,27 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_text_input(
     blink_standalone_renderer_t* renderer,
     const char* utf8_text);
+/* Queue no-JS Blink DOM mutations for the next advance_frame call. These
+ * mutate the current live document through Blink DOM APIs and do not reload the
+ * document. The no-script profile rejects inline event handlers and
+ * javascript: URL surfaces. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_text(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* utf8_text);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* attribute_name,
+    const char* attribute_value);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_remove_element_attribute(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* attribute_name);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_style(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* style_attribute_value);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(
     blink_standalone_renderer_t* renderer);
 
