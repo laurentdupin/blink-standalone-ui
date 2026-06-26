@@ -132,6 +132,7 @@ void PrintUsage() {
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
+      "[--c-api-empty-resource-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
       "This target now exercises the Chromium compositor path only. CPU BMP "
@@ -550,6 +551,80 @@ bool WriteSolidBmp(const std::filesystem::path& path,
   file.write(reinterpret_cast<const char*>(bytes.data()),
              static_cast<std::streamsize>(bytes.size()));
   return file.good();
+}
+
+int RunCApiEmptyResourceSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 180;
+  config.height = 100;
+  config.device_scale_factor = 1.0f;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_empty_resource_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_viewport(renderer, 180, 100, 1.0f);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_empty_resource_smoke: set viewport failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;background:#123;color:white}"
+      "#box{width:100px;height:40px;background:#d74}</style>"
+      "<div id='box' data-godot-action='empty-resource'>OK</div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_empty_resource_smoke: set html failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_empty_resource_smoke: advance failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const size_t hit_count =
+      blink_standalone_renderer_hit_metadata_count(renderer);
+  const bool output_ok =
+      status == BLINK_STANDALONE_STATUS_OK && output.pixels &&
+      output.width == 180 && output.height == 100 && output.pixel_count > 0;
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  if (!output_ok || hit_count == 0) {
+    std::fprintf(stderr,
+                 "c_api_empty_resource_smoke: output/metadata invalid "
+                 "status=%d size=%dx%d bytes=%zu hits=%zu\n",
+                 status, output.width, output.height, output.pixel_count,
+                 hit_count);
+    return 1;
+  }
+
+  std::printf(
+      "c_api_empty_resource_smoke: ok raw=%dx%d stride=%d bytes=%zu hits=%zu\n",
+      output.width, output.height, output.stride, output.pixel_count,
+      hit_count);
+  return 0;
 }
 
 int RunCApiTwoInstanceSmoke() {
@@ -1293,6 +1368,7 @@ int main(int argc, char** argv) {
     const std::string arg = argv[i];
     if (arg == "--c-api-smoke" ||
         arg == "--c-api-viewport-resize-smoke" ||
+        arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -1323,6 +1399,7 @@ int main(int argc, char** argv) {
   bool cc_scheduler_probe = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
+  bool c_api_empty_resource_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -1426,6 +1503,8 @@ int main(int argc, char** argv) {
       c_api_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
       c_api_viewport_resize_smoke = true;
+    } else if (arg == "--c-api-empty-resource-smoke") {
+      c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -1539,6 +1618,10 @@ int main(int argc, char** argv) {
 
   if (c_api_viewport_resize_smoke) {
     return RunCApiViewportResizeSmoke();
+  }
+
+  if (c_api_empty_resource_smoke) {
+    return RunCApiEmptyResourceSmoke();
   }
 
   if (c_api_two_instance_smoke) {

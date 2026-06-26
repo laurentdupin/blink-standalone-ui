@@ -10897,7 +10897,19 @@ bool IsDataURLMimeTypeSupported(const KURL&,
 const base::flat_map<std::string, mojom::DocumentPolicyFeature>&
 GetDocumentPolicyNameFeatureMap() {
   static const base::flat_map<std::string, mojom::DocumentPolicyFeature>* map =
-      new base::flat_map<std::string, mojom::DocumentPolicyFeature>();
+      new base::flat_map<std::string, mojom::DocumentPolicyFeature>({
+          {"*", mojom::DocumentPolicyFeature::kDefault},
+          {"force-load-at-top",
+           mojom::DocumentPolicyFeature::kForceLoadAtTop},
+          {"js-profiling", mojom::DocumentPolicyFeature::kJSProfiling},
+          {"sync-xhr", mojom::DocumentPolicyFeature::kSyncXHR},
+          {"include-js-call-stacks-in-crash-reports",
+           mojom::DocumentPolicyFeature::kIncludeJSCallStacksInCrashReports},
+          {"expect-no-linked-resources",
+           mojom::DocumentPolicyFeature::kExpectNoLinkedResources},
+          {"network-efficiency-guardrails",
+           mojom::DocumentPolicyFeature::kNetworkEfficiencyGuardrails},
+      });
   return *map;
 }
 Vector<char> FormDataEncoder::GenerateUniqueBoundaryString() {
@@ -13121,8 +13133,22 @@ GetDocumentPolicyFeatureInfoMap() {
                         DocumentPolicyFeatureInfo>* map =
       new base::flat_map<mojom::blink::DocumentPolicyFeature,
                          DocumentPolicyFeatureInfo>({
+          {mojom::blink::DocumentPolicyFeature::kDefault,
+           {"*", PolicyValue::CreateBool(true)}},
+          {mojom::blink::DocumentPolicyFeature::kForceLoadAtTop,
+           {"force-load-at-top", PolicyValue::CreateBool(false)}},
+          {mojom::blink::DocumentPolicyFeature::kJSProfiling,
+           {"js-profiling", PolicyValue::CreateBool(false)}},
+          {mojom::blink::DocumentPolicyFeature::kSyncXHR,
+           {"sync-xhr", PolicyValue::CreateBool(true)}},
+          {mojom::blink::DocumentPolicyFeature::
+               kIncludeJSCallStacksInCrashReports,
+           {"include-js-call-stacks-in-crash-reports",
+            PolicyValue::CreateBool(false)}},
           {mojom::blink::DocumentPolicyFeature::kExpectNoLinkedResources,
            {"expect-no-linked-resources", PolicyValue::CreateBool(false)}},
+          {mojom::blink::DocumentPolicyFeature::kNetworkEfficiencyGuardrails,
+           {"network-efficiency-guardrails", PolicyValue::CreateBool(false)}},
       });
   return *map;
 }
