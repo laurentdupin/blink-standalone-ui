@@ -8,7 +8,9 @@ The active renderer is a single Chromium compositor path:
 This runner intentionally does not request BMP output, software raster,
 retained draw commands, or oracle comparisons.  It validates that the
 standalone benchmark reaches the cc/GPU/Viz submission milestones and records
-command/process timings for the selected HTML fixture set.
+command/process timings for the selected HTML fixture set.  By default it asks
+the benchmark for minimal frame results so timing reflects the compositor path
+rather than the expensive diagnostic paint-artifact audit walker.
 """
 
 from __future__ import annotations
@@ -577,6 +579,16 @@ def main() -> int:
     parser.add_argument("--shard-count", type=int)
     parser.add_argument("--benchmark-arg", action="append", default=[])
     parser.add_argument(
+        "--result-collection",
+        choices=("minimal", "full"),
+        default="minimal",
+        help=(
+            "Benchmark result collection mode. The default avoids full "
+            "paint-artifact diagnostics so warm timings measure the rendering "
+            "path; use 'full' when investigating paint artifact metadata."
+        ),
+    )
+    parser.add_argument(
         "--warm-scenario",
         action="append",
         default=[],
@@ -628,7 +640,8 @@ def main() -> int:
     started = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     for index, html_path in enumerate(files, start=1):
         print(f"[{index}/{len(files)}] {html_path.relative_to(html_root).as_posix()}", flush=True)
-        extra_args = list(args.benchmark_arg)
+        extra_args = ["--result-collection", args.result_collection]
+        extra_args.extend(args.benchmark_arg)
         if args.warm_iterations > 0:
             extra_args.extend(["--warm-iterations", str(args.warm_iterations)])
             for scenario in args.warm_scenario:
@@ -670,6 +683,7 @@ def main() -> int:
             "process_elapsed_ms starts at benchmark main and excludes Python orchestration.",
             "advance_frame_ms covers the measured compositor AdvanceFrame call.",
             "SDL/window Vulkan presentation is validated by run_sdl_profile_benchmark.py.",
+            "Default result collection is minimal; use --result-collection=full to include paint-artifact audit diagnostics in frame timings.",
         ],
         "summary": summarize(rows),
         "pages": rows,
