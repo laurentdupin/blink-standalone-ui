@@ -13,6 +13,7 @@
 #endif
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -36,7 +37,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
-#include "html_css_renderer/compositor_runtime.h"
+#include "html_css_renderer/compositor_types.h"
 #include "html_css_renderer/css_file_loader.h"
 #include "html_css_renderer/renderer_c_api.h"
 #include "html_css_renderer/standalone_process.h"
@@ -328,12 +329,20 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* size) {
   const size_t x = value.find('x');
   if (x == std::string::npos)
     return false;
-  try {
-    size->width = std::stof(value.substr(0, x));
-    size->height = std::stof(value.substr(x + 1));
-  } catch (...) {
+  std::string width_text = value.substr(0, x);
+  std::string height_text = value.substr(x + 1);
+  char* width_end = nullptr;
+  char* height_end = nullptr;
+  errno = 0;
+  const float width = std::strtof(width_text.c_str(), &width_end);
+  if (errno != 0 || width_end == width_text.c_str() || *width_end != '\0')
     return false;
-  }
+  errno = 0;
+  const float height = std::strtof(height_text.c_str(), &height_end);
+  if (errno != 0 || height_end == height_text.c_str() || *height_end != '\0')
+    return false;
+  size->width = width;
+  size->height = height;
   return size->width > 0.0f && size->height > 0.0f;
 }
 
@@ -341,12 +350,20 @@ bool ParsePoint(const std::string& value, html_css_renderer::Point* point) {
   const size_t comma = value.find(',');
   if (comma == std::string::npos)
     return false;
-  try {
-    point->x = std::stof(value.substr(0, comma));
-    point->y = std::stof(value.substr(comma + 1));
-  } catch (...) {
+  std::string x_text = value.substr(0, comma);
+  std::string y_text = value.substr(comma + 1);
+  char* x_end = nullptr;
+  char* y_end = nullptr;
+  errno = 0;
+  const float x = std::strtof(x_text.c_str(), &x_end);
+  if (errno != 0 || x_end == x_text.c_str() || *x_end != '\0')
     return false;
-  }
+  errno = 0;
+  const float y = std::strtof(y_text.c_str(), &y_end);
+  if (errno != 0 || y_end == y_text.c_str() || *y_end != '\0')
+    return false;
+  point->x = x;
+  point->y = y;
   return point->x >= 0.0f && point->y >= 0.0f;
 }
 
@@ -483,18 +500,6 @@ html_css_renderer::MouseInputButton MouseButtonFromSdlForCompositorViewer(
   return html_css_renderer::MouseInputButton::kNone;
 }
 
-void AppendMouseInputEventForCompositorViewer(
-    html_css_renderer::FrameInput* input,
-    html_css_renderer::MouseInputEventType type,
-    html_css_renderer::Point position,
-    html_css_renderer::MouseInputButton button,
-    int modifiers,
-    int click_count) {
-  input->mouse_events.push_back(
-      html_css_renderer::MouseInputEvent{type, position, button, modifiers,
-                                         click_count});
-}
-
 int KeyboardModifiersFromSdlForCompositorViewer(SDL_Keymod mod) {
   int modifiers = 0;
   if ((mod & SDL_KMOD_SHIFT) != 0)
@@ -539,29 +544,6 @@ KeyboardInputKeyFromNameForCompositorViewer(const std::string& name) {
   return std::nullopt;
 }
 
-void AppendKeyboardTextInputEventForCompositorViewer(
-    html_css_renderer::FrameInput* input,
-    const std::string& text,
-    int modifiers) {
-  if (text.empty())
-    return;
-  input->keyboard_events.push_back(html_css_renderer::KeyboardInputEvent{
-      html_css_renderer::KeyboardInputEventType::kText,
-      html_css_renderer::KeyboardInputKey::kUnknown, text, modifiers});
-}
-
-void AppendKeyboardKeyInputEventForCompositorViewer(
-    html_css_renderer::FrameInput* input,
-    html_css_renderer::KeyboardInputEventType type,
-    html_css_renderer::KeyboardInputKey key,
-    int modifiers) {
-  if (key == html_css_renderer::KeyboardInputKey::kUnknown)
-    return;
-  input->keyboard_events.push_back(
-      html_css_renderer::KeyboardInputEvent{type, key, std::string(),
-                                            modifiers});
-}
-
 struct SyntheticWheelBurst {
   int count = 0;
   html_css_renderer::Point delta;
@@ -586,18 +568,6 @@ bool ParseWheelBurst(const std::string& value, SyntheticWheelBurst* burst) {
     return true;
   }
   return false;
-}
-
-void AccumulateWheelInput(std::optional<html_css_renderer::WheelInput>* wheel,
-                          html_css_renderer::Point position,
-                          html_css_renderer::Point delta) {
-  if (wheel->has_value()) {
-    (*wheel)->position = position;
-    (*wheel)->delta.x += delta.x;
-    (*wheel)->delta.y += delta.y;
-    return;
-  }
-  *wheel = html_css_renderer::WheelInput{position, delta};
 }
 
 std::string HtmlWithInlineStylesForCompositorViewer(
@@ -709,18 +679,6 @@ void AppendSyntheticSdlClickEventsForCompositorViewer(
     up.button.button = SDL_BUTTON_LEFT;
     events->push_back(up);
   }
-}
-
-html_css_renderer::Point DocumentScrollForCompositorViewer(
-    const html_css_renderer::CompositorFrameResult& result) {
-  const auto& offsets = result.successor_snapshot.scroll_offsets_by_element_id;
-  const auto document = offsets.find("document");
-  if (document != offsets.end())
-    return document->second;
-  const auto body = offsets.find("body");
-  if (body != offsets.end())
-    return body->second;
-  return html_css_renderer::Point{0.0f, 0.0f};
 }
 
 void PrintUsage() {
@@ -847,90 +805,6 @@ bool IsChromiumGpuSwitch(const std::string& arg, bool* consumes_value) {
       return true;
   }
   return false;
-}
-
-void PrintFrameStatus(const char* reason,
-                      uint64_t frame,
-                      const html_css_renderer::CompositorFrameResult& result) {
-  std::fprintf(stderr,
-               "frame=%llu reason=%s paint_clean=%d root_layer=%d layers=%d "
-               "viewport=%dx%d "
-               "cc_output=%dx%d viz_output=%dx%d "
-               "chunks=%d display_items=%d begin_frame=%d cc_host=%d "
-               "cc_attached=%d cc_commit=%d frame_sink_request=%d "
-               "frame_sink_bound=%d gpu_context=%d raster_context=%d "
-               "shared_image=%d viz_submit=%d viz_display=%d skia_gpu=%d\n",
-               static_cast<unsigned long long>(frame), reason,
-               result.paint_clean ? 1 : 0,
-               result.root_layer_available ? 1 : 0,
-               result.compositor_layer_count,
-               static_cast<int>(result.successor_snapshot.viewport.width),
-               static_cast<int>(result.successor_snapshot.viewport.height),
-               static_cast<int>(result.compositor_output_size.width),
-               static_cast<int>(result.compositor_output_size.height),
-               static_cast<int>(result.viz_display_output_size.width),
-               static_cast<int>(result.viz_display_output_size.height),
-               result.paint_chunk_count,
-               result.display_item_count, result.needs_begin_frame ? 1 : 0,
-               result.cc_host_created ? 1 : 0,
-               result.cc_root_layer_attached ? 1 : 0,
-               result.cc_commit_requested ? 1 : 0,
-               result.cc_frame_sink_requested ? 1 : 0,
-               result.cc_frame_sink_bound ? 1 : 0,
-               result.gpu_context_created ? 1 : 0,
-               result.raster_context_created ? 1 : 0,
-               result.shared_image_interface_available ? 1 : 0,
-               result.compositor_frame_submitted ? 1 : 0,
-               result.viz_display_created ? 1 : 0,
-               result.skia_renderer_gpu_path_reached ? 1 : 0);
-}
-
-void PrintPresentationStatus(
-    const char* reason,
-    const html_css_renderer::NativePresentationResult& result,
-    bool include_diagnostics = true) {
-  std::fprintf(stderr,
-               "presentation=%s native_window=%d vulkan_instance=%d "
-               "vulkan_queue=%d vulkan_surface=%d vulkan_swapchain=%d "
-               "vulkan_present=%d surface=%dx%d viz_manager=%d viz_support=%d "
-               "cc_output=%dx%d viz_output=%dx%d "
-               "viz_display=%d cc_host=%d cc_attached=%d cc_commit=%d "
-               "frame_sink_request=%d frame_sink_bound=%d gpu_context=%d "
-               "raster_context=%d shared_image=%d viz_submit=%d skia_gpu=%d",
-               reason, result.native_window_available ? 1 : 0,
-               result.vulkan_instance_initialized ? 1 : 0,
-               result.vulkan_device_queue_initialized ? 1 : 0,
-               result.vulkan_surface_created ? 1 : 0,
-               result.vulkan_swapchain_created ? 1 : 0,
-               result.vulkan_presented ? 1 : 0,
-               static_cast<int>(result.surface_size.width),
-               static_cast<int>(result.surface_size.height),
-               result.viz_frame_sink_manager_created ? 1 : 0,
-               result.viz_frame_sink_support_created ? 1 : 0,
-               static_cast<int>(result.compositor_output_size.width),
-               static_cast<int>(result.compositor_output_size.height),
-               static_cast<int>(result.viz_display_output_size.width),
-               static_cast<int>(result.viz_display_output_size.height),
-               result.viz_display_created ? 1 : 0,
-               result.cc_host_created ? 1 : 0,
-               result.cc_root_layer_attached ? 1 : 0,
-               result.cc_commit_requested ? 1 : 0,
-               result.cc_frame_sink_requested ? 1 : 0,
-               result.cc_frame_sink_bound ? 1 : 0,
-               result.gpu_context_created ? 1 : 0,
-               result.raster_context_created ? 1 : 0,
-               result.shared_image_interface_available ? 1 : 0,
-               result.compositor_frame_submitted ? 1 : 0,
-               result.skia_renderer_gpu_path_reached ? 1 : 0);
-  if (!result.failure_reason.empty())
-    std::fprintf(stderr, " failure='%s'", result.failure_reason.c_str());
-  std::fprintf(stderr, "\n");
-  if (result.vulkan_presented)
-    std::fprintf(stderr, "diagnostic: Chromium Vulkan swap result: SWAP_ACK\n");
-  if (include_diagnostics) {
-    for (const std::string& diagnostic : result.diagnostics)
-      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
-  }
 }
 
 }  // namespace
