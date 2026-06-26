@@ -147,6 +147,7 @@ void PrintUsage() {
       "[--c-api-separated-click-smoke] "
       "[--c-api-text-input-smoke] "
       "[--c-api-form-control-mutation-smoke] "
+      "[--c-api-absolute-form-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
@@ -1822,6 +1823,140 @@ int RunCApiFormControlMutationSmoke() {
   return 0;
 }
 
+int RunCApiAbsoluteFormMutationSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 320;
+  config.height = 180;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_absolute_form_mutation_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><html><head><style id='theme'>"
+      "html,body{margin:0;padding:0;background:rgba(0,0,0,0)}"
+      "#box_theme{position:absolute;left:50px;top:0;width:40px;height:40px;"
+      "background:rgb(40,120,216)}"
+      "button{position:absolute;left:0;top:60px;width:100px;height:36px;"
+      "padding:0;border:0;color:white;background:black;font-size:20px}"
+      "#name{position:absolute;left:0;top:105px;width:130px;height:22px;"
+      "font-size:14px}"
+      "#bio{position:absolute;left:140px;top:90px;width:130px;height:48px;"
+      "font-size:14px}"
+      "#agree{position:absolute;left:0;top:142px}"
+      "#r1{position:absolute;left:40px;top:142px}"
+      "#r2{position:absolute;left:80px;top:142px}"
+      "</style></head><body>"
+      "<div id='box_style' style='position:absolute;left:0;top:0;width:40px;"
+      "height:40px;background:rgb(40,120,216)'></div>"
+      "<div id='box_theme'></div>"
+      "<div id='label' style='position:absolute;left:120px;top:0;width:180px;"
+      "height:34px;color:white;background:black;font-size:24px;'>A</div>"
+      "<button id='action' data-godot-action='old'>Old</button>"
+      "<input id='name' value='seed'>"
+      "<textarea id='bio'>bio-seed</textarea>"
+      "<input id='agree' type='checkbox'>"
+      "<input id='r1' type='radio' name='choice' checked>"
+      "<input id='r2' type='radio' name='choice'>"
+      "</body></html>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_absolute_form_mutation_smoke: set html failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_absolute_form_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_renderer_release_latest_output(renderer);
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_absolute_form_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats initial_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 320 ||
+      output.height != 180 || initial_stats.blue_2878d8 < 2500 ||
+      !HasHitId(renderer, "name") || !HasHitId(renderer, "action")) {
+    std::fprintf(stderr,
+                 "c_api_absolute_form_mutation_smoke: initial output invalid "
+                 "status=%d size=%dx%d blue=%zu hits_name=%d hits_action=%d\n",
+                 status, output.width, output.height, initial_stats.blue_2878d8,
+                 HasHitId(renderer, "name") ? 1 : 0,
+                 HasHitId(renderer, "action") ? 1 : 0);
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_form_control_value(renderer, "name",
+                                                            "api-value");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_absolute_form_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_absolute_form_mutation_smoke: value mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats mutated_stats = AnalyzeFramePixelContent(output);
+  blink_standalone_form_control_state_t name_state = {};
+  blink_standalone_form_control_state_t bio_state = {};
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 320 ||
+      output.height != 180 || mutated_stats.blue_2878d8 < 2500 ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "api-value" ||
+      !GetFormStateById(renderer, "bio", &bio_state) ||
+      FormStateValue(bio_state) != "bio-seed" ||
+      !HitCheckedStateIs(renderer, "r1", true) ||
+      !HitCheckedStateIs(renderer, "r2", false)) {
+    std::fprintf(stderr,
+                 "c_api_absolute_form_mutation_smoke: mutated state invalid "
+                 "status=%d size=%dx%d blue=%zu name=%s bio=%s r1=%d "
+                 "r2=%d\n",
+                 status, output.width, output.height, mutated_stats.blue_2878d8,
+                 FormStateValue(name_state).c_str(),
+                 FormStateValue(bio_state).c_str(),
+                 HitCheckedStateIs(renderer, "r1", true) ? 1 : 0,
+                 HitCheckedStateIs(renderer, "r2", true) ? 1 : 0);
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_absolute_form_mutation_smoke: ok value=api-value raw=320x180\n");
+  return 0;
+}
+
 int RunCApiEmptyResourceSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 180;
@@ -2893,6 +3028,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
+        arg == "--c-api-absolute-form-mutation-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -2930,6 +3066,7 @@ int main(int argc, char** argv) {
   bool c_api_dom_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
+  bool c_api_absolute_form_mutation_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -3045,6 +3182,8 @@ int main(int argc, char** argv) {
       c_api_text_input_smoke = true;
     } else if (arg == "--c-api-form-control-mutation-smoke") {
       c_api_form_control_mutation_smoke = true;
+    } else if (arg == "--c-api-absolute-form-mutation-smoke") {
+      c_api_absolute_form_mutation_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -3182,6 +3321,10 @@ int main(int argc, char** argv) {
 
   if (c_api_form_control_mutation_smoke) {
     return RunCApiFormControlMutationSmoke();
+  }
+
+  if (c_api_absolute_form_mutation_smoke) {
+    return RunCApiAbsoluteFormMutationSmoke();
   }
 
   if (c_api_two_instance_smoke) {

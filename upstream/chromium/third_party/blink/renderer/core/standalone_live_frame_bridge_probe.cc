@@ -171,9 +171,11 @@
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_box_model_object.h"
 #include "third_party/blink/renderer/core/layout/layout_image.h"
+#include "third_party/blink/renderer/core/layout/layout_invalidation_reason.h"
 #include "third_party/blink/renderer/core/layout/list/layout_list_item.h"
 #include "third_party/blink/renderer/core/layout/block_node.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/layout/layout_object_inlines.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table.h"
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
@@ -9988,6 +9990,15 @@ bool ParseStandaloneUnsignedPair(const std::string& value,
   return true;
 }
 
+void MarkStandaloneFormControlMutationLayout(Element& element) {
+  LayoutObject* layout_object = element.GetLayoutObject();
+  if (!layout_object) {
+    return;
+  }
+  layout_object->SetNeedsLayoutAndFullPaintInvalidation(
+      layout_invalidation_reason::kTextControlChanged);
+}
+
 void ApplyDomMutationsForStandaloneRenderer(
     Document& document,
     const std::vector<StandaloneDomMutationForRenderer>& mutations) {
@@ -10049,8 +10060,10 @@ void ApplyDomMutationsForStandaloneRenderer(
       case 6:
         if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
           textarea->setValueForBinding(String::FromUtf8(mutation.value));
+          MarkStandaloneFormControlMutationLayout(*element);
         } else if (auto* text_control = DynamicTo<TextControlElement>(element)) {
           text_control->SetValue(String::FromUtf8(mutation.value));
+          MarkStandaloneFormControlMutationLayout(*element);
         } else {
           continue;
         }
@@ -10061,15 +10074,16 @@ void ApplyDomMutationsForStandaloneRenderer(
             continue;
           }
           input->SetChecked(mutation.value == "1");
+          MarkStandaloneFormControlMutationLayout(*element);
         } else {
           continue;
         }
         break;
       case 8:
         document.UpdateStyleAndLayoutTree();
-      if (Page* page = document.GetPage()) {
-        page->GetFocusController().SetFocusedElement(element,
-                                                    document.GetFrame());
+        if (Page* page = document.GetPage()) {
+          page->GetFocusController().SetFocusedElement(element,
+                                                      document.GetFrame());
         } else {
           element->Focus();
         }
