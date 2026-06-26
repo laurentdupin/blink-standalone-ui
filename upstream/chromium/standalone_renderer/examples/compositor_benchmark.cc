@@ -162,6 +162,8 @@ struct FramePixelContentStats {
   size_t blue_144a80 = 0;
   size_t orange_dd7744 = 0;
   size_t orange_d06329 = 0;
+  size_t resource_red_e84444 = 0;
+  size_t resource_green_237a57 = 0;
 };
 
 FramePixelContentStats AnalyzeFramePixelContent(
@@ -691,12 +693,20 @@ FramePixelContentStats AnalyzeFramePixelContent(
       if (matches(red, green, blue, 0xd0, 0x63, 0x29)) {
         ++stats.orange_d06329;
       }
+      if (matches(red, green, blue, 0xe8, 0x44, 0x44)) {
+        ++stats.resource_red_e84444;
+      }
+      if (matches(red, green, blue, 0x23, 0x7a, 0x57)) {
+        ++stats.resource_green_237a57;
+      }
     }
   }
   return stats;
 }
 
-bool HasHitId(blink_standalone_renderer_t* renderer, const char* expected_id) {
+bool GetHitById(blink_standalone_renderer_t* renderer,
+                const char* expected_id,
+                blink_standalone_hit_metadata_t* out) {
   for (size_t i = 0; i < blink_standalone_renderer_hit_metadata_count(renderer); ++i) {
     blink_standalone_hit_metadata_t hit = {};
     if (blink_standalone_renderer_get_hit_metadata(renderer, i, &hit) != BLINK_STANDALONE_STATUS_OK) {
@@ -704,10 +714,25 @@ bool HasHitId(blink_standalone_renderer_t* renderer, const char* expected_id) {
     }
     const std::string id = hit.element_id ? hit.element_id : "";
     if (id == expected_id) {
+      if (out) {
+        *out = hit;
+      }
       return true;
     }
   }
   return false;
+}
+
+bool HasHitId(blink_standalone_renderer_t* renderer, const char* expected_id) {
+  return GetHitById(renderer, expected_id, nullptr);
+}
+
+bool HitCheckedStateIs(blink_standalone_renderer_t* renderer,
+                       const char* expected_id,
+                       bool checked) {
+  blink_standalone_hit_metadata_t hit = {};
+  return GetHitById(renderer, expected_id, &hit) &&
+         ((hit.checked != 0) == checked);
 }
 
 bool WriteSolidBmp(const std::filesystem::path& path,
@@ -965,13 +990,19 @@ int RunCApiTwoInstanceSmoke() {
   }
 
   const char* html_a =
-      "<!doctype html><style>body{margin:0;background:white}.a{width:64px;"
+      "<!doctype html><style>body{margin:0;background:#112233}.a{width:64px;"
       "height:64px;background-image:url(icon.bmp);background-size:64px 64px}"
-      "</style><div id='alpha' class='a' data-godot-action='alpha'>Alpha</div>";
+      "label{display:block;margin-top:4px;color:white}</style><div id='alpha' "
+      "class='a' data-godot-action='alpha'>Alpha</div><label><input "
+      "id='check_a' type='checkbox' data-godot-action='check-a'>A</label>";
   const char* html_b =
-      "<!doctype html><style>body{margin:0;background:white}.b{width:48px;"
-      "height:48px;background-image:url(icon.bmp);background-size:48px 48px}"
-      "</style><div id='beta' class='b' data-godot-action='beta'>Beta</div>";
+      "<!doctype html><style>html,body{margin:0;background:transparent}.panel{"
+      "width:100px;height:40px;background:#d06329}.b{width:48px;height:48px;"
+      "background-image:url(icon.bmp);background-size:48px 48px}label{display:"
+      "block;margin-top:4px;color:#102030}</style><div id='panel_b' "
+      "class='panel'></div><div id='beta' class='b' data-godot-action='beta'>"
+      "Beta</div><label><input id='check_b' type='checkbox' "
+      "data-godot-action='check-b'>B</label>";
 
   const std::string root_a_string = root_a.string();
   const std::string root_b_string = root_b.string();
@@ -994,6 +1025,7 @@ int RunCApiTwoInstanceSmoke() {
   struct CapturedFrame {
     blink_standalone_frame_output_t output = {};
     uint64_t hash = 0;
+    FramePixelContentStats pixel_stats;
   };
   const auto capture_frame = [](blink_standalone_renderer_t* renderer,
                                 const char* label,
@@ -1004,6 +1036,7 @@ int RunCApiTwoInstanceSmoke() {
         blink_standalone_renderer_get_latest_output(renderer,
                                                     &captured->output);
     captured->hash = HashFramePixels(captured->output);
+    captured->pixel_stats = AnalyzeFramePixelContent(captured->output);
     const bool ok =
         output_status == BLINK_STANDALONE_STATUS_OK &&
         captured->output.width == expected_width &&
@@ -1032,11 +1065,20 @@ int RunCApiTwoInstanceSmoke() {
   CapturedFrame first_a;
   if (status != BLINK_STANDALONE_STATUS_OK ||
       !capture_frame(renderer_a, "A first", 256, 128, &first_a) ||
-      !HasHitId(renderer_a, "alpha") || HasHitId(renderer_a, "beta")) {
+      !HasHitId(renderer_a, "alpha") || HasHitId(renderer_a, "beta") ||
+      !HitCheckedStateIs(renderer_a, "check_a", false) ||
+      first_a.pixel_stats.transparent != 0 ||
+      first_a.pixel_stats.dark_blue_112233 < 4000 ||
+      first_a.pixel_stats.resource_red_e84444 < 2500 ||
+      first_a.pixel_stats.resource_green_237a57 != 0) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: A first advance failed status=%d "
-                 "Aerr=%s\n",
-                 status, blink_standalone_renderer_last_error(renderer_a));
+                 "transparent=%zu bg112233=%zu red=%zu green=%zu Aerr=%s\n",
+                 status, first_a.pixel_stats.transparent,
+                 first_a.pixel_stats.dark_blue_112233,
+                 first_a.pixel_stats.resource_red_e84444,
+                 first_a.pixel_stats.resource_green_237a57,
+                 blink_standalone_renderer_last_error(renderer_a));
     blink_standalone_renderer_destroy(renderer_b);
     blink_standalone_renderer_destroy(renderer_a);
     return 1;
@@ -1047,12 +1089,56 @@ int RunCApiTwoInstanceSmoke() {
   if (status != BLINK_STANDALONE_STATUS_OK ||
       !capture_frame(renderer_b, "B first", 180, 100, &first_b) ||
       !HasHitId(renderer_b, "beta") || HasHitId(renderer_b, "alpha") ||
-      first_a.hash == first_b.hash) {
+      !HitCheckedStateIs(renderer_b, "check_b", false) ||
+      first_b.hash == first_a.hash || first_b.pixel_stats.transparent < 5000 ||
+      first_b.pixel_stats.orange_d06329 < 3000 ||
+      first_b.pixel_stats.resource_green_237a57 < 1500 ||
+      first_b.pixel_stats.resource_red_e84444 != 0) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: B first advance failed status=%d "
-                 "A_hash=%llu B_hash=%llu Aerr=%s Berr=%s\n",
+                 "A_hash=%llu B_hash=%llu transparent=%zu orange=%zu "
+                 "red=%zu green=%zu Aerr=%s Berr=%s\n",
                  status, static_cast<unsigned long long>(first_a.hash),
                  static_cast<unsigned long long>(first_b.hash),
+                 first_b.pixel_stats.transparent,
+                 first_b.pixel_stats.orange_d06329,
+                 first_b.pixel_stats.resource_red_e84444,
+                 first_b.pixel_stats.resource_green_237a57,
+                 blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  blink_standalone_hit_metadata_t check_a = {};
+  if (!GetHitById(renderer_a, "check_a", &check_a)) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: A checkbox metadata missing\n");
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+  const float check_a_x = check_a.bounds.x + check_a.bounds.width * 0.5f;
+  const float check_a_y = check_a.bounds.y + check_a.bounds.height * 0.5f;
+  blink_standalone_renderer_mouse_move(renderer_a, check_a_x, check_a_y, 0);
+  blink_standalone_renderer_mouse_down(renderer_a, check_a_x, check_a_y,
+                                       BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0,
+                                       1);
+  blink_standalone_renderer_mouse_up(renderer_a, check_a_x, check_a_y,
+                                     BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  status = blink_standalone_renderer_advance_frame(renderer_a, 0.008);
+  CapturedFrame checked_a;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_frame(renderer_a, "A checked", 256, 128, &checked_a) ||
+      !HitCheckedStateIs(renderer_a, "check_a", true) ||
+      !HitCheckedStateIs(renderer_b, "check_b", false) ||
+      checked_a.hash == first_a.hash) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: A checkbox isolation failed "
+                 "status=%d first_hash=%llu checked_hash=%llu Aerr=%s Berr=%s\n",
+                 status, static_cast<unsigned long long>(first_a.hash),
+                 static_cast<unsigned long long>(checked_a.hash),
                  blink_standalone_renderer_last_error(renderer_a),
                  blink_standalone_renderer_last_error(renderer_b));
     blink_standalone_renderer_destroy(renderer_b);
@@ -1061,10 +1147,12 @@ int RunCApiTwoInstanceSmoke() {
   }
 
   const char* html_a_reload =
-      "<!doctype html><!--reload--><style>body{margin:0;background:white}.a{"
+      "<!doctype html><!--reload--><style>body{margin:0;background:#112233}.a{"
       "width:64px;height:64px;background-image:url(icon.bmp);"
-      "background-size:64px 64px}</style><div id='alpha' class='a' "
-      "data-godot-action='alpha'>Alpha</div>";
+      "background-size:64px 64px}label{display:block;margin-top:4px;"
+      "color:white}</style><div id='alpha' class='a' "
+      "data-godot-action='alpha'>Alpha</div><label><input id='check_a' "
+      "type='checkbox' data-godot-action='check-a'>A</label>";
   status = blink_standalone_renderer_set_document_html(
       renderer_a, html_a_reload, root_a_string.c_str(), root_a_string.c_str());
   if (status == BLINK_STANDALONE_STATUS_OK)
@@ -1073,7 +1161,9 @@ int RunCApiTwoInstanceSmoke() {
   if (status != BLINK_STANDALONE_STATUS_OK ||
       !capture_frame(renderer_a, "A second", 256, 128, &second_a) ||
       second_a.hash != first_a.hash || !HasHitId(renderer_a, "alpha") ||
-      HasHitId(renderer_a, "beta")) {
+      HasHitId(renderer_a, "beta") ||
+      !HitCheckedStateIs(renderer_a, "check_a", false) ||
+      !HitCheckedStateIs(renderer_b, "check_b", false)) {
     std::fprintf(stderr,
                  "c_api_two_instance_smoke: A second advance failed status=%d "
                  "first_hash=%llu second_hash=%llu Aerr=%s Berr=%s\n",
@@ -1087,10 +1177,12 @@ int RunCApiTwoInstanceSmoke() {
   }
 
   const char* html_b_reload =
-      "<!doctype html><!--reload--><style>body{margin:0;background:#102030}"
+      "<!doctype html><!--reload--><style>html,body{margin:0;background:transparent}"
       ".c{width:72px;height:54px;background-image:url(icon.bmp);"
-      "background-size:72px 54px;color:white}</style><div id='gamma' "
-      "class='c' data-godot-action='gamma'>Gamma</div>";
+      "background-size:72px 54px;color:white}.panel{width:80px;height:32px;"
+      "background:#d06329}</style><div id='panel_b_reload' "
+      "class='panel'></div><div id='gamma' class='c' "
+      "data-godot-action='gamma'>Gamma</div>";
   status = blink_standalone_renderer_set_viewport(renderer_b, 128, 96, 1.0f);
   if (status == BLINK_STANDALONE_STATUS_OK) {
     status = blink_standalone_renderer_set_document_html(
@@ -1105,7 +1197,11 @@ int RunCApiTwoInstanceSmoke() {
       second_b.hash == first_b.hash || second_b.hash == second_a.hash ||
       !HasHitId(renderer_b, "gamma") || HasHitId(renderer_b, "alpha") ||
       HasHitId(renderer_b, "beta") || !HasHitId(renderer_a, "alpha") ||
-      HasHitId(renderer_a, "gamma")) {
+      HasHitId(renderer_a, "gamma") ||
+      second_b.pixel_stats.transparent < 3000 ||
+      second_b.pixel_stats.orange_d06329 < 2000 ||
+      second_b.pixel_stats.resource_green_237a57 < 2500 ||
+      second_b.pixel_stats.resource_red_e84444 != 0) {
     std::fprintf(
         stderr,
         "c_api_two_instance_smoke: B second advance failed status=%d "
@@ -1125,17 +1221,39 @@ int RunCApiTwoInstanceSmoke() {
     return 1;
   }
 
+  status = blink_standalone_renderer_advance_frame(renderer_a, 0.048);
+  CapturedFrame final_a;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_frame(renderer_a, "A final", 256, 128, &final_a) ||
+      final_a.hash != second_a.hash || !HasHitId(renderer_a, "alpha") ||
+      HasHitId(renderer_a, "gamma") ||
+      !HitCheckedStateIs(renderer_a, "check_a", false)) {
+    std::fprintf(stderr,
+                 "c_api_two_instance_smoke: A final isolation failed "
+                 "status=%d second_hash=%llu final_hash=%llu Aerr=%s Berr=%s\n",
+                 status, static_cast<unsigned long long>(second_a.hash),
+                 static_cast<unsigned long long>(final_a.hash),
+                 blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
   std::printf(
       "c_api_two_instance_smoke: ok A=%dx%d hash=%llu hits=%zu B=%dx%d "
-      "hash=%llu hits=%zu B_reloaded=%dx%d hash=%llu\n",
-      second_a.output.width, second_a.output.height,
-      static_cast<unsigned long long>(second_a.hash),
+      "hash=%llu hits=%zu B_reloaded=%dx%d hash=%llu transparent=%zu "
+      "A_final=%dx%d hash=%llu\n",
+      final_a.output.width, final_a.output.height,
+      static_cast<unsigned long long>(final_a.hash),
       blink_standalone_renderer_hit_metadata_count(renderer_a),
       first_b.output.width, first_b.output.height,
       static_cast<unsigned long long>(first_b.hash),
       blink_standalone_renderer_hit_metadata_count(renderer_b),
       second_b.output.width, second_b.output.height,
-      static_cast<unsigned long long>(second_b.hash));
+      static_cast<unsigned long long>(second_b.hash),
+      second_b.pixel_stats.transparent, final_a.output.width,
+      final_a.output.height, static_cast<unsigned long long>(final_a.hash));
   blink_standalone_renderer_destroy(renderer_b);
   blink_standalone_renderer_destroy(renderer_a);
   return 0;

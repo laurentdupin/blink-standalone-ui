@@ -74,7 +74,11 @@ FetchParameters CSSImageValue::PrepareFetch(
     resource_request.SetIsAdResource();
   }
   ExecutionContext* execution_context = document.GetExecutionContext();
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  ResourceLoaderOptions options(nullptr);
+#else
   ResourceLoaderOptions options(execution_context->GetCurrentWorld());
+#endif
   options.initiator_info.name = initiator_name_.empty()
                                     ? fetch_initiator_type_names::kCSS
                                     : initiator_name_;

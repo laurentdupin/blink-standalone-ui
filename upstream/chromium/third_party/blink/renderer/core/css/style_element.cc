@@ -195,15 +195,15 @@ StyleElement::ProcessingResult StyleElement::CreateSheetOrModule(
   DCHECK(IsSameObject(element));
   Document& document = element.GetDocument();
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  const bool passes_style_csp = true;
+#else
   ContentSecurityPolicy* csp =
       element.GetExecutionContext()
           ? element.GetExecutionContext()
                 ->GetContentSecurityPolicyForCurrentWorld()
           : nullptr;
 
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  const bool passes_style_csp = true;
-#else
   // CSP is bypassed for style elements in user agent shadow DOM.
   const bool passes_style_csp =
       IsInUserAgentShadowDOM(element) ||

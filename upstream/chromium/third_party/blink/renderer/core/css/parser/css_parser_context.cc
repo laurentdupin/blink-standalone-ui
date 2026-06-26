@@ -114,9 +114,13 @@ CSSParserContext::CSSParserContext(
           document.GetExecutionContext()
               ? document.GetExecutionContext()->GetSecureContextMode()
               : SecureContextMode::kInsecureContext,
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+          nullptr,
+#else
           document.GetExecutionContext()
               ? document.GetExecutionContext()->GetCurrentWorld()
               : nullptr,
+#endif
           &document,
           resource_fetch_restriction) {}
 
@@ -129,7 +133,11 @@ CSSParserContext::CSSParserContext(const ExecutionContext& context)
                                 context.GetReferrerPolicy()),
                        true,
                        context.GetSecureContextMode(),
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+                       nullptr,
+#else
                        context.GetCurrentWorld(),
+#endif
                        IsA<LocalDOMWindow>(&context)
                            ? To<LocalDOMWindow>(context).document()
                            : nullptr,
