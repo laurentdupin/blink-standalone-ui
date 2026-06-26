@@ -2,9 +2,12 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <algorithm>
+#include <cerrno>
+#include <cstdlib>
 #include <vector>
 
 #include "base/at_exit.h"
@@ -74,12 +77,20 @@ bool ParseViewport(const std::string& value, html_css_renderer::Size* size) {
   const size_t x = value.find('x');
   if (x == std::string::npos)
     return false;
-  try {
-    size->width = std::stof(value.substr(0, x));
-    size->height = std::stof(value.substr(x + 1));
-  } catch (...) {
+  std::string width_text = value.substr(0, x);
+  std::string height_text = value.substr(x + 1);
+  char* width_end = nullptr;
+  char* height_end = nullptr;
+  errno = 0;
+  const float width = std::strtof(width_text.c_str(), &width_end);
+  if (errno != 0 || width_end == width_text.c_str() || *width_end != '\0')
     return false;
-  }
+  errno = 0;
+  const float height = std::strtof(height_text.c_str(), &height_end);
+  if (errno != 0 || height_end == height_text.c_str() || *height_end != '\0')
+    return false;
+  size->width = width;
+  size->height = height;
   return size->width > 0.0f && size->height > 0.0f;
 }
 
@@ -110,16 +121,15 @@ std::vector<std::string> SplitCommaList(const std::string& value) {
 }
 
 bool ParseNonNegativeInt(const std::string& value, int* out) {
-  try {
-    size_t consumed = 0;
-    const int parsed = std::stoi(value, &consumed);
-    if (consumed != value.size() || parsed < 0)
-      return false;
-    *out = parsed;
-    return true;
-  } catch (...) {
+  char* end = nullptr;
+  errno = 0;
+  const long parsed = std::strtol(value.c_str(), &end, 10);
+  if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < 0 ||
+      parsed > std::numeric_limits<int>::max()) {
     return false;
   }
+  *out = static_cast<int>(parsed);
+  return true;
 }
 
 void PrintUsage() {

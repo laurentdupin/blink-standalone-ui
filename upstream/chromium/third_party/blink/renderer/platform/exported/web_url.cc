@@ -56,6 +56,13 @@ WebURL& WebURL::operator=(const KURL& url) {
 }
 
 WebURL::operator KURL() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  // Standalone initial documents can leave optional WebNavigationParams URL
+  // fields unset. Match the public GURL conversion contract: a null WebURL
+  // converts to an empty URL object instead of feeding a null String to KURL.
+  if (IsNull())
+    return KURL();
+#endif
   return KURL(string_, parsed_, is_valid_);
 }
 
