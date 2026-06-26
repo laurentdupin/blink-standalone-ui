@@ -9991,12 +9991,119 @@ bool ParseStandaloneUnsignedPair(const std::string& value,
 }
 
 void MarkStandaloneFormControlMutationLayout(Element& element) {
-  LayoutObject* layout_object = element.GetLayoutObject();
-  if (!layout_object) {
+  for (Node* current = &element; current;
+       current = current->ParentOrShadowHostNode()) {
+    auto* current_element = DynamicTo<Element>(current);
+    if (!current_element) {
+      continue;
+    }
+    LayoutObject* layout_object = current_element->GetLayoutObject();
+    if (!layout_object) {
+      continue;
+    }
+    layout_object->SetNeedsLayoutAndFullPaintInvalidation(
+        layout_invalidation_reason::kTextControlChanged);
+  }
+  if (Element* host = element.OwnerShadowHost()) {
+    MarkStandaloneFormControlMutationLayout(*host);
+  }
+}
+
+void MarkStandaloneInputEventLayout(Document& document,
+                                    LocalFrameView& frame_view) {
+  frame_view.SetNeedsLayout();
+  if (Element* focused_element = document.FocusedElement()) {
+    MarkStandaloneFormControlMutationLayout(*focused_element);
+  }
+}
+
+void UpdateStandaloneFocusedInputLayout(Document& document) {
+  Element* focused_element = document.FocusedElement();
+  if (!focused_element) {
     return;
   }
-  layout_object->SetNeedsLayoutAndFullPaintInvalidation(
-      layout_invalidation_reason::kTextControlChanged);
+  MarkStandaloneFormControlMutationLayout(*focused_element);
+  document.UpdateStyleAndLayoutForNode(focused_element,
+                                       DocumentUpdateReason::kTest);
+}
+
+TextControlElement* FocusedTextControlForStandaloneRenderer(
+    Document& document) {
+  return DynamicTo<TextControlElement>(document.FocusedElement());
+}
+
+bool ReplaceFocusedTextControlSelectionForStandaloneRenderer(
+    Document& document,
+    const String& replacement) {
+  TextControlElement* control =
+      FocusedTextControlForStandaloneRenderer(document);
+  if (!control) {
+    return false;
+  }
+
+  String original = control->InnerEditorValue();
+  unsigned start = control->selectionStart();
+  unsigned end = control->selectionEnd();
+  if (start > end) {
+    std::swap(start, end);
+  }
+  start = std::min(start, original.length());
+  end = std::min(end, original.length());
+
+  StringBuilder text;
+  text.Append(StringView(original, 0, start));
+  text.Append(replacement);
+  text.Append(StringView(original, end));
+  control->SetValue(text.ToString(), TextFieldEventBehavior::kDispatchNoEvent,
+                    TextControlSetValueSelection::kDoNotSet);
+
+  const unsigned caret = start + replacement.length();
+  control->SetSelectionRange(caret, caret);
+  MarkStandaloneFormControlMutationLayout(*control);
+  return true;
+}
+
+bool ApplyFocusedTextControlEditingKeyForStandaloneRenderer(Document& document,
+                                                            int key) {
+  TextControlElement* control =
+      FocusedTextControlForStandaloneRenderer(document);
+  if (!control) {
+    return false;
+  }
+
+  String original = control->InnerEditorValue();
+  unsigned start = control->selectionStart();
+  unsigned end = control->selectionEnd();
+  if (start > end) {
+    std::swap(start, end);
+  }
+  start = std::min(start, original.length());
+  end = std::min(end, original.length());
+
+  if (start == end) {
+    if (key == 8) {
+      if (start == 0) {
+        return true;
+      }
+      --start;
+    } else if (key == 46) {
+      if (end >= original.length()) {
+        return true;
+      }
+      ++end;
+    } else {
+      return false;
+    }
+  }
+
+  StringBuilder text;
+  text.Append(StringView(original, 0, start));
+  text.Append(StringView(original, end));
+  control->SetValue(text.ToString(), TextFieldEventBehavior::kDispatchNoEvent,
+                    TextControlSetValueSelection::kDoNotSet);
+  control->SetSelectionRange(start, start);
+  MarkStandaloneFormControlMutationLayout(*control);
+  return true;
 }
 
 void ApplyDomMutationsForStandaloneRenderer(
@@ -10650,6 +10757,7 @@ void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
 
   TraceLiveFrameProbeLifecycleState("keyboard input before lifecycle update",
                                     &document, frame, &frame_view);
+  MarkStandaloneInputEventLayout(document, frame_view);
   TraceLiveFrameProbeStage("before keyboard input lifecycle update");
   UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
       *frame->View(), DocumentUpdateReason::kTest);
@@ -10659,13 +10767,30 @@ void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
   for (const StandaloneKeyboardInputEventForRenderer& pending :
        pending_events) {
     bool handled = false;
+    MarkStandaloneInputEventLayout(document, frame_view);
+    TraceLiveFrameProbeStage("before keyboard input predispatch lifecycle update");
+    UpdateAllLifecyclePhasesExceptPaintForStandaloneRenderer(
+        *frame->View(), DocumentUpdateReason::kTest);
+    TraceLiveFrameProbeStage("after keyboard input predispatch lifecycle update");
+    TraceLiveFrameProbeStage("before focused input layout update");
+    UpdateStandaloneFocusedInputLayout(document);
+    TraceLiveFrameProbeStage("after focused input layout update");
     if (pending.type == 1 && !pending.text.empty()) {
       const String text = String::FromUtf8(pending.text);
-      TraceLiveFrameProbeStage("before blink text input dispatch");
-      handled = frame->GetEventHandler().HandleTextInputEvent(
-          text, nullptr, kTextEventInputKeyboard);
-      TraceLiveFrameProbeStage("after blink text input dispatch");
+      TraceLiveFrameProbeStage("before standalone text control text insert");
+      handled =
+          ReplaceFocusedTextControlSelectionForStandaloneRenderer(document,
+                                                                  text);
+      TraceLiveFrameProbeStage("after standalone text control text insert");
       last_result = handled ? "text_handled" : "text_not_handled";
+    } else if (pending.type == 2 && (pending.key == 8 || pending.key == 46)) {
+      TraceLiveFrameProbeStage("before standalone text control edit key");
+      handled =
+          ApplyFocusedTextControlEditingKeyForStandaloneRenderer(document,
+                                                                 pending.key);
+      TraceLiveFrameProbeStage("after standalone text control edit key");
+      last_result = handled ? "key_text_control_handled"
+                            : "key_text_control_not_handled";
     } else if (pending.type == 2 || pending.type == 3) {
       TraceLiveFrameProbeStage("before blink keyboard dispatch");
       last_result =
@@ -10678,6 +10803,7 @@ void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
     }
     if (handled) {
       cache.keyboard_input_events_dispatched = true;
+      MarkStandaloneInputEventLayout(document, frame_view);
     }
     ++cache.keyboard_input_event_dispatch_count;
   }
