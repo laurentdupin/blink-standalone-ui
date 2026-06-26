@@ -178,6 +178,7 @@
 #include "third_party/blink/renderer/core/layout/table/layout_table_column.h"
 #include "third_party/blink/renderer/core/layout/table/table_layout_algorithm_types.h"
 #include "third_party/blink/renderer/core/loader/empty_clients.h"
+#include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/layout/physical_box_fragment.h"
@@ -9963,6 +9964,30 @@ void ApplyElementAttributesForStandaloneRenderer(
   }
 }
 
+bool ParseStandaloneUnsignedPair(const std::string& value,
+                                 unsigned* first,
+                                 unsigned* second) {
+  const size_t separator = value.find(':');
+  if (separator == std::string::npos) {
+    return false;
+  }
+  char* end = nullptr;
+  const unsigned long parsed_first =
+      std::strtoul(value.substr(0, separator).c_str(), &end, 10);
+  if (!end || *end != '\0') {
+    return false;
+  }
+  end = nullptr;
+  const unsigned long parsed_second =
+      std::strtoul(value.substr(separator + 1).c_str(), &end, 10);
+  if (!end || *end != '\0') {
+    return false;
+  }
+  *first = static_cast<unsigned>(parsed_first);
+  *second = static_cast<unsigned>(parsed_second);
+  return true;
+}
+
 void ApplyDomMutationsForStandaloneRenderer(
     Document& document,
     const std::vector<StandaloneDomMutationForRenderer>& mutations) {
@@ -9970,6 +9995,12 @@ void ApplyDomMutationsForStandaloneRenderer(
   cache.dom_mutations_applied = false;
   cache.dom_mutation_apply_count = 0;
   for (const StandaloneDomMutationForRenderer& mutation : mutations) {
+    if (mutation.type == 9) {
+      document.ClearFocusedElement();
+      cache.dom_mutations_applied = true;
+      ++cache.dom_mutation_apply_count;
+      continue;
+    }
     Element* element = document.getElementById(
         AtomicString(String::FromUtf8(mutation.element_id)));
     if (!element && mutation.type == 5) {
@@ -10015,6 +10046,48 @@ void ApplyDomMutationsForStandaloneRenderer(
           continue;
         }
         break;
+      case 6:
+        if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
+          textarea->setValueForBinding(String::FromUtf8(mutation.value));
+        } else if (auto* text_control = DynamicTo<TextControlElement>(element)) {
+          text_control->SetValue(String::FromUtf8(mutation.value));
+        } else {
+          continue;
+        }
+        break;
+      case 7:
+        if (auto* input = DynamicTo<HTMLInputElement>(element)) {
+          if (!input->IsCheckable()) {
+            continue;
+          }
+          input->SetChecked(mutation.value == "1");
+        } else {
+          continue;
+        }
+        break;
+      case 8:
+        document.UpdateStyleAndLayoutTree();
+      if (Page* page = document.GetPage()) {
+        page->GetFocusController().SetFocusedElement(element,
+                                                    document.GetFrame());
+        } else {
+          element->Focus();
+        }
+        break;
+      case 10: {
+        auto* text_control = DynamicTo<TextControlElement>(element);
+        if (!text_control) {
+          continue;
+        }
+        unsigned start = 0;
+        unsigned end = 0;
+        if (!ParseStandaloneUnsignedPair(mutation.value, &start, &end)) {
+          continue;
+        }
+        document.UpdateStyleAndLayoutTree();
+        text_control->SetSelectionRange(start, end);
+        break;
+      }
       default:
         continue;
     }

@@ -183,6 +183,24 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     const char* style_element_id,
     const char* css_text);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_form_control_value(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* value);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_form_control_checked(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    int checked);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_focus_element(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_blur_focused_element(
+    blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_text_selection(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    unsigned start,
+    unsigned end);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(
     blink_standalone_renderer_t* renderer);
 

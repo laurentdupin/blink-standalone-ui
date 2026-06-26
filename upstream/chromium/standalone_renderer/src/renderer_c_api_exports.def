@@ -18,6 +18,11 @@ EXPORTS
   blink_standalone_renderer_remove_element_attribute
   blink_standalone_renderer_set_element_style
   blink_standalone_renderer_replace_stylesheet_text
+  blink_standalone_renderer_set_form_control_value
+  blink_standalone_renderer_set_form_control_checked
+  blink_standalone_renderer_focus_element
+  blink_standalone_renderer_blur_focused_element
+  blink_standalone_renderer_set_text_selection
   blink_standalone_renderer_reset_state
   blink_standalone_renderer_get_latest_output
   blink_standalone_renderer_release_latest_output

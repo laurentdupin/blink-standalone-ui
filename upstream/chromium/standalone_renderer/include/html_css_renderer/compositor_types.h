@@ -133,6 +133,11 @@ enum class DomMutationType {
   kRemoveAttribute = 3,
   kSetStyleAttribute = 4,
   kReplaceStylesheetText = 5,
+  kSetFormControlValue = 6,
+  kSetFormControlChecked = 7,
+  kFocusElement = 8,
+  kBlurFocusedElement = 9,
+  kSetTextSelection = 10,
 };
 
 struct DomMutation {

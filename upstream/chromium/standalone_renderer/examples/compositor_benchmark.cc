@@ -146,6 +146,7 @@ void PrintUsage() {
       "[--c-api-transparent-background-smoke] "
       "[--c-api-separated-click-smoke] "
       "[--c-api-text-input-smoke] "
+      "[--c-api-form-control-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
@@ -1575,6 +1576,252 @@ int RunCApiTextInputSmoke() {
   return 0;
 }
 
+int RunCApiFormControlMutationSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 420;
+  config.height = 240;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style id='theme'>body{margin:0;padding:12px;"
+      "font:18px monospace;background:#112233;color:white}"
+      "#panel{position:absolute;left:10px;top:10px;width:390px;height:205px;"
+      "background:#2878d8;padding:8px}input,textarea{font:18px monospace;"
+      "margin:4px;padding:4px;background:white;color:#111}#name{width:230px}"
+      "#bio{width:300px;height:54px}</style>"
+      "<div id='panel' data-godot-action='panel'>"
+      "<input id='name' value='old' data-godot-action='name'>"
+      "<textarea id='bio' data-godot-action='bio'>before</textarea>"
+      "<label><input id='agree' type='checkbox' "
+      "data-godot-action='agree'>Agree</label>"
+      "<label><input id='r1' type='radio' name='mode' checked "
+      "data-godot-action='r1'>One</label>"
+      "<label><input id='r2' type='radio' name='mode' "
+      "data-godot-action='r2'>Two</label></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: set html failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_form_control_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const uint64_t initial_hash = HashFramePixels(output);
+  const FramePixelContentStats initial_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      initial_stats.blue_2878d8 < 3000 || !HasHitId(renderer, "panel")) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: initial output invalid "
+                 "status=%d blue=%zu\n",
+                 status, initial_stats.blue_2878d8);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  if (blink_standalone_renderer_set_element_attribute(
+          renderer, "panel", "onclick", "alert(1)") !=
+      BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: no-script rejection "
+                 "failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_form_control_value(renderer, "name",
+                                                            "api-value");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_form_control_value(
+                     renderer, "bio", "line one\nprogrammatic")
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_form_control_checked(
+                     renderer, "agree", 1)
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_form_control_checked(
+                     renderer, "r2", 1)
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_focus_element(renderer, "name")
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_text_selection(renderer, "name",
+                                                               3, 6)
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_form_control_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: form mutations failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const uint64_t mutated_hash = HashFramePixels(output);
+  blink_standalone_form_control_state_t name_state = {};
+  blink_standalone_form_control_state_t bio_state = {};
+  if (status != BLINK_STANDALONE_STATUS_OK || mutated_hash == initial_hash ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "api-value" || name_state.focused == 0 ||
+      name_state.selection_offsets_present == 0 ||
+      name_state.selection_start != 3 || name_state.selection_end != 6 ||
+      !GetFormStateById(renderer, "bio", &bio_state) ||
+      FormStateValue(bio_state) != "line one\nprogrammatic" ||
+      !HitCheckedStateIs(renderer, "agree", true) ||
+      !HitCheckedStateIs(renderer, "r2", true) ||
+      !HitCheckedStateIs(renderer, "r1", false)) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: mutated state invalid "
+                 "status=%d name=%s focused=%d sel=%u:%u bio=%s "
+                 "agree=%d r1=%d r2=%d\n",
+                 status, FormStateValue(name_state).c_str(),
+                 name_state.focused, name_state.selection_start,
+                 name_state.selection_end, FormStateValue(bio_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0,
+                 HitCheckedStateIs(renderer, "r1", true) ? 1 : 0,
+                 HitCheckedStateIs(renderer, "r2", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_focus_element(renderer, "bio");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_text_selection(renderer, "bio",
+                                                               0, 4)
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_form_control_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: textarea focus failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  if (!GetFormStateById(renderer, "bio", &bio_state) ||
+      bio_state.focused == 0 || bio_state.selection_offsets_present == 0 ||
+      bio_state.selection_start != 0 || bio_state.selection_end != 4) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: textarea selection "
+                 "invalid focused=%d sel=%u:%u\n",
+                 bio_state.focused, bio_state.selection_start,
+                 bio_state.selection_end);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_blur_focused_element(renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_form_control_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: blur failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  if (!GetFormStateById(renderer, "bio", &bio_state) ||
+      bio_state.focused != 0) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: blur did not clear "
+                 "focused state\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_element_style(
+      renderer, "panel",
+      "position:absolute;left:10px;top:10px;width:390px;height:205px;"
+      "background:#d06329;padding:8px");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_replace_stylesheet_text(
+                     renderer, "theme",
+                     "body{margin:0;padding:12px;font:18px monospace;"
+                     "background:#112233;color:white}input,textarea{"
+                     "font:18px monospace;margin:4px;padding:4px;background:"
+                     "white;color:#111}#name{width:230px}#bio{width:300px;"
+                     "height:54px}")
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_viewport(renderer, 420, 240,
+                                                         2.0f)
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_form_control_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: preservation mutation "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats final_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 840 ||
+      output.height != 480 || final_stats.orange_d06329 < 12000 ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "api-value" ||
+      !GetFormStateById(renderer, "bio", &bio_state) ||
+      FormStateValue(bio_state) != "line one\nprogrammatic" ||
+      !HitCheckedStateIs(renderer, "agree", true) ||
+      !HitCheckedStateIs(renderer, "r2", true) ||
+      !HitCheckedStateIs(renderer, "r1", false) ||
+      !HasHitId(renderer, "panel")) {
+    std::fprintf(stderr,
+                 "c_api_form_control_mutation_smoke: state did not persist "
+                 "status=%d size=%dx%d orange=%zu name=%s bio=%s\n",
+                 status, output.width, output.height, final_stats.orange_d06329,
+                 FormStateValue(name_state).c_str(),
+                 FormStateValue(bio_state).c_str());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_form_control_mutation_smoke: ok value=api-value textarea=value "
+      "checked=agree,r2 selection=covered resize=840x480\n");
+  return 0;
+}
+
 int RunCApiEmptyResourceSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 180;
@@ -2645,6 +2892,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-separated-click-smoke" ||
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
+        arg == "--c-api-form-control-mutation-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -2681,6 +2929,7 @@ int main(int argc, char** argv) {
   bool c_api_separated_click_smoke = false;
   bool c_api_dom_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
+  bool c_api_form_control_mutation_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -2794,6 +3043,8 @@ int main(int argc, char** argv) {
       c_api_dom_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
       c_api_text_input_smoke = true;
+    } else if (arg == "--c-api-form-control-mutation-smoke") {
+      c_api_form_control_mutation_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -2927,6 +3178,10 @@ int main(int argc, char** argv) {
 
   if (c_api_text_input_smoke) {
     return RunCApiTextInputSmoke();
+  }
+
+  if (c_api_form_control_mutation_smoke) {
+    return RunCApiFormControlMutationSmoke();
   }
 
   if (c_api_two_instance_smoke) {

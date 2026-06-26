@@ -279,7 +279,8 @@ blink_standalone_status_code_t QueueDomMutation(
     const char* element_id,
     const char* name,
     const char* value) {
-  if (!renderer || !element_id || !*element_id) {
+  if (!renderer || ((type != html_css_renderer::DomMutationType::kBlurFocusedElement) &&
+                    (!element_id || !*element_id))) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   const std::string mutation_name = name ? name : "";
@@ -308,7 +309,7 @@ blink_standalone_status_code_t QueueDomMutation(
   }
   html_css_renderer::DomMutation mutation;
   mutation.type = type;
-  mutation.element_id = element_id;
+  mutation.element_id = element_id ? element_id : "";
   mutation.name = mutation_name;
   mutation.value = mutation_value;
   renderer->pending_dom_mutations.push_back(std::move(mutation));
@@ -636,6 +637,69 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kReplaceStylesheetText,
       style_element_id, "", css_text);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_form_control_value(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* value) {
+  if (!value) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(
+      renderer, html_css_renderer::DomMutationType::kSetFormControlValue,
+      element_id, "value", value);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_form_control_checked(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    int checked) {
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(
+      renderer, html_css_renderer::DomMutationType::kSetFormControlChecked,
+      element_id, "checked", checked ? "1" : "0");
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_focus_element(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id) {
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kFocusElement,
+                          element_id, "", "");
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_blur_focused_element(
+    blink_standalone_renderer_t* renderer) {
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(
+      renderer, html_css_renderer::DomMutationType::kBlurFocusedElement, "",
+      "", "");
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_text_selection(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    unsigned start,
+    unsigned end) {
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  const std::string range =
+      std::to_string(start) + ":" + std::to_string(end);
+  return QueueDomMutation(
+      renderer, html_css_renderer::DomMutationType::kSetTextSelection,
+      element_id, "selection", range.c_str());
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(
