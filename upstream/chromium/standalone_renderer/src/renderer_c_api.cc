@@ -295,7 +295,11 @@ blink_standalone_status_code_t QueueDomMutation(
             ? MutationViolatesNoScriptProfile(mutation_name, mutation_value)
             : type == html_css_renderer::DomMutationType::kSetStyleAttribute
                   ? MutationViolatesNoScriptProfile("style", mutation_value)
-                  : false;
+                  : type ==
+                            html_css_renderer::DomMutationType::
+                                kReplaceStylesheetText
+                        ? ContainsJavaScriptScheme(LowerAscii(mutation_value))
+                        : false;
     if (rejected) {
       renderer->last_error =
           "mutation rejected by no-script profile (event handler/javascript surface)";
@@ -617,6 +621,21 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetStyleAttribute,
       element_id, "style", style_attribute_value);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_replace_stylesheet_text(
+    blink_standalone_renderer_t* renderer,
+    const char* style_element_id,
+    const char* css_text) {
+  if (!css_text) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  return QueueDomMutation(
+      renderer, html_css_renderer::DomMutationType::kReplaceStylesheetText,
+      style_element_id, "", css_text);
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(

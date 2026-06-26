@@ -179,6 +179,10 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     const char* element_id,
     const char* style_attribute_value);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_replace_stylesheet_text(
+    blink_standalone_renderer_t* renderer,
+    const char* style_element_id,
+    const char* css_text);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_reset_state(
     blink_standalone_renderer_t* renderer);
 

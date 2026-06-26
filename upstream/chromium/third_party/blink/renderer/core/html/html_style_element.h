@@ -51,6 +51,10 @@ class CORE_EXPORT HTMLStyleElement final : public HTMLElement,
 
   using StyleElement::sheet;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  void ReplaceStyleTextForStandaloneRenderer(const String&);
+#endif
+
   bool disabled() const;
   void setDisabled(bool);
   BlockingAttribute& blocking() const { return *blocking_attribute_; }

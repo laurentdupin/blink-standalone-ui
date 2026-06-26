@@ -611,7 +611,7 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
       const size_t close = lower.find("</style>", open_end + 1);
       if (close == std::string::npos)
         break;
-      styles += "<style>";
+      styles += input.substr(open, open_end + 1 - open);
       styles += RewriteStandaloneCssUrlsToFileUrls(
           input.substr(open_end + 1, close - open_end - 1));
       styles += "</style>";

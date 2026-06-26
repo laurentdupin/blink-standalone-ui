@@ -33,8 +33,6 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
-#include <stdio.h>
-
 namespace blink {
 
 HTMLStyleElement::HTMLStyleElement(Document& document,
@@ -44,6 +42,15 @@ HTMLStyleElement::HTMLStyleElement(Document& document,
       blocking_attribute_(MakeGarbageCollected<BlockingAttribute>(this)) {}
 
 HTMLStyleElement::~HTMLStyleElement() = default;
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void HTMLStyleElement::ReplaceStyleTextForStandaloneRenderer(
+    const String& text) {
+  setTextContent(text);
+  StyleElement::ChildrenChanged(*this);
+  GetDocument().GetStyleEngine().ModifiedStyleSheetCandidateNode(*this);
+}
+#endif
 
 void HTMLStyleElement::ParseAttribute(
     const AttributeModificationParams& params) {

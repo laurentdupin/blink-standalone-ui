@@ -132,6 +132,7 @@ enum class DomMutationType {
   kSetAttribute = 2,
   kRemoveAttribute = 3,
   kSetStyleAttribute = 4,
+  kReplaceStylesheetText = 5,
 };
 
 struct DomMutation {

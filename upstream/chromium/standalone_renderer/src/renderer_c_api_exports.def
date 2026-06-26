@@ -17,6 +17,7 @@ EXPORTS
   blink_standalone_renderer_set_element_attribute
   blink_standalone_renderer_remove_element_attribute
   blink_standalone_renderer_set_element_style
+  blink_standalone_renderer_replace_stylesheet_text
   blink_standalone_renderer_reset_state
   blink_standalone_renderer_get_latest_output
   blink_standalone_renderer_release_latest_output

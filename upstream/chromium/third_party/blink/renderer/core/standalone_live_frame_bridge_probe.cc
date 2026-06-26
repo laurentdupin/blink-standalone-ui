@@ -9972,6 +9972,17 @@ void ApplyDomMutationsForStandaloneRenderer(
   for (const StandaloneDomMutationForRenderer& mutation : mutations) {
     Element* element = document.getElementById(
         AtomicString(String::FromUtf8(mutation.element_id)));
+    if (!element && mutation.type == 5) {
+      const AtomicString style_element_id(
+          String::FromUtf8(mutation.element_id));
+      for (HTMLStyleElement& candidate :
+           Traversal<HTMLStyleElement>::DescendantsOf(document)) {
+        if (candidate.GetIdAttribute() == style_element_id) {
+          element = &candidate;
+          break;
+        }
+      }
+    }
     if (!element) {
       continue;
     }
@@ -9995,6 +10006,14 @@ void ApplyDomMutationsForStandaloneRenderer(
       case 4:
         element->setAttribute(html_names::kStyleAttr,
                               AtomicString(String::FromUtf8(mutation.value)));
+        break;
+      case 5:
+        if (auto* style_element = DynamicTo<HTMLStyleElement>(element)) {
+          style_element->ReplaceStyleTextForStandaloneRenderer(
+              String::FromUtf8(mutation.value));
+        } else {
+          continue;
+        }
         break;
       default:
         continue;
@@ -13095,6 +13114,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   ApplyDomMutationsForStandaloneRenderer(document,
                                          cache.requested_dom_mutations);
   TraceLiveFrameProbeStage("after ApplyDomMutations");
+  if (cache.dom_mutations_applied) {
+    TraceLiveFrameProbeStage("before post-dom-mutation pending tasks");
+    blink::test::RunPendingTasks();
+    TraceLiveFrameProbeStage("after post-dom-mutation pending tasks");
+  }
   cache.element_attributes_changed_since_probe = false;
   TraceLiveFrameProbeStage("after document setup");
   cache.timing_html_document_setup_ms =

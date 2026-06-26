@@ -1135,16 +1135,23 @@ int RunCApiDomMutationSmoke() {
   }
   blink_standalone_renderer_release_latest_output(renderer);
 
-  status = blink_standalone_renderer_set_element_style(
-      renderer,
-      "card",
-      "position:absolute;left:12px;top:12px;width:130px;"
-      "height:58px;background:#237a57;color:white;padding:8px");
+  status = blink_standalone_renderer_remove_element_attribute(
+      renderer, "card", "style");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_replace_stylesheet_text(
+                     renderer,
+                     "theme",
+                     "body{margin:0;font:16px monospace}"
+                     "#card{position:absolute;left:12px;top:12px;width:130px;"
+                     "height:58px;background:#237a57;color:white;padding:8px}"
+                     "#name{position:absolute;left:12px;top:92px;width:150px}"
+                     "label{position:absolute;left:12px;top:124px}")
+               : status;
   if (status != BLINK_STANDALONE_STATUS_OK ||
       !AdvanceCApiFrameForSmoke(renderer, time,
                                 "c_api_dom_mutation_smoke")) {
     std::fprintf(stderr,
-                 "c_api_dom_mutation_smoke: second style mutation failed "
+                 "c_api_dom_mutation_smoke: stylesheet mutation failed "
                  "status=%d error=%s\n",
                  status, blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_destroy(renderer);
@@ -1160,7 +1167,7 @@ int RunCApiDomMutationSmoke() {
       !HitCheckedStateIs(renderer, "agree", true) ||
       !HasHitId(renderer, "card")) {
     std::fprintf(stderr,
-                 "c_api_dom_mutation_smoke: second style mutation not reflected "
+                 "c_api_dom_mutation_smoke: stylesheet mutation not reflected "
                  "status=%d green=%zu orange=%zu blue=%zu value=%s "
                  "checked=%d\n",
                  status, green_stats.resource_green_237a57,
