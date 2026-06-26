@@ -77,6 +77,9 @@ void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
+int StandaloneBlinkLiveFrameBridgePrewarmCcFrameSinkForStandaloneRenderer(
+    int width,
+    int height);
 int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
@@ -117,6 +120,8 @@ double StandaloneBlinkLiveFrameBridgeTimingCcPendingUpdateMsForStandaloneRendere
 double StandaloneBlinkLiveFrameBridgeTimingCcSchedulerRunLoopMsForStandaloneRenderer(
     const char* body_html);
 double StandaloneBlinkLiveFrameBridgeTimingCcSubmitWaitMsForStandaloneRenderer(
+    const char* body_html);
+double StandaloneBlinkLiveFrameBridgeTimingCcStartupPrewarmMsForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(
     const char* body_html);
@@ -852,6 +857,13 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         trace_stages_ ? 1 : 0);
     probe::StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
         lifecycle_stop_.empty() ? nullptr : lifecycle_stop_.c_str());
+    const int prewarm_width =
+        std::max(1, static_cast<int>(std::round(snapshot_.viewport.width)));
+    const int prewarm_height =
+        std::max(1, static_cast<int>(std::round(snapshot_.viewport.height)));
+    const int prewarm_ok =
+        probe::StandaloneBlinkLiveFrameBridgePrewarmCcFrameSinkForStandaloneRenderer(
+            prewarm_width, prewarm_height);
     if (diagnostics) {
       diagnostics->push_back("standalone Chromium compositor runtime linked");
       diagnostics->push_back(
@@ -866,6 +878,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         diagnostics->push_back(
             "no-script profile requested by embedder configuration");
       }
+      diagnostics->push_back(std::string("cc/viz frame sink prewarm: ") +
+                             (prewarm_ok ? "ok" : "failed"));
     }
     return probe::StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer() &&
            probe::StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -1150,6 +1164,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             probe_html.c_str());
     result.timing.bridge_cc_submit_wait_ms =
         probe::StandaloneBlinkLiveFrameBridgeTimingCcSubmitWaitMsForStandaloneRenderer(
+            probe_html.c_str());
+    result.timing.bridge_cc_startup_prewarm_ms =
+        probe::StandaloneBlinkLiveFrameBridgeTimingCcStartupPrewarmMsForStandaloneRenderer(
             probe_html.c_str());
     result.timing.bridge_cache_hit =
         probe::StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(

@@ -1928,6 +1928,7 @@ class StandaloneCcLayerHost final
       return false;
     }
     if (frame_sink_bound_) {
+      timing_frame_sink_warmup_ms_ = 0.0;
       return true;
     }
     const auto warmup_start = StandaloneProbeClock::now();
@@ -2973,6 +2974,7 @@ struct LiveFramePaintProbeCache {
   double timing_cc_pending_update_ms = 0.0;
   double timing_cc_scheduler_run_loop_ms = 0.0;
   double timing_cc_submit_wait_ms = 0.0;
+  double timing_cc_startup_prewarm_ms = 0.0;
   bool timing_cache_hit = false;
   bool timing_reused_live_document = false;
   bool timing_rebuilt_for_attributes = false;
@@ -3230,6 +3232,26 @@ void SyncStandaloneCcTimingForStandaloneRenderer(
       cache.cc_layer_host->timing_scheduler_run_loop_ms();
   cache.timing_cc_submit_wait_ms =
       cache.cc_layer_host->timing_submit_wait_ms();
+}
+
+bool PrewarmStandaloneCcFrameSinkForStandaloneRenderer(
+    LiveFramePaintProbeCache& cache,
+    const gfx::Size& viewport) {
+  if (!cache.cc_layer_host) {
+    cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
+  }
+  cache.cc_frame_sink_failure_reason.clear();
+  const auto prewarm_start = StandaloneProbeClock::now();
+  const bool host_ok = cache.cc_layer_host->EnsureHostForScheduler(
+      viewport, &cache.cc_frame_sink_failure_reason);
+  const bool sink_ok =
+      host_ok && cache.cc_layer_host->EnsureFrameSinkReadyForScheduler(
+                     &cache.cc_frame_sink_failure_reason);
+  cache.timing_cc_startup_prewarm_ms =
+      StandaloneProbeElapsedMs(prewarm_start, StandaloneProbeClock::now());
+  SyncStandaloneCcTimingForStandaloneRenderer(cache);
+  SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+  return sink_ok;
 }
 
 bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
@@ -13638,6 +13660,19 @@ int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRe
   return 1;
 }
 
+int StandaloneBlinkLiveFrameBridgePrewarmCcFrameSinkForStandaloneRenderer(
+    int width,
+    int height) {
+  EnsureWtfInitializedForStandaloneRenderer();
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const int safe_width = std::max(1, width);
+  const int safe_height = std::max(1, height);
+  return PrewarmStandaloneCcFrameSinkForStandaloneRenderer(
+             cache, gfx::Size(safe_width, safe_height))
+             ? 1
+             : 0;
+}
+
 int StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
     const char* body_html) {
   return RunLiveFramePaintProbe(body_html).paint_chunk_count;
@@ -13744,6 +13779,13 @@ double StandaloneBlinkLiveFrameBridgeTimingCcSubmitWaitMsForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);
   return ProbeCache().timing_cc_submit_wait_ms;
+}
+
+double
+StandaloneBlinkLiveFrameBridgeTimingCcStartupPrewarmMsForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().timing_cc_startup_prewarm_ms;
 }
 
 int StandaloneBlinkLiveFrameBridgeTimingCacheHitForStandaloneRenderer(

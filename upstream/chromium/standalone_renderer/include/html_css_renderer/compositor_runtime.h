@@ -36,6 +36,7 @@ struct CompositorFrameTiming {
   double bridge_cc_pending_update_ms = 0.0;
   double bridge_cc_scheduler_run_loop_ms = 0.0;
   double bridge_cc_submit_wait_ms = 0.0;
+  double bridge_cc_startup_prewarm_ms = 0.0;
   bool bridge_cache_hit = false;
   bool bridge_reused_live_document = false;
   bool bridge_rebuilt_for_attributes = false;

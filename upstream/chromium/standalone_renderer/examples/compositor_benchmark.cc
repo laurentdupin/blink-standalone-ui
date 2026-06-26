@@ -1078,6 +1078,8 @@ void WriteFrameTimingJsonFields(
        << timing.bridge_cc_scheduler_run_loop_ms << ",\n";
   file << indent << "  \"bridge_cc_submit_wait_ms\": "
        << timing.bridge_cc_submit_wait_ms << ",\n";
+  file << indent << "  \"bridge_cc_startup_prewarm_ms\": "
+       << timing.bridge_cc_startup_prewarm_ms << ",\n";
   file << indent << "  \"bridge_cache_hit\": "
        << (timing.bridge_cache_hit ? "true" : "false") << ",\n";
   file << indent << "  \"bridge_reused_live_document\": "
