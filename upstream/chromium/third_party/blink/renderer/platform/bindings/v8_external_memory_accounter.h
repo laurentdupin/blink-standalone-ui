@@ -8,12 +8,24 @@
 #include <stdlib.h>
 
 #include "base/check_op.h"
-#include "v8/include/v8-external-memory-accounter.h"
 #include "v8/include/v8-isolate.h"
+
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#include "v8/include/v8-external-memory-accounter.h"
+#endif
 
 namespace blink {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+class V8ExternalMemoryAccounterBase {
+ public:
+  void Increase(v8::Isolate*, size_t) {}
+  void Decrease(v8::Isolate*, size_t) {}
+  void Update(v8::Isolate*, int64_t) {}
+};
+#else
 using V8ExternalMemoryAccounterBase = v8::ExternalMemoryAccounter;
+#endif
 
 class V8ExternalMemoryAccounter {
  public:
