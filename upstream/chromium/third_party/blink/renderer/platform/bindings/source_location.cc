@@ -6,7 +6,8 @@
 
 #include "base/tracing/protos/chrome_track_event.pbzero.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
-#if !defined(STANDALONE_RENDERER_GN_PROBE)
+#if !defined(STANDALONE_RENDERER_GN_PROBE) && \
+    !defined(HTML_CSS_RENDERER_STANDALONE)
 #include "third_party/blink/renderer/platform/bindings/thread_debugger.h"
 #endif
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
@@ -14,6 +15,11 @@
 #include "v8/include/v8-inspector-protocol.h"
 
 namespace blink {
+
+#if defined(STANDALONE_RENDERER_GN_PROBE) || \
+    defined(HTML_CSS_RENDERER_STANDALONE)
+#define BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION 1
+#endif
 
 namespace {
 
@@ -52,7 +58,7 @@ SourceLocation* SourceLocation::CaptureWithFullStackTrace() {
 // static
 std::unique_ptr<v8_inspector::V8StackTrace>
 SourceLocation::CaptureStackTraceInternal(bool full) {
-#if defined(STANDALONE_RENDERER_GN_PROBE)
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
   return nullptr;
 #else
   v8::Isolate* isolate = v8::Isolate::TryGetCurrent();
@@ -67,6 +73,10 @@ SourceLocation::CaptureStackTraceInternal(bool full) {
 // static
 SourceLocation* SourceLocation::CreateFromNonEmptyV8StackTraceInternal(
     std::unique_ptr<v8_inspector::V8StackTrace> stack_trace) {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return MakeGarbageCollected<SourceLocation>(String(), String(), 0, 0, nullptr,
+                                              0);
+#else
   // Retrieve the data before passing the ownership to SourceLocation.
   String url = ToPlatformString(stack_trace->topSourceURL());
   String function = ToPlatformString(stack_trace->topFunctionName());
@@ -76,6 +86,7 @@ SourceLocation* SourceLocation::CreateFromNonEmptyV8StackTraceInternal(
   return MakeGarbageCollected<SourceLocation>(
       url, function, line_number, column_number, std::move(stack_trace),
       script_id);
+#endif
 }
 
 SourceLocation::SourceLocation(const String& url, int char_position)
@@ -119,6 +130,9 @@ SourceLocation* SourceLocation::Clone() const {
 }
 
 void SourceLocation::WriteIntoTrace(perfetto::TracedValue context) const {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return;
+#else
   if (!stack_trace_ || stack_trace_->isEmpty()) {
     return;
   }
@@ -133,9 +147,13 @@ void SourceLocation::WriteIntoTrace(perfetto::TracedValue context) const {
     dict.Add("lineNumber", frame.lineNumber);
     dict.Add("columnNumber", frame.columnNumber);
   }
+#endif
 }
 
 void SourceLocation::ToTracedValue(TracedValue* value, const char* name) const {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return;
+#else
   if (!stack_trace_ || stack_trace_->isEmpty())
     return;
   value->BeginArray(name);
@@ -164,23 +182,36 @@ void SourceLocation::ToTracedValue(TracedValue* value, const char* name) const {
 
   value->EndDictionary();
   value->EndArray();
+#endif
 }
 
 String SourceLocation::ToString() const {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return String();
+#else
   if (!stack_trace_)
     return String();
   return ToPlatformString(stack_trace_->toString());
+#endif
 }
 
 std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace>
 SourceLocation::BuildInspectorObject() const {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return nullptr;
+#else
   return BuildInspectorObject(std::numeric_limits<int>::max());
+#endif
 }
 
 std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace>
 SourceLocation::BuildInspectorObject(int max_async_depth) const {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return nullptr;
+#else
   return stack_trace_ ? stack_trace_->buildInspectorObject(max_async_depth)
                       : nullptr;
+#endif
 }
 
 SourceLocation* CaptureSourceLocation(const String& url,
@@ -210,6 +241,10 @@ SourceLocation* CaptureSourceLocation() {
 
 SourceLocation* CaptureSourceLocation(v8::Isolate* isolate,
                                       v8::Local<v8::Function> function) {
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+  return MakeGarbageCollected<SourceLocation>(String(), String(), 0, 0, nullptr,
+                                              0);
+#else
   if (!function.IsEmpty()) {
     v8::Location location = function->GetScriptLocation();
     return MakeGarbageCollected<SourceLocation>(
@@ -221,6 +256,11 @@ SourceLocation* CaptureSourceLocation(v8::Isolate* isolate,
   }
   return MakeGarbageCollected<SourceLocation>(String(), String(), 0, 0, nullptr,
                                               0);
+#endif
 }
+
+#if defined(BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION)
+#undef BLINK_STANDALONE_NO_SCRIPT_SOURCE_LOCATION
+#endif
 
 }  // namespace blink

@@ -22,7 +22,11 @@ AdScriptIdentifier::AdScriptIdentifier(
     : context_id(context_id), id(id), name(std::move(name)) {}
 
 bool AdScriptIdentifier::operator==(const AdScriptIdentifier& other) const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return id == other.id;
+#else
   return context_id.pair() == other.context_id.pair() && id == other.id;
+#endif
 }
 
 String AdTracker::AdScriptAncestry::ToString() const {

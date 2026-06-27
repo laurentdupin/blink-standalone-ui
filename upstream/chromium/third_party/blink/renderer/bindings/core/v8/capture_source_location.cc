@@ -20,6 +20,9 @@
 namespace blink {
 
 String CaptureCurrentScriptUrl(v8::Isolate* isolate) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return String();
+#else
   DCHECK(isolate);
   if (!isolate->InContext()) {
     return String();
@@ -28,12 +31,16 @@ String CaptureCurrentScriptUrl(v8::Isolate* isolate) {
   v8::Local<v8::String> script_name =
       v8::StackTrace::CurrentScriptNameOrSourceURL(isolate);
   return ToCoreStringWithNullCheck(isolate, script_name);
+#endif
 }
 
 Vector<String> CaptureScriptUrlsFromCurrentStack(v8::Isolate* isolate,
                                                  wtf_size_t unique_url_count) {
   Vector<String> unique_urls;
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return unique_urls;
+#else
   if (!isolate || !isolate->InContext()) {
     return unique_urls;
   }
@@ -62,9 +69,30 @@ Vector<String> CaptureScriptUrlsFromCurrentStack(v8::Isolate* isolate,
     }
   }
   return unique_urls;
+#endif
 }
 
 SourceLocation* CaptureSourceLocation(ExecutionContext* execution_context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+    Document* document = window->document();
+    unsigned line_number = 0;
+    if (document->GetScriptableDocumentParser() &&
+        !document->IsInDocumentWrite()) {
+      if (document->GetScriptableDocumentParser()->IsParsingAtLineNumber()) {
+        line_number =
+            document->GetScriptableDocumentParser()->LineNumber().OneBasedInt();
+      }
+    }
+    return MakeGarbageCollected<SourceLocation>(document->Url().GetString(),
+                                                String(), line_number, 0,
+                                                nullptr);
+  }
+
+  return MakeGarbageCollected<SourceLocation>(
+      execution_context ? execution_context->Url().GetString() : String(),
+      String(), 0, 0, nullptr);
+#else
   std::unique_ptr<v8_inspector::V8StackTrace> stack_trace =
       SourceLocation::CaptureStackTraceInternal(false);
   if (stack_trace && !stack_trace->isEmpty()) {
@@ -90,11 +118,17 @@ SourceLocation* CaptureSourceLocation(ExecutionContext* execution_context) {
   return MakeGarbageCollected<SourceLocation>(
       execution_context ? execution_context->Url().GetString() : String(),
       String(), 0, 0, std::move(stack_trace));
+#endif
 }
 
 SourceLocation* CaptureSourceLocation(v8::Isolate* isolate,
                                       v8::Local<v8::Message> message,
                                       ExecutionContext* execution_context) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return MakeGarbageCollected<SourceLocation>(
+      execution_context ? execution_context->Url().GetString() : String(),
+      String(), 0, 0, nullptr);
+#else
   v8::Local<v8::StackTrace> stack = message->GetStackTrace();
   std::unique_ptr<v8_inspector::V8StackTrace> stack_trace;
   ThreadDebugger* debugger = ThreadDebugger::From(isolate);
@@ -131,6 +165,7 @@ SourceLocation* CaptureSourceLocation(v8::Isolate* isolate,
   return MakeGarbageCollected<SourceLocation>(
       url, String(), line_number, column_number, std::move(stack_trace),
       script_id);
+#endif
 }
 
 }  // namespace blink
