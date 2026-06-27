@@ -118,6 +118,29 @@ Imported SharedImage/Vulkan backing code, including
 `ExternalVkImageBackingFactory`, is not connected to the standalone runtime in a
 way that can target a caller-supplied `VkImage`.
 
+The next target-write checkpoint audited whether the texture CopyOutput result
+could be copied into a caller-supplied `VkImage` without adding public ABI. The
+answer is no in this checkout. `CopyOutputSharedImageResult` exposes a
+`gpu::ClientSharedImage` to the caller, but the standalone probe currently sees
+only client-visible metadata: size, format, mailbox, and creation sync token.
+The backing `VkImage` is service-side state behind SharedImage representations.
+The service-side APIs that can expose `SkiaImageRepresentation` or
+`VulkanImageRepresentation` are not wired through `StandaloneCompositorRuntime`.
+The client-side bridge remains fail-closed: `ClientSharedImage::Map()`,
+`BeginRasterAccess()`, `BeginGLAccessForCopySharedImage()`,
+`CreateGLTexture()`, `CloneGpuMemoryBufferHandle()`, and related helpers return
+null or empty handles.
+
+Chromium has GPU-side building blocks that could become the target writer:
+`gpu::VulkanCommandBuffer` can perform image layout transitions and image/buffer
+copies, and Viz/Skia has `BlitRequest` paths that write into SharedImage
+destinations. Neither path currently accepts a raw externally supplied
+`VkImage` from the standalone runtime. A real implementation needs either a
+service-side mailbox-to-Vulkan-image access bridge plus a same-device target
+copy command, or a registered external-target SharedImage backing for the
+embedder image. The benchmark should not add `--gpu-external-vulkan-target-smoke`
+until one of those paths is real.
+
 ## Why No Public API Yet
 
 A real Godot-owned target path is not implementable in this checkpoint without
@@ -302,6 +325,10 @@ Until then, adding C ABI entry points would only create a dead API surface.
   `gpu::VulkanDeviceQueue` wrapper can borrow existing Vulkan device/queue
   handles inside this standalone build and create Chromium helper state without
   double-destroying the borrowed device.
+- No `--gpu-external-vulkan-target-smoke` exists yet. Same-device target image
+  writes are blocked because the standalone runtime cannot access the
+  service-side `VkImage` behind the CopyOutput SharedImage mailbox and cannot
+  register a raw embedder `VkImage` as a writable SharedImage destination.
 - Embedder-owned Vulkan `VkImage` targeting is blocked pending the runtime
   ownership, same-device, copy, and synchronization wiring above.
 - D3D12 GPU target support is design-only until a real Chromium D3D12/DXGI/Dawn
