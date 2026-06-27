@@ -145,6 +145,10 @@ void PrintUsage() {
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
+      "[--c-api-css-filter-blur-smoke] "
+      "[--c-api-backdrop-filter-region-smoke] "
+      "[--c-api-backdrop-filter-rounded-smoke] "
+      "[--c-api-backdrop-filter-unsupported-smoke] "
       "[--c-api-separated-click-smoke] "
       "[--c-api-text-input-smoke] "
       "[--c-api-form-control-mutation-smoke] "
@@ -839,6 +843,52 @@ FramePixelContentStats AnalyzeFramePixelContent(
     }
   }
   return stats;
+}
+
+size_t CountPixelsInRectNearColor(const blink_standalone_frame_output_t& output,
+                                  int left,
+                                  int top,
+                                  int width,
+                                  int height,
+                                  uint8_t expected_red,
+                                  uint8_t expected_green,
+                                  uint8_t expected_blue,
+                                  int tolerance) {
+  if (!output.pixels || output.width <= 0 || output.height <= 0 ||
+      output.stride < output.width * 4 ||
+      (output.pixel_format != BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 &&
+       output.pixel_format != BLINK_STANDALONE_PIXEL_FORMAT_BGRA8)) {
+    return 0;
+  }
+  const int x0 = std::max(0, left);
+  const int y0 = std::max(0, top);
+  const int x1 = std::min(output.width, left + width);
+  const int y1 = std::min(output.height, top + height);
+  size_t count = 0;
+  for (int y = y0; y < y1; ++y) {
+    const uint8_t* row =
+        output.pixels + static_cast<size_t>(y) * output.stride;
+    for (int x = x0; x < x1; ++x) {
+      const uint8_t* pixel = row + static_cast<size_t>(x) * 4;
+      const uint8_t red =
+          output.pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 ? pixel[0]
+                                                                     : pixel[2];
+      const uint8_t green = pixel[1];
+      const uint8_t blue =
+          output.pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 ? pixel[2]
+                                                                     : pixel[0];
+      const auto near_channel = [tolerance](uint8_t actual, uint8_t expected) {
+        const int delta = static_cast<int>(actual) - static_cast<int>(expected);
+        return delta >= -tolerance && delta <= tolerance;
+      };
+      if (near_channel(red, expected_red) &&
+          near_channel(green, expected_green) &&
+          near_channel(blue, expected_blue)) {
+        ++count;
+      }
+    }
+  }
+  return count;
 }
 
 bool GetHitById(blink_standalone_renderer_t* renderer,
@@ -2435,6 +2485,289 @@ int RunCApiMutationStressSmoke() {
       static_cast<unsigned long long>(final_a_hash),
       static_cast<unsigned long long>(stable_b_hash),
       static_cast<unsigned long long>(mutated_b_hash));
+  return 0;
+}
+
+bool RenderHtmlForBackdropSmoke(blink_standalone_renderer_t* renderer,
+                                const char* html,
+                                const char* label,
+                                blink_standalone_frame_output_t* output) {
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: set html failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: advance failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  status = blink_standalone_renderer_get_latest_output(renderer, output);
+  if (status != BLINK_STANDALONE_STATUS_OK || !output->pixels) {
+    std::fprintf(stderr, "%s: output failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  return true;
+}
+
+int RunCApiCssFilterBlurSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 160;
+  config.height = 120;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_css_filter_blur_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* unfiltered =
+      "<!doctype html><style>body{margin:0;background:#112233}"
+      "#box{position:absolute;left:40px;top:32px;width:72px;height:56px;"
+      "background:#d06329}</style><div id='box'></div>";
+  blink_standalone_frame_output_t output = {};
+  if (!RenderHtmlForBackdropSmoke(renderer, unfiltered,
+                                  "c_api_css_filter_blur_smoke", &output)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const size_t unfiltered_edge_orange =
+      CountPixelsInRectNearColor(output, 40, 32, 8, 56, 0xd0, 0x63, 0x29, 12);
+  const uint64_t unfiltered_hash = HashFramePixels(output);
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  const char* filtered =
+      "<!doctype html><style>body{margin:0;background:#112233}"
+      "#box{position:absolute;left:40px;top:32px;width:72px;height:56px;"
+      "background:#d06329;filter:blur(8px)}</style><div id='box'></div>";
+  output = {};
+  if (!RenderHtmlForBackdropSmoke(renderer, filtered,
+                                  "c_api_css_filter_blur_smoke", &output)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const size_t filtered_edge_orange =
+      CountPixelsInRectNearColor(output, 40, 32, 8, 56, 0xd0, 0x63, 0x29, 12);
+  const uint64_t filtered_hash = HashFramePixels(output);
+  if (unfiltered_hash == filtered_hash ||
+      filtered_edge_orange >= unfiltered_edge_orange) {
+    std::fprintf(
+        stderr,
+        "c_api_css_filter_blur_smoke: blur did not affect raw pixels "
+        "unfiltered_edge=%zu filtered_edge=%zu hashes=%llu/%llu\n",
+        unfiltered_edge_orange, filtered_edge_orange,
+        static_cast<unsigned long long>(unfiltered_hash),
+        static_cast<unsigned long long>(filtered_hash));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_css_filter_blur_smoke: ok unfiltered_edge=%zu "
+      "filtered_edge=%zu\n",
+      unfiltered_edge_orange, filtered_edge_orange);
+  return 0;
+}
+
+bool GetSingleBackdropRegion(blink_standalone_renderer_t* renderer,
+                             const char* label,
+                             blink_standalone_backdrop_filter_region_t* region) {
+  const size_t count =
+      blink_standalone_renderer_backdrop_filter_region_count(renderer);
+  if (count != 1 ||
+      blink_standalone_renderer_get_backdrop_filter_region(renderer, 0,
+                                                           region) !=
+          BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: expected one backdrop region, got %zu error=%s\n",
+                 label, count, blink_standalone_renderer_last_error(renderer));
+    return false;
+  }
+  return true;
+}
+
+int RunCApiBackdropFilterRegionSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 256;
+  config.height = 128;
+  config.device_scale_factor = 2.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_region_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>body{margin:0;background:#123456}"
+      "#panel{position:absolute;left:32px;top:24px;width:96px;height:48px;"
+      "background:rgba(255,255,255,.25);backdrop-filter:blur(8px);"
+      "-webkit-backdrop-filter:blur(8px)}</style><div id='panel'></div>";
+  blink_standalone_frame_output_t output = {};
+  if (!RenderHtmlForBackdropSmoke(renderer, html,
+                                  "c_api_backdrop_filter_region_smoke",
+                                  &output)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  const bool dsf_ok = output.width == 512 && output.height == 256;
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_backdrop_filter_region_t region = {};
+  if (!GetSingleBackdropRegion(renderer, "c_api_backdrop_filter_region_smoke",
+                               &region) ||
+      !dsf_ok || region.blur_radius_css_px < 7.5f ||
+      region.blur_radius_css_px > 8.5f || region.bounds.x < 31.0f ||
+      region.bounds.x > 33.0f || region.bounds.y < 23.0f ||
+      region.bounds.y > 25.0f || region.bounds.width < 95.0f ||
+      region.bounds.width > 97.0f || region.bounds.height < 47.0f ||
+      region.bounds.height > 49.0f ||
+      (region.flags &
+       (BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_COMPLEX_CLIP |
+        BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_TRANSFORM |
+        BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_FILTER_OP |
+        BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_MASK_OR_BLEND)) != 0) {
+    std::fprintf(
+        stderr,
+        "c_api_backdrop_filter_region_smoke: invalid region raw_dsf=%d "
+        "bounds=%.1f,%.1f %.1fx%.1f blur=%.1f flags=%u\n",
+        dsf_ok ? 1 : 0, region.bounds.x, region.bounds.y,
+        region.bounds.width, region.bounds.height, region.blur_radius_css_px,
+        region.flags);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_backdrop_filter_region_smoke: ok bounds=%.0f,%.0f %.0fx%.0f "
+      "blur=%.1f flags=%u raw=512x256\n",
+      region.bounds.x, region.bounds.y, region.bounds.width,
+      region.bounds.height, region.blur_radius_css_px, region.flags);
+  return 0;
+}
+
+int RunCApiBackdropFilterRoundedSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 220;
+  config.height = 140;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_rounded_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>body{margin:0;background:#123456}"
+      "#panel{position:absolute;left:24px;top:20px;width:120px;height:64px;"
+      "border-radius:14px;background:rgba(255,255,255,.2);"
+      "backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}"
+      "</style><div id='panel'></div>";
+  blink_standalone_frame_output_t output = {};
+  if (!RenderHtmlForBackdropSmoke(renderer, html,
+                                  "c_api_backdrop_filter_rounded_smoke",
+                                  &output)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_backdrop_filter_region_t region = {};
+  if (!GetSingleBackdropRegion(renderer, "c_api_backdrop_filter_rounded_smoke",
+                               &region) ||
+      (region.flags & BLINK_STANDALONE_BACKDROP_FILTER_ROUNDED_RECT) == 0 ||
+      region.border_radius_top_left < 13.0f ||
+      region.border_radius_top_right < 13.0f ||
+      region.border_radius_bottom_right < 13.0f ||
+      region.border_radius_bottom_left < 13.0f) {
+    std::fprintf(
+        stderr,
+        "c_api_backdrop_filter_rounded_smoke: invalid rounded region "
+        "flags=%u radii=%.1f/%.1f/%.1f/%.1f blur=%.1f\n",
+        region.flags, region.border_radius_top_left,
+        region.border_radius_top_right, region.border_radius_bottom_right,
+        region.border_radius_bottom_left, region.blur_radius_css_px);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_backdrop_filter_rounded_smoke: ok blur=%.1f radii=%.1f/%.1f/"
+      "%.1f/%.1f flags=%u\n",
+      region.blur_radius_css_px, region.border_radius_top_left,
+      region.border_radius_top_right, region.border_radius_bottom_right,
+      region.border_radius_bottom_left, region.flags);
+  return 0;
+}
+
+int RunCApiBackdropFilterUnsupportedSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 240;
+  config.height = 160;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_unsupported_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>body{margin:0;background:#123456}"
+      "#panel{position:absolute;left:40px;top:32px;width:100px;height:56px;"
+      "transform:rotate(4deg);clip-path:inset(0 round 10px);"
+      "mix-blend-mode:multiply;background:rgba(255,255,255,.2);"
+      "backdrop-filter:blur(4px) brightness(1.2);"
+      "-webkit-backdrop-filter:blur(4px) brightness(1.2)}"
+      "</style><div id='panel'></div>";
+  blink_standalone_frame_output_t output = {};
+  if (!RenderHtmlForBackdropSmoke(renderer, html,
+                                  "c_api_backdrop_filter_unsupported_smoke",
+                                  &output)) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_backdrop_filter_region_t region = {};
+  if (!GetSingleBackdropRegion(renderer,
+                               "c_api_backdrop_filter_unsupported_smoke",
+                               &region) ||
+      (region.flags &
+       (BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_COMPLEX_CLIP |
+        BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_TRANSFORM |
+        BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_FILTER_OP |
+        BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_MASK_OR_BLEND)) == 0) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_unsupported_smoke: unsupported flags "
+                 "missing flags=%u blur=%.1f bounds=%.1f,%.1f %.1fx%.1f\n",
+                 region.flags, region.blur_radius_css_px, region.bounds.x,
+                 region.bounds.y, region.bounds.width, region.bounds.height);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_backdrop_filter_unsupported_smoke: ok flags=%u blur=%.1f\n",
+      region.flags, region.blur_radius_css_px);
   return 0;
 }
 
@@ -4871,6 +5204,10 @@ int main(int argc, char** argv) {
         arg == "--c-api-viewport-resize-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
+        arg == "--c-api-css-filter-blur-smoke" ||
+        arg == "--c-api-backdrop-filter-region-smoke" ||
+        arg == "--c-api-backdrop-filter-rounded-smoke" ||
+        arg == "--c-api-backdrop-filter-unsupported-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-fragment-mutation-smoke" ||
@@ -4917,6 +5254,10 @@ int main(int argc, char** argv) {
   bool c_api_viewport_resize_smoke = false;
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
+  bool c_api_css_filter_blur_smoke = false;
+  bool c_api_backdrop_filter_region_smoke = false;
+  bool c_api_backdrop_filter_rounded_smoke = false;
+  bool c_api_backdrop_filter_unsupported_smoke = false;
   bool c_api_separated_click_smoke = false;
   bool c_api_dom_mutation_smoke = false;
   bool c_api_fragment_mutation_smoke = false;
@@ -5037,6 +5378,14 @@ int main(int argc, char** argv) {
       c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-transparent-background-smoke") {
       c_api_transparent_background_smoke = true;
+    } else if (arg == "--c-api-css-filter-blur-smoke") {
+      c_api_css_filter_blur_smoke = true;
+    } else if (arg == "--c-api-backdrop-filter-region-smoke") {
+      c_api_backdrop_filter_region_smoke = true;
+    } else if (arg == "--c-api-backdrop-filter-rounded-smoke") {
+      c_api_backdrop_filter_rounded_smoke = true;
+    } else if (arg == "--c-api-backdrop-filter-unsupported-smoke") {
+      c_api_backdrop_filter_unsupported_smoke = true;
     } else if (arg == "--c-api-separated-click-smoke") {
       c_api_separated_click_smoke = true;
     } else if (arg == "--c-api-dom-mutation-smoke") {
@@ -5184,6 +5533,22 @@ int main(int argc, char** argv) {
 
   if (c_api_transparent_background_smoke) {
     return RunCApiTransparentBackgroundSmoke();
+  }
+
+  if (c_api_css_filter_blur_smoke) {
+    return RunCApiCssFilterBlurSmoke();
+  }
+
+  if (c_api_backdrop_filter_region_smoke) {
+    return RunCApiBackdropFilterRegionSmoke();
+  }
+
+  if (c_api_backdrop_filter_rounded_smoke) {
+    return RunCApiBackdropFilterRoundedSmoke();
+  }
+
+  if (c_api_backdrop_filter_unsupported_smoke) {
+    return RunCApiBackdropFilterUnsupportedSmoke();
   }
 
   if (c_api_separated_click_smoke) {

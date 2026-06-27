@@ -671,6 +671,29 @@ struct LiveFormControlEntry {
   unsigned selection_end = 0;
 };
 
+enum StandaloneBackdropFilterFlags : uint32_t {
+  kStandaloneBackdropFilterRoundedRect = 1u << 0,
+  kStandaloneBackdropFilterUnsupportedComplexClip = 1u << 1,
+  kStandaloneBackdropFilterUnsupportedTransform = 1u << 2,
+  kStandaloneBackdropFilterUnsupportedFilterOp = 1u << 3,
+  kStandaloneBackdropFilterUnsupportedMaskOrBlend = 1u << 4,
+};
+
+struct LiveBackdropFilterRegion {
+  std::string element_id;
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+  float blur_radius_css_px = 0.0f;
+  float border_radius_top_left = 0.0f;
+  float border_radius_top_right = 0.0f;
+  float border_radius_bottom_right = 0.0f;
+  float border_radius_bottom_left = 0.0f;
+  float opacity = 1.0f;
+  uint32_t flags = 0;
+};
+
 struct LiveScrollableElementEntry {
   std::string element_id;
   DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
@@ -2995,6 +3018,7 @@ struct LiveFramePaintProbeCache {
       finer_cache_units_by_chunk;
   std::vector<LiveHitTestEntry> hit_test_entries;
   std::vector<LiveFormControlEntry> form_control_entries;
+  std::vector<LiveBackdropFilterRegion> backdrop_filter_regions;
   std::vector<LiveScrollableElementEntry> scrollable_element_entries;
   std::vector<std::string> artifact_audit_lines;
   std::string raw_paint_artifact_audit_json;
@@ -3146,6 +3170,7 @@ void ClearStandaloneFrameDiagnosticState(LiveFramePaintProbeCache& cache) {
   cache.finer_cache_units_by_chunk.clear();
   cache.hit_test_entries.clear();
   cache.form_control_entries.clear();
+  cache.backdrop_filter_regions.clear();
   cache.scrollable_element_entries.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
@@ -5105,6 +5130,116 @@ bool AppendPaintArtifactExtractedOps(
     }
   }
   return complete && !exported_draw_ops.empty();
+}
+
+bool ExtractBlurBackdropFilterForStandaloneRenderer(
+    const CompositorFilterOperations* filters,
+    float* blur_radius_css_px,
+    bool* unsupported_filter_op) {
+  if (blur_radius_css_px) {
+    *blur_radius_css_px = 0.0f;
+  }
+  if (unsupported_filter_op) {
+    *unsupported_filter_op = false;
+  }
+  if (!filters) {
+    return false;
+  }
+  bool saw_blur = false;
+  for (const cc::FilterOperation& operation :
+       filters->AsCcFilterOperations().operations()) {
+    if (operation.type() == cc::FilterOperation::BLUR) {
+      if (saw_blur && unsupported_filter_op) {
+        *unsupported_filter_op = true;
+      }
+      saw_blur = true;
+      if (blur_radius_css_px) {
+        *blur_radius_css_px = operation.amount();
+      }
+      continue;
+    }
+    if (unsupported_filter_op) {
+      *unsupported_filter_op = true;
+    }
+  }
+  return saw_blur;
+}
+
+void CollectBackdropFilterRegionsForStandaloneRenderer(
+    const PaintArtifact& artifact,
+    std::vector<LiveBackdropFilterRegion>& regions) {
+  regions.clear();
+  const PaintChunks& chunks = artifact.GetPaintChunks();
+  std::vector<uint64_t> seen_effect_nodes;
+  for (wtf_size_t chunk_index = 0; chunk_index < chunks.size();
+       ++chunk_index) {
+    const PaintChunk& chunk = chunks[chunk_index];
+    const PropertyTreeState chunk_state = chunk.properties.Unalias();
+    const EffectPaintPropertyNode& effect = chunk_state.Effect();
+    const CompositorFilterOperations* backdrop_filter =
+        effect.BackdropFilter();
+    if (!backdrop_filter) {
+      continue;
+    }
+    const uint64_t effect_node_id = reinterpret_cast<uintptr_t>(&effect);
+    if (std::find(seen_effect_nodes.begin(), seen_effect_nodes.end(),
+                  effect_node_id) != seen_effect_nodes.end()) {
+      continue;
+    }
+    seen_effect_nodes.push_back(effect_node_id);
+
+    LiveBackdropFilterRegion region;
+    region.opacity = effect.Opacity();
+    float blur_radius = 0.0f;
+    bool unsupported_filter_op = false;
+    const bool has_blur = ExtractBlurBackdropFilterForStandaloneRenderer(
+        backdrop_filter, &blur_radius, &unsupported_filter_op);
+    region.blur_radius_css_px = blur_radius;
+    if (!has_blur || unsupported_filter_op) {
+      region.flags |= kStandaloneBackdropFilterUnsupportedFilterOp;
+    }
+    if (effect.BlendMode() != SkBlendMode::kSrcOver) {
+      region.flags |= kStandaloneBackdropFilterUnsupportedMaskOrBlend;
+    }
+    if (effect.BackdropMaskElementId()) {
+      region.flags |= kStandaloneBackdropFilterUnsupportedMaskOrBlend;
+    }
+
+    bool projection_has_non_translation = false;
+    const gfx::Transform projection = DirectTransformToRootForStandaloneRenderer(
+        chunk_state, nullptr, &projection_has_non_translation);
+    if (!projection.Is2dTransform() || projection_has_non_translation) {
+      region.flags |= kStandaloneBackdropFilterUnsupportedTransform;
+    }
+
+    const SkPath& backdrop_bounds_path = effect.BackdropFilterBounds();
+    SkRect backdrop_rect;
+    SkRRect backdrop_rrect;
+    const bool is_rect = backdrop_bounds_path.isRect(&backdrop_rect);
+    const bool is_rrect = !is_rect && backdrop_bounds_path.isRRect(&backdrop_rrect);
+    if (!is_rect && !is_rrect) {
+      region.flags |= kStandaloneBackdropFilterUnsupportedComplexClip;
+    }
+    const gfx::RectF mapped_bounds =
+        projection.MapRect(gfx::SkRectToRectF(backdrop_bounds_path.getBounds()));
+    region.x = mapped_bounds.x();
+    region.y = mapped_bounds.y();
+    region.width = mapped_bounds.width();
+    region.height = mapped_bounds.height();
+    if (is_rrect) {
+      region.flags |= kStandaloneBackdropFilterRoundedRect;
+      region.border_radius_top_left = backdrop_rrect.radii(SkRRect::kUpperLeft_Corner).x();
+      region.border_radius_top_right =
+          backdrop_rrect.radii(SkRRect::kUpperRight_Corner).x();
+      region.border_radius_bottom_right =
+          backdrop_rrect.radii(SkRRect::kLowerRight_Corner).x();
+      region.border_radius_bottom_left =
+          backdrop_rrect.radii(SkRRect::kLowerLeft_Corner).x();
+    }
+    if (region.width > 0.0f && region.height > 0.0f) {
+      regions.push_back(std::move(region));
+    }
+  }
 }
 
 bool IsPaintOpCurrentlyExtracted(cc::PaintOpType type) {
@@ -13536,6 +13671,12 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
+  if (cache.collect_frame_diagnostics) {
+    CollectBackdropFilterRegionsForStandaloneRenderer(
+        artifact, cache.backdrop_filter_regions);
+  } else {
+    cache.backdrop_filter_regions.clear();
+  }
   if (cc::Layer* root_layer = frame_view.RootCcLayer()) {
     cache.compositor_root_layer_available = true;
     cache.compositor_layer_count =
@@ -14776,6 +14917,77 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
   }
   if (selection_end) {
     *selection_end = entry.selection_end;
+  }
+  return 1;
+}
+
+int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionCountForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return static_cast<int>(ProbeCache().backdrop_filter_regions.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    float* x,
+    float* y,
+    float* width,
+    float* height,
+    float* blur_radius_css_px,
+    float* border_radius_top_left,
+    float* border_radius_top_right,
+    float* border_radius_bottom_right,
+    float* border_radius_bottom_left,
+    float* opacity,
+    uint32_t* flags,
+    char* element_id,
+    int element_id_capacity) {
+  RunLiveFramePaintProbe(body_html);
+  const auto& entries = ProbeCache().backdrop_filter_regions;
+  if (index < 0 || index >= static_cast<int>(entries.size())) {
+    return 0;
+  }
+  const LiveBackdropFilterRegion& entry = entries[static_cast<size_t>(index)];
+  if (x) {
+    *x = entry.x;
+  }
+  if (y) {
+    *y = entry.y;
+  }
+  if (width) {
+    *width = entry.width;
+  }
+  if (height) {
+    *height = entry.height;
+  }
+  if (blur_radius_css_px) {
+    *blur_radius_css_px = entry.blur_radius_css_px;
+  }
+  if (border_radius_top_left) {
+    *border_radius_top_left = entry.border_radius_top_left;
+  }
+  if (border_radius_top_right) {
+    *border_radius_top_right = entry.border_radius_top_right;
+  }
+  if (border_radius_bottom_right) {
+    *border_radius_bottom_right = entry.border_radius_bottom_right;
+  }
+  if (border_radius_bottom_left) {
+    *border_radius_bottom_left = entry.border_radius_bottom_left;
+  }
+  if (opacity) {
+    *opacity = entry.opacity;
+  }
+  if (flags) {
+    *flags = entry.flags;
+  }
+  if (element_id && element_id_capacity > 0) {
+    const size_t copied =
+        std::min(entry.element_id.size(),
+                 static_cast<size_t>(element_id_capacity - 1));
+    std::memcpy(element_id, entry.element_id.data(), copied);
+    element_id[copied] = '\0';
   }
   return 1;
 }

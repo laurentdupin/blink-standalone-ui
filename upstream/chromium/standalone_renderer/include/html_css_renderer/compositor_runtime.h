@@ -77,6 +77,7 @@ struct CompositorFrameResult {
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<FormControlEntry> form_control_entries;
+  std::vector<BackdropFilterRegion> backdrop_filter_regions;
   std::vector<ScrollableElementEntry> scrollable_element_entries;
   Point document_max_scroll_offset;
   std::vector<std::string> diagnostics;

@@ -254,6 +254,21 @@ void CopyFormControlState(const html_css_renderer::FormControlEntry& source,
   state->selection_end = source.selection_end;
 }
 
+void CopyBackdropFilterRegion(
+    const html_css_renderer::BackdropFilterRegion& source,
+    blink_standalone_backdrop_filter_region_t* region) {
+  *region = blink_standalone_backdrop_filter_region_t{};
+  region->bounds = ToCRect(source.bounds);
+  region->blur_radius_css_px = source.blur_radius_css_px;
+  region->border_radius_top_left = source.border_radius_top_left;
+  region->border_radius_top_right = source.border_radius_top_right;
+  region->border_radius_bottom_right = source.border_radius_bottom_right;
+  region->border_radius_bottom_left = source.border_radius_bottom_left;
+  region->opacity = source.opacity;
+  region->flags = source.flags;
+  region->element_id = source.element_id.c_str();
+}
+
 }  // namespace
 
 struct blink_standalone_renderer {
@@ -1251,6 +1266,27 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                       BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                       std::string("get_form_control_selected_value failed: element id '") +
                           element_id + "' is not a known form control");
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_backdrop_filter_region_count(
+    const blink_standalone_renderer_t* renderer) {
+  return renderer ? renderer->latest_result.backdrop_filter_regions.size() : 0;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_backdrop_filter_region(
+    const blink_standalone_renderer_t* renderer,
+    size_t index,
+    blink_standalone_backdrop_filter_region_t* out) {
+  if (!renderer || !out ||
+      index >= renderer->latest_result.backdrop_filter_regions.size()) {
+    return SetLastError(
+        const_cast<blink_standalone_renderer_t*>(renderer),
+        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "get_backdrop_filter_region failed: renderer, output pointer, and valid index are required");
+  }
+  CopyBackdropFilterRegion(renderer->latest_result.backdrop_filter_regions[index],
+                           out);
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_last_error_code(

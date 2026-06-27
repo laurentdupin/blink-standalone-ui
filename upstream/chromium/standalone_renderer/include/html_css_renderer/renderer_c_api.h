@@ -64,6 +64,14 @@ typedef enum blink_standalone_insert_position {
   BLINK_STANDALONE_INSERT_AFTER_END = 3,
 } blink_standalone_insert_position_t;
 
+typedef enum blink_standalone_backdrop_filter_flags {
+  BLINK_STANDALONE_BACKDROP_FILTER_ROUNDED_RECT = 1u << 0,
+  BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_COMPLEX_CLIP = 1u << 1,
+  BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_TRANSFORM = 1u << 2,
+  BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_FILTER_OP = 1u << 3,
+  BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_MASK_OR_BLEND = 1u << 4,
+} blink_standalone_backdrop_filter_flags_t;
+
 /* Rects and input coordinates are in logical CSS/view coordinates unless they
  * describe raw frame output dimensions. */
 typedef struct blink_standalone_rect {
@@ -132,6 +140,23 @@ typedef struct blink_standalone_form_control_state {
   const char* max;
   const char* step;
 } blink_standalone_form_control_state_t;
+
+/* Backdrop-filter metadata describes regions Blink would sample behind the HTML
+ * surface. Blink does not sample host-scene pixels; embedders can use this
+ * metadata to blur their own framebuffer behind the raw HTML output. Bounds and
+ * radii are logical CSS px. Unsupported flags mean the region exists but should
+ * not be treated as an exact simple blur. */
+typedef struct blink_standalone_backdrop_filter_region {
+  blink_standalone_rect_t bounds;
+  float blur_radius_css_px;
+  float border_radius_top_left;
+  float border_radius_top_right;
+  float border_radius_bottom_right;
+  float border_radius_bottom_left;
+  float opacity;
+  uint32_t flags;
+  const char* element_id;
+} blink_standalone_backdrop_filter_region_t;
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
     const blink_standalone_renderer_config_t* config,
@@ -295,6 +320,12 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const char* element_id,
     const char* const* values,
     size_t value_count);
+BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_backdrop_filter_region_count(
+    const blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_backdrop_filter_region(
+    const blink_standalone_renderer_t* renderer,
+    size_t index,
+    blink_standalone_backdrop_filter_region_t* out);
 
 /* Renderer-local diagnostics describe the last API failure. Successful
  * renderer operations clear stale diagnostics. get_last_error_message and

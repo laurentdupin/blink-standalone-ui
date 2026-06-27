@@ -226,6 +226,18 @@ struct FormControlEntry {
   unsigned selection_end = 0;
 };
 
+struct BackdropFilterRegion {
+  Rect bounds;
+  float blur_radius_css_px = 0.0f;
+  float border_radius_top_left = 0.0f;
+  float border_radius_top_right = 0.0f;
+  float border_radius_bottom_right = 0.0f;
+  float border_radius_bottom_left = 0.0f;
+  float opacity = 1.0f;
+  uint32_t flags = 0;
+  std::string element_id;
+};
+
 struct ScrollableElementEntry {
   std::string element_id;
   Rect bounds;

@@ -241,6 +241,24 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
     int step_capacity,
     char* selected_values,
     int selected_values_capacity);
+int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionCountForStandaloneRenderer(
+    const char* body_html);
+int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
+    const char* body_html,
+    int index,
+    float* x,
+    float* y,
+    float* width,
+    float* height,
+    float* blur_radius_css_px,
+    float* border_radius_top_left,
+    float* border_radius_top_right,
+    float* border_radius_bottom_right,
+    float* border_radius_bottom_left,
+    float* opacity,
+    uint32_t* flags,
+    char* element_id,
+    int element_id_capacity);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
@@ -1188,6 +1206,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (collect_full_result) {
       ImportHitTestEntries(probe_html, result);
       ImportFormControlEntries(probe_html, result);
+      ImportBackdropFilterRegions(probe_html, result);
       ImportScrollableElementEntries(probe_html, result);
       CopyRawAudit(probe_html, result);
     }
@@ -1384,6 +1403,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       result.raw_paint_artifact_audit_json.clear();
       result.hit_test_entries.clear();
       result.form_control_entries.clear();
+      result.backdrop_filter_regions.clear();
       result.scrollable_element_entries.clear();
       result.diagnostics.clear();
     }
@@ -1513,6 +1533,49 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       entry.selection_start = selection_start;
       entry.selection_end = selection_end;
       result.form_control_entries.push_back(std::move(entry));
+    }
+  }
+
+  static void ImportBackdropFilterRegions(const std::string& probe_html,
+                                          CompositorFrameResult& result) {
+    namespace probe = ::blink::standalone_renderer_probe;
+    const int entry_count =
+        probe::StandaloneBlinkLiveFrameBridgeBackdropFilterRegionCountForStandaloneRenderer(
+            probe_html.c_str());
+    for (int i = 0; i < entry_count && i < 4096; ++i) {
+      std::array<char, 256> element_id{};
+      float x = 0.0f;
+      float y = 0.0f;
+      float width = 0.0f;
+      float height = 0.0f;
+      float blur_radius_css_px = 0.0f;
+      float border_radius_top_left = 0.0f;
+      float border_radius_top_right = 0.0f;
+      float border_radius_bottom_right = 0.0f;
+      float border_radius_bottom_left = 0.0f;
+      float opacity = 1.0f;
+      uint32_t flags = 0;
+      if (!probe::StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
+              probe_html.c_str(), i, &x, &y, &width, &height,
+              &blur_radius_css_px, &border_radius_top_left,
+              &border_radius_top_right, &border_radius_bottom_right,
+              &border_radius_bottom_left, &opacity, &flags,
+              element_id.data(), static_cast<int>(element_id.size()))) {
+        continue;
+      }
+      if (width <= 0.0f || height <= 0.0f)
+        continue;
+      BackdropFilterRegion entry;
+      entry.bounds = Rect{x, y, width, height};
+      entry.blur_radius_css_px = blur_radius_css_px;
+      entry.border_radius_top_left = border_radius_top_left;
+      entry.border_radius_top_right = border_radius_top_right;
+      entry.border_radius_bottom_right = border_radius_bottom_right;
+      entry.border_radius_bottom_left = border_radius_bottom_left;
+      entry.opacity = opacity;
+      entry.flags = flags;
+      entry.element_id = element_id.data();
+      result.backdrop_filter_regions.push_back(std::move(entry));
     }
   }
 

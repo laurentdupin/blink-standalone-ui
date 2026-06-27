@@ -47,6 +47,24 @@ Transparent output is preserved when the document opts into transparency, for
 example with transparent `html`/`body` backgrounds. Opaque document backgrounds
 produce opaque raw pixels.
 
+## Backdrop Filter Metadata
+
+Ordinary CSS `filter` effects, such as `filter: blur(...)`, are rendered by
+Blink into the raw HTML output. CSS `backdrop-filter` is different: Blink does
+not receive, sample, or blur host-scene pixels behind the HTML surface. Instead,
+the standalone C API exposes backdrop-filter regions as metadata so the embedder
+can blur its own framebuffer or backbuffer behind the raw HTML output.
+
+Use `blink_standalone_renderer_backdrop_filter_region_count` and
+`blink_standalone_renderer_get_backdrop_filter_region` after
+`advance_frame`. Region bounds and corner radii are logical CSS px, matching hit
+metadata and input coordinates even when the raw output is DSF-scaled. The MVP
+metadata is exact for simple blur-only rectangular or rounded-rectangle regions.
+Unsupported flags mark regions that exist but should not be treated as an exact
+simple blur, including complex clips, non-translation transforms, non-blur
+filter operations, masks, or blend modes. `element_id` may be empty when Blink's
+PaintArtifact/effect metadata cannot attribute the region reliably.
+
 ## Input
 
 Mouse, wheel, keyboard, and text input are queued through the C API and applied
@@ -165,6 +183,10 @@ The benchmark executable exposes focused C API smokes for embedder regressions:
 
 - `--c-api-smoke`
 - `--c-api-transparent-background-smoke`
+- `--c-api-css-filter-blur-smoke`
+- `--c-api-backdrop-filter-region-smoke`
+- `--c-api-backdrop-filter-rounded-smoke`
+- `--c-api-backdrop-filter-unsupported-smoke`
 - `--c-api-dom-mutation-smoke`
 - `--c-api-body-mutation-smoke`
 - `--c-api-form-control-mutation-smoke`
