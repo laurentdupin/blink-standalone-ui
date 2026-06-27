@@ -158,7 +158,9 @@ Chromium/V8 runtime-support exports, `GetHandleVerifier` and
 `CrashForExceptionInNonABICompliantCodeRange`, because those are explicitly
 exported by linked implementation objects. They are not part of the supported
 embedder API; Godot and other hosts should link only the import library and call
-the documented `blink_standalone_renderer_*` functions. The build also generates:
+the documented `blink_standalone_renderer_*` functions. See `docs/C_API.md` for
+the public lifecycle, raw output, input, mutation, diagnostics, and form-state
+contract. The build also generates:
 
 ```text
 build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_link_manifest.json

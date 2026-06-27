@@ -140,7 +140,9 @@ The intended public ABI surface is the `blink_standalone_renderer_*` C API decla
 implementation-support exports from Chromium/V8 (`GetHandleVerifier` and
 `CrashForExceptionInNonABICompliantCodeRange`). Embedders should treat those as
 sealed runtime support details and link only against the import library for the
-documented `blink_standalone_renderer_*` API.
+documented `blink_standalone_renderer_*` API. See `docs/C_API.md` for the
+embedder lifecycle, raw output, input, mutation, diagnostics, and form-state
+contract.
 
 The generated dependency manifest records both artifacts and the static-link
 contract:

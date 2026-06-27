@@ -24,6 +24,8 @@ extern "C" {
 
 typedef struct blink_standalone_renderer blink_standalone_renderer_t;
 
+/* Public status values returned by the embeddable C API. Calls with a null
+ * renderer cannot store renderer-local diagnostics; use the return code. */
 typedef enum blink_standalone_status_code {
   BLINK_STANDALONE_STATUS_OK = 0,
   BLINK_STANDALONE_STATUS_INVALID_ARGUMENT = 1,
@@ -32,6 +34,8 @@ typedef enum blink_standalone_status_code {
   BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED = 4,
 } blink_standalone_status_code_t;
 
+/* Raw frame bytes are currently RGBA8 or BGRA8. Inspect pixel_format and stride
+ * before reading pixels; do not assume tightly packed rows. */
 typedef enum blink_standalone_pixel_format {
   BLINK_STANDALONE_PIXEL_FORMAT_NONE = 0,
   BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 = 1,
@@ -60,6 +64,8 @@ typedef enum blink_standalone_insert_position {
   BLINK_STANDALONE_INSERT_AFTER_END = 3,
 } blink_standalone_insert_position_t;
 
+/* Rects and input coordinates are in logical CSS/view coordinates unless they
+ * describe raw frame output dimensions. */
 typedef struct blink_standalone_rect {
   float x;
   float y;
@@ -68,12 +74,20 @@ typedef struct blink_standalone_rect {
 } blink_standalone_rect_t;
 
 typedef struct blink_standalone_renderer_config {
+  /* Logical CSS viewport size. device_scale_factor controls physical raw output
+   * size, e.g. 256x128 at 2.0 produces a 512x256 raw frame. */
   int width;
   int height;
   float device_scale_factor;
+  /* Non-zero enables the public no-script profile: JavaScript, inline event
+   * handlers, javascript: URLs, and executable embedded surfaces are rejected or
+   * made inert at the C API boundary. */
   int no_script_profile;
 } blink_standalone_renderer_config_t;
 
+/* Pointers returned in this struct are owned by the renderer and are valid
+ * until the next output release, renderer mutation, frame advance, or destroy.
+ * Call release_latest_output when the embedder has finished reading pixels. */
 typedef struct blink_standalone_frame_output {
   const uint8_t* pixels;
   size_t pixel_count;
@@ -86,6 +100,9 @@ typedef struct blink_standalone_frame_output {
   size_t dirty_rect_count;
 } blink_standalone_frame_output_t;
 
+/* Hit metadata is collected from the latest frame. String pointers are
+ * renderer-owned and valid until the next renderer operation that replaces
+ * frame metadata. bounds are logical CSS/view coordinates. */
 typedef struct blink_standalone_hit_metadata {
   const char* element_id;
   const char* tag_name;
@@ -97,6 +114,10 @@ typedef struct blink_standalone_hit_metadata {
   int focused;
 } blink_standalone_hit_metadata_t;
 
+/* Form control state is collected from real Blink form controls in the latest
+ * frame. value is the current value for inputs, textareas, sliders/ranges and
+ * single-selects; multi-selects expose all selected option values through the
+ * explicit selected-value accessors below. */
 typedef struct blink_standalone_form_control_state {
   const char* element_id;
   const char* tag_name;
@@ -127,6 +148,8 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     int width,
     int height,
     float device_scale_factor);
+/* Advance applies queued input and mutations, runs Blink lifecycle/compositor
+ * work, and makes a latest raw output/metadata snapshot available. */
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_advance_frame(
     blink_standalone_renderer_t* renderer,
     double timeline_time_seconds);
@@ -169,10 +192,11 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_text_input(
     blink_standalone_renderer_t* renderer,
     const char* utf8_text);
-/* Queue no-JS Blink DOM mutations for the next advance_frame call. These
- * mutate the current live document through Blink DOM APIs and do not reload the
- * document. The no-script profile rejects inline event handlers and
- * javascript: URL surfaces. */
+/* Queue no-JS Blink DOM/form/style mutations for the next advance_frame call.
+ * These mutate the current live document through Blink APIs and do not reload
+ * the document. State outside the mutated/replaced subtree is preserved when
+ * Blink preserves it. The no-script profile rejects script tags, inline event
+ * handlers, javascript: URL surfaces, and executable embedded surfaces. */
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_text(
     blink_standalone_renderer_t* renderer,
     const char* element_id,
@@ -235,6 +259,8 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_frame_output_t* output);
 BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_release_latest_output(blink_standalone_renderer_t* renderer);
 
+/* Metadata and form-state accessors read the latest frame snapshot. String
+ * lifetimes match the latest renderer-owned metadata snapshot. */
 BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_hit_metadata_count(
     const blink_standalone_renderer_t* renderer);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_hit_metadata(
@@ -270,6 +296,10 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const char* const* values,
     size_t value_count);
 
+/* Renderer-local diagnostics describe the last API failure. Successful
+ * renderer operations clear stale diagnostics. get_last_error_message and
+ * last_error return renderer-owned strings valid until the next renderer
+ * operation that replaces diagnostics, or destroy. */
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_last_error_code(
     const blink_standalone_renderer_t* renderer);
 BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_get_last_error_message(
