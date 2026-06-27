@@ -20,6 +20,10 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_command_pool.h"
+#include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_implementation.h"
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/css_file_loader.h"
 #include "html_css_renderer/renderer_c_api.h"
@@ -4826,6 +4830,85 @@ int RunGpuOutputSmoke() {
   return 0;
 }
 
+int RunGpuExternalVulkanDeviceSmoke() {
+  std::unique_ptr<gpu::VulkanImplementation> implementation =
+      gpu::CreateVulkanImplementation(false);
+  if (!implementation) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_device_smoke: Vulkan implementation "
+                 "creation failed\n");
+    return 1;
+  }
+
+  if (!implementation->InitializeVulkanInstance(true)) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_device_smoke: Vulkan instance "
+                 "initialization failed\n");
+    return 1;
+  }
+
+  std::unique_ptr<gpu::VulkanDeviceQueue> owned_queue =
+      gpu::CreateVulkanDeviceQueue(
+          implementation.get(), gpu::VulkanDeviceQueue::GRAPHICS_QUEUE_FLAG);
+  if (!owned_queue) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_device_smoke: owned Vulkan device queue "
+                 "initialization failed\n");
+    return 1;
+  }
+
+  const VkInstance borrowed_instance = owned_queue->GetVulkanInstance();
+  const VkPhysicalDevice borrowed_physical_device =
+      owned_queue->GetVulkanPhysicalDevice();
+  const VkDevice borrowed_device = owned_queue->GetVulkanDevice();
+  const VkQueue borrowed_queue = owned_queue->GetVulkanQueue();
+  const uint32_t borrowed_queue_family = owned_queue->GetVulkanQueueIndex();
+  const gfx::ExtensionSet borrowed_extensions =
+      owned_queue->enabled_extensions();
+
+  bool borrowed_initialized = false;
+  bool command_pool_initialized = false;
+  {
+    auto borrowed_queue_wrapper =
+        std::make_unique<gpu::VulkanDeviceQueue>(borrowed_instance);
+    borrowed_initialized = borrowed_queue_wrapper->InitializeForWebView(
+        borrowed_physical_device, borrowed_device, borrowed_queue,
+        borrowed_queue_family, borrowed_extensions);
+    if (!borrowed_initialized) {
+      std::fprintf(stderr,
+                   "gpu_external_vulkan_device_smoke: non-owning Vulkan device "
+                   "queue wrapper initialization failed\n");
+      borrowed_queue_wrapper->Destroy();
+      owned_queue->Destroy();
+      return 1;
+    }
+
+    auto command_pool =
+        std::make_unique<gpu::VulkanCommandPool>(borrowed_queue_wrapper.get());
+    command_pool_initialized = command_pool->Initialize();
+    if (!command_pool_initialized) {
+      std::fprintf(stderr,
+                   "gpu_external_vulkan_device_smoke: command pool creation "
+                   "through borrowed queue failed\n");
+      command_pool->Destroy();
+      borrowed_queue_wrapper->Destroy();
+      owned_queue->Destroy();
+      return 1;
+    }
+    command_pool->Destroy();
+    borrowed_queue_wrapper->Destroy();
+  }
+
+  owned_queue->Destroy();
+
+  std::printf(
+      "gpu_external_vulkan_device_smoke: ok borrowed_queue=%d "
+      "command_pool=%d queue_family=%u extensions=%zu owns_device=0\n",
+      borrowed_initialized ? 1 : 0, command_pool_initialized ? 1 : 0,
+      borrowed_queue_family, borrowed_extensions.size());
+  return 0;
+}
+
 bool FeatureSwitchContains(const std::string& enabled_features,
                            const char* feature_name) {
   size_t start = 0;
@@ -5393,6 +5476,7 @@ int main(int argc, char** argv) {
   bool unsupported_out_requested = false;
   bool cc_scheduler_probe = false;
   bool gpu_output_smoke = false;
+  bool gpu_external_vulkan_device_smoke = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_empty_resource_smoke = false;
@@ -5516,6 +5600,8 @@ int main(int argc, char** argv) {
       cc_scheduler_probe = true;
     } else if (arg == "--gpu-output-smoke") {
       gpu_output_smoke = true;
+    } else if (arg == "--gpu-external-vulkan-device-smoke") {
+      gpu_external_vulkan_device_smoke = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
@@ -5669,6 +5755,10 @@ int main(int argc, char** argv) {
 
   if (gpu_output_smoke) {
     return RunGpuOutputSmoke();
+  }
+
+  if (gpu_external_vulkan_device_smoke) {
+    return RunGpuExternalVulkanDeviceSmoke();
   }
 
   if (c_api_smoke) {

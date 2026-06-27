@@ -201,6 +201,16 @@ Godot because the standalone runtime still needs:
 - a no-swapchain render/copy path from the Chromium SharedImage result into the
   supplied `VkImage`.
 
+The benchmark flag `--gpu-external-vulkan-device-smoke` is an internal proof for
+the first piece only. It creates a normal Chromium Vulkan device, borrows its
+raw handles into a second non-owning `gpu::VulkanDeviceQueue` via
+`InitializeForWebView()`, creates a command pool through the borrowed wrapper,
+and tears the wrapper down without destroying the original device. This proves
+the basic lifetime model can be used in the standalone build. It does not prove
+that arbitrary Godot handles can be accepted yet, because that still requires an
+external `VulkanImplementation`/`VulkanInstance` adapter and feature/extension
+validation around the supplied instance.
+
 The current Win32 Vulkan implementation requires these instance extensions when
 it creates Chromium's instance:
 
@@ -288,6 +298,10 @@ Until then, adding C ABI entry points would only create a dead API surface.
 - `--gpu-output-smoke` validates an internal Chromium-owned SharedImage
   CopyOutput result: Viz/SkiaRenderer can produce a GPU mailbox for the rendered
   frame.
+- `--gpu-external-vulkan-device-smoke` validates that a non-owning
+  `gpu::VulkanDeviceQueue` wrapper can borrow existing Vulkan device/queue
+  handles inside this standalone build and create Chromium helper state without
+  double-destroying the borrowed device.
 - Embedder-owned Vulkan `VkImage` targeting is blocked pending the runtime
   ownership, same-device, copy, and synchronization wiring above.
 - D3D12 GPU target support is design-only until a real Chromium D3D12/DXGI/Dawn
