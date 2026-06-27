@@ -4,6 +4,11 @@ The SDL viewer is a sample host for the standalone Chromium compositor path.
 It owns the native window and event pump; Blink, PaintArtifactCompositor, cc,
 Viz, Skia, ANGLE, and GPU infrastructure own rendering.
 
+For presentation-independent embedder-owned texture targets, see
+`docs/GPU_INTEROP.md`. That path is distinct from SDL native-window
+presentation and is not exposed as a public C API until it can write a supplied
+GPU image through a real Chromium/Vulkan path.
+
 ## Backend Selection
 
 Use:
