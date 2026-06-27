@@ -159,44 +159,125 @@ plumbing, not public C ABI:
   if the path cannot write the image. Only after that should a public C ABI be
   added.
 
-## Same-Device Feasibility
+## Same-Device Embedder Targets
 
 Godot can expose backend-native resources such as `VkInstance`,
 `VkPhysicalDevice`, `VkDevice`, `VkQueue`, queue family index, `VkImage`,
 `VkImageView`, and matching D3D12 device/queue/resource handles. That is the
 right product direction for a stable Godot-owned target: Godot owns the texture
-and Blink writes into it.
+and Blink writes into it. The current standalone checkout cannot do this yet
+without new Chromium-side ownership plumbing.
 
-The current standalone Vulkan host does not yet support that model.
-`VulkanWindowHost` creates Chromium's own Vulkan implementation, instance,
-device queue, Win32 surface, and swapchain. Reusing Godot's Vulkan device would
-require a sibling initialization path around externally owned Vulkan handles,
-including:
+### Vulkan
 
-- a Chromium `gpu::VulkanDeviceQueue` or equivalent wrapper that can reference,
-  but not destroy, externally owned `VkInstance`, `VkPhysicalDevice`,
-  `VkDevice`, and `VkQueue` handles;
-- feature/extension validation against the externally supplied device. The
-  minimum list must be derived from Chromium's Vulkan/Skia requirements in the
-  active build rather than guessed. The renderer will also need transfer/copy
-  support, layout transitions, and synchronization primitives compatible with
-  the target image;
-- explicit wait/signal semaphore or timeline semaphore ownership rules;
-- a no-swapchain/offscreen path that copies from the Chromium-owned SharedImage
-  result into the supplied `VkImage`.
+The active SDL Vulkan path is still Chromium-owned. `VulkanWindowHost` calls:
 
-D3D12 has the same shape but is further away in this checkout. There is no
-active standalone D3D12 host equivalent to `VulkanWindowHost`; a real D3D12
-target path would need Chromium/Skia/Dawn/Viz initialization around an externally
-owned `ID3D12Device*` and `ID3D12CommandQueue*`, plus resource-state and fence
-contracts for a supplied `ID3D12Resource*`.
+```text
+gpu::CreateVulkanImplementation(false)
+VulkanImplementation::InitializeVulkanInstance(true)
+gpu::CreateVulkanDeviceQueue(... GRAPHICS | PRESENTATION ...)
+VulkanImplementation::CreateViewSurface(hwnd)
+VulkanSurface::Initialize/Reshape
+```
+
+That path creates a Chromium `VkInstance`, `VkDevice`, graphics/presentation
+queue, Win32 surface, swapchain, and command pool. It is correct for native
+window presentation, but it is not a same-device embedder path.
+
+Chromium's `gpu::VulkanDeviceQueue` has non-owning initialization helpers:
+`InitializeForWebView()` and `InitializeForCompositorGpuThread()` can reference
+externally supplied `VkPhysicalDevice`, `VkDevice`, and `VkQueue` handles
+without destroying the device. Those helpers are not enough by themselves for
+Godot because the standalone runtime still needs:
+
+- a `VulkanImplementation`/`VulkanInstance` wrapper around the externally
+  supplied `VkInstance`, with function pointers, Vulkan version, physical-device
+  info, Skia feature queries, and platform external-sync helpers initialized;
+- validation that the externally supplied physical device and queue match the
+  device used for the target `VkImage`;
+- an extension/feature contract matching the active Chromium/Skia path;
+- queue locking and lifetime rules for work submitted on an embedder-owned
+  queue;
+- a no-swapchain render/copy path from the Chromium SharedImage result into the
+  supplied `VkImage`.
+
+The current Win32 Vulkan implementation requires these instance extensions when
+it creates Chromium's instance:
+
+```text
+VK_KHR_external_memory_capabilities
+VK_KHR_external_semaphore_capabilities
+VK_KHR_surface
+VK_KHR_win32_surface
+```
+
+It currently requires `VK_KHR_swapchain` at device creation because the active
+host is a window/swapchain presenter. It also requests these optional device
+extensions:
+
+```text
+VK_KHR_external_memory
+VK_KHR_external_memory_win32
+VK_KHR_external_semaphore
+VK_KHR_external_semaphore_win32
+```
+
+Skia may add further extensions and physical-device features through
+`VulkanInstance::skia_features()` at runtime. A future offscreen same-device
+target should not blindly require `VK_KHR_swapchain`, but it must derive and
+verify the actual Skia/Viz/SharedImage requirements from the active build before
+accepting Godot handles.
+
+Copying the `--gpu-output-smoke` SharedImage result into a Godot-owned image
+requires a real Vulkan target writer, not just the mailbox diagnostic. The
+writer must acquire or otherwise access the Chromium-owned source image, wait on
+the source sync token, transition the source to a transfer-readable layout,
+transition the Godot image from its declared current layout to
+`VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL` or a renderable equivalent, copy/blit or
+render-resolve with compatible format and extent, transition the Godot image to
+the requested final layout, and signal the embedder-provided semaphore/timeline
+value before Godot samples it. The API also needs resize/generation and no-reuse
+rules so the target image is not destroyed or reused while Chromium work is in
+flight.
+
+So the Vulkan answer is: same-device is technically plausible in Chromium, and
+this checkout has useful internal pieces, but it is not implementable as a
+public API today. The minimum credible prototype is an internal external-device
+adapter that can initialize Chromium's Vulkan/Skia state around supplied handles
+or prove why that fails, followed by an internal smoke that copies a
+Chromium-owned SharedImage into an external-like `VkImage` without any window or
+swapchain fallback.
+
+### D3D12
+
+D3D12 is further away than Vulkan in this standalone checkout. The tree contains
+Chromium code for D3D/DXGI, Dawn/Graphite, and D3D SharedImage plumbing, but
+there is no active standalone D3D12 host equivalent to `VulkanWindowHost`. The
+SDL viewer intentionally rejects `--gpu-backend=dx12` rather than falling back
+to Vulkan or CPU.
+
+A real D3D12 target path would first need a Chromium-owned D3D12/DXGI/Dawn or
+Skia/Viz host for standalone rendering. Only after that exists can the same
+device question be answered by code. The expected shape is an adapter around an
+externally supplied `ID3D12Device*` and `ID3D12CommandQueue*`, a copy or render
+path into a supplied `ID3D12Resource*`, explicit resource-state transitions, and
+fence wait/signal ownership. The checkout does not currently expose that layer,
+so same-device D3D12 is design-only.
+
+### Future ABI Direction
 
 The future public ABI should stay presentation-independent and should not
-mention SDL, HWND, or swapchains. The Godot-proposed structs with a backend enum,
-common logical/physical target config, Vulkan external device/target handles,
-and D3D12 external device/target handles match the right direction. They should
-not be added until at least one backend can initialize or copy through a real
-Chromium-owned path.
+mention SDL, HWND, or swapchains. A backend enum, common logical/physical target
+config, Vulkan external device/target structs, and D3D12 external device/target
+structs match the right direction. Before exposing them publicly, a real backend
+must prove at least one of these operations:
+
+- initialize Chromium's GPU/Skia/Viz path from externally supplied device and
+  queue handles; or
+- copy a Chromium-owned GPU result into an externally supplied target resource
+  on the same device with explicit synchronization.
+
+Until then, adding C ABI entry points would only create a dead API surface.
 
 ## Current Status
 
