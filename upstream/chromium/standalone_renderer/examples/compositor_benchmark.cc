@@ -874,7 +874,7 @@ int RunCApiResourceProviderDataUrlSmoke() {
       output_status != BLINK_STANDALONE_STATUS_OK ||
       provider_state.stylesheet_request_count < 1 ||
       provider_state.data_url_request_count != 0 ||
-      stats.resource_red_e84444 < 3000 ||
+      stats.resource_red_e84444 < 6000 ||
       stats.resource_green_237a57 != 0) {
     std::fprintf(
         stderr,
@@ -907,6 +907,11 @@ int RunCApiResourceProviderDataUrlSmoke() {
     blink_standalone_renderer_destroy(renderer);
     return 1;
   }
+  const int data_before_callback = provider_state.data_url_request_count;
+  const int img_before_callback = provider_state.data_url_img_request_count;
+  const int css_bg_before_callback =
+      provider_state.data_url_css_background_request_count;
+  const int blocked_before_callback = provider_state.blocked_count;
   status = blink_standalone_renderer_set_document_html(
       renderer, html_callback.c_str(), "", "");
   status = status == BLINK_STANDALONE_STATUS_OK
@@ -916,21 +921,27 @@ int RunCApiResourceProviderDataUrlSmoke() {
   output_status = blink_standalone_renderer_get_latest_output(renderer, &output);
   stats = AnalyzeFramePixelContent(output);
   const int callback_data_requests =
-      provider_state.data_url_request_count;
+      provider_state.data_url_request_count - data_before_callback;
+  const int callback_img_requests =
+      provider_state.data_url_img_request_count - img_before_callback;
+  const int callback_css_bg_requests =
+      provider_state.data_url_css_background_request_count -
+      css_bg_before_callback;
   if (status != BLINK_STANDALONE_STATUS_OK ||
       output_status != BLINK_STANDALONE_STATUS_OK ||
-      callback_data_requests < 1 ||
-      provider_state.data_url_css_background_request_count < 1 ||
-      stats.resource_green_237a57 < 3000 ||
+      callback_data_requests < 2 ||
+      callback_img_requests < 1 ||
+      callback_css_bg_requests < 1 ||
+      provider_state.blocked_count != blocked_before_callback ||
+      stats.resource_green_237a57 < 6000 ||
       stats.resource_red_e84444 != 0) {
     std::fprintf(
         stderr,
         "c_api_resource_provider_data_url_smoke: callback data URL failed "
         "status=%d output_status=%d data=%d img=%d css_bg=%d red=%zu "
         "green=%zu error=%s\n",
-        status, output_status, provider_state.data_url_request_count,
-        provider_state.data_url_img_request_count,
-        provider_state.data_url_css_background_request_count,
+        status, output_status, callback_data_requests, callback_img_requests,
+        callback_css_bg_requests,
         stats.resource_red_e84444, stats.resource_green_237a57,
         blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_release_latest_output(renderer);
@@ -951,7 +962,7 @@ int RunCApiResourceProviderDataUrlSmoke() {
   stats = AnalyzeFramePixelContent(output);
   if (status != BLINK_STANDALONE_STATUS_OK ||
       output_status != BLINK_STANDALONE_STATUS_OK ||
-      provider_state.blocked_count <= blocked_before ||
+      provider_state.blocked_count < blocked_before + 2 ||
       stats.resource_red_e84444 != 0 ||
       stats.resource_green_237a57 != 0) {
     std::fprintf(

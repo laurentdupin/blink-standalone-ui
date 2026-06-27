@@ -960,8 +960,7 @@ void LayoutBox::UpdateFromStyle() {
   // StyleDidChange() has already synchronized overflow_clip_axes_. Keep the
   // axes consistent with the final HasNonVisibleOverflow() bit so Blink's real
   // prepaint property-tree code can create content overflow clips.
-  if (overflow_clip_presence_changed && should_clip_overflow &&
-      !IsFloatingOrOutOfFlowPositioned()) {
+  if (overflow_clip_presence_changed && should_clip_overflow) {
     SetOverflowClipAxes(ComputeOverflowClipAxes());
     if (Layer())
       Layer()->ScrollContainerStatusChanged();

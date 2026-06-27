@@ -9995,6 +9995,7 @@ void StartStandaloneImageLoadsForStaticRenderFromNode(Node& node) {
         StandaloneRendererSetDeferImageAttributeLoads(false);
       }
     }
+    image->SelectSourceURL(ImageLoader::kUpdateIgnorePreviousError);
     TraceLiveFrameProbeStage("static image load source normalized");
   }
   for (Node* child = node.firstChild(); child; child = child->nextSibling()) {
