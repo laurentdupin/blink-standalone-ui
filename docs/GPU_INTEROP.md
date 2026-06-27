@@ -208,6 +208,77 @@ a first-class SharedImage destination. Route A may still be useful as an
 internal stepping stone, but it would otherwise create a separate raw-image copy
 bridge beside Chromium's existing SharedImage access model.
 
+### Borrowed `VkImage` Backing Audit
+
+The next bounded audit checked whether Route B could be prototyped by adding a
+small internal `SharedImageBacking` that wraps a caller-owned `VkImage`.
+
+The useful existing write path is Viz `BlitRequest`. A `CopyOutputRequest` with
+`ResultDestination::kSharedImage`, `result_selection`, and a `BlitRequest`
+will make `SkiaOutputSurfaceImplOnGpu::CopyOutputRGBAInTexture()` look up the
+destination mailbox through `SharedImageManager::ProduceSkia()` with
+`SHARED_IMAGE_USAGE_DISPLAY_WRITE`, begin a Skia write access, and render the
+CopyOutput result into that destination surface. This is the right path for
+Godot because it writes into a destination SharedImage rather than returning a
+separate Chromium-owned output mailbox.
+
+The missing piece is a valid destination SharedImage backing for a borrowed
+raw Vulkan image. The current Vulkan backings are not a small fit:
+
+- `ExternalVkImageBackingFactory` creates Chromium-owned Vulkan images through
+  `ExternalVkImageBacking::Create()`, or imports a platform
+  `gfx::GpuMemoryBufferHandle` through `CreateFromGMB()`. It has no raw
+  borrowed-`VkImage` constructor.
+- `ExternalVkImageBacking` stores `TextureHolderVk` entries containing
+  `std::unique_ptr<gpu::VulkanImage>`. Its destructor schedules those
+  `VulkanImage` objects for cleanup through `VulkanFenceHelper`, so using this
+  class directly would transfer destruction ownership to Chromium.
+- `gpu::VulkanImage::Create(device_queue, VkImage, VkDeviceMemory, ...)` can
+  wrap existing handles, but it is still an owning wrapper: `Destroy()` calls
+  `vkDestroyImage()` and destroys the wrapped `VkDeviceMemory`, and the
+  destructor DCHECKs that cleanup has happened. It is not safe for a
+  Godot-owned image without a new non-owning mode.
+- `CreateGrVkImageInfo()` fills Skia's `GrVkImageInfo` from
+  `gpu::VulkanImage`, including `fAlloc.fMemory`, allocation size, memory type,
+  usage flags, tiling, queue family, and layout. Godot's reviewed handle set
+  exposes `VkImage`/`VkImageView`/format, but not `VkDeviceMemory`, allocation
+  size, or memory type. A borrowed backing must either require that extra
+  allocation metadata or prove that the active Skia/Vulkan path can safely wrap
+  the image without it.
+- The existing `ExternalVkImageSkiaImageRepresentation` is coupled to
+  `ExternalVkImageBacking` synchronization state, promise textures, external
+  semaphore pool, and GL/Vulkan interop behavior. A borrowed backing would need
+  its own Skia representation and explicit layout/semaphore contract rather
+  than reusing that class unchanged.
+- On the active Windows Vulkan build, `VulkanImplementationWin32::
+  CreateImageFromGpuMemoryHandle()` remains `NOTIMPLEMENTED()`, so the
+  `GpuMemoryBufferHandle` import route is not currently a shortcut around raw
+  image wrapping.
+
+Therefore an internal `--gpu-borrowed-vkimage-backing-smoke` would be premature
+in this checkout. A half-smoke could register a mailbox that only carries
+metadata, or could wrap a locally created image in an owning `VulkanImage`, but
+neither would prove a Godot-owned target survives without Chromium destroying
+or reallocating it.
+
+The smallest honest next implementation is:
+
+1. Add a service-side borrowed Vulkan backing, separate from
+   `ExternalVkImageBacking`, with explicit non-ownership of `VkImage` and memory
+   handles.
+2. Decide the required embedder metadata: at minimum image size, format, usage,
+   current/final layout, queue family, and synchronization; likely also
+   `VkDeviceMemory`, allocation size, and memory type unless Skia validation
+   proves those can be omitted.
+3. Implement a Skia Ganesh representation that builds a `GrBackendTexture` for
+   the borrowed image, enforces `DISPLAY_WRITE`, handles begin/end semaphores or
+   timeline waits/signals, and leaves the image in the requested final layout.
+4. Register the backing with `SharedImageManager`/`SharedImageFactory`, create a
+   matching `ClientSharedImage`, and drive Viz `BlitRequest` into it.
+5. Only then add `--gpu-borrowed-vkimage-backing-smoke`, using a locally
+   created image as an external stand-in and verifying that the GPU write path,
+   not CPU readback, populates the target.
+
 ## Why No Public API Yet
 
 A real Godot-owned target path is not implementable in this checkpoint without
