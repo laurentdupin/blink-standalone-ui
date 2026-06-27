@@ -81,6 +81,7 @@
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/pending_copy_output_request.h"
 #include "gpu/command_buffer/client/context_support.h"
+#include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/service/scheduler.h"
@@ -732,6 +733,16 @@ struct LiveRawFrameOutput {
   std::vector<uint8_t> pixels;
 };
 
+struct LiveGpuFrameOutput {
+  bool shared_image_available = false;
+  bool is_software = false;
+  int width = 0;
+  int height = 0;
+  std::string format;
+  std::string mailbox;
+  std::string creation_sync_token;
+};
+
 struct LiveElementScrollOffset {
   float x = 0.0f;
   float y = 0.0f;
@@ -1278,10 +1289,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       bool* copy_output_requested,
       bool* copy_output_png_requested,
       bool* copy_output_raw_requested,
+      bool* copy_output_gpu_requested,
       bool* copy_output_completed,
       bool* copy_output_succeeded,
       std::vector<uint8_t>* copy_output_png,
       LiveRawFrameOutput* copy_output_raw_frame,
+      LiveGpuFrameOutput* copy_output_gpu_frame,
       std::string* copy_output_failure,
       std::string* failure_reason,
       bool* begin_frame_source_set = nullptr,
@@ -1306,10 +1319,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         copy_output_requested_(copy_output_requested),
         copy_output_png_requested_(copy_output_png_requested),
         copy_output_raw_requested_(copy_output_raw_requested),
+        copy_output_gpu_requested_(copy_output_gpu_requested),
         copy_output_completed_(copy_output_completed),
         copy_output_succeeded_(copy_output_succeeded),
         copy_output_png_(copy_output_png),
         copy_output_raw_frame_(copy_output_raw_frame),
+        copy_output_gpu_frame_(copy_output_gpu_frame),
         copy_output_failure_(copy_output_failure),
         failure_reason_(failure_reason),
         begin_frame_source_set_(begin_frame_source_set),
@@ -1429,7 +1444,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                           copy_output_png_requested_ &&
                               *copy_output_png_requested_,
                           copy_output_raw_requested_ &&
-                              *copy_output_raw_requested_);
+                              *copy_output_raw_requested_,
+                          copy_output_gpu_requested_ &&
+                              *copy_output_gpu_requested_);
       }
       if (display_) {
         DrawVizDisplayNow();
@@ -1625,7 +1642,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   void RequestCopyOutput(const gfx::Size& output_size,
                          bool wants_png,
-                         bool wants_raw) {
+                         bool wants_raw,
+                         bool wants_gpu) {
     if (!support_) {
       SetCopyOutputFailure("Viz CopyOutput cannot run without frame sink support");
       return;
@@ -1646,15 +1664,20 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (copy_output_raw_frame_) {
       *copy_output_raw_frame_ = LiveRawFrameOutput();
     }
+    if (copy_output_gpu_frame_) {
+      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
+    }
     if (copy_output_failure_) {
       copy_output_failure_->clear();
     }
 
     auto request = std::make_unique<viz::CopyOutputRequest>(
         viz::CopyOutputRequest::ResultFormat::RGBA,
-        viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+        wants_gpu ? viz::CopyOutputRequest::ResultDestination::kSharedImage
+                  : viz::CopyOutputRequest::ResultDestination::kSystemMemory,
         base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
-                       base::Unretained(this), wants_png, wants_raw));
+                       base::Unretained(this), wants_png, wants_raw,
+                       wants_gpu));
     request->set_area(gfx::Rect(output_size));
     support_->RequestCopyOfOutput(
         std::make_unique<viz::PendingCopyOutputRequest>(
@@ -1663,6 +1686,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   void OnCopyOutput(bool wants_png,
                     bool wants_raw,
+                    bool wants_gpu,
                     std::unique_ptr<viz::CopyOutputResult> output) {
     if (!output) {
       SetCopyOutputFailure("Viz CopyOutput returned no result");
@@ -1672,6 +1696,44 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       SetCopyOutputFailure(
           std::string("Viz CopyOutput returned empty result: ") +
           StandaloneCopyOutputErrorName(output->error()));
+      return;
+    }
+    if (wants_gpu) {
+      if (output->destination() !=
+          viz::CopyOutputResult::Destination::kSharedImage) {
+        SetCopyOutputFailure("Viz CopyOutput did not return a shared image");
+        return;
+      }
+      scoped_refptr<gpu::ClientSharedImage> shared_image =
+          output->GetSharedImage();
+      if (!shared_image || shared_image->mailbox().IsZero()) {
+        SetCopyOutputFailure("Viz CopyOutput shared image is missing");
+        return;
+      }
+      if (copy_output_gpu_frame_) {
+        LiveGpuFrameOutput gpu_frame;
+        gpu_frame.shared_image_available = true;
+        gpu_frame.is_software = shared_image->is_software();
+        gpu_frame.width = shared_image->size().width();
+        gpu_frame.height = shared_image->size().height();
+        gpu_frame.format = shared_image->format().ToString();
+        gpu_frame.mailbox = shared_image->mailbox().ToDebugString();
+        gpu_frame.creation_sync_token =
+            shared_image->creation_sync_token().ToDebugString();
+        *copy_output_gpu_frame_ = std::move(gpu_frame);
+      }
+      if (copy_output_failure_) {
+        copy_output_failure_->clear();
+      }
+      if (copy_output_succeeded_) {
+        *copy_output_succeeded_ = true;
+      }
+      if (copy_output_completed_) {
+        *copy_output_completed_ = true;
+      }
+      if (copy_output_run_loop_) {
+        copy_output_run_loop_->Quit();
+      }
       return;
     }
     viz::CopyOutputResult::ScopedSkBitmap scoped_bitmap =
@@ -1768,6 +1830,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (copy_output_raw_frame_) {
       *copy_output_raw_frame_ = LiveRawFrameOutput();
     }
+    if (copy_output_gpu_frame_) {
+      *copy_output_gpu_frame_ = LiveGpuFrameOutput();
+    }
     if (copy_output_failure_) {
       *copy_output_failure_ = std::move(reason);
     }
@@ -1804,10 +1869,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<bool> copy_output_requested_ = nullptr;
   raw_ptr<bool> copy_output_png_requested_ = nullptr;
   raw_ptr<bool> copy_output_raw_requested_ = nullptr;
+  raw_ptr<bool> copy_output_gpu_requested_ = nullptr;
   raw_ptr<bool> copy_output_completed_ = nullptr;
   raw_ptr<bool> copy_output_succeeded_ = nullptr;
   raw_ptr<std::vector<uint8_t>> copy_output_png_ = nullptr;
   raw_ptr<LiveRawFrameOutput> copy_output_raw_frame_ = nullptr;
+  raw_ptr<LiveGpuFrameOutput> copy_output_gpu_frame_ = nullptr;
   raw_ptr<std::string> copy_output_failure_ = nullptr;
   raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
@@ -1966,13 +2033,24 @@ class StandaloneCcLayerHost final
     return frame_sink_failure_reason_;
   }
   void RequestNextCopyOutput(bool wants_png, bool wants_raw) {
+    RequestNextCopyOutput(wants_png, wants_raw, /*wants_gpu=*/false);
+  }
+
+  void RequestNextGpuFrameOutput() {
+    RequestNextCopyOutput(/*wants_png=*/false, /*wants_raw=*/false,
+                          /*wants_gpu=*/true);
+  }
+
+  void RequestNextCopyOutput(bool wants_png, bool wants_raw, bool wants_gpu) {
     copy_output_requested_ = true;
     copy_output_png_requested_ = wants_png;
     copy_output_raw_requested_ = wants_raw;
+    copy_output_gpu_requested_ = wants_gpu;
     copy_output_completed_ = false;
     copy_output_succeeded_ = false;
     copy_output_png_.clear();
     copy_output_raw_frame_ = LiveRawFrameOutput();
+    copy_output_gpu_frame_ = LiveGpuFrameOutput();
     copy_output_failure_.clear();
     next_composite_requires_forced_redraw_ = true;
   }
@@ -1986,6 +2064,9 @@ class StandaloneCcLayerHost final
   }
   const LiveRawFrameOutput& copy_output_raw_frame() const {
     return copy_output_raw_frame_;
+  }
+  const LiveGpuFrameOutput& copy_output_gpu_frame() const {
+    return copy_output_gpu_frame_;
   }
   const std::string& copy_output_failure() const {
     return copy_output_failure_;
@@ -2328,8 +2409,10 @@ class StandaloneCcLayerHost final
             &skia_gpu_reached_, &submitted_output_size_,
             &viz_display_output_size_, &copy_output_requested_,
             &copy_output_png_requested_, &copy_output_raw_requested_,
+            &copy_output_gpu_requested_,
             &copy_output_completed_, &copy_output_succeeded_,
-            &copy_output_png_, &copy_output_raw_frame_, &copy_output_failure_,
+            &copy_output_png_, &copy_output_raw_frame_,
+            &copy_output_gpu_frame_, &copy_output_failure_,
             &frame_sink_failure_reason_,
             /*begin_frame_source_set=*/nullptr,
             /*did_not_produce_count=*/nullptr,
@@ -2495,10 +2578,12 @@ class StandaloneCcLayerHost final
   bool copy_output_requested_ = false;
   bool copy_output_png_requested_ = false;
   bool copy_output_raw_requested_ = false;
+  bool copy_output_gpu_requested_ = false;
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
   std::vector<uint8_t> copy_output_png_;
   LiveRawFrameOutput copy_output_raw_frame_;
+  LiveGpuFrameOutput copy_output_gpu_frame_;
   std::string copy_output_failure_;
   int commit_count_ = 0;
   std::string frame_sink_failure_reason_;
@@ -2670,9 +2755,11 @@ class StandaloneCcSchedulerParityProbe final
             /*viz_display_output_size=*/nullptr, &copy_output_requested_,
             /*copy_output_png_requested=*/nullptr,
             /*copy_output_raw_requested=*/nullptr,
+            /*copy_output_gpu_requested=*/nullptr,
             &copy_output_completed_, &copy_output_succeeded_,
             &copy_output_png_, &copy_output_raw_frame_,
-            &copy_output_failure_, &failure_reason_,
+            /*copy_output_gpu_frame=*/nullptr, &copy_output_failure_,
+            &failure_reason_,
             &begin_frame_source_set_, &did_not_produce_count_,
             &last_frame_skipped_reason_, &last_did_not_produce_has_damage_,
             /*async_compositor_frame_ack=*/true);
@@ -2893,10 +2980,12 @@ class StandaloneCcSchedulerParityProbe final
   bool copy_output_requested_ = false;
   bool copy_output_png_requested_ = false;
   bool copy_output_raw_requested_ = false;
+  bool copy_output_gpu_requested_ = false;
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
   std::vector<uint8_t> copy_output_png_;
   LiveRawFrameOutput copy_output_raw_frame_;
+  LiveGpuFrameOutput copy_output_gpu_frame_;
   std::string copy_output_failure_;
   std::string failure_reason_;
 };
@@ -2944,10 +3033,12 @@ struct LiveFramePaintProbeCache {
   gfx::Size cc_viz_display_output_size;
   bool copy_output_raw_requested = false;
   bool copy_output_png_requested = false;
+  bool copy_output_gpu_requested = false;
   bool copy_output_png_completed = false;
   bool copy_output_png_succeeded = false;
   std::vector<uint8_t> copy_output_png;
   LiveRawFrameOutput copy_output_raw_frame;
+  LiveGpuFrameOutput copy_output_gpu_frame;
   std::string copy_output_failure;
   int cc_commit_count = 0;
   std::string cc_attach_failure_reason;
@@ -3296,10 +3387,12 @@ void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
       cache.cc_layer_host->copy_output_succeeded();
   cache.copy_output_png = cache.cc_layer_host->copy_output_png();
   cache.copy_output_raw_frame = cache.cc_layer_host->copy_output_raw_frame();
+  cache.copy_output_gpu_frame = cache.cc_layer_host->copy_output_gpu_frame();
   cache.copy_output_failure = cache.cc_layer_host->copy_output_failure();
   if (cache.copy_output_png_completed) {
     cache.copy_output_png_requested = false;
     cache.copy_output_raw_requested = false;
+    cache.copy_output_gpu_requested = false;
   }
 }
 
@@ -3398,9 +3491,11 @@ bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
 
   TraceLiveFrameProbeStage(before_stage);
   cache.cc_frame_sink_failure_reason.clear();
-  if (cache.copy_output_png_requested || cache.copy_output_raw_requested) {
+  if (cache.copy_output_png_requested || cache.copy_output_raw_requested ||
+      cache.copy_output_gpu_requested) {
     cache.cc_layer_host->RequestNextCopyOutput(
-        cache.copy_output_png_requested, cache.copy_output_raw_requested);
+        cache.copy_output_png_requested, cache.copy_output_raw_requested,
+        cache.copy_output_gpu_requested);
   }
   const auto composite_start = StandaloneProbeClock::now();
   const bool submitted =
@@ -13466,9 +13561,11 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
     SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     return false;
   }
-  if (cache.copy_output_png_requested || cache.copy_output_raw_requested) {
+  if (cache.copy_output_png_requested || cache.copy_output_raw_requested ||
+      cache.copy_output_gpu_requested) {
     cache.cc_layer_host->RequestNextCopyOutput(
-        cache.copy_output_png_requested, cache.copy_output_raw_requested);
+        cache.copy_output_png_requested, cache.copy_output_raw_requested,
+        cache.copy_output_gpu_requested);
   }
 
   std::optional<LiveFramePaintProbeResult> lifecycle_stop_result;
@@ -14067,10 +14164,12 @@ void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
 void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_png_requested = true;
+  cache.copy_output_gpu_requested = false;
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_png.clear();
   cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
   cache.initialized = false;
 }
@@ -14078,9 +14177,25 @@ void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer() {
 void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_raw_requested = true;
+  cache.copy_output_gpu_requested = false;
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
+  cache.copy_output_failure.clear();
+  cache.initialized = false;
+}
+
+void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.copy_output_gpu_requested = true;
+  cache.copy_output_png_requested = false;
+  cache.copy_output_raw_requested = false;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_png.clear();
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
   cache.initialized = false;
 }
@@ -15653,6 +15768,59 @@ int StandaloneBlinkLiveFrameBridgeRawFrameBytesForStandaloneRenderer(
   }
   std::memcpy(destination, pixels.data(), pixels.size());
   return static_cast<int>(pixels.size());
+}
+
+int StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height,
+    int* is_software,
+    char* format,
+    int format_capacity,
+    char* mailbox,
+    int mailbox_capacity,
+    char* creation_sync_token,
+    int creation_sync_token_capacity) {
+  RunLiveFramePaintProbe(body_html);
+  const LiveGpuFrameOutput& gpu_frame = ProbeCache().copy_output_gpu_frame;
+  if (!gpu_frame.shared_image_available || gpu_frame.width <= 0 ||
+      gpu_frame.height <= 0 || gpu_frame.mailbox.empty()) {
+    return 0;
+  }
+  if (width) {
+    *width = gpu_frame.width;
+  }
+  if (height) {
+    *height = gpu_frame.height;
+  }
+  if (is_software) {
+    *is_software = gpu_frame.is_software ? 1 : 0;
+  }
+  if (format && format_capacity > 0) {
+    const int copy_count =
+        std::min(static_cast<int>(gpu_frame.format.size()),
+                 format_capacity - 1);
+    std::memcpy(format, gpu_frame.format.data(),
+                static_cast<size_t>(copy_count));
+    format[copy_count] = '\0';
+  }
+  if (mailbox && mailbox_capacity > 0) {
+    const int copy_count =
+        std::min(static_cast<int>(gpu_frame.mailbox.size()),
+                 mailbox_capacity - 1);
+    std::memcpy(mailbox, gpu_frame.mailbox.data(),
+                static_cast<size_t>(copy_count));
+    mailbox[copy_count] = '\0';
+  }
+  if (creation_sync_token && creation_sync_token_capacity > 0) {
+    const int copy_count =
+        std::min(static_cast<int>(gpu_frame.creation_sync_token.size()),
+                 creation_sync_token_capacity - 1);
+    std::memcpy(creation_sync_token, gpu_frame.creation_sync_token.data(),
+                static_cast<size_t>(copy_count));
+    creation_sync_token[copy_count] = '\0';
+  }
+  return 1;
 }
 
 int StandaloneBlinkLiveFrameBridgeChunkStableKeyAtForStandaloneRenderer(

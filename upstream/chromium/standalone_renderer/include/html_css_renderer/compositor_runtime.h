@@ -43,6 +43,16 @@ struct CompositorFrameTiming {
   bool bridge_rebuilt_for_attributes = false;
 };
 
+struct GpuFrameOutput {
+  bool shared_image_available = false;
+  bool is_software = false;
+  int width = 0;
+  int height = 0;
+  std::string format;
+  std::string mailbox;
+  std::string creation_sync_token;
+};
+
 struct CompositorFrameResult {
   RendererSnapshot successor_snapshot;
   CompositorFrameTiming timing;
@@ -74,6 +84,9 @@ struct CompositorFrameResult {
   bool raw_frame_requested = false;
   std::string raw_frame_failure;
   RawFrameOutput raw_frame;
+  bool gpu_frame_requested = false;
+  std::string gpu_frame_failure;
+  GpuFrameOutput gpu_frame;
   std::string raw_paint_artifact_audit_json;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<FormControlEntry> form_control_entries;

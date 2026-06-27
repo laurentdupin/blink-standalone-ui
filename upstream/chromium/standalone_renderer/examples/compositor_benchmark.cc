@@ -143,6 +143,7 @@ void PrintUsage() {
       "[--trace-stages] [--lifecycle-stop <stage>] "
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
+      "[--gpu-output-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
@@ -4764,6 +4765,67 @@ int RunTypefaceIsolationSmoke() {
   return 0;
 }
 
+int RunGpuOutputSmoke() {
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {128.0f, 64.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      "</style><div id='box'></div>";
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(stderr, "gpu_output_smoke: runtime initialization failed\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_gpu_frame = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult result = runtime->AdvanceFrame(input);
+  if (!result.gpu_frame.shared_image_available ||
+      result.gpu_frame.mailbox.empty() ||
+      !result.viz_display_created ||
+      !result.skia_renderer_gpu_path_reached ||
+      !result.shared_image_interface_available ||
+      result.gpu_frame.is_software) {
+    std::fprintf(stderr,
+                 "gpu_output_smoke: failed shared_image=%d mailbox=%s "
+                 "software=%d viz_display=%d skia_gpu=%d shared_interface=%d "
+                 "failure=%s\n",
+                 result.gpu_frame.shared_image_available ? 1 : 0,
+                 result.gpu_frame.mailbox.c_str(),
+                 result.gpu_frame.is_software ? 1 : 0,
+                 result.viz_display_created ? 1 : 0,
+                 result.skia_renderer_gpu_path_reached ? 1 : 0,
+                 result.shared_image_interface_available ? 1 : 0,
+                 result.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : result.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+  std::printf(
+      "gpu_output_smoke: ok size=%dx%d format=%s mailbox=%s sync=%s "
+      "viz_display=%d skia_gpu=%d shared_interface=%d\n",
+      result.gpu_frame.width, result.gpu_frame.height,
+      result.gpu_frame.format.c_str(), result.gpu_frame.mailbox.c_str(),
+      result.gpu_frame.creation_sync_token.c_str(),
+      result.viz_display_created ? 1 : 0,
+      result.skia_renderer_gpu_path_reached ? 1 : 0,
+      result.shared_image_interface_available ? 1 : 0);
+  return 0;
+}
+
 bool FeatureSwitchContains(const std::string& enabled_features,
                            const char* feature_name) {
   size_t start = 0;
@@ -5330,6 +5392,7 @@ int main(int argc, char** argv) {
   std::string lifecycle_stop;
   bool unsupported_out_requested = false;
   bool cc_scheduler_probe = false;
+  bool gpu_output_smoke = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_empty_resource_smoke = false;
@@ -5451,6 +5514,8 @@ int main(int argc, char** argv) {
       trace_stages = true;
     } else if (arg == "--cc-scheduler-probe") {
       cc_scheduler_probe = true;
+    } else if (arg == "--gpu-output-smoke") {
+      gpu_output_smoke = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
@@ -5600,6 +5665,10 @@ int main(int argc, char** argv) {
     }
     std::printf("%s", json.c_str());
     return json.find("\"success\": true") != std::string::npos ? 0 : 6;
+  }
+
+  if (gpu_output_smoke) {
+    return RunGpuOutputSmoke();
   }
 
   if (c_api_smoke) {

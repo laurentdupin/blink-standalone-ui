@@ -87,6 +87,7 @@ void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
     int height);
 void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -311,6 +312,17 @@ int StandaloneBlinkLiveFrameBridgeRawFrameBytesForStandaloneRenderer(
     const char* body_html,
     uint8_t* destination,
     int destination_size);
+int StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
+    const char* body_html,
+    int* width,
+    int* height,
+    int* is_software,
+    char* format,
+    int format_capacity,
+    char* mailbox,
+    int mailbox_capacity,
+    char* creation_sync_token,
+    int creation_sync_token_capacity);
 }  // namespace blink::standalone_renderer_probe
 
 namespace html_css_renderer {
@@ -1018,9 +1030,11 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     CompositorFrameResult result;
     result.png_snapshot_requested = input.request_png_snapshot;
     result.raw_frame_requested = input.request_raw_frame;
+    result.gpu_frame_requested = input.request_gpu_frame;
     result.successor_snapshot = snapshot_;
     const bool collect_full_result =
         input.request_png_snapshot || input.request_raw_frame ||
+        input.request_gpu_frame ||
         input.result_collection == FrameResultCollection::kFull;
     probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
         collect_full_result ? 1 : 0);
@@ -1038,6 +1052,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
     if (input.request_raw_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
+    }
+    if (input.request_gpu_frame) {
+      probe::StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer();
     }
     probe::StandaloneBlinkLiveFrameBridgeSetDeviceScaleFactorForStandaloneRenderer(
         snapshot_.device_scale_factor);
@@ -1216,6 +1233,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
     CopyPngSnapshot(probe_html, result);
     CopyRawFrame(probe_html, result);
+    CopyGpuFrame(probe_html, result);
     if (collect_full_result) {
       AppendFrameDiagnostics(probe_html, result);
     } else if (!result.cc_root_layer_attached ||
@@ -1331,7 +1349,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   bool NeedsFrameForInput(const FrameInput& input) const {
     if (!last_frame_result_)
       return true;
-    if (input.request_png_snapshot || input.request_raw_frame)
+    if (input.request_png_snapshot || input.request_raw_frame ||
+        input.request_gpu_frame)
       return true;
     if (input.force_document_reload)
       return true;
@@ -1398,11 +1417,14 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.frame_skipped_due_to_no_demand = true;
     result.png_snapshot_requested = input.request_png_snapshot;
     result.raw_frame_requested = input.request_raw_frame;
+    result.gpu_frame_requested = input.request_gpu_frame;
     result.png_snapshot_available = false;
     result.png_snapshot_failure.clear();
     result.png_snapshot_bytes.clear();
     result.raw_frame_failure.clear();
     result.raw_frame = RawFrameOutput();
+    result.gpu_frame_failure.clear();
+    result.gpu_frame = GpuFrameOutput();
     if (input.result_collection == FrameResultCollection::kMinimal) {
       result.raw_paint_artifact_audit_json.clear();
       result.hit_test_entries.clear();
@@ -1746,6 +1768,42 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         Rect{0.0f, 0.0f, static_cast<float>(width),
              static_cast<float>(height)});
     result.raw_frame = std::move(raw_frame);
+  }
+
+  static void CopyGpuFrame(const std::string& probe_html,
+                           CompositorFrameResult& result) {
+    if (!result.gpu_frame_requested)
+      return;
+    namespace probe = ::blink::standalone_renderer_probe;
+    int width = 0;
+    int height = 0;
+    int is_software = 0;
+    std::array<char, 64> format{};
+    std::array<char, 128> mailbox{};
+    std::array<char, 128> creation_sync_token{};
+    if (!probe::StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
+            probe_html.c_str(), &width, &height, &is_software,
+            format.data(), static_cast<int>(format.size()),
+            mailbox.data(), static_cast<int>(mailbox.size()),
+            creation_sync_token.data(),
+            static_cast<int>(creation_sync_token.size()))) {
+      std::array<char, 256> failure{};
+      const int copied =
+          probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
+              probe_html.c_str(), failure.data(),
+              static_cast<int>(failure.size()));
+      result.gpu_frame_failure =
+          copied > 0 ? failure.data()
+                     : "Viz CopyOutput shared image was not produced";
+      return;
+    }
+    result.gpu_frame.shared_image_available = true;
+    result.gpu_frame.is_software = is_software != 0;
+    result.gpu_frame.width = width;
+    result.gpu_frame.height = height;
+    result.gpu_frame.format = format.data();
+    result.gpu_frame.mailbox = mailbox.data();
+    result.gpu_frame.creation_sync_token = creation_sync_token.data();
   }
 
   static void AppendFrameFailures(const std::string& probe_html,

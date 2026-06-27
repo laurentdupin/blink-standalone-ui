@@ -162,6 +162,7 @@ struct FrameInput {
   double timeline_time_seconds = 0.0;
   bool request_png_snapshot = false;
   bool request_raw_frame = false;
+  bool request_gpu_frame = false;
   bool force_document_reload = false;
   FrameResultCollection result_collection = FrameResultCollection::kFull;
   std::optional<Size> viewport;
