@@ -155,6 +155,7 @@ void PrintUsage() {
       "[--c-api-fragment-mutation-smoke] "
       "[--c-api-structural-dom-mutation-smoke] "
       "[--c-api-mutation-diagnostics-smoke] "
+      "[--c-api-mutation-stress-smoke] "
       "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
@@ -1935,6 +1936,505 @@ int RunCApiMutationDiagnosticsSmoke() {
       "c_api_mutation_diagnostics_smoke: ok missing/unsafe/unsupported "
       "diagnostics covered raw=%dx%d\n",
       output.width, output.height);
+  return 0;
+}
+
+int RunCApiMutationStressSmoke() {
+  constexpr int kIterations = 40;
+  blink_standalone_renderer_config_t config_a = {};
+  config_a.width = 320;
+  config_a.height = 180;
+  config_a.device_scale_factor = 1.0f;
+  config_a.no_script_profile = 1;
+  blink_standalone_renderer_config_t config_b = {};
+  config_b.width = 180;
+  config_b.height = 100;
+  config_b.device_scale_factor = 1.0f;
+  config_b.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer_a = nullptr;
+  blink_standalone_renderer_t* renderer_b = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config_a, &renderer_a);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer_a) {
+    std::fprintf(stderr,
+                 "c_api_mutation_stress_smoke: create A failed status=%d\n",
+                 status);
+    return 1;
+  }
+  status = blink_standalone_renderer_create(&config_b, &renderer_b);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer_b) {
+    std::fprintf(stderr,
+                 "c_api_mutation_stress_smoke: create B failed status=%d\n",
+                 status);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  const char* html_a =
+      "<!doctype html><html><head><style id='theme'>"
+      "html,body{margin:0;padding:0;background:#112233;font:15px monospace}"
+      "#target{position:absolute;left:8px;top:8px;width:112px;height:42px;"
+      "background:#2878d8;color:white}"
+      "#slot{position:absolute;left:128px;top:8px;width:150px;height:54px}"
+      "#name{position:absolute;left:8px;top:72px;width:120px}"
+      "#range{position:absolute;left:8px;top:104px;width:120px}"
+      "#choice{position:absolute;left:140px;top:72px;width:90px}"
+      "#tags{position:absolute;left:240px;top:72px;width:70px;height:70px}"
+      "label{position:absolute;left:8px;top:138px;color:white}"
+      "select{display:none}"
+      "</style></head><body>"
+      "<div id='target' data-godot-action='start'>Start</div>"
+      "<div id='slot'><span id='slot_child' data-godot-action='slot'>Slot</span></div>"
+      "<input id='name' value='seed'>"
+      "<input id='range' type='range' min='0' max='100' step='5' value='10'>"
+      "<select id='choice'><option value='a' selected>A</option>"
+      "<option value='b'>B</option><option value='c'>C</option></select>"
+      "<select id='tags' multiple><option value='alpha' selected>Alpha</option>"
+      "<option value='beta'>Beta</option><option value='gamma' selected>Gamma</option>"
+      "</select><label><input id='agree' type='checkbox'>Agree</label>"
+      "</body></html>";
+  const char* html_b =
+      "<!doctype html><style>html,body{margin:0;background:transparent}"
+      "#panel_b{width:100px;height:40px;background:#d06329}"
+      "#stable_b{position:absolute;left:0;top:48px;width:110px;height:28px;"
+      "background:#237a57;color:white}</style>"
+      "<div id='panel_b'></div><div id='stable_b' "
+      "data-godot-action='stable-b'>Stable</div>"
+      "<input id='name_b' value='stable'>";
+  status = blink_standalone_renderer_set_document_html(renderer_a, html_a, "",
+                                                       "");
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    status = blink_standalone_renderer_set_document_html(renderer_b, html_b,
+                                                         "", "");
+  }
+  const bool initial_a_ok =
+      AdvanceCApiFrameForSmoke(renderer_a, 0.0,
+                               "c_api_mutation_stress_smoke");
+  const bool initial_b_ok =
+      AdvanceCApiFrameForSmoke(renderer_b, 0.0,
+                               "c_api_mutation_stress_smoke");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !initial_a_ok ||
+      !initial_b_ok) {
+    std::fprintf(stderr,
+                 "c_api_mutation_stress_smoke: initial render failed "
+                 "status=%d Aerr=%s Berr=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  const auto capture_hash = [](blink_standalone_renderer_t* renderer,
+                               const char* label,
+                               int expected_width,
+                               int expected_height,
+                               uint64_t* hash_out,
+                               FramePixelContentStats* stats_out) -> bool {
+    blink_standalone_frame_output_t output = {};
+    const blink_standalone_status_code_t output_status =
+        blink_standalone_renderer_get_latest_output(renderer, &output);
+    const uint64_t hash = HashFramePixels(output);
+    const FramePixelContentStats stats = AnalyzeFramePixelContent(output);
+    const bool ok =
+        output_status == BLINK_STANDALONE_STATUS_OK &&
+        output.width == expected_width && output.height == expected_height &&
+        output.stride >= expected_width * 4 && output.pixel_count > 0 &&
+        output.pixel_format != BLINK_STANDALONE_PIXEL_FORMAT_NONE &&
+        hash != 0 && FrameHasNonUniformPixels(output);
+    if (!ok) {
+      std::fprintf(stderr,
+                   "c_api_mutation_stress_smoke: %s output invalid status=%d "
+                   "raw=%dx%d stride=%d bytes=%zu format=%d hash=%llu "
+                   "error=%s\n",
+                   label, output_status, output.width, output.height,
+                   output.stride, output.pixel_count, output.pixel_format,
+                   static_cast<unsigned long long>(hash),
+                   blink_standalone_renderer_last_error(renderer));
+    }
+    blink_standalone_renderer_release_latest_output(renderer);
+    if (hash_out) {
+      *hash_out = hash;
+    }
+    if (stats_out) {
+      *stats_out = stats;
+    }
+    return ok;
+  };
+
+  uint64_t initial_a_hash = 0;
+  FramePixelContentStats initial_a_stats;
+  uint64_t initial_b_hash = 0;
+  FramePixelContentStats initial_b_stats;
+  if (!capture_hash(renderer_a, "A initial", 320, 180, &initial_a_hash,
+                    &initial_a_stats) ||
+      !capture_hash(renderer_b, "B initial", 180, 100, &initial_b_hash,
+                    &initial_b_stats) ||
+      initial_a_stats.dark_blue_112233 < 8000 ||
+      initial_b_stats.transparent < 8000 ||
+      initial_b_stats.orange_d06329 < 3000 ||
+      !HasHitId(renderer_a, "target") || !HasHitId(renderer_a, "slot_child") ||
+      !HasHitId(renderer_b, "stable_b")) {
+    std::fprintf(stderr,
+                 "c_api_mutation_stress_smoke: initial invariants failed "
+                 "Ahash=%llu Bhash=%llu Ablue=%zu Btransparent=%zu "
+                 "Borange=%zu Ahit=%d Bhit=%d\n",
+                 static_cast<unsigned long long>(initial_a_hash),
+                 static_cast<unsigned long long>(initial_b_hash),
+                 initial_a_stats.dark_blue_112233,
+                 initial_b_stats.transparent, initial_b_stats.orange_d06329,
+                 HasHitId(renderer_a, "target") ? 1 : 0,
+                 HasHitId(renderer_b, "stable_b") ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  double time = 0.016;
+  uint64_t previous_a_hash = initial_a_hash;
+  uint64_t final_a_hash = initial_a_hash;
+  int resize_count = 0;
+  int failure_recovery_count = 0;
+  int insert_remove_count = 0;
+  int body_replace_count = 0;
+  for (int i = 0; i < kIterations; ++i) {
+    const std::string index = std::to_string(i);
+    const char* color =
+        i % 4 == 0   ? "#2878d8"
+        : i % 4 == 1 ? "#d06329"
+        : i % 4 == 2 ? "#e84444"
+                     : "#237a57";
+    const std::string style =
+        std::string("position:absolute;left:8px;top:8px;width:112px;"
+                    "height:42px;color:white;background:") +
+        color;
+    const std::string action = "action-" + index;
+    const std::string target_text = "T" + index;
+    status = blink_standalone_renderer_set_element_text(
+        renderer_a, "target", target_text.c_str());
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_element_attribute(
+                       renderer_a, "target", "data-godot-action",
+                       action.c_str())
+                 : status;
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_element_style(
+                       renderer_a, "target", style.c_str())
+                 : status;
+    const std::string css =
+        std::string("html,body{margin:0;padding:0;background:#112233;"
+                    "font:15px monospace}#target{position:absolute;left:8px;"
+                    "top:8px;width:112px;height:42px;color:white}#slot{"
+                    "position:absolute;left:128px;top:8px;width:150px;"
+                    "height:54px}#name{position:absolute;left:8px;top:72px;"
+                    "width:120px}#range{position:absolute;left:8px;top:104px;"
+                    "width:120px}#choice{position:absolute;left:140px;top:72px;"
+                    "width:90px}#tags{position:absolute;left:240px;top:72px;"
+                    "width:70px;height:70px}label{position:absolute;left:8px;"
+                    "top:138px;color:") +
+        (i % 2 == 0 ? "white" : "#d06329") + "}select{display:none}";
+    if (status == BLINK_STANDALONE_STATUS_OK && i % 9 == 5) {
+      status = blink_standalone_renderer_replace_stylesheet_text(
+          renderer_a, "theme", css.c_str());
+    }
+    const std::string name_value = "value-" + index;
+    const std::string range_value = std::to_string((i * 5) % 105);
+    const char* choice_value = i % 3 == 0 ? "a" : (i % 3 == 1 ? "b" : "c");
+    const char* selected_values_even[] = {"alpha", "gamma"};
+    const char* selected_values_odd[] = {"beta"};
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_form_control_value(
+                       renderer_a, "name", name_value.c_str())
+                 : status;
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_form_control_value(
+                       renderer_a, "range", range_value.c_str())
+                 : status;
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_form_control_value(
+                       renderer_a, "choice", choice_value)
+                 : status;
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_form_control_checked(
+                       renderer_a, "agree", i % 2 == 0 ? 1 : 0)
+                 : status;
+    status = status == BLINK_STANDALONE_STATUS_OK
+                 ? blink_standalone_renderer_set_form_control_selected_values(
+                       renderer_a, "tags",
+                       i % 2 == 0 ? selected_values_even : selected_values_odd,
+                       i % 2 == 0 ? 2 : 1)
+                 : status;
+
+    if (status == BLINK_STANDALONE_STATUS_OK && i % 8 == 4) {
+      const std::string fragment =
+          "<span id='slot_child' data-godot-action='slot-" + index +
+          "' style='display:block;width:120px;height:28px;background:" +
+          color + ";color:white'>Slot " + index + "</span>";
+      status = blink_standalone_renderer_set_element_inner_html(
+          renderer_a, "slot", fragment.c_str());
+    }
+    if (status == BLINK_STANDALONE_STATUS_OK && i % 7 == 3) {
+      const std::string inserted =
+          "<span id='temp' data-godot-action='temp-" + index +
+          "' style='display:block;width:90px;height:18px;background:#e84444;"
+          "color:white'>Temp</span>";
+      status = blink_standalone_renderer_insert_element_html(
+          renderer_a, "slot", BLINK_STANDALONE_INSERT_BEFORE_END,
+          inserted.c_str());
+      ++insert_remove_count;
+    }
+    if (status == BLINK_STANDALONE_STATUS_OK && i % 7 == 4 &&
+        HasHitId(renderer_a, "temp")) {
+      status = blink_standalone_renderer_remove_element(renderer_a, "temp");
+    }
+    if (status == BLINK_STANDALONE_STATUS_OK && i == 20) {
+      const char* body =
+          "<div id='target' data-godot-action='body-replaced' "
+          "style='position:absolute;left:8px;top:8px;width:112px;height:42px;"
+          "background:#2878d8;color:white'>Body</div>"
+          "<div id='slot'><span id='slot_child' data-godot-action='slot-body' "
+          "style='display:block;width:120px;height:28px;background:#d06329;"
+          "color:white'>Slot body</span></div>"
+          "<input id='name' value='body-seed'>"
+          "<input id='range' type='range' min='0' max='100' step='5' value='20'>"
+          "<select id='choice'><option value='a'>A</option>"
+          "<option value='b' selected>B</option><option value='c'>C</option></select>"
+          "<select id='tags' multiple><option value='alpha' selected>Alpha</option>"
+          "<option value='beta' selected>Beta</option><option value='gamma'>Gamma</option>"
+          "</select><label><input id='agree' type='checkbox' checked>Agree</label>";
+      status = blink_standalone_renderer_set_body_inner_html(renderer_a, body);
+      ++body_replace_count;
+    }
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "c_api_mutation_stress_smoke: queue failed iteration=%d "
+                   "status=%d error=%s\n",
+                   i, status, blink_standalone_renderer_last_error(renderer_a));
+      blink_standalone_renderer_destroy(renderer_b);
+      blink_standalone_renderer_destroy(renderer_a);
+      return 1;
+    }
+
+    if (i % 11 == 3) {
+      if (blink_standalone_renderer_insert_element_html(
+              renderer_a, "target", BLINK_STANDALONE_INSERT_BEFORE_END,
+              "<button onclick='alert(1)'>Bad</button>") !=
+              BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+          blink_standalone_renderer_get_last_error_code(renderer_a) !=
+              BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+        std::fprintf(stderr,
+                     "c_api_mutation_stress_smoke: unsafe failure diagnostic "
+                     "missing iteration=%d status=%d error=%s\n",
+                     i, blink_standalone_renderer_get_last_error_code(renderer_a),
+                     blink_standalone_renderer_last_error(renderer_a));
+        blink_standalone_renderer_destroy(renderer_b);
+        blink_standalone_renderer_destroy(renderer_a);
+        return 1;
+      }
+      status = blink_standalone_renderer_set_element_text(
+          renderer_a, "target", target_text.c_str());
+      ++failure_recovery_count;
+    } else if (i % 11 == 7) {
+      if (blink_standalone_renderer_remove_element(renderer_a, "missing") !=
+              BLINK_STANDALONE_STATUS_INVALID_ARGUMENT ||
+          blink_standalone_renderer_get_last_error_code(renderer_a) !=
+              BLINK_STANDALONE_STATUS_INVALID_ARGUMENT) {
+        std::fprintf(stderr,
+                     "c_api_mutation_stress_smoke: missing-id diagnostic "
+                     "missing iteration=%d status=%d error=%s\n",
+                     i, blink_standalone_renderer_get_last_error_code(renderer_a),
+                     blink_standalone_renderer_last_error(renderer_a));
+        blink_standalone_renderer_destroy(renderer_b);
+        blink_standalone_renderer_destroy(renderer_a);
+        return 1;
+      }
+      status = blink_standalone_renderer_set_element_text(
+          renderer_a, "target", target_text.c_str());
+      ++failure_recovery_count;
+    } else if (i % 11 == 9) {
+      if (blink_standalone_renderer_insert_element_html(
+              renderer_a, "target",
+              static_cast<blink_standalone_insert_position_t>(-1),
+              "<span>Bad</span>") != BLINK_STANDALONE_STATUS_INVALID_ARGUMENT ||
+          blink_standalone_renderer_get_last_error_code(renderer_a) !=
+              BLINK_STANDALONE_STATUS_INVALID_ARGUMENT) {
+        std::fprintf(stderr,
+                     "c_api_mutation_stress_smoke: invalid-position "
+                     "diagnostic missing iteration=%d status=%d error=%s\n",
+                     i, blink_standalone_renderer_get_last_error_code(renderer_a),
+                     blink_standalone_renderer_last_error(renderer_a));
+        blink_standalone_renderer_destroy(renderer_b);
+        blink_standalone_renderer_destroy(renderer_a);
+        return 1;
+      }
+      status = blink_standalone_renderer_set_element_text(
+          renderer_a, "target", target_text.c_str());
+      ++failure_recovery_count;
+    }
+    if (status != BLINK_STANDALONE_STATUS_OK ||
+        blink_standalone_renderer_get_last_error_code(renderer_a) !=
+            BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "c_api_mutation_stress_smoke: recovery mutation failed "
+                   "iteration=%d status=%d code=%d error=%s\n",
+                   i, status,
+                   blink_standalone_renderer_get_last_error_code(renderer_a),
+                   blink_standalone_renderer_last_error(renderer_a));
+      blink_standalone_renderer_destroy(renderer_b);
+      blink_standalone_renderer_destroy(renderer_a);
+      return 1;
+    }
+
+    int expected_width = 320;
+    int expected_height = 180;
+    if (i % 13 == 5) {
+      status = blink_standalone_renderer_set_viewport(renderer_a, 320, 180,
+                                                      2.0f);
+      expected_width = 640;
+      expected_height = 360;
+      ++resize_count;
+    } else if (i % 13 == 6) {
+      status = blink_standalone_renderer_set_viewport(renderer_a, 320, 180,
+                                                      1.0f);
+      ++resize_count;
+    }
+    if (status == BLINK_STANDALONE_STATUS_OK) {
+      status = blink_standalone_renderer_advance_frame(renderer_a, time);
+    }
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "c_api_mutation_stress_smoke: advance failed iteration=%d "
+                   "status=%d error=%s\n",
+                   i, status, blink_standalone_renderer_last_error(renderer_a));
+      blink_standalone_renderer_destroy(renderer_b);
+      blink_standalone_renderer_destroy(renderer_a);
+      return 1;
+    }
+    uint64_t frame_hash = 0;
+    FramePixelContentStats frame_stats;
+    if (!capture_hash(renderer_a, "A stress", expected_width, expected_height,
+                      &frame_hash, &frame_stats)) {
+      blink_standalone_renderer_destroy(renderer_b);
+      blink_standalone_renderer_destroy(renderer_a);
+      return 1;
+    }
+    final_a_hash = frame_hash;
+    blink_standalone_form_control_state_t name_state = {};
+    blink_standalone_form_control_state_t range_state = {};
+    blink_standalone_form_control_state_t choice_state = {};
+    const size_t selected_count =
+        blink_standalone_renderer_form_control_selected_value_count(renderer_a,
+                                                                    "tags");
+    blink_standalone_hit_metadata_t target_hit = {};
+    const std::string expected_action = i == 20 ? "body-replaced" : action;
+    if (!GetFormStateById(renderer_a, "name", &name_state) ||
+        !GetFormStateById(renderer_a, "range", &range_state) ||
+        !GetFormStateById(renderer_a, "choice", &choice_state) ||
+        FormStateValue(name_state) != (i == 20 ? "body-seed" : name_value) ||
+        selected_count == 0 || !HasHitId(renderer_a, "slot_child") ||
+        !GetHitById(renderer_a, "target", &target_hit) ||
+        std::string(target_hit.data_godot_action
+                        ? target_hit.data_godot_action
+                        : "") != expected_action ||
+        (i % 7 == 1 && HasHitId(renderer_a, "temp")) ||
+        frame_stats.dark_blue_112233 < 4000 || frame_hash == 0) {
+      std::fprintf(stderr,
+                   "c_api_mutation_stress_smoke: invariant failed iteration=%d "
+                   "hash=%llu prev=%llu raw=%dx%d blue=%zu name=%s range=%s "
+                   "choice=%s selected=%zu target_action=%s expected=%s "
+                   "temp=%d error=%s\n",
+                   i, static_cast<unsigned long long>(frame_hash),
+                   static_cast<unsigned long long>(previous_a_hash),
+                   expected_width, expected_height,
+                   frame_stats.dark_blue_112233,
+                   FormStateValue(name_state).c_str(),
+                   FormStateValue(range_state).c_str(),
+                   FormStateValue(choice_state).c_str(), selected_count,
+                   target_hit.data_godot_action ? target_hit.data_godot_action
+                                                : "",
+                   expected_action.c_str(), HasHitId(renderer_a, "temp") ? 1 : 0,
+                   blink_standalone_renderer_last_error(renderer_a));
+      blink_standalone_renderer_destroy(renderer_b);
+      blink_standalone_renderer_destroy(renderer_a);
+      return 1;
+    }
+    previous_a_hash = frame_hash;
+    time += 0.016;
+  }
+
+  status = blink_standalone_renderer_advance_frame(renderer_b, time + 1.0);
+  uint64_t stable_b_hash = 0;
+  FramePixelContentStats stable_b_stats;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_hash(renderer_b, "B stable", 180, 100, &stable_b_hash,
+                    &stable_b_stats) ||
+      stable_b_hash != initial_b_hash || !HasHitId(renderer_b, "stable_b") ||
+      HasHitId(renderer_b, "target") || stable_b_stats.transparent < 8000 ||
+      stable_b_stats.orange_d06329 < 3000) {
+    std::fprintf(stderr,
+                 "c_api_mutation_stress_smoke: B isolation failed status=%d "
+                 "initial_hash=%llu stable_hash=%llu transparent=%zu "
+                 "orange=%zu target_leak=%d Berr=%s\n",
+                 status, static_cast<unsigned long long>(initial_b_hash),
+                 static_cast<unsigned long long>(stable_b_hash),
+                 stable_b_stats.transparent, stable_b_stats.orange_d06329,
+                 HasHitId(renderer_b, "target") ? 1 : 0,
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_element_text(renderer_b, "stable_b",
+                                                      "Mutated B");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_element_attribute(
+                     renderer_b, "stable_b", "data-godot-action", "mutated-b")
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer_b, time + 2.0)
+               : status;
+  uint64_t mutated_b_hash = 0;
+  FramePixelContentStats mutated_b_stats;
+  blink_standalone_hit_metadata_t stable_b_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !capture_hash(renderer_b, "B mutated", 180, 100, &mutated_b_hash,
+                    &mutated_b_stats) ||
+      mutated_b_hash == stable_b_hash ||
+      !GetHitById(renderer_b, "stable_b", &stable_b_hit) ||
+      std::string(stable_b_hit.data_godot_action
+                      ? stable_b_hit.data_godot_action
+                      : "") != "mutated-b" ||
+      !HasHitId(renderer_a, "target") || HasHitId(renderer_a, "stable_b")) {
+    std::fprintf(stderr,
+                 "c_api_mutation_stress_smoke: B mutation/A isolation failed "
+                 "status=%d stable=%llu mutated=%llu Baction=%s Aleak=%d "
+                 "Aerr=%s Berr=%s\n",
+                 status, static_cast<unsigned long long>(stable_b_hash),
+                 static_cast<unsigned long long>(mutated_b_hash),
+                 stable_b_hit.data_godot_action ? stable_b_hit.data_godot_action
+                                                : "",
+                 HasHitId(renderer_a, "stable_b") ? 1 : 0,
+                 blink_standalone_renderer_last_error(renderer_a),
+                 blink_standalone_renderer_last_error(renderer_b));
+    blink_standalone_renderer_destroy(renderer_b);
+    blink_standalone_renderer_destroy(renderer_a);
+    return 1;
+  }
+
+  blink_standalone_renderer_destroy(renderer_b);
+  blink_standalone_renderer_destroy(renderer_a);
+  std::printf(
+      "c_api_mutation_stress_smoke: ok iterations=%d failures=%d "
+      "insert_remove=%d body_replaces=%d resizes=%d A_initial=%llu "
+      "A_final=%llu B_stable=%llu B_mutated=%llu\n",
+      kIterations, failure_recovery_count, insert_remove_count,
+      body_replace_count, resize_count,
+      static_cast<unsigned long long>(initial_a_hash),
+      static_cast<unsigned long long>(final_a_hash),
+      static_cast<unsigned long long>(stable_b_hash),
+      static_cast<unsigned long long>(mutated_b_hash));
   return 0;
 }
 
@@ -4376,6 +4876,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-fragment-mutation-smoke" ||
         arg == "--c-api-structural-dom-mutation-smoke" ||
         arg == "--c-api-mutation-diagnostics-smoke" ||
+        arg == "--c-api-mutation-stress-smoke" ||
         arg == "--c-api-body-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
@@ -4421,6 +4922,7 @@ int main(int argc, char** argv) {
   bool c_api_fragment_mutation_smoke = false;
   bool c_api_structural_dom_mutation_smoke = false;
   bool c_api_mutation_diagnostics_smoke = false;
+  bool c_api_mutation_stress_smoke = false;
   bool c_api_body_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
@@ -4545,6 +5047,8 @@ int main(int argc, char** argv) {
       c_api_structural_dom_mutation_smoke = true;
     } else if (arg == "--c-api-mutation-diagnostics-smoke") {
       c_api_mutation_diagnostics_smoke = true;
+    } else if (arg == "--c-api-mutation-stress-smoke") {
+      c_api_mutation_stress_smoke = true;
     } else if (arg == "--c-api-body-mutation-smoke") {
       c_api_body_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
@@ -4700,6 +5204,10 @@ int main(int argc, char** argv) {
 
   if (c_api_mutation_diagnostics_smoke) {
     return RunCApiMutationDiagnosticsSmoke();
+  }
+
+  if (c_api_mutation_stress_smoke) {
+    return RunCApiMutationStressSmoke();
   }
 
   if (c_api_body_mutation_smoke) {
