@@ -261,21 +261,43 @@ metadata, or could wrap a locally created image in an owning `VulkanImage`, but
 neither would prove a Godot-owned target survives without Chromium destroying
 or reallocating it.
 
+An implementation probe confirmed one more constraint. A standalone borrowed
+`VkImage` backing and Ganesh representation can be made to compile, but the
+current offscreen benchmark GPU path does not expose a Vulkan-backed
+`gpu::SharedContextState`: `SharedContextState::vk_context_provider()` is null
+even when Viz reaches the GPU SkiaRenderer path and
+`--gpu-output-smoke` can produce a Chromium-owned SharedImage mailbox. Calling
+`InProcessGpuThreadHolder::GetSharedContextState()` from the frame-sink thread
+also trips Chromium's sequence-checked `scoped_refptr` DCHECK; borrowed
+SharedImage setup must run on the GPU task sequence. Moving the prototype work
+to the GPU thread avoided the sequence crash, but the smoke still failed
+recoverably with `Borrowed VkImage target requires a Vulkan Ganesh context`.
+
+This means the next real implementation step is not just a new backing class.
+The standalone offscreen GPU-output path must first provide a Vulkan Ganesh
+`SharedContextState` or a separate Vulkan Skia context compatible with
+`SharedImageManager`/`SharedImageRepresentationFactory`. Without that context,
+a borrowed Vulkan image cannot be exposed as a writable Skia representation in
+the benchmark/runtime path, and a smoke would only validate fallback metadata.
+
 The smallest honest next implementation is:
 
 1. Add a service-side borrowed Vulkan backing, separate from
    `ExternalVkImageBacking`, with explicit non-ownership of `VkImage` and memory
    handles.
-2. Decide the required embedder metadata: at minimum image size, format, usage,
+2. Wire or create a Vulkan Ganesh `SharedContextState` for the standalone
+   offscreen GPU-output path, and run borrowed backing setup on the GPU task
+   sequence.
+3. Decide the required embedder metadata: at minimum image size, format, usage,
    current/final layout, queue family, and synchronization; likely also
    `VkDeviceMemory`, allocation size, and memory type unless Skia validation
    proves those can be omitted.
-3. Implement a Skia Ganesh representation that builds a `GrBackendTexture` for
+4. Implement a Skia Ganesh representation that builds a `GrBackendTexture` for
    the borrowed image, enforces `DISPLAY_WRITE`, handles begin/end semaphores or
    timeline waits/signals, and leaves the image in the requested final layout.
-4. Register the backing with `SharedImageManager`/`SharedImageFactory`, create a
+5. Register the backing with `SharedImageManager`/`SharedImageFactory`, create a
    matching `ClientSharedImage`, and drive Viz `BlitRequest` into it.
-5. Only then add `--gpu-borrowed-vkimage-backing-smoke`, using a locally
+6. Only then add `--gpu-borrowed-vkimage-backing-smoke`, using a locally
    created image as an external stand-in and verifying that the GPU write path,
    not CPU readback, populates the target.
 
