@@ -543,8 +543,10 @@ bool XMLDocumentParser::ParseDocumentFragment(
     return true;
   }
 
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   TryRethrowScope rethrow_scope(fragment->GetDocument().GetAgent().isolate(),
                                 exception_state);
+#endif
   auto* parser = MakeGarbageCollected<XMLDocumentParser>(
       fragment, context_element, parser_content_policy);
   bool well_formed = parser->AppendFragmentSource(chunk);
@@ -1131,16 +1133,24 @@ void XMLDocumentParser::StartElementNs(
   }
 
   v8::Isolate* isolate = document_->GetAgent().isolate();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   v8::TryCatch try_catch(isolate);
+#endif
   if (!HandleElementAttributes(prefixed_attributes, attributes,
                                prefix_to_namespace_map_,
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+                               IGNORE_EXCEPTION)) {
+#else
                                parsing_fragment_ ? PassThroughException(isolate)
                                                  : IGNORE_EXCEPTION)) {
+#endif
     StopParsing();
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
     if (parsing_fragment_) {
       DCHECK(try_catch.HasCaught());
       try_catch.ReThrow();
     }
+#endif
     return;
   }
 
