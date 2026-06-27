@@ -96,6 +96,46 @@ surfaces including:
 The API does not advertise arbitrary JavaScript, WASM, navigation, or network
 behavior. Local/static resources are the intended resource model.
 
+## Resource Provider
+
+Embedders that need to own document resource loading can install a per-renderer
+resource provider with `blink_standalone_renderer_set_resource_provider`.
+Provider callbacks receive the requested URL, document/base URL, resource type
+hint, initiator hint, and accepted MIME types. Response bytes are copied into
+renderer-owned storage before the callback release hook is invoked.
+
+When `BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL` and
+`BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK` are set, non-data
+external resources fail closed through the provider callback. The standalone
+filesystem `resource_root` fallback is not used for those requests. Data URLs
+remain internally handled memory-only resources unless callback-for-data routing
+is explicitly enabled.
+
+Currently provider-backed resource coverage includes:
+
+- Image resources used by elements and CSS image values.
+- CSS background-image resources.
+- Linked stylesheets via `<link rel="stylesheet" href="...">`.
+- Simple CSS imports from provider-loaded stylesheets, including
+  `@import url(...)` and quoted `@import "..."` forms.
+
+Linked stylesheets and CSS imports are routed through the provider because the
+standalone probe strips stylesheet link elements before constructing the live
+Blink frame. Provider-loaded stylesheet text is injected into the existing
+Blink stylesheet path and then parsed by Blink.
+
+Downloadable web fonts from CSS `@font-face` are not supported in this
+standalone build yet. The current build intentionally stubs
+`FontFace::Create(Document*, StyleRuleFontFace, ...)` and
+`FontResource::Fetch(...)`, and web-font decoding is fail-closed in
+`web_font_decoder_phase1_unsupported.cc`. Because those stubs prevent
+`@font-face` rules from reaching Blink's normal font fetch/decode path, no
+`BLINK_STANDALONE_RESOURCE_TYPE_FONT` /
+`BLINK_STANDALONE_RESOURCE_INITIATOR_FONT_FACE` callback is emitted today.
+Supporting this requires restoring a CSS-only FontFace/FontResource path plus
+the required web-font decode/sanitization dependencies without exposing the
+JavaScript FontFace API.
+
 ## Live Mutations
 
 Mutation calls queue work for the next `advance_frame`. They use live Blink
