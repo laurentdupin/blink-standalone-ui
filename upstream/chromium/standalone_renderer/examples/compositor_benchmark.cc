@@ -517,9 +517,19 @@ std::vector<uint8_t> MakeSolidBmp(int width,
 
 struct CApiResourceProviderSmokeState {
   std::vector<uint8_t> green_bmp = MakeSolidBmp(4, 4, 0x23, 0x7a, 0x57);
+  std::string theme_css =
+      "@import url('asset://imported.css');"
+      "body{margin:0;background:#112233}"
+      "#bg{position:absolute;left:0;top:0;width:80px;height:80px;"
+      "background-image:url('asset://green.bmp');background-size:80px 80px}";
+  std::string imported_css =
+      "#imported{position:absolute;left:90px;top:0;width:40px;height:40px;"
+      "background:#e84444}";
   int request_count = 0;
   int image_request_count = 0;
   int stylesheet_request_count = 0;
+  int stylesheet_link_request_count = 0;
+  int css_import_request_count = 0;
   int css_background_request_count = 0;
   int not_found_count = 0;
   int release_count = 0;
@@ -541,10 +551,34 @@ blink_standalone_resource_status_t CApiResourceProviderSmokeLoad(
     ++state->stylesheet_request_count;
   }
   if (request->initiator ==
+      BLINK_STANDALONE_RESOURCE_INITIATOR_STYLESHEET_LINK) {
+    ++state->stylesheet_link_request_count;
+  }
+  if (request->initiator == BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_IMPORT) {
+    ++state->css_import_request_count;
+  }
+  if (request->initiator ==
       BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE) {
     ++state->css_background_request_count;
   }
   const std::string url = request->url;
+  if (url.find("theme.css") != std::string::npos) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes = reinterpret_cast<const uint8_t*>(state->theme_css.data());
+    response->byte_count = state->theme_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  if (url.find("imported.css") != std::string::npos) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes =
+        reinterpret_cast<const uint8_t*>(state->imported_css.data());
+    response->byte_count = state->imported_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
   const std::vector<uint8_t>* bytes = nullptr;
   if (url.find("green.bmp") != std::string::npos) {
     bytes = &state->green_bmp;
@@ -602,11 +636,8 @@ int RunCApiResourceProviderSmoke() {
     return 1;
   }
   const char* html =
-      "<!doctype html><style>body{margin:0;background:#112233}"
-      "#bg{position:absolute;left:0;top:0;width:80px;height:80px;"
-      "background-image:url('asset://green.bmp');background-size:80px 80px}"
-      "</style>"
-      "<div id='bg'></div>";
+      "<!doctype html><link rel='stylesheet' href='asset://theme.css'>"
+      "<div id='bg'></div><div id='imported'></div>";
   status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
   if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
@@ -623,21 +654,29 @@ int RunCApiResourceProviderSmoke() {
   const FramePixelContentStats stats = AnalyzeFramePixelContent(output);
   if (status != BLINK_STANDALONE_STATUS_OK ||
       output_status != BLINK_STANDALONE_STATUS_OK ||
-      provider_state.request_count < 1 ||
+      provider_state.request_count < 3 ||
       provider_state.image_request_count < 1 ||
+      provider_state.stylesheet_request_count < 2 ||
+      provider_state.stylesheet_link_request_count < 1 ||
+      provider_state.css_import_request_count < 1 ||
       provider_state.css_background_request_count < 1 ||
       provider_state.release_count != provider_state.request_count ||
+      stats.resource_red_e84444 < 1200 ||
       stats.resource_green_237a57 < 1500) {
     std::fprintf(
         stderr,
         "c_api_resource_provider_smoke: provider render failed status=%d "
-        "output_status=%d requests=%d images=%d stylesheets=%d css_bg=%d "
-        "releases=%d green=%zu error=%s\n",
+        "output_status=%d requests=%d images=%d stylesheets=%d "
+        "link=%d import=%d css_bg=%d releases=%d red=%zu green=%zu "
+        "error=%s\n",
         status, output_status, provider_state.request_count,
         provider_state.image_request_count,
         provider_state.stylesheet_request_count,
+        provider_state.stylesheet_link_request_count,
+        provider_state.css_import_request_count,
         provider_state.css_background_request_count,
-        provider_state.release_count, stats.resource_green_237a57,
+        provider_state.release_count, stats.resource_red_e84444,
+        stats.resource_green_237a57,
         blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_release_latest_output(renderer);
     blink_standalone_renderer_destroy(renderer);
@@ -647,10 +686,7 @@ int RunCApiResourceProviderSmoke() {
 
   const int requests_before_missing = provider_state.request_count;
   const char* missing_html =
-      "<!doctype html><style>body{margin:0;background:#123456}"
-      "#missing{position:absolute;left:0;top:0;width:40px;height:40px;"
-      "background-image:url('asset://missing.bmp')}"
-      "</style>"
+      "<!doctype html><link rel='stylesheet' href='asset://missing.css'>"
       "<div id='missing'></div>";
   status =
       blink_standalone_renderer_set_document_html(renderer, missing_html, "",
@@ -681,13 +717,15 @@ int RunCApiResourceProviderSmoke() {
   blink_standalone_renderer_destroy(renderer);
   std::printf(
       "c_api_resource_provider_smoke: ok requests=%d images=%d "
-      "stylesheets=%d css_bg=%d not_found=%d releases=%d green=%zu "
-      "fallback=disabled\n",
+      "stylesheets=%d link=%d import=%d css_bg=%d not_found=%d "
+      "releases=%d red=%zu green=%zu fallback=disabled\n",
       provider_state.request_count, provider_state.image_request_count,
       provider_state.stylesheet_request_count,
+      provider_state.stylesheet_link_request_count,
+      provider_state.css_import_request_count,
       provider_state.css_background_request_count,
       provider_state.not_found_count, provider_state.release_count,
-      stats.resource_green_237a57);
+      stats.resource_red_e84444, stats.resource_green_237a57);
   return 0;
 }
 

@@ -668,6 +668,220 @@ std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
   return output;
 }
 
+std::string TrimAsciiWhitespace(std::string value) {
+  const auto not_space = [](unsigned char c) {
+    return !std::isspace(c);
+  };
+  value.erase(value.begin(),
+              std::find_if(value.begin(), value.end(), not_space));
+  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(),
+              value.end());
+  return value;
+}
+
+std::string UnquoteCssUrlToken(std::string value) {
+  value = TrimAsciiWhitespace(std::move(value));
+  if (value.size() >= 2 &&
+      ((value.front() == '\'' && value.back() == '\'') ||
+       (value.front() == '"' && value.back() == '"'))) {
+    return value.substr(1, value.size() - 2);
+  }
+  return value;
+}
+
+std::string ResolveProviderUrl(const std::string& value,
+                               const std::string& base_url) {
+  const std::string url = TrimAsciiWhitespace(value);
+  if (url.empty() || HasUrlScheme(url) || base_url.empty())
+    return url;
+  const size_t slash = base_url.find_last_of('/');
+  if (slash == std::string::npos)
+    return url;
+  return base_url.substr(0, slash + 1) + url;
+}
+
+std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
+                                                 const std::string& name) {
+  const std::string lower = LowerAscii(tag);
+  const std::string needle = LowerAscii(name);
+  size_t pos = 0;
+  while ((pos = lower.find(needle, pos)) != std::string::npos) {
+    if (pos > 0) {
+      const char prev = lower[pos - 1];
+      if (std::isalnum(static_cast<unsigned char>(prev)) || prev == '-' ||
+          prev == '_') {
+        pos += needle.size();
+        continue;
+      }
+    }
+    size_t cursor = pos + needle.size();
+    while (cursor < lower.size() &&
+           std::isspace(static_cast<unsigned char>(lower[cursor]))) {
+      ++cursor;
+    }
+    if (cursor >= lower.size() || lower[cursor] != '=') {
+      pos += needle.size();
+      continue;
+    }
+    ++cursor;
+    while (cursor < lower.size() &&
+           std::isspace(static_cast<unsigned char>(lower[cursor]))) {
+      ++cursor;
+    }
+    if (cursor >= tag.size())
+      return std::string();
+    const char quote = tag[cursor];
+    if (quote == '\'' || quote == '"') {
+      const size_t end = tag.find(quote, cursor + 1);
+      if (end == std::string::npos)
+        return std::nullopt;
+      return tag.substr(cursor + 1, end - cursor - 1);
+    }
+    size_t end = cursor;
+    while (end < tag.size() &&
+           !std::isspace(static_cast<unsigned char>(tag[end])) &&
+           tag[end] != '>') {
+      ++end;
+    }
+    return tag.substr(cursor, end - cursor);
+  }
+  return std::nullopt;
+}
+
+std::vector<std::string> ExtractProviderLinkedStylesheetHrefs(
+    const std::string& html) {
+  std::vector<std::string> hrefs;
+  const std::string lower = LowerAscii(html);
+  size_t search_offset = 0;
+  while (true) {
+    const size_t open = lower.find("<link", search_offset);
+    if (open == std::string::npos)
+      break;
+    const size_t open_end = lower.find('>', open);
+    if (open_end == std::string::npos)
+      break;
+    const std::string tag = html.substr(open, open_end - open + 1);
+    const std::optional<std::string> rel = HtmlTagAttributeValue(tag, "rel");
+    const std::optional<std::string> href = HtmlTagAttributeValue(tag, "href");
+    if (rel && href && LowerAscii(*rel).find("stylesheet") != std::string::npos)
+      hrefs.push_back(*href);
+    search_offset = open_end + 1;
+  }
+  return hrefs;
+}
+
+std::optional<std::pair<size_t, size_t>> FindNextCssImportRule(
+    const std::string& css,
+    size_t offset,
+    std::string* import_url) {
+  const std::string lower = LowerAscii(css);
+  const size_t at_import = lower.find("@import", offset);
+  if (at_import == std::string::npos)
+    return std::nullopt;
+  size_t cursor = at_import + 7;
+  while (cursor < css.size() &&
+         std::isspace(static_cast<unsigned char>(css[cursor]))) {
+    ++cursor;
+  }
+  std::string url;
+  if (lower.compare(cursor, 4, "url(") == 0) {
+    cursor += 4;
+    const size_t close = css.find(')', cursor);
+    if (close == std::string::npos)
+      return std::nullopt;
+    url = UnquoteCssUrlToken(css.substr(cursor, close - cursor));
+    cursor = close + 1;
+  } else if (cursor < css.size() &&
+             (css[cursor] == '\'' || css[cursor] == '"')) {
+    const char quote = css[cursor];
+    const size_t close = css.find(quote, cursor + 1);
+    if (close == std::string::npos)
+      return std::nullopt;
+    url = css.substr(cursor + 1, close - cursor - 1);
+    cursor = close + 1;
+  } else {
+    return std::nullopt;
+  }
+  const size_t semicolon = css.find(';', cursor);
+  if (semicolon == std::string::npos)
+    return std::nullopt;
+  *import_url = url;
+  return std::make_pair(at_import, semicolon + 1);
+}
+
+std::optional<std::string> LoadProviderStylesheetText(const std::string& url,
+                                                      const std::string& base_url,
+                                                      StandaloneResourceInitiator initiator,
+                                                      int depth);
+
+std::string InlineProviderCssImports(const std::string& css,
+                                     const std::string& base_url,
+                                     int depth) {
+  if (depth >= 8)
+    return css;
+  std::string output;
+  size_t offset = 0;
+  while (true) {
+    std::string import_url;
+    const std::optional<std::pair<size_t, size_t>> range =
+        FindNextCssImportRule(css, offset, &import_url);
+    if (!range)
+      break;
+    output += css.substr(offset, range->first - offset);
+    const std::string resolved = ResolveProviderUrl(import_url, base_url);
+    if (std::optional<std::string> imported = LoadProviderStylesheetText(
+            resolved, resolved, StandaloneResourceInitiator::kCssImport,
+            depth + 1)) {
+      output += *imported;
+      output += "\n";
+    }
+    offset = range->second;
+  }
+  output += css.substr(offset);
+  return output;
+}
+
+std::optional<std::string> LoadProviderStylesheetText(
+    const std::string& url,
+    const std::string& base_url,
+    StandaloneResourceInitiator initiator,
+    int depth) {
+  StandaloneResourceRequest request;
+  request.url = url;
+  request.document_url = base_url;
+  request.base_url = base_url;
+  request.type_hint = StandaloneResourceTypeHint::kStylesheet;
+  request.initiator = initiator;
+  request.accepted_mime_types.push_back("text/css");
+  StandaloneResourceResult result =
+      DefaultStandaloneResourceProvider().LoadResource(request);
+  if (result.status != StandaloneResourceStatus::kSuccess ||
+      result.encoded_bytes.empty()) {
+    return std::nullopt;
+  }
+  std::string css(reinterpret_cast<const char*>(result.encoded_bytes.data()),
+                  result.encoded_bytes.size());
+  return InlineProviderCssImports(css, url, depth);
+}
+
+std::vector<Stylesheet> LoadProviderLinkedStylesheets(
+    const std::string& html,
+    bool provider_available) {
+  std::vector<Stylesheet> stylesheets;
+  if (!provider_available)
+    return stylesheets;
+  for (const std::string& href : ExtractProviderLinkedStylesheetHrefs(html)) {
+    const std::string resolved = ResolveProviderUrl(
+        href, GetStandaloneResourceProviderDocumentBasePath());
+    if (std::optional<std::string> css = LoadProviderStylesheetText(
+            resolved, resolved, StandaloneResourceInitiator::kStylesheetLink,
+            0)) {
+      stylesheets.push_back(Stylesheet{resolved, *css});
+    }
+  }
+  return stylesheets;
+}
+
 std::string BuildLiveBlinkProbeHtml(const std::string& html,
                                     const std::vector<Stylesheet>& stylesheets) {
   const auto extract_style_blocks = [&](const std::string& input) {
@@ -1040,8 +1254,15 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         collect_full_result ? 1 : 0);
     probe::StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
         transparent_background_ ? 1 : 0);
+    std::vector<Stylesheet> effective_stylesheets = snapshot_.stylesheets;
+    std::vector<Stylesheet> provider_linked_stylesheets =
+        LoadProviderLinkedStylesheets(snapshot_.html,
+                                      resource_provider_ != nullptr);
+    effective_stylesheets.insert(effective_stylesheets.end(),
+                                 provider_linked_stylesheets.begin(),
+                                 provider_linked_stylesheets.end());
     const std::string probe_html =
-        BuildLiveBlinkProbeHtml(snapshot_.html, snapshot_.stylesheets);
+        BuildLiveBlinkProbeHtml(snapshot_.html, effective_stylesheets);
     if (input.force_document_reload || last_probe_html_ != probe_html) {
       ResetTypefaceResourceRegistryForFrame();
       probe::StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
