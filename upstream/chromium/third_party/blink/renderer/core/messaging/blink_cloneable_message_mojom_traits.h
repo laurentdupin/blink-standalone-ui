@@ -37,22 +37,38 @@ struct CORE_EXPORT StructTraits<blink::mojom::CloneableMessageDataView,
   }
 
   static uint64_t stack_trace_id(const blink::BlinkCloneableMessage& input) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    return 0;
+#else
     return static_cast<uint64_t>(input.sender_stack_trace_id.id);
+#endif
   }
 
   static int64_t stack_trace_debugger_id_first(
       const blink::BlinkCloneableMessage& input) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    return 0;
+#else
     return input.sender_stack_trace_id.debugger_id.first;
+#endif
   }
 
   static int64_t stack_trace_debugger_id_second(
       const blink::BlinkCloneableMessage& input) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    return 0;
+#else
     return input.sender_stack_trace_id.debugger_id.second;
+#endif
   }
 
   static bool stack_trace_should_pause(
       const blink::BlinkCloneableMessage& input) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    return false;
+#else
     return input.sender_stack_trace_id.should_pause;
+#endif
   }
 
   static const base::UnguessableToken& sender_agent_cluster_id(
