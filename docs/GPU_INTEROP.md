@@ -141,6 +141,73 @@ copy command, or a registered external-target SharedImage backing for the
 embedder image. The benchmark should not add `--gpu-external-vulkan-target-smoke`
 until one of those paths is real.
 
+## Route Audit: External Vulkan Target Writes
+
+The two credible routes from the `--gpu-output-smoke` SharedImage mailbox to an
+embedder-owned Vulkan target are both blocked today by missing service-side
+SharedImage plumbing. Neither route should be exposed as public C ABI until an
+internal smoke proves a real GPU-to-GPU write.
+
+### Route A: Service-Side Mailbox Copy
+
+The CopyOutput result is a `CopyOutputSharedImageResult` containing a
+`gpu::ClientSharedImage`. The standalone probe can read client-visible metadata:
+size, format, mailbox, and creation sync token. It does not receive the
+service-side backing image.
+
+Chromium's direct copy helper is `gpu::CopySharedImageHelper`. It is built
+around `gpu::SharedImageRepresentationFactory` and `gpu::SharedContextState`,
+and its `CopySharedImage()` path copies from one mailbox to another mailbox.
+Internally it produces Skia representations for the source and destination
+SharedImages. That is a real GPU-side path, but the destination must already be
+a SharedImage mailbox; it does not accept an arbitrary raw `VkImage`.
+
+The lower-level representation layer does contain `VulkanImageRepresentation`
+and `ScopedAccess::GetVulkanImage()`, but those are service-side objects reached
+through the SharedImage manager/representation factory. They are not exposed
+through `StandaloneCompositorRuntime` or through the `ClientSharedImage`
+metadata returned by the benchmark.
+
+Route A would require a new runtime-internal GPU-service bridge that keeps
+CopyOutput result ownership, accesses its service-side representation, and
+submits a same-device copy into a registered destination. Without that bridge,
+an external-target smoke would only validate metadata or CPU readback, not
+external Vulkan output.
+
+### Route B: Register Target Image as Writable SharedImage
+
+The preferred route for Godot is to make the target texture a writable
+SharedImage destination, then reuse Chromium's mailbox-to-mailbox copy/blit
+machinery. That keeps external targets inside Chromium's existing SharedImage
+lifetime, synchronization, and access model.
+
+The relevant imported classes are `gpu::SharedImageFactory`,
+`gpu::ExternalVkImageBackingFactory`, and `gpu::ExternalVkImageBacking`.
+`SharedImageFactory` installs `ExternalVkImageBackingFactory` for Vulkan
+`SharedContextState`s. The factory can create Chromium-owned external Vulkan
+images, initialize from pixel data, or import a `gfx::GpuMemoryBufferHandle`.
+It does not expose a path that wraps a borrowed raw `VkImage`.
+
+The lower-level Vulkan helpers match that limitation. `gpu::VulkanImage` can be
+created by Chromium or from a `gfx::GpuMemoryBufferHandle`; it does not have a
+standalone borrowed-`VkImage` constructor. On the active Windows path,
+`VulkanImplementationWin32::CreateImageFromGpuMemoryHandle()` is currently
+`NOTIMPLEMENTED()` and returns `nullptr`, so even the GMB import route is not
+ready for this Vulkan target use case in the generated Windows build.
+
+Route B needs one real addition before a target smoke can exist:
+
+- an importable platform memory-handle contract from the embedder, wired through
+  `gfx::GpuMemoryBufferHandle` and `ExternalVkImageBackingFactory`; or
+- a service-side SharedImage backing that explicitly wraps a borrowed `VkImage`,
+  records that Chromium must not destroy it, handles layout/sync ownership, and
+  exposes Skia/Vulkan write access through the normal representation APIs.
+
+Route B is the better product architecture because a Godot-owned target becomes
+a first-class SharedImage destination. Route A may still be useful as an
+internal stepping stone, but it would otherwise create a separate raw-image copy
+bridge beside Chromium's existing SharedImage access model.
+
 ## Why No Public API Yet
 
 A real Godot-owned target path is not implementable in this checkpoint without
