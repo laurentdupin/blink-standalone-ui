@@ -238,7 +238,9 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
     char* max,
     int max_capacity,
     char* step,
-    int step_capacity);
+    int step_capacity,
+    char* selected_values,
+    int selected_values_capacity);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
@@ -295,6 +297,32 @@ namespace {
 namespace fs = std::filesystem;
 
 using RuntimeClock = std::chrono::steady_clock;
+
+std::vector<std::string> ParseLengthPrefixedStringList(
+    const std::string& serialized) {
+  std::vector<std::string> values;
+  size_t offset = 0;
+  while (offset < serialized.size()) {
+    const size_t separator = serialized.find(':', offset);
+    if (separator == std::string::npos || separator == offset) {
+      break;
+    }
+    size_t length = 0;
+    for (size_t i = offset; i < separator; ++i) {
+      if (!std::isdigit(static_cast<unsigned char>(serialized[i]))) {
+        return values;
+      }
+      length = length * 10 + static_cast<size_t>(serialized[i] - '0');
+    }
+    const size_t value_begin = separator + 1;
+    if (value_begin + length > serialized.size()) {
+      break;
+    }
+    values.push_back(serialized.substr(value_begin, length));
+    offset = value_begin + length;
+  }
+  return values;
+}
 
 double RuntimeElapsedMs(RuntimeClock::time_point start,
                         RuntimeClock::time_point end) {
@@ -1446,6 +1474,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       std::array<char, 128> min{};
       std::array<char, 128> max{};
       std::array<char, 128> step{};
+      std::array<char, 4096> selected_values{};
       int checked = 0;
       int focused = 0;
       int selection_offsets_present = 0;
@@ -1461,7 +1490,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
                   &selection_end, type.data(), static_cast<int>(type.size()),
                   min.data(), static_cast<int>(min.size()), max.data(),
                   static_cast<int>(max.size()), step.data(),
-                  static_cast<int>(step.size()))) {
+                  static_cast<int>(step.size()), selected_values.data(),
+                  static_cast<int>(selected_values.size()))) {
         continue;
       }
       const size_t id_length = std::strlen(element_id.data());
@@ -1475,6 +1505,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       entry.min = min.data();
       entry.max = max.data();
       entry.step = step.data();
+      entry.selected_values =
+          ParseLengthPrefixedStringList(selected_values.data());
       entry.checked = checked != 0;
       entry.focused = focused != 0;
       entry.selection_offsets_present = selection_offsets_present != 0;

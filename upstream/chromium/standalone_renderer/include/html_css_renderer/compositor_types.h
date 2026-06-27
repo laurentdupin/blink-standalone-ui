@@ -140,6 +140,7 @@ enum class DomMutationType {
   kSetTextSelection = 10,
   kSetElementInnerHtml = 11,
   kSetBodyInnerHtml = 12,
+  kSetFormControlSelectedValues = 13,
 };
 
 struct DomMutation {
@@ -215,6 +216,7 @@ struct FormControlEntry {
   std::string min;
   std::string max;
   std::string step;
+  std::vector<std::string> selected_values;
   bool checked = false;
   bool focused = false;
   bool selection_offsets_present = false;

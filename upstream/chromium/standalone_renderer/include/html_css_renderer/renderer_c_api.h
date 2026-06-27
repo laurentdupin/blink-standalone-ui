@@ -241,6 +241,19 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const blink_standalone_renderer_t* renderer,
     const char* element_id,
     blink_standalone_form_control_state_t* state);
+BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_selected_value_count(
+    const blink_standalone_renderer_t* renderer,
+    const char* element_id);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_form_control_selected_value(
+    const blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    size_t index,
+    const char** value_out);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_form_control_selected_values(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* const* values,
+    size_t value_count);
 
 BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_last_error(
     const blink_standalone_renderer_t* renderer);

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -275,6 +276,19 @@ void ClearPendingInput(blink_standalone_renderer* renderer) {
   renderer->pending_keyboard_events.clear();
   renderer->pending_dom_mutations.clear();
   renderer->pending_wheel.reset();
+}
+
+std::string SerializeSelectedValuesForMutation(const char* const* values,
+                                               size_t value_count) {
+  std::string serialized;
+  for (size_t i = 0; i < value_count; ++i) {
+    const char* value = values[i] ? values[i] : "";
+    const size_t length = std::strlen(value);
+    serialized += std::to_string(length);
+    serialized += ':';
+    serialized.append(value, length);
+  }
+  return serialized;
 }
 
 blink_standalone_status_code_t QueueDomMutation(
@@ -717,6 +731,27 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       element_id, "checked", checked ? "1" : "0");
 }
 
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_form_control_selected_values(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    const char* const* values,
+    size_t value_count) {
+  if (!renderer || !element_id || (!values && value_count != 0)) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  for (size_t i = 0; i < value_count; ++i) {
+    if (!values[i]) {
+      return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    }
+  }
+  renderer->last_error.clear();
+  return QueueDomMutation(
+      renderer,
+      html_css_renderer::DomMutationType::kSetFormControlSelectedValues,
+      element_id, "selected_values",
+      SerializeSelectedValuesForMutation(values, value_count).c_str());
+}
+
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_focus_element(
     blink_standalone_renderer_t* renderer,
     const char* element_id) {
@@ -866,6 +901,43 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       CopyFormControlState(entry, state);
       return BLINK_STANDALONE_STATUS_OK;
     }
+  }
+  return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_selected_value_count(
+    const blink_standalone_renderer_t* renderer,
+    const char* element_id) {
+  if (!renderer || !element_id) {
+    return 0;
+  }
+  for (const html_css_renderer::FormControlEntry& entry :
+       renderer->latest_result.form_control_entries) {
+    if (entry.element_id == element_id) {
+      return entry.selected_values.size();
+    }
+  }
+  return 0;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_form_control_selected_value(
+    const blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    size_t index,
+    const char** value_out) {
+  if (!renderer || !element_id || !value_out) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  for (const html_css_renderer::FormControlEntry& entry :
+       renderer->latest_result.form_control_entries) {
+    if (entry.element_id != element_id) {
+      continue;
+    }
+    if (index >= entry.selected_values.size()) {
+      return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    }
+    *value_out = entry.selected_values[index].c_str();
+    return BLINK_STANDALONE_STATUS_OK;
   }
   return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
 }

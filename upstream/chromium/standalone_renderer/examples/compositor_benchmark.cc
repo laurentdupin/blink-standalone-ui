@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -150,6 +151,7 @@ void PrintUsage() {
       "[--c-api-absolute-form-mutation-smoke] "
       "[--c-api-slider-form-state-smoke] "
       "[--c-api-select-form-state-smoke] "
+      "[--c-api-multiselect-form-state-smoke] "
       "[--c-api-fragment-mutation-smoke] "
       "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
@@ -881,6 +883,38 @@ std::string FormStateValue(
 
 std::string FormStateCString(const char* value) {
   return value ? value : "";
+}
+
+std::vector<std::string> SelectedValuesForSmoke(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id) {
+  std::vector<std::string> values;
+  const size_t count =
+      blink_standalone_renderer_form_control_selected_value_count(renderer,
+                                                                  element_id);
+  for (size_t i = 0; i < count; ++i) {
+    const char* value = nullptr;
+    if (blink_standalone_renderer_get_form_control_selected_value(
+            renderer, element_id, i, &value) == BLINK_STANDALONE_STATUS_OK) {
+      values.push_back(value ? value : "");
+    }
+  }
+  return values;
+}
+
+bool SelectedValuesEqual(const std::vector<std::string>& actual,
+                         std::initializer_list<const char*> expected) {
+  if (actual.size() != expected.size()) {
+    return false;
+  }
+  size_t index = 0;
+  for (const char* value : expected) {
+    if (actual[index] != value) {
+      return false;
+    }
+    ++index;
+  }
+  return true;
 }
 
 bool AdvanceCApiFrameForSmoke(blink_standalone_renderer_t* renderer,
@@ -2516,6 +2550,149 @@ int RunCApiSelectFormStateSmoke() {
   return 0;
 }
 
+int RunCApiMultiSelectFormStateSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 360;
+  config.height = 200;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;padding:12px;background:#112233;"
+      "color:white;font:16px sans-serif}select{display:none}#label{"
+      "position:absolute;left:20px;top:16px;width:190px;height:26px;"
+      "background:#2878d8;color:white}</style>"
+      "<div id='label' data-godot-action='label'>Tags</div>"
+      "<select id='tags' multiple data-godot-action='tags'>"
+      "<option value='alpha' selected>Alpha</option>"
+      "<option value='beta'>Beta</option>"
+      "<option value='gamma' selected>Gamma</option>"
+      "<option value='delta'>Delta</option>"
+      "</select>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, 0.0,
+                                "c_api_multiselect_form_state_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: initial render failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_form_control_state_t state = {};
+  std::vector<std::string> values = SelectedValuesForSmoke(renderer, "tags");
+  if (!GetFormStateById(renderer, "tags", &state) ||
+      FormStateValue(state) != "alpha" ||
+      !SelectedValuesEqual(values, {"alpha", "gamma"})) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: initial mismatch "
+                 "value=%s selected_count=%zu\n",
+                 FormStateValue(state).c_str(), values.size());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.016;
+  const char* beta_gamma[] = {"beta", "gamma"};
+  status = blink_standalone_renderer_set_form_control_selected_values(
+      renderer, "tags", beta_gamma, 2);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_multiselect_form_state_smoke") ||
+      !GetFormStateById(renderer, "tags", &state)) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: beta/gamma mutation "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  values = SelectedValuesForSmoke(renderer, "tags");
+  if (FormStateValue(state) != "beta" ||
+      !SelectedValuesEqual(values, {"beta", "gamma"})) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: beta/gamma mismatch "
+                 "value=%s selected_count=%zu\n",
+                 FormStateValue(state).c_str(), values.size());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  time += 0.016;
+  const char* beta_missing[] = {"beta", "missing"};
+  status = blink_standalone_renderer_set_form_control_selected_values(
+      renderer, "tags", beta_missing, 2);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_multiselect_form_state_smoke") ||
+      !GetFormStateById(renderer, "tags", &state)) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: missing mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  values = SelectedValuesForSmoke(renderer, "tags");
+  if (FormStateValue(state) != "beta" ||
+      !SelectedValuesEqual(values, {"beta"})) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: missing value behavior "
+                 "changed value=%s selected_count=%zu\n",
+                 FormStateValue(state).c_str(), values.size());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  time += 0.016;
+  const char* alpha_delta[] = {"alpha", "delta"};
+  status = blink_standalone_renderer_set_form_control_selected_values(
+      renderer, "tags", alpha_delta, 2);
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_viewport(renderer, 360, 200,
+                                                         2.0f)
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_multiselect_form_state_smoke") ||
+      !GetFormStateById(renderer, "tags", &state)) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: resize mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  values = SelectedValuesForSmoke(renderer, "tags");
+  if (FormStateValue(state) != "alpha" ||
+      !SelectedValuesEqual(values, {"alpha", "delta"})) {
+    std::fprintf(stderr,
+                 "c_api_multiselect_form_state_smoke: resize persistence "
+                 "failed value=%s selected_count=%zu\n",
+                 FormStateValue(state).c_str(), values.size());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_multiselect_form_state_smoke: ok initial=alpha,gamma "
+      "set=beta,gamma missing=ignored resize=alpha,delta\n");
+  return 0;
+}
+
 int RunCApiAbsoluteFormMutationSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 320;
@@ -3726,6 +3903,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-absolute-form-mutation-smoke" ||
         arg == "--c-api-slider-form-state-smoke" ||
         arg == "--c-api-select-form-state-smoke" ||
+        arg == "--c-api-multiselect-form-state-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -3768,6 +3946,7 @@ int main(int argc, char** argv) {
   bool c_api_absolute_form_mutation_smoke = false;
   bool c_api_slider_form_state_smoke = false;
   bool c_api_select_form_state_smoke = false;
+  bool c_api_multiselect_form_state_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -3893,6 +4072,8 @@ int main(int argc, char** argv) {
       c_api_slider_form_state_smoke = true;
     } else if (arg == "--c-api-select-form-state-smoke") {
       c_api_select_form_state_smoke = true;
+    } else if (arg == "--c-api-multiselect-form-state-smoke") {
+      c_api_multiselect_form_state_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -4050,6 +4231,10 @@ int main(int argc, char** argv) {
 
   if (c_api_select_form_state_smoke) {
     return RunCApiSelectFormStateSmoke();
+  }
+
+  if (c_api_multiselect_form_state_smoke) {
+    return RunCApiMultiSelectFormStateSmoke();
   }
 
   if (c_api_two_instance_smoke) {

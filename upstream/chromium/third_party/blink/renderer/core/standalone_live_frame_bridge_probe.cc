@@ -157,6 +157,7 @@
 #include "third_party/blink/renderer/core/html/html_style_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_option_element.h"
 #include "third_party/blink/renderer/core/html/forms/radio_button_group_scope.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
@@ -662,6 +663,7 @@ struct LiveFormControlEntry {
   std::string min;
   std::string max;
   std::string step;
+  std::vector<std::string> selected_values;
   bool checked = false;
   bool focused = false;
   bool selection_offsets_present = false;
@@ -7634,6 +7636,7 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string input_name;
   std::string value_attr;
   std::string live_value;
+  std::vector<std::string> selected_values;
   std::string element_interface;
   std::string computed_display;
   std::string layout_object_type;
@@ -7823,6 +7826,12 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         item.element_interface = "HTMLSelectElement";
         item.live_value =
             BlinkStringToStdStringForStandaloneRenderer(select->Value());
+        for (auto& option : select->GetOptionList()) {
+          if (option.Selected()) {
+            item.selected_values.push_back(
+                BlinkStringToStdStringForStandaloneRenderer(option.value()));
+          }
+        }
       } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
         item.element_interface = "HTMLTextAreaElement";
         item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
@@ -7999,6 +8008,7 @@ void CollectFormControlEntriesForStandaloneRenderer(
     entry.min = item.min_attr;
     entry.max = item.max_attr;
     entry.step = item.step_attr;
+    entry.selected_values = item.selected_values;
     entry.checked = item.checked;
     entry.focused = item.focused;
     entry.selection_offsets_present = item.selection_offsets_present;
@@ -10021,6 +10031,48 @@ void MarkStandaloneFormControlMutationLayout(Element& element) {
       layout_invalidation_reason::kTextControlChanged);
 }
 
+std::vector<std::string> ParseStandaloneLengthPrefixedStringList(
+    const std::string& serialized) {
+  std::vector<std::string> values;
+  size_t offset = 0;
+  while (offset < serialized.size()) {
+    const size_t separator = serialized.find(':', offset);
+    if (separator == std::string::npos || separator == offset) {
+      break;
+    }
+    size_t length = 0;
+    for (size_t i = offset; i < separator; ++i) {
+      if (!std::isdigit(static_cast<unsigned char>(serialized[i]))) {
+        return values;
+      }
+      length = length * 10 + static_cast<size_t>(serialized[i] - '0');
+    }
+    const size_t value_begin = separator + 1;
+    if (value_begin + length > serialized.size()) {
+      break;
+    }
+    values.push_back(serialized.substr(value_begin, length));
+    offset = value_begin + length;
+  }
+  return values;
+}
+
+void ApplyStandaloneSelectSelectedValuesForRenderer(
+    HTMLSelectElement& select,
+    const std::vector<std::string>& selected_values) {
+  for (auto& option : select.GetOptionList()) {
+    const std::string option_value =
+        BlinkStringToStdStringForStandaloneRenderer(option.value());
+    const bool should_select =
+        std::find(selected_values.begin(), selected_values.end(),
+                  option_value) != selected_values.end();
+    option.SetSelected(should_select);
+    option.SetDirty(true);
+  }
+  MarkStandaloneFormControlMutationLayout(select);
+  select.GetDocument().UpdateStyleAndLayoutTree();
+}
+
 void MarkStandaloneInputEventLayout(Document& document,
                                     LocalFrameView& frame_view) {
   frame_view.SetNeedsLayout();
@@ -10161,6 +10213,15 @@ void ApplyDomMutationsForStandaloneRenderer(
       case 12:
         element->SetInnerHTMLWithoutTrustedTypes(
             String::FromUtf8(mutation.value));
+        break;
+      case 13:
+        if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+          ApplyStandaloneSelectSelectedValuesForRenderer(
+              *select,
+              ParseStandaloneLengthPrefixedStringList(mutation.value));
+        } else {
+          continue;
+        }
         break;
       case 2:
         if (mutation.name.empty()) {
@@ -14633,6 +14694,17 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryCountForStandaloneRenderer(
   return static_cast<int>(ProbeCache().form_control_entries.size());
 }
 
+std::string SerializeStandaloneSelectedValues(
+    const std::vector<std::string>& values) {
+  std::string serialized;
+  for (const std::string& value : values) {
+    serialized += std::to_string(value.size());
+    serialized += ':';
+    serialized += value;
+  }
+  return serialized;
+}
+
 int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
     const char* body_html,
     int index,
@@ -14654,7 +14726,9 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
     char* max,
     int max_capacity,
     char* step,
-    int step_capacity) {
+    int step_capacity,
+    char* selected_values,
+    int selected_values_capacity) {
   RunLiveFramePaintProbe(body_html);
   const auto& entries = ProbeCache().form_control_entries;
   if (index < 0 || index >= static_cast<int>(entries.size())) {
@@ -14678,6 +14752,8 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
   copy_string(entry.min, min, min_capacity);
   copy_string(entry.max, max, max_capacity);
   copy_string(entry.step, step, step_capacity);
+  copy_string(SerializeStandaloneSelectedValues(entry.selected_values),
+              selected_values, selected_values_capacity);
   if (checked) {
     *checked = entry.checked ? 1 : 0;
   }
