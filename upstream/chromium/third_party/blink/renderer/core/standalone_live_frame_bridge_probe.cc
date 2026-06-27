@@ -9991,22 +9991,12 @@ bool ParseStandaloneUnsignedPair(const std::string& value,
 }
 
 void MarkStandaloneFormControlMutationLayout(Element& element) {
-  for (Node* current = &element; current;
-       current = current->ParentOrShadowHostNode()) {
-    auto* current_element = DynamicTo<Element>(current);
-    if (!current_element) {
-      continue;
-    }
-    LayoutObject* layout_object = current_element->GetLayoutObject();
-    if (!layout_object) {
-      continue;
-    }
-    layout_object->SetNeedsLayoutAndFullPaintInvalidation(
-        layout_invalidation_reason::kTextControlChanged);
+  LayoutObject* layout_object = element.GetLayoutObject();
+  if (!layout_object) {
+    return;
   }
-  if (Element* host = element.OwnerShadowHost()) {
-    MarkStandaloneFormControlMutationLayout(*host);
-  }
+  layout_object->SetNeedsLayoutAndFullPaintInvalidation(
+      layout_invalidation_reason::kTextControlChanged);
 }
 
 void MarkStandaloneInputEventLayout(Document& document,

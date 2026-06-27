@@ -2388,7 +2388,7 @@ int RunCApiAbsoluteFormMutationSmoke() {
   status = blink_standalone_renderer_set_form_control_value(renderer, "name",
                                                             "api-value");
   if (status != BLINK_STANDALONE_STATUS_OK ||
-      !AdvanceCApiFrameForSmoke(renderer, time,
+      !AdvanceCApiFrameForSmoke(renderer, 0.0,
                                 "c_api_absolute_form_mutation_smoke")) {
     std::fprintf(stderr,
                  "c_api_absolute_form_mutation_smoke: value mutation failed "
