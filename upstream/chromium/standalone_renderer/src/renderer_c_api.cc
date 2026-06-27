@@ -128,24 +128,46 @@ bool ContainsJavaScriptScheme(const std::string& lower_html) {
   return compact.find("javascript:") != std::string::npos;
 }
 
-bool ViolatesNoScriptProfile(const std::string& html) {
+const char* NoScriptViolationReason(const std::string& html) {
   const std::string lower = LowerAscii(html);
-  return lower.find("<script") != std::string::npos ||
-         ContainsJavaScriptScheme(lower) ||
-         lower.find("<iframe") != std::string::npos ||
-         lower.find("<object") != std::string::npos ||
-         lower.find("<embed") != std::string::npos ||
-         HasInlineEventHandlerAttribute(lower);
+  if (lower.find("<script") != std::string::npos) {
+    return "script tag";
+  }
+  if (HasInlineEventHandlerAttribute(lower)) {
+    return "inline event handler";
+  }
+  if (ContainsJavaScriptScheme(lower)) {
+    return "javascript URL";
+  }
+  if (lower.find("<iframe") != std::string::npos) {
+    return "iframe element";
+  }
+  if (lower.find("<object") != std::string::npos) {
+    return "object element";
+  }
+  if (lower.find("<embed") != std::string::npos) {
+    return "embed element";
+  }
+  return "";
+}
+
+bool ViolatesNoScriptProfile(const std::string& html) {
+  return NoScriptViolationReason(html)[0] != '\0';
+}
+
+const char* AttributeNoScriptViolationReason(const std::string& attribute_name,
+                                             const std::string& value) {
+  const std::string lower_name = LowerAscii(attribute_name);
+  if (lower_name.size() >= 2 && lower_name[0] == 'o' &&
+      lower_name[1] == 'n') {
+    return "inline event handler";
+  }
+  return ContainsJavaScriptScheme(LowerAscii(value)) ? "javascript URL" : "";
 }
 
 bool MutationViolatesNoScriptProfile(const std::string& attribute_name,
                                      const std::string& value) {
-  const std::string lower_name = LowerAscii(attribute_name);
-  if (lower_name.size() >= 2 && lower_name[0] == 'o' &&
-      lower_name[1] == 'n') {
-    return true;
-  }
-  return ContainsJavaScriptScheme(LowerAscii(value));
+  return AttributeNoScriptViolationReason(attribute_name, value)[0] != '\0';
 }
 
 blink_standalone_rect_t ToCRect(const html_css_renderer::Rect& rect) {
@@ -248,10 +270,125 @@ struct blink_standalone_renderer {
   std::vector<html_css_renderer::KeyboardInputEvent> pending_keyboard_events;
   std::vector<html_css_renderer::DomMutation> pending_dom_mutations;
   std::optional<html_css_renderer::WheelInput> pending_wheel;
+  blink_standalone_status_code_t last_error_code =
+      BLINK_STANDALONE_STATUS_OK;
   std::string last_error;
 };
 
 namespace {
+
+void ClearLastError(blink_standalone_renderer* renderer) {
+  if (!renderer) {
+    return;
+  }
+  renderer->last_error_code = BLINK_STANDALONE_STATUS_OK;
+  renderer->last_error.clear();
+}
+
+blink_standalone_status_code_t SetLastError(
+    blink_standalone_renderer* renderer,
+    blink_standalone_status_code_t code,
+    std::string message) {
+  if (renderer) {
+    renderer->last_error_code = code;
+    renderer->last_error = std::move(message);
+  }
+  return code;
+}
+
+const char* DomMutationTypeName(html_css_renderer::DomMutationType type) {
+  switch (type) {
+    case html_css_renderer::DomMutationType::kSetTextContent:
+      return "set_element_text";
+    case html_css_renderer::DomMutationType::kSetAttribute:
+      return "set_element_attribute";
+    case html_css_renderer::DomMutationType::kRemoveAttribute:
+      return "remove_element_attribute";
+    case html_css_renderer::DomMutationType::kSetStyleAttribute:
+      return "set_element_style";
+    case html_css_renderer::DomMutationType::kReplaceStylesheetText:
+      return "replace_stylesheet_text";
+    case html_css_renderer::DomMutationType::kSetFormControlValue:
+      return "set_form_control_value";
+    case html_css_renderer::DomMutationType::kSetFormControlChecked:
+      return "set_form_control_checked";
+    case html_css_renderer::DomMutationType::kFocusElement:
+      return "focus_element";
+    case html_css_renderer::DomMutationType::kBlurFocusedElement:
+      return "blur_focused_element";
+    case html_css_renderer::DomMutationType::kSetTextSelection:
+      return "set_text_selection";
+    case html_css_renderer::DomMutationType::kSetElementInnerHtml:
+      return "set_element_inner_html";
+    case html_css_renderer::DomMutationType::kSetBodyInnerHtml:
+      return "set_body_inner_html";
+    case html_css_renderer::DomMutationType::kSetFormControlSelectedValues:
+      return "set_form_control_selected_values";
+    case html_css_renderer::DomMutationType::kInsertElementHtml:
+      return "insert_element_html";
+    case html_css_renderer::DomMutationType::kRemoveElement:
+      return "remove_element";
+  }
+  return "dom_mutation";
+}
+
+std::string ElementLabel(const char* element_id) {
+  return element_id && *element_id ? element_id : "<empty>";
+}
+
+bool HasLiveElement(blink_standalone_renderer* renderer,
+                    const char* element_id) {
+  return renderer && renderer->runtime &&
+         renderer->runtime->HasLiveElement(element_id ? element_id : "");
+}
+
+blink_standalone_status_code_t RequireLiveElement(
+    blink_standalone_renderer* renderer,
+    const char* api_name,
+    const char* element_id) {
+  if (!renderer) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (!element_id || !*element_id) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(api_name) +
+                            " failed: element id is required");
+  }
+  if (!HasLiveElement(renderer, element_id)) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(api_name) + " failed: element id '" +
+                            element_id +
+                            "' not found in current live document");
+  }
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
+const html_css_renderer::FormControlEntry* FindFormControlEntry(
+    const blink_standalone_renderer* renderer,
+    const char* element_id) {
+  if (!renderer || !element_id) {
+    return nullptr;
+  }
+  for (const html_css_renderer::FormControlEntry& entry :
+       renderer->latest_result.form_control_entries) {
+    if (entry.element_id == element_id) {
+      return &entry;
+    }
+  }
+  return nullptr;
+}
+
+bool IsCheckboxOrRadio(const html_css_renderer::FormControlEntry& entry) {
+  return entry.type == "checkbox" || entry.type == "radio";
+}
+
+bool IsSelect(const html_css_renderer::FormControlEntry& entry) {
+  return LowerAscii(entry.tag_name) == "select";
+}
+
+bool IsTextSelectionCapable(const html_css_renderer::FormControlEntry& entry) {
+  return entry.selection_offsets_present;
+}
 
 blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* renderer) {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
@@ -265,8 +402,8 @@ blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* rend
       html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
   std::vector<std::string> diagnostics;
   if (!renderer->runtime || !renderer->runtime->Initialize(&diagnostics)) {
-    renderer->last_error = "failed to initialize standalone compositor runtime";
-    return BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED,
+                        "failed to initialize standalone compositor runtime");
   }
   return BLINK_STANDALONE_STATUS_OK;
 }
@@ -313,35 +450,46 @@ blink_standalone_status_code_t QueueDomMutation(
     const char* value) {
   if (!renderer || ((type != html_css_renderer::DomMutationType::kBlurFocusedElement) &&
                     (!element_id || !*element_id))) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(DomMutationTypeName(type)) +
+                            " failed: element id is required");
   }
   const std::string mutation_name = name ? name : "";
   const std::string mutation_value = value ? value : "";
   if ((type == html_css_renderer::DomMutationType::kSetAttribute ||
        type == html_css_renderer::DomMutationType::kRemoveAttribute) &&
       mutation_name.empty()) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(DomMutationTypeName(type)) +
+                            " failed: attribute name is required for element id '" +
+                            ElementLabel(element_id) + "'");
   }
   if (renderer->no_script_profile) {
     const bool html_fragment_mutation =
         type == html_css_renderer::DomMutationType::kSetElementInnerHtml ||
         type == html_css_renderer::DomMutationType::kSetBodyInnerHtml ||
         type == html_css_renderer::DomMutationType::kInsertElementHtml;
-    const bool rejected =
+    const char* reason =
         type == html_css_renderer::DomMutationType::kSetAttribute
-            ? MutationViolatesNoScriptProfile(mutation_name, mutation_value)
-            : html_fragment_mutation ? ViolatesNoScriptProfile(mutation_value)
-            : type == html_css_renderer::DomMutationType::kSetStyleAttribute
-                  ? MutationViolatesNoScriptProfile("style", mutation_value)
-                  : type ==
-                            html_css_renderer::DomMutationType::
-                                kReplaceStylesheetText
-                        ? ContainsJavaScriptScheme(LowerAscii(mutation_value))
-                        : false;
-    if (rejected) {
-      renderer->last_error =
-          "mutation rejected by no-script profile (event handler/javascript surface)";
-      return BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED;
+            ? AttributeNoScriptViolationReason(mutation_name, mutation_value)
+            : html_fragment_mutation
+                  ? NoScriptViolationReason(mutation_value)
+                  : type == html_css_renderer::DomMutationType::kSetStyleAttribute
+                        ? AttributeNoScriptViolationReason("style",
+                                                           mutation_value)
+                        : type ==
+                                  html_css_renderer::DomMutationType::
+                                      kReplaceStylesheetText
+                              ? (ContainsJavaScriptScheme(
+                                     LowerAscii(mutation_value))
+                                     ? "javascript URL"
+                                     : "")
+                              : "";
+    if (reason[0] != '\0') {
+      return SetLastError(
+          renderer, BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
+          std::string(DomMutationTypeName(type)) +
+              " rejected by no-script profile: " + reason);
     }
   }
   html_css_renderer::DomMutation mutation;
@@ -432,13 +580,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer || !html) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
-  renderer->last_error.clear();
+  ClearLastError(renderer);
   renderer->html = html;
   if (renderer->no_script_profile && ViolatesNoScriptProfile(renderer->html)) {
-    renderer->last_error =
-        "document rejected by no-script profile (script/event handler/navigation surface)";
     renderer->html.clear();
-    return BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
+        std::string("set_document_html rejected by no-script profile: ") +
+            NoScriptViolationReason(html));
   }
   renderer->resource_root = resource_root ? resource_root : "";
   renderer->resource_base_path = resource_base_path ? resource_base_path : "";
@@ -454,8 +603,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     int height,
     float device_scale_factor) {
   if (!renderer || width <= 0 || height <= 0 || device_scale_factor <= 0.0f) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_viewport failed: width, height, and device scale factor must be positive");
   }
+  ClearLastError(renderer);
   renderer->viewport = {static_cast<float>(width), static_cast<float>(height)};
   renderer->device_scale_factor = device_scale_factor;
   return BLINK_STANDALONE_STATUS_OK;
@@ -467,7 +618,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer || !renderer->runtime) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
-  renderer->last_error.clear();
+  ClearLastError(renderer);
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
   input.device_scale_factor = renderer->device_scale_factor;
@@ -491,11 +642,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer->latest_result.raw_frame.pixels.empty()) {
     return BLINK_STANDALONE_STATUS_OK;
   }
-  renderer->last_error =
+  return SetLastError(
+      renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
       renderer->latest_result.raw_frame_failure.empty()
-          ? "raw frame output was not produced"
-          : renderer->latest_result.raw_frame_failure;
-  return BLINK_STANDALONE_STATUS_RENDER_FAILED;
+          ? "advance_frame failed: raw frame output was not produced"
+          : "advance_frame failed: " +
+                renderer->latest_result.raw_frame_failure);
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
@@ -511,6 +663,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
+  ClearLastError(renderer);
   AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kMove, x, y,
                    BLINK_STANDALONE_MOUSE_BUTTON_NONE, modifiers, 0);
   return BLINK_STANDALONE_STATUS_OK;
@@ -525,8 +678,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     int click_count) {
   if (!renderer || ToRuntimeMouseButton(button) ==
                        html_css_renderer::MouseInputButton::kNone) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "mouse_down failed: valid renderer and mouse button are required");
   }
+  ClearLastError(renderer);
   AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kDown, x, y,
                    button, modifiers, click_count > 0 ? click_count : 1);
   return BLINK_STANDALONE_STATUS_OK;
@@ -541,8 +696,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     int click_count) {
   if (!renderer || ToRuntimeMouseButton(button) ==
                        html_css_renderer::MouseInputButton::kNone) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "mouse_up failed: valid renderer and mouse button are required");
   }
+  ClearLastError(renderer);
   AppendMouseEvent(renderer, html_css_renderer::MouseInputEventType::kUp, x, y,
                    button, modifiers, click_count > 0 ? click_count : 1);
   return BLINK_STANDALONE_STATUS_OK;
@@ -557,6 +714,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
+  ClearLastError(renderer);
   if (!renderer->pending_wheel) {
     renderer->pending_wheel = html_css_renderer::WheelInput();
   }
@@ -572,8 +730,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     int modifiers) {
   if (!renderer || ToRuntimeKeyboardKey(key) ==
                        html_css_renderer::KeyboardInputKey::kUnknown) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "key_down failed: valid renderer and key are required");
   }
+  ClearLastError(renderer);
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kKeyDown,
                       key, std::string(), modifiers);
   return BLINK_STANDALONE_STATUS_OK;
@@ -585,8 +745,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     int modifiers) {
   if (!renderer || ToRuntimeKeyboardKey(key) ==
                        html_css_renderer::KeyboardInputKey::kUnknown) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "key_up failed: valid renderer and key are required");
   }
+  ClearLastError(renderer);
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kKeyUp,
                       key, std::string(), modifiers);
   return BLINK_STANDALONE_STATUS_OK;
@@ -596,8 +758,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     const char* utf8_text) {
   if (!renderer || !utf8_text) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "text_input failed: renderer and UTF-8 text are required");
   }
+  ClearLastError(renderer);
   AppendKeyboardEvent(renderer, html_css_renderer::KeyboardInputEventType::kText,
                       BLINK_STANDALONE_KEY_UNKNOWN, utf8_text, 0);
   return BLINK_STANDALONE_STATUS_OK;
@@ -608,10 +772,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     const char* utf8_text) {
   if (!utf8_text) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_element_text failed: UTF-8 text is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_element_text", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetTextContent,
@@ -623,17 +791,15 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     const char* html_fragment) {
   if (!html_fragment) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "set_element_inner_html failed: HTML fragment is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
-  }
-  if (!renderer || !renderer->runtime ||
-      !renderer->runtime->HasLiveElement(element_id ? element_id : "")) {
-    if (renderer) {
-      renderer->last_error = "element not found in current live document";
-    }
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_element_inner_html", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetElementInnerHtml,
@@ -644,17 +810,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     const char* html_fragment) {
   if (!html_fragment) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_body_inner_html failed: HTML fragment is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
-  }
+  ClearLastError(renderer);
   if (!renderer || !renderer->runtime || !renderer->runtime->HasLiveBody()) {
-    if (renderer) {
-      renderer->last_error =
-          "document body not available in current live document";
-    }
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "set_body_inner_html failed: document body not available in current live document");
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetBodyInnerHtml,
@@ -667,21 +830,19 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_insert_position_t position,
     const char* html_fragment) {
   if (!html_fragment) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "insert_element_html failed: HTML fragment is required");
   }
   const char* position_name = InsertPositionName(position);
   if (!position_name) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "insert_element_html failed: insert position is invalid");
   }
-  if (renderer) {
-    renderer->last_error.clear();
-  }
-  if (!renderer || !renderer->runtime ||
-      !renderer->runtime->HasLiveElement(element_id ? element_id : "")) {
-    if (renderer) {
-      renderer->last_error = "element not found in current live document";
-    }
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "insert_element_html", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kInsertElementHtml,
@@ -691,15 +852,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_remove_element(
     blink_standalone_renderer_t* renderer,
     const char* element_id) {
-  if (renderer) {
-    renderer->last_error.clear();
-  }
-  if (!renderer || !renderer->runtime ||
-      !renderer->runtime->HasLiveElement(element_id ? element_id : "")) {
-    if (renderer) {
-      renderer->last_error = "element not found in current live document";
-    }
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "remove_element", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kRemoveElement,
@@ -712,10 +869,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* attribute_name,
     const char* attribute_value) {
   if (!attribute_value) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_element_attribute failed: attribute value is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_element_attribute", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetAttribute,
@@ -726,8 +887,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     const char* element_id,
     const char* attribute_name) {
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "remove_element_attribute", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kRemoveAttribute,
@@ -739,10 +903,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     const char* style_attribute_value) {
   if (!style_attribute_value) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_element_style failed: style attribute value is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_element_style", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetStyleAttribute,
@@ -754,10 +922,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* style_element_id,
     const char* css_text) {
   if (!css_text) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "replace_stylesheet_text failed: CSS text is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "replace_stylesheet_text", style_element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kReplaceStylesheetText,
@@ -769,10 +941,22 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     const char* value) {
   if (!value) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_form_control_value failed: value is required");
   }
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_form_control_value", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
+  }
+  const html_css_renderer::FormControlEntry* entry =
+      FindFormControlEntry(renderer, element_id);
+  if (!entry) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string("set_form_control_value failed: element id '") +
+                            ElementLabel(element_id) +
+                            "' is not a supported form control");
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetFormControlValue,
@@ -783,8 +967,20 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     const char* element_id,
     int checked) {
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_form_control_checked", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
+  }
+  const html_css_renderer::FormControlEntry* entry =
+      FindFormControlEntry(renderer, element_id);
+  if (!entry || !IsCheckboxOrRadio(*entry)) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        std::string("set_form_control_checked failed: element id '") +
+            ElementLabel(element_id) +
+            "' is not a checkbox or radio form control");
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetFormControlChecked,
@@ -797,14 +993,29 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* const* values,
     size_t value_count) {
   if (!renderer || !element_id || (!values && value_count != 0)) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "set_form_control_selected_values failed: renderer, element id, and values are required");
   }
   for (size_t i = 0; i < value_count; ++i) {
     if (!values[i]) {
-      return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                          "set_form_control_selected_values failed: selected value entries must be non-null");
     }
   }
-  renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status = RequireLiveElement(
+      renderer, "set_form_control_selected_values", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
+  }
+  const html_css_renderer::FormControlEntry* entry =
+      FindFormControlEntry(renderer, element_id);
+  if (!entry || !IsSelect(*entry)) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        std::string("set_form_control_selected_values failed: element id '") +
+            ElementLabel(element_id) + "' is not a select form control");
+  }
   return QueueDomMutation(
       renderer,
       html_css_renderer::DomMutationType::kSetFormControlSelectedValues,
@@ -815,8 +1026,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_focus_element(
     blink_standalone_renderer_t* renderer,
     const char* element_id) {
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "focus_element", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
   }
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kFocusElement,
@@ -825,9 +1039,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_blur_focused_element(
     blink_standalone_renderer_t* renderer) {
-  if (renderer) {
-    renderer->last_error.clear();
-  }
+  ClearLastError(renderer);
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kBlurFocusedElement, "",
       "", "");
@@ -838,8 +1050,20 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     unsigned start,
     unsigned end) {
-  if (renderer) {
-    renderer->last_error.clear();
+  ClearLastError(renderer);
+  blink_standalone_status_code_t status =
+      RequireLiveElement(renderer, "set_text_selection", element_id);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
+  }
+  const html_css_renderer::FormControlEntry* entry =
+      FindFormControlEntry(renderer, element_id);
+  if (!entry || !IsTextSelectionCapable(*entry)) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        std::string("set_text_selection failed: element id '") +
+            ElementLabel(element_id) +
+            "' is not a text-editable form control");
   }
   const std::string range =
       std::to_string(start) + ":" + std::to_string(end);
@@ -853,7 +1077,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
-  renderer->last_error.clear();
+  ClearLastError(renderer);
   renderer->runtime.reset();
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
   renderer->dirty_rects.clear();
@@ -865,7 +1089,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     blink_standalone_frame_output_t* output) {
   if (!renderer || !output) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "get_latest_output failed: renderer and output pointer are required");
   }
   const html_css_renderer::RawFrameOutput& raw =
       renderer->latest_result.raw_frame;
@@ -880,7 +1105,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   output->dirty_rects =
       renderer->dirty_rects.empty() ? nullptr : renderer->dirty_rects.data();
   output->dirty_rect_count = renderer->dirty_rects.size();
-  return output->pixels ? BLINK_STANDALONE_STATUS_OK : BLINK_STANDALONE_STATUS_RENDER_FAILED;
+  if (output->pixels) {
+    ClearLastError(renderer);
+    return BLINK_STANDALONE_STATUS_OK;
+  }
+  return SetLastError(renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+                      "get_latest_output failed: no raw frame output is available");
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_release_latest_output(
@@ -904,7 +1134,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_hit_metadata_t* hit) {
   if (!renderer || !hit ||
       index >= renderer->latest_result.hit_test_entries.size()) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "get_hit_metadata failed: renderer, hit pointer, and valid index are required");
   }
   const html_css_renderer::HitTestEntry& source =
       renderer->latest_result.hit_test_entries[index];
@@ -918,7 +1150,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     float y,
     blink_standalone_hit_metadata_t* hit) {
   if (!renderer || !hit) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "hit_test failed: renderer and hit pointer are required");
   }
   const auto& entries = renderer->latest_result.hit_test_entries;
   for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
@@ -927,7 +1161,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       return BLINK_STANDALONE_STATUS_OK;
     }
   }
-  return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                      BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                      "hit_test failed: no hit metadata entry contains the requested point");
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_state_count(
@@ -941,7 +1177,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_form_control_state_t* state) {
   if (!renderer || !state ||
       index >= renderer->latest_result.form_control_entries.size()) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "get_form_control_state failed: renderer, state pointer, and valid index are required");
   }
   CopyFormControlState(renderer->latest_result.form_control_entries[index],
                        state);
@@ -953,7 +1191,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     blink_standalone_form_control_state_t* state) {
   if (!renderer || !element_id || !state) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "get_form_control_state_by_id failed: renderer, element id, and state pointer are required");
   }
   for (const html_css_renderer::FormControlEntry& entry :
        renderer->latest_result.form_control_entries) {
@@ -962,7 +1202,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       return BLINK_STANDALONE_STATUS_OK;
     }
   }
-  return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                      BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                      std::string("get_form_control_state_by_id failed: element id '") +
+                          element_id + "' is not a known form control");
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_selected_value_count(
@@ -986,7 +1229,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     size_t index,
     const char** value_out) {
   if (!renderer || !element_id || !value_out) {
-    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "get_form_control_selected_value failed: renderer, element id, and value pointer are required");
   }
   for (const html_css_renderer::FormControlEntry& entry :
        renderer->latest_result.form_control_entries) {
@@ -994,18 +1239,40 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       continue;
     }
     if (index >= entry.selected_values.size()) {
-      return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+      return SetLastError(
+          const_cast<blink_standalone_renderer_t*>(renderer),
+          BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+          "get_form_control_selected_value failed: selected value index is out of range");
     }
     *value_out = entry.selected_values[index].c_str();
     return BLINK_STANDALONE_STATUS_OK;
   }
-  return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
+                      BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                      std::string("get_form_control_selected_value failed: element id '") +
+                          element_id + "' is not a known form control");
 }
 
-extern "C" BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_last_error(
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_last_error_code(
+    const blink_standalone_renderer_t* renderer) {
+  return renderer ? renderer->last_error_code
+                  : BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_get_last_error_message(
     const blink_standalone_renderer_t* renderer) {
   if (!renderer || renderer->last_error.empty()) {
     return "";
   }
   return renderer->last_error.c_str();
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_clear_last_error(
+    blink_standalone_renderer_t* renderer) {
+  ClearLastError(renderer);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_last_error(
+    const blink_standalone_renderer_t* renderer) {
+  return blink_standalone_renderer_get_last_error_message(renderer);
 }

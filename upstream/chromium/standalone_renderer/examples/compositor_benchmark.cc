@@ -154,6 +154,7 @@ void PrintUsage() {
       "[--c-api-multiselect-form-state-smoke] "
       "[--c-api-fragment-mutation-smoke] "
       "[--c-api-structural-dom-mutation-smoke] "
+      "[--c-api-mutation-diagnostics-smoke] "
       "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
@@ -1765,6 +1766,174 @@ int RunCApiStructuralDomMutationSmoke() {
       "green=%zu raw=%dx%d state=persisted\n",
       initial_stats.blue_2878d8, replaced_stats.resource_red_e84444,
       inserted_stats.orange_d06329, inserted_stats.resource_green_237a57,
+      output.width, output.height);
+  return 0;
+}
+
+int RunCApiMutationDiagnosticsSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 260;
+  config.height = 160;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_mutation_diagnostics_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;font:16px monospace;background:#112233}"
+      "#target{position:absolute;left:8px;top:8px;width:110px;height:42px;"
+      "background:#2878d8;color:white}"
+      "#box{position:absolute;left:130px;top:8px;width:80px;height:42px;"
+      "background:#d06329;color:white}"
+      "#name{position:absolute;left:8px;top:70px;width:150px}</style>"
+      "<div id='target' data-godot-action='target'>Target</div>"
+      "<div id='box'>Box</div>"
+      "<input id='name' value='seed'>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, 0.0,
+                                "c_api_mutation_diagnostics_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_mutation_diagnostics_smoke: initial render failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const auto expect_error = [&](blink_standalone_status_code_t actual,
+                                blink_standalone_status_code_t expected,
+                                const char* required_a,
+                                const char* required_b) -> bool {
+    const std::string message =
+        blink_standalone_renderer_get_last_error_message(renderer);
+    const blink_standalone_status_code_t code =
+        blink_standalone_renderer_get_last_error_code(renderer);
+    const bool ok = actual == expected && code == expected &&
+                    message.find(required_a) != std::string::npos &&
+                    (!required_b ||
+                     message.find(required_b) != std::string::npos);
+    if (!ok) {
+      std::fprintf(stderr,
+                   "c_api_mutation_diagnostics_smoke: expected error "
+                   "status=%d code=%d contains='%s'/'%s' actual_status=%d "
+                   "actual_code=%d message=%s\n",
+                   expected, expected, required_a,
+                   required_b ? required_b : "", actual, code,
+                   message.c_str());
+    }
+    return ok;
+  };
+
+  if (!expect_error(blink_standalone_renderer_set_element_text(
+                        renderer, "missing-text", "Text"),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "set_element_text", "missing-text") ||
+      !expect_error(blink_standalone_renderer_set_element_style(
+                        renderer, "missing-style", "color:red"),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "set_element_style", "missing-style") ||
+      !expect_error(blink_standalone_renderer_remove_element(
+                        renderer, "missing-remove"),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "remove_element", "missing-remove") ||
+      !expect_error(blink_standalone_renderer_insert_element_html(
+                        renderer, "missing-insert",
+                        BLINK_STANDALONE_INSERT_BEFORE_END,
+                        "<span>Missing</span>"),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "insert_element_html", "missing-insert")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (!expect_error(blink_standalone_renderer_insert_element_html(
+                        renderer, "target",
+                        static_cast<blink_standalone_insert_position_t>(99),
+                        "<span>Bad</span>"),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "insert_element_html", "insert position is invalid")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (!expect_error(blink_standalone_renderer_set_element_inner_html(
+                        renderer, "target", "<script>alert(1)</script>"),
+                    BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
+                    "set_element_inner_html", "script tag") ||
+      !expect_error(blink_standalone_renderer_set_body_inner_html(
+                        renderer, "<button onclick='alert(1)'>Bad</button>"),
+                    BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
+                    "set_body_inner_html", "inline event handler") ||
+      !expect_error(blink_standalone_renderer_insert_element_html(
+                        renderer, "target",
+                        BLINK_STANDALONE_INSERT_BEFORE_END,
+                        "<a href=' javascript:alert(1)'>Bad</a>"),
+                    BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
+                    "insert_element_html", "javascript URL")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (!expect_error(blink_standalone_renderer_set_form_control_value(
+                        renderer, "box", "not-a-form"),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "set_form_control_value", "not a supported form control") ||
+      !expect_error(blink_standalone_renderer_set_form_control_checked(
+                        renderer, "name", 1),
+                    BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                    "set_form_control_checked", "not a checkbox or radio")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_element_text(renderer, "target",
+                                                      "Updated");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      blink_standalone_renderer_get_last_error_code(renderer) !=
+          BLINK_STANDALONE_STATUS_OK ||
+      std::strlen(blink_standalone_renderer_get_last_error_message(renderer)) !=
+          0 ||
+      !AdvanceCApiFrameForSmoke(renderer, 0.016,
+                                "c_api_mutation_diagnostics_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_mutation_diagnostics_smoke: successful mutation did "
+                 "not clear diagnostics status=%d code=%d message=%s\n",
+                 status, blink_standalone_renderer_get_last_error_code(renderer),
+                 blink_standalone_renderer_get_last_error_message(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK || !HasHitId(renderer, "target") ||
+      !HasHitId(renderer, "box") || output.width != 260 ||
+      output.height != 160) {
+    std::fprintf(stderr,
+                 "c_api_mutation_diagnostics_smoke: output invalid after "
+                 "failed mutations status=%d raw=%dx%d target=%d box=%d "
+                 "error=%s\n",
+                 status, output.width, output.height,
+                 HasHitId(renderer, "target") ? 1 : 0,
+                 HasHitId(renderer, "box") ? 1 : 0,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_mutation_diagnostics_smoke: ok missing/unsafe/unsupported "
+      "diagnostics covered raw=%dx%d\n",
       output.width, output.height);
   return 0;
 }
@@ -4206,6 +4375,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-fragment-mutation-smoke" ||
         arg == "--c-api-structural-dom-mutation-smoke" ||
+        arg == "--c-api-mutation-diagnostics-smoke" ||
         arg == "--c-api-body-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
@@ -4250,6 +4420,7 @@ int main(int argc, char** argv) {
   bool c_api_dom_mutation_smoke = false;
   bool c_api_fragment_mutation_smoke = false;
   bool c_api_structural_dom_mutation_smoke = false;
+  bool c_api_mutation_diagnostics_smoke = false;
   bool c_api_body_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
@@ -4372,6 +4543,8 @@ int main(int argc, char** argv) {
       c_api_fragment_mutation_smoke = true;
     } else if (arg == "--c-api-structural-dom-mutation-smoke") {
       c_api_structural_dom_mutation_smoke = true;
+    } else if (arg == "--c-api-mutation-diagnostics-smoke") {
+      c_api_mutation_diagnostics_smoke = true;
     } else if (arg == "--c-api-body-mutation-smoke") {
       c_api_body_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
@@ -4523,6 +4696,10 @@ int main(int argc, char** argv) {
 
   if (c_api_structural_dom_mutation_smoke) {
     return RunCApiStructuralDomMutationSmoke();
+  }
+
+  if (c_api_mutation_diagnostics_smoke) {
+    return RunCApiMutationDiagnosticsSmoke();
   }
 
   if (c_api_body_mutation_smoke) {

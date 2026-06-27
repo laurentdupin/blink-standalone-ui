@@ -270,6 +270,12 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const char* const* values,
     size_t value_count);
 
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_last_error_code(
+    const blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_get_last_error_message(
+    const blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_clear_last_error(
+    blink_standalone_renderer_t* renderer);
 BLINK_STANDALONE_RENDERER_C_API const char* blink_standalone_renderer_last_error(
     const blink_standalone_renderer_t* renderer);
 
