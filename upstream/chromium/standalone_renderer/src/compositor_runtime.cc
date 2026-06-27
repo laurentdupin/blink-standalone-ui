@@ -80,6 +80,7 @@ void StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer
 void StandaloneBlinkLiveFrameBridgeInvalidateCacheForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeHasLiveElementForStandaloneRenderer(
     const char* element_id);
+int StandaloneBlinkLiveFrameBridgeHasLiveBodyForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
     void* native_window_handle,
     int width,
@@ -1254,6 +1255,17 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return ::blink::standalone_renderer_probe::
                StandaloneBlinkLiveFrameBridgeHasLiveElementForStandaloneRenderer(
                    element_id.c_str()) != 0;
+  }
+
+  bool HasLiveBody() const override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    return ::blink::standalone_renderer_probe::
+               StandaloneBlinkLiveFrameBridgeHasLiveBodyForStandaloneRenderer() !=
+           0;
   }
 
  private:

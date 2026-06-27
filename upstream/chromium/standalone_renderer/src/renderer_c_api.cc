@@ -291,11 +291,13 @@ blink_standalone_status_code_t QueueDomMutation(
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
   if (renderer->no_script_profile) {
+    const bool html_fragment_mutation =
+        type == html_css_renderer::DomMutationType::kSetElementInnerHtml ||
+        type == html_css_renderer::DomMutationType::kSetBodyInnerHtml;
     const bool rejected =
         type == html_css_renderer::DomMutationType::kSetAttribute
             ? MutationViolatesNoScriptProfile(mutation_name, mutation_value)
-            : type == html_css_renderer::DomMutationType::kSetElementInnerHtml
-                  ? ViolatesNoScriptProfile(mutation_value)
+            : html_fragment_mutation ? ViolatesNoScriptProfile(mutation_value)
             : type == html_css_renderer::DomMutationType::kSetStyleAttribute
                   ? MutationViolatesNoScriptProfile("style", mutation_value)
                   : type ==
@@ -603,6 +605,27 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetElementInnerHtml,
                           element_id, "", html_fragment);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_body_inner_html(
+    blink_standalone_renderer_t* renderer,
+    const char* html_fragment) {
+  if (!html_fragment) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  if (!renderer || !renderer->runtime || !renderer->runtime->HasLiveBody()) {
+    if (renderer) {
+      renderer->last_error =
+          "document body not available in current live document";
+    }
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kSetBodyInnerHtml,
+                          "__body__", "", html_fragment);
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(

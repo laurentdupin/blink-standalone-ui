@@ -149,6 +149,7 @@ void PrintUsage() {
       "[--c-api-form-control-mutation-smoke] "
       "[--c-api-absolute-form-mutation-smoke] "
       "[--c-api-fragment-mutation-smoke] "
+      "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
       "[--typeface-isolation-smoke]\n"
@@ -1455,6 +1456,249 @@ bool WriteSolidBmp(const std::filesystem::path& path,
   file.write(reinterpret_cast<const char*>(bytes.data()),
              static_cast<std::streamsize>(bytes.size()));
   return file.good();
+}
+
+int RunCApiBodyMutationSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 320;
+  config.height = 200;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  if (blink_standalone_renderer_set_body_inner_html(
+          renderer, "<main id='early'>Early</main>") !=
+      BLINK_STANDALONE_STATUS_INVALID_ARGUMENT) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: missing live body was accepted\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><html><head><style id='theme'>"
+      "html,body{margin:0;padding:0;background:rgba(0,0,0,0);"
+      "font:16px monospace}"
+      "#panel{position:absolute;left:8px;top:8px;width:140px;height:56px;"
+      "background:#2878d8;color:white}"
+      "#body_panel{position:absolute;left:0;top:0;width:165px;height:70px;"
+      "background:#e84444;color:white}"
+      "#body_button{position:absolute;left:0;top:90px;width:120px;height:34px}"
+      "#name{position:absolute;left:8px;top:82px;width:150px}"
+      "label{position:absolute;left:8px;top:120px}"
+      "</style></head><body>"
+      "<div id='panel' data-godot-action='old'>Old body</div>"
+      "<input id='name' value='seed' data-godot-action='name'>"
+      "<label><input id='agree' type='checkbox' "
+      "data-godot-action='agree'>Agree</label>"
+      "</body></html>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: set html failed status=%d "
+                 "error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_body_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats initial_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      initial_stats.blue_2878d8 < 3000 || !HasHitId(renderer, "panel") ||
+      !HasHitId(renderer, "name") || !HasHitId(renderer, "agree")) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: initial output invalid status=%d "
+                 "blue=%zu panel=%d name=%d agree=%d\n",
+                 status, initial_stats.blue_2878d8,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 HasHitId(renderer, "name") ? 1 : 0,
+                 HasHitId(renderer, "agree") ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_form_control_value(renderer, "name",
+                                                            "persisted");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_form_control_checked(
+                     renderer, "agree", 1)
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_focus_element(renderer, "name")
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_body_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: old body state setup failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_form_control_state_t name_state = {};
+  if (!GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" || name_state.focused == 0 ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: old body state was not set "
+                 "value=%s focused=%d checked=%d\n",
+                 FormStateValue(name_state).c_str(), name_state.focused,
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (blink_standalone_renderer_set_body_inner_html(
+          renderer, "<script>alert(1)</script>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_set_body_inner_html(
+          renderer, "<button onclick='alert(1)'>Bad</button>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_set_body_inner_html(
+          renderer, "<a href='javascript:alert(1)'>Bad</a>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_set_body_inner_html(
+          renderer, "<iframe src='about:blank'></iframe>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: no-script fragment rejection "
+                 "failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_body_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  if (!HasHitId(renderer, "panel") || !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted") {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: rejected body fragment mutated "
+                 "document panel=%d value=%s\n",
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 FormStateValue(name_state).c_str());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_body_inner_html(
+      renderer,
+      "<main id='body_panel' data-godot-action='body'>"
+      "<span id='body_child'>New body</span></main>"
+      "<button id='body_button' data-godot-action='button'>Press</button>");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_body_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: body replacement failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats replaced_stats = AnalyzeFramePixelContent(output);
+  blink_standalone_hit_metadata_t body_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      replaced_stats.resource_red_e84444 < 6000 ||
+      !GetHitById(renderer, "body_panel", &body_hit) ||
+      std::string(body_hit.data_godot_action ? body_hit.data_godot_action
+                                             : "") != "body" ||
+      !HasHitId(renderer, "body_child") ||
+      !HasHitId(renderer, "body_button") || HasHitId(renderer, "panel") ||
+      HasHitId(renderer, "name") || HasHitId(renderer, "agree") ||
+      GetFormStateById(renderer, "name", &name_state)) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: body replacement not reflected "
+                 "status=%d red=%zu body=%d child=%d button=%d old=%d "
+                 "name_hit=%d name_state=%d action=%s\n",
+                 status, replaced_stats.resource_red_e84444,
+                 HasHitId(renderer, "body_panel") ? 1 : 0,
+                 HasHitId(renderer, "body_child") ? 1 : 0,
+                 HasHitId(renderer, "body_button") ? 1 : 0,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 HasHitId(renderer, "name") ? 1 : 0,
+                 GetFormStateById(renderer, "name", &name_state) ? 1 : 0,
+                 body_hit.data_godot_action ? body_hit.data_godot_action : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_replace_stylesheet_text(
+      renderer,
+      "theme",
+      "html,body{margin:0;padding:0;background:rgba(0,0,0,0);"
+      "font:16px monospace}"
+      "#body_panel{position:absolute;left:0;top:0;width:165px;height:70px;"
+      "background:#237a57;color:white}"
+      "#body_button{position:absolute;left:0;top:90px;width:120px;height:34px}");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_body_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: stylesheet after body replacement "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats stylesheet_stats =
+      AnalyzeFramePixelContent(output);
+  body_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      stylesheet_stats.resource_green_237a57 < 6000 ||
+      !GetHitById(renderer, "body_panel", &body_hit) ||
+      std::string(body_hit.data_godot_action ? body_hit.data_godot_action
+                                             : "") != "body" ||
+      !HasHitId(renderer, "body_button") || HasHitId(renderer, "name")) {
+    std::fprintf(stderr,
+                 "c_api_body_mutation_smoke: stylesheet after body replacement "
+                 "not reflected status=%d green=%zu body=%d button=%d "
+                 "name=%d action=%s\n",
+                 status, stylesheet_stats.resource_green_237a57,
+                 HasHitId(renderer, "body_panel") ? 1 : 0,
+                 HasHitId(renderer, "body_button") ? 1 : 0,
+                 HasHitId(renderer, "name") ? 1 : 0,
+                 body_hit.data_godot_action ? body_hit.data_godot_action : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_body_mutation_smoke: ok blue=%zu red=%zu green=%zu "
+      "old_state_cleared=1\n",
+      initial_stats.blue_2878d8, replaced_stats.resource_red_e84444,
+      stylesheet_stats.resource_green_237a57);
+  return 0;
 }
 
 int RunCApiSeparatedClickSmoke() {
@@ -3258,6 +3502,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-separated-click-smoke" ||
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-fragment-mutation-smoke" ||
+        arg == "--c-api-body-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
         arg == "--c-api-absolute-form-mutation-smoke" ||
@@ -3297,6 +3542,7 @@ int main(int argc, char** argv) {
   bool c_api_separated_click_smoke = false;
   bool c_api_dom_mutation_smoke = false;
   bool c_api_fragment_mutation_smoke = false;
+  bool c_api_body_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
   bool c_api_absolute_form_mutation_smoke = false;
@@ -3413,6 +3659,8 @@ int main(int argc, char** argv) {
       c_api_dom_mutation_smoke = true;
     } else if (arg == "--c-api-fragment-mutation-smoke") {
       c_api_fragment_mutation_smoke = true;
+    } else if (arg == "--c-api-body-mutation-smoke") {
+      c_api_body_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
       c_api_text_input_smoke = true;
     } else if (arg == "--c-api-form-control-mutation-smoke") {
@@ -3552,6 +3800,10 @@ int main(int argc, char** argv) {
 
   if (c_api_fragment_mutation_smoke) {
     return RunCApiFragmentMutationSmoke();
+  }
+
+  if (c_api_body_mutation_smoke) {
+    return RunCApiBodyMutationSmoke();
   }
 
   if (c_api_text_input_smoke) {

@@ -10119,8 +10119,11 @@ void ApplyDomMutationsForStandaloneRenderer(
       ++cache.dom_mutation_apply_count;
       continue;
     }
-    Element* element = document.getElementById(
-        AtomicString(String::FromUtf8(mutation.element_id)));
+    Element* element =
+        mutation.type == 12
+            ? document.body()
+            : document.getElementById(
+                  AtomicString(String::FromUtf8(mutation.element_id)));
     if (!element && mutation.type == 5) {
       const AtomicString style_element_id(
           String::FromUtf8(mutation.element_id));
@@ -10140,6 +10143,10 @@ void ApplyDomMutationsForStandaloneRenderer(
         element->setTextContent(String::FromUtf8(mutation.value));
         break;
       case 11:
+        element->SetInnerHTMLWithoutTrustedTypes(
+            String::FromUtf8(mutation.value));
+        break;
+      case 12:
         element->SetInnerHTMLWithoutTrustedTypes(
             String::FromUtf8(mutation.value));
         break;
@@ -13998,6 +14005,14 @@ int StandaloneBlinkLiveFrameBridgeHasLiveElementForStandaloneRenderer(
              .getElementById(AtomicString(String::FromUtf8(element_id)))
              ? 1
              : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeHasLiveBodyForStandaloneRenderer() {
+  DummyPageHolder* holder = ProbeCache().holder;
+  if (!holder) {
+    return 0;
+  }
+  return holder->GetDocument().body() ? 1 : 0;
 }
 
 void StandaloneBlinkLiveFrameBridgeSetInteractionStateForStandaloneRenderer(

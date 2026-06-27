@@ -139,6 +139,7 @@ enum class DomMutationType {
   kBlurFocusedElement = 9,
   kSetTextSelection = 10,
   kSetElementInnerHtml = 11,
+  kSetBodyInnerHtml = 12,
 };
 
 struct DomMutation {
