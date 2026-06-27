@@ -124,6 +124,18 @@ standalone probe strips stylesheet link elements before constructing the live
 Blink frame. Provider-loaded stylesheet text is injected into the existing
 Blink stylesheet path and then parsed by Blink.
 
+By default, `data:` URLs remain internally decoded memory-only resources and do
+not call the provider. With
+`BLINK_STANDALONE_RESOURCE_PROVIDER_CALLBACK_FOR_DATA_URLS`, data URLs that
+reach the standalone provider-backed fetch seam are routed through the callback;
+today this is validated for CSS image values such as `background-image:
+url(data:...)`, including data URLs inside provider-loaded linked stylesheets.
+If the callback blocks or fails those data URLs, the request fails closed and
+does not fall back to internal data decoding. Blink's native element data-URL
+path for `<img src="data:...">` does not currently route through this provider
+seam, so the callback-for-data flag should not be treated as complete
+document-wide interception yet.
+
 Downloadable web fonts from CSS `@font-face` are not supported in this
 standalone build yet. The current build intentionally stubs
 `FontFace::Create(Document*, StyleRuleFontFace, ...)` and

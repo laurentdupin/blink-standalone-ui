@@ -442,6 +442,10 @@ bool ShouldBlockFallbackForRequest(const StandaloneResourceRequest& request,
       !(flags & kStandaloneResourceProviderCallbackForDataUrls)) {
     return false;
   }
+  if (IsDataUrl(request.url) && provider_was_available &&
+      (flags & kStandaloneResourceProviderCallbackForDataUrls)) {
+    return true;
+  }
   if (!provider_was_available &&
       (flags & kStandaloneResourceProviderRequireProviderForExternal) &&
       !IsDataUrl(request.url)) {

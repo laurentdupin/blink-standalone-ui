@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/at_exit.h"
+#include "base/base64.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -150,6 +151,7 @@ void PrintUsage() {
       "[--gpu-output-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
+      "[--c-api-resource-provider-data-url-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
       "[--c-api-css-filter-blur-smoke] "
@@ -515,6 +517,12 @@ std::vector<uint8_t> MakeSolidBmp(int width,
   return bytes;
 }
 
+std::string MakeBmpDataUrl(const std::vector<uint8_t>& bytes) {
+  return "data:image/bmp;base64," +
+         base::Base64Encode(base::span<const uint8_t>(bytes.data(),
+                                                      bytes.size()));
+}
+
 struct CApiResourceProviderSmokeState {
   std::vector<uint8_t> green_bmp = MakeSolidBmp(4, 4, 0x23, 0x7a, 0x57);
   std::string theme_css =
@@ -726,6 +734,248 @@ int RunCApiResourceProviderSmoke() {
       provider_state.css_background_request_count,
       provider_state.not_found_count, provider_state.release_count,
       stats.resource_red_e84444, stats.resource_green_237a57);
+  return 0;
+}
+
+struct CApiResourceProviderDataUrlSmokeState {
+  std::vector<uint8_t> green_bmp = MakeSolidBmp(4, 4, 0x23, 0x7a, 0x57);
+  std::vector<uint8_t> red_img_bmp = MakeSolidBmp(5, 5, 0xe8, 0x44, 0x44);
+  std::vector<uint8_t> red_bg_bmp = MakeSolidBmp(4, 4, 0xe8, 0x44, 0x44);
+  std::string img_data_url = MakeBmpDataUrl(red_img_bmp);
+  std::string bg_data_url = MakeBmpDataUrl(red_bg_bmp);
+  std::string theme_css =
+      "body{margin:0;background:#112233}"
+      "#data-img{position:absolute;left:0;top:0;width:60px;height:60px}"
+      "#data-bg{position:absolute;left:80px;top:0;width:60px;height:60px;"
+      "background-image:url('" +
+      bg_data_url + "');background-size:60px 60px}";
+  int request_count = 0;
+  int data_url_request_count = 0;
+  int data_url_img_request_count = 0;
+  int data_url_css_background_request_count = 0;
+  int stylesheet_request_count = 0;
+  int blocked_count = 0;
+  int release_count = 0;
+  bool block_data_urls = false;
+};
+
+blink_standalone_resource_status_t CApiResourceProviderDataUrlSmokeLoad(
+    void* user_data,
+    const blink_standalone_resource_request_t* request,
+    blink_standalone_resource_response_t* response) {
+  auto* state =
+      static_cast<CApiResourceProviderDataUrlSmokeState*>(user_data);
+  if (!state || !request || !response || !request->url) {
+    return BLINK_STANDALONE_RESOURCE_STATUS_ERROR;
+  }
+  ++state->request_count;
+  const std::string url = request->url;
+  if (url.find("data-theme.css") != std::string::npos) {
+    ++state->stylesheet_request_count;
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes = reinterpret_cast<const uint8_t*>(state->theme_css.data());
+    response->byte_count = state->theme_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  if (url.rfind("data:", 0) == 0) {
+    ++state->data_url_request_count;
+    if (request->initiator == BLINK_STANDALONE_RESOURCE_INITIATOR_IMG_ELEMENT) {
+      ++state->data_url_img_request_count;
+    }
+    if (request->initiator ==
+        BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE) {
+      ++state->data_url_css_background_request_count;
+    }
+    if (state->block_data_urls) {
+      ++state->blocked_count;
+      response->status = BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED;
+      return BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED;
+    }
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "image/bmp";
+    response->bytes = state->green_bmp.data();
+    response->byte_count = state->green_bmp.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  response->status = BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+  return BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+}
+
+void CApiResourceProviderDataUrlSmokeRelease(
+    void* user_data,
+    blink_standalone_resource_response_t*) {
+  auto* state =
+      static_cast<CApiResourceProviderDataUrlSmokeState*>(user_data);
+  if (state) {
+    ++state->release_count;
+  }
+}
+
+int RunCApiResourceProviderDataUrlSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 180;
+  config.height = 100;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_data_url_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  CApiResourceProviderDataUrlSmokeState provider_state;
+  const std::string html_base =
+      "<!doctype html><link rel='stylesheet' href='asset://data-theme.css'>"
+      "<img id='data-img' src='" +
+      provider_state.img_data_url + "'><div id='data-bg'></div>";
+  const std::string html_default = html_base + "<!--default-data-url-->";
+  const std::string html_callback = html_base + "<!--callback-data-url-->";
+  const std::string html_blocked = html_base + "<!--blocked-data-url-->";
+
+  status = blink_standalone_renderer_set_resource_provider(
+      renderer, CApiResourceProviderDataUrlSmokeLoad,
+      CApiResourceProviderDataUrlSmokeRelease, &provider_state,
+      BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_NETWORK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_data_url_smoke: provider set "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_set_document_html(
+      renderer, html_default.c_str(), "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_data_url_smoke: set html failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+  blink_standalone_frame_output_t output = {};
+  blink_standalone_status_code_t output_status =
+      blink_standalone_renderer_get_latest_output(renderer, &output);
+  FramePixelContentStats stats = AnalyzeFramePixelContent(output);
+  const int default_requests = provider_state.request_count;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      provider_state.stylesheet_request_count < 1 ||
+      provider_state.data_url_request_count != 0 ||
+      stats.resource_red_e84444 < 3000 ||
+      stats.resource_green_237a57 != 0) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_data_url_smoke: default data URL failed "
+        "status=%d output_status=%d requests=%d stylesheets=%d data=%d "
+        "red=%zu green=%zu error=%s\n",
+        status, output_status, provider_state.request_count,
+        provider_state.stylesheet_request_count,
+        provider_state.data_url_request_count, stats.resource_red_e84444,
+        stats.resource_green_237a57,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_resource_provider(
+      renderer, CApiResourceProviderDataUrlSmokeLoad,
+      CApiResourceProviderDataUrlSmokeRelease, &provider_state,
+      BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_NETWORK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_CALLBACK_FOR_DATA_URLS);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_data_url_smoke: callback-for-data "
+                 "provider set failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  status = blink_standalone_renderer_set_document_html(
+      renderer, html_callback.c_str(), "", "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 1.0 / 60.0)
+               : status;
+  output = {};
+  output_status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  stats = AnalyzeFramePixelContent(output);
+  const int callback_data_requests =
+      provider_state.data_url_request_count;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      callback_data_requests < 1 ||
+      provider_state.data_url_css_background_request_count < 1 ||
+      stats.resource_green_237a57 < 3000 ||
+      stats.resource_red_e84444 != 0) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_data_url_smoke: callback data URL failed "
+        "status=%d output_status=%d data=%d img=%d css_bg=%d red=%zu "
+        "green=%zu error=%s\n",
+        status, output_status, provider_state.data_url_request_count,
+        provider_state.data_url_img_request_count,
+        provider_state.data_url_css_background_request_count,
+        stats.resource_red_e84444, stats.resource_green_237a57,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  provider_state.block_data_urls = true;
+  const int blocked_before = provider_state.blocked_count;
+  status = blink_standalone_renderer_set_document_html(
+      renderer, html_blocked.c_str(), "", "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 2.0 / 60.0)
+               : status;
+  output = {};
+  output_status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      provider_state.blocked_count <= blocked_before ||
+      stats.resource_red_e84444 != 0 ||
+      stats.resource_green_237a57 != 0) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_data_url_smoke: blocked data URL failed "
+        "status=%d output_status=%d blocked=%d before=%d red=%zu green=%zu "
+        "error=%s\n",
+        status, output_status, provider_state.blocked_count, blocked_before,
+        stats.resource_red_e84444, stats.resource_green_237a57,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_resource_provider_data_url_smoke: ok default_requests=%d "
+      "data_requests=%d img=%d css_bg=%d blocked=%d releases=%d "
+      "default=internal callback=replaced blocked=no_fallback\n",
+      default_requests, provider_state.data_url_request_count,
+      provider_state.data_url_img_request_count,
+      provider_state.data_url_css_background_request_count,
+      provider_state.blocked_count, provider_state.release_count);
   return 0;
 }
 
@@ -5682,6 +5932,7 @@ int main(int argc, char** argv) {
     if (arg == "--c-api-smoke" ||
         arg == "--c-api-viewport-resize-smoke" ||
         arg == "--c-api-resource-provider-smoke" ||
+        arg == "--c-api-resource-provider-data-url-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-css-filter-blur-smoke" ||
@@ -5736,6 +5987,7 @@ int main(int argc, char** argv) {
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_resource_provider_smoke = false;
+  bool c_api_resource_provider_data_url_smoke = false;
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
   bool c_api_css_filter_blur_smoke = false;
@@ -5865,6 +6117,8 @@ int main(int argc, char** argv) {
       c_api_viewport_resize_smoke = true;
     } else if (arg == "--c-api-resource-provider-smoke") {
       c_api_resource_provider_smoke = true;
+    } else if (arg == "--c-api-resource-provider-data-url-smoke") {
+      c_api_resource_provider_data_url_smoke = true;
     } else if (arg == "--c-api-empty-resource-smoke") {
       c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-transparent-background-smoke") {
@@ -6030,6 +6284,10 @@ int main(int argc, char** argv) {
 
   if (c_api_resource_provider_smoke) {
     return RunCApiResourceProviderSmoke();
+  }
+
+  if (c_api_resource_provider_data_url_smoke) {
+    return RunCApiResourceProviderDataUrlSmoke();
   }
 
   if (c_api_empty_resource_smoke) {
