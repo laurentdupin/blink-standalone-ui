@@ -38,7 +38,9 @@ class CORE_EXPORT CEReactionsScope final {
   static CEReactionsScope* top_of_stack_;
   CustomElementReactionStack* stack_ = nullptr;
   CEReactionsScope* prev_;
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   v8::TryCatch try_catch_;
+#endif
 };
 
 }  // namespace blink

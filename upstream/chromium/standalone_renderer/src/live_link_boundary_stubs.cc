@@ -1459,8 +1459,7 @@ CEReactionsScope* CEReactionsScope::top_of_stack_ = nullptr;
 CEReactionsScope* CEReactionsScope::Current() {
   return top_of_stack_;
 }
-CEReactionsScope::CEReactionsScope(v8::Isolate* isolate)
-    : prev_(top_of_stack_), try_catch_(isolate) {
+CEReactionsScope::CEReactionsScope(v8::Isolate*) : prev_(top_of_stack_) {
   top_of_stack_ = this;
 }
 CEReactionsScope::~CEReactionsScope() {
