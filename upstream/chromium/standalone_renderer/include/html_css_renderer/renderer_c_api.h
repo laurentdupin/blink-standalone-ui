@@ -99,6 +99,10 @@ typedef struct blink_standalone_form_control_state {
   int selection_offsets_present;
   unsigned selection_start;
   unsigned selection_end;
+  const char* type;
+  const char* min;
+  const char* max;
+  const char* step;
 } blink_standalone_form_control_state_t;
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(

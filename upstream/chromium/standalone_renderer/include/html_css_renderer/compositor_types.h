@@ -211,6 +211,10 @@ struct FormControlEntry {
   std::string element_id;
   std::string tag_name;
   std::string value;
+  std::string type;
+  std::string min;
+  std::string max;
+  std::string step;
   bool checked = false;
   bool focused = false;
   bool selection_offsets_present = false;

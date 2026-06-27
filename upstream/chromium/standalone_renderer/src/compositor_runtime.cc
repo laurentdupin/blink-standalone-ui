@@ -230,7 +230,15 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
     int* focused,
     int* selection_offsets_present,
     unsigned* selection_start,
-    unsigned* selection_end);
+    unsigned* selection_end,
+    char* type,
+    int type_capacity,
+    char* min,
+    int min_capacity,
+    char* max,
+    int max_capacity,
+    char* step,
+    int step_capacity);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryAtForStandaloneRenderer(
@@ -1434,6 +1442,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       std::array<char, 256> element_id{};
       std::array<char, 64> tag_name{};
       std::array<char, 2048> value{};
+      std::array<char, 64> type{};
+      std::array<char, 128> min{};
+      std::array<char, 128> max{};
+      std::array<char, 128> step{};
       int checked = 0;
       int focused = 0;
       int selection_offsets_present = 0;
@@ -1446,7 +1458,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
                   static_cast<int>(tag_name.size()), value.data(),
                   static_cast<int>(value.size()), &checked, &focused,
                   &selection_offsets_present, &selection_start,
-                  &selection_end)) {
+                  &selection_end, type.data(), static_cast<int>(type.size()),
+                  min.data(), static_cast<int>(min.size()), max.data(),
+                  static_cast<int>(max.size()), step.data(),
+                  static_cast<int>(step.size()))) {
         continue;
       }
       const size_t id_length = std::strlen(element_id.data());
@@ -1456,6 +1471,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       entry.element_id = std::string(element_id.data(), id_length);
       entry.tag_name = tag_name.data();
       entry.value = value.data();
+      entry.type = type.data();
+      entry.min = min.data();
+      entry.max = max.data();
+      entry.step = step.data();
       entry.checked = checked != 0;
       entry.focused = focused != 0;
       entry.selection_offsets_present = selection_offsets_present != 0;

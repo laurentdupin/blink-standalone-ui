@@ -658,6 +658,10 @@ struct LiveFormControlEntry {
   std::string element_id;
   std::string tag_name;
   std::string value;
+  std::string type;
+  std::string min;
+  std::string max;
+  std::string step;
   bool checked = false;
   bool focused = false;
   bool selection_offsets_present = false;
@@ -7624,6 +7628,9 @@ struct FormControlElementDiagnosticForStandaloneRenderer {
   std::string debug_id;
   std::string type_attr;
   std::string name_attr;
+  std::string min_attr;
+  std::string max_attr;
+  std::string step_attr;
   std::string input_name;
   std::string value_attr;
   std::string live_value;
@@ -7784,6 +7791,12 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
           element->getAttribute(html_names::kTypeAttr));
       item.name_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kNameAttr));
+      item.min_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kMinAttr));
+      item.max_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kMaxAttr));
+      item.step_attr = BlinkStringToStdStringForStandaloneRenderer(
+          element->getAttribute(html_names::kStepAttr));
       item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
           element->getAttribute(html_names::kValueAttr));
       item.is_connected = element->isConnected();
@@ -7980,6 +7993,10 @@ void CollectFormControlEntriesForStandaloneRenderer(
     entry.element_id = item.element_id;
     entry.tag_name = item.tag_name;
     entry.value = item.live_value;
+    entry.type = item.type_attr;
+    entry.min = item.min_attr;
+    entry.max = item.max_attr;
+    entry.step = item.step_attr;
     entry.checked = item.checked;
     entry.focused = item.focused;
     entry.selection_offsets_present = item.selection_offsets_present;
@@ -8135,6 +8152,9 @@ std::string FormControlDiagnosticsJsonForStandaloneRenderer(
          << JsonStringForStandaloneRenderer(item.debug_id)
          << ",\"type_attr\":" << JsonStringForStandaloneRenderer(item.type_attr)
          << ",\"name_attr\":" << JsonStringForStandaloneRenderer(item.name_attr)
+         << ",\"min_attr\":" << JsonStringForStandaloneRenderer(item.min_attr)
+         << ",\"max_attr\":" << JsonStringForStandaloneRenderer(item.max_attr)
+         << ",\"step_attr\":" << JsonStringForStandaloneRenderer(item.step_attr)
          << ",\"input_name\":" << JsonStringForStandaloneRenderer(item.input_name)
          << ",\"value_length\":" << item.value_attr.size()
          << ",\"live_value\":"
@@ -14621,33 +14641,38 @@ int StandaloneBlinkLiveFrameBridgeFormControlEntryAtForStandaloneRenderer(
     int* focused,
     int* selection_offsets_present,
     unsigned* selection_start,
-    unsigned* selection_end) {
+    unsigned* selection_end,
+    char* type,
+    int type_capacity,
+    char* min,
+    int min_capacity,
+    char* max,
+    int max_capacity,
+    char* step,
+    int step_capacity) {
   RunLiveFramePaintProbe(body_html);
   const auto& entries = ProbeCache().form_control_entries;
   if (index < 0 || index >= static_cast<int>(entries.size())) {
     return 0;
   }
   const LiveFormControlEntry& entry = entries[static_cast<size_t>(index)];
-  if (element_id && element_id_capacity > 0) {
+  auto copy_string = [](const std::string& source, char* destination,
+                        int destination_capacity) {
+    if (!destination || destination_capacity <= 0) {
+      return;
+    }
     const size_t copied =
-        std::min(entry.element_id.size(),
-                 static_cast<size_t>(element_id_capacity - 1));
-    std::memcpy(element_id, entry.element_id.data(), copied);
-    element_id[copied] = '\0';
-  }
-  if (tag_name && tag_name_capacity > 0) {
-    const size_t copied =
-        std::min(entry.tag_name.size(),
-                 static_cast<size_t>(tag_name_capacity - 1));
-    std::memcpy(tag_name, entry.tag_name.data(), copied);
-    tag_name[copied] = '\0';
-  }
-  if (value && value_capacity > 0) {
-    const size_t copied =
-        std::min(entry.value.size(), static_cast<size_t>(value_capacity - 1));
-    std::memcpy(value, entry.value.data(), copied);
-    value[copied] = '\0';
-  }
+        std::min(source.size(), static_cast<size_t>(destination_capacity - 1));
+    std::memcpy(destination, source.data(), copied);
+    destination[copied] = '\0';
+  };
+  copy_string(entry.element_id, element_id, element_id_capacity);
+  copy_string(entry.tag_name, tag_name, tag_name_capacity);
+  copy_string(entry.value, value, value_capacity);
+  copy_string(entry.type, type, type_capacity);
+  copy_string(entry.min, min, min_capacity);
+  copy_string(entry.max, max, max_capacity);
+  copy_string(entry.step, step, step_capacity);
   if (checked) {
     *checked = entry.checked ? 1 : 0;
   }

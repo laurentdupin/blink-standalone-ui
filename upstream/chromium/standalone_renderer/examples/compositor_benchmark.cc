@@ -148,6 +148,7 @@ void PrintUsage() {
       "[--c-api-text-input-smoke] "
       "[--c-api-form-control-mutation-smoke] "
       "[--c-api-absolute-form-mutation-smoke] "
+      "[--c-api-slider-form-state-smoke] "
       "[--c-api-fragment-mutation-smoke] "
       "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
@@ -875,6 +876,10 @@ bool GetFormStateById(blink_standalone_renderer_t* renderer,
 std::string FormStateValue(
     const blink_standalone_form_control_state_t& state) {
   return state.value ? state.value : "";
+}
+
+std::string FormStateCString(const char* value) {
+  return value ? value : "";
 }
 
 bool AdvanceCApiFrameForSmoke(blink_standalone_renderer_t* renderer,
@@ -2298,6 +2303,103 @@ int RunCApiFormControlMutationSmoke() {
   return 0;
 }
 
+int RunCApiSliderFormStateSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 320;
+  config.height = 160;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_slider_form_state_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;padding:12px;background:#112233;"
+      "color:white;font:16px sans-serif}#volume{position:absolute;left:20px;"
+      "top:70px;width:220px;height:24px}#label{position:absolute;left:20px;"
+      "top:28px;width:160px;height:28px;background:#2878d8;color:white}"
+      "</style><div id='label' data-godot-action='label'>Volume</div>"
+      "<input id='volume' type='range' min='0' max='100' step='5' "
+      "value='35' data-godot-action='volume'>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, 0.0,
+                                "c_api_slider_form_state_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_slider_form_state_smoke: initial render failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_form_control_state_t state = {};
+  if (!GetFormStateById(renderer, "volume", &state) ||
+      FormStateValue(state) != "35" ||
+      FormStateCString(state.type) != "range" ||
+      FormStateCString(state.min) != "0" ||
+      FormStateCString(state.max) != "100" ||
+      FormStateCString(state.step) != "5" ||
+      !HasHitId(renderer, "volume")) {
+    std::fprintf(stderr,
+                 "c_api_slider_form_state_smoke: initial state mismatch "
+                 "value=%s type=%s min=%s max=%s step=%s\n",
+                 FormStateValue(state).c_str(),
+                 FormStateCString(state.type).c_str(),
+                 FormStateCString(state.min).c_str(),
+                 FormStateCString(state.max).c_str(),
+                 FormStateCString(state.step).c_str());
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.016;
+  status = blink_standalone_renderer_set_form_control_value(renderer, "volume",
+                                                            "80");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_slider_form_state_smoke") ||
+      !GetFormStateById(renderer, "volume", &state) ||
+      FormStateValue(state) != "80") {
+    std::fprintf(stderr,
+                 "c_api_slider_form_state_smoke: set value failed status=%d "
+                 "value=%s error=%s\n",
+                 status, FormStateValue(state).c_str(),
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  time += 0.016;
+  status = blink_standalone_renderer_set_form_control_value(renderer, "volume",
+                                                            "103");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_slider_form_state_smoke") ||
+      !GetFormStateById(renderer, "volume", &state) ||
+      FormStateValue(state) != "103") {
+    std::fprintf(stderr,
+                 "c_api_slider_form_state_smoke: out-of-range value failed "
+                 "status=%d value=%s error=%s\n",
+                 status, FormStateValue(state).c_str(),
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_slider_form_state_smoke: ok value=103 type=range min=0 max=100 "
+      "step=5 out_of_range=preserved\n");
+  return 0;
+}
+
 int RunCApiAbsoluteFormMutationSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 320;
@@ -3506,6 +3608,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
         arg == "--c-api-absolute-form-mutation-smoke" ||
+        arg == "--c-api-slider-form-state-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -3546,6 +3649,7 @@ int main(int argc, char** argv) {
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
   bool c_api_absolute_form_mutation_smoke = false;
+  bool c_api_slider_form_state_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -3667,6 +3771,8 @@ int main(int argc, char** argv) {
       c_api_form_control_mutation_smoke = true;
     } else if (arg == "--c-api-absolute-form-mutation-smoke") {
       c_api_absolute_form_mutation_smoke = true;
+    } else if (arg == "--c-api-slider-form-state-smoke") {
+      c_api_slider_form_state_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -3816,6 +3922,10 @@ int main(int argc, char** argv) {
 
   if (c_api_absolute_form_mutation_smoke) {
     return RunCApiAbsoluteFormMutationSmoke();
+  }
+
+  if (c_api_slider_form_state_smoke) {
+    return RunCApiSliderFormStateSmoke();
   }
 
   if (c_api_two_instance_smoke) {

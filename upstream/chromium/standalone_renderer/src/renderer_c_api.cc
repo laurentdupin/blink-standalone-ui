@@ -219,6 +219,10 @@ void CopyFormControlState(const html_css_renderer::FormControlEntry& source,
   state->element_id = source.element_id.c_str();
   state->tag_name = source.tag_name.c_str();
   state->value = source.value.c_str();
+  state->type = source.type.c_str();
+  state->min = source.min.c_str();
+  state->max = source.max.c_str();
+  state->step = source.step.c_str();
   state->checked = source.checked ? 1 : 0;
   state->focused = source.focused ? 1 : 0;
   state->selection_offsets_present =
