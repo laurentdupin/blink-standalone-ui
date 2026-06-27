@@ -10,8 +10,10 @@ compositor path:
 
 `HTML/CSS input -> Blink lifecycle -> PaintArtifactCompositor -> cc -> GPU raster/shared image -> Viz Display/SkiaRenderer GPU -> Vulkan -> SDL HWND`
 
-The retained `DrawCommandList` presenter, Skia CPU raster path, SDL texture
-upload path, and old retained SDL viewer are no longer production surfaces.
+The retained `DrawCommandList` presenter, Skia CPU raster path, and old retained
+SDL viewer are no longer production surfaces. The SDL texture upload path remains
+available only through the explicit `--gpu-backend=cpu-texture` legacy/debug
+mode; it is not the default and is not a fallback for GPU backend modes.
 
 Active entrypoints:
 
@@ -23,7 +25,11 @@ Active entrypoints:
 
 The SDL viewer is host-only. It owns window creation, input/event pumping,
 native HWND lifetime, size changes, and frame scheduling. It does not own a
-renderer, texture upload, readback, or pixel presentation path.
+renderer or pixel presentation path in the default Vulkan mode.
+
+See `docs/GPU_BACKENDS.md` for the current SDL backend matrix. Today Vulkan is
+active and validated. DX12 is intentionally blocked until there is a Chromium
+D3D12/DXGI/Dawn/Skia/Viz host equivalent to `VulkanWindowHost`.
 
 ## Runtime Boundaries
 

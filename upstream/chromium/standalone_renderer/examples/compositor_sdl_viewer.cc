@@ -37,6 +37,7 @@
 #include "base/threading/platform_thread.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/compositor_types.h"
 #include "html_css_renderer/css_file_loader.h"
 #include "html_css_renderer/renderer_c_api.h"
@@ -54,6 +55,60 @@ namespace {
 namespace fs = std::filesystem;
 
 constexpr int kNavigationDeferralsAfterReset = 10;
+
+std::string LowerAsciiForCompositorViewer(std::string value);
+
+enum class ViewerGpuBackend {
+  kVulkan,
+  kDx12,
+  kCpuTexture,
+};
+
+const char* ViewerGpuBackendName(ViewerGpuBackend backend) {
+  switch (backend) {
+    case ViewerGpuBackend::kVulkan:
+      return "vulkan";
+    case ViewerGpuBackend::kDx12:
+      return "dx12";
+    case ViewerGpuBackend::kCpuTexture:
+      return "cpu-texture";
+  }
+  return "unknown";
+}
+
+bool ParseViewerGpuBackend(const std::string& value,
+                           ViewerGpuBackend* backend) {
+  const std::string lower = LowerAsciiForCompositorViewer(value);
+  if (lower == "vulkan") {
+    *backend = ViewerGpuBackend::kVulkan;
+    return true;
+  }
+  if (lower == "dx12" || lower == "d3d12") {
+    *backend = ViewerGpuBackend::kDx12;
+    return true;
+  }
+  if (lower == "cpu-texture" || lower == "cpu" || lower == "legacy-cpu") {
+    *backend = ViewerGpuBackend::kCpuTexture;
+    return true;
+  }
+  return false;
+}
+
+ViewerGpuBackend PreparseViewerGpuBackend(int argc, char** argv) {
+  ViewerGpuBackend backend = ViewerGpuBackend::kVulkan;
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i] ? argv[i] : "";
+    if (arg == "--gpu-backend" && i + 1 < argc) {
+      ParseViewerGpuBackend(argv[i + 1] ? argv[i + 1] : "", &backend);
+      ++i;
+      continue;
+    }
+    if (arg.rfind("--gpu-backend=", 0) == 0) {
+      ParseViewerGpuBackend(arg.substr(14), &backend);
+    }
+  }
+  return backend;
+}
 
 bool ReadTextFile(const std::string& path, std::string* out) {
   std::ifstream file(path, std::ios::binary);
@@ -378,6 +433,19 @@ html_css_renderer::Size SdlWindowPixelViewport(SDL_Window* window) {
                                  static_cast<float>(std::max(1, height))};
 }
 
+void* SdlWin32WindowHandleForCompositorViewer(SDL_Window* window) {
+#if defined(_WIN32)
+  SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+  if (!properties) {
+    return nullptr;
+  }
+  return SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+                                nullptr);
+#else
+  return nullptr;
+#endif
+}
+
 html_css_renderer::Point SdlWindowPointToPixelViewport(
     SDL_Window* window,
     html_css_renderer::Point window_point) {
@@ -694,12 +762,14 @@ void PrintUsage() {
       "[--synthetic-sdl-click-repeats N] [--synthetic-navigation-smoke] "
       "[--synthetic-navigation-stress N] "
       "[--synthetic-wheel-burst count,deltaY|count,deltaX,deltaY] "
+      "[--gpu-backend vulkan|dx12|cpu-texture] "
       "[--trace-stages] [--full-frame-diagnostics]\n"
       "Launching without --html, --html-file, or --html-dir opens a native "
       "HTML directory picker on Windows and recursively lists HTML files. "
       "F1/F2 switch files; F5 resets the current file.\n"
       "SDL owns the host window/event pump only. HTML/CSS frames are driven "
-      "through Blink PaintArtifactCompositor/cc/Viz/GPU/Vulkan.\n");
+      "through Blink PaintArtifactCompositor/cc/Viz/GPU. The default backend "
+      "is vulkan; cpu-texture is an explicit legacy/debug mode.\n");
 }
 
 bool FeatureSwitchContains(const std::string& enabled_features,
@@ -735,7 +805,10 @@ void AppendFeatureSwitchIfMissing(base::CommandLine* command_line,
   command_line->AppendSwitchASCII(switches::kEnableFeatures, enabled_features);
 }
 
-void ApplyStandaloneGpuDefaults() {
+void ApplyStandaloneGpuDefaults(ViewerGpuBackend backend) {
+  if (backend == ViewerGpuBackend::kDx12) {
+    return;
+  }
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch(switches::kUseGL) &&
       !command_line->HasSwitch(switches::kUseANGLE)) {
@@ -812,7 +885,8 @@ bool IsChromiumGpuSwitch(const std::string& arg, bool* consumes_value) {
 int main(int argc, char** argv) {
   html_css_renderer::ConfigureStandaloneToolProcess();
   base::CommandLine::Init(argc, argv);
-  ApplyStandaloneGpuDefaults();
+  ViewerGpuBackend gpu_backend = PreparseViewerGpuBackend(argc, argv);
+  ApplyStandaloneGpuDefaults(gpu_backend);
   base::AtExitManager at_exit_manager;
   html_css_renderer::InitializeStandaloneIcu();
   InitializeStandaloneFeatureList();
@@ -942,6 +1016,17 @@ int main(int argc, char** argv) {
     } else if (arg.rfind("--viewport=", 0) == 0) {
       if (!ParseViewport(arg.substr(11), &renderer.viewport)) {
         std::fprintf(stderr, "invalid --viewport\n");
+        return 2;
+      }
+    } else if (arg == "--gpu-backend") {
+      const char* value = next_value();
+      if (!value || !ParseViewerGpuBackend(value, &gpu_backend)) {
+        std::fprintf(stderr, "invalid --gpu-backend\n");
+        return 2;
+      }
+    } else if (arg.rfind("--gpu-backend=", 0) == 0) {
+      if (!ParseViewerGpuBackend(arg.substr(14), &gpu_backend)) {
+        std::fprintf(stderr, "invalid --gpu-backend\n");
         return 2;
       }
     } else if (arg == "--quit-after-ms") {
@@ -1122,6 +1207,18 @@ int main(int argc, char** argv) {
     }
   }
 
+  std::fprintf(stderr, "selected GPU backend: %s\n",
+               ViewerGpuBackendName(gpu_backend));
+  if (gpu_backend == ViewerGpuBackend::kDx12) {
+    std::fprintf(
+        stderr,
+        "DX12 backend is not wired: the standalone SDL viewer currently has a "
+        "Chromium VulkanWindowHost only. A real DX12 mode needs an equivalent "
+        "Chromium-owned D3D12/DXGI/Dawn/Skia/Viz native-window host and CMake "
+        "source/library wiring; refusing to fall back to Vulkan or CPU.\n");
+    return 2;
+  }
+
   if (!html_input_provided) {
     std::fprintf(
         stderr,
@@ -1185,8 +1282,11 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "SDL_StartTextInput failed: %s\n", SDL_GetError());
   }
 
-  SDL_Renderer* sdl_renderer = SDL_CreateRenderer(window, nullptr);
-  if (!sdl_renderer) {
+  const bool cpu_texture_backend =
+      gpu_backend == ViewerGpuBackend::kCpuTexture;
+  SDL_Renderer* sdl_renderer =
+      cpu_texture_backend ? SDL_CreateRenderer(window, nullptr) : nullptr;
+  if (cpu_texture_backend && !sdl_renderer) {
     std::fprintf(stderr, "SDL_CreateRenderer failed: %s\n", SDL_GetError());
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
@@ -1205,6 +1305,13 @@ int main(int argc, char** argv) {
         BLINK_STANDALONE_PIXEL_FORMAT_NONE;
   } c_api;
 
+  struct ViewerGpuRuntime {
+    std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime;
+    html_css_renderer::CompositorFrameResult latest_frame;
+    html_css_renderer::NativePresentationResult latest_presentation;
+    bool frame_valid = false;
+  } gpu_runtime;
+
   auto clear_c_api_output = [&]() {
     if (c_api.renderer && c_api.output_valid) {
       blink_standalone_renderer_release_latest_output(c_api.renderer);
@@ -1218,6 +1325,17 @@ int main(int argc, char** argv) {
     if (c_api.renderer) {
       blink_standalone_renderer_destroy(c_api.renderer);
       c_api.renderer = nullptr;
+      QuiesceStandaloneViewerAfterDocumentTeardown();
+    }
+  };
+
+  auto destroy_gpu_runtime = [&]() {
+    if (gpu_runtime.runtime) {
+      gpu_runtime.runtime.reset();
+      gpu_runtime.latest_frame = html_css_renderer::CompositorFrameResult();
+      gpu_runtime.latest_presentation =
+          html_css_renderer::NativePresentationResult();
+      gpu_runtime.frame_valid = false;
       QuiesceStandaloneViewerAfterDocumentTeardown();
     }
   };
@@ -1250,8 +1368,12 @@ int main(int argc, char** argv) {
   };
 
   auto update_window_title = [&]() {
-    std::string title = "Blink standalone C API SDL host: ";
-    title += c_api.output_valid ? "presented " : "waiting ";
+    std::string title = "Blink standalone SDL host: ";
+    const bool presented =
+        cpu_texture_backend ? c_api.output_valid : gpu_runtime.frame_valid;
+    title += presented ? "presented " : "waiting ";
+    title += ViewerGpuBackendName(gpu_backend);
+    title += " ";
     title += current_document_label();
     SDL_SetWindowTitle(window, title.c_str());
   };
@@ -1313,6 +1435,65 @@ int main(int argc, char** argv) {
     return true;
   };
 
+  auto print_native_presentation_diagnostics =
+      [](const html_css_renderer::NativePresentationResult& result) {
+        for (const std::string& diagnostic : result.diagnostics) {
+          std::fprintf(stderr, "native_presentation: %s\n",
+                       diagnostic.c_str());
+        }
+      };
+
+  auto validate_vulkan_presentation =
+      [&](const html_css_renderer::NativePresentationResult& presentation,
+          const char* reason) {
+        if (presentation.native_window_available &&
+            presentation.vulkan_instance_initialized &&
+            presentation.vulkan_device_queue_initialized &&
+            presentation.vulkan_surface_created &&
+            presentation.vulkan_surface_initialized &&
+            presentation.vulkan_swapchain_created &&
+            presentation.viz_display_created &&
+            presentation.skia_renderer_gpu_path_reached &&
+            presentation.vulkan_presented) {
+          return true;
+        }
+        std::fprintf(
+            stderr,
+            "Vulkan backend presentation failed for %s: "
+            "native_window=%d vk_instance=%d vk_device=%d vk_surface=%d "
+            "vk_surface_init=%d vk_swapchain=%d viz_display=%d skia_gpu=%d "
+            "vulkan_present=%d failure=%s\n",
+            reason ? reason : "frame", presentation.native_window_available,
+            presentation.vulkan_instance_initialized,
+            presentation.vulkan_device_queue_initialized,
+            presentation.vulkan_surface_created,
+            presentation.vulkan_surface_initialized,
+            presentation.vulkan_swapchain_created,
+            presentation.viz_display_created,
+            presentation.skia_renderer_gpu_path_reached,
+            presentation.vulkan_presented,
+            presentation.failure_reason.empty()
+                ? "(none)"
+                : presentation.failure_reason.c_str());
+        print_native_presentation_diagnostics(presentation);
+        return false;
+      };
+
+  auto present_latest_gpu_frame = [&](const char* reason) {
+    if (!gpu_runtime.runtime) {
+      std::fprintf(stderr, "GPU runtime is not initialized\n");
+      return false;
+    }
+    gpu_runtime.latest_presentation =
+        gpu_runtime.runtime->PresentToNativeWindow(gpu_runtime.latest_frame);
+    print_native_presentation_diagnostics(gpu_runtime.latest_presentation);
+    if (!validate_vulkan_presentation(gpu_runtime.latest_presentation, reason)) {
+      return false;
+    }
+    gpu_runtime.frame_valid = true;
+    return true;
+  };
+
   auto write_current_paint_artifact_dump = [&]() {
     if (!paint_artifact_dump_path.empty()) {
       std::fprintf(stderr,
@@ -1321,18 +1502,34 @@ int main(int argc, char** argv) {
   };
 
   auto write_current_screenshot = [&]() {
-    if (!c_api.output_valid) {
-      std::fprintf(stderr, "screenshot capture failed: no C API raw frame output\n");
-      return false;
-    }
-    std::optional<std::vector<uint8_t>> png =
-        EncodeRawFramePngForCompositorViewer(c_api.latest_output);
-    if (!png) {
-      std::fprintf(stderr, "screenshot capture failed: raw frame PNG encoding failed\n");
-      return false;
-    }
-    if (!WriteBinaryFileForCompositorViewer(screenshot_out, *png)) {
-      return false;
+    if (cpu_texture_backend) {
+      if (!c_api.output_valid) {
+        std::fprintf(stderr,
+                     "screenshot capture failed: no C API raw frame output\n");
+        return false;
+      }
+      std::optional<std::vector<uint8_t>> png =
+          EncodeRawFramePngForCompositorViewer(c_api.latest_output);
+      if (!png) {
+        std::fprintf(
+            stderr,
+            "screenshot capture failed: raw frame PNG encoding failed\n");
+        return false;
+      }
+      if (!WriteBinaryFileForCompositorViewer(screenshot_out, *png)) {
+        return false;
+      }
+    } else {
+      if (!gpu_runtime.latest_frame.png_snapshot_available ||
+          gpu_runtime.latest_frame.png_snapshot_bytes.empty()) {
+        std::fprintf(stderr,
+                     "screenshot capture failed: no GPU runtime PNG snapshot\n");
+        return false;
+      }
+      if (!WriteBinaryFileForCompositorViewer(
+              screenshot_out, gpu_runtime.latest_frame.png_snapshot_bytes)) {
+        return false;
+      }
     }
     std::fprintf(stderr, "wrote compositor screenshot: %s\n",
                  fs::absolute(fs::path(screenshot_out)).string().c_str());
@@ -1358,6 +1555,30 @@ int main(int argc, char** argv) {
                      : 0);
   };
 
+  auto print_gpu_frame_status = [&](const char* reason) {
+    const html_css_renderer::CompositorFrameResult& frame =
+        gpu_runtime.latest_frame;
+    const html_css_renderer::NativePresentationResult& presentation =
+        gpu_runtime.latest_presentation;
+    std::fprintf(stderr,
+                 "frame=%llu reason=%s backend=%s cc_output=%dx%d "
+                 "viz_output=%dx%d paint_clean=%d root_layer=%d "
+                 "viz_display=%d skia_gpu=%d vulkan_present=%d "
+                 "begin_frame=%d\n",
+                 static_cast<unsigned long long>(frame_count),
+                 reason ? reason : "unknown", ViewerGpuBackendName(gpu_backend),
+                 static_cast<int>(frame.compositor_output_size.width),
+                 static_cast<int>(frame.compositor_output_size.height),
+                 static_cast<int>(frame.viz_display_output_size.width),
+                 static_cast<int>(frame.viz_display_output_size.height),
+                 frame.paint_clean ? 1 : 0,
+                 frame.root_layer_available ? 1 : 0,
+                 presentation.viz_display_created ? 1 : 0,
+                 presentation.skia_renderer_gpu_path_reached ? 1 : 0,
+                 presentation.vulkan_presented ? 1 : 0,
+                 frame.needs_begin_frame ? 1 : 0);
+  };
+
   auto advance_c_api_frame = [&](const char* reason, double timeline_seconds) {
     clear_c_api_output();
     const blink_standalone_status_code_t status =
@@ -1374,6 +1595,45 @@ int main(int argc, char** argv) {
       return false;
     }
     print_c_api_frame_status(reason);
+    write_current_paint_artifact_dump();
+    update_window_title();
+    return true;
+  };
+
+  std::vector<html_css_renderer::MouseInputEvent> pending_gpu_mouse_events;
+  std::vector<html_css_renderer::KeyboardInputEvent> pending_gpu_keyboard_events;
+  std::optional<html_css_renderer::WheelInput> pending_gpu_wheel;
+
+  auto advance_gpu_frame = [&](const char* reason,
+                               double timeline_seconds,
+                               bool request_png_snapshot) {
+    if (!gpu_runtime.runtime) {
+      std::fprintf(stderr, "GPU runtime is not initialized\n");
+      return false;
+    }
+    html_css_renderer::FrameInput input;
+    input.viewport = current_viewport;
+    input.device_scale_factor = renderer.device_scale_factor;
+    input.html_override = HtmlWithInlineStylesForCompositorViewer(
+        current_document_html, current_document_stylesheets);
+    input.resource_root = current_resource_root;
+    input.resource_base_path = current_resource_base_path;
+    input.timeline_time_seconds = timeline_seconds;
+    input.request_png_snapshot = request_png_snapshot;
+    input.request_raw_frame = false;
+    input.result_collection = html_css_renderer::FrameResultCollection::kFull;
+    input.mouse_events = std::move(pending_gpu_mouse_events);
+    input.keyboard_events = std::move(pending_gpu_keyboard_events);
+    input.wheel = pending_gpu_wheel;
+    pending_gpu_mouse_events.clear();
+    pending_gpu_keyboard_events.clear();
+    pending_gpu_wheel.reset();
+    gpu_runtime.latest_frame = gpu_runtime.runtime->AdvanceFrame(input);
+    ++frame_count;
+    if (!present_latest_gpu_frame(reason)) {
+      return false;
+    }
+    print_gpu_frame_status(reason);
     write_current_paint_artifact_dump();
     update_window_title();
     return true;
@@ -1398,6 +1658,62 @@ int main(int argc, char** argv) {
   };
   auto create_c_api_renderer = [&]() {
     return create_c_api_renderer_for_viewport(SdlWindowPixelViewport(window));
+  };
+
+  auto create_gpu_runtime_for_viewport =
+      [&](html_css_renderer::Size viewport) {
+        destroy_gpu_runtime();
+        current_viewport = viewport;
+        html_css_renderer::CompositorRuntimeCreateInfo create_info;
+        create_info.renderer = renderer;
+        create_info.renderer.viewport = current_viewport;
+        create_info.renderer.html = current_document_html;
+        create_info.renderer.stylesheets = current_document_stylesheets;
+        gpu_runtime.runtime =
+            html_css_renderer::CreateStandaloneCompositorRuntime(
+                std::move(create_info));
+        if (!gpu_runtime.runtime) {
+          std::fprintf(stderr, "failed to create GPU compositor runtime\n");
+          return false;
+        }
+        std::vector<std::string> init_diagnostics;
+        if (!gpu_runtime.runtime->Initialize(&init_diagnostics)) {
+          for (const std::string& diagnostic : init_diagnostics) {
+            std::fprintf(stderr, "runtime_init: %s\n", diagnostic.c_str());
+          }
+          std::fprintf(stderr, "GPU compositor runtime initialization failed\n");
+          return false;
+        }
+        for (const std::string& diagnostic : init_diagnostics) {
+          std::fprintf(stderr, "runtime_init: %s\n", diagnostic.c_str());
+        }
+        html_css_renderer::NativeWindowConfig native_config;
+        native_config.win32_hwnd = SdlWin32WindowHandleForCompositorViewer(window);
+        native_config.viewport = current_viewport;
+        gpu_runtime.latest_presentation =
+            gpu_runtime.runtime->InitializeNativeWindow(native_config);
+        print_native_presentation_diagnostics(gpu_runtime.latest_presentation);
+        if (!gpu_runtime.latest_presentation.native_window_available ||
+            !gpu_runtime.latest_presentation.vulkan_instance_initialized ||
+            !gpu_runtime.latest_presentation.vulkan_device_queue_initialized ||
+            !gpu_runtime.latest_presentation.vulkan_surface_created ||
+            !gpu_runtime.latest_presentation.vulkan_surface_initialized ||
+            !gpu_runtime.latest_presentation.vulkan_swapchain_created) {
+          std::fprintf(stderr,
+                       "Vulkan native window initialization failed: %s\n",
+                       gpu_runtime.latest_presentation.failure_reason.empty()
+                           ? "(no failure reason)"
+                           : gpu_runtime.latest_presentation.failure_reason
+                                 .c_str());
+          return false;
+        }
+        std::fprintf(stderr,
+                     "GPU backend initialized: selected=%s actual=vulkan\n",
+                     ViewerGpuBackendName(gpu_backend));
+        return true;
+      };
+  auto create_gpu_runtime = [&]() {
+    return create_gpu_runtime_for_viewport(SdlWindowPixelViewport(window));
   };
 
   auto set_current_document_on_c_api_renderer = [&]() {
@@ -1444,14 +1760,22 @@ int main(int argc, char** argv) {
     current_resource_root = effective_resource_root;
     current_resource_base_path = effective_resource_base_path;
 
-    if (!create_c_api_renderer() || !set_current_document_on_c_api_renderer()) {
-      document_load_error_code = 1;
-      return false;
-    }
     document_start_ms = SDL_GetTicks();
-    if (!advance_c_api_frame(reason, 0.0)) {
-      document_load_error_code = 3;
-      return false;
+    if (cpu_texture_backend) {
+      if (!create_c_api_renderer() || !set_current_document_on_c_api_renderer()) {
+        document_load_error_code = 1;
+        return false;
+      }
+      if (!advance_c_api_frame(reason, 0.0)) {
+        document_load_error_code = 3;
+        return false;
+      }
+    } else {
+      if (!create_gpu_runtime() ||
+          !advance_gpu_frame(reason, 0.0, request_png_snapshot)) {
+        document_load_error_code = 3;
+        return false;
+      }
     }
     if (request_png_snapshot && !write_current_screenshot()) {
       document_load_error_code = 3;
@@ -1463,8 +1787,10 @@ int main(int argc, char** argv) {
   if (!load_current_document(
           "initial", !screenshot_out.empty() && screenshot_after_ms <= 0)) {
     destroy_c_api_renderer();
+    destroy_gpu_runtime();
     destroy_texture();
-    SDL_DestroyRenderer(sdl_renderer);
+    if (sdl_renderer)
+      SDL_DestroyRenderer(sdl_renderer);
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -1495,10 +1821,17 @@ int main(int argc, char** argv) {
   };
 
   auto reset_current_document = [&]() {
-    if (!create_c_api_renderer_for_viewport(current_viewport) ||
-        !set_current_document_on_c_api_renderer() ||
-        !advance_c_api_frame("reset", 0.0)) {
-      return false;
+    if (cpu_texture_backend) {
+      if (!create_c_api_renderer_for_viewport(current_viewport) ||
+          !set_current_document_on_c_api_renderer() ||
+          !advance_c_api_frame("reset", 0.0)) {
+        return false;
+      }
+    } else {
+      if (!create_gpu_runtime_for_viewport(current_viewport) ||
+          !advance_gpu_frame("reset", 0.0, false)) {
+        return false;
+      }
     }
     post_reset_navigation_deferrals = kNavigationDeferralsAfterReset;
     QuiesceStandaloneViewerAfterDocumentTeardown();
@@ -1519,6 +1852,13 @@ int main(int argc, char** argv) {
           (initial_mouse_buttons & SDL_BUTTON_LMASK) != 0};
 
   auto send_mouse_move = [&](html_css_renderer::Point point, int modifiers) {
+    if (!cpu_texture_backend) {
+      pending_gpu_mouse_events.push_back(
+          html_css_renderer::MouseInputEvent{
+              html_css_renderer::MouseInputEventType::kMove, point,
+              html_css_renderer::MouseInputButton::kNone, modifiers, 0});
+      return true;
+    }
     return blink_standalone_renderer_mouse_move(c_api.renderer, point.x, point.y,
                                                 modifiers) ==
            BLINK_STANDALONE_STATUS_OK;
@@ -1526,6 +1866,13 @@ int main(int argc, char** argv) {
   auto send_mouse_button = [&](bool down, html_css_renderer::Point point,
                                html_css_renderer::MouseInputButton button,
                                int modifiers, int click_count) {
+    if (!cpu_texture_backend) {
+      pending_gpu_mouse_events.push_back(html_css_renderer::MouseInputEvent{
+          down ? html_css_renderer::MouseInputEventType::kDown
+               : html_css_renderer::MouseInputEventType::kUp,
+          point, button, modifiers, click_count});
+      return true;
+    }
     const blink_standalone_mouse_button_t c_button =
         CApiMouseButtonFromRuntimeButton(button);
     if (down) {
@@ -1541,12 +1888,24 @@ int main(int argc, char** argv) {
   };
   auto send_wheel = [&](html_css_renderer::Point point,
                         html_css_renderer::Point delta) {
+    if (!cpu_texture_backend) {
+      pending_gpu_wheel = html_css_renderer::WheelInput{point, delta};
+      return true;
+    }
     return blink_standalone_renderer_wheel(c_api.renderer, point.x, point.y,
                                            delta.x, delta.y) ==
            BLINK_STANDALONE_STATUS_OK;
   };
   auto send_key = [&](bool down, html_css_renderer::KeyboardInputKey key,
                       int modifiers) {
+    if (!cpu_texture_backend) {
+      pending_gpu_keyboard_events.push_back(
+          html_css_renderer::KeyboardInputEvent{
+              down ? html_css_renderer::KeyboardInputEventType::kKeyDown
+                   : html_css_renderer::KeyboardInputEventType::kKeyUp,
+              key, std::string(), modifiers});
+      return key != html_css_renderer::KeyboardInputKey::kUnknown;
+    }
     const blink_standalone_key_t c_key = CApiKeyFromRuntimeKey(key);
     if (c_key == BLINK_STANDALONE_KEY_UNKNOWN) {
       return false;
@@ -1561,6 +1920,13 @@ int main(int argc, char** argv) {
   };
   auto send_text = [&](const std::string& text) {
     if (text.empty()) {
+      return true;
+    }
+    if (!cpu_texture_backend) {
+      pending_gpu_keyboard_events.push_back(
+          html_css_renderer::KeyboardInputEvent{
+              html_css_renderer::KeyboardInputEventType::kText,
+              html_css_renderer::KeyboardInputKey::kUnknown, text, 0});
       return true;
     }
     return blink_standalone_renderer_text_input(c_api.renderer, text.c_str()) ==
@@ -1632,13 +1998,17 @@ int main(int argc, char** argv) {
   };
 
   auto run_update_frame = [&](const char* reason, double timeline_seconds) {
-    return advance_c_api_frame(reason, timeline_seconds);
+    if (cpu_texture_backend) {
+      return advance_c_api_frame(reason, timeline_seconds);
+    }
+    return advance_gpu_frame(reason, timeline_seconds, false);
   };
 
   if (synthetic_input_smoke || synthetic_resize || synthetic_wheel_burst ||
       synthetic_navigation_smoke || synthetic_navigation_stress > 0 ||
       !synthetic_click_points.empty()) {
-    bool synthetic_ok = c_api.output_valid;
+    bool synthetic_ok =
+        cpu_texture_backend ? c_api.output_valid : gpu_runtime.frame_valid;
     double synthetic_time = 1.0 / 60.0;
     if (synthetic_navigation_smoke) {
       synthetic_ok = navigate_to_file(1, "synthetic_next") && synthetic_ok;
@@ -1707,6 +2077,12 @@ int main(int argc, char** argv) {
               static_cast<int>(current_viewport.height),
               renderer.device_scale_factor) == BLINK_STANDALONE_STATUS_OK &&
           run_update_frame("synthetic_resize", synthetic_time) && synthetic_ok;
+      if (!screenshot_out.empty() && !screenshot_written &&
+          !cpu_texture_backend &&
+          !advance_gpu_frame("synthetic_resize_screenshot", synthetic_time,
+                             true)) {
+        synthetic_ok = false;
+      }
       if (!screenshot_out.empty() && !screenshot_written &&
           !write_current_screenshot()) {
         synthetic_ok = false;
@@ -1777,8 +2153,10 @@ int main(int argc, char** argv) {
 
     const int exit_code = synthetic_ok ? 0 : 5;
     destroy_c_api_renderer();
+    destroy_gpu_runtime();
     destroy_texture();
-    SDL_DestroyRenderer(sdl_renderer);
+    if (sdl_renderer)
+      SDL_DestroyRenderer(sdl_renderer);
     SDL_StopTextInput(window);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -1813,7 +2191,9 @@ int main(int argc, char** argv) {
   while (running) {
     SDL_Event event;
     bool needs_frame =
-        blink_standalone_renderer_needs_begin_frame(c_api.renderer) != 0;
+        cpu_texture_backend
+            ? blink_standalone_renderer_needs_begin_frame(c_api.renderer) != 0
+            : gpu_runtime.latest_frame.needs_begin_frame;
     NavigationAction navigation_action = NavigationAction::kNone;
     double timeline_seconds =
         static_cast<double>(SDL_GetTicks() - document_start_ms) / 1000.0;
@@ -1997,8 +2377,10 @@ int main(int argc, char** argv) {
       }
       if (!navigation_ok) {
         destroy_c_api_renderer();
+        destroy_gpu_runtime();
         destroy_texture();
-        SDL_DestroyRenderer(sdl_renderer);
+        if (sdl_renderer)
+          SDL_DestroyRenderer(sdl_renderer);
         SDL_StopTextInput(window);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -2009,6 +2391,10 @@ int main(int argc, char** argv) {
     }
 
     if (screenshot_due()) {
+      if (!cpu_texture_backend &&
+          !advance_gpu_frame("screenshot", timeline_seconds, true)) {
+        return 3;
+      }
       if (!write_current_screenshot()) {
         return 3;
       }
@@ -2060,10 +2446,14 @@ int main(int argc, char** argv) {
                static_cast<unsigned long long>(idle_waits),
                static_cast<unsigned long long>(idle_no_frame_ticks));
 
-  const int exit_code = c_api.output_valid ? 0 : 4;
+  const int exit_code =
+      (cpu_texture_backend ? c_api.output_valid : gpu_runtime.frame_valid) ? 0
+                                                                          : 4;
   destroy_c_api_renderer();
+  destroy_gpu_runtime();
   destroy_texture();
-  SDL_DestroyRenderer(sdl_renderer);
+  if (sdl_renderer)
+    SDL_DestroyRenderer(sdl_renderer);
   SDL_StopTextInput(window);
   SDL_DestroyWindow(window);
   SDL_Quit();
