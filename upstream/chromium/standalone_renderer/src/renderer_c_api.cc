@@ -291,6 +291,20 @@ std::string SerializeSelectedValuesForMutation(const char* const* values,
   return serialized;
 }
 
+const char* InsertPositionName(blink_standalone_insert_position_t position) {
+  switch (position) {
+    case BLINK_STANDALONE_INSERT_BEFORE_BEGIN:
+      return "beforebegin";
+    case BLINK_STANDALONE_INSERT_AFTER_BEGIN:
+      return "afterbegin";
+    case BLINK_STANDALONE_INSERT_BEFORE_END:
+      return "beforeend";
+    case BLINK_STANDALONE_INSERT_AFTER_END:
+      return "afterend";
+  }
+  return nullptr;
+}
+
 blink_standalone_status_code_t QueueDomMutation(
     blink_standalone_renderer_t* renderer,
     html_css_renderer::DomMutationType type,
@@ -311,7 +325,8 @@ blink_standalone_status_code_t QueueDomMutation(
   if (renderer->no_script_profile) {
     const bool html_fragment_mutation =
         type == html_css_renderer::DomMutationType::kSetElementInnerHtml ||
-        type == html_css_renderer::DomMutationType::kSetBodyInnerHtml;
+        type == html_css_renderer::DomMutationType::kSetBodyInnerHtml ||
+        type == html_css_renderer::DomMutationType::kInsertElementHtml;
     const bool rejected =
         type == html_css_renderer::DomMutationType::kSetAttribute
             ? MutationViolatesNoScriptProfile(mutation_name, mutation_value)
@@ -644,6 +659,51 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return QueueDomMutation(renderer,
                           html_css_renderer::DomMutationType::kSetBodyInnerHtml,
                           "__body__", "", html_fragment);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_insert_element_html(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    blink_standalone_insert_position_t position,
+    const char* html_fragment) {
+  if (!html_fragment) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  const char* position_name = InsertPositionName(position);
+  if (!position_name) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  if (!renderer || !renderer->runtime ||
+      !renderer->runtime->HasLiveElement(element_id ? element_id : "")) {
+    if (renderer) {
+      renderer->last_error = "element not found in current live document";
+    }
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kInsertElementHtml,
+                          element_id, position_name, html_fragment);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_remove_element(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id) {
+  if (renderer) {
+    renderer->last_error.clear();
+  }
+  if (!renderer || !renderer->runtime ||
+      !renderer->runtime->HasLiveElement(element_id ? element_id : "")) {
+    if (renderer) {
+      renderer->last_error = "element not found in current live document";
+    }
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  return QueueDomMutation(renderer,
+                          html_css_renderer::DomMutationType::kRemoveElement,
+                          element_id, "", "");
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(

@@ -10223,6 +10223,14 @@ void ApplyDomMutationsForStandaloneRenderer(
           continue;
         }
         break;
+      case 14:
+        element->InsertAdjacentHTMLWithoutTrustedTypesForTesting(
+            String::FromUtf8(mutation.name),
+            String::FromUtf8(mutation.value), ASSERT_NO_EXCEPTION);
+        break;
+      case 15:
+        element->remove(ASSERT_NO_EXCEPTION);
+        break;
       case 2:
         if (mutation.name.empty()) {
           continue;

@@ -53,6 +53,13 @@ typedef enum blink_standalone_key {
   BLINK_STANDALONE_KEY_DELETE = 46,
 } blink_standalone_key_t;
 
+typedef enum blink_standalone_insert_position {
+  BLINK_STANDALONE_INSERT_BEFORE_BEGIN = 0,
+  BLINK_STANDALONE_INSERT_AFTER_BEGIN = 1,
+  BLINK_STANDALONE_INSERT_BEFORE_END = 2,
+  BLINK_STANDALONE_INSERT_AFTER_END = 3,
+} blink_standalone_insert_position_t;
+
 typedef struct blink_standalone_rect {
   float x;
   float y;
@@ -177,6 +184,14 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_body_inner_html(
     blink_standalone_renderer_t* renderer,
     const char* html_fragment);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_insert_element_html(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id,
+    blink_standalone_insert_position_t position,
+    const char* html_fragment);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_remove_element(
+    blink_standalone_renderer_t* renderer,
+    const char* element_id);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_element_attribute(
     blink_standalone_renderer_t* renderer,
     const char* element_id,

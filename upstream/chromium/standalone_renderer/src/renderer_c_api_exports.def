@@ -16,6 +16,8 @@ EXPORTS
   blink_standalone_renderer_set_element_text
   blink_standalone_renderer_set_element_inner_html
   blink_standalone_renderer_set_body_inner_html
+  blink_standalone_renderer_insert_element_html
+  blink_standalone_renderer_remove_element
   blink_standalone_renderer_set_element_attribute
   blink_standalone_renderer_remove_element_attribute
   blink_standalone_renderer_set_element_style

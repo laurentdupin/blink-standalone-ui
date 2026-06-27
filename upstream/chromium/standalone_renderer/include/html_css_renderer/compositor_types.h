@@ -141,6 +141,8 @@ enum class DomMutationType {
   kSetElementInnerHtml = 11,
   kSetBodyInnerHtml = 12,
   kSetFormControlSelectedValues = 13,
+  kInsertElementHtml = 14,
+  kRemoveElement = 15,
 };
 
 struct DomMutation {

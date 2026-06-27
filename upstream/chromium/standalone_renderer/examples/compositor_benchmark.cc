@@ -153,6 +153,7 @@ void PrintUsage() {
       "[--c-api-select-form-state-smoke] "
       "[--c-api-multiselect-form-state-smoke] "
       "[--c-api-fragment-mutation-smoke] "
+      "[--c-api-structural-dom-mutation-smoke] "
       "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
       "[--c-api-two-instance-smoke] "
@@ -1458,6 +1459,313 @@ int RunCApiFragmentMutationSmoke() {
       "state=persisted\n",
       initial_stats.blue_2878d8, replaced_stats.resource_red_e84444,
       final_stats.orange_d06329);
+  return 0;
+}
+
+int RunCApiStructuralDomMutationSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 360;
+  config.height = 220;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style id='theme'>body{margin:0;font:16px monospace;"
+      "background:#112233;color:white}"
+      "#target{position:absolute;left:10px;top:10px;width:250px;height:74px}"
+      ".tile{position:absolute;top:0;width:76px;height:44px;color:white}"
+      "#old{left:0;background:#2878d8}"
+      "#name{position:absolute;left:10px;top:104px;width:150px}"
+      "label{position:absolute;left:10px;top:140px}</style>"
+      "<div id='target'><div id='old' class='tile' "
+      "data-godot-action='old'>Old</div></div>"
+      "<input id='name' value='seed' data-godot-action='name'>"
+      "<label><input id='agree' type='checkbox' "
+      "data-godot-action='toggle'>Agree</label>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: set html failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.0;
+  if (!AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_structural_dom_mutation_smoke")) {
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_frame_output_t output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats initial_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      initial_stats.blue_2878d8 < 2500 || !HasHitId(renderer, "old") ||
+      !HasHitId(renderer, "target") || !HasHitId(renderer, "name") ||
+      !HasHitId(renderer, "agree")) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: initial output invalid "
+                 "status=%d blue=%zu old=%d target=%d name=%d agree=%d\n",
+                 status, initial_stats.blue_2878d8,
+                 HasHitId(renderer, "old") ? 1 : 0,
+                 HasHitId(renderer, "target") ? 1 : 0,
+                 HasHitId(renderer, "name") ? 1 : 0,
+                 HasHitId(renderer, "agree") ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  if (blink_standalone_renderer_insert_element_html(
+          renderer, "missing-target", BLINK_STANDALONE_INSERT_BEFORE_END,
+          "<span>Missing</span>") != BLINK_STANDALONE_STATUS_INVALID_ARGUMENT ||
+      blink_standalone_renderer_remove_element(renderer, "missing-target") !=
+          BLINK_STANDALONE_STATUS_INVALID_ARGUMENT) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: missing target was "
+                 "accepted\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  if (blink_standalone_renderer_insert_element_html(
+          renderer, "target", BLINK_STANDALONE_INSERT_BEFORE_END,
+          "<button onclick='alert(1)'>Bad</button>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_insert_element_html(
+          renderer, "target", BLINK_STANDALONE_INSERT_BEFORE_END,
+          "<a href='javascript:alert(1)'>Bad</a>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED ||
+      blink_standalone_renderer_insert_element_html(
+          renderer, "target", BLINK_STANDALONE_INSERT_BEFORE_END,
+          "<iframe src='about:blank'></iframe>") !=
+          BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: no-script insert "
+                 "rejection failed\n");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_form_control_value(renderer, "name",
+                                                            "persisted");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_form_control_checked(
+                     renderer, "agree", 1)
+               : status;
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_focus_element(renderer, "name")
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_structural_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: state setup failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  blink_standalone_form_control_state_t name_state = {};
+  if (!GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" || name_state.focused == 0 ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: persisted state setup "
+                 "invalid value=%s focused=%d checked=%d\n",
+                 FormStateValue(name_state).c_str(), name_state.focused,
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  status = blink_standalone_renderer_set_element_inner_html(
+      renderer, "target",
+      "<section id='panel' class='tile' data-godot-action='panel' "
+      "style='left:0;background:#e84444'>Panel</section>");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_structural_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: inner html mutation "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats replaced_stats = AnalyzeFramePixelContent(output);
+  blink_standalone_hit_metadata_t panel_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      replaced_stats.resource_red_e84444 < 2500 || HasHitId(renderer, "old") ||
+      !GetHitById(renderer, "panel", &panel_hit) ||
+      std::string(panel_hit.data_godot_action ? panel_hit.data_godot_action
+                                              : "") != "panel" ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: replacement invalid "
+                 "status=%d red=%zu old=%d panel=%d value=%s checked=%d "
+                 "action=%s\n",
+                 status, replaced_stats.resource_red_e84444,
+                 HasHitId(renderer, "old") ? 1 : 0,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 FormStateValue(name_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0,
+                 panel_hit.data_godot_action ? panel_hit.data_godot_action : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_insert_element_html(
+      renderer, "panel", BLINK_STANDALONE_INSERT_AFTER_END,
+      "<section id='inserted' class='tile' data-godot-action='inserted' "
+      "style='left:90px;background:#d06329'>Inserted</section>");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_insert_element_html(
+                     renderer, "panel", BLINK_STANDALONE_INSERT_BEFORE_END,
+                     "<span id='innerchild' data-godot-action='innerchild' "
+                     "style='display:block;position:absolute;left:4px;top:22px;"
+                     "width:54px;height:18px;background:#237a57'>Child</span>")
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_structural_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: insert mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats inserted_stats = AnalyzeFramePixelContent(output);
+  blink_standalone_hit_metadata_t inserted_hit = {};
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      inserted_stats.orange_d06329 < 2500 ||
+      inserted_stats.resource_green_237a57 < 600 ||
+      !GetHitById(renderer, "inserted", &inserted_hit) ||
+      std::string(inserted_hit.data_godot_action
+                      ? inserted_hit.data_godot_action
+                      : "") != "inserted" ||
+      !HasHitId(renderer, "innerchild") || !HasHitId(renderer, "panel") ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: insert not reflected "
+                 "status=%d orange=%zu green=%zu inserted=%d inner=%d "
+                 "panel=%d value=%s checked=%d action=%s\n",
+                 status, inserted_stats.orange_d06329,
+                 inserted_stats.resource_green_237a57,
+                 HasHitId(renderer, "inserted") ? 1 : 0,
+                 HasHitId(renderer, "innerchild") ? 1 : 0,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 FormStateValue(name_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0,
+                 inserted_hit.data_godot_action ? inserted_hit.data_godot_action
+                                                : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_remove_element(renderer, "inserted");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_structural_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: remove mutation failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  time += 0.016;
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats removed_stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK || HasHitId(renderer, "inserted") ||
+      !HasHitId(renderer, "panel") || !HasHitId(renderer, "innerchild") ||
+      removed_stats.resource_red_e84444 < 2000 ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: removal invalid "
+                 "status=%d inserted=%d panel=%d inner=%d red=%zu value=%s "
+                 "checked=%d\n",
+                 status, HasHitId(renderer, "inserted") ? 1 : 0,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 HasHitId(renderer, "innerchild") ? 1 : 0,
+                 removed_stats.resource_red_e84444,
+                 FormStateValue(name_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  status = blink_standalone_renderer_set_viewport(renderer, 360, 220, 2.0f);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_structural_dom_mutation_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: resize failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  output = {};
+  status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK || output.width != 720 ||
+      output.height != 440 || !HasHitId(renderer, "panel") ||
+      HasHitId(renderer, "inserted") ||
+      !GetFormStateById(renderer, "name", &name_state) ||
+      FormStateValue(name_state) != "persisted" ||
+      !HitCheckedStateIs(renderer, "agree", true)) {
+    std::fprintf(stderr,
+                 "c_api_structural_dom_mutation_smoke: resize/state invalid "
+                 "status=%d raw=%dx%d panel=%d inserted=%d value=%s "
+                 "checked=%d\n",
+                 status, output.width, output.height,
+                 HasHitId(renderer, "panel") ? 1 : 0,
+                 HasHitId(renderer, "inserted") ? 1 : 0,
+                 FormStateValue(name_state).c_str(),
+                 HitCheckedStateIs(renderer, "agree", true) ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_structural_dom_mutation_smoke: ok blue=%zu red=%zu orange=%zu "
+      "green=%zu raw=%dx%d state=persisted\n",
+      initial_stats.blue_2878d8, replaced_stats.resource_red_e84444,
+      inserted_stats.orange_d06329, inserted_stats.resource_green_237a57,
+      output.width, output.height);
   return 0;
 }
 
@@ -3897,6 +4205,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-separated-click-smoke" ||
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-fragment-mutation-smoke" ||
+        arg == "--c-api-structural-dom-mutation-smoke" ||
         arg == "--c-api-body-mutation-smoke" ||
         arg == "--c-api-text-input-smoke" ||
         arg == "--c-api-form-control-mutation-smoke" ||
@@ -3940,6 +4249,7 @@ int main(int argc, char** argv) {
   bool c_api_separated_click_smoke = false;
   bool c_api_dom_mutation_smoke = false;
   bool c_api_fragment_mutation_smoke = false;
+  bool c_api_structural_dom_mutation_smoke = false;
   bool c_api_body_mutation_smoke = false;
   bool c_api_text_input_smoke = false;
   bool c_api_form_control_mutation_smoke = false;
@@ -4060,6 +4370,8 @@ int main(int argc, char** argv) {
       c_api_dom_mutation_smoke = true;
     } else if (arg == "--c-api-fragment-mutation-smoke") {
       c_api_fragment_mutation_smoke = true;
+    } else if (arg == "--c-api-structural-dom-mutation-smoke") {
+      c_api_structural_dom_mutation_smoke = true;
     } else if (arg == "--c-api-body-mutation-smoke") {
       c_api_body_mutation_smoke = true;
     } else if (arg == "--c-api-text-input-smoke") {
@@ -4207,6 +4519,10 @@ int main(int argc, char** argv) {
 
   if (c_api_fragment_mutation_smoke) {
     return RunCApiFragmentMutationSmoke();
+  }
+
+  if (c_api_structural_dom_mutation_smoke) {
+    return RunCApiStructuralDomMutationSmoke();
   }
 
   if (c_api_body_mutation_smoke) {
