@@ -267,6 +267,14 @@ void CopyBackdropFilterRegion(
   region->opacity = source.opacity;
   region->flags = source.flags;
   region->element_id = source.element_id.c_str();
+  const size_t operation_count =
+      std::min(source.filter_operations.size(),
+               static_cast<size_t>(BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS));
+  region->filter_op_count = static_cast<uint32_t>(operation_count);
+  for (size_t i = 0; i < operation_count; ++i) {
+    region->filter_ops[i].type = source.filter_operations[i].type;
+    region->filter_ops[i].amount = source.filter_operations[i].amount;
+  }
 }
 
 }  // namespace

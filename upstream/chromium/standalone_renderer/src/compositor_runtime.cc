@@ -257,6 +257,10 @@ int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
     float* border_radius_bottom_left,
     float* opacity,
     uint32_t* flags,
+    uint32_t* filter_op_count,
+    uint32_t* filter_op_types,
+    float* filter_op_amounts,
+    int filter_op_capacity,
     char* element_id,
     int element_id_capacity);
 int StandaloneBlinkLiveFrameBridgeScrollableElementEntryCountForStandaloneRenderer(
@@ -1544,6 +1548,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             probe_html.c_str());
     for (int i = 0; i < entry_count && i < 4096; ++i) {
       std::array<char, 256> element_id{};
+      std::array<uint32_t, 8> filter_op_types{};
+      std::array<float, 8> filter_op_amounts{};
       float x = 0.0f;
       float y = 0.0f;
       float width = 0.0f;
@@ -1555,11 +1561,14 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       float border_radius_bottom_left = 0.0f;
       float opacity = 1.0f;
       uint32_t flags = 0;
+      uint32_t filter_op_count = 0;
       if (!probe::StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
               probe_html.c_str(), i, &x, &y, &width, &height,
               &blur_radius_css_px, &border_radius_top_left,
               &border_radius_top_right, &border_radius_bottom_right,
-              &border_radius_bottom_left, &opacity, &flags,
+              &border_radius_bottom_left, &opacity, &flags, &filter_op_count,
+              filter_op_types.data(), filter_op_amounts.data(),
+              static_cast<int>(filter_op_types.size()),
               element_id.data(), static_cast<int>(element_id.size()))) {
         continue;
       }
@@ -1575,6 +1584,15 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       entry.opacity = opacity;
       entry.flags = flags;
       entry.element_id = element_id.data();
+      const uint32_t copied_filter_op_count =
+          std::min<uint32_t>(filter_op_count,
+                             static_cast<uint32_t>(filter_op_types.size()));
+      for (uint32_t op = 0; op < copied_filter_op_count; ++op) {
+        BackdropFilterOperation operation;
+        operation.type = filter_op_types[op];
+        operation.amount = filter_op_amounts[op];
+        entry.filter_operations.push_back(operation);
+      }
       result.backdrop_filter_regions.push_back(std::move(entry));
     }
   }

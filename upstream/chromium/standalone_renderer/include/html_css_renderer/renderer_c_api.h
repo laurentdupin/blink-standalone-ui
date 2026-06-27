@@ -72,6 +72,28 @@ typedef enum blink_standalone_backdrop_filter_flags {
   BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_MASK_OR_BLEND = 1u << 4,
 } blink_standalone_backdrop_filter_flags_t;
 
+typedef enum blink_standalone_backdrop_filter_op_type {
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_BLUR = 0,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_BRIGHTNESS = 1,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_CONTRAST = 2,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_SATURATE = 3,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_GRAYSCALE = 4,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_SEPIA = 5,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_INVERT = 6,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_HUE_ROTATE = 7,
+  BLINK_STANDALONE_BACKDROP_FILTER_OP_OPACITY = 8,
+} blink_standalone_backdrop_filter_op_type_t;
+
+#define BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS 8
+
+typedef struct blink_standalone_backdrop_filter_op {
+  uint32_t type;
+  /* CSS px for blur, degrees for hue-rotate, multipliers for brightness,
+   * contrast, and saturate, and normalized fractions for grayscale, sepia,
+   * invert, and opacity. */
+  float amount;
+} blink_standalone_backdrop_filter_op_t;
+
 /* Rects and input coordinates are in logical CSS/view coordinates unless they
  * describe raw frame output dimensions. */
 typedef struct blink_standalone_rect {
@@ -143,11 +165,13 @@ typedef struct blink_standalone_form_control_state {
 
 /* Backdrop-filter metadata describes regions Blink would sample behind the HTML
  * surface. Blink does not sample host-scene pixels; embedders can use this
- * metadata to blur their own framebuffer behind the raw HTML output. Bounds and
- * radii are logical CSS px. Unsupported flags mean the region exists but should
- * not be treated as an exact simple blur. */
+ * metadata to apply ordered operations to their own framebuffer behind the raw
+ * HTML output. Bounds and radii are logical CSS px. Unsupported flags mean the
+ * region exists but should not be treated as an exact supported operation chain.
+ */
 typedef struct blink_standalone_backdrop_filter_region {
   blink_standalone_rect_t bounds;
+  /* Compatibility shortcut for the largest blur() operation in filter_ops. */
   float blur_radius_css_px;
   float border_radius_top_left;
   float border_radius_top_right;
@@ -156,6 +180,8 @@ typedef struct blink_standalone_backdrop_filter_region {
   float opacity;
   uint32_t flags;
   const char* element_id;
+  uint32_t filter_op_count;
+  blink_standalone_backdrop_filter_op_t filter_ops[BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS];
 } blink_standalone_backdrop_filter_region_t;
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(

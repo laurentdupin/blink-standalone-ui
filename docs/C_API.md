@@ -58,12 +58,21 @@ can blur its own framebuffer or backbuffer behind the raw HTML output.
 Use `blink_standalone_renderer_backdrop_filter_region_count` and
 `blink_standalone_renderer_get_backdrop_filter_region` after
 `advance_frame`. Region bounds and corner radii are logical CSS px, matching hit
-metadata and input coordinates even when the raw output is DSF-scaled. The MVP
-metadata is exact for simple blur-only rectangular or rounded-rectangle regions.
+metadata and input coordinates even when the raw output is DSF-scaled.
+
+Each region exposes an ordered `filter_ops` chain for supported backdrop-filter
+operations: `blur`, `brightness`, `contrast`, `saturate`, `grayscale`, `sepia`,
+`invert`, `hue-rotate`, and `opacity`. Units are CSS px for blur, degrees for
+hue-rotate, multipliers for brightness/contrast/saturate, and normalized
+fractions for grayscale/sepia/invert/opacity. `blur_radius_css_px` remains a
+compatibility shortcut for the largest exported blur operation.
+
 Unsupported flags mark regions that exist but should not be treated as an exact
-simple blur, including complex clips, non-translation transforms, non-blur
-filter operations, masks, or blend modes. `element_id` may be empty when Blink's
-PaintArtifact/effect metadata cannot attribute the region reliably.
+supported chain, including complex clips, non-translation transforms,
+unsupported filter operations such as drop-shadow/reference filters/color
+matrices, masks, blend modes, or operation chains longer than
+`BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS`. `element_id` may be empty when
+Blink's PaintArtifact/effect metadata cannot attribute the region reliably.
 
 ## Input
 
@@ -186,6 +195,7 @@ The benchmark executable exposes focused C API smokes for embedder regressions:
 - `--c-api-css-filter-blur-smoke`
 - `--c-api-backdrop-filter-region-smoke`
 - `--c-api-backdrop-filter-rounded-smoke`
+- `--c-api-backdrop-filter-chain-smoke`
 - `--c-api-backdrop-filter-unsupported-smoke`
 - `--c-api-dom-mutation-smoke`
 - `--c-api-body-mutation-smoke`

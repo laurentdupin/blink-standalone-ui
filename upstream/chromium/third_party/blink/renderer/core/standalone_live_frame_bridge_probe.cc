@@ -679,6 +679,18 @@ enum StandaloneBackdropFilterFlags : uint32_t {
   kStandaloneBackdropFilterUnsupportedMaskOrBlend = 1u << 4,
 };
 
+enum StandaloneBackdropFilterOperationType : uint32_t {
+  kStandaloneBackdropFilterOperationBlur = 0,
+  kStandaloneBackdropFilterOperationBrightness = 1,
+  kStandaloneBackdropFilterOperationContrast = 2,
+  kStandaloneBackdropFilterOperationSaturate = 3,
+  kStandaloneBackdropFilterOperationGrayscale = 4,
+  kStandaloneBackdropFilterOperationSepia = 5,
+  kStandaloneBackdropFilterOperationInvert = 6,
+  kStandaloneBackdropFilterOperationHueRotate = 7,
+  kStandaloneBackdropFilterOperationOpacity = 8,
+};
+
 struct LiveBackdropFilterRegion {
   std::string element_id;
   float x = 0.0f;
@@ -692,6 +704,7 @@ struct LiveBackdropFilterRegion {
   float border_radius_bottom_left = 0.0f;
   float opacity = 1.0f;
   uint32_t flags = 0;
+  std::vector<LiveExportedFilterOperation> filter_operations;
 };
 
 struct LiveScrollableElementEntry {
@@ -5132,10 +5145,12 @@ bool AppendPaintArtifactExtractedOps(
   return complete && !exported_draw_ops.empty();
 }
 
-bool ExtractBlurBackdropFilterForStandaloneRenderer(
+bool ExportBackdropFilterOperationsForStandaloneRenderer(
     const CompositorFilterOperations* filters,
+    std::vector<LiveExportedFilterOperation>& operations,
     float* blur_radius_css_px,
     bool* unsupported_filter_op) {
+  operations.clear();
   if (blur_radius_css_px) {
     *blur_radius_css_px = 0.0f;
   }
@@ -5145,24 +5160,75 @@ bool ExtractBlurBackdropFilterForStandaloneRenderer(
   if (!filters) {
     return false;
   }
-  bool saw_blur = false;
+
+  bool has_supported_operation = false;
   for (const cc::FilterOperation& operation :
        filters->AsCcFilterOperations().operations()) {
-    if (operation.type() == cc::FilterOperation::BLUR) {
-      if (saw_blur && unsupported_filter_op) {
+    LiveExportedFilterOperation out;
+    switch (operation.type()) {
+      case cc::FilterOperation::BLUR:
+        out.type = kStandaloneBackdropFilterOperationBlur;
+        out.amount = operation.amount();
+        if (blur_radius_css_px) {
+          *blur_radius_css_px =
+              std::max(*blur_radius_css_px, operation.amount());
+        }
+        break;
+      case cc::FilterOperation::BRIGHTNESS:
+        out.type = kStandaloneBackdropFilterOperationBrightness;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::CONTRAST:
+        out.type = kStandaloneBackdropFilterOperationContrast;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::SATURATE:
+        out.type = kStandaloneBackdropFilterOperationSaturate;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::GRAYSCALE:
+        out.type = kStandaloneBackdropFilterOperationGrayscale;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::SEPIA:
+        out.type = kStandaloneBackdropFilterOperationSepia;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::INVERT:
+        out.type = kStandaloneBackdropFilterOperationInvert;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::HUE_ROTATE:
+        out.type = kStandaloneBackdropFilterOperationHueRotate;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::OPACITY:
+        out.type = kStandaloneBackdropFilterOperationOpacity;
+        out.amount = operation.amount();
+        break;
+      case cc::FilterOperation::DROP_SHADOW:
+      case cc::FilterOperation::COLOR_MATRIX:
+      case cc::FilterOperation::ZOOM:
+      case cc::FilterOperation::REFERENCE:
+      case cc::FilterOperation::SATURATING_BRIGHTNESS:
+      case cc::FilterOperation::ALPHA_THRESHOLD:
+      case cc::FilterOperation::OFFSET:
+        if (unsupported_filter_op) {
+          *unsupported_filter_op = true;
+        }
+        continue;
+    }
+
+    has_supported_operation = true;
+    if (operations.size() >= 8u) {
+      if (unsupported_filter_op) {
         *unsupported_filter_op = true;
-      }
-      saw_blur = true;
-      if (blur_radius_css_px) {
-        *blur_radius_css_px = operation.amount();
       }
       continue;
     }
-    if (unsupported_filter_op) {
-      *unsupported_filter_op = true;
-    }
+    operations.push_back(out);
   }
-  return saw_blur;
+  return has_supported_operation;
 }
 
 void CollectBackdropFilterRegionsForStandaloneRenderer(
@@ -5192,10 +5258,12 @@ void CollectBackdropFilterRegionsForStandaloneRenderer(
     region.opacity = effect.Opacity();
     float blur_radius = 0.0f;
     bool unsupported_filter_op = false;
-    const bool has_blur = ExtractBlurBackdropFilterForStandaloneRenderer(
-        backdrop_filter, &blur_radius, &unsupported_filter_op);
+    const bool has_supported_filter =
+        ExportBackdropFilterOperationsForStandaloneRenderer(
+            backdrop_filter, region.filter_operations, &blur_radius,
+            &unsupported_filter_op);
     region.blur_radius_css_px = blur_radius;
-    if (!has_blur || unsupported_filter_op) {
+    if (!has_supported_filter || unsupported_filter_op) {
       region.flags |= kStandaloneBackdropFilterUnsupportedFilterOp;
     }
     if (effect.BlendMode() != SkBlendMode::kSrcOver) {
@@ -14941,6 +15009,10 @@ int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
     float* border_radius_bottom_left,
     float* opacity,
     uint32_t* flags,
+    uint32_t* filter_op_count,
+    uint32_t* filter_op_types,
+    float* filter_op_amounts,
+    int filter_op_capacity,
     char* element_id,
     int element_id_capacity) {
   RunLiveFramePaintProbe(body_html);
@@ -14981,6 +15053,25 @@ int StandaloneBlinkLiveFrameBridgeBackdropFilterRegionAtForStandaloneRenderer(
   }
   if (flags) {
     *flags = entry.flags;
+  }
+  const uint32_t copied_filter_op_count =
+      filter_op_capacity > 0
+          ? std::min<uint32_t>(
+                static_cast<uint32_t>(entry.filter_operations.size()),
+                static_cast<uint32_t>(filter_op_capacity))
+          : 0u;
+  if (filter_op_count) {
+    *filter_op_count = copied_filter_op_count;
+  }
+  for (uint32_t i = 0; i < copied_filter_op_count; ++i) {
+    if (filter_op_types) {
+      filter_op_types[i] = static_cast<uint32_t>(
+          entry.filter_operations[static_cast<size_t>(i)].type);
+    }
+    if (filter_op_amounts) {
+      filter_op_amounts[i] =
+          entry.filter_operations[static_cast<size_t>(i)].amount;
+    }
   }
   if (element_id && element_id_capacity > 0) {
     const size_t copied =
