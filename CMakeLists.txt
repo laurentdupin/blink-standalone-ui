@@ -1262,6 +1262,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   set(BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST
     ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_link_manifest.json
   )
+  set(BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR
+    ${CMAKE_BINARY_DIR}/package/c_api_runtime
+    CACHE PATH
+    "Output directory for the embeddable C API DLL/import-library runtime package."
+  )
   set(_blink_standalone_renderer_c_api_link_manifest_content [=[
 {
   "schema_version": 1,
@@ -1312,7 +1317,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "ws2_32",
     "delayimp"
   ],
-  "todo": "Promote this manifest into a generated response file or install/export package once the C API distribution packaging is defined."
+  "runtime_package_target": "blink_standalone_renderer_c_api_runtime_package",
+  "runtime_package_dir": "@BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR@"
 }
 ]=])
   string(CONFIGURE
@@ -1326,6 +1332,36 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     DEPENDS blink_standalone_renderer_c_api_dll
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API link manifest: ${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
+  )
+
+  add_custom_target(blink_standalone_renderer_c_api_runtime_package
+    DEPENDS
+      blink_standalone_renderer_c_api_dll
+      blink_standalone_renderer_c_api_link_manifest
+      blink_angle_libEGL
+      blink_angle_libGLESv2
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_standalone_renderer_c_api_dll>"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api_dll>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_LINKER_FILE:blink_standalone_renderer_c_api_dll>"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/$<TARGET_LINKER_FILE_NAME:blink_standalone_renderer_c_api_dll>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_angle_libEGL>"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_angle_libEGL>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_angle_libGLESv2>"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_angle_libGLESv2>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_ICU_DATA_FILE}"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/icudtl.dat"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/blink_standalone_renderer_c_api_link_manifest.json"
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "C API runtime package: ${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
   )
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia

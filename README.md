@@ -103,20 +103,29 @@ That preset uses Chromium LLVM, Release optimization, disables forced
 `DCHECK_ALWAYS_ON`, disables expensive DCHECK buildflags, and removes the old
 standalone size/SIMD restrictions.
 
-The recommended C API artifacts for embedders are the DLL and import library:
+The recommended C API artifacts for embedders are the DLL and import library.
+Build and gather the runtime package with:
 
-```text
-build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.dll
-build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.lib
+```powershell
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-c-api-package
 ```
 
-The runtime package for hosts that use the C API DLL must also include the
-ANGLE and ICU sidecar files from the same build directory:
+The generated package directory is:
 
 ```text
+build/cmake-generated-v8-chromium-llvm/package/c_api_runtime/
+```
+
+It contains the import library and all runtime sidecars an embedder should copy
+beside its executable or DLL load location:
+
+```text
+blink_standalone_renderer_c_api.dll
+blink_standalone_renderer_c_api.lib
 libEGL.dll
 libGLESv2.dll
 icudtl.dat
+blink_standalone_renderer_c_api_link_manifest.json
 ```
 
 This DLL boundary is the intended Godot-facing package because it seals
@@ -137,11 +146,11 @@ The generated dependency manifest records both artifacts and the static-link
 contract:
 
 ```text
-build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_link_manifest.json
+build/cmake-generated-v8-chromium-llvm/package/c_api_runtime/blink_standalone_renderer_c_api_link_manifest.json
 ```
 
-All build products and fetched SDL sources live under `build/`, which is
-generated-only and ignored by Git.
+All package files, build products, and fetched SDL sources live under `build/`,
+which is generated-only and ignored by Git.
 
 ## SDL demo
 

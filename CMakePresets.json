@@ -187,6 +187,15 @@
       "jobs": 8
     },
     {
+      "name": "x64-Release-GeneratedV8-ChromiumLLVM-c-api-package",
+      "displayName": "Package C API runtime with generated Chromium LLVM",
+      "configurePreset": "x64-Release-GeneratedV8-ChromiumLLVM",
+      "targets": [
+        "blink_standalone_renderer_c_api_runtime_package"
+      ],
+      "jobs": 8
+    },
+    {
       "name": "x64-Release-GeneratedV8-ChromiumLLVM-sdl-viewer",
       "displayName": "Build SDL viewer with generated Chromium LLVM",
       "configurePreset": "x64-Release-GeneratedV8-ChromiumLLVM",

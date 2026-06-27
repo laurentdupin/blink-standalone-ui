@@ -129,11 +129,15 @@ overrides generated debug buildflags so expensive DCHECKs are off, and removes
 the old standalone `SK_ENABLE_OPTIMIZE_SIZE`, `CPU_NO_SIMD`,
 `SKCMS_DISABLE_HSW`, and `SKCMS_DISABLE_SKX` restrictions.
 
-The C API preset writes the recommended Godot-facing DLL and import library to:
+The C API package preset builds the DLL/import library and gathers the required
+runtime sidecars into a stable generated directory:
+
+```powershell
+cmake --build --preset x64-Release-GeneratedV8-ChromiumLLVM-c-api-package
+```
 
 ```text
-build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.dll
-build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api.lib
+build/cmake-generated-v8-chromium-llvm/package/c_api_runtime/
 ```
 
 The DLL is the recommended artifact for Godot and other external embedders
@@ -163,17 +167,19 @@ build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_link_mani
 The manifest records the current DLL and static dependency contract: the DLL and
 import library, the internal static archive, generated `v8_monolith.lib`,
 Chromium libc++ object directory and object-list file, third-party CMake targets,
-and Windows system libraries. Godot should link the DLL import library rather
-than the static archive.
+and Windows system libraries. Godot should link the DLL import library from the
+package directory rather than the static archive.
 
-At runtime, embedders must deploy the C API DLL together with the ANGLE and ICU
-sidecar files from the same build directory:
+At runtime, embedders must deploy the package files beside the host executable
+or DLL load location:
 
 ```text
 blink_standalone_renderer_c_api.dll
+blink_standalone_renderer_c_api.lib
 libEGL.dll
 libGLESv2.dll
 icudtl.dat
+blink_standalone_renderer_c_api_link_manifest.json
 ```
 
 The equivalent manual configuration shape is:
@@ -199,7 +205,7 @@ cmake -S . -B build\cmake-generated-v8-chromium-llvm -G Ninja `
   -DBLINK_STANDALONE_V8_COMPAT_OUT_DIR=C:/Repos/blink-standalone-ui/build/cmake-generated-v8-release/v8_compat/src/v8/out/chromium_static `
   -DBLINK_STANDALONE_V8_COMPAT_ACTION=plan
 ninja -C build\cmake-generated-v8-chromium-llvm -j8 blink_standalone_sdl_viewer_skia
-ninja -C build\cmake-generated-v8-chromium-llvm -j8 blink_standalone_renderer_c_api_dll blink_standalone_renderer_c_api_link_manifest
+ninja -C build\cmake-generated-v8-chromium-llvm -j8 blink_standalone_renderer_c_api_runtime_package
 ```
 
 Generated V8 work copies, depot_tools runtime checkouts, CIPD payloads,
