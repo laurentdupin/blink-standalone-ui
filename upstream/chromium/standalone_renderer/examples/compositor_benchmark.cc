@@ -149,6 +149,7 @@ void PrintUsage() {
       "[--c-api-form-control-mutation-smoke] "
       "[--c-api-absolute-form-mutation-smoke] "
       "[--c-api-slider-form-state-smoke] "
+      "[--c-api-select-form-state-smoke] "
       "[--c-api-fragment-mutation-smoke] "
       "[--c-api-body-mutation-smoke] "
       "[--c-api-dom-mutation-smoke] "
@@ -2400,6 +2401,121 @@ int RunCApiSliderFormStateSmoke() {
   return 0;
 }
 
+int RunCApiSelectFormStateSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 320;
+  config.height = 160;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_select_form_state_smoke: create failed status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;padding:12px;background:#112233;"
+      "color:white;font:16px sans-serif}select{position:absolute;left:20px;"
+      "top:60px;width:180px;height:34px;font:16px sans-serif}#label{"
+      "position:absolute;left:20px;top:22px;width:160px;height:26px;"
+      "background:#2878d8;color:white}</style>"
+      "<div id='label' data-godot-action='label'>Choice</div>"
+      "<select id='choice' data-godot-action='choice'>"
+      "<option value='a' selected>A</option>"
+      "<option value='b'>B</option>"
+      "<option value='c'>C</option>"
+      "</select>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, 0.0,
+                                "c_api_select_form_state_smoke")) {
+    std::fprintf(stderr,
+                 "c_api_select_form_state_smoke: initial render failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_form_control_state_t state = {};
+  if (!GetFormStateById(renderer, "choice", &state) ||
+      FormStateValue(state) != "a" || !HasHitId(renderer, "choice")) {
+    std::fprintf(stderr,
+                 "c_api_select_form_state_smoke: initial state mismatch "
+                 "value=%s hit=%d\n",
+                 FormStateValue(state).c_str(),
+                 HasHitId(renderer, "choice") ? 1 : 0);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  double time = 0.016;
+  status = blink_standalone_renderer_set_form_control_value(renderer, "choice",
+                                                            "b");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_select_form_state_smoke") ||
+      !GetFormStateById(renderer, "choice", &state) ||
+      FormStateValue(state) != "b") {
+    std::fprintf(stderr,
+                 "c_api_select_form_state_smoke: set b failed status=%d "
+                 "value=%s error=%s\n",
+                 status, FormStateValue(state).c_str(),
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  time += 0.016;
+  status = blink_standalone_renderer_set_form_control_value(renderer, "choice",
+                                                            "missing");
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_select_form_state_smoke") ||
+      !GetFormStateById(renderer, "choice", &state) ||
+      !FormStateValue(state).empty()) {
+    std::fprintf(stderr,
+                 "c_api_select_form_state_smoke: missing value behavior "
+                 "changed status=%d value=%s error=%s\n",
+                 status, FormStateValue(state).c_str(),
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  time += 0.016;
+  status = blink_standalone_renderer_set_form_control_value(renderer, "choice",
+                                                            "c");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_set_viewport(renderer, 320, 160,
+                                                         2.0f)
+               : status;
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      !AdvanceCApiFrameForSmoke(renderer, time,
+                                "c_api_select_form_state_smoke") ||
+      !GetFormStateById(renderer, "choice", &state) ||
+      FormStateValue(state) != "c" || !HasHitId(renderer, "choice")) {
+    std::fprintf(stderr,
+                 "c_api_select_form_state_smoke: resize persistence failed "
+                 "status=%d value=%s hit=%d error=%s\n",
+                 status, FormStateValue(state).c_str(),
+                 HasHitId(renderer, "choice") ? 1 : 0,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_select_form_state_smoke: ok initial=a set=b missing=empty "
+      "resize_value=c\n");
+  return 0;
+}
+
 int RunCApiAbsoluteFormMutationSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 320;
@@ -3609,6 +3725,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-form-control-mutation-smoke" ||
         arg == "--c-api-absolute-form-mutation-smoke" ||
         arg == "--c-api-slider-form-state-smoke" ||
+        arg == "--c-api-select-form-state-smoke" ||
         arg == "--c-api-two-instance-smoke" ||
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
@@ -3650,6 +3767,7 @@ int main(int argc, char** argv) {
   bool c_api_form_control_mutation_smoke = false;
   bool c_api_absolute_form_mutation_smoke = false;
   bool c_api_slider_form_state_smoke = false;
+  bool c_api_select_form_state_smoke = false;
   bool c_api_two_instance_smoke = false;
   bool typeface_isolation_smoke = false;
   int warm_iterations = 0;
@@ -3773,6 +3891,8 @@ int main(int argc, char** argv) {
       c_api_absolute_form_mutation_smoke = true;
     } else if (arg == "--c-api-slider-form-state-smoke") {
       c_api_slider_form_state_smoke = true;
+    } else if (arg == "--c-api-select-form-state-smoke") {
+      c_api_select_form_state_smoke = true;
     } else if (arg == "--c-api-two-instance-smoke") {
       c_api_two_instance_smoke = true;
     } else if (arg == "--typeface-isolation-smoke") {
@@ -3926,6 +4046,10 @@ int main(int argc, char** argv) {
 
   if (c_api_slider_form_state_smoke) {
     return RunCApiSliderFormStateSmoke();
+  }
+
+  if (c_api_select_form_state_smoke) {
+    return RunCApiSelectFormStateSmoke();
   }
 
   if (c_api_two_instance_smoke) {

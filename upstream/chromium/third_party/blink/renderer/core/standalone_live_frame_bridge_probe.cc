@@ -7821,6 +7821,8 @@ void CollectFormControlDomDiagnosticsForStandaloneRenderer(
         }
       } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
         item.element_interface = "HTMLSelectElement";
+        item.live_value =
+            BlinkStringToStdStringForStandaloneRenderer(select->Value());
       } else if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
         item.element_interface = "HTMLTextAreaElement";
         item.value_attr = BlinkStringToStdStringForStandaloneRenderer(
@@ -10188,6 +10190,9 @@ void ApplyDomMutationsForStandaloneRenderer(
       case 6:
         if (auto* textarea = DynamicTo<HTMLTextAreaElement>(element)) {
           textarea->setValueForBinding(String::FromUtf8(mutation.value));
+          MarkStandaloneFormControlMutationLayout(*element);
+        } else if (auto* select = DynamicTo<HTMLSelectElement>(element)) {
+          select->setValueForBinding(String::FromUtf8(mutation.value));
           MarkStandaloneFormControlMutationLayout(*element);
         } else if (auto* text_control = DynamicTo<TextControlElement>(element)) {
           text_control->SetValue(String::FromUtf8(mutation.value));
