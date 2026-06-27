@@ -52,12 +52,19 @@ bool ScriptableDocumentParser::IsParsingAtLineNumber() const {
 void ScriptableDocumentParser::AddInlineScriptStreamer(
     const String& source,
     scoped_refptr<BackgroundInlineScriptStreamer> streamer) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   base::AutoLock lock(streamers_lock_);
   inline_script_streamers_.insert(source, std::move(streamer));
+#endif
 }
 
 InlineScriptStreamer* ScriptableDocumentParser::TakeInlineScriptStreamer(
     const String& source) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   scoped_refptr<BackgroundInlineScriptStreamer> streamer;
   {
     base::AutoLock lock(streamers_lock_);
@@ -72,12 +79,17 @@ InlineScriptStreamer* ScriptableDocumentParser::TakeInlineScriptStreamer(
   if (streamer)
     return InlineScriptStreamer::From(std::move(streamer));
   return nullptr;
+#endif
 }
 
 bool ScriptableDocumentParser::HasInlineScriptStreamerForTesting(
     const String& source) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return false;
+#else
   base::AutoLock lock(streamers_lock_);
   return inline_script_streamers_.Contains(source);
+#endif
 }
 
 }  // namespace blink

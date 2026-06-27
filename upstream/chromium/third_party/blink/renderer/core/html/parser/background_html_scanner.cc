@@ -23,8 +23,6 @@
 namespace blink {
 namespace {
 
-using CompileOptions = v8::ScriptCompiler::CompileOptions;
-
 // Eager compilation takes more time and uses more memory than lazy compilation,
 // but the resulting code executes faster. These options let us trade off
 // between the pros/cons of eager and lazy compilation.
@@ -40,6 +38,9 @@ enum class CompileStrategy {
   // All scripts are compiled eagerly.
   kEager,
 };
+
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
+using CompileOptions = v8::ScriptCompiler::CompileOptions;
 
 void EmitHTMLInlineCompilationHistograms(bool script_streamer_timed_out) {
   UMA_HISTOGRAM_BOOLEAN("WebCore.Scripts.InlineStreamerTimedOut",
@@ -101,6 +102,7 @@ bool ShouldPrecompileFrame(bool is_main_frame) {
       kPrecompileMainFrameOnlyParam.Get();
   return is_main_frame || !kPrecompileMainFrameOnlyValue;
 }
+#endif
 
 }  // namespace
 
@@ -108,6 +110,9 @@ bool ShouldPrecompileFrame(bool is_main_frame) {
 SequenceBound<BackgroundHTMLScanner> BackgroundHTMLScanner::Create(
     const HTMLParserOptions& options,
     ScriptableDocumentParser* parser) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return SequenceBound<BackgroundHTMLScanner>();
+#else
   TRACE_EVENT0("blink", "BackgroundHTMLScanner::Create");
   auto token_scanner = ScriptTokenScanner::Create(parser);
   if (!token_scanner)
@@ -119,6 +124,7 @@ SequenceBound<BackgroundHTMLScanner> BackgroundHTMLScanner::Create(
       worker_pool::CreateSequencedTaskRunner(
           {base::TaskPriority::USER_BLOCKING}),
       std::make_unique<HTMLTokenizer>(options), std::move(token_scanner));
+#endif
 }
 
 BackgroundHTMLScanner::BackgroundHTMLScanner(
@@ -130,6 +136,9 @@ BackgroundHTMLScanner::BackgroundHTMLScanner(
 BackgroundHTMLScanner::~BackgroundHTMLScanner() = default;
 
 void BackgroundHTMLScanner::Scan(const String& source) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   TRACE_EVENT0("blink", "BackgroundHTMLScanner::Scan");
   token_scanner_->set_first_script_in_scan(true);
   source_.Append(source);
@@ -139,11 +148,15 @@ void BackgroundHTMLScanner::Scan(const String& source) {
     token_scanner_->ScanToken(*token);
     token->Clear();
   }
+#endif
 }
 
 std::unique_ptr<BackgroundHTMLScanner::ScriptTokenScanner>
 BackgroundHTMLScanner::ScriptTokenScanner::Create(
     ScriptableDocumentParser* parser) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return nullptr;
+#else
   bool is_main_frame =
       parser->GetDocument() && parser->GetDocument()->IsInOutermostMainFrame();
   bool precompile_scripts = ShouldPrecompileFrame(is_main_frame);
@@ -152,19 +165,30 @@ BackgroundHTMLScanner::ScriptTokenScanner::Create(
   }
   return std::make_unique<ScriptTokenScanner>(parser, GetCompileTaskRunner(),
                                               GetMinimumScriptSize());
+#endif
 }
 
 BackgroundHTMLScanner::ScriptTokenScanner::ScriptTokenScanner(
     ScriptableDocumentParser* parser,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     wtf_size_t min_script_size)
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    : isolate_(nullptr),
+      parser_(parser),
+      task_runner_(std::move(task_runner)),
+      min_script_size_(min_script_size) {}
+#else
     : isolate_(parser->GetDocument()->GetAgent().isolate()),
       parser_(parser),
       task_runner_(std::move(task_runner)),
       min_script_size_(min_script_size) {}
+#endif
 
 void BackgroundHTMLScanner::ScriptTokenScanner::ScanToken(
     const HTMLToken& token) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  return;
+#else
   switch (token.GetType()) {
     case HTMLToken::kCharacter: {
       if (in_script_) {
@@ -226,6 +250,7 @@ void BackgroundHTMLScanner::ScriptTokenScanner::ScanToken(
       return;
     }
   }
+#endif
 }
 
 }  // namespace blink

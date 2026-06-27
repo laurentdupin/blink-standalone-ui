@@ -11,7 +11,7 @@
 namespace blink {
 
 v8::Isolate* ToIsolate(const LocalFrame*) {
-  return v8::Isolate::TryGetCurrent();
+  return nullptr;
 }
 
 LocalDOMWindow* ToLocalDOMWindow(const ScriptState*) {

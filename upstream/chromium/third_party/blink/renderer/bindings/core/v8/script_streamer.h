@@ -306,17 +306,25 @@ class CORE_EXPORT BackgroundInlineScriptStreamer final
   void Cancel() { cancelled_.Set(); }
 
   // This may return false if V8 failed to create a background streaming task.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  bool CanStream() const { return false; }
+#else
   bool CanStream() const { return task_.get(); }
+#endif
   bool TimedOut() const { return timed_out_; }
 
   v8::ScriptCompiler::StreamedSource* Source(v8::ScriptType expected_type);
 
   base::TimeDelta ElapsedTime() const {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    return base::TimeDelta();
+#else
     CHECK(source_);
     // This should only be accessed from the main thread after Run() has
     // completed.
     return base::Microseconds(
         source_->compilation_details().background_time_in_microseconds);
+#endif
   }
 
   uint64_t script_length() const { return script_length_; }
@@ -328,8 +336,10 @@ class CORE_EXPORT BackgroundInlineScriptStreamer final
   const uint64_t script_length_;
   const base::TimeDelta wait_timeout_;
   const std::string timeout_histogram_name_;
+#if !defined(HTML_CSS_RENDERER_STANDALONE)
   std::unique_ptr<v8::ScriptCompiler::StreamedSource> source_;
   std::unique_ptr<v8::ScriptCompiler::ScriptStreamingTask> task_;
+#endif
   base::WaitableEvent event_;
   base::AtomicFlag started_;
   base::AtomicFlag cancelled_;
