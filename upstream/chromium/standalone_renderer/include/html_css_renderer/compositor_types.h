@@ -2,12 +2,15 @@
 #define STANDALONE_RENDERER_INCLUDE_HTML_CSS_RENDERER_COMPOSITOR_TYPES_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace html_css_renderer {
+
+class StandaloneResourceProvider;
 
 struct Point {
   float x = 0.0f;
@@ -171,6 +174,9 @@ struct FrameInput {
   std::optional<std::vector<Stylesheet>> stylesheets_override;
   std::optional<std::string> resource_root;
   std::optional<std::string> resource_base_path;
+  std::shared_ptr<StandaloneResourceProvider> resource_provider;
+  uint32_t resource_provider_flags = 0;
+  bool resource_provider_changed = false;
   std::unordered_map<std::string, std::string> element_attributes_by_id_and_name;
   std::vector<MouseInputEvent> mouse_events;
   std::vector<PointerState> pointers;

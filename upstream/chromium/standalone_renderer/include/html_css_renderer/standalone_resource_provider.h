@@ -15,6 +15,7 @@ enum class StandaloneResourceTypeHint {
   kImage,
   kStylesheet,
   kFont,
+  kMedia,
 };
 
 enum class StandaloneResourceInitiator {
@@ -22,7 +23,16 @@ enum class StandaloneResourceInitiator {
   kImgElement,
   kCssBackgroundImage,
   kStylesheetLink,
+  kCssImport,
   kFontFace,
+  kMedia,
+};
+
+enum StandaloneResourceProviderFlags : uint32_t {
+  kStandaloneResourceProviderDisableFileFallback = 1u << 0,
+  kStandaloneResourceProviderDisableNetwork = 1u << 1,
+  kStandaloneResourceProviderCallbackForDataUrls = 1u << 2,
+  kStandaloneResourceProviderRequireProviderForExternal = 1u << 3,
 };
 
 enum class StandaloneResourceStatus {
@@ -108,6 +118,9 @@ void SetStandaloneResourceProviderResourceRoot(std::string root_path);
 std::string GetStandaloneResourceProviderResourceRoot();
 void SetStandaloneResourceProviderDocumentBasePath(std::string base_path);
 std::string GetStandaloneResourceProviderDocumentBasePath();
+void SetStandaloneResourceProviderEmbedderProvider(
+    std::shared_ptr<StandaloneResourceProvider> provider,
+    uint32_t flags);
 void ResetStandaloneResourceProviderDiagnostics();
 StandaloneResourceProviderDiagnostics GetStandaloneResourceProviderDiagnostics();
 

@@ -190,15 +190,18 @@ bool StandaloneDataImageNeedsDecodedImageBridge(const KURL& url) {
          lower_url.rfind("data:image/webp", 0) == 0;
 }
 
-bool ShouldTryStandaloneProviderImageResource(const FetchParameters& params,
-                                              const ResourceFactory& factory) {
-  if (factory.GetType() != ResourceType::kImage) {
-    return false;
+bool ShouldTryStandaloneProviderResource(const FetchParameters& params,
+                                         const ResourceFactory& factory) {
+  if (factory.GetType() == ResourceType::kImage) {
+    if (!params.Url().ProtocolIsData()) {
+      return true;
+    }
+    return StandaloneDataImageNeedsDecodedImageBridge(params.Url());
   }
-  if (!params.Url().ProtocolIsData()) {
-    return true;
+  if (factory.GetType() == ResourceType::kCSSStyleSheet) {
+    return !params.Url().ProtocolIsData();
   }
-  return StandaloneDataImageNeedsDecodedImageBridge(params.Url());
+  return false;
 }
 
 std::optional<std::vector<uint8_t>> EncodeStandaloneDecodedImageAsPng(
@@ -224,29 +227,41 @@ std::optional<std::vector<uint8_t>> EncodeStandaloneDecodedImageAsPng(
   return std::vector<uint8_t>(bytes, bytes + png_data->size());
 }
 
-Resource* CreateStandaloneProviderImageResource(
+Resource* CreateStandaloneProviderResource(
     const FetchParameters& params,
     const ResourceFactory& factory,
     base::SingleThreadTaskRunner* task_runner) {
-  if (!ShouldTryStandaloneProviderImageResource(params, factory)) {
+  if (!ShouldTryStandaloneProviderResource(params, factory)) {
     return nullptr;
   }
 
   html_css_renderer::StandaloneResourceRequest request;
   request.url = params.Url().GetString().Utf8();
-  request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
-  request.accepted_mime_types.push_back("image/png");
-  request.accepted_mime_types.push_back("image/jpeg");
-  request.accepted_mime_types.push_back("image/bmp");
-  request.accepted_mime_types.push_back("image/webp");
-  request.accepted_mime_types.push_back("image/svg+xml");
-  if (params.Options().initiator_info.name == fetch_initiator_type_names::kCSS ||
-      params.Options().initiator_info.name == fetch_initiator_type_names::kUacss) {
+  if (factory.GetType() == ResourceType::kCSSStyleSheet) {
+    request.type_hint =
+        html_css_renderer::StandaloneResourceTypeHint::kStylesheet;
+    request.accepted_mime_types.push_back("text/css");
     request.initiator =
-        html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
+        params.Options().initiator_info.name == fetch_initiator_type_names::kCSS
+            ? html_css_renderer::StandaloneResourceInitiator::kCssImport
+            : html_css_renderer::StandaloneResourceInitiator::kStylesheetLink;
   } else {
-    request.initiator =
-        html_css_renderer::StandaloneResourceInitiator::kImgElement;
+    request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
+    request.accepted_mime_types.push_back("image/png");
+    request.accepted_mime_types.push_back("image/jpeg");
+    request.accepted_mime_types.push_back("image/bmp");
+    request.accepted_mime_types.push_back("image/webp");
+    request.accepted_mime_types.push_back("image/svg+xml");
+    if (params.Options().initiator_info.name ==
+            fetch_initiator_type_names::kCSS ||
+        params.Options().initiator_info.name ==
+            fetch_initiator_type_names::kUacss) {
+      request.initiator =
+          html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage;
+    } else {
+      request.initiator =
+          html_css_renderer::StandaloneResourceInitiator::kImgElement;
+    }
   }
 
   html_css_renderer::StandaloneResourceResult result =
@@ -254,6 +269,10 @@ Resource* CreateStandaloneProviderImageResource(
           request);
 
   std::string response_mime_type = result.mime_type;
+  if (response_mime_type.empty() &&
+      factory.GetType() == ResourceType::kCSSStyleSheet) {
+    response_mime_type = "text/css";
+  }
   if (result.status == html_css_renderer::StandaloneResourceStatus::kSuccess) {
     if (std::optional<std::vector<uint8_t>> png_bytes =
             EncodeStandaloneDecodedImageAsPng(result)) {
@@ -1511,7 +1530,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
   // If detached, we do very early return here to skip all processing below.
   if (properties_->IsDetached()) {
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-    if (Resource* resource = CreateStandaloneProviderImageResource(
+    if (Resource* resource = CreateStandaloneProviderResource(
             params, factory, freezable_task_runner_.get())) {
       return resource;
     }
@@ -1571,7 +1590,7 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
 
   const ResourceType resource_type = factory.GetType();
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-  if (Resource* resource = CreateStandaloneProviderImageResource(
+  if (Resource* resource = CreateStandaloneProviderResource(
           params, factory, freezable_task_runner_.get())) {
     return resource;
   }

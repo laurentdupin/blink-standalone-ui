@@ -64,6 +64,67 @@ typedef enum blink_standalone_insert_position {
   BLINK_STANDALONE_INSERT_AFTER_END = 3,
 } blink_standalone_insert_position_t;
 
+typedef enum blink_standalone_resource_type_hint {
+  BLINK_STANDALONE_RESOURCE_TYPE_UNKNOWN = 0,
+  BLINK_STANDALONE_RESOURCE_TYPE_IMAGE = 1,
+  BLINK_STANDALONE_RESOURCE_TYPE_STYLESHEET = 2,
+  BLINK_STANDALONE_RESOURCE_TYPE_FONT = 3,
+  BLINK_STANDALONE_RESOURCE_TYPE_MEDIA = 4,
+} blink_standalone_resource_type_hint_t;
+
+typedef enum blink_standalone_resource_initiator {
+  BLINK_STANDALONE_RESOURCE_INITIATOR_OTHER = 0,
+  BLINK_STANDALONE_RESOURCE_INITIATOR_IMG_ELEMENT = 1,
+  BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE = 2,
+  BLINK_STANDALONE_RESOURCE_INITIATOR_STYLESHEET_LINK = 3,
+  BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_IMPORT = 4,
+  BLINK_STANDALONE_RESOURCE_INITIATOR_FONT_FACE = 5,
+  BLINK_STANDALONE_RESOURCE_INITIATOR_MEDIA = 6,
+} blink_standalone_resource_initiator_t;
+
+typedef enum blink_standalone_resource_status {
+  BLINK_STANDALONE_RESOURCE_STATUS_OK = 0,
+  BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND = 1,
+  BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED = 2,
+  BLINK_STANDALONE_RESOURCE_STATUS_UNSUPPORTED_SCHEME = 3,
+  BLINK_STANDALONE_RESOURCE_STATUS_UNSUPPORTED_MIME = 4,
+  BLINK_STANDALONE_RESOURCE_STATUS_ERROR = 5,
+} blink_standalone_resource_status_t;
+
+typedef enum blink_standalone_resource_provider_flags {
+  BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK = 1u << 0,
+  BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_NETWORK = 1u << 1,
+  BLINK_STANDALONE_RESOURCE_PROVIDER_CALLBACK_FOR_DATA_URLS = 1u << 2,
+  BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL = 1u << 3,
+} blink_standalone_resource_provider_flags_t;
+
+typedef struct blink_standalone_resource_request {
+  const char* url;
+  const char* document_url;
+  const char* base_url;
+  uint32_t type_hint;
+  uint32_t initiator;
+  const char* accepted_mime_types;
+} blink_standalone_resource_request_t;
+
+typedef struct blink_standalone_resource_response {
+  uint32_t status;
+  const char* mime_type;
+  const uint8_t* bytes;
+  size_t byte_count;
+  const char* resolved_url_or_cache_key;
+} blink_standalone_resource_response_t;
+
+typedef blink_standalone_resource_status_t (
+    *blink_standalone_load_resource_callback)(
+    void* user_data,
+    const blink_standalone_resource_request_t* request,
+    blink_standalone_resource_response_t* response);
+
+typedef void (*blink_standalone_release_resource_callback)(
+    void* user_data,
+    blink_standalone_resource_response_t* response);
+
 typedef enum blink_standalone_backdrop_filter_flags {
   BLINK_STANDALONE_BACKDROP_FILTER_ROUNDED_RECT = 1u << 0,
   BLINK_STANDALONE_BACKDROP_FILTER_UNSUPPORTED_COMPLEX_CLIP = 1u << 1,
@@ -194,6 +255,16 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const char* html,
     const char* resource_root,
     const char* resource_base_path);
+/* Optional per-renderer resource provider. When provider-required/file-fallback
+ * flags are set, non-data external resources are loaded only through this
+ * callback and missing/blocked resources fail recoverably. Response bytes and
+ * strings are copied before the release callback is invoked. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_resource_provider(
+    blink_standalone_renderer_t* renderer,
+    blink_standalone_load_resource_callback load,
+    blink_standalone_release_resource_callback release,
+    void* user_data,
+    uint32_t flags);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_viewport(
     blink_standalone_renderer_t* renderer,
     int width,

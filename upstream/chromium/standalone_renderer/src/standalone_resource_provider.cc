@@ -29,6 +29,8 @@ struct ResourceProviderContextState {
   StandaloneResourceProviderDiagnostics diagnostics;
   std::string resource_root;
   std::string document_base_path;
+  std::shared_ptr<StandaloneResourceProvider> embedder_provider;
+  uint32_t embedder_provider_flags = 0;
 };
 
 ResourceProviderContextState& GlobalContextState() {
@@ -73,6 +75,13 @@ std::string& MutableResourceRoot() {
 
 std::string& MutableDocumentBasePath() {
   return CurrentContextStateLocked().document_base_path;
+}
+
+std::pair<std::shared_ptr<StandaloneResourceProvider>, uint32_t>
+CurrentEmbedderProviderAndFlags() {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  ResourceProviderContextState& state = CurrentContextStateLocked();
+  return {state.embedder_provider, state.embedder_provider_flags};
 }
 
 std::string LowerAscii(std::string value) {
@@ -394,6 +403,61 @@ StandaloneResourceResult DecodeOrClassifyImageBytes(
       "valid WebP resource classified without platform WebP decoder");
 }
 
+bool IsSvgImageMime(const std::string& mime_type);
+bool IsDataUrl(const std::string& url);
+
+StandaloneResourceResult FinalizeProviderMemoryResult(
+    StandaloneResourceResult result,
+    StandaloneResourceTypeHint type_hint) {
+  result.source_kind = StandaloneResourceSourceKind::kMemory;
+  if (result.cache_key.empty()) {
+    result.cache_key = result.resolved_path;
+  }
+  if (result.status != StandaloneResourceStatus::kSuccess) {
+    return result;
+  }
+  if (type_hint != StandaloneResourceTypeHint::kImage) {
+    return result;
+  }
+  if (result.mime_type.empty()) {
+    return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
+                       "resource provider returned image bytes without MIME");
+  }
+  if (IsSvgImageMime(result.mime_type)) {
+    result.error = "encoded SVG available; real Blink SVG image path not linked";
+    return result;
+  }
+  if (result.encoded_bytes.empty()) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "resource provider returned empty image bytes",
+                       result.mime_type);
+  }
+  return DecodeOrClassifyImageBytes(std::move(result));
+}
+
+bool ShouldBlockFallbackForRequest(const StandaloneResourceRequest& request,
+                                   uint32_t flags,
+                                   bool provider_was_available) {
+  if (IsDataUrl(request.url) &&
+      !(flags & kStandaloneResourceProviderCallbackForDataUrls)) {
+    return false;
+  }
+  if (!provider_was_available &&
+      (flags & kStandaloneResourceProviderRequireProviderForExternal) &&
+      !IsDataUrl(request.url)) {
+    return true;
+  }
+  if ((flags & kStandaloneResourceProviderDisableFileFallback) &&
+      !IsDataUrl(request.url)) {
+    return true;
+  }
+  if ((flags & kStandaloneResourceProviderRequireProviderForExternal) &&
+      !IsDataUrl(request.url)) {
+    return true;
+  }
+  return false;
+}
+
 std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
   if (metadata.find("image/png") != std::string::npos)
     return "image/png";
@@ -412,6 +476,10 @@ std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
 
 bool IsSvgImageMime(const std::string& mime_type) {
   return mime_type == "image/svg+xml";
+}
+
+bool IsDataUrl(const std::string& url) {
+  return LowerAscii(url).rfind("data:", 0) == 0;
 }
 
 std::vector<uint8_t> PercentDecodeBytes(const std::string& input) {
@@ -647,6 +715,31 @@ class DefaultProvider final : public StandaloneResourceProvider {
   StandaloneResourceResult LoadResource(
       const StandaloneResourceRequest& request) override {
     StandaloneResourceResult result;
+    auto [embedder_provider, flags] = CurrentEmbedderProviderAndFlags();
+    const bool should_call_embedder =
+        embedder_provider &&
+        (!IsDataUrl(request.url) ||
+         (flags & kStandaloneResourceProviderCallbackForDataUrls));
+    if (should_call_embedder) {
+      result = FinalizeProviderMemoryResult(
+          embedder_provider->LoadResource(request), request.type_hint);
+      if (result.status == StandaloneResourceStatus::kSuccess ||
+          ShouldBlockFallbackForRequest(request, flags,
+                                        /*provider_was_available=*/true)) {
+        RecordRequest(request, result);
+        return result;
+      }
+    } else if (ShouldBlockFallbackForRequest(request, flags,
+                                             embedder_provider != nullptr)) {
+      result = ErrorResult(
+          StandaloneResourceStatus::kBlockedByPolicy,
+          embedder_provider
+              ? "resource provider is required for external resources"
+              : "resource provider is required but not configured");
+      RecordRequest(request, result);
+      return result;
+    }
+
     if (request.type_hint != StandaloneResourceTypeHint::kImage) {
       result = ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
                            "provider currently supports image requests only");
@@ -710,6 +803,15 @@ std::string GetStandaloneResourceProviderDocumentBasePath() {
   return MutableDocumentBasePath();
 }
 
+void SetStandaloneResourceProviderEmbedderProvider(
+    std::shared_ptr<StandaloneResourceProvider> provider,
+    uint32_t flags) {
+  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  ResourceProviderContextState& state = CurrentContextStateLocked();
+  state.embedder_provider = std::move(provider);
+  state.embedder_provider_flags = flags;
+}
+
 void ResetStandaloneResourceProviderDiagnostics() {
   std::lock_guard<std::mutex> lock(DiagnosticsMutex());
   MutableDiagnostics() = StandaloneResourceProviderDiagnostics();
@@ -750,8 +852,12 @@ const char* ToString(StandaloneResourceInitiator initiator) {
       return "css_background_image";
     case StandaloneResourceInitiator::kStylesheetLink:
       return "stylesheet_link";
+    case StandaloneResourceInitiator::kCssImport:
+      return "css_import";
     case StandaloneResourceInitiator::kFontFace:
       return "font_face";
+    case StandaloneResourceInitiator::kMedia:
+      return "media";
   }
   return "other";
 }

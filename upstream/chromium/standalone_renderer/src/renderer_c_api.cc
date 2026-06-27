@@ -279,6 +279,146 @@ void CopyBackdropFilterRegion(
 
 }  // namespace
 
+namespace {
+
+uint32_t ToCResourceType(html_css_renderer::StandaloneResourceTypeHint type) {
+  switch (type) {
+    case html_css_renderer::StandaloneResourceTypeHint::kImage:
+      return BLINK_STANDALONE_RESOURCE_TYPE_IMAGE;
+    case html_css_renderer::StandaloneResourceTypeHint::kStylesheet:
+      return BLINK_STANDALONE_RESOURCE_TYPE_STYLESHEET;
+    case html_css_renderer::StandaloneResourceTypeHint::kFont:
+      return BLINK_STANDALONE_RESOURCE_TYPE_FONT;
+    case html_css_renderer::StandaloneResourceTypeHint::kMedia:
+      return BLINK_STANDALONE_RESOURCE_TYPE_MEDIA;
+    case html_css_renderer::StandaloneResourceTypeHint::kUnknown:
+      return BLINK_STANDALONE_RESOURCE_TYPE_UNKNOWN;
+  }
+  return BLINK_STANDALONE_RESOURCE_TYPE_UNKNOWN;
+}
+
+uint32_t ToCResourceInitiator(
+    html_css_renderer::StandaloneResourceInitiator initiator) {
+  switch (initiator) {
+    case html_css_renderer::StandaloneResourceInitiator::kImgElement:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_IMG_ELEMENT;
+    case html_css_renderer::StandaloneResourceInitiator::kCssBackgroundImage:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE;
+    case html_css_renderer::StandaloneResourceInitiator::kStylesheetLink:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_STYLESHEET_LINK;
+    case html_css_renderer::StandaloneResourceInitiator::kCssImport:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_IMPORT;
+    case html_css_renderer::StandaloneResourceInitiator::kFontFace:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_FONT_FACE;
+    case html_css_renderer::StandaloneResourceInitiator::kMedia:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_MEDIA;
+    case html_css_renderer::StandaloneResourceInitiator::kOther:
+      return BLINK_STANDALONE_RESOURCE_INITIATOR_OTHER;
+  }
+  return BLINK_STANDALONE_RESOURCE_INITIATOR_OTHER;
+}
+
+html_css_renderer::StandaloneResourceStatus ToRuntimeResourceStatus(
+    uint32_t status) {
+  switch (status) {
+    case BLINK_STANDALONE_RESOURCE_STATUS_OK:
+      return html_css_renderer::StandaloneResourceStatus::kSuccess;
+    case BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND:
+      return html_css_renderer::StandaloneResourceStatus::kNotFound;
+    case BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED:
+      return html_css_renderer::StandaloneResourceStatus::kBlockedByPolicy;
+    case BLINK_STANDALONE_RESOURCE_STATUS_UNSUPPORTED_SCHEME:
+      return html_css_renderer::StandaloneResourceStatus::kUnsupportedScheme;
+    case BLINK_STANDALONE_RESOURCE_STATUS_UNSUPPORTED_MIME:
+      return html_css_renderer::StandaloneResourceStatus::kUnsupportedMime;
+    case BLINK_STANDALONE_RESOURCE_STATUS_ERROR:
+    default:
+      return html_css_renderer::StandaloneResourceStatus::kError;
+  }
+}
+
+std::string JoinAcceptedMimeTypes(const std::vector<std::string>& values) {
+  std::string joined;
+  for (const std::string& value : values) {
+    if (!joined.empty()) {
+      joined += ",";
+    }
+    joined += value;
+  }
+  return joined;
+}
+
+class CApiResourceProvider final
+    : public html_css_renderer::StandaloneResourceProvider {
+ public:
+  CApiResourceProvider(blink_standalone_load_resource_callback load,
+                       blink_standalone_release_resource_callback release,
+                       void* user_data)
+      : load_(load), release_(release), user_data_(user_data) {}
+
+  html_css_renderer::StandaloneResourceResult LoadResource(
+      const html_css_renderer::StandaloneResourceRequest& request) override {
+    html_css_renderer::StandaloneResourceResult result;
+    if (!load_) {
+      result.status =
+          html_css_renderer::StandaloneResourceStatus::kBlockedByPolicy;
+      result.error = "C resource provider callback is not configured";
+      return result;
+    }
+
+    const std::string accepted_mime_types =
+        JoinAcceptedMimeTypes(request.accepted_mime_types);
+    blink_standalone_resource_request_t c_request = {};
+    c_request.url = request.url.c_str();
+    c_request.document_url = request.document_url.c_str();
+    c_request.base_url = request.base_url.c_str();
+    c_request.type_hint = ToCResourceType(request.type_hint);
+    c_request.initiator = ToCResourceInitiator(request.initiator);
+    c_request.accepted_mime_types = accepted_mime_types.c_str();
+
+    blink_standalone_resource_response_t c_response = {};
+    c_response.status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    const blink_standalone_resource_status_t returned_status =
+        load_(user_data_, &c_request, &c_response);
+    const uint32_t effective_status =
+        returned_status != BLINK_STANDALONE_RESOURCE_STATUS_OK
+            ? returned_status
+            : c_response.status;
+
+    result.status = ToRuntimeResourceStatus(effective_status);
+    result.source_kind = html_css_renderer::StandaloneResourceSourceKind::kMemory;
+    if (c_response.mime_type) {
+      result.mime_type = c_response.mime_type;
+    }
+    if (c_response.resolved_url_or_cache_key) {
+      result.cache_key = c_response.resolved_url_or_cache_key;
+    } else {
+      result.cache_key = request.url;
+    }
+    if (result.status == html_css_renderer::StandaloneResourceStatus::kSuccess &&
+        c_response.bytes && c_response.byte_count > 0) {
+      result.encoded_bytes.assign(c_response.bytes,
+                                  c_response.bytes + c_response.byte_count);
+    }
+    if (release_) {
+      release_(user_data_, &c_response);
+    }
+    if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess &&
+        result.error.empty()) {
+      result.error = "C resource provider returned " +
+                     std::string(html_css_renderer::ToString(result.status));
+    }
+    return result;
+  }
+
+ private:
+  blink_standalone_load_resource_callback load_ = nullptr;
+  blink_standalone_release_resource_callback release_ = nullptr;
+  void* user_data_ = nullptr;
+};
+
+}  // namespace
+
 struct blink_standalone_renderer {
   std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime;
   html_css_renderer::Size viewport = {800.0f, 600.0f};
@@ -287,6 +427,10 @@ struct blink_standalone_renderer {
   std::string html;
   std::string resource_root;
   std::string resource_base_path;
+  std::shared_ptr<html_css_renderer::StandaloneResourceProvider>
+      resource_provider;
+  uint32_t resource_provider_flags = 0;
+  bool resource_provider_dirty = false;
   html_css_renderer::CompositorFrameResult latest_result;
   std::vector<blink_standalone_rect_t> dirty_rects;
   std::vector<html_css_renderer::MouseInputEvent> pending_mouse_events;
@@ -620,6 +764,29 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return BLINK_STANDALONE_STATUS_OK;
 }
 
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_resource_provider(
+    blink_standalone_renderer_t* renderer,
+    blink_standalone_load_resource_callback load,
+    blink_standalone_release_resource_callback release,
+    void* user_data,
+    uint32_t flags) {
+  if (!renderer) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  ClearLastError(renderer);
+  if (!load) {
+    renderer->resource_provider.reset();
+    renderer->resource_provider_flags = 0;
+    renderer->resource_provider_dirty = true;
+    return BLINK_STANDALONE_STATUS_OK;
+  }
+  renderer->resource_provider =
+      std::make_shared<CApiResourceProvider>(load, release, user_data);
+  renderer->resource_provider_flags = flags;
+  renderer->resource_provider_dirty = true;
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_viewport(
     blink_standalone_renderer_t* renderer,
     int width,
@@ -648,6 +815,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   input.html_override = renderer->html;
   input.resource_root = renderer->resource_root;
   input.resource_base_path = renderer->resource_base_path;
+  if (renderer->resource_provider_dirty) {
+    input.resource_provider = renderer->resource_provider;
+    input.resource_provider_flags = renderer->resource_provider_flags;
+    input.resource_provider_changed = true;
+  }
   input.timeline_time_seconds = timeline_time_seconds;
   input.request_raw_frame = true;
   input.result_collection = html_css_renderer::FrameResultCollection::kFull;
@@ -657,6 +829,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   input.wheel = renderer->pending_wheel;
   ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
+  renderer->resource_provider_dirty = false;
   renderer->dirty_rects.clear();
   for (const html_css_renderer::Rect& rect :
        renderer->latest_result.raw_frame.dirty_rects) {

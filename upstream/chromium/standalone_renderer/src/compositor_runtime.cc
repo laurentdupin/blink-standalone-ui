@@ -1374,6 +1374,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         *input.resource_base_path != resource_base_path_) {
       return true;
     }
+    if (input.resource_provider_changed)
+      return true;
     if (!SameStringMap(input.element_attributes_by_id_and_name,
                        snapshot_.element_attributes_by_id_and_name)) {
       return true;
@@ -1453,6 +1455,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       resource_root_ = *input.resource_root;
     if (input.resource_base_path)
       resource_base_path_ = *input.resource_base_path;
+    if (input.resource_provider_changed) {
+      resource_provider_ = input.resource_provider;
+      resource_provider_flags_ = input.resource_provider_flags;
+    }
     snapshot_.element_attributes_by_id_and_name =
         input.element_attributes_by_id_and_name;
     snapshot_.scroll_offsets_by_element_id = input.scroll_offsets_by_element_id;
@@ -1462,6 +1468,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   void ApplyResourceProviderContext() {
     SetStandaloneResourceProviderResourceRoot(resource_root_);
     SetStandaloneResourceProviderDocumentBasePath(resource_base_path_);
+    SetStandaloneResourceProviderEmbedderProvider(resource_provider_,
+                                                 resource_provider_flags_);
   }
 
   static void ImportHitTestEntries(const std::string& probe_html,
@@ -1895,6 +1903,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   uint64_t resource_provider_context_id_ = 0;
   std::string resource_root_;
   std::string resource_base_path_;
+  std::shared_ptr<StandaloneResourceProvider> resource_provider_;
+  uint32_t resource_provider_flags_ = 0;
   uint64_t typeface_registry_context_id_ = 0;
   uint64_t bridge_instance_id_ = 0;
 };
