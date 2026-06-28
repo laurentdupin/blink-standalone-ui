@@ -282,6 +282,15 @@ sequence because `SharedContextState` is sequence checked.
 This smoke is intentionally Skia direct-write only. It does not prove copying
 the rendered Viz output into the borrowed target.
 
+`--gpu-output-vulkan-pixel-smoke` narrows the next blocker. It requests the same
+offscreen Vulkan SharedImage CopyOutput as `--gpu-output-vulkan-smoke`, then
+reads that source mailbox back through the GPU-service Skia representation. The
+submitted cc frame is not empty: the diagnostic frame dump shows damage, a
+non-transparent root background, three quads, and the expected `#123456` color
+quad. The Vulkan CopyOutput source SharedImage still reads back as fully
+transparent (`nontransparent_pixels=0`, background and box samples
+`00000000`).
+
 `--gpu-borrowed-vkimage-render-copy-smoke` is the next render-output attempt. It
 prepares the same borrowed `VkImage` backing as a writable SharedImage
 destination, passes it to `CopyOutputRequest::set_blit_request()`, and lets Viz
@@ -290,14 +299,14 @@ borrowed target can be registered as the BlitRequest destination without the
 earlier client `ClientSharedImage` sequence/lifetime DCHECK, and the smoke
 releases the backing before explicitly destroying the stand-in `VkImage`.
 
-The smoke is still blocked as a rendered-output proof: the BlitRequest completes
-and the target cleanup is correct, but verification observes an entirely
-transparent target (`nontransparent_pixels=0`). A service-side mailbox-to-mailbox
-copy from the CopyOutput SharedImage to the borrowed target has the same content
-blocker: the CopyOutput source mailbox itself reads back as transparent in this
-standalone offscreen Vulkan path. The current blocker is therefore not borrowed
-target ownership; it is that the offscreen Vulkan CopyOutput/BlitRequest source
-does not yet expose rendered HTML pixels to the copy path.
+The render-copy smoke is still blocked as a rendered-output proof because it
+inherits the transparent source. `SkiaOutputSurfaceImplOnGpu::CopyOutputRGBAInTexture()`
+is reached, but the `SkSurface*` supplied to that texture CopyOutput path does
+not contain the rendered cc content in this standalone offscreen Vulkan
+configuration. The current blocker is therefore not
+borrowed target ownership or BlitRequest destination registration; it is the
+offscreen Vulkan SkiaOutputSurface/CopyOutput source surface integration between
+Viz's submitted cc frame and `CopyOutputRGBAInTexture()`.
 
 The remaining implementation steps before public ABI are:
 
@@ -309,8 +318,9 @@ The remaining implementation steps before public ABI are:
    acquire/release layout and semaphore handling, still without destroying
    borrowed `VkImage`, memory, image views, semaphores, or fences.
 3. Make the offscreen Vulkan CopyOutput/BlitRequest path produce rendered HTML
-   pixels, not just a SharedImage mailbox. The current rendered-output copy smoke
-   reaches the borrowed destination but observes transparent output.
+   pixels, not just a SharedImage mailbox. The current pixel-content smoke shows
+   the cc frame has content but the Vulkan CopyOutput source SharedImage is
+   transparent.
 4. Once CopyOutput content is non-empty, keep the destination as a service-side
    SharedImage and validate either direct Viz `BlitRequest` into the borrowed
    target or a service-side SharedImage-to-SharedImage copy into it. Only after

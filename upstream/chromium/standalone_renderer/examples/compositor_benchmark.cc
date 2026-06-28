@@ -165,6 +165,7 @@ void PrintUsage() {
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
       "[--gpu-output-smoke] "
       "[--gpu-output-vulkan-smoke] "
+      "[--gpu-output-vulkan-pixel-smoke] "
       "[--gpu-vulkan-ganesh-context-smoke] "
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
@@ -5639,6 +5640,75 @@ int RunGpuOutputVulkanSmoke() {
   return 0;
 }
 
+int RunGpuOutputVulkanPixelSmoke() {
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {128.0f, 64.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      "</style><div id='box'></div>";
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(
+        stderr,
+        "gpu_output_vulkan_pixel_smoke: failed failure=runtime initialization "
+        "failed\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_vulkan_gpu_frame = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult result = runtime->AdvanceFrame(input);
+  if (!result.gpu_frame.shared_image_available ||
+      result.gpu_frame.mailbox.empty() ||
+      !result.gpu_frame.vk_context_provider_available ||
+      !result.gpu_frame.shared_context_state_is_vulkan ||
+      !result.viz_display_created ||
+      !result.skia_renderer_gpu_path_reached ||
+      !result.shared_image_interface_available ||
+      result.gpu_frame.is_software) {
+    std::fprintf(
+        stderr,
+        "gpu_output_vulkan_pixel_smoke: failed failure=setup shared_image=%d "
+        "mailbox=%s software=%d vk_context_provider=%d is_vulkan=%d "
+        "viz_display=%d skia_gpu=%d shared_interface=%d copy_failure=%s\n",
+        result.gpu_frame.shared_image_available ? 1 : 0,
+        result.gpu_frame.mailbox.c_str(),
+        result.gpu_frame.is_software ? 1 : 0,
+        result.gpu_frame.vk_context_provider_available ? 1 : 0,
+        result.gpu_frame.shared_context_state_is_vulkan ? 1 : 0,
+        result.viz_display_created ? 1 : 0,
+        result.skia_renderer_gpu_path_reached ? 1 : 0,
+        result.shared_image_interface_available ? 1 : 0,
+        result.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : result.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  const std::string result_line =
+      runtime->RunGpuOutputVulkanPixelSmokeForTesting();
+  if (result_line.find("gpu_output_vulkan_pixel_smoke: ok") != 0 &&
+      result_line.find("gpu_output_vulkan_pixel_smoke: blocked") != 0) {
+    std::fprintf(stderr, "%s\n", result_line.c_str());
+    return 1;
+  }
+  std::printf("%s\n", result_line.c_str());
+  return 0;
+}
+
 int RunGpuBorrowedVkImageBackingSmoke() {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer.viewport = {128.0f, 64.0f};
@@ -6535,6 +6605,7 @@ int main(int argc, char** argv) {
   bool cc_scheduler_probe = false;
   bool gpu_output_smoke = false;
   bool gpu_output_vulkan_smoke = false;
+  bool gpu_output_vulkan_pixel_smoke = false;
   bool gpu_borrowed_vkimage_backing_smoke = false;
   bool gpu_borrowed_vkimage_render_copy_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
@@ -6667,6 +6738,8 @@ int main(int argc, char** argv) {
       gpu_output_smoke = true;
     } else if (arg == "--gpu-output-vulkan-smoke") {
       gpu_output_vulkan_smoke = true;
+    } else if (arg == "--gpu-output-vulkan-pixel-smoke") {
+      gpu_output_vulkan_pixel_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-backing-smoke") {
       gpu_borrowed_vkimage_backing_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-render-copy-smoke") {
@@ -6838,6 +6911,10 @@ int main(int argc, char** argv) {
 
   if (gpu_output_vulkan_smoke) {
     return RunGpuOutputVulkanSmoke();
+  }
+
+  if (gpu_output_vulkan_pixel_smoke) {
+    return RunGpuOutputVulkanPixelSmoke();
   }
 
   if (gpu_borrowed_vkimage_backing_smoke) {

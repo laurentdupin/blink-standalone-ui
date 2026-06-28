@@ -1031,6 +1031,21 @@ struct StandaloneBorrowedVkImageRenderCopySmokeResult {
   std::string failure;
 };
 
+struct StandaloneVulkanGpuOutputPixelSmokeResult {
+  bool source_available = false;
+  bool context_available = false;
+  bool readback_verified = false;
+  bool blocked = false;
+  int width = 0;
+  int height = 0;
+  std::string format = "RGBA_8888";
+  std::string source_mailbox;
+  std::string observed_background;
+  std::string observed_box;
+  size_t nontransparent_pixels = 0;
+  std::string failure;
+};
+
 std::string StandaloneBorrowedVkImageRenderCopySmokeLine(
     const StandaloneBorrowedVkImageRenderCopySmokeResult& result) {
   std::ostringstream out;
@@ -1062,6 +1077,29 @@ std::string StandaloneBorrowedVkImageRenderCopySmokeLine(
       << " backing_released=" << (result.backing_released ? 1 : 0)
       << " target_destroyed=" << (result.target_destroyed ? 1 : 0)
       << " ownership=borrowed";
+  return out.str();
+}
+
+std::string StandaloneVulkanGpuOutputPixelSmokeLine(
+    const StandaloneVulkanGpuOutputPixelSmokeResult& result) {
+  std::ostringstream out;
+  out << "gpu_output_vulkan_pixel_smoke: ";
+  if (result.failure.empty()) {
+    out << "ok";
+  } else if (result.blocked) {
+    out << "blocked reason=" << result.failure;
+  } else {
+    out << "failed failure=" << result.failure;
+  }
+  out << " source=" << (result.source_available ? 1 : 0)
+      << " source_mailbox=" << result.source_mailbox
+      << " size=" << result.width << "x" << result.height
+      << " format=" << result.format
+      << " observed_background=" << result.observed_background
+      << " observed_box=" << result.observed_box
+      << " nontransparent_pixels=" << result.nontransparent_pixels
+      << " context=" << (result.context_available ? 1 : 0)
+      << " readback=" << (result.readback_verified ? 1 : 0);
   return out.str();
 }
 
@@ -1845,6 +1883,152 @@ class StandaloneSkiaOutputSurfaceDependency final
     }
     return RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
         std::move(source_shared_image));
+  }
+
+  std::string RunGpuOutputVulkanPixelSmokeForTesting(
+      scoped_refptr<gpu::ClientSharedImage> source_shared_image) {
+    if (vulkan_context_.initialized() &&
+        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
+      base::SingleThreadTaskRunner* task_runner =
+          vulkan_context_.owning_task_runner_for_testing();
+      if (task_runner) {
+        base::WaitableEvent completed(
+            base::WaitableEvent::ResetPolicy::MANUAL,
+            base::WaitableEvent::InitialState::NOT_SIGNALED);
+        std::string result;
+        const bool posted = task_runner->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](StandaloneSkiaOutputSurfaceDependency* self,
+                   scoped_refptr<gpu::ClientSharedImage> source_shared_image,
+                   std::string* result, base::WaitableEvent* completed) {
+                  *result =
+                      self->RunGpuOutputVulkanPixelSmokeOnCurrentSequence(
+                          std::move(source_shared_image));
+                  completed->Signal();
+                },
+                base::Unretained(this), std::move(source_shared_image),
+                &result, &completed));
+        if (!posted) {
+          return "gpu_output_vulkan_pixel_smoke: failed failure=failed to post "
+                 "pixel smoke to Vulkan context sequence";
+        }
+        completed.Wait();
+        return result;
+      }
+    }
+    return RunGpuOutputVulkanPixelSmokeOnCurrentSequence(
+        std::move(source_shared_image));
+  }
+
+  std::string RunGpuOutputVulkanPixelSmokeOnCurrentSequence(
+      scoped_refptr<gpu::ClientSharedImage> source_shared_image) {
+    StandaloneVulkanGpuOutputPixelSmokeResult result;
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      return StandaloneVulkanGpuOutputPixelSmokeLine(result);
+    };
+    auto finish_with_blocker = [&](std::string reason) {
+      result.blocked = true;
+      result.failure = std::move(reason);
+      return StandaloneVulkanGpuOutputPixelSmokeLine(result);
+    };
+
+    if (!source_shared_image || source_shared_image->mailbox().IsZero()) {
+      return finish_with_failure(
+          "pixel smoke requires a held CopyOutput SharedImage source");
+    }
+    result.source_available = true;
+    result.source_mailbox = source_shared_image->mailbox().ToDebugString();
+    result.width = source_shared_image->size().width();
+    result.height = source_shared_image->size().height();
+    result.format = source_shared_image->format().ToString();
+    if (result.width <= 0 || result.height <= 0) {
+      return finish_with_failure("CopyOutput source has invalid size");
+    }
+    if (!use_vulkan_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "pixel smoke requires offscreen Vulkan output");
+    }
+    gpu::SharedImageManager* manager = GetSharedImageManager();
+    if (!manager) {
+      return finish_with_failure("SharedImageManager is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    result.context_available = true;
+
+    scoped_refptr<gpu::MemoryTracker> memory_tracker =
+        base::MakeRefCounted<gpu::MemoryTracker>();
+    gpu::SharedImageRepresentationFactory representation_factory(
+        manager, std::move(memory_tracker));
+    auto read_representation = representation_factory.ProduceSkia(
+        source_shared_image->mailbox(), context_state,
+        gpu::SharedImageUsageSet(gpu::SHARED_IMAGE_USAGE_DISPLAY_READ));
+    if (!read_representation) {
+      return finish_with_failure(
+          "CopyOutput source Skia representation failed");
+    }
+    std::vector<GrBackendSemaphore> begin_semaphores;
+    std::vector<GrBackendSemaphore> end_semaphores;
+    auto read_access = read_representation->BeginScopedReadAccess(
+        &begin_semaphores, &end_semaphores);
+    if (!begin_semaphores.empty() &&
+        !context_state->gr_context()->wait(begin_semaphores.size(),
+                                           begin_semaphores.data(),
+                                           /*deleteSemaphoresAfterWait=*/false)) {
+      return finish_with_failure(
+          "CopyOutput source read semaphore wait failed");
+    }
+    if (!read_access) {
+      return finish_with_failure("CopyOutput source read access failed");
+    }
+    sk_sp<SkImage> image = read_access->CreateSkImage(context_state.get());
+    if (!image) {
+      return finish_with_failure("CopyOutput source image creation failed");
+    }
+
+    const SkImageInfo readback_info =
+        SkImageInfo::MakeN32Premul(result.width, result.height);
+    std::vector<uint32_t> readback_pixels(
+        static_cast<size_t>(result.width) * static_cast<size_t>(result.height));
+    const size_t row_bytes =
+        static_cast<size_t>(result.width) * sizeof(uint32_t);
+    if (!image->readPixels(context_state->gr_context(), readback_info,
+                           readback_pixels.data(), row_bytes, 0, 0)) {
+      return finish_with_failure("CopyOutput source readback failed");
+    }
+    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
+    for (uint32_t pixel : readback_pixels) {
+      if (SkColorGetA(pixel) != 0) {
+        ++result.nontransparent_pixels;
+      }
+    }
+    const SkColor expected_background = SkColorSetARGB(255, 0x12, 0x34, 0x56);
+    const SkColor expected_box = SkColorSetARGB(255, 0xd0, 0x63, 0x29);
+    const SkColor observed_background = pixmap.getColor(4, 4);
+    const SkColor observed_box =
+        pixmap.getColor(std::min(result.width - 1, 24),
+                        std::min(result.height - 1, 24));
+    result.observed_background = StandaloneFormatColor(observed_background);
+    result.observed_box = StandaloneFormatColor(observed_box);
+    if (result.nontransparent_pixels == 0) {
+      return finish_with_blocker(
+          "offscreen Vulkan CopyOutput source SharedImage is transparent");
+    }
+    if (!StandaloneColorClose(observed_background, expected_background) ||
+        !StandaloneColorClose(observed_box, expected_box)) {
+      return finish_with_failure(
+          "offscreen Vulkan CopyOutput pixel verification failed");
+    }
+    result.readback_verified = true;
+    return StandaloneVulkanGpuOutputPixelSmokeLine(result);
   }
 
   std::string RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
@@ -2976,6 +3160,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         ->VerifyBorrowedVkImageRenderCopyBlitTargetForTesting();
   }
 
+  std::string RunGpuOutputVulkanPixelSmokeForTesting() {
+    if (!display_) {
+      return "gpu_output_vulkan_pixel_smoke: failed failure=Viz Display is "
+             "not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_output_vulkan_pixel_smoke: failed failure=offscreen Vulkan "
+             "Skia dependency is not available";
+    }
+    if (!held_gpu_copy_output_shared_image_) {
+      return "gpu_output_vulkan_pixel_smoke: failed failure=held Vulkan "
+             "CopyOutput SharedImage is not available";
+    }
+    return offscreen_skia_dependency_->RunGpuOutputVulkanPixelSmokeForTesting(
+        held_gpu_copy_output_shared_image_);
+  }
+
  private:
   void ReleaseHeldGpuCopyOutputSharedImage(const gpu::SyncToken& sync_token) {
     held_gpu_copy_output_shared_image_.reset();
@@ -3607,6 +3808,13 @@ class StandaloneCcLayerHost final
              "LayerTreeFrameSink is not available";
     }
     return active_frame_sink_->RunBorrowedVkImageRenderCopySmokeForTesting();
+  }
+  std::string RunGpuOutputVulkanPixelSmokeForTesting() {
+    if (!active_frame_sink_) {
+      return "gpu_output_vulkan_pixel_smoke: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunGpuOutputVulkanPixelSmokeForTesting();
   }
   bool copy_output_completed() const { return copy_output_completed_; }
   bool copy_output_succeeded() const { return copy_output_succeeded_; }
@@ -15835,6 +16043,29 @@ StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageRenderCopySmokeForStandaloneRend
   }
   smoke_result =
       cache.cc_layer_host->RunBorrowedVkImageRenderCopySmokeForTesting();
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunGpuOutputVulkanPixelSmokeForStandaloneRenderer() {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.copy_output_gpu_frame.shared_image_available ||
+      !cache.copy_output_gpu_frame.vk_context_provider_available ||
+      !cache.copy_output_gpu_frame.shared_context_state_is_vulkan) {
+    smoke_result =
+        "gpu_output_vulkan_pixel_smoke: failed failure=Vulkan SharedImage "
+        "CopyOutput did not initialize before pixel smoke";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_output_vulkan_pixel_smoke: failed failure=cc layer host is not "
+        "available";
+    return smoke_result.c_str();
+  }
+  smoke_result =
+      cache.cc_layer_host->RunGpuOutputVulkanPixelSmokeForTesting();
   return smoke_result.c_str();
 }
 
