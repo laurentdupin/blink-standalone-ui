@@ -67,6 +67,7 @@
 #include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
+#include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
@@ -86,9 +87,14 @@
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
+#include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/scheduler_sequence.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
+#include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/in_process_gpu_thread_holder.h"
 #include "gpu/command_buffer/service/service_utils.h"
@@ -99,6 +105,7 @@
 #include "gpu/ipc/raster_in_process_context.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
@@ -107,6 +114,7 @@
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -122,6 +130,12 @@
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/encode/SkPngEncoder.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSurface.h"
+#include "third_party/skia/include/gpu/ganesh/GrBackendSemaphore.h"
+#include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
+#include "third_party/skia/include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "third_party/skia/include/gpu/ganesh/vk/GrVkBackendSurface.h"
+#include "third_party/skia/include/private/chromium/GrPromiseImageTexture.h"
 #include "ui/gl/buildflags.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
@@ -948,6 +962,208 @@ const char* StandaloneCopyOutputErrorName(viz::CopyOutputResult::Error error) {
   return "unknown";
 }
 
+struct StandaloneBorrowedVkImageBackingSmokeResult {
+  bool context_available = false;
+  bool target_created = false;
+  bool backend_texture_valid = false;
+  bool registered = false;
+  bool produced_skia = false;
+  bool write_access = false;
+  bool readback_verified = false;
+  bool backing_released = false;
+  bool target_destroyed = false;
+  int width = 64;
+  int height = 32;
+  std::string format = "RGBA_8888";
+  std::string failure;
+};
+
+std::string StandaloneBorrowedVkImageBackingSmokeLine(
+    const StandaloneBorrowedVkImageBackingSmokeResult& result) {
+  std::ostringstream out;
+  out << "gpu_borrowed_vkimage_backing_smoke: ";
+  if (result.failure.empty()) {
+    out << "ok";
+  } else {
+    out << "failed failure=" << result.failure;
+  }
+  out << " path=skia_direct_write"
+      << " viz_blit_request=0"
+      << " target=" << result.width << "x" << result.height
+      << " format=" << result.format
+      << " context=" << (result.context_available ? 1 : 0)
+      << " target_created=" << (result.target_created ? 1 : 0)
+      << " backend_texture=" << (result.backend_texture_valid ? 1 : 0)
+      << " registered=" << (result.registered ? 1 : 0)
+      << " produced_skia=" << (result.produced_skia ? 1 : 0)
+      << " write_access=" << (result.write_access ? 1 : 0)
+      << " readback=" << (result.readback_verified ? 1 : 0)
+      << " backing_released=" << (result.backing_released ? 1 : 0)
+      << " target_destroyed=" << (result.target_destroyed ? 1 : 0)
+      << " ownership=borrowed";
+  return out.str();
+}
+
+class StandaloneBorrowedVkImageBacking final
+    : public gpu::ClearTrackingSharedImageBacking {
+ public:
+  StandaloneBorrowedVkImageBacking(
+      const gpu::Mailbox& mailbox,
+      const gpu::SharedImageInfo& si_info,
+      scoped_refptr<gpu::SharedContextState> context_state,
+      const GrBackendTexture& backend_texture)
+      : gpu::ClearTrackingSharedImageBacking(
+            mailbox,
+            si_info,
+            /*estimated_size=*/
+            static_cast<size_t>(std::max(0, si_info.size.width())) *
+                static_cast<size_t>(std::max(0, si_info.size.height())) * 4u,
+            /*is_thread_safe=*/false),
+        context_state_(std::move(context_state)),
+        backend_texture_(backend_texture),
+        promise_texture_(GrPromiseImageTexture::Make(backend_texture_)) {}
+
+  StandaloneBorrowedVkImageBacking(
+      const StandaloneBorrowedVkImageBacking&) = delete;
+  StandaloneBorrowedVkImageBacking& operator=(
+      const StandaloneBorrowedVkImageBacking&) = delete;
+
+  ~StandaloneBorrowedVkImageBacking() override {
+    DCHECK(!is_write_);
+    DCHECK_EQ(read_count_, 0);
+    // The VkImage is embedder-owned in the product design. This proof backing
+    // intentionally drops only its Skia wrappers and never destroys the image.
+    promise_texture_.reset();
+  }
+
+  gpu::SharedImageBackingType GetType() const override {
+    return gpu::SharedImageBackingType::kStandaloneBorrowedVkImage;
+  }
+
+  void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
+
+ protected:
+  std::unique_ptr<gpu::SkiaGaneshImageRepresentation> ProduceSkiaGanesh(
+      gpu::SharedImageManager* manager,
+      gpu::MemoryTypeTracker* tracker,
+      scoped_refptr<gpu::SharedContextState> context_state) override;
+
+ private:
+  class SkiaRepresentation final : public gpu::SkiaGaneshImageRepresentation {
+   public:
+    SkiaRepresentation(GrDirectContext* gr_context,
+                       gpu::SharedImageManager* manager,
+                       StandaloneBorrowedVkImageBacking* backing,
+                       gpu::MemoryTypeTracker* tracker)
+        : gpu::SkiaGaneshImageRepresentation(gr_context,
+                                             manager,
+                                             backing,
+                                             tracker) {}
+
+    bool SupportsMultipleConcurrentReadAccess() override { return true; }
+
+    std::vector<sk_sp<SkSurface>> BeginWriteAccess(
+        int final_msaa_count,
+        const SkSurfaceProps& surface_props,
+        const gfx::Rect& update_rect,
+        std::vector<GrBackendSemaphore>* begin_semaphores,
+        std::vector<GrBackendSemaphore>* end_semaphores,
+        std::unique_ptr<skgpu::MutableTextureState>* end_state) override {
+      return borrowed_backing()->BeginSkiaWriteAccess(final_msaa_count,
+                                                      surface_props);
+    }
+
+    std::vector<sk_sp<GrPromiseImageTexture>> BeginWriteAccess(
+        std::vector<GrBackendSemaphore>* begin_semaphores,
+        std::vector<GrBackendSemaphore>* end_semaphores,
+        std::unique_ptr<skgpu::MutableTextureState>* end_state) override {
+      return borrowed_backing()->BeginSkiaWriteAccessAsPromiseTexture();
+    }
+
+    void EndWriteAccess() override { borrowed_backing()->EndSkiaWriteAccess(); }
+
+    std::vector<sk_sp<GrPromiseImageTexture>> BeginReadAccess(
+        std::vector<GrBackendSemaphore>* begin_semaphores,
+        std::vector<GrBackendSemaphore>* end_semaphores,
+        std::unique_ptr<skgpu::MutableTextureState>* end_state) override {
+      return borrowed_backing()->BeginSkiaReadAccess();
+    }
+
+    void EndReadAccess() override { borrowed_backing()->EndSkiaReadAccess(); }
+
+   private:
+    StandaloneBorrowedVkImageBacking* borrowed_backing() {
+      return static_cast<StandaloneBorrowedVkImageBacking*>(backing());
+    }
+  };
+
+  std::vector<sk_sp<SkSurface>> BeginSkiaWriteAccess(
+      int final_msaa_count,
+      const SkSurfaceProps& surface_props) {
+    if (is_write_ || read_count_ > 0 || !context_state_ ||
+        !context_state_->gr_context() || !backend_texture_.isValid()) {
+      return {};
+    }
+    is_write_ = true;
+    const SkColorType sk_color_type = viz::ToClosestSkColorType(format());
+    sk_sp<SkSurface> surface = SkSurfaces::WrapBackendTexture(
+        context_state_->gr_context(), backend_texture_, surface_origin(),
+        final_msaa_count, sk_color_type, color_space().ToSkColorSpace(),
+        &surface_props);
+    if (!surface) {
+      is_write_ = false;
+      return {};
+    }
+    return {std::move(surface)};
+  }
+
+  std::vector<sk_sp<GrPromiseImageTexture>>
+  BeginSkiaWriteAccessAsPromiseTexture() {
+    if (is_write_ || read_count_ > 0 || !promise_texture_) {
+      return {};
+    }
+    is_write_ = true;
+    return {promise_texture_};
+  }
+
+  void EndSkiaWriteAccess() {
+    DCHECK(is_write_);
+    is_write_ = false;
+    SetCleared();
+  }
+
+  std::vector<sk_sp<GrPromiseImageTexture>> BeginSkiaReadAccess() {
+    if (is_write_ || !promise_texture_) {
+      return {};
+    }
+    ++read_count_;
+    return {promise_texture_};
+  }
+
+  void EndSkiaReadAccess() {
+    DCHECK_GT(read_count_, 0);
+    --read_count_;
+  }
+
+  scoped_refptr<gpu::SharedContextState> context_state_;
+  GrBackendTexture backend_texture_;
+  sk_sp<GrPromiseImageTexture> promise_texture_;
+  bool is_write_ = false;
+  int read_count_ = 0;
+};
+
+std::unique_ptr<gpu::SkiaGaneshImageRepresentation>
+StandaloneBorrowedVkImageBacking::ProduceSkiaGanesh(
+    gpu::SharedImageManager* manager,
+    gpu::MemoryTypeTracker* tracker,
+    scoped_refptr<gpu::SharedContextState> context_state) {
+  if (context_state != context_state_) {
+    return nullptr;
+  }
+  return std::make_unique<SkiaRepresentation>(
+      context_state_->gr_context(), manager, this, tracker);
+}
+
 class StandaloneOffscreenVulkanGaneshContext {
  public:
   StandaloneOffscreenVulkanGaneshContext() = default;
@@ -1057,6 +1273,15 @@ class StandaloneOffscreenVulkanGaneshContext {
   }
 
   bool initialized() const { return initialized_; }
+
+  bool RunsOnOwningSequenceForTesting() const {
+    return !owning_task_runner_ ||
+           owning_task_runner_->RunsTasksInCurrentSequence();
+  }
+
+  base::SingleThreadTaskRunner* owning_task_runner_for_testing() const {
+    return owning_task_runner_.get();
+  }
 
  private:
   struct Resources {
@@ -1308,6 +1533,200 @@ class StandaloneSkiaOutputSurfaceDependency final
   bool NeedsSupportForExternalStencil() override { return false; }
 
   bool IsUsingCompositorGpuThread() override { return false; }
+
+  std::string RunBorrowedVkImageBackingSmokeForTesting() {
+    if (vulkan_context_.initialized() &&
+        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
+      base::SingleThreadTaskRunner* task_runner =
+          vulkan_context_.owning_task_runner_for_testing();
+      if (task_runner) {
+        base::WaitableEvent completed(
+            base::WaitableEvent::ResetPolicy::MANUAL,
+            base::WaitableEvent::InitialState::NOT_SIGNALED);
+        std::string result;
+        const bool posted = task_runner->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](StandaloneSkiaOutputSurfaceDependency* self,
+                   std::string* result, base::WaitableEvent* completed) {
+                  *result =
+                      self->RunBorrowedVkImageBackingSmokeOnCurrentSequence();
+                  completed->Signal();
+                },
+                base::Unretained(this), &result, &completed));
+        if (!posted) {
+          return "gpu_borrowed_vkimage_backing_smoke: failed failure=failed "
+                 "to post borrowed VkImage smoke to Vulkan context sequence";
+        }
+        completed.Wait();
+        return result;
+      }
+    }
+    return RunBorrowedVkImageBackingSmokeOnCurrentSequence();
+  }
+
+  std::string RunBorrowedVkImageBackingSmokeOnCurrentSequence() {
+    StandaloneBorrowedVkImageBackingSmokeResult result;
+    std::unique_ptr<gpu::VulkanImage> target_image;
+    scoped_refptr<gpu::MemoryTracker> memory_tracker;
+    std::unique_ptr<gpu::MemoryTypeTracker> memory_type_tracker;
+    std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
+    std::unique_ptr<gpu::SkiaImageRepresentation> skia_representation;
+    std::unique_ptr<gpu::SkiaImageRepresentation::ScopedWriteAccess>
+        write_access;
+
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      write_access.reset();
+      skia_representation.reset();
+      if (factory_ref) {
+        factory_ref.reset();
+        result.backing_released = true;
+      }
+      memory_type_tracker.reset();
+      memory_tracker.reset();
+      if (target_image) {
+        target_image->Destroy();
+        result.target_destroyed = true;
+      }
+      return StandaloneBorrowedVkImageBackingSmokeLine(result);
+    };
+
+    if (!use_vulkan_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "borrowed VkImage smoke requires offscreen Vulkan output");
+    }
+    gpu::SharedImageManager* manager = GetSharedImageManager();
+    if (!manager) {
+      return finish_with_failure("SharedImageManager is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    viz::VulkanContextProvider* vulkan_provider =
+        context_state->vk_context_provider();
+    gpu::VulkanDeviceQueue* device_queue = vulkan_provider->GetDeviceQueue();
+    if (!device_queue) {
+      return finish_with_failure("Vulkan context provider has no device queue");
+    }
+    result.context_available = true;
+
+    const gfx::Size target_size(result.width, result.height);
+    target_image = gpu::VulkanImage::Create(
+        device_queue, target_size, VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    if (!target_image || target_image->image() == VK_NULL_HANDLE) {
+      return finish_with_failure("stand-in target VkImage creation failed");
+    }
+    result.target_created = true;
+
+    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
+    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
+    const GrVkImageInfo vk_image_info =
+        gpu::CreateGrVkImageInfo(target_image.get(), format, color_space);
+    const GrBackendTexture backend_texture =
+        GrBackendTextures::MakeVk(result.width, result.height, vk_image_info);
+    if (!backend_texture.isValid()) {
+      return finish_with_failure("Skia backend texture wrapping failed");
+    }
+    result.backend_texture_valid = true;
+
+    const gpu::Mailbox mailbox = gpu::Mailbox::Generate();
+    const gpu::SharedImageUsageSet usage =
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE;
+    gpu::SharedImageInfo si_info(format, target_size, color_space,
+                                 kTopLeft_GrSurfaceOrigin,
+                                 kPremul_SkAlphaType, usage,
+                                 "StandaloneBorrowedVkImageBackingSmoke");
+    memory_tracker = base::MakeRefCounted<gpu::MemoryTracker>();
+    memory_type_tracker =
+        std::make_unique<gpu::MemoryTypeTracker>(memory_tracker);
+    factory_ref = manager->Register(
+        std::make_unique<StandaloneBorrowedVkImageBacking>(
+            mailbox, si_info, context_state, backend_texture),
+        memory_type_tracker.get());
+    if (!factory_ref) {
+      return finish_with_failure("borrowed VkImage backing registration failed");
+    }
+    result.registered = true;
+
+    skia_representation = manager->ProduceSkia(
+        mailbox, memory_type_tracker.get(), context_state,
+        gpu::SharedImageUsageSet(gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE));
+    if (!skia_representation) {
+      return finish_with_failure("borrowed VkImage Skia representation failed");
+    }
+    result.produced_skia = true;
+
+    std::vector<GrBackendSemaphore> begin_semaphores;
+    std::vector<GrBackendSemaphore> end_semaphores;
+    write_access = skia_representation->BeginScopedWriteAccess(
+        /*final_msaa_count=*/1, SkSurfaceProps(), &begin_semaphores,
+        &end_semaphores,
+        gpu::SharedImageRepresentation::AllowUnclearedAccess::kYes);
+    if (!write_access || !write_access->has_surfaces() ||
+        !write_access->surface()) {
+      return finish_with_failure("borrowed VkImage Skia write access failed");
+    }
+    result.write_access = true;
+    SkSurface* surface = write_access->surface();
+    if (!begin_semaphores.empty() &&
+        !surface->wait(begin_semaphores.size(), begin_semaphores.data(),
+                       /*deleteSemaphoresAfterWait=*/false)) {
+      return finish_with_failure("borrowed VkImage begin semaphore wait failed");
+    }
+
+    constexpr SkColor kExpectedColor = SkColorSetARGB(255, 210, 99, 41);
+    surface->getCanvas()->clear(kExpectedColor);
+    context_state->gr_context()->flush(surface);
+    if (!context_state->gr_context()->submit()) {
+      return finish_with_failure("borrowed VkImage Skia submit failed");
+    }
+
+    const SkImageInfo readback_info =
+        SkImageInfo::MakeN32Premul(result.width, result.height);
+    std::vector<uint32_t> readback_pixels(
+        static_cast<size_t>(result.width) * static_cast<size_t>(result.height));
+    const size_t row_bytes =
+        static_cast<size_t>(result.width) * sizeof(uint32_t);
+    if (!surface->readPixels(readback_info, readback_pixels.data(), row_bytes,
+                             0, 0)) {
+      return finish_with_failure("borrowed VkImage readback verification failed");
+    }
+    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
+    const SkColor observed =
+        pixmap.getColor(result.width / 2, result.height / 2);
+    auto close_channel = [](uint8_t observed_channel,
+                            uint8_t expected_channel) {
+      return std::abs(static_cast<int>(observed_channel) -
+                      static_cast<int>(expected_channel)) <= 4;
+    };
+    if (!close_channel(SkColorGetA(observed), SkColorGetA(kExpectedColor)) ||
+        !close_channel(SkColorGetR(observed), SkColorGetR(kExpectedColor)) ||
+        !close_channel(SkColorGetG(observed), SkColorGetG(kExpectedColor)) ||
+        !close_channel(SkColorGetB(observed), SkColorGetB(kExpectedColor))) {
+      return finish_with_failure("borrowed VkImage readback color mismatch");
+    }
+    result.readback_verified = true;
+
+    write_access.reset();
+    skia_representation.reset();
+    factory_ref.reset();
+    result.backing_released = true;
+    memory_type_tracker.reset();
+    memory_tracker.reset();
+    target_image->Destroy();
+    result.target_destroyed = true;
+    target_image.reset();
+    return StandaloneBorrowedVkImageBackingSmokeLine(result);
+  }
 
  private:
   void SetFailure(const char* reason) {
@@ -1761,6 +2180,18 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   void ExportFrameTiming() override {}
 
+  std::string RunBorrowedVkImageBackingSmokeForTesting() {
+    if (!display_) {
+      return "gpu_borrowed_vkimage_backing_smoke: failed failure=Viz Display "
+             "is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_borrowed_vkimage_backing_smoke: failed failure=offscreen "
+             "Vulkan Skia dependency is not available";
+    }
+    return offscreen_skia_dependency_->RunBorrowedVkImageBackingSmokeForTesting();
+  }
+
  private:
   void SetFailure(const char* reason) {
     if (failure_reason_) {
@@ -1781,13 +2212,14 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         SetFailure("Offscreen Viz Display GPU thread holder failed to initialize");
         return false;
       }
+      auto dependency = std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
+          gpu_thread_holder_, gpu::kNullSurfaceHandle, failure_reason_,
+          use_vulkan_offscreen_output_, &vulkan_context_provider_available_,
+          &vulkan_shared_context_state_is_vulkan_);
+      offscreen_skia_dependency_ = dependency.get();
       auto display_controller =
           std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
-              std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
-                  gpu_thread_holder_, gpu::kNullSurfaceHandle,
-                  failure_reason_, use_vulkan_offscreen_output_,
-                  &vulkan_context_provider_available_,
-                  &vulkan_shared_context_state_is_vulkan_));
+              std::move(dependency));
       std::unique_ptr<viz::OutputSurface> output_surface =
           viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
                                              renderer_settings_,
@@ -1828,6 +2260,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink before Viz Display GPU init");
+    offscreen_skia_dependency_ = nullptr;
     if (!gpu_thread_holder_->GetTaskExecutor()) {
       SetFailure("Viz Display GPU thread holder failed to initialize");
       return false;
@@ -2123,6 +2556,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   std::unique_ptr<viz::Display> display_;
+  raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
+      nullptr;
   bool display_uses_software_output_ = false;
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
@@ -2179,6 +2614,7 @@ class StandaloneCcLayerHost final
   StandaloneCcLayerHost& operator=(const StandaloneCcLayerHost&) = delete;
 
   ~StandaloneCcLayerHost() override {
+    active_frame_sink_ = nullptr;
     layer_tree_host_.reset();
     animation_host_.reset();
     if (scheduler_task_graph_runner_started_) {
@@ -2301,6 +2737,7 @@ class StandaloneCcLayerHost final
       return;
     }
     use_vulkan_offscreen_output_ = enabled;
+    active_frame_sink_ = nullptr;
     layer_tree_host_.reset();
     animation_host_.reset();
     frame_sink_manager_.reset();
@@ -2346,6 +2783,13 @@ class StandaloneCcLayerHost final
   }
   void RequestNextCopyOutputPng() {
     RequestNextCopyOutput(/*wants_png=*/true, /*wants_raw=*/false);
+  }
+  std::string RunBorrowedVkImageBackingSmokeForTesting() {
+    if (!active_frame_sink_) {
+      return "gpu_borrowed_vkimage_backing_smoke: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunBorrowedVkImageBackingSmokeForTesting();
   }
   bool copy_output_completed() const { return copy_output_completed_; }
   bool copy_output_succeeded() const { return copy_output_succeeded_; }
@@ -2710,6 +3154,7 @@ class StandaloneCcLayerHost final
             /*last_did_not_produce_has_damage=*/nullptr,
             settings_.single_thread_proxy_scheduler,
             use_vulkan_offscreen_output_);
+    active_frame_sink_ = layer_tree_frame_sink.get();
     TraceLiveFrameProbeStage("cc host CreateFrameSink before SetLayerTreeFrameSink");
     layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
     TraceLiveFrameProbeStage("cc host CreateFrameSink after SetLayerTreeFrameSink");
@@ -2790,6 +3235,7 @@ class StandaloneCcLayerHost final
   }
   void DidFailToInitializeLayerTreeFrameSink() override {
     frame_sink_bound_ = false;
+    active_frame_sink_ = nullptr;
     if (frame_sink_failure_reason_.empty()) {
       RememberFrameSinkFailure("cc::LayerTreeHost rejected LayerTreeFrameSink");
     }
@@ -2835,6 +3281,7 @@ class StandaloneCcLayerHost final
   void DidLoseLayerTreeFrameSink() override {
     frame_sink_requested_ = true;
     frame_sink_bound_ = false;
+    active_frame_sink_ = nullptr;
     RememberFrameSinkFailure("cc::LayerTreeFrameSink was lost");
   }
 
@@ -2847,6 +3294,7 @@ class StandaloneCcLayerHost final
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   std::unique_ptr<cc::LayerTreeHost> layer_tree_host_;
+  raw_ptr<StandaloneDirectLayerTreeFrameSink> active_frame_sink_ = nullptr;
   raw_ptr<cc::Layer> attached_root_layer_ = nullptr;
   gfx::Size logical_viewport_;
   gfx::Size physical_viewport_;
@@ -14526,6 +14974,28 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() 
   cache.copy_output_failure.clear();
   cache.cc_layer_host.reset();
   cache.initialized = false;
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageBackingSmokeForStandaloneRenderer() {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.copy_output_gpu_frame.shared_image_available ||
+      !cache.copy_output_gpu_frame.vk_context_provider_available ||
+      !cache.copy_output_gpu_frame.shared_context_state_is_vulkan) {
+    smoke_result =
+        "gpu_borrowed_vkimage_backing_smoke: failed failure=Vulkan SharedImage "
+        "CopyOutput did not initialize before borrowed target smoke";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_borrowed_vkimage_backing_smoke: failed failure=cc layer host is "
+        "not available";
+    return smoke_result.c_str();
+  }
+  smoke_result = cache.cc_layer_host->RunBorrowedVkImageBackingSmokeForTesting();
+  return smoke_result.c_str();
 }
 
 void StandaloneBlinkLiveFrameBridgeSetDocumentScrollOffsetForStandaloneRenderer(

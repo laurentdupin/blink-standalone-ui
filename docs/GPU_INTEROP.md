@@ -255,92 +255,65 @@ raw Vulkan image. The current Vulkan backings are not a small fit:
   `GpuMemoryBufferHandle` import route is not currently a shortcut around raw
   image wrapping.
 
-Therefore an internal `--gpu-borrowed-vkimage-backing-smoke` would be premature
-in this checkout. A half-smoke could register a mailbox that only carries
-metadata, or could wrap a locally created image in an owning `VulkanImage`, but
-neither would prove a Godot-owned target survives without Chromium destroying
-or reallocating it.
-
-An implementation probe confirmed one more constraint. A standalone borrowed
-`VkImage` backing and Ganesh representation can be made to compile, but the
-current offscreen benchmark GPU path does not expose a Vulkan-backed
-`gpu::SharedContextState`: `SharedContextState::vk_context_provider()` is null
-even when Viz reaches the GPU SkiaRenderer path and
-`--gpu-output-smoke` can produce a Chromium-owned SharedImage mailbox. Calling
-`InProcessGpuThreadHolder::GetSharedContextState()` from the frame-sink thread
-also trips Chromium's sequence-checked `scoped_refptr` DCHECK; borrowed
-SharedImage setup must run on the GPU task sequence. Moving the prototype work
-to the GPU thread avoided the sequence crash, but the smoke still failed
-recoverably with `Borrowed VkImage target requires a Vulkan Ganesh context`.
-
-The reason is the current offscreen context topology. The benchmark/offscreen
-path uses `gpu::InProcessGpuThreadHolder`, which initializes an offscreen GL
-surface and GL context, constructs `SharedContextState` from that GL share group
-and surface, and calls `InitializeGL()`/`InitializeSkia()`. The custom
-`StandaloneSkiaOutputSurfaceDependency` returns that shared context state to
-Viz, but `GetVulkanContextProvider()` is hard-coded to `nullptr`. As a result,
-`SkiaOutputSurfaceImplOnGpu::Initialize()` takes the GL/offscreen output-device
-path (`SkiaOutputDeviceOffscreen`) rather than `InitializeForVulkan()`, even
-though the frame still reaches the GPU SkiaRenderer and can produce a SharedImage
-mailbox.
-
-The SDL Vulkan path does not solve this because `VulkanWindowHost` is a
-separate native-window presenter. It creates its own `gpu::VulkanImplementation`,
-`gpu::VulkanDeviceQueue`, Win32 surface, swapchain, and command pool, but it
-does not create or expose a `SharedContextState`, a
-`viz::VulkanInProcessContextProvider`, or an offscreen Skia/Vulkan render target.
-It proves Chromium-owned Vulkan presentation to an HWND, not a reusable
-offscreen Vulkan Ganesh context.
-
-The imported Chromium tree does contain `viz::VulkanInProcessContextProvider`,
+The imported Chromium tree contains `viz::VulkanInProcessContextProvider`,
 `SkiaOutputDeviceVulkan`, and `SkiaOutputDeviceVulkanSecondaryCB`, and they are
 buildable in the generated Windows build. The benchmark smoke
-`--gpu-vulkan-ganesh-context-smoke` now proves the smallest context-only piece:
-it creates a `viz::VulkanInProcessContextProvider`, constructs an offscreen
+`--gpu-vulkan-ganesh-context-smoke` proves the context-only piece: it creates a
+`viz::VulkanInProcessContextProvider`, constructs an offscreen
 `gpu::SharedContextState` with `GrContextType::kVulkan`, and initializes a
 Vulkan Ganesh `GrDirectContext` without an SDL window, HWND, surface, or
 swapchain.
 
-That smoke is not yet runtime integration. `StandaloneCompositorRuntime` and
-`StandaloneSkiaOutputSurfaceDependency` still do not expose that Vulkan context
-provider to Viz, so the production offscreen frame path still uses the existing
-GL/offscreen dependency path. Until that wiring exists, a borrowed Vulkan image
-cannot be exposed as a writable Skia representation in the benchmark/runtime
-path, and a borrowed target smoke would only validate fallback metadata.
+`--gpu-output-vulkan-smoke` wires that context provider into the actual
+standalone offscreen runtime path. It proves the Viz frame path reaches
+`vk_context_provider=1`, `is_vulkan=1`, `viz_display=1`, `skia_gpu=1`, and still
+produces a Chromium-owned SharedImage mailbox.
 
-The smallest honest next implementation is:
+`--gpu-borrowed-vkimage-backing-smoke` is the first borrowed target proof on
+that Vulkan-backed runtime path. It creates a local `VkImage` on the Chromium
+Vulkan device as an external-image stand-in, registers a standalone
+`SharedImageBacking` that borrows the image without owning it, writes known
+content through a Skia Ganesh representation, verifies the result with CPU
+readback, releases the backing, and only then explicitly destroys the target
+image. The write path under test is GPU-backed; readback is verification only.
+The smoke must run the borrowed SharedImage setup on the Vulkan context's owner
+sequence because `SharedContextState` is sequence checked.
 
-1. Add a service-side borrowed Vulkan backing, separate from
-   `ExternalVkImageBacking`, with explicit non-ownership of `VkImage` and memory
-   handles.
-2. Wire the proven Vulkan Ganesh `SharedContextState` into the standalone
-   offscreen GPU-output path. This likely means teaching
-   `StandaloneSkiaOutputSurfaceDependency` to expose the
-   `viz::VulkanInProcessContextProvider` and ensuring
-   `SkiaOutputSurfaceImplOnGpu` selects its Vulkan/offscreen device path instead
-   of the current GL `SkiaOutputDeviceOffscreen` path. Borrowed backing setup
-   must run on the GPU task sequence.
-3. Decide the required embedder metadata: at minimum image size, format, usage,
-   current/final layout, queue family, and synchronization; likely also
-   `VkDeviceMemory`, allocation size, and memory type unless Skia validation
-   proves those can be omitted.
-4. Implement a Skia Ganesh representation that builds a `GrBackendTexture` for
-   the borrowed image, enforces `DISPLAY_WRITE`, handles begin/end semaphores or
-   timeline waits/signals, and leaves the image in the requested final layout.
-5. Register the backing with `SharedImageManager`/`SharedImageFactory`, create a
-   matching `ClientSharedImage`, and drive Viz `BlitRequest` into it.
-6. Only then add `--gpu-borrowed-vkimage-backing-smoke`, using a locally
-   created image as an external stand-in and verifying that the GPU write path,
-   not CPU readback, populates the target.
+This smoke is intentionally Skia direct-write only. It does not prove copying
+the rendered Viz output into the borrowed target and it does not use Viz
+`BlitRequest`. Earlier synthetic client-image attempts hit client
+`ClientSharedImage` sequence and lifetime ownership problems. The next honest
+step is to keep the destination as a service-side SharedImage and drive a
+service-side copy/blit from the CopyOutput SharedImage mailbox into that
+borrowed destination, without constructing a fake client image on the wrong
+sequence.
+
+The remaining implementation steps before public ABI are:
+
+1. Define the external target metadata and synchronization contract: at minimum
+   image size, format, usage, current/final layout, queue family, and wait/signal
+   synchronization; likely also `VkDeviceMemory`, allocation size, and memory
+   type unless Skia validation proves those can be omitted.
+2. Extend the borrowed backing beyond the smoke path with explicit
+   acquire/release layout and semaphore handling, still without destroying
+   borrowed `VkImage`, memory, image views, semaphores, or fences.
+3. Connect the rendered-output path to the borrowed destination using a real
+   service-side SharedImage copy/blit path. This is the missing render-output
+   integration after the Skia direct-write proof.
+4. Add an internal smoke that copies the Chromium-owned rendered SharedImage
+   output into the borrowed target. Only after that should public C ABI be
+   added.
 
 ## Why No Public API Yet
 
-A real Godot-owned target path is not implementable in this checkpoint without
-additional Chromium runtime wiring:
+A real Godot-owned target path is not yet ready for public ABI because the
+rendered-output copy step and embedder synchronization contract are still
+missing:
 
-- The current runtime can prove a Chromium-owned SharedImage mailbox for the
-  final submitted Viz frame, but it does not expose ownership, exportable memory,
-  or an external-image copy/import path suitable for an embedder.
+- The current runtime can prove both a Chromium-owned SharedImage mailbox for
+  the final submitted Viz frame and a Skia Ganesh direct-write into a borrowed
+  stand-in `VkImage`, but it does not yet copy the rendered frame output into
+  that borrowed target.
 - `VulkanWindowHost` uses a Chromium-owned device and swapchain; it cannot adopt
   Godot's `VkDevice`, `VkQueue`, or `VkImage`.
 - Imported SharedImage/Vulkan code creates Chromium-owned images or imports
@@ -370,9 +343,9 @@ plumbing, not public C ABI:
 4. Decide whether the runtime can consume an embedder-created device directly or
    whether the embedder must provide an importable memory handle instead of a
    raw `VkImage`.
-5. Add an internal smoke using an external-like `VkImage`, with a hard failure
-  if the path cannot write the image. Only after that should a public C ABI be
-  added.
+5. Add an internal smoke that copies rendered Viz output into an external-like
+   `VkImage`, with a hard failure if the path cannot write the image. Only after
+   that should a public C ABI be added.
 
 ## Same-Device Embedder Targets
 

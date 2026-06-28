@@ -127,7 +127,8 @@ enum class SharedImageBackingType {
   kDXGISwapChain = 17,
   kWrappedGraphiteTexture = 18,
   kDawn = 19,
-  kMaxValue = kDawn
+  kStandaloneBorrowedVkImage = 20,
+  kMaxValue = kStandaloneBorrowedVkImage
 };
 
 #if BUILDFLAG(IS_WIN)
