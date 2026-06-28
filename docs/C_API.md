@@ -146,6 +146,19 @@ not install a live CSS font face and `web_font_decoder_phase1_unsupported.cc`
 still rejects web-font decoding. The JavaScript `FontFace` constructor/API,
 promises, and events remain unsupported.
 
+Media and audio playback remain unsupported. In this standalone profile,
+`HTMLElementFactory::Create(...)` does not construct `HTMLAudioElement`,
+`HTMLVideoElement`, or `HTMLSourceElement`; those tags are ordinary
+`HTMLElement` instances and do not run the Blink media resource selection
+algorithm. The active frame/client stubs also return `nullptr` from
+`CreateWebMediaPlayer(...)`, so playback and decoding are unavailable even if
+real media elements are imported later. As a result, `<audio src>`,
+`<video src>`, and media `<source src>` URLs do not currently issue
+`BLINK_STANDALONE_RESOURCE_TYPE_MEDIA` provider callbacks. Provider-required
+mode remains fail-closed because no filesystem or network media fetch is
+attempted; adding media provider routing requires importing/wiring the real
+Blink media element load path separately from media decoding/playback.
+
 ## Live Mutations
 
 Mutation calls queue work for the next `advance_frame`. They use live Blink
