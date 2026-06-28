@@ -294,23 +294,28 @@ offscreen Vulkan Ganesh context.
 
 The imported Chromium tree does contain `viz::VulkanInProcessContextProvider`,
 `SkiaOutputDeviceVulkan`, and `SkiaOutputDeviceVulkanSecondaryCB`, and they are
-buildable in the generated Windows build. They are not currently wired into
-`StandaloneCompositorRuntime` or `StandaloneSkiaOutputSurfaceDependency`. A real
-prototype must either create a Vulkan-backed `SharedContextState` around a
-`VulkanInProcessContextProvider` for the offscreen runtime, or add an offscreen
-Vulkan output-surface variant that can be used without an HWND/swapchain. Until
-that exists, a borrowed Vulkan image cannot be exposed as a writable Skia
-representation in the benchmark/runtime path, and a smoke would only validate
-fallback metadata.
+buildable in the generated Windows build. The benchmark smoke
+`--gpu-vulkan-ganesh-context-smoke` now proves the smallest context-only piece:
+it creates a `viz::VulkanInProcessContextProvider`, constructs an offscreen
+`gpu::SharedContextState` with `GrContextType::kVulkan`, and initializes a
+Vulkan Ganesh `GrDirectContext` without an SDL window, HWND, surface, or
+swapchain.
+
+That smoke is not yet runtime integration. `StandaloneCompositorRuntime` and
+`StandaloneSkiaOutputSurfaceDependency` still do not expose that Vulkan context
+provider to Viz, so the production offscreen frame path still uses the existing
+GL/offscreen dependency path. Until that wiring exists, a borrowed Vulkan image
+cannot be exposed as a writable Skia representation in the benchmark/runtime
+path, and a borrowed target smoke would only validate fallback metadata.
 
 The smallest honest next implementation is:
 
 1. Add a service-side borrowed Vulkan backing, separate from
    `ExternalVkImageBacking`, with explicit non-ownership of `VkImage` and memory
    handles.
-2. Wire or create a Vulkan Ganesh `SharedContextState` for the standalone
+2. Wire the proven Vulkan Ganesh `SharedContextState` into the standalone
    offscreen GPU-output path. This likely means teaching
-   `StandaloneSkiaOutputSurfaceDependency` to expose a real
+   `StandaloneSkiaOutputSurfaceDependency` to expose the
    `viz::VulkanInProcessContextProvider` and ensuring
    `SkiaOutputSurfaceImplOnGpu` selects its Vulkan/offscreen device path instead
    of the current GL `SkiaOutputDeviceOffscreen` path. Borrowed backing setup

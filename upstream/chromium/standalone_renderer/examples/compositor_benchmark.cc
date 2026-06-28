@@ -17,9 +17,17 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_helpers.h"
+#include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/trace_event/trace_event_impl.h"
+#include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
+#include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/command_buffer/service/shared_context_state.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "gpu/config/gpu_feature_info.h"
+#include "gpu/config/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/vulkan/init/vulkan_factory.h"
 #include "gpu/vulkan/vulkan_command_pool.h"
@@ -32,7 +40,14 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "html_css_renderer/typeface_resource_registry.h"
 #include "third_party/skia/include/core/SkTypeface.h"
+#include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gl/gl_context.h"
+#include "ui/gl/gl_share_group.h"
+#include "ui/gl/gl_surface.h"
+#include "ui/gl/gl_utils.h"
+#include "ui/gl/init/gl_factory.h"
 #include "ui/gl/gl_switches.h"
 
 extern "C" const char*
@@ -149,6 +164,7 @@ void PrintUsage() {
       "[--warm-iterations N] [--warm-scenario name[,name...]] "
       "[--result-collection full|minimal] [--cc-scheduler-probe] "
       "[--gpu-output-smoke] "
+      "[--gpu-vulkan-ganesh-context-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
@@ -5629,6 +5645,123 @@ int RunGpuExternalVulkanDeviceSmoke() {
   return 0;
 }
 
+int RunGpuVulkanGaneshContextSmoke() {
+  std::unique_ptr<gpu::VulkanImplementation> implementation =
+      gpu::CreateVulkanImplementation(false);
+  if (!implementation) {
+    std::fprintf(stderr,
+                 "gpu_vulkan_ganesh_context_smoke: Vulkan implementation "
+                 "creation failed\n");
+    return 1;
+  }
+
+  if (!implementation->InitializeVulkanInstance(true)) {
+    std::fprintf(stderr,
+                 "gpu_vulkan_ganesh_context_smoke: Vulkan instance "
+                 "initialization failed\n");
+    return 1;
+  }
+
+  scoped_refptr<viz::VulkanInProcessContextProvider> vulkan_context_provider =
+      viz::VulkanInProcessContextProvider::Create(implementation.get());
+  if (!vulkan_context_provider) {
+    std::fprintf(stderr,
+                 "gpu_vulkan_ganesh_context_smoke: Vulkan context provider "
+                 "creation failed\n");
+    return 1;
+  }
+
+  if (gl::GetGLImplementation() == gl::kGLImplementationNone) {
+    if (!gl::init::InitializeStaticGLBindingsOneOff()) {
+      std::fprintf(stderr,
+                   "gpu_vulkan_ganesh_context_smoke: GL static bindings "
+                   "initialization failed\n");
+      vulkan_context_provider->Destroy();
+      return 1;
+    }
+    if (gl::GetGLImplementation() != gl::kGLImplementationDisabled &&
+        !gl::init::InitializeGLOneOffPlatformImplementation(
+            /*disable_gl_drawing=*/false, /*init_extensions=*/true,
+            gl::GpuPreference::kDefault)) {
+      std::fprintf(stderr,
+                   "gpu_vulkan_ganesh_context_smoke: GL platform "
+                   "initialization failed\n");
+      vulkan_context_provider->Destroy();
+      return 1;
+    }
+  }
+
+  scoped_refptr<gl::GLShareGroup> share_group =
+      base::MakeRefCounted<gl::GLShareGroup>();
+  scoped_refptr<gl::GLSurface> gl_surface =
+      gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(), gfx::Size());
+  if (!gl_surface) {
+    std::fprintf(stderr,
+                 "gpu_vulkan_ganesh_context_smoke: offscreen GL surface "
+                 "creation failed\n");
+    vulkan_context_provider->Destroy();
+    return 1;
+  }
+
+  gpu::GpuPreferences gpu_preferences;
+  gpu_preferences.gr_context_type = gpu::GrContextType::kVulkan;
+  gl::GLContextAttribs attribs =
+      gpu::gles2::GenerateGLContextAttribsForCompositor(
+          gpu_preferences.use_passthrough_cmd_decoder);
+  scoped_refptr<gl::GLContext> gl_context =
+      gl::init::CreateGLContext(share_group.get(), gl_surface.get(), attribs);
+  if (!gl_context || !gl_context->MakeCurrent(gl_surface.get())) {
+    std::fprintf(stderr,
+                 "gpu_vulkan_ganesh_context_smoke: offscreen GL context "
+                 "creation failed\n");
+    vulkan_context_provider->Destroy();
+    return 1;
+  }
+
+  gpu::GpuFeatureInfo gpu_feature_info;
+  gpu::GpuDriverBugWorkarounds workarounds(
+      gpu_feature_info.enabled_gpu_driver_bug_workarounds);
+  scoped_refptr<gpu::SharedContextState> context_state =
+      base::MakeRefCounted<gpu::SharedContextState>(
+          share_group, gl_surface, gl_context,
+          /*use_virtualized_gl_contexts=*/false, base::DoNothing(),
+          gpu::GrContextType::kVulkan, vulkan_context_provider.get());
+  const bool initialized = context_state->InitializeSkia(
+      gpu_preferences, workarounds, /*gr_cache=*/nullptr,
+      /*persistent_cache=*/nullptr, /*use_shader_cache_shm_count=*/nullptr,
+      /*progress_reporter=*/nullptr);
+  const bool has_vulkan_provider =
+      context_state->vk_context_provider() == vulkan_context_provider.get();
+  const bool is_vulkan = context_state->GrContextIsVulkan();
+  const bool has_gr_context = context_state->gr_context() != nullptr;
+  const size_t extension_count =
+      vulkan_context_provider->GetDeviceQueue()
+          ? vulkan_context_provider->GetDeviceQueue()->enabled_extensions().size()
+          : 0u;
+
+  context_state.reset();
+  if (gl_context->IsCurrent(gl_surface.get()))
+    gl_context->ReleaseCurrent(gl_surface.get());
+  vulkan_context_provider->Destroy();
+
+  if (!initialized || !has_vulkan_provider || !is_vulkan || !has_gr_context) {
+    std::fprintf(stderr,
+                 "gpu_vulkan_ganesh_context_smoke: failed initialized=%d "
+                 "vk_provider=%d is_vulkan=%d gr_context=%d extensions=%zu\n",
+                 initialized ? 1 : 0, has_vulkan_provider ? 1 : 0,
+                 is_vulkan ? 1 : 0, has_gr_context ? 1 : 0, extension_count);
+    return 1;
+  }
+
+  std::printf(
+      "gpu_vulkan_ganesh_context_smoke: ok initialized=%d vk_provider=%d "
+      "is_vulkan=%d gr_context=%d extensions=%zu offscreen=1 "
+      "viz_runtime=not_wired\n",
+      initialized ? 1 : 0, has_vulkan_provider ? 1 : 0,
+      is_vulkan ? 1 : 0, has_gr_context ? 1 : 0, extension_count);
+  return 0;
+}
+
 bool FeatureSwitchContains(const std::string& enabled_features,
                            const char* feature_name) {
   size_t start = 0;
@@ -6200,6 +6333,7 @@ int main(int argc, char** argv) {
   bool cc_scheduler_probe = false;
   bool gpu_output_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
+  bool gpu_vulkan_ganesh_context_smoke = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_resource_provider_smoke = false;
@@ -6328,6 +6462,8 @@ int main(int argc, char** argv) {
       gpu_output_smoke = true;
     } else if (arg == "--gpu-external-vulkan-device-smoke") {
       gpu_external_vulkan_device_smoke = true;
+    } else if (arg == "--gpu-vulkan-ganesh-context-smoke") {
+      gpu_vulkan_ganesh_context_smoke = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
@@ -6491,6 +6627,10 @@ int main(int argc, char** argv) {
 
   if (gpu_external_vulkan_device_smoke) {
     return RunGpuExternalVulkanDeviceSmoke();
+  }
+
+  if (gpu_vulkan_ganesh_context_smoke) {
+    return RunGpuVulkanGaneshContextSmoke();
   }
 
   if (c_api_smoke) {
