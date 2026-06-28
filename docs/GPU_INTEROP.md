@@ -280,13 +280,24 @@ The smoke must run the borrowed SharedImage setup on the Vulkan context's owner
 sequence because `SharedContextState` is sequence checked.
 
 This smoke is intentionally Skia direct-write only. It does not prove copying
-the rendered Viz output into the borrowed target and it does not use Viz
-`BlitRequest`. Earlier synthetic client-image attempts hit client
-`ClientSharedImage` sequence and lifetime ownership problems. The next honest
-step is to keep the destination as a service-side SharedImage and drive a
-service-side copy/blit from the CopyOutput SharedImage mailbox into that
-borrowed destination, without constructing a fake client image on the wrong
-sequence.
+the rendered Viz output into the borrowed target.
+
+`--gpu-borrowed-vkimage-render-copy-smoke` is the next render-output attempt. It
+prepares the same borrowed `VkImage` backing as a writable SharedImage
+destination, passes it to `CopyOutputRequest::set_blit_request()`, and lets Viz
+write into the target through the Vulkan offscreen runtime path. That proves the
+borrowed target can be registered as the BlitRequest destination without the
+earlier client `ClientSharedImage` sequence/lifetime DCHECK, and the smoke
+releases the backing before explicitly destroying the stand-in `VkImage`.
+
+The smoke is still blocked as a rendered-output proof: the BlitRequest completes
+and the target cleanup is correct, but verification observes an entirely
+transparent target (`nontransparent_pixels=0`). A service-side mailbox-to-mailbox
+copy from the CopyOutput SharedImage to the borrowed target has the same content
+blocker: the CopyOutput source mailbox itself reads back as transparent in this
+standalone offscreen Vulkan path. The current blocker is therefore not borrowed
+target ownership; it is that the offscreen Vulkan CopyOutput/BlitRequest source
+does not yet expose rendered HTML pixels to the copy path.
 
 The remaining implementation steps before public ABI are:
 
@@ -297,12 +308,13 @@ The remaining implementation steps before public ABI are:
 2. Extend the borrowed backing beyond the smoke path with explicit
    acquire/release layout and semaphore handling, still without destroying
    borrowed `VkImage`, memory, image views, semaphores, or fences.
-3. Connect the rendered-output path to the borrowed destination using a real
-   service-side SharedImage copy/blit path. This is the missing render-output
-   integration after the Skia direct-write proof.
-4. Add an internal smoke that copies the Chromium-owned rendered SharedImage
-   output into the borrowed target. Only after that should public C ABI be
-   added.
+3. Make the offscreen Vulkan CopyOutput/BlitRequest path produce rendered HTML
+   pixels, not just a SharedImage mailbox. The current rendered-output copy smoke
+   reaches the borrowed destination but observes transparent output.
+4. Once CopyOutput content is non-empty, keep the destination as a service-side
+   SharedImage and validate either direct Viz `BlitRequest` into the borrowed
+   target or a service-side SharedImage-to-SharedImage copy into it. Only after
+   that should public C ABI be added.
 
 ## Why No Public API Yet
 
@@ -310,10 +322,11 @@ A real Godot-owned target path is not yet ready for public ABI because the
 rendered-output copy step and embedder synchronization contract are still
 missing:
 
-- The current runtime can prove both a Chromium-owned SharedImage mailbox for
-  the final submitted Viz frame and a Skia Ganesh direct-write into a borrowed
-  stand-in `VkImage`, but it does not yet copy the rendered frame output into
-  that borrowed target.
+- The current runtime can prove a Chromium-owned SharedImage mailbox for the
+  final submitted Viz frame, a Skia Ganesh direct-write into a borrowed stand-in
+  `VkImage`, and a Viz BlitRequest targeted at that borrowed backing. It does
+  not yet prove rendered HTML pixels in that target because the offscreen Vulkan
+  CopyOutput/BlitRequest source is currently transparent.
 - `VulkanWindowHost` uses a Chromium-owned device and swapchain; it cannot adopt
   Godot's `VkDevice`, `VkQueue`, or `VkImage`.
 - Imported SharedImage/Vulkan code creates Chromium-owned images or imports

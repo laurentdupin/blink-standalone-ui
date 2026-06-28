@@ -145,6 +145,7 @@ class StandaloneCompositorRuntime {
   virtual bool HasLiveElement(const std::string& element_id) const = 0;
   virtual bool HasLiveBody() const = 0;
   virtual std::string RunBorrowedVkImageBackingSmokeForTesting() = 0;
+  virtual std::string RunBorrowedVkImageRenderCopySmokeForTesting() = 0;
 };
 
 std::unique_ptr<StandaloneCompositorRuntime> CreateStandaloneCompositorRuntime(

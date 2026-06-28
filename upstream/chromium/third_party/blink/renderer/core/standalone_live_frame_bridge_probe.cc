@@ -88,10 +88,12 @@
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/copy_shared_image_helper.h"
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/scheduler_sequence.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
@@ -1004,6 +1006,86 @@ std::string StandaloneBorrowedVkImageBackingSmokeLine(
   return out.str();
 }
 
+struct StandaloneBorrowedVkImageRenderCopySmokeResult {
+  bool source_available = false;
+  bool context_available = false;
+  bool target_created = false;
+  bool backend_texture_valid = false;
+  bool registered = false;
+  bool service_copy = false;
+  bool viz_blit_request = false;
+  bool readback_verified = false;
+  bool backing_released = false;
+  bool target_destroyed = false;
+  bool blocked = false;
+  int width = 0;
+  int height = 0;
+  std::string path = "service_copy";
+  std::string format = "RGBA_8888";
+  std::string source_mailbox;
+  std::string source_background;
+  std::string source_box;
+  std::string observed_background;
+  std::string observed_box;
+  size_t nontransparent_pixels = 0;
+  std::string failure;
+};
+
+std::string StandaloneBorrowedVkImageRenderCopySmokeLine(
+    const StandaloneBorrowedVkImageRenderCopySmokeResult& result) {
+  std::ostringstream out;
+  out << "gpu_borrowed_vkimage_render_copy_smoke: ";
+  if (result.failure.empty()) {
+    out << "ok";
+  } else if (result.blocked) {
+    out << "blocked reason=" << result.failure;
+  } else {
+    out << "failed failure=" << result.failure;
+  }
+  out << " path=" << result.path
+      << " viz_blit_request=" << (result.viz_blit_request ? 1 : 0)
+      << " target=" << result.width << "x" << result.height
+      << " format=" << result.format
+      << " source=" << (result.source_available ? 1 : 0)
+      << " source_mailbox=" << result.source_mailbox
+      << " source_background=" << result.source_background
+      << " source_box=" << result.source_box
+      << " observed_background=" << result.observed_background
+      << " observed_box=" << result.observed_box
+      << " nontransparent_pixels=" << result.nontransparent_pixels
+      << " context=" << (result.context_available ? 1 : 0)
+      << " target_created=" << (result.target_created ? 1 : 0)
+      << " backend_texture=" << (result.backend_texture_valid ? 1 : 0)
+      << " registered=" << (result.registered ? 1 : 0)
+      << " service_copy=" << (result.service_copy ? 1 : 0)
+      << " readback=" << (result.readback_verified ? 1 : 0)
+      << " backing_released=" << (result.backing_released ? 1 : 0)
+      << " target_destroyed=" << (result.target_destroyed ? 1 : 0)
+      << " ownership=borrowed";
+  return out.str();
+}
+
+std::string StandaloneFormatColor(SkColor color) {
+  std::ostringstream out;
+  out << std::hex << std::setfill('0')
+      << std::setw(2) << static_cast<int>(SkColorGetA(color))
+      << std::setw(2) << static_cast<int>(SkColorGetR(color))
+      << std::setw(2) << static_cast<int>(SkColorGetG(color))
+      << std::setw(2) << static_cast<int>(SkColorGetB(color));
+  return out.str();
+}
+
+bool StandaloneColorClose(SkColor observed, SkColor expected) {
+  auto close_channel = [](uint8_t observed_channel, uint8_t expected_channel) {
+    return std::abs(static_cast<int>(observed_channel) -
+                    static_cast<int>(expected_channel)) <= 6;
+  };
+  return close_channel(SkColorGetA(observed), SkColorGetA(expected)) &&
+         close_channel(SkColorGetR(observed), SkColorGetR(expected)) &&
+         close_channel(SkColorGetG(observed), SkColorGetG(expected)) &&
+         close_channel(SkColorGetB(observed), SkColorGetB(expected));
+}
+
 class StandaloneBorrowedVkImageBacking final
     : public gpu::ClearTrackingSharedImageBacking {
  public:
@@ -1728,7 +1810,638 @@ class StandaloneSkiaOutputSurfaceDependency final
     return StandaloneBorrowedVkImageBackingSmokeLine(result);
   }
 
+  std::string RunBorrowedVkImageRenderCopySmokeForTesting(
+      scoped_refptr<gpu::ClientSharedImage> source_shared_image) {
+    if (vulkan_context_.initialized() &&
+        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
+      base::SingleThreadTaskRunner* task_runner =
+          vulkan_context_.owning_task_runner_for_testing();
+      if (task_runner) {
+        base::WaitableEvent completed(
+            base::WaitableEvent::ResetPolicy::MANUAL,
+            base::WaitableEvent::InitialState::NOT_SIGNALED);
+        std::string result;
+        const bool posted = task_runner->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](StandaloneSkiaOutputSurfaceDependency* self,
+                   scoped_refptr<gpu::ClientSharedImage> source_shared_image,
+                   std::string* result, base::WaitableEvent* completed) {
+                  *result = self
+                                ->RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
+                                    std::move(source_shared_image));
+                  completed->Signal();
+                },
+                base::Unretained(this), std::move(source_shared_image),
+                &result, &completed));
+        if (!posted) {
+          return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+                 "failure=failed to post render-copy smoke to Vulkan context "
+                 "sequence";
+        }
+        completed.Wait();
+        return result;
+      }
+    }
+    return RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
+        std::move(source_shared_image));
+  }
+
+  std::string RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
+      scoped_refptr<gpu::ClientSharedImage> source_shared_image) {
+    StandaloneBorrowedVkImageRenderCopySmokeResult result;
+    std::unique_ptr<gpu::VulkanImage> target_image;
+    scoped_refptr<gpu::MemoryTracker> registration_memory_tracker;
+    std::unique_ptr<gpu::MemoryTypeTracker> registration_memory_type_tracker;
+    std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
+
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      if (factory_ref) {
+        factory_ref.reset();
+        result.backing_released = true;
+      }
+      registration_memory_type_tracker.reset();
+      registration_memory_tracker.reset();
+      if (target_image) {
+        target_image->Destroy();
+        result.target_destroyed = true;
+      }
+      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+    };
+
+    if (!source_shared_image || source_shared_image->mailbox().IsZero()) {
+      return finish_with_failure(
+          "render-copy smoke requires a held CopyOutput SharedImage source");
+    }
+    result.source_available = true;
+    result.source_mailbox = source_shared_image->mailbox().ToDebugString();
+    result.width = source_shared_image->size().width();
+    result.height = source_shared_image->size().height();
+    result.format = source_shared_image->format().ToString();
+    if (result.width <= 0 || result.height <= 0) {
+      return finish_with_failure("CopyOutput source has invalid size");
+    }
+    if (!use_vulkan_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "render-copy smoke requires offscreen Vulkan output");
+    }
+    gpu::SharedImageManager* manager = GetSharedImageManager();
+    if (!manager) {
+      return finish_with_failure("SharedImageManager is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    viz::VulkanContextProvider* vulkan_provider =
+        context_state->vk_context_provider();
+    gpu::VulkanDeviceQueue* device_queue = vulkan_provider->GetDeviceQueue();
+    if (!device_queue) {
+      return finish_with_failure("Vulkan context provider has no device queue");
+    }
+    result.context_available = true;
+
+    const gfx::Size target_size(result.width, result.height);
+    target_image = gpu::VulkanImage::Create(
+        device_queue, target_size, VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    if (!target_image || target_image->image() == VK_NULL_HANDLE) {
+      return finish_with_failure("stand-in target VkImage creation failed");
+    }
+    result.target_created = true;
+
+    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
+    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
+    const GrVkImageInfo vk_image_info =
+        gpu::CreateGrVkImageInfo(target_image.get(), format, color_space);
+    const GrBackendTexture backend_texture =
+        GrBackendTextures::MakeVk(result.width, result.height, vk_image_info);
+    if (!backend_texture.isValid()) {
+      return finish_with_failure("Skia backend texture wrapping failed");
+    }
+    result.backend_texture_valid = true;
+
+    const gpu::Mailbox target_mailbox = gpu::Mailbox::Generate();
+    const gpu::SharedImageUsageSet usage =
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE;
+    gpu::SharedImageInfo si_info(format, target_size, color_space,
+                                 kTopLeft_GrSurfaceOrigin,
+                                 kPremul_SkAlphaType, usage,
+                                 "StandaloneBorrowedVkImageRenderCopySmoke");
+    registration_memory_tracker = base::MakeRefCounted<gpu::MemoryTracker>();
+    registration_memory_type_tracker =
+        std::make_unique<gpu::MemoryTypeTracker>(registration_memory_tracker);
+    factory_ref = manager->Register(
+        std::make_unique<StandaloneBorrowedVkImageBacking>(
+            target_mailbox, si_info, context_state, backend_texture),
+        registration_memory_type_tracker.get());
+    if (!factory_ref) {
+      return finish_with_failure("borrowed VkImage backing registration failed");
+    }
+    result.registered = true;
+
+    scoped_refptr<gpu::MemoryTracker> copy_memory_tracker =
+        base::MakeRefCounted<gpu::MemoryTracker>();
+    gpu::SharedImageRepresentationFactory representation_factory(
+        manager, std::move(copy_memory_tracker));
+    gpu::CopySharedImageHelper copy_helper(&representation_factory,
+                                           context_state.get());
+    {
+      auto source_read_representation = representation_factory.ProduceSkia(
+          source_shared_image->mailbox(), context_state);
+      if (!source_read_representation) {
+        return finish_with_failure(
+            "render-copy source Skia representation failed");
+      }
+      std::vector<GrBackendSemaphore> source_begin_semaphores;
+      std::vector<GrBackendSemaphore> source_end_semaphores;
+      auto source_read_access =
+          source_read_representation->BeginScopedReadAccess(
+              &source_begin_semaphores, &source_end_semaphores);
+      if (!source_begin_semaphores.empty() &&
+          !context_state->gr_context()->wait(
+              source_begin_semaphores.size(), source_begin_semaphores.data(),
+              /*deleteSemaphoresAfterWait=*/false)) {
+        return finish_with_failure(
+            "render-copy source read semaphore wait failed");
+      }
+      if (!source_read_access) {
+        return finish_with_failure("render-copy source read access failed");
+      }
+      sk_sp<SkImage> source_image =
+          source_read_access->CreateSkImage(context_state.get());
+      if (!source_image) {
+        return finish_with_failure("render-copy source image creation failed");
+      }
+      const SkImageInfo source_readback_info =
+          SkImageInfo::MakeN32Premul(result.width, result.height);
+      std::vector<uint32_t> source_readback_pixels(
+          static_cast<size_t>(result.width) *
+          static_cast<size_t>(result.height));
+      const size_t source_row_bytes =
+          static_cast<size_t>(result.width) * sizeof(uint32_t);
+      if (!source_image->readPixels(context_state->gr_context(),
+                                    source_readback_info,
+                                    source_readback_pixels.data(),
+                                    source_row_bytes, 0, 0)) {
+        return finish_with_failure("render-copy source readback failed");
+      }
+      SkPixmap source_pixmap(source_readback_info,
+                             source_readback_pixels.data(), source_row_bytes);
+      result.source_background =
+          StandaloneFormatColor(source_pixmap.getColor(4, 4));
+      result.source_box = StandaloneFormatColor(source_pixmap.getColor(
+          std::min(result.width - 1, 24), std::min(result.height - 1, 24)));
+    }
+    std::array<gpu::Mailbox, 2> mailboxes = {
+        source_shared_image->mailbox(), target_mailbox};
+    auto copy_result = copy_helper.CopySharedImage(
+        /*xoffset=*/0, /*yoffset=*/0, /*x=*/0, /*y=*/0,
+        static_cast<GLsizei>(result.width),
+        static_cast<GLsizei>(result.height),
+        static_cast<GLsizei>(result.width),
+        static_cast<GLsizei>(result.height),
+        reinterpret_cast<const volatile GLbyte*>(mailboxes.data()));
+    if (!copy_result.has_value()) {
+      const gpu::CopySharedImageHelper::GLError& error = copy_result.error();
+      return finish_with_failure(error.function_name + ": " + error.msg);
+    }
+    result.service_copy = true;
+
+    auto read_representation = representation_factory.ProduceSkia(
+        target_mailbox, context_state,
+        gpu::SharedImageUsageSet(gpu::SHARED_IMAGE_USAGE_DISPLAY_READ));
+    if (!read_representation) {
+      return finish_with_failure(
+          "borrowed VkImage Skia read representation failed");
+    }
+    std::vector<GrBackendSemaphore> read_begin_semaphores;
+    std::vector<GrBackendSemaphore> read_end_semaphores;
+    auto read_access = read_representation->BeginScopedReadAccess(
+        &read_begin_semaphores, &read_end_semaphores);
+    if (!read_access) {
+      return finish_with_failure("borrowed VkImage Skia read access failed");
+    }
+    if (!read_begin_semaphores.empty() &&
+        !context_state->gr_context()->wait(read_begin_semaphores.size(),
+                                           read_begin_semaphores.data(),
+                                           /*deleteSemaphoresAfterWait=*/false)) {
+      return finish_with_failure("borrowed VkImage read semaphore wait failed");
+    }
+    sk_sp<SkImage> image = read_access->CreateSkImage(context_state.get());
+    if (!image) {
+      return finish_with_failure("borrowed VkImage readback image creation failed");
+    }
+
+    const SkImageInfo readback_info =
+        SkImageInfo::MakeN32Premul(result.width, result.height);
+    std::vector<uint32_t> readback_pixels(
+        static_cast<size_t>(result.width) * static_cast<size_t>(result.height));
+    const size_t row_bytes =
+        static_cast<size_t>(result.width) * sizeof(uint32_t);
+    if (!image->readPixels(context_state->gr_context(), readback_info,
+                           readback_pixels.data(), row_bytes, 0, 0)) {
+      return finish_with_failure("borrowed VkImage render-copy readback failed");
+    }
+    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
+    for (uint32_t pixel : readback_pixels) {
+      if (SkColorGetA(pixel) != 0) {
+        ++result.nontransparent_pixels;
+      }
+    }
+    const SkColor expected_background = SkColorSetARGB(255, 0x12, 0x34, 0x56);
+    const SkColor expected_box = SkColorSetARGB(255, 0xd0, 0x63, 0x29);
+    const SkColor observed_background = pixmap.getColor(4, 4);
+    const SkColor observed_box =
+        pixmap.getColor(std::min(result.width - 1, 24),
+                        std::min(result.height - 1, 24));
+    result.observed_background = StandaloneFormatColor(observed_background);
+    result.observed_box = StandaloneFormatColor(observed_box);
+    if (!StandaloneColorClose(observed_background, expected_background) ||
+        !StandaloneColorClose(observed_box, expected_box)) {
+      return finish_with_failure("rendered HTML pixel verification failed");
+    }
+    result.readback_verified = true;
+
+    read_access.reset();
+    read_representation.reset();
+    factory_ref.reset();
+    result.backing_released = true;
+    registration_memory_type_tracker.reset();
+    registration_memory_tracker.reset();
+    target_image->Destroy();
+    result.target_destroyed = true;
+    target_image.reset();
+    return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+  }
+
+  std::string PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+      const gfx::Size& target_size,
+      scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
+    if (vulkan_context_.initialized() &&
+        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
+      base::SingleThreadTaskRunner* task_runner =
+          vulkan_context_.owning_task_runner_for_testing();
+      if (task_runner) {
+        base::WaitableEvent completed(
+            base::WaitableEvent::ResetPolicy::MANUAL,
+            base::WaitableEvent::InitialState::NOT_SIGNALED);
+        std::string result;
+        scoped_refptr<gpu::ClientSharedImage> shared_image;
+        const bool posted = task_runner->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](StandaloneSkiaOutputSurfaceDependency* self,
+                   const gfx::Size& target_size,
+                   scoped_refptr<gpu::ClientSharedImage>* shared_image,
+                   std::string* result, base::WaitableEvent* completed) {
+                  *result = self
+                                ->PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
+                                    target_size, shared_image);
+                  completed->Signal();
+                },
+                base::Unretained(this), target_size, &shared_image, &result,
+                &completed));
+        if (!posted) {
+          return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+                 "failure=failed to post borrowed blit target setup to "
+                 "Vulkan context sequence path=viz_blit_request "
+                 "viz_blit_request=1";
+        }
+        completed.Wait();
+        if (result.empty() && target_shared_image) {
+          *target_shared_image = std::move(shared_image);
+        }
+        return result;
+      }
+    }
+    return PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
+        target_size, target_shared_image);
+  }
+
+  std::string VerifyBorrowedVkImageRenderCopyBlitTargetForTesting() {
+    if (vulkan_context_.initialized() &&
+        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
+      base::SingleThreadTaskRunner* task_runner =
+          vulkan_context_.owning_task_runner_for_testing();
+      if (task_runner) {
+        base::WaitableEvent completed(
+            base::WaitableEvent::ResetPolicy::MANUAL,
+            base::WaitableEvent::InitialState::NOT_SIGNALED);
+        std::string result;
+        const bool posted = task_runner->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](StandaloneSkiaOutputSurfaceDependency* self,
+                   std::string* result, base::WaitableEvent* completed) {
+                  *result = self
+                                ->VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+                  completed->Signal();
+                },
+                base::Unretained(this), &result, &completed));
+        if (!posted) {
+          return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+                 "failure=failed to post borrowed blit target verification to "
+                 "Vulkan context sequence path=viz_blit_request "
+                 "viz_blit_request=1";
+        }
+        completed.Wait();
+        return result;
+      }
+    }
+    return VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+  }
+
+  void DiscardBorrowedVkImageRenderCopyBlitTargetForTesting() {
+    if (vulkan_context_.initialized() &&
+        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
+      base::SingleThreadTaskRunner* task_runner =
+          vulkan_context_.owning_task_runner_for_testing();
+      if (task_runner) {
+        base::WaitableEvent completed(
+            base::WaitableEvent::ResetPolicy::MANUAL,
+            base::WaitableEvent::InitialState::NOT_SIGNALED);
+        if (task_runner->PostTask(
+                FROM_HERE,
+                base::BindOnce(
+                    [](StandaloneSkiaOutputSurfaceDependency* self,
+                       base::WaitableEvent* completed) {
+                      self->DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+                      completed->Signal();
+                    },
+                    base::Unretained(this), &completed))) {
+          completed.Wait();
+        }
+        return;
+      }
+    }
+    DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+  }
+
  private:
+  struct BorrowedVkImageRenderCopyBlitTarget {
+    gfx::Size size;
+    std::string format = "RGBA_8888";
+    gpu::Mailbox mailbox;
+    std::unique_ptr<gpu::VulkanImage> image;
+    raw_ptr<gpu::MemoryTypeTracker> registration_tracker = nullptr;
+    std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
+    scoped_refptr<gpu::ClientSharedImage> client_shared_image;
+    bool target_created = false;
+    bool backend_texture_valid = false;
+    bool registered = false;
+  };
+
+  std::string PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
+      const gfx::Size& target_size,
+      scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
+    DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+    StandaloneBorrowedVkImageRenderCopySmokeResult result;
+    result.path = "viz_blit_request";
+    result.viz_blit_request = true;
+    result.width = target_size.width();
+    result.height = target_size.height();
+
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+    };
+
+    if (!target_shared_image) {
+      return finish_with_failure("borrowed blit target output pointer is null");
+    }
+    if (target_size.IsEmpty()) {
+      return finish_with_failure("borrowed blit target size is empty");
+    }
+    if (!use_vulkan_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "borrowed blit target requires offscreen Vulkan output");
+    }
+    gpu::SharedImageManager* manager = GetSharedImageManager();
+    if (!manager) {
+      return finish_with_failure("SharedImageManager is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    viz::VulkanContextProvider* vulkan_provider =
+        context_state->vk_context_provider();
+    gpu::VulkanDeviceQueue* device_queue = vulkan_provider->GetDeviceQueue();
+    if (!device_queue) {
+      return finish_with_failure("Vulkan context provider has no device queue");
+    }
+    result.context_available = true;
+
+    auto target = std::make_unique<BorrowedVkImageRenderCopyBlitTarget>();
+    target->size = target_size;
+    target->image = gpu::VulkanImage::Create(
+        device_queue, target_size, VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    if (!target->image || target->image->image() == VK_NULL_HANDLE) {
+      return finish_with_failure("stand-in blit target VkImage creation failed");
+    }
+    target->target_created = true;
+    result.target_created = true;
+
+    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
+    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
+    const GrVkImageInfo vk_image_info =
+        gpu::CreateGrVkImageInfo(target->image.get(), format, color_space);
+    const GrBackendTexture backend_texture =
+        GrBackendTextures::MakeVk(target_size.width(), target_size.height(),
+                                  vk_image_info);
+    if (!backend_texture.isValid()) {
+      target->image->Destroy();
+      return finish_with_failure("Skia backend texture wrapping failed");
+    }
+    target->backend_texture_valid = true;
+    result.backend_texture_valid = true;
+
+    target->mailbox = gpu::Mailbox::Generate();
+    const gpu::SharedImageUsageSet usage =
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE;
+    gpu::SharedImageInfo si_info(format, target_size, color_space,
+                                 kTopLeft_GrSurfaceOrigin,
+                                 kPremul_SkAlphaType, usage,
+                                 "StandaloneBorrowedVkImageBlitTargetSmoke");
+    target->registration_tracker = context_state->memory_type_tracker();
+    target->factory_ref = manager->Register(
+        std::make_unique<StandaloneBorrowedVkImageBacking>(
+            target->mailbox, si_info, context_state, backend_texture),
+        target->registration_tracker);
+    if (!target->factory_ref) {
+      target->image->Destroy();
+      return finish_with_failure("borrowed blit target registration failed");
+    }
+    target->registered = true;
+    result.registered = true;
+
+    gpu::SharedImageMetadata metadata;
+    metadata.format = format;
+    metadata.size = target_size;
+    metadata.color_space = color_space;
+    metadata.surface_origin = kTopLeft_GrSurfaceOrigin;
+    metadata.alpha_type = kPremul_SkAlphaType;
+    metadata.usage = usage;
+    target->client_shared_image = gpu::ClientSharedImage::CreateForTesting(
+        target->mailbox, metadata, gpu::SyncToken(), /*texture_target=*/3553u,
+        /*is_software=*/false);
+    if (!target->client_shared_image) {
+      target->factory_ref.reset();
+      target->image->Destroy();
+      return finish_with_failure("borrowed blit target ClientSharedImage failed");
+    }
+
+    *target_shared_image = target->client_shared_image;
+    borrowed_blit_target_ = std::move(target);
+    return "";
+  }
+
+  std::string VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence() {
+    StandaloneBorrowedVkImageRenderCopySmokeResult result;
+    result.path = "viz_blit_request";
+    result.viz_blit_request = true;
+    if (borrowed_blit_target_) {
+      result.width = borrowed_blit_target_->size.width();
+      result.height = borrowed_blit_target_->size.height();
+      result.format = borrowed_blit_target_->format;
+      result.target_created = borrowed_blit_target_->target_created;
+      result.backend_texture_valid =
+          borrowed_blit_target_->backend_texture_valid;
+      result.registered = borrowed_blit_target_->registered;
+    }
+
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
+      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+    };
+    auto finish_with_blocker = [&](std::string reason) {
+      result.blocked = true;
+      result.failure = std::move(reason);
+      DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
+      return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+    };
+
+    if (!borrowed_blit_target_) {
+      return finish_with_failure("borrowed blit target is not prepared");
+    }
+    gpu::SharedImageManager* manager = GetSharedImageManager();
+    if (!manager) {
+      return finish_with_failure("SharedImageManager is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    result.context_available = true;
+
+    auto read_representation = manager->ProduceSkia(
+        borrowed_blit_target_->mailbox,
+        borrowed_blit_target_->registration_tracker, context_state,
+        gpu::SharedImageUsageSet(gpu::SHARED_IMAGE_USAGE_DISPLAY_READ));
+    if (!read_representation) {
+      return finish_with_failure(
+          "borrowed blit target Skia read representation failed");
+    }
+    std::vector<GrBackendSemaphore> read_begin_semaphores;
+    std::vector<GrBackendSemaphore> read_end_semaphores;
+    auto read_access = read_representation->BeginScopedReadAccess(
+        &read_begin_semaphores, &read_end_semaphores);
+    if (!read_begin_semaphores.empty() &&
+        !context_state->gr_context()->wait(read_begin_semaphores.size(),
+                                           read_begin_semaphores.data(),
+                                           /*deleteSemaphoresAfterWait=*/false)) {
+      return finish_with_failure("borrowed blit target read semaphore wait failed");
+    }
+    if (!read_access) {
+      return finish_with_failure("borrowed blit target Skia read access failed");
+    }
+    sk_sp<SkImage> image = read_access->CreateSkImage(context_state.get());
+    if (!image) {
+      return finish_with_failure("borrowed blit target image creation failed");
+    }
+
+    const SkImageInfo readback_info =
+        SkImageInfo::MakeN32Premul(result.width, result.height);
+    std::vector<uint32_t> readback_pixels(
+        static_cast<size_t>(result.width) * static_cast<size_t>(result.height));
+    const size_t row_bytes =
+        static_cast<size_t>(result.width) * sizeof(uint32_t);
+    if (!image->readPixels(context_state->gr_context(), readback_info,
+                           readback_pixels.data(), row_bytes, 0, 0)) {
+      return finish_with_failure("borrowed blit target readback failed");
+    }
+    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
+    for (uint32_t pixel : readback_pixels) {
+      if (SkColorGetA(pixel) != 0) {
+        ++result.nontransparent_pixels;
+      }
+    }
+    const SkColor expected_background = SkColorSetARGB(255, 0x12, 0x34, 0x56);
+    const SkColor expected_box = SkColorSetARGB(255, 0xd0, 0x63, 0x29);
+    const SkColor observed_background = pixmap.getColor(4, 4);
+    const SkColor observed_box =
+        pixmap.getColor(std::min(result.width - 1, 24),
+                        std::min(result.height - 1, 24));
+    result.observed_background = StandaloneFormatColor(observed_background);
+    result.observed_box = StandaloneFormatColor(observed_box);
+    if (result.nontransparent_pixels == 0) {
+      return finish_with_blocker(
+          "offscreen Vulkan BlitRequest populated a transparent borrowed target");
+    }
+    if (!StandaloneColorClose(observed_background, expected_background) ||
+        !StandaloneColorClose(observed_box, expected_box)) {
+      return finish_with_failure("borrowed blit target pixel verification failed");
+    }
+    result.readback_verified = true;
+
+    read_access.reset();
+    read_representation.reset();
+    DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
+    return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
+  }
+
+  void DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
+      StandaloneBorrowedVkImageRenderCopySmokeResult* result = nullptr) {
+    if (!borrowed_blit_target_) {
+      return;
+    }
+    borrowed_blit_target_->client_shared_image.reset();
+    if (borrowed_blit_target_->factory_ref) {
+      borrowed_blit_target_->factory_ref.reset();
+      if (result) {
+        result->backing_released = true;
+      }
+    }
+    if (borrowed_blit_target_->image) {
+      borrowed_blit_target_->image->Destroy();
+      if (result) {
+        result->target_destroyed = true;
+      }
+    }
+    borrowed_blit_target_.reset();
+  }
+
   void SetFailure(const char* reason) {
     if (failure_reason_ && reason && failure_reason_->empty()) {
       *failure_reason_ = reason;
@@ -1744,6 +2457,8 @@ class StandaloneSkiaOutputSurfaceDependency final
   raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
   StandaloneOffscreenVulkanGaneshContext vulkan_context_;
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
+  std::unique_ptr<BorrowedVkImageRenderCopyBlitTarget>
+      borrowed_blit_target_;
 };
 
 class StandaloneInProcessRasterContextProvider final
@@ -2019,7 +2734,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   StandaloneDirectLayerTreeFrameSink& operator=(
       const StandaloneDirectLayerTreeFrameSink&) = delete;
 
-  ~StandaloneDirectLayerTreeFrameSink() override = default;
+  ~StandaloneDirectLayerTreeFrameSink() override {
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+  }
 
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override {
     TraceLiveFrameProbeStage("direct frame sink BindToClient begin");
@@ -2113,6 +2830,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         *compositor_frame_submitted_ = true;
       }
       SetFailure("");
+      if (display_) {
+        DrawVizDisplayNow();
+      }
       if (should_copy_output && display_) {
         RequestCopyOutput(output_size,
                           copy_output_png_requested_ &&
@@ -2121,8 +2841,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                               *copy_output_raw_requested_,
                           copy_output_gpu_requested_ &&
                               *copy_output_gpu_requested_);
-      }
-      if (display_) {
         DrawVizDisplayNow();
       }
       if (should_copy_output) {
@@ -2192,7 +2910,81 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     return offscreen_skia_dependency_->RunBorrowedVkImageBackingSmokeForTesting();
   }
 
+  std::string RunBorrowedVkImageRenderCopySmokeForTesting() {
+    if (!display_) {
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=Viz "
+             "Display is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+             "failure=offscreen Vulkan Skia dependency is not available";
+    }
+
+    gfx::Size output_size = viewport_;
+    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    scoped_refptr<gpu::ClientSharedImage> blit_target;
+    std::string prepare_result =
+        offscreen_skia_dependency_
+            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+                output_size, &blit_target);
+    if (!prepare_result.empty()) {
+      return prepare_result;
+    }
+    if (!blit_target || blit_target->mailbox().IsZero()) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+             "failure=borrowed blit target SharedImage is unavailable "
+             "path=viz_blit_request viz_blit_request=1";
+    }
+
+    RequestCopyOutput(output_size,
+                      /*wants_png=*/false,
+                      /*wants_raw=*/false,
+                      /*wants_gpu=*/true, std::move(blit_target));
+    DrawVizDisplayNow();
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+      base::OneShotTimer timeout;
+      copy_output_run_loop_ = &run_loop;
+      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+      run_loop.Run();
+      timeout.Stop();
+      copy_output_run_loop_ = nullptr;
+    }
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+             "failure=Viz BlitRequest CopyOutput did not complete "
+             "path=viz_blit_request viz_blit_request=1";
+    }
+    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+      std::string failure =
+          copy_output_failure_ && !copy_output_failure_->empty()
+              ? *copy_output_failure_
+              : "Viz BlitRequest CopyOutput failed";
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=" +
+             failure + " path=viz_blit_request viz_blit_request=1";
+    }
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    return offscreen_skia_dependency_
+        ->VerifyBorrowedVkImageRenderCopyBlitTargetForTesting();
+  }
+
  private:
+  void ReleaseHeldGpuCopyOutputSharedImage(const gpu::SyncToken& sync_token) {
+    held_gpu_copy_output_shared_image_.reset();
+    if (held_gpu_copy_output_release_callback_) {
+      std::move(held_gpu_copy_output_release_callback_)
+          .Run(sync_token, /*lost_resource=*/false);
+    }
+  }
+
   void SetFailure(const char* reason) {
     if (failure_reason_) {
       *failure_reason_ = reason ? reason : "";
@@ -2336,7 +3128,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   void RequestCopyOutput(const gfx::Size& output_size,
                          bool wants_png,
                          bool wants_raw,
-                         bool wants_gpu) {
+                         bool wants_gpu,
+                         scoped_refptr<gpu::ClientSharedImage> blit_target =
+                             nullptr) {
+    if (wants_gpu) {
+      ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    }
     if (!support_) {
       SetCopyOutputFailure("Viz CopyOutput cannot run without frame sink support");
       return;
@@ -2372,6 +3169,14 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                        base::Unretained(this), wants_png, wants_raw,
                        wants_gpu));
     request->set_area(gfx::Rect(output_size));
+    if (blit_target) {
+      request->set_result_selection(gfx::Rect(output_size));
+      const gpu::SyncToken sync_token = blit_target->creation_sync_token();
+      request->set_blit_request(viz::BlitRequest(
+          gfx::Point(), viz::LetterboxingBehavior::kDoNotLetterbox,
+          std::move(blit_target), sync_token,
+          /*populates_mappable_shared_image=*/false));
+    }
     support_->RequestCopyOfOutput(
         std::make_unique<viz::PendingCopyOutputRequest>(
             local_surface_id_, viz::SubtreeCaptureId(), std::move(request)));
@@ -2403,6 +3208,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         SetCopyOutputFailure("Viz CopyOutput shared image is missing");
         return;
       }
+      held_gpu_copy_output_shared_image_ = shared_image;
+      held_gpu_copy_output_release_callback_ =
+          output->TakeSharedImageOwnership();
       if (copy_output_gpu_frame_) {
         LiveGpuFrameOutput gpu_frame;
         gpu_frame.shared_image_available = true;
@@ -2578,6 +3386,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<LiveGpuFrameOutput> copy_output_gpu_frame_ = nullptr;
   raw_ptr<std::string> copy_output_failure_ = nullptr;
   raw_ptr<base::RunLoop> copy_output_run_loop_ = nullptr;
+  scoped_refptr<gpu::ClientSharedImage> held_gpu_copy_output_shared_image_;
+  viz::ReleaseCallback held_gpu_copy_output_release_callback_;
   raw_ptr<std::string> failure_reason_ = nullptr;
   raw_ptr<bool> begin_frame_source_set_ = nullptr;
   raw_ptr<int> did_not_produce_count_ = nullptr;
@@ -2790,6 +3600,13 @@ class StandaloneCcLayerHost final
              "LayerTreeFrameSink is not available";
     }
     return active_frame_sink_->RunBorrowedVkImageBackingSmokeForTesting();
+  }
+  std::string RunBorrowedVkImageRenderCopySmokeForTesting() {
+    if (!active_frame_sink_) {
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunBorrowedVkImageRenderCopySmokeForTesting();
   }
   bool copy_output_completed() const { return copy_output_completed_; }
   bool copy_output_succeeded() const { return copy_output_succeeded_; }
@@ -14995,6 +15812,29 @@ StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageBackingSmokeForStandaloneRendere
     return smoke_result.c_str();
   }
   smoke_result = cache.cc_layer_host->RunBorrowedVkImageBackingSmokeForTesting();
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageRenderCopySmokeForStandaloneRenderer() {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.copy_output_gpu_frame.shared_image_available ||
+      !cache.copy_output_gpu_frame.vk_context_provider_available ||
+      !cache.copy_output_gpu_frame.shared_context_state_is_vulkan) {
+    smoke_result =
+        "gpu_borrowed_vkimage_render_copy_smoke: failed failure=Vulkan "
+        "SharedImage CopyOutput did not initialize before render-copy smoke";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_borrowed_vkimage_render_copy_smoke: failed failure=cc layer host "
+        "is not available";
+    return smoke_result.c_str();
+  }
+  smoke_result =
+      cache.cc_layer_host->RunBorrowedVkImageRenderCopySmokeForTesting();
   return smoke_result.c_str();
 }
 
