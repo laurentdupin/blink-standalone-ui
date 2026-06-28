@@ -2566,6 +2566,15 @@ class StandaloneSkiaOutputSurfaceDependency final
   std::string PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
       const gfx::Size& target_size,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
+    return PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+        target_size, nullptr, nullptr, target_shared_image);
+  }
+
+  std::string PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+      const gfx::Size& target_size,
+      ID3D12Resource* external_resource,
+      void* shared_handle,
+      scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
 #if BUILDFLAG(IS_WIN) && \
     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
     if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
@@ -2577,18 +2586,26 @@ class StandaloneSkiaOutputSurfaceDependency final
       scoped_refptr<gpu::ClientSharedImage> shared_image;
       const bool posted = task_runner->PostTask(
           FROM_HERE,
-          base::BindOnce(
-              [](StandaloneSkiaOutputSurfaceDependency* self,
-                 const gfx::Size& target_size,
-                 scoped_refptr<gpu::ClientSharedImage>* shared_image,
-                 std::string* result, base::WaitableEvent* completed) {
+              base::BindOnce(
+                  [](StandaloneSkiaOutputSurfaceDependency* self,
+                     const gfx::Size& target_size,
+                     uintptr_t external_resource,
+                     uintptr_t shared_handle,
+                     scoped_refptr<gpu::ClientSharedImage>* shared_image,
+                     std::string* result, base::WaitableEvent* completed) {
                 *result =
                     self
                         ->PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
-                            target_size, shared_image);
+                            target_size,
+                            reinterpret_cast<ID3D12Resource*>(
+                                external_resource),
+                            reinterpret_cast<void*>(shared_handle),
+                            shared_image);
                 completed->Signal();
               },
-              base::Unretained(this), target_size, &shared_image, &result,
+              base::Unretained(this), target_size,
+              reinterpret_cast<uintptr_t>(external_resource),
+              reinterpret_cast<uintptr_t>(shared_handle), &shared_image, &result,
               &completed));
       if (!posted) {
         return "gpu_borrowed_d3d12_render_copy_smoke: failed "
@@ -2602,7 +2619,7 @@ class StandaloneSkiaOutputSurfaceDependency final
       return result;
     }
     return PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
-        target_size, target_shared_image);
+        target_size, external_resource, shared_handle, target_shared_image);
 #else
     StandaloneBorrowedD3D12RenderCopySmokeResult result;
     result.blocked = true;
@@ -2963,12 +2980,15 @@ class StandaloneSkiaOutputSurfaceDependency final
     std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
     scoped_refptr<gpu::ClientSharedImage> client_shared_image;
     bool target_created = false;
+    bool external_resource = false;
     bool shared_texture_memory_created = false;
     bool registered = false;
   };
 
   std::string PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
       const gfx::Size& target_size,
+      ID3D12Resource* external_resource,
+      void* shared_handle,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
     DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
     StandaloneBorrowedD3D12RenderCopySmokeResult result;
@@ -3018,35 +3038,71 @@ class StandaloneSkiaOutputSurfaceDependency final
     }
     result.context_available = true;
 
-    D3D12_HEAP_PROPERTIES heap_properties = {};
-    heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
-    heap_properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    heap_properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-    heap_properties.CreationNodeMask = 1;
-    heap_properties.VisibleNodeMask = 1;
-
     D3D12_RESOURCE_DESC resource_desc = {};
-    resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    resource_desc.Alignment = 0;
-    resource_desc.Width = static_cast<UINT64>(target_size.width());
-    resource_desc.Height = static_cast<UINT>(target_size.height());
-    resource_desc.DepthOrArraySize = 1;
-    resource_desc.MipLevels = 1;
-    resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    resource_desc.SampleDesc.Count = 1;
-    resource_desc.SampleDesc.Quality = 0;
-    resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
-                          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
-
     auto target = std::make_unique<BorrowedD3D12RenderCopyBlitTarget>();
     target->size = target_size;
-    HRESULT hr = device->CreateCommittedResource(
-        &heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc,
-        D3D12_RESOURCE_STATE_COMMON, nullptr,
-        IID_PPV_ARGS(&target->resource));
-    if (FAILED(hr) || !target->resource) {
-      return finish_with_failure("stand-in D3D12 target resource creation failed");
+    Microsoft::WRL::ComPtr<ID3D12Resource> opened_shared_resource;
+    if (shared_handle) {
+      HRESULT hr = device->OpenSharedHandle(
+          static_cast<HANDLE>(shared_handle),
+          IID_PPV_ARGS(&opened_shared_resource));
+      if (FAILED(hr) || !opened_shared_resource) {
+        return finish_with_failure(
+            "borrowed external D3D12 shared handle open failed");
+      }
+      external_resource = opened_shared_resource.Get();
+    }
+    if (external_resource) {
+      resource_desc = external_resource->GetDesc();
+      if (resource_desc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D ||
+          resource_desc.Width != static_cast<UINT64>(target_size.width()) ||
+          resource_desc.Height != static_cast<UINT>(target_size.height()) ||
+          resource_desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM) {
+        return finish_with_failure(
+            "borrowed external D3D12 target resource metadata mismatch");
+      }
+      Microsoft::WRL::ComPtr<ID3D12Device> resource_device;
+      if (!shared_handle) {
+        if (FAILED(external_resource->GetDevice(
+                IID_PPV_ARGS(&resource_device))) ||
+            !resource_device || resource_device.Get() != device.Get()) {
+          return finish_with_failure(
+              "borrowed external D3D12 target is not owned by the active "
+              "renderer D3D12 device");
+        }
+      }
+      target->resource =
+          opened_shared_resource ? opened_shared_resource : external_resource;
+      target->external_resource = true;
+    } else {
+      D3D12_HEAP_PROPERTIES heap_properties = {};
+      heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+      heap_properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+      heap_properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+      heap_properties.CreationNodeMask = 1;
+      heap_properties.VisibleNodeMask = 1;
+
+      resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+      resource_desc.Alignment = 0;
+      resource_desc.Width = static_cast<UINT64>(target_size.width());
+      resource_desc.Height = static_cast<UINT>(target_size.height());
+      resource_desc.DepthOrArraySize = 1;
+      resource_desc.MipLevels = 1;
+      resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+      resource_desc.SampleDesc.Count = 1;
+      resource_desc.SampleDesc.Quality = 0;
+      resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+      resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                            D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+
+      HRESULT hr = device->CreateCommittedResource(
+          &heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc,
+          D3D12_RESOURCE_STATE_COMMON, nullptr,
+          IID_PPV_ARGS(&target->resource));
+      if (FAILED(hr) || !target->resource) {
+        return finish_with_failure(
+            "stand-in D3D12 target resource creation failed");
+      }
     }
     target->target_created = true;
     result.target_created = true;
@@ -3185,8 +3241,10 @@ class StandaloneSkiaOutputSurfaceDependency final
       }
     }
     if (borrowed_d3d12_blit_target_->resource) {
+      const bool external_resource =
+          borrowed_d3d12_blit_target_->external_resource;
       borrowed_d3d12_blit_target_->resource.Reset();
-      if (result) {
+      if (result && !external_resource) {
         result->target_destroyed = true;
       }
     }
@@ -3716,6 +3774,18 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
+    return RunD3D12RenderCopyForTesting(nullptr);
+  }
+
+  std::string RunExternalD3D12RenderCopyForTesting(void* d3d12_resource,
+                                                   void* shared_handle) {
+    ID3D12Resource* external_resource =
+        static_cast<ID3D12Resource*>(d3d12_resource);
+    return RunD3D12RenderCopyForTesting(external_resource, shared_handle);
+  }
+
+  std::string RunD3D12RenderCopyForTesting(ID3D12Resource* external_resource,
+                                           void* shared_handle = nullptr) {
     if (!display_) {
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=Viz "
              "Display is not initialized";
@@ -3733,7 +3803,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     std::string prepare_result =
         offscreen_skia_dependency_
             ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
-                output_size, &blit_target);
+                output_size, external_resource, shared_handle, &blit_target);
     if (!prepare_result.empty()) {
       return prepare_result;
     }
@@ -4453,6 +4523,15 @@ class StandaloneCcLayerHost final
              "LayerTreeFrameSink is not available";
     }
     return active_frame_sink_->RunBorrowedD3D12RenderCopySmokeForTesting();
+  }
+  std::string RunExternalD3D12RenderCopyForTesting(void* d3d12_resource,
+                                                   void* shared_handle) {
+    if (!active_frame_sink_) {
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunExternalD3D12RenderCopyForTesting(
+        d3d12_resource, shared_handle);
   }
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
     if (!active_frame_sink_) {
@@ -16742,6 +16821,36 @@ StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRender
   }
   smoke_result =
       cache.cc_layer_host->RunBorrowedD3D12RenderCopySmokeForTesting();
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunExternalD3D12RenderCopyForStandaloneRenderer(
+    void* d3d12_resource,
+    void* shared_handle) {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!d3d12_resource && !shared_handle) {
+    smoke_result =
+        "gpu_borrowed_d3d12_render_copy_smoke: failed failure=external "
+        "D3D12 resource/shared handle is null";
+    return smoke_result.c_str();
+  }
+  if (!cache.copy_output_gpu_frame.shared_image_available) {
+    smoke_result =
+        "gpu_borrowed_d3d12_render_copy_smoke: failed failure=D3D12 "
+        "SharedImage CopyOutput did not initialize before external render-copy";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_borrowed_d3d12_render_copy_smoke: failed failure=cc layer host "
+        "is not available";
+    return smoke_result.c_str();
+  }
+  smoke_result =
+      cache.cc_layer_host->RunExternalD3D12RenderCopyForTesting(d3d12_resource,
+                                                                shared_handle);
   return smoke_result.c_str();
 }
 

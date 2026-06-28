@@ -56,6 +56,11 @@
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/gl_switches.h"
 
+#if BUILDFLAG(IS_WIN)
+#include <d3d12.h>
+#include <wrl/client.h>
+#endif
+
 #if defined(BLINK_STANDALONE_HAVE_DAWN_D3D12)
 #include "dawn/dawn_proc.h"
 #include "dawn/native/DawnNative.h"
@@ -517,7 +522,139 @@ int RunCApiSmoke() {
   return 0;
 }
 
-int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
+#if BUILDFLAG(IS_WIN)
+bool ReadbackD3D12TextureForSmoke(ID3D12Device* device,
+                                  ID3D12CommandQueue* queue,
+                                  ID3D12Resource* texture,
+                                  uint32_t width,
+                                  uint32_t height,
+                                  std::vector<uint32_t>* pixels,
+                                  std::string* failure) {
+  auto fail = [&](const char* message) {
+    if (failure) {
+      *failure = message;
+    }
+    return false;
+  };
+  if (!device || !queue || !texture || !pixels || width == 0 || height == 0) {
+    return fail("invalid D3D12 readback arguments");
+  }
+
+  D3D12_RESOURCE_DESC texture_desc = texture->GetDesc();
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+  UINT row_count = 0;
+  UINT64 row_size_bytes = 0;
+  UINT64 total_bytes = 0;
+  device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &footprint,
+                                &row_count, &row_size_bytes, &total_bytes);
+  if (row_count == 0 || row_size_bytes == 0 || total_bytes == 0) {
+    return fail("D3D12 readback footprint is empty");
+  }
+
+  D3D12_HEAP_PROPERTIES readback_heap = {};
+  readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+  readback_heap.CreationNodeMask = 1;
+  readback_heap.VisibleNodeMask = 1;
+  D3D12_RESOURCE_DESC buffer_desc = {};
+  buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  buffer_desc.Width = total_bytes;
+  buffer_desc.Height = 1;
+  buffer_desc.DepthOrArraySize = 1;
+  buffer_desc.MipLevels = 1;
+  buffer_desc.SampleDesc.Count = 1;
+  buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+  if (FAILED(device->CreateCommittedResource(
+          &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+          D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback))) ||
+      !readback) {
+    return fail("D3D12 readback buffer creation failed");
+  }
+
+  Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+  if (FAILED(device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                            IID_PPV_ARGS(&allocator))) ||
+      !allocator) {
+    return fail("D3D12 readback command allocator creation failed");
+  }
+  Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+  if (FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                       allocator.Get(), nullptr,
+                                       IID_PPV_ARGS(&command_list))) ||
+      !command_list) {
+    return fail("D3D12 readback command list creation failed");
+  }
+
+  D3D12_TEXTURE_COPY_LOCATION src = {};
+  src.pResource = texture;
+  src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+  src.SubresourceIndex = 0;
+  D3D12_TEXTURE_COPY_LOCATION dst = {};
+  dst.pResource = readback.Get();
+  dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+  dst.PlacedFootprint = footprint;
+  command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+  if (FAILED(command_list->Close())) {
+    return fail("D3D12 readback command list close failed");
+  }
+  ID3D12CommandList* command_lists[] = {command_list.Get()};
+  queue->ExecuteCommandLists(1, command_lists);
+
+  Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+  if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                                 IID_PPV_ARGS(&fence))) ||
+      !fence) {
+    return fail("D3D12 readback fence creation failed");
+  }
+  HANDLE event_handle = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+  if (!event_handle) {
+    return fail("D3D12 readback event creation failed");
+  }
+  constexpr UINT64 kFenceValue = 1;
+  if (FAILED(queue->Signal(fence.Get(), kFenceValue))) {
+    ::CloseHandle(event_handle);
+    return fail("D3D12 readback fence signal failed");
+  }
+  if (fence->GetCompletedValue() < kFenceValue) {
+    if (FAILED(fence->SetEventOnCompletion(kFenceValue, event_handle))) {
+      ::CloseHandle(event_handle);
+      return fail("D3D12 readback fence wait setup failed");
+    }
+    ::WaitForSingleObject(event_handle, 5000);
+  }
+  ::CloseHandle(event_handle);
+  if (fence->GetCompletedValue() < kFenceValue) {
+    return fail("D3D12 readback fence wait timed out");
+  }
+
+  void* mapped = nullptr;
+  D3D12_RANGE read_range = {0, static_cast<SIZE_T>(total_bytes)};
+  if (FAILED(readback->Map(0, &read_range, &mapped)) || !mapped) {
+    return fail("D3D12 readback map failed");
+  }
+  const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
+  pixels->assign(static_cast<size_t>(width) * static_cast<size_t>(height), 0);
+  for (uint32_t y = 0; y < height; ++y) {
+    const uint8_t* row =
+        mapped_bytes + footprint.Offset +
+        static_cast<size_t>(y) * footprint.Footprint.RowPitch;
+    for (uint32_t x = 0; x < width; ++x) {
+      const uint8_t* p = row + static_cast<size_t>(x) * 4u;
+      (*pixels)[static_cast<size_t>(y) * width + x] =
+          (static_cast<uint32_t>(p[3]) << 24) |
+          (static_cast<uint32_t>(p[0]) << 16) |
+          (static_cast<uint32_t>(p[1]) << 8) | static_cast<uint32_t>(p[2]);
+    }
+  }
+  D3D12_RANGE written_range = {0, 0};
+  readback->Unmap(0, &written_range);
+  return true;
+}
+#endif
+
+int RunCApiExternalGpuTargetSmoke(uint32_t backend,
+                                  const char* label,
+                                  bool require_external_target) {
   blink_standalone_renderer_config_t config = {};
   config.width = 128;
   config.height = 64;
@@ -533,9 +670,12 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
 
   const uint32_t capabilities =
       blink_standalone_renderer_gpu_backend_capabilities(renderer, backend);
+  const uint32_t required_capability =
+      require_external_target
+          ? BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET
+          : BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
   if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0 ||
-      (capabilities &
-       BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN) == 0) {
+      (capabilities & required_capability) == 0) {
     std::fprintf(stderr,
                  "%s: blocked backend unavailable capabilities=%u\n", label,
                  capabilities);
@@ -559,7 +699,9 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
 
   blink_standalone_external_gpu_target_t target = {};
   target.common.backend = backend;
-  target.common.flags = BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN;
+  target.common.flags =
+      require_external_target ? 0
+                              : BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN;
   target.common.logical_width = 128;
   target.common.logical_height = 64;
   target.common.physical_width = 128;
@@ -569,10 +711,80 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
   target.common.alpha_mode = BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
   target.common.color_space = BLINK_STANDALONE_COLOR_SPACE_SRGB;
   target.common.generation = 1;
+#if BUILDFLAG(IS_WIN)
+  Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device;
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> d3d12_queue;
+  Microsoft::WRL::ComPtr<ID3D12Resource> d3d12_resource;
+  HANDLE d3d12_shared_handle = nullptr;
+#endif
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
     target.vulkan.width = 128;
     target.vulkan.height = 64;
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+#if BUILDFLAG(IS_WIN)
+    HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0,
+                                   IID_PPV_ARGS(&d3d12_device));
+    if (FAILED(hr) || !d3d12_device) {
+      std::fprintf(stderr, "%s: blocked d3d12_device=0 hr=0x%08lx\n", label,
+                   static_cast<unsigned long>(hr));
+      blink_standalone_renderer_destroy(renderer);
+      return 0;
+    }
+    D3D12_COMMAND_QUEUE_DESC queue_desc = {};
+    queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    hr = d3d12_device->CreateCommandQueue(&queue_desc,
+                                          IID_PPV_ARGS(&d3d12_queue));
+    if (FAILED(hr) || !d3d12_queue) {
+      std::fprintf(stderr, "%s: failed d3d12_queue=0 hr=0x%08lx\n", label,
+                   static_cast<unsigned long>(hr));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    D3D12_HEAP_PROPERTIES heap_properties = {};
+    heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    heap_properties.CreationNodeMask = 1;
+    heap_properties.VisibleNodeMask = 1;
+    D3D12_RESOURCE_DESC resource_desc = {};
+    resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    resource_desc.Width = 128;
+    resource_desc.Height = 64;
+    resource_desc.DepthOrArraySize = 1;
+    resource_desc.MipLevels = 1;
+    resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    resource_desc.SampleDesc.Count = 1;
+    resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+    hr = d3d12_device->CreateCommittedResource(
+        &heap_properties, D3D12_HEAP_FLAG_SHARED, &resource_desc,
+        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&d3d12_resource));
+    if (FAILED(hr) || !d3d12_resource) {
+      std::fprintf(stderr, "%s: failed d3d12_resource=0 hr=0x%08lx\n", label,
+                   static_cast<unsigned long>(hr));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    hr = d3d12_device->CreateSharedHandle(d3d12_resource.Get(), nullptr,
+                                          GENERIC_ALL, nullptr,
+                                          &d3d12_shared_handle);
+    if (FAILED(hr) || !d3d12_shared_handle) {
+      std::fprintf(stderr, "%s: failed d3d12_shared_handle=0 hr=0x%08lx\n",
+                   label, static_cast<unsigned long>(hr));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    target.d3d12.d3d12_device = d3d12_device.Get();
+    target.d3d12.d3d12_command_queue = d3d12_queue.Get();
+    target.d3d12.shared_handle = d3d12_shared_handle;
+    target.d3d12.dxgi_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+    target.d3d12.required_final_state =
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+#else
+    std::fprintf(stderr, "%s: blocked platform=non_windows\n", label);
+    blink_standalone_renderer_destroy(renderer);
+    return 0;
+#endif
     target.d3d12.width = 128;
     target.d3d12.height = 64;
   }
@@ -588,16 +800,82 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
                  label, status, result.status, result.backend,
                  result.target_written, result.width, result.height,
                  blink_standalone_renderer_last_error(renderer));
+#if BUILDFLAG(IS_WIN)
+    if (target.d3d12.shared_handle) {
+      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+    }
+#endif
     blink_standalone_renderer_destroy(renderer);
     return 1;
   }
 
+  uint32_t observed_background = 0;
+  uint32_t observed_box = 0;
+  uint32_t background_pixels = 0;
+  uint32_t box_pixels = 0;
+  uint32_t nontransparent_pixels = 0;
+#if BUILDFLAG(IS_WIN)
+  if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+    std::vector<uint32_t> pixels;
+    std::string failure;
+    if (!ReadbackD3D12TextureForSmoke(d3d12_device.Get(), d3d12_queue.Get(),
+                                      d3d12_resource.Get(), 128, 64, &pixels,
+                                      &failure)) {
+      std::fprintf(stderr, "%s: failed external_readback=0 failure=%s\n",
+                   label, failure.c_str());
+      if (target.d3d12.shared_handle) {
+        CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+      }
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    auto pixel_at = [&](uint32_t x, uint32_t y) {
+      return pixels[static_cast<size_t>(y) * 128u + x];
+    };
+    observed_background = pixel_at(4, 4);
+    observed_box = pixel_at(20, 20);
+    for (uint32_t pixel : pixels) {
+      if ((pixel >> 24) != 0) {
+        ++nontransparent_pixels;
+      }
+      if (pixel == 0xff123456u) {
+        ++background_pixels;
+      } else if (pixel == 0xffd06329u) {
+        ++box_pixels;
+      }
+    }
+    if (observed_background != 0xff123456u || observed_box != 0xffd06329u ||
+        background_pixels == 0 || box_pixels == 0 ||
+        nontransparent_pixels != 128u * 64u) {
+      std::fprintf(stderr,
+                   "%s: failed external_readback=1 "
+                   "observed_background=%08x observed_box=%08x "
+                   "background_pixels=%u box_pixels=%u "
+                   "nontransparent_pixels=%u\n",
+                   label, observed_background, observed_box,
+                   background_pixels, box_pixels, nontransparent_pixels);
+      if (target.d3d12.shared_handle) {
+        CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+      }
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+  }
+#endif
+
   std::printf(
       "%s: ok backend=%u capabilities=%u target_written=%u size=%ux%u "
-      "format=%u generation=%llu\n",
+      "format=%u generation=%llu observed_background=%08x observed_box=%08x "
+      "background_pixels=%u box_pixels=%u nontransparent_pixels=%u\n",
       label, result.backend, capabilities, result.target_written, result.width,
       result.height, result.pixel_format,
-      static_cast<unsigned long long>(result.generation));
+      static_cast<unsigned long long>(result.generation), observed_background,
+      observed_box, background_pixels, box_pixels, nontransparent_pixels);
+#if BUILDFLAG(IS_WIN)
+  if (target.d3d12.shared_handle) {
+    CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+  }
+#endif
   blink_standalone_renderer_destroy(renderer);
   return 0;
 }
@@ -605,13 +883,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
 int RunCApiVulkanExternalTargetSmoke() {
   return RunCApiExternalGpuTargetSmoke(
       BLINK_STANDALONE_GPU_BACKEND_VULKAN,
-      "c_api_vulkan_external_target_smoke");
+      "c_api_vulkan_external_target_smoke",
+      /*require_external_target=*/true);
 }
 
 int RunCApiD3D12ExternalTargetSmoke() {
   return RunCApiExternalGpuTargetSmoke(
       BLINK_STANDALONE_GPU_BACKEND_D3D12,
-      "c_api_d3d12_external_target_smoke");
+      "c_api_d3d12_external_target_smoke",
+      /*require_external_target=*/true);
 }
 
 std::vector<uint8_t> MakeSolidBmp(int width,

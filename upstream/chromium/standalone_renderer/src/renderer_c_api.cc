@@ -912,6 +912,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gp
     case BLINK_STANDALONE_GPU_BACKEND_D3D12:
 #if defined(_WIN32)
       return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
+             BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET |
              BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
 #else
       return 0;
@@ -946,8 +947,22 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
                         "render_to_gpu_target failed: requested GPU backend is unavailable");
   }
-  if ((target->common.flags &
-       BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN) == 0) {
+  const bool internal_standin =
+      (target->common.flags &
+       BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN) != 0;
+  const bool d3d12_external =
+      backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+      target->d3d12.shared_handle != nullptr;
+  if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+      !target->d3d12.shared_handle && target->d3d12.d3d12_resource) {
+    result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+        "render_to_gpu_target failed: raw D3D12 resource pointers require "
+        "same-device setup, which is not part of this checkpoint; pass a "
+        "shared_handle for the external D3D12 target path");
+  }
+  if (!internal_standin && !d3d12_external) {
     result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
@@ -967,8 +982,13 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
     smoke_result = renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
-    smoke_result =
-        renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
+    if (d3d12_external) {
+      smoke_result = renderer->runtime->RunExternalD3D12RenderCopyForTesting(
+          target->d3d12.d3d12_resource, target->d3d12.shared_handle);
+    } else {
+      smoke_result =
+          renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
+    }
   } else {
     result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,

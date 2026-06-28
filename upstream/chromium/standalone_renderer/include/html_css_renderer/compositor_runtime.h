@@ -147,6 +147,9 @@ class StandaloneCompositorRuntime {
   virtual std::string RunBorrowedVkImageBackingSmokeForTesting() = 0;
   virtual std::string RunBorrowedVkImageRenderCopySmokeForTesting() = 0;
   virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
+  virtual std::string RunExternalD3D12RenderCopyForTesting(
+      void* d3d12_resource,
+      void* shared_handle) = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
 };
 

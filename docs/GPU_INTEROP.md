@@ -655,21 +655,34 @@ metadata, or real external handles that this build cannot yet adopt return
 `BLINK_STANDALONE_STATUS_UNSUPPORTED` or another non-OK status with
 renderer-local diagnostics.
 
-The current public ABI validation uses
+The initial public ABI validation used
 `BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN`. That flag creates a
 stand-in target on the active standalone GPU device and verifies rendered HTML
-pixels through the same public C API call:
+pixels through the same public C API call. It remains useful as an internal
+diagnostic, but it is not treated as real embedder handle support.
 
-```text
---c-api-vulkan-external-target-smoke
---c-api-d3d12-external-target-smoke
-```
+The D3D12 public path now has a real handle-adoption proof. The public smoke
+`--c-api-d3d12-external-target-smoke` creates a caller-owned D3D12 texture with
+shared-handle export enabled, passes only the shared handle through
+`blink_standalone_renderer_render_to_gpu_target()`, lets the standalone
+renderer open that handle on the active Dawn D3D12 device, writes rendered HTML
+pixels into it through the Viz `BlitRequest` path, and then reads the original
+caller-owned resource back with the caller's device/queue. The smoke verifies
+the expected CSS background and box colors. Raw `ID3D12Resource*` adoption is
+not advertised as public support because it is only valid with an explicit
+same-device setup contract; cross-device callers must use the shared-handle
+path.
 
-This is a real C ABI boundary and target-writer validation, but it is not yet
-the final Godot handle path. The next implementation checkpoint is to replace
-the stand-in target with embedder-provided `VkImage` / `ID3D12Resource` handles,
-validate device/queue compatibility, and honor the public layout/resource-state
-and synchronization fields.
+The Vulkan public path does not yet have an equivalent real handle-adoption
+proof. `blink_standalone_vulkan_external_target_t` reserves the metadata needed
+for a future implementation, including `VkImage`, device/memory handles,
+format, layout, queue-family, allocation, tiling/usage, and synchronization
+fields. However, the capability query deliberately does not advertise
+`BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET` for Vulkan, and
+`--c-api-vulkan-external-target-smoke` reports blocked. A raw foreign `VkImage`
+is not a valid contract unless the renderer is initialized on the same
+`VkDevice`/queue ownership domain, and the current public C API has no
+renderer-level external Vulkan device setup.
 
 ## Current Status
 
@@ -696,10 +709,38 @@ and synchronization fields.
 - `--gpu-borrowed-d3d12-render-copy-smoke` validates that rendered HTML pixels
   can be written through Viz `BlitRequest` into a borrowed D3D12
   `ID3D12Resource` backing and read back for verification.
-- `--c-api-vulkan-external-target-smoke` validates the public C API GPU target
-  call for Vulkan using the internal stand-in target flag.
 - `--c-api-d3d12-external-target-smoke` validates the public C API GPU target
-  call for D3D12 using the internal stand-in target flag.
-- Real embedder-owned native handle adoption is still pending. The ABI reserves
-  the required Vulkan and D3D12 metadata, but non-stand-in targets currently
-  return explicit unsupported status rather than falling back to CPU.
+  call for D3D12 using a caller-created shared-handle texture and caller-side
+  readback of deterministic rendered HTML pixels.
+- `--c-api-vulkan-external-target-smoke` is currently an honest blocked smoke:
+  Vulkan is available and the internal stand-in path is available, but real
+  external Vulkan target capability is not advertised.
+- Real D3D12 shared-handle adoption is available on Windows. Raw D3D12 resource
+  pointer adoption still requires a same-device setup contract and is rejected
+  by the public C API.
+- Real Vulkan embedder-owned native handle adoption is still pending. The ABI
+  reserves the required Vulkan metadata, but non-stand-in Vulkan targets return
+  explicit unsupported status rather than falling back to CPU.
+
+## Remaining Vulkan Implementation Routes
+
+The next Vulkan checkpoint must attempt one of two concrete routes:
+
+1. Same-device/embedder-device setup: add a renderer setup path that wraps a
+   caller-provided `VkInstance`, `VkPhysicalDevice`, `VkDevice`, `VkQueue`, and
+   queue family in Chromium's Vulkan/Skia/Viz objects. The active candidate is
+   a non-owning `gpu::VulkanDeviceQueue` initialized from caller handles and a
+   matching `viz::VulkanInProcessContextProvider::CreateForCompositorGpuThread`
+   setup. This is the preferred Godot architecture because the supplied
+   `VkImage` is then in the same device domain as the renderer.
+2. Cross-device external-memory import: require the embedder to provide an
+   exportable memory handle and import that memory into the renderer's Vulkan
+   device before wrapping it as a SharedImage destination. The current Windows
+   `VulkanImplementationWin32::CreateImageFromGpuMemoryHandle()` route is
+   `NOTIMPLEMENTED()`, so this likely needs explicit OPAQUE_WIN32/fd import
+   plumbing rather than the existing GpuMemoryBuffer shortcut.
+
+Until one of these routes has a public smoke that creates the target outside
+the renderer, calls `blink_standalone_renderer_render_to_gpu_target()`, and
+verifies deterministic pixels from that target, Vulkan `EXTERNAL_TARGET`
+capability must remain disabled.

@@ -224,12 +224,24 @@ typedef struct blink_standalone_gpu_target_common {
 
 typedef struct blink_standalone_vulkan_external_target {
   void* vk_image;
+  void* vk_device;
+  void* vk_physical_device;
+  void* vk_device_memory;
+  void* shared_memory_handle;
   uint32_t vk_format;
   uint32_t width;
   uint32_t height;
   uint32_t current_layout;
   uint32_t required_final_layout;
   uint32_t queue_family_index;
+  uint64_t allocation_offset;
+  uint64_t allocation_size;
+  uint32_t image_tiling;
+  uint32_t image_usage_flags;
+  uint32_t sample_count;
+  uint32_t level_count;
+  uint32_t sharing_mode;
+  uint32_t external_memory_handle_type;
   void* wait_semaphore;
   uint64_t wait_value;
   void* signal_semaphore;
@@ -240,6 +252,7 @@ typedef struct blink_standalone_d3d12_external_target {
   void* d3d12_device;
   void* d3d12_command_queue;
   void* d3d12_resource;
+  void* shared_handle;
   uint32_t dxgi_format;
   uint32_t width;
   uint32_t height;
