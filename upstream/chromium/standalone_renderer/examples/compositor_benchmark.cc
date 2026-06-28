@@ -174,6 +174,7 @@ void PrintUsage() {
       "[--c-api-resource-provider-data-url-smoke] "
       "[--c-api-resource-provider-font-smoke] "
       "[--c-api-resource-provider-mask-svg-smoke] "
+      "[--c-api-resource-provider-free-then-mask-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
       "[--c-api-css-filter-blur-smoke] "
@@ -1414,6 +1415,229 @@ int RunCApiResourceProviderMaskSvgSmoke() {
       provider_state.css_image_request_count, provider_state.mask_request_count,
       provider_state.svg_request_count, provider_state.blocked_count,
       provider_state.release_count);
+  return 0;
+}
+
+struct CApiResourceProviderFreeThenMaskSmokeState {
+  std::vector<uint8_t> red_bmp = MakeSolidBmp(2, 2, 0xe8, 0x44, 0x44);
+  std::vector<uint8_t> white_mask_bmp = MakeSolidBmp(2, 2, 0xff, 0xff, 0xff);
+  std::string theme_css =
+      "@import url('asset://imported.css');"
+      "body{margin:0;background:#112233}"
+      "#linked{position:absolute;left:50px;top:0;width:40px;height:40px;"
+      "background:#e84444}";
+  std::string imported_css =
+      "#image{position:absolute;left:0;top:0;width:40px;height:40px;"
+      "background-image:url('asset://red_2x2.bmp');"
+      "background-size:40px 40px}";
+  int request_count = 0;
+  int image_request_count = 0;
+  int stylesheet_request_count = 0;
+  int stylesheet_link_request_count = 0;
+  int css_import_request_count = 0;
+  int css_image_request_count = 0;
+  int red_request_count = 0;
+  int mask_request_count = 0;
+  int release_count = 0;
+};
+
+blink_standalone_resource_status_t CApiResourceProviderFreeThenMaskSmokeLoad(
+    void* user_data,
+    const blink_standalone_resource_request_t* request,
+    blink_standalone_resource_response_t* response) {
+  auto* state =
+      static_cast<CApiResourceProviderFreeThenMaskSmokeState*>(user_data);
+  if (!state || !request || !response || !request->url) {
+    return BLINK_STANDALONE_RESOURCE_STATUS_ERROR;
+  }
+  ++state->request_count;
+  if (request->type_hint == BLINK_STANDALONE_RESOURCE_TYPE_IMAGE) {
+    ++state->image_request_count;
+  }
+  if (request->type_hint == BLINK_STANDALONE_RESOURCE_TYPE_STYLESHEET) {
+    ++state->stylesheet_request_count;
+  }
+  if (request->initiator ==
+      BLINK_STANDALONE_RESOURCE_INITIATOR_STYLESHEET_LINK) {
+    ++state->stylesheet_link_request_count;
+  }
+  if (request->initiator == BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_IMPORT) {
+    ++state->css_import_request_count;
+  }
+  if (request->initiator ==
+      BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE) {
+    ++state->css_image_request_count;
+  }
+
+  const std::string url = request->url;
+  if (url.find("theme.css") != std::string::npos) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes = reinterpret_cast<const uint8_t*>(state->theme_css.data());
+    response->byte_count = state->theme_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  if (url.find("imported.css") != std::string::npos) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes =
+        reinterpret_cast<const uint8_t*>(state->imported_css.data());
+    response->byte_count = state->imported_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  const std::vector<uint8_t>* bytes = nullptr;
+  if (url.find("red_2x2.bmp") != std::string::npos) {
+    ++state->red_request_count;
+    bytes = &state->red_bmp;
+  } else if (url.find("mask_2x2.bmp") != std::string::npos) {
+    ++state->mask_request_count;
+    bytes = &state->white_mask_bmp;
+  }
+  if (!bytes) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+    return BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+  }
+  response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  response->mime_type = "image/bmp";
+  response->bytes = bytes->data();
+  response->byte_count = bytes->size();
+  response->resolved_url_or_cache_key = request->url;
+  return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+}
+
+void CApiResourceProviderFreeThenMaskSmokeRelease(
+    void* user_data,
+    blink_standalone_resource_response_t*) {
+  auto* state =
+      static_cast<CApiResourceProviderFreeThenMaskSmokeState*>(user_data);
+  if (state) {
+    ++state->release_count;
+  }
+}
+
+bool RenderProviderDocumentForFreeThenMaskSmoke(
+    CApiResourceProviderFreeThenMaskSmokeState* provider_state,
+    const char* html,
+    const char* label,
+    size_t* red_pixels_out) {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 120;
+  config.height = 80;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_free_then_mask_smoke: %s create "
+                 "failed status=%d\n",
+                 label, status);
+    return false;
+  }
+  status = blink_standalone_renderer_set_resource_provider(
+      renderer, CApiResourceProviderFreeThenMaskSmokeLoad,
+      CApiResourceProviderFreeThenMaskSmokeRelease, provider_state,
+      BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_NETWORK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_free_then_mask_smoke: %s provider "
+                 "set failed status=%d error=%s\n",
+                 label, status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return false;
+  }
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 0.0)
+               : status;
+  blink_standalone_frame_output_t output = {};
+  blink_standalone_status_code_t output_status =
+      blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats stats = AnalyzeFramePixelContent(output);
+  if (red_pixels_out) {
+    *red_pixels_out = stats.resource_red_e84444;
+  }
+  const bool ok = status == BLINK_STANDALONE_STATUS_OK &&
+                  output_status == BLINK_STANDALONE_STATUS_OK &&
+                  stats.resource_red_e84444 >= 1200;
+  if (!ok) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_free_then_mask_smoke: %s render failed "
+        "status=%d output_status=%d red=%zu error=%s\n",
+        label, status, output_status, stats.resource_red_e84444,
+        blink_standalone_renderer_last_error(renderer));
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  return ok;
+}
+
+int RunCApiResourceProviderFreeThenMaskSmoke() {
+  CApiResourceProviderFreeThenMaskSmokeState provider_state;
+  const char* linked_html =
+      "<!doctype html><link rel='stylesheet' href='asset://theme.css'>"
+      "<div id='linked'></div><div id='image'></div>";
+  size_t linked_red = 0;
+  if (!RenderProviderDocumentForFreeThenMaskSmoke(
+          &provider_state, linked_html, "linked", &linked_red)) {
+    return 1;
+  }
+
+  const int requests_after_linked = provider_state.request_count;
+  const int releases_after_linked = provider_state.release_count;
+  const char* mask_html =
+      "<!doctype html><style>body{margin:0;background:#112233}"
+      "#masked{position:absolute;left:0;top:0;width:40px;height:40px;"
+      "background:#e84444;-webkit-mask-image:url('asset://mask_2x2.bmp');"
+      "mask-image:url('asset://mask_2x2.bmp');"
+      "-webkit-mask-size:40px 40px;mask-size:40px 40px}</style>"
+      "<div id='masked'></div>";
+  size_t mask_red = 0;
+  if (!RenderProviderDocumentForFreeThenMaskSmoke(
+          &provider_state, mask_html, "mask", &mask_red)) {
+    return 1;
+  }
+
+  if (provider_state.stylesheet_link_request_count < 1 ||
+      provider_state.css_import_request_count < 1 ||
+      provider_state.red_request_count < 1 ||
+      provider_state.mask_request_count < 1 ||
+      provider_state.release_count != provider_state.request_count ||
+      provider_state.request_count <= requests_after_linked ||
+      releases_after_linked <= 0) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_free_then_mask_smoke: provider counts failed "
+        "requests=%d after_linked=%d images=%d stylesheets=%d link=%d "
+        "import=%d css_image=%d red_req=%d mask_req=%d releases=%d "
+        "after_linked_releases=%d linked_red=%zu mask_red=%zu\n",
+        provider_state.request_count, requests_after_linked,
+        provider_state.image_request_count,
+        provider_state.stylesheet_request_count,
+        provider_state.stylesheet_link_request_count,
+        provider_state.css_import_request_count,
+        provider_state.css_image_request_count, provider_state.red_request_count,
+        provider_state.mask_request_count, provider_state.release_count,
+        releases_after_linked, linked_red, mask_red);
+    return 1;
+  }
+
+  std::printf(
+      "c_api_resource_provider_free_then_mask_smoke: ok linked_red=%zu "
+      "mask_red=%zu requests=%d images=%d stylesheets=%d link=%d import=%d "
+      "css_image=%d red_req=%d mask_req=%d releases=%d\n",
+      linked_red, mask_red, provider_state.request_count,
+      provider_state.image_request_count, provider_state.stylesheet_request_count,
+      provider_state.stylesheet_link_request_count,
+      provider_state.css_import_request_count,
+      provider_state.css_image_request_count, provider_state.red_request_count,
+      provider_state.mask_request_count, provider_state.release_count);
   return 0;
 }
 
@@ -6758,6 +6982,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-resource-provider-data-url-smoke" ||
         arg == "--c-api-resource-provider-font-smoke" ||
         arg == "--c-api-resource-provider-mask-svg-smoke" ||
+        arg == "--c-api-resource-provider-free-then-mask-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-css-filter-blur-smoke" ||
@@ -6820,6 +7045,7 @@ int main(int argc, char** argv) {
   bool c_api_resource_provider_data_url_smoke = false;
   bool c_api_resource_provider_font_smoke = false;
   bool c_api_resource_provider_mask_svg_smoke = false;
+  bool c_api_resource_provider_free_then_mask_smoke = false;
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
   bool c_api_css_filter_blur_smoke = false;
@@ -6965,6 +7191,8 @@ int main(int argc, char** argv) {
       c_api_resource_provider_font_smoke = true;
     } else if (arg == "--c-api-resource-provider-mask-svg-smoke") {
       c_api_resource_provider_mask_svg_smoke = true;
+    } else if (arg == "--c-api-resource-provider-free-then-mask-smoke") {
+      c_api_resource_provider_free_then_mask_smoke = true;
     } else if (arg == "--c-api-empty-resource-smoke") {
       c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-transparent-background-smoke") {
@@ -7162,6 +7390,10 @@ int main(int argc, char** argv) {
 
   if (c_api_resource_provider_mask_svg_smoke) {
     return RunCApiResourceProviderMaskSvgSmoke();
+  }
+
+  if (c_api_resource_provider_free_then_mask_smoke) {
+    return RunCApiResourceProviderFreeThenMaskSmoke();
   }
 
   if (c_api_empty_resource_smoke) {

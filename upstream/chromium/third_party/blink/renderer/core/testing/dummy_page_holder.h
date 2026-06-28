@@ -94,6 +94,9 @@ class DummyPageHolder {
   LocalFrame& GetFrame() const;
   LocalFrameView& GetFrameView() const;
   Document& GetDocument() const;
+  void RestoreMockOverlayScrollbarSettingsForTesting() const {
+    enable_mock_scrollbars_.RestoreExpectedSettingsForTesting();
+  }
 
  private:
   Persistent<Page> page_;

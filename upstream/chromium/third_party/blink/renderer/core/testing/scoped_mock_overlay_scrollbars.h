@@ -76,6 +76,13 @@ class ScopedMockOverlayScrollbars {
 #endif
   }
 
+  void RestoreExpectedSettingsForTesting() const {
+    ScrollbarThemeSettings::SetOverlayScrollbarsEnabled(
+        use_mock_overlay_scrollbars_);
+    ScrollbarThemeSettings::SetMockScrollbarsEnabled(
+        use_mock_overlay_scrollbars_);
+  }
+
  private:
   bool use_mock_overlay_scrollbars_;
   bool original_mock_scrollbars_enabled_;

@@ -5071,6 +5071,9 @@ void ResetStandaloneLiveDocumentForFullHtmlReplacement(
   RunStandaloneMainThreadTasksForNavigationReset();
   cache.cc_layer_host.reset();
   RunStandaloneMainThreadTasksForNavigationReset();
+  if (cache.holder) {
+    cache.holder->RestoreMockOverlayScrollbarSettingsForTesting();
+  }
   delete cache.holder;
   cache.holder = nullptr;
   RunStandaloneMainThreadTasksForNavigationReset();
