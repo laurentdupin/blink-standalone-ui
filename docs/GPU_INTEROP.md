@@ -505,13 +505,71 @@ there is no active standalone D3D12 host equivalent to `VulkanWindowHost`. The
 SDL viewer intentionally rejects `--gpu-backend=dx12` rather than falling back
 to Vulkan or CPU.
 
-A real D3D12 target path would first need a Chromium-owned D3D12/DXGI/Dawn or
-Skia/Viz host for standalone rendering. Only after that exists can the same
-device question be answered by code. The expected shape is an adapter around an
-externally supplied `ID3D12Device*` and `ID3D12CommandQueue*`, a copy or render
-path into a supplied `ID3D12Resource*`, explicit resource-state transitions, and
-fence wait/signal ownership. The checkout does not currently expose that layer,
-so same-device D3D12 is design-only.
+The current audit found no direct Ganesh-D3D12 route analogous to the working
+Vulkan Ganesh path. `gpu::GrContextType` only has `kGL`, `kVulkan`, and
+`kGraphiteDawn`; `gpu::SharedContextState::InitializeGanesh()` handles GL and
+Vulkan, then CHECKs that the non-GL Ganesh path is Vulkan. Skia's Ganesh D3D
+headers are present in `third_party/skia/include/gpu/ganesh/d3d`, but this
+standalone Chromium integration does not expose a `GrContextType::kD3D` or a
+Viz `SkiaOutputSurface` path using those headers.
+
+Chromium's current D3D12 compositor direction in this checkout is
+Graphite/Dawn:
+
+- `gpu::DawnContextProvider` can create Dawn contexts and exposes
+  `GetD3D12CommandQueue()` on Windows.
+- `viz::SkiaOutputDeviceDawn` can present through a Dawn surface and uses a
+  child HWND for D3D swapchains on Windows.
+- D3D/DXGI SharedImage classes exist, including `D3DImageBackingFactory`,
+  `D3DImageBacking`, `DXGISharedHandleManager`, and Dawn/Graphite
+  representations.
+
+Those pieces are not active in the standalone build. The relevant Chromium
+paths are explicitly gated out under `HTML_CSS_RENDERER_STANDALONE`:
+
+- `gpu::SharedContextState::InitializeGraphite()` only calls
+  `DawnContextProvider::InitializeGraphiteContext()` under
+  `BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)`.
+- `viz::CompositorGpuThread` only carries a shared Dawn provider under the same
+  non-standalone gate.
+- `viz::SkiaOutputSurfaceImplOnGpu::InitializeForDawn()` is also compiled out
+  for standalone.
+- `viz::GpuServiceImpl` removes its Dawn provider and D3D factory setup from
+  the standalone path.
+- The standalone runtime dependency currently returns `nullptr` from
+  `StandaloneSkiaOutputSurfaceDependency::GetDawnContextProvider()`.
+
+The generated CMake target also does not wire the Dawn/D3D implementation files
+needed for a real D3D12 smoke, including `dawn_context_provider.cc`,
+`dawn_instance.cc`, `dawn_platform.cc`, `skia_output_device_dawn.cc`,
+`d3d_image_backing.cc`, `d3d_image_backing_factory.cc`,
+`dxgi_shared_handle_manager.cc`, `wrapped_graphite_texture_backing.cc`, and
+`skia_graphite_dawn_image_representation.cc`. The repository includes many of
+those source files, but they are not part of the standalone generated-V8
+ChromiumLLVM target.
+
+Therefore a bounded `--gpu-output-d3d12-smoke` is not currently honest: the
+runtime cannot create a D3D12-backed `SharedContextState`, cannot hand Dawn to
+Viz, and cannot produce a D3D12 texture-backed CopyOutput source. A real D3D12
+checkpoint should first add an internal Graphite/Dawn bootstrap for standalone:
+
+1. Enable/build the required Dawn/Graphite/D3D source files and generated Dawn
+   libraries for the standalone target.
+2. Add a standalone `DawnContextProvider` owner analogous to the Vulkan
+   provider owner, with an opt-in `GrContextType::kGraphiteDawn` runtime flag.
+3. Return that provider from
+   `StandaloneSkiaOutputSurfaceDependency::GetDawnContextProvider()`.
+4. Prove `SharedContextState::IsGraphiteDawnD3D()` and a non-null Graphite
+   context in an offscreen smoke.
+5. Only then add a pixel-bearing D3D12 CopyOutput smoke and, later, a borrowed
+   `ID3D12Resource`/DXGI shared-handle target proof with explicit resource
+   states and fence wait/signal ownership.
+
+Until those pieces exist, same-device D3D12 is design-only. The expected future
+shape is an adapter around an externally supplied `ID3D12Device*` and
+`ID3D12CommandQueue*`, a copy or render path into a supplied
+`ID3D12Resource*`, explicit resource-state transitions, and fence wait/signal
+ownership.
 
 ### Future ABI Direction
 
@@ -547,5 +605,8 @@ Until then, adding C ABI entry points would only create a dead API surface.
   register a raw embedder `VkImage` as a writable SharedImage destination.
 - Embedder-owned Vulkan `VkImage` targeting is blocked pending the runtime
   ownership, same-device, copy, and synchronization wiring above.
-- D3D12 GPU target support is design-only until a real Chromium D3D12/DXGI/Dawn
-  host exists in the standalone runtime.
+- D3D12 GPU target support is design-only. The current blocker is not just a
+  missing public ABI: standalone compiles out the Graphite/Dawn paths, returns
+  no Dawn provider to Viz, and does not CMake-wire the Dawn/D3D SharedImage
+  implementation files needed for a D3D12 `SharedContextState` or CopyOutput
+  smoke.
