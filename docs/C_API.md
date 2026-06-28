@@ -47,6 +47,36 @@ Transparent output is preserved when the document opts into transparency, for
 example with transparent `html`/`body` backgrounds. Opaque document backgrounds
 produce opaque raw pixels.
 
+## External GPU Targets
+
+The raw CPU frame path above remains the default and portable backend. Optional
+GPU target output is explicit opt-in through:
+
+- `blink_standalone_renderer_gpu_backend_capabilities`
+- `blink_standalone_renderer_render_to_gpu_target`
+
+The GPU target ABI is backend neutral. `blink_standalone_external_gpu_target_t`
+contains a common logical/physical target section plus backend-specific Vulkan
+and D3D12 sections. The common section carries logical size, physical size,
+device scale factor, pixel format, alpha mode, color space, generation, and
+flags. The Vulkan section reserves `VkImage`, format, extent, current/final
+layout, queue family, and wait/signal semaphore metadata. The D3D12 section
+reserves `ID3D12Device*`, `ID3D12CommandQueue*`, `ID3D12Resource*`, DXGI format,
+extent, current/final resource state, and wait/signal fence metadata.
+
+GPU target calls never silently fall back to CPU output. Unsupported backends,
+unavailable platform support, invalid target metadata, or native handles that
+this build cannot yet adopt return a non-OK status and renderer-local
+diagnostics.
+
+Current validation supports the explicit
+`BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN` flag. It creates a borrowed
+stand-in target on the active standalone GPU device and proves the public C API
+can drive the same rendered-output target writer used by the internal Vulkan and
+D3D12 proofs. Real embedder-owned `VkImage` / `ID3D12Resource` handle adoption
+is reserved by the ABI but still returns unsupported until the next GPU interop
+checkpoint wires device/queue/resource ownership and synchronization.
+
 ## Backdrop Filter Metadata
 
 Ordinary CSS `filter` effects, such as `filter: blur(...)`, are rendered by
@@ -261,6 +291,8 @@ self-build and package details.
 The benchmark executable exposes focused C API smokes for embedder regressions:
 
 - `--c-api-smoke`
+- `--c-api-vulkan-external-target-smoke`
+- `--c-api-d3d12-external-target-smoke`
 - `--c-api-transparent-background-smoke`
 - `--c-api-css-filter-blur-smoke`
 - `--c-api-backdrop-filter-region-smoke`

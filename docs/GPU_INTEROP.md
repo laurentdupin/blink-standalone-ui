@@ -623,25 +623,53 @@ not own or destroy the target resource; the smoke releases the SharedImage
 registration before destroying the stand-in resource.
 
 This proves that the standalone D3D12 Graphite/Viz path can write rendered HTML
-pixels into a borrowed D3D12 texture destination. It is still not a public
-Godot-facing ABI. The public API must replace the stand-in resource with
-embedder-provided `ID3D12Device*`, `ID3D12CommandQueue*`, `ID3D12Resource*`,
-resource-state metadata, and fence wait/signal ownership.
+pixels into a borrowed D3D12 texture destination. The current public C ABI uses
+that proven path for an internal stand-in target; real embedder handles are
+reserved in the ABI but still return an explicit unsupported status until the
+handle-adoption layer is implemented.
 
-### Future ABI Direction
+### Public ABI Direction
 
-The future public ABI should stay presentation-independent and should not
-mention SDL, HWND, or swapchains. A backend enum, common logical/physical target
-config, Vulkan external device/target structs, and D3D12 external device/target
-structs match the right direction. Before exposing them publicly, a real backend
-must prove at least one of these operations:
+The public GPU ABI is presentation-independent and does not mention SDL, HWND,
+or swapchains. The exported surface is:
 
-- initialize Chromium's GPU/Skia/Viz path from externally supplied device and
-  queue handles; or
-- copy a Chromium-owned GPU result into an externally supplied target resource
-  on the same device with explicit synchronization.
+```c
+blink_standalone_renderer_gpu_backend_capabilities(renderer, backend)
+blink_standalone_renderer_render_to_gpu_target(renderer, target, result)
+```
 
-Until then, adding C ABI entry points would only create a dead API surface.
+`blink_standalone_external_gpu_target_t` contains a backend-neutral common
+section plus Vulkan and D3D12 target sections. The common section carries
+logical size, physical size, device scale factor, pixel format, alpha mode,
+color space, generation, and flags. The Vulkan section reserves `VkImage`,
+format, extent, current/final layout, queue family, and wait/signal semaphore
+metadata. The D3D12 section reserves `ID3D12Device*`, `ID3D12CommandQueue*`,
+`ID3D12Resource*`, DXGI format, extent, current/final resource state, and
+wait/signal fence metadata.
+
+GPU target mode is explicit opt-in. The C API raw CPU output path remains the
+portable default and is selected only through `advance_frame` plus
+`get_latest_output`. `render_to_gpu_target` does not silently fall back to CPU
+output. Unsupported backends, unavailable platform support, invalid target
+metadata, or real external handles that this build cannot yet adopt return
+`BLINK_STANDALONE_STATUS_UNSUPPORTED` or another non-OK status with
+renderer-local diagnostics.
+
+The current public ABI validation uses
+`BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN`. That flag creates a
+stand-in target on the active standalone GPU device and verifies rendered HTML
+pixels through the same public C API call:
+
+```text
+--c-api-vulkan-external-target-smoke
+--c-api-d3d12-external-target-smoke
+```
+
+This is a real C ABI boundary and target-writer validation, but it is not yet
+the final Godot handle path. The next implementation checkpoint is to replace
+the stand-in target with embedder-provided `VkImage` / `ID3D12Resource` handles,
+validate device/queue compatibility, and honor the public layout/resource-state
+and synchronization fields.
 
 ## Current Status
 
@@ -668,8 +696,10 @@ Until then, adding C ABI entry points would only create a dead API surface.
 - `--gpu-borrowed-d3d12-render-copy-smoke` validates that rendered HTML pixels
   can be written through Viz `BlitRequest` into a borrowed D3D12
   `ID3D12Resource` backing and read back for verification.
-- Public GPU C ABI work is still pending. The internal proofs now exist for
-  Vulkan and D3D12 rendered-output plus borrowed-target writes, but a public
-  embedder API still needs explicit device/queue/resource ownership, layout or
-  resource-state transitions, synchronization, alpha/color-space metadata, DSF,
-  and failure/capability reporting.
+- `--c-api-vulkan-external-target-smoke` validates the public C API GPU target
+  call for Vulkan using the internal stand-in target flag.
+- `--c-api-d3d12-external-target-smoke` validates the public C API GPU target
+  call for D3D12 using the internal stand-in target flag.
+- Real embedder-owned native handle adoption is still pending. The ABI reserves
+  the required Vulkan and D3D12 metadata, but non-stand-in targets currently
+  return explicit unsupported status rather than falling back to CPU.

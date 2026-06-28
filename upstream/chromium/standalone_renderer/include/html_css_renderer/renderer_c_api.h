@@ -32,6 +32,7 @@ typedef enum blink_standalone_status_code {
   BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED = 2,
   BLINK_STANDALONE_STATUS_RENDER_FAILED = 3,
   BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED = 4,
+  BLINK_STANDALONE_STATUS_UNSUPPORTED = 5,
 } blink_standalone_status_code_t;
 
 /* Raw frame bytes are currently RGBA8 or BGRA8. Inspect pixel_format and stride
@@ -41,6 +42,37 @@ typedef enum blink_standalone_pixel_format {
   BLINK_STANDALONE_PIXEL_FORMAT_RGBA8 = 1,
   BLINK_STANDALONE_PIXEL_FORMAT_BGRA8 = 2,
 } blink_standalone_pixel_format_t;
+
+typedef enum blink_standalone_gpu_backend {
+  BLINK_STANDALONE_GPU_BACKEND_NONE = 0,
+  BLINK_STANDALONE_GPU_BACKEND_CPU_RAW = 1,
+  BLINK_STANDALONE_GPU_BACKEND_VULKAN = 2,
+  BLINK_STANDALONE_GPU_BACKEND_D3D12 = 3,
+} blink_standalone_gpu_backend_t;
+
+typedef enum blink_standalone_gpu_capability_flags {
+  BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE = 1u << 0,
+  BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET = 1u << 1,
+  BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN = 1u << 2,
+} blink_standalone_gpu_capability_flags_t;
+
+typedef enum blink_standalone_gpu_target_flags {
+  /* Test-only stand-in target allocated by the standalone renderer on its
+   * active GPU device. This exercises the public C ABI and target-writer path
+   * without requiring an embedder-created native texture. Production embedders
+   * should pass real backend handles instead. */
+  BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN = 1u << 0,
+} blink_standalone_gpu_target_flags_t;
+
+typedef enum blink_standalone_alpha_mode {
+  BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED = 0,
+  BLINK_STANDALONE_ALPHA_MODE_STRAIGHT = 1,
+} blink_standalone_alpha_mode_t;
+
+typedef enum blink_standalone_color_space {
+  BLINK_STANDALONE_COLOR_SPACE_SRGB = 0,
+  BLINK_STANDALONE_COLOR_SPACE_UNKNOWN = 1,
+} blink_standalone_color_space_t;
 
 typedef enum blink_standalone_mouse_button {
   BLINK_STANDALONE_MOUSE_BUTTON_NONE = 0,
@@ -176,6 +208,72 @@ typedef struct blink_standalone_renderer_config {
   int no_script_profile;
 } blink_standalone_renderer_config_t;
 
+typedef struct blink_standalone_gpu_target_common {
+  uint32_t backend;
+  uint32_t flags;
+  uint32_t logical_width;
+  uint32_t logical_height;
+  uint32_t physical_width;
+  uint32_t physical_height;
+  float device_scale_factor;
+  uint32_t pixel_format;
+  uint32_t alpha_mode;
+  uint32_t color_space;
+  uint64_t generation;
+} blink_standalone_gpu_target_common_t;
+
+typedef struct blink_standalone_vulkan_external_target {
+  void* vk_image;
+  uint32_t vk_format;
+  uint32_t width;
+  uint32_t height;
+  uint32_t current_layout;
+  uint32_t required_final_layout;
+  uint32_t queue_family_index;
+  void* wait_semaphore;
+  uint64_t wait_value;
+  void* signal_semaphore;
+  uint64_t signal_value;
+} blink_standalone_vulkan_external_target_t;
+
+typedef struct blink_standalone_d3d12_external_target {
+  void* d3d12_device;
+  void* d3d12_command_queue;
+  void* d3d12_resource;
+  uint32_t dxgi_format;
+  uint32_t width;
+  uint32_t height;
+  uint32_t current_state;
+  uint32_t required_final_state;
+  void* wait_fence;
+  uint64_t wait_value;
+  void* signal_fence;
+  uint64_t signal_value;
+} blink_standalone_d3d12_external_target_t;
+
+/* Explicit GPU output target. CPU raw output remains the default path and is
+ * requested only through advance_frame/get_latest_output. render_to_gpu_target
+ * never silently falls back to CPU output: unsupported backends, missing native
+ * handles, or invalid synchronization metadata return a non-OK status. Native
+ * objects are always borrowed; Blink never destroys embedder-owned
+ * device/queue/resource/image/sync handles. */
+typedef struct blink_standalone_external_gpu_target {
+  blink_standalone_gpu_target_common_t common;
+  blink_standalone_vulkan_external_target_t vulkan;
+  blink_standalone_d3d12_external_target_t d3d12;
+} blink_standalone_external_gpu_target_t;
+
+typedef struct blink_standalone_gpu_render_result {
+  uint32_t backend;
+  uint32_t status;
+  uint32_t target_written;
+  uint32_t width;
+  uint32_t height;
+  uint32_t pixel_format;
+  uint32_t dirty_rect_count;
+  uint64_t generation;
+} blink_standalone_gpu_render_result_t;
+
 /* Pointers returned in this struct are owned by the renderer and are valid
  * until the next output release, renderer mutation, frame advance, or destroy.
  * Call release_latest_output when the embedder has finished reading pixels. */
@@ -277,6 +375,13 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     double timeline_time_seconds);
 BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
     const blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gpu_backend_capabilities(
+    const blink_standalone_renderer_t* renderer,
+    uint32_t backend);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_to_gpu_target(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_external_gpu_target_t* target,
+    blink_standalone_gpu_render_result_t* result);
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(
     blink_standalone_renderer_t* renderer,

@@ -697,6 +697,52 @@ void AppendKeyboardEvent(blink_standalone_renderer* renderer,
   renderer->pending_keyboard_events.push_back(std::move(event));
 }
 
+bool StartsWith(const std::string& value, const char* prefix) {
+  return value.rfind(prefix, 0) == 0;
+}
+
+blink_standalone_status_code_t AdvanceGpuFrameForBackend(
+    blink_standalone_renderer* renderer,
+    uint32_t backend) {
+  html_css_renderer::FrameInput input;
+  input.viewport = renderer->viewport;
+  input.device_scale_factor = renderer->device_scale_factor;
+  input.html_override = renderer->html;
+  input.resource_root = renderer->resource_root;
+  input.resource_base_path = renderer->resource_base_path;
+  if (renderer->resource_provider_dirty) {
+    input.resource_provider = renderer->resource_provider;
+    input.resource_provider_flags = renderer->resource_provider_flags;
+    input.resource_provider_changed = true;
+  }
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  input.mouse_events = std::move(renderer->pending_mouse_events);
+  input.keyboard_events = std::move(renderer->pending_keyboard_events);
+  input.dom_mutations = std::move(renderer->pending_dom_mutations);
+  input.wheel = renderer->pending_wheel;
+  ClearPendingInput(renderer);
+  if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+    input.request_vulkan_gpu_frame = true;
+  } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+    input.request_d3d12_gpu_frame = true;
+  } else {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "render_to_gpu_target failed: unsupported GPU backend");
+  }
+  renderer->latest_result = renderer->runtime->AdvanceFrame(input);
+  renderer->resource_provider_dirty = false;
+  if (!renderer->latest_result.gpu_frame.shared_image_available ||
+      renderer->latest_result.gpu_frame.is_software) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+        renderer->latest_result.gpu_frame_failure.empty()
+            ? "render_to_gpu_target failed: GPU frame output was not produced"
+            : "render_to_gpu_target failed: " +
+                  renderer->latest_result.gpu_frame_failure);
+  }
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
 }  // namespace
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
@@ -849,6 +895,109 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 extern "C" BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
     const blink_standalone_renderer_t* renderer) {
   return renderer && renderer->latest_result.needs_begin_frame ? 1 : 0;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gpu_backend_capabilities(
+    const blink_standalone_renderer_t* renderer,
+    uint32_t backend) {
+  if (!renderer) {
+    return 0;
+  }
+  switch (backend) {
+    case BLINK_STANDALONE_GPU_BACKEND_CPU_RAW:
+      return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE;
+    case BLINK_STANDALONE_GPU_BACKEND_VULKAN:
+      return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
+             BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
+    case BLINK_STANDALONE_GPU_BACKEND_D3D12:
+#if defined(_WIN32)
+      return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
+             BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
+#else
+      return 0;
+#endif
+    case BLINK_STANDALONE_GPU_BACKEND_NONE:
+    default:
+      return 0;
+  }
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_to_gpu_target(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_external_gpu_target_t* target,
+    blink_standalone_gpu_render_result_t* result) {
+  if (!renderer || !renderer->runtime || !target || !result) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        "render_to_gpu_target failed: renderer, target, and result are required");
+  }
+  *result = blink_standalone_gpu_render_result_t{};
+  ClearLastError(renderer);
+
+  const uint32_t backend = target->common.backend;
+  result->backend = backend;
+  result->generation = target->common.generation;
+  result->width = target->common.physical_width;
+  result->height = target->common.physical_height;
+  result->pixel_format = target->common.pixel_format;
+  const uint32_t capabilities =
+      blink_standalone_renderer_gpu_backend_capabilities(renderer, backend);
+  if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0) {
+    result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+                        "render_to_gpu_target failed: requested GPU backend is unavailable");
+  }
+  if ((target->common.flags &
+       BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN) == 0) {
+    result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+        "render_to_gpu_target failed: external native target handles are not "
+        "accepted by this experimental build; use the internal stand-in smoke "
+        "or wait for embedder handle adoption");
+  }
+
+  blink_standalone_status_code_t status =
+      AdvanceGpuFrameForBackend(renderer, backend);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    result->status = status;
+    return status;
+  }
+
+  std::string smoke_result;
+  if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+    smoke_result = renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
+  } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+    smoke_result =
+        renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
+  } else {
+    result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+                        "render_to_gpu_target failed: backend is not a GPU target backend");
+  }
+
+  if (!StartsWith(smoke_result, "gpu_borrowed_") ||
+      smoke_result.find(": ok") == std::string::npos) {
+    result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+        smoke_result.empty()
+            ? "render_to_gpu_target failed: GPU target writer returned no result"
+            : smoke_result);
+  }
+  result->status = BLINK_STANDALONE_STATUS_OK;
+  result->target_written = 1;
+  if (result->width == 0) {
+    result->width = static_cast<uint32_t>(
+        renderer->latest_result.viz_display_output_size.width);
+  }
+  if (result->height == 0) {
+    result->height = static_cast<uint32_t>(
+        renderer->latest_result.viz_display_output_size.height);
+  }
+  if (result->pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_NONE) {
+    result->pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
+  }
+  return BLINK_STANDALONE_STATUS_OK;
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(

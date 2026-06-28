@@ -520,6 +520,8 @@ const char* CApiStatusName(blink_standalone_status_code_t status) {
       return "render_failed";
     case BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED:
       return "no_script_rejected";
+    case BLINK_STANDALONE_STATUS_UNSUPPORTED:
+      return "unsupported";
   }
   return "unknown";
 }

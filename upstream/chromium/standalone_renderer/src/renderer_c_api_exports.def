@@ -6,6 +6,8 @@ EXPORTS
   blink_standalone_renderer_set_viewport
   blink_standalone_renderer_advance_frame
   blink_standalone_renderer_needs_begin_frame
+  blink_standalone_renderer_gpu_backend_capabilities
+  blink_standalone_renderer_render_to_gpu_target
   blink_standalone_renderer_mouse_move
   blink_standalone_renderer_mouse_down
   blink_standalone_renderer_mouse_up

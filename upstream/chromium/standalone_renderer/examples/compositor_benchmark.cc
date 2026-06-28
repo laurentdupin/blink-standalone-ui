@@ -184,6 +184,8 @@ void PrintUsage() {
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
       "[--gpu-borrowed-d3d12-render-copy-smoke] "
+      "[--c-api-vulkan-external-target-smoke] "
+      "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
@@ -513,6 +515,103 @@ int RunCApiSmoke() {
       output.dirty_rect_count, hit_count, pixel_stats.nonwhite_colored,
       pixel_stats.blue_2878d8);
   return 0;
+}
+
+int RunCApiExternalGpuTargetSmoke(uint32_t backend, const char* label) {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 128;
+  config.height = 64;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr, "%s: create failed status=%d\n", label, status);
+    return 1;
+  }
+
+  const uint32_t capabilities =
+      blink_standalone_renderer_gpu_backend_capabilities(renderer, backend);
+  if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0 ||
+      (capabilities &
+       BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN) == 0) {
+    std::fprintf(stderr,
+                 "%s: blocked backend unavailable capabilities=%u\n", label,
+                 capabilities);
+    blink_standalone_renderer_destroy(renderer);
+    return 0;
+  }
+
+  const char* html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      "</style><div id='box'></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: set document failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_external_gpu_target_t target = {};
+  target.common.backend = backend;
+  target.common.flags = BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN;
+  target.common.logical_width = 128;
+  target.common.logical_height = 64;
+  target.common.physical_width = 128;
+  target.common.physical_height = 64;
+  target.common.device_scale_factor = 1.0f;
+  target.common.pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
+  target.common.alpha_mode = BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
+  target.common.color_space = BLINK_STANDALONE_COLOR_SPACE_SRGB;
+  target.common.generation = 1;
+  if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+    target.vulkan.width = 128;
+    target.vulkan.height = 64;
+  } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+    target.d3d12.width = 128;
+    target.d3d12.height = 64;
+  }
+
+  blink_standalone_gpu_render_result_t result = {};
+  status =
+      blink_standalone_renderer_render_to_gpu_target(renderer, &target, &result);
+  if (status != BLINK_STANDALONE_STATUS_OK || result.target_written == 0 ||
+      result.backend != backend || result.width != 128 || result.height != 64) {
+    std::fprintf(stderr,
+                 "%s: failed status=%d result_status=%u backend=%u "
+                 "written=%u size=%ux%u error=%s\n",
+                 label, status, result.status, result.backend,
+                 result.target_written, result.width, result.height,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  std::printf(
+      "%s: ok backend=%u capabilities=%u target_written=%u size=%ux%u "
+      "format=%u generation=%llu\n",
+      label, result.backend, capabilities, result.target_written, result.width,
+      result.height, result.pixel_format,
+      static_cast<unsigned long long>(result.generation));
+  blink_standalone_renderer_destroy(renderer);
+  return 0;
+}
+
+int RunCApiVulkanExternalTargetSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_smoke");
+}
+
+int RunCApiD3D12ExternalTargetSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_smoke");
 }
 
 std::vector<uint8_t> MakeSolidBmp(int width,
@@ -7474,6 +7573,8 @@ int main(int argc, char** argv) {
   bool gpu_borrowed_d3d12_render_copy_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
   bool gpu_vulkan_ganesh_context_smoke = false;
+  bool c_api_vulkan_external_target_smoke = false;
+  bool c_api_d3d12_external_target_smoke = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_resource_provider_smoke = false;
@@ -7620,6 +7721,10 @@ int main(int argc, char** argv) {
       gpu_external_vulkan_device_smoke = true;
     } else if (arg == "--gpu-vulkan-ganesh-context-smoke") {
       gpu_vulkan_ganesh_context_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-smoke") {
+      c_api_vulkan_external_target_smoke = true;
+    } else if (arg == "--c-api-d3d12-external-target-smoke") {
+      c_api_d3d12_external_target_smoke = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
@@ -7819,6 +7924,14 @@ int main(int argc, char** argv) {
 
   if (gpu_vulkan_ganesh_context_smoke) {
     return RunGpuVulkanGaneshContextSmoke();
+  }
+
+  if (c_api_vulkan_external_target_smoke) {
+    return RunCApiVulkanExternalTargetSmoke();
+  }
+
+  if (c_api_d3d12_external_target_smoke) {
+    return RunCApiD3D12ExternalTargetSmoke();
   }
 
   if (c_api_smoke) {
