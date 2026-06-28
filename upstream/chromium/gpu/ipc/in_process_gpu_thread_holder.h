@@ -15,12 +15,22 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/gpu_in_process_thread_service.h"
+#include "gpu/vulkan/buildflags.h"
 
 namespace gpu {
 class CommandBufferTaskExecutor;
 class Scheduler;
 class SharedImageManager;
 class SyncPointManager;
+class VulkanImplementation;
+
+}  // namespace gpu
+
+namespace viz {
+class VulkanInProcessContextProvider;
+}  // namespace viz
+
+namespace gpu {
 
 // Starts a GPU thread and task executor that runs tasks on the GPU thread. This
 // isn't a full GPU thread implementation and should only be used in tests. A
@@ -72,6 +82,11 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<SharedContextState> context_state_;
+#if BUILDFLAG(ENABLE_VULKAN)
+  std::unique_ptr<VulkanImplementation> vulkan_implementation_;
+  scoped_refptr<viz::VulkanInProcessContextProvider>
+      vulkan_context_provider_;
+#endif
 
   std::unique_ptr<SyncPointManager> sync_point_manager_;
   std::unique_ptr<Scheduler> scheduler_;

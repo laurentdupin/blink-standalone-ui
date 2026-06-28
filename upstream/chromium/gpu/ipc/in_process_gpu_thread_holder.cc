@@ -21,9 +21,16 @@
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_info_collector.h"
 #include "gpu/config/gpu_util.h"
+#include "gpu/vulkan/buildflags.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
+
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
+#include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_implementation.h"
+#endif
 
 namespace gpu {
 
@@ -185,9 +192,42 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
 
   TraceStandaloneGpuThreadHolderStage(
       "InitializeOnGpuThread before shared context state");
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (gpu_preferences_.gr_context_type == GrContextType::kVulkan) {
+    TraceStandaloneGpuThreadHolderStage(
+        "InitializeOnGpuThread before Vulkan implementation");
+    vulkan_implementation_ = CreateVulkanImplementation(false);
+    if (!vulkan_implementation_ ||
+        !vulkan_implementation_->InitializeVulkanInstance(true)) {
+      TraceStandaloneGpuThreadHolderStage(
+          "InitializeOnGpuThread failed Vulkan implementation");
+      vulkan_implementation_.reset();
+      completion->Signal();
+      return;
+    }
+    TraceStandaloneGpuThreadHolderStage(
+        "InitializeOnGpuThread before Vulkan context provider");
+    vulkan_context_provider_ =
+        viz::VulkanInProcessContextProvider::Create(
+            vulkan_implementation_.get());
+    if (!vulkan_context_provider_) {
+      TraceStandaloneGpuThreadHolderStage(
+          "InitializeOnGpuThread failed Vulkan context provider");
+      vulkan_implementation_.reset();
+      completion->Signal();
+      return;
+    }
+  }
+#endif
   context_state_ = base::MakeRefCounted<SharedContextState>(
       share_group_, surface_, context_, use_virtualized_gl_context,
-      base::DoNothing(), gpu_preferences_.gr_context_type);
+      base::DoNothing(), gpu_preferences_.gr_context_type,
+#if BUILDFLAG(ENABLE_VULKAN)
+      vulkan_context_provider_.get()
+#else
+      nullptr
+#endif
+  );
   TraceStandaloneGpuThreadHolderStage("InitializeOnGpuThread before InitializeGL");
   TraceStandaloneGpuThreadHolderPointer("workarounds before InitializeGL",
                                         &gpu_driver_bug_workarounds_);
@@ -232,6 +272,13 @@ void InProcessGpuThreadHolder::DeleteOnGpuThread() {
   shared_image_manager_.reset();
 
   context_state_.reset();
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (vulkan_context_provider_) {
+    vulkan_context_provider_->Destroy();
+    vulkan_context_provider_.reset();
+  }
+  vulkan_implementation_.reset();
+#endif
   context_.reset();
   surface_.reset();
   share_group_.reset();

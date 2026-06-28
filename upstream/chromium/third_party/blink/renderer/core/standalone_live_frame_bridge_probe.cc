@@ -1284,218 +1284,6 @@ StandaloneBorrowedVkImageBacking::ProduceSkiaGanesh(
       context_state_->gr_context(), manager, this, tracker);
 }
 
-class StandaloneOffscreenVulkanGaneshContext {
- public:
-  StandaloneOffscreenVulkanGaneshContext() = default;
-
-  StandaloneOffscreenVulkanGaneshContext(
-      const StandaloneOffscreenVulkanGaneshContext&) = delete;
-  StandaloneOffscreenVulkanGaneshContext& operator=(
-      const StandaloneOffscreenVulkanGaneshContext&) = delete;
-
-  ~StandaloneOffscreenVulkanGaneshContext() { Reset(); }
-
-  bool EnsureInitialized(std::string* failure_reason) {
-    if (initialized_) {
-      return true;
-    }
-    if (failed_) {
-      SetFailure(failure_reason, failure_reason_);
-      return false;
-    }
-
-    vulkan_implementation_ = gpu::CreateVulkanImplementation(false);
-    if (!vulkan_implementation_) {
-      return Fail(failure_reason,
-                  "offscreen Vulkan output failed to create implementation");
-    }
-    if (!vulkan_implementation_->InitializeVulkanInstance(true)) {
-      return Fail(failure_reason,
-                  "offscreen Vulkan output failed to initialize instance");
-    }
-    vulkan_context_provider_ =
-        viz::VulkanInProcessContextProvider::Create(
-            vulkan_implementation_.get());
-    if (!vulkan_context_provider_) {
-      return Fail(failure_reason,
-                  "offscreen Vulkan output failed to create context provider");
-    }
-
-    if (gl::GetGLImplementation() == gl::kGLImplementationNone) {
-      if (!gl::init::InitializeStaticGLBindingsOneOff()) {
-        return Fail(failure_reason,
-                    "offscreen Vulkan output failed to initialize GL bindings");
-      }
-      if (gl::GetGLImplementation() != gl::kGLImplementationDisabled &&
-          !gl::init::InitializeGLOneOffPlatformImplementation(
-              /*disable_gl_drawing=*/false, /*init_extensions=*/true,
-              gl::GpuPreference::kDefault)) {
-        return Fail(failure_reason,
-                    "offscreen Vulkan output failed to initialize GL platform");
-      }
-    }
-
-    share_group_ = base::MakeRefCounted<gl::GLShareGroup>();
-    gl_surface_ =
-        gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(),
-                                           gfx::Size());
-    if (!gl_surface_) {
-      return Fail(failure_reason,
-                  "offscreen Vulkan output failed to create GL surface");
-    }
-
-    gpu::GpuPreferences gpu_preferences;
-    gpu_preferences.gr_context_type = gpu::GrContextType::kVulkan;
-    gl::GLContextAttribs attribs =
-        gpu::gles2::GenerateGLContextAttribsForCompositor(
-            gpu_preferences.use_passthrough_cmd_decoder);
-    gl_context_ =
-        gl::init::CreateGLContext(share_group_.get(), gl_surface_.get(),
-                                  attribs);
-    if (!gl_context_ || !gl_context_->MakeCurrent(gl_surface_.get())) {
-      return Fail(failure_reason,
-                  "offscreen Vulkan output failed to create GL context");
-    }
-
-    gpu::GpuFeatureInfo gpu_feature_info;
-    gpu::GpuDriverBugWorkarounds workarounds(
-        gpu_feature_info.enabled_gpu_driver_bug_workarounds);
-    context_state_ = base::MakeRefCounted<gpu::SharedContextState>(
-        share_group_, gl_surface_, gl_context_,
-        /*use_virtualized_gl_contexts=*/false, base::DoNothing(),
-        gpu::GrContextType::kVulkan, vulkan_context_provider_.get());
-    if (!context_state_->InitializeSkia(
-            gpu_preferences, workarounds, /*gr_cache=*/nullptr,
-            /*persistent_cache=*/nullptr,
-            /*use_shader_cache_shm_count=*/nullptr,
-            /*progress_reporter=*/nullptr) ||
-        !context_state_->gr_context() ||
-        context_state_->vk_context_provider() !=
-            vulkan_context_provider_.get() ||
-        !context_state_->GrContextIsVulkan()) {
-      return Fail(failure_reason,
-                  "offscreen Vulkan output failed to initialize Ganesh");
-    }
-
-    if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
-      owning_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
-    }
-    initialized_ = true;
-    return true;
-  }
-
-  scoped_refptr<gpu::SharedContextState> context_state() const {
-    return context_state_;
-  }
-
-  viz::VulkanContextProvider* vulkan_context_provider() const {
-    return vulkan_context_provider_.get();
-  }
-
-  bool initialized() const { return initialized_; }
-
-  bool RunsOnOwningSequenceForTesting() const {
-    return !owning_task_runner_ ||
-           owning_task_runner_->RunsTasksInCurrentSequence();
-  }
-
-  base::SingleThreadTaskRunner* owning_task_runner_for_testing() const {
-    return owning_task_runner_.get();
-  }
-
- private:
-  struct Resources {
-    std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation;
-    scoped_refptr<viz::VulkanInProcessContextProvider>
-        vulkan_context_provider;
-    scoped_refptr<gl::GLShareGroup> share_group;
-    scoped_refptr<gl::GLSurface> gl_surface;
-    scoped_refptr<gl::GLContext> gl_context;
-    scoped_refptr<gpu::SharedContextState> context_state;
-  };
-
-  void Reset() {
-    Resources resources;
-    resources.vulkan_implementation = std::move(vulkan_implementation_);
-    resources.vulkan_context_provider = std::move(vulkan_context_provider_);
-    resources.share_group = std::move(share_group_);
-    resources.gl_surface = std::move(gl_surface_);
-    resources.gl_context = std::move(gl_context_);
-    resources.context_state = std::move(context_state_);
-    auto owning_task_runner = std::move(owning_task_runner_);
-    initialized_ = false;
-
-    if (!resources.vulkan_implementation &&
-        !resources.vulkan_context_provider && !resources.share_group &&
-        !resources.gl_surface && !resources.gl_context &&
-        !resources.context_state) {
-      return;
-    }
-
-    if (owning_task_runner &&
-        !owning_task_runner->RunsTasksInCurrentSequence()) {
-      base::WaitableEvent destroyed(
-          base::WaitableEvent::ResetPolicy::MANUAL,
-          base::WaitableEvent::InitialState::NOT_SIGNALED);
-      owning_task_runner->PostTask(
-          FROM_HERE,
-          base::BindOnce(
-              [](Resources resources, base::WaitableEvent* destroyed) {
-                DestroyResources(std::move(resources));
-                destroyed->Signal();
-              },
-              std::move(resources), &destroyed));
-      destroyed.Wait();
-      return;
-    }
-
-    DestroyResources(std::move(resources));
-  }
-
-  static void DestroyResources(Resources resources) {
-    resources.context_state.reset();
-    if (resources.gl_context && resources.gl_surface &&
-        resources.gl_context->IsCurrent(resources.gl_surface.get())) {
-      resources.gl_context->ReleaseCurrent(resources.gl_surface.get());
-    }
-    resources.gl_context.reset();
-    resources.gl_surface.reset();
-    resources.share_group.reset();
-    if (resources.vulkan_context_provider) {
-      resources.vulkan_context_provider->Destroy();
-      resources.vulkan_context_provider.reset();
-    }
-    resources.vulkan_implementation.reset();
-  }
-
-  bool Fail(std::string* failure_reason, const char* reason) {
-    failed_ = true;
-    failure_reason_ = reason ? reason : "";
-    SetFailure(failure_reason, failure_reason_);
-    Reset();
-    return false;
-  }
-
-  static void SetFailure(std::string* failure_reason,
-                         const std::string& reason) {
-    if (failure_reason && failure_reason->empty()) {
-      *failure_reason = reason;
-    }
-  }
-
-  bool initialized_ = false;
-  bool failed_ = false;
-  std::string failure_reason_;
-  std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation_;
-  scoped_refptr<viz::VulkanInProcessContextProvider>
-      vulkan_context_provider_;
-  scoped_refptr<gl::GLShareGroup> share_group_;
-  scoped_refptr<gl::GLSurface> gl_surface_;
-  scoped_refptr<gl::GLContext> gl_context_;
-  scoped_refptr<gpu::SharedContextState> context_state_;
-  scoped_refptr<base::SingleThreadTaskRunner> owning_task_runner_;
-};
-
 class StandaloneSkiaOutputSurfaceDependency final
     : public viz::SkiaOutputSurfaceDependency {
  public:
@@ -1551,15 +1339,20 @@ class StandaloneSkiaOutputSurfaceDependency final
 
   scoped_refptr<gpu::SharedContextState> GetSharedContextState() override {
     if (use_vulkan_offscreen_ && IsOffscreen()) {
-      if (!vulkan_context_.EnsureInitialized(failure_reason_)) {
+      scoped_refptr<gpu::SharedContextState> context_state =
+          gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
+                             : nullptr;
+      if (!context_state || !context_state->GrContextIsVulkan() ||
+          !context_state->vk_context_provider()) {
+        SetFailure(
+            "offscreen Vulkan Display requires a Vulkan in-process GPU "
+            "SharedContextState");
         return nullptr;
       }
       if (shared_context_state_is_vulkan_) {
-        *shared_context_state_is_vulkan_ =
-            vulkan_context_.context_state() &&
-            vulkan_context_.context_state()->GrContextIsVulkan();
+        *shared_context_state_is_vulkan_ = context_state->GrContextIsVulkan();
       }
-      return vulkan_context_.context_state();
+      return context_state;
     }
     return gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
                               : nullptr;
@@ -1569,14 +1362,20 @@ class StandaloneSkiaOutputSurfaceDependency final
 
   viz::VulkanContextProvider* GetVulkanContextProvider() override {
     if (use_vulkan_offscreen_ && IsOffscreen()) {
-      if (!vulkan_context_.EnsureInitialized(failure_reason_)) {
+      scoped_refptr<gpu::SharedContextState> context_state =
+          gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
+                             : nullptr;
+      if (!context_state || !context_state->vk_context_provider()) {
+        SetFailure(
+            "offscreen Vulkan Display requires a Vulkan context provider from "
+            "the in-process GPU holder");
         return nullptr;
       }
       if (vulkan_context_provider_available_) {
         *vulkan_context_provider_available_ =
-            vulkan_context_.vulkan_context_provider() != nullptr;
+            context_state->vk_context_provider() != nullptr;
       }
-      return vulkan_context_.vulkan_context_provider();
+      return context_state->vk_context_provider();
     }
     return nullptr;
   }
@@ -1654,33 +1453,42 @@ class StandaloneSkiaOutputSurfaceDependency final
 
   bool IsUsingCompositorGpuThread() override { return false; }
 
+  scoped_refptr<base::SingleThreadTaskRunner>
+  GpuTaskRunnerIfOffSequenceForTesting() const {
+    if (!gpu_thread_holder_) {
+      return nullptr;
+    }
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+        gpu_thread_holder_->task_runner();
+    if (!task_runner || task_runner->RunsTasksInCurrentSequence()) {
+      return nullptr;
+    }
+    return task_runner;
+  }
+
   std::string RunBorrowedVkImageBackingSmokeForTesting() {
-    if (vulkan_context_.initialized() &&
-        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
-      base::SingleThreadTaskRunner* task_runner =
-          vulkan_context_.owning_task_runner_for_testing();
-      if (task_runner) {
-        base::WaitableEvent completed(
-            base::WaitableEvent::ResetPolicy::MANUAL,
-            base::WaitableEvent::InitialState::NOT_SIGNALED);
-        std::string result;
-        const bool posted = task_runner->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                [](StandaloneSkiaOutputSurfaceDependency* self,
-                   std::string* result, base::WaitableEvent* completed) {
-                  *result =
-                      self->RunBorrowedVkImageBackingSmokeOnCurrentSequence();
-                  completed->Signal();
-                },
-                base::Unretained(this), &result, &completed));
-        if (!posted) {
-          return "gpu_borrowed_vkimage_backing_smoke: failed failure=failed "
-                 "to post borrowed VkImage smoke to Vulkan context sequence";
-        }
-        completed.Wait();
-        return result;
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result =
+                    self->RunBorrowedVkImageBackingSmokeOnCurrentSequence();
+                completed->Signal();
+              },
+              base::Unretained(this), &result, &completed));
+      if (!posted) {
+        return "gpu_borrowed_vkimage_backing_smoke: failed failure=failed "
+               "to post borrowed VkImage smoke to Vulkan context sequence";
       }
+      completed.Wait();
+      return result;
     }
     return RunBorrowedVkImageBackingSmokeOnCurrentSequence();
   }
@@ -1850,36 +1658,32 @@ class StandaloneSkiaOutputSurfaceDependency final
 
   std::string RunBorrowedVkImageRenderCopySmokeForTesting(
       scoped_refptr<gpu::ClientSharedImage> source_shared_image) {
-    if (vulkan_context_.initialized() &&
-        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
-      base::SingleThreadTaskRunner* task_runner =
-          vulkan_context_.owning_task_runner_for_testing();
-      if (task_runner) {
-        base::WaitableEvent completed(
-            base::WaitableEvent::ResetPolicy::MANUAL,
-            base::WaitableEvent::InitialState::NOT_SIGNALED);
-        std::string result;
-        const bool posted = task_runner->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                [](StandaloneSkiaOutputSurfaceDependency* self,
-                   scoped_refptr<gpu::ClientSharedImage> source_shared_image,
-                   std::string* result, base::WaitableEvent* completed) {
-                  *result = self
-                                ->RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
-                                    std::move(source_shared_image));
-                  completed->Signal();
-                },
-                base::Unretained(this), std::move(source_shared_image),
-                &result, &completed));
-        if (!posted) {
-          return "gpu_borrowed_vkimage_render_copy_smoke: failed "
-                 "failure=failed to post render-copy smoke to Vulkan context "
-                 "sequence";
-        }
-        completed.Wait();
-        return result;
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 scoped_refptr<gpu::ClientSharedImage> source_shared_image,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result =
+                    self->RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
+                        std::move(source_shared_image));
+                completed->Signal();
+              },
+              base::Unretained(this), std::move(source_shared_image), &result,
+              &completed));
+      if (!posted) {
+        return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+               "failure=failed to post render-copy smoke to Vulkan context "
+               "sequence";
       }
+      completed.Wait();
+      return result;
     }
     return RunBorrowedVkImageRenderCopySmokeOnCurrentSequence(
         std::move(source_shared_image));
@@ -1887,35 +1691,30 @@ class StandaloneSkiaOutputSurfaceDependency final
 
   std::string RunGpuOutputVulkanPixelSmokeForTesting(
       scoped_refptr<gpu::ClientSharedImage> source_shared_image) {
-    if (vulkan_context_.initialized() &&
-        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
-      base::SingleThreadTaskRunner* task_runner =
-          vulkan_context_.owning_task_runner_for_testing();
-      if (task_runner) {
-        base::WaitableEvent completed(
-            base::WaitableEvent::ResetPolicy::MANUAL,
-            base::WaitableEvent::InitialState::NOT_SIGNALED);
-        std::string result;
-        const bool posted = task_runner->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                [](StandaloneSkiaOutputSurfaceDependency* self,
-                   scoped_refptr<gpu::ClientSharedImage> source_shared_image,
-                   std::string* result, base::WaitableEvent* completed) {
-                  *result =
-                      self->RunGpuOutputVulkanPixelSmokeOnCurrentSequence(
-                          std::move(source_shared_image));
-                  completed->Signal();
-                },
-                base::Unretained(this), std::move(source_shared_image),
-                &result, &completed));
-        if (!posted) {
-          return "gpu_output_vulkan_pixel_smoke: failed failure=failed to post "
-                 "pixel smoke to Vulkan context sequence";
-        }
-        completed.Wait();
-        return result;
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 scoped_refptr<gpu::ClientSharedImage> source_shared_image,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result = self->RunGpuOutputVulkanPixelSmokeOnCurrentSequence(
+                    std::move(source_shared_image));
+                completed->Signal();
+              },
+              base::Unretained(this), std::move(source_shared_image), &result,
+              &completed));
+      if (!posted) {
+        return "gpu_output_vulkan_pixel_smoke: failed failure=failed to post "
+               "pixel smoke to Vulkan context sequence";
       }
+      completed.Wait();
+      return result;
     }
     return RunGpuOutputVulkanPixelSmokeOnCurrentSequence(
         std::move(source_shared_image));
@@ -2269,102 +2068,91 @@ class StandaloneSkiaOutputSurfaceDependency final
   std::string PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
       const gfx::Size& target_size,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
-    if (vulkan_context_.initialized() &&
-        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
-      base::SingleThreadTaskRunner* task_runner =
-          vulkan_context_.owning_task_runner_for_testing();
-      if (task_runner) {
-        base::WaitableEvent completed(
-            base::WaitableEvent::ResetPolicy::MANUAL,
-            base::WaitableEvent::InitialState::NOT_SIGNALED);
-        std::string result;
-        scoped_refptr<gpu::ClientSharedImage> shared_image;
-        const bool posted = task_runner->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                [](StandaloneSkiaOutputSurfaceDependency* self,
-                   const gfx::Size& target_size,
-                   scoped_refptr<gpu::ClientSharedImage>* shared_image,
-                   std::string* result, base::WaitableEvent* completed) {
-                  *result = self
-                                ->PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
-                                    target_size, shared_image);
-                  completed->Signal();
-                },
-                base::Unretained(this), target_size, &shared_image, &result,
-                &completed));
-        if (!posted) {
-          return "gpu_borrowed_vkimage_render_copy_smoke: failed "
-                 "failure=failed to post borrowed blit target setup to "
-                 "Vulkan context sequence path=viz_blit_request "
-                 "viz_blit_request=1";
-        }
-        completed.Wait();
-        if (result.empty() && target_shared_image) {
-          *target_shared_image = std::move(shared_image);
-        }
-        return result;
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      scoped_refptr<gpu::ClientSharedImage> shared_image;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 const gfx::Size& target_size,
+                 scoped_refptr<gpu::ClientSharedImage>* shared_image,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result =
+                    self
+                        ->PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
+                            target_size, shared_image);
+                completed->Signal();
+              },
+              base::Unretained(this), target_size, &shared_image, &result,
+              &completed));
+      if (!posted) {
+        return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+               "failure=failed to post borrowed blit target setup to "
+               "Vulkan context sequence path=viz_blit_request "
+               "viz_blit_request=1";
       }
+      completed.Wait();
+      if (result.empty() && target_shared_image) {
+        *target_shared_image = std::move(shared_image);
+      }
+      return result;
     }
     return PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
         target_size, target_shared_image);
   }
 
   std::string VerifyBorrowedVkImageRenderCopyBlitTargetForTesting() {
-    if (vulkan_context_.initialized() &&
-        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
-      base::SingleThreadTaskRunner* task_runner =
-          vulkan_context_.owning_task_runner_for_testing();
-      if (task_runner) {
-        base::WaitableEvent completed(
-            base::WaitableEvent::ResetPolicy::MANUAL,
-            base::WaitableEvent::InitialState::NOT_SIGNALED);
-        std::string result;
-        const bool posted = task_runner->PostTask(
-            FROM_HERE,
-            base::BindOnce(
-                [](StandaloneSkiaOutputSurfaceDependency* self,
-                   std::string* result, base::WaitableEvent* completed) {
-                  *result = self
-                                ->VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
-                  completed->Signal();
-                },
-                base::Unretained(this), &result, &completed));
-        if (!posted) {
-          return "gpu_borrowed_vkimage_render_copy_smoke: failed "
-                 "failure=failed to post borrowed blit target verification to "
-                 "Vulkan context sequence path=viz_blit_request "
-                 "viz_blit_request=1";
-        }
-        completed.Wait();
-        return result;
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result = self
+                              ->VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+                completed->Signal();
+              },
+              base::Unretained(this), &result, &completed));
+      if (!posted) {
+        return "gpu_borrowed_vkimage_render_copy_smoke: failed "
+               "failure=failed to post borrowed blit target verification to "
+               "Vulkan context sequence path=viz_blit_request "
+               "viz_blit_request=1";
       }
+      completed.Wait();
+      return result;
     }
     return VerifyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
   }
 
   void DiscardBorrowedVkImageRenderCopyBlitTargetForTesting() {
-    if (vulkan_context_.initialized() &&
-        !vulkan_context_.RunsOnOwningSequenceForTesting()) {
-      base::SingleThreadTaskRunner* task_runner =
-          vulkan_context_.owning_task_runner_for_testing();
-      if (task_runner) {
-        base::WaitableEvent completed(
-            base::WaitableEvent::ResetPolicy::MANUAL,
-            base::WaitableEvent::InitialState::NOT_SIGNALED);
-        if (task_runner->PostTask(
-                FROM_HERE,
-                base::BindOnce(
-                    [](StandaloneSkiaOutputSurfaceDependency* self,
-                       base::WaitableEvent* completed) {
-                      self->DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
-                      completed->Signal();
-                    },
-                    base::Unretained(this), &completed))) {
-          completed.Wait();
-        }
-        return;
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      if (task_runner->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  [](StandaloneSkiaOutputSurfaceDependency* self,
+                     base::WaitableEvent* completed) {
+                    self->DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+                    completed->Signal();
+                  },
+                  base::Unretained(this), &completed))) {
+        completed.Wait();
       }
+      return;
     }
     DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
   }
@@ -2639,7 +2427,6 @@ class StandaloneSkiaOutputSurfaceDependency final
   gpu::GpuPreferences vulkan_gpu_preferences_;
   raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
   raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
-  StandaloneOffscreenVulkanGaneshContext vulkan_context_;
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
   std::unique_ptr<BorrowedVkImageRenderCopyBlitTarget>
       borrowed_blit_target_;
@@ -4126,7 +3913,8 @@ class StandaloneCcLayerHost final
     if (!gpu_thread_holder_) {
       gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
       gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
-          gpu::GrContextType::kGL;
+          use_vulkan_offscreen_output_ ? gpu::GrContextType::kVulkan
+                                       : gpu::GrContextType::kGL;
     }
     TraceLiveFrameProbeStage("cc host CreateFrameSink after gpu holder");
     TraceLiveFrameProbeStage("cc host CreateFrameSink before context providers");
