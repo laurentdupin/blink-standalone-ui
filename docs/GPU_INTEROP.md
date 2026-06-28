@@ -565,9 +565,48 @@ checkpoint should first add an internal Graphite/Dawn bootstrap for standalone:
    `ID3D12Resource`/DXGI shared-handle target proof with explicit resource
    states and fence wait/signal ownership.
 
-Until those pieces exist, same-device D3D12 is design-only. The expected future
-shape is an adapter around an externally supplied `ID3D12Device*` and
-`ID3D12CommandQueue*`, a copy or render path into a supplied
+The first implementation retry after the Vulkan pixel-bearing checkpoint added
+`--gpu-output-d3d12-pixel-smoke` as an explicit diagnostic gate. In the current
+generated standalone checkout it reports blocked before runtime because:
+
+- `generated/blink_live/gen/skia/buildflags.h` sets `SKIA_USE_DAWN` to `0`.
+- `generated/blink_live/gen/ui/gl/buildflags.h` sets `USE_DAWN` to `0`.
+- `third_party/dawn/include` is present, but `third_party/dawn/src` is not
+  present in this checkout and the active build tree contains no Dawn native
+  libraries.
+
+The next implementation retry proved the first part of that blocker is
+recoverable. `standalone_renderer/tools/build_dawn_d3d12_native.py` fetches the
+Skia-pinned Dawn revision into the build tree, syncs Dawn's own native
+dependencies with Dawn's depot-tools-free fetch helper, configures Dawn with
+D3D12 enabled and the other native backends disabled, and builds:
+
+- `webgpu_headers_gen`
+- `dawn_proc`
+- `dawn_native`
+
+That produces generated Dawn/WebGPU headers plus `dawn_native.lib` and
+`dawn_proc.lib` under the selected build directory. The experimental
+`BLINK_STANDALONE_DAWN_D3D12` CMake option can consume those headers and
+libraries for the benchmark target. With that option enabled,
+`--gpu-output-d3d12-pixel-smoke` now proves a real Dawn D3D12 GPU path by
+creating a D3D12 adapter/device, clearing an `RGBA8Unorm` texture, copying it to
+a readback buffer, and validating deterministic pixels. This is a D3D12 texture
+pixel proof, not yet a standalone HTML/Viz output proof.
+
+The next code task is to move from the Dawn texture proof to Chromium's
+Graphite/Viz path: enable real `USE_DAWN` and `SKIA_USE_DAWN` buildflags, wire
+`dawn_context_provider.cc`/`dawn_instance.cc`/`dawn_platform.cc` and the
+Graphite/Dawn SharedImage files, and make
+`DawnContextProvider::CreateWithBackend(wgpu::BackendType::D3D12, ...)`
+initialize from the standalone runtime. Only after that provider exists can
+`StandaloneSkiaOutputSurfaceDependency::GetDawnContextProvider()` return a real
+provider and a D3D12 `SharedContextState`/Viz output smoke attempt rendered HTML
+pixels.
+
+Until those pieces exist, same-device D3D12 external targets are design-only.
+The expected future shape is an adapter around an externally supplied
+`ID3D12Device*` and `ID3D12CommandQueue*`, a copy or render path into a supplied
 `ID3D12Resource*`, explicit resource-state transitions, and fence wait/signal
 ownership.
 
@@ -605,8 +644,8 @@ Until then, adding C ABI entry points would only create a dead API surface.
   register a raw embedder `VkImage` as a writable SharedImage destination.
 - Embedder-owned Vulkan `VkImage` targeting is blocked pending the runtime
   ownership, same-device, copy, and synchronization wiring above.
-- D3D12 GPU target support is design-only. The current blocker is not just a
-  missing public ABI: standalone compiles out the Graphite/Dawn paths, returns
-  no Dawn provider to Viz, and does not CMake-wire the Dawn/D3D SharedImage
-  implementation files needed for a D3D12 `SharedContextState` or CopyOutput
-  smoke.
+- D3D12 GPU target support is still design-only. The current blocker is not a
+  missing public ABI: standalone has a Dawn D3D12 texture pixel proof, but still
+  does not wire a Dawn provider into Viz and does not CMake-wire the
+  Graphite/Dawn SharedImage implementation files needed for a D3D12
+  `SharedContextState` or CopyOutput smoke.

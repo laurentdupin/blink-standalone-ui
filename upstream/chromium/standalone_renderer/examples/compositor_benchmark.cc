@@ -7,8 +7,10 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <algorithm>
 #include <cerrno>
+#include <cstdint>
 #include <cstdlib>
 #include <vector>
 
@@ -22,6 +24,7 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/trace_event/trace_event_impl.h"
+#include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -39,16 +42,24 @@
 #include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "html_css_renderer/typeface_resource_registry.h"
+#include "skia/buildflags.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/buildflags.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/gl_switches.h"
+
+#if defined(BLINK_STANDALONE_HAVE_DAWN_D3D12)
+#include "dawn/dawn_proc.h"
+#include "dawn/native/DawnNative.h"
+#include "webgpu/webgpu_cpp.h"
+#endif
 
 extern "C" const char*
 StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
@@ -166,6 +177,7 @@ void PrintUsage() {
       "[--gpu-output-smoke] "
       "[--gpu-output-vulkan-smoke] "
       "[--gpu-output-vulkan-pixel-smoke] "
+      "[--gpu-output-d3d12-pixel-smoke] "
       "[--gpu-vulkan-ganesh-context-smoke] "
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
@@ -6136,6 +6148,224 @@ int RunGpuOutputVulkanPixelSmoke() {
   return 0;
 }
 
+int RunGpuOutputD3D12PixelSmoke() {
+#if !BUILDFLAG(IS_WIN)
+  std::printf(
+      "gpu_output_d3d12_pixel_smoke: blocked platform=non_windows "
+      "native_d3d12=0 failure=native D3D12 is a Windows backend; Linux and "
+      "other platforms need Vulkan or a separately proven translation layer\n");
+  return 0;
+#elif defined(BLINK_STANDALONE_HAVE_DAWN_D3D12)
+  constexpr uint32_t kWidth = 16;
+  constexpr uint32_t kHeight = 16;
+  constexpr uint32_t kBytesPerPixel = 4;
+  constexpr uint32_t kReadbackBytesPerRow = 256;
+  constexpr uint32_t kExpectedR = 0x12;
+  constexpr uint32_t kExpectedG = 0x34;
+  constexpr uint32_t kExpectedB = 0x56;
+  constexpr uint32_t kExpectedA = 0xff;
+
+  DawnProcTable procs = dawn::native::GetProcs();
+  dawnProcSetProcs(&procs);
+
+  dawn::native::DawnInstanceDescriptor native_desc;
+  wgpu::InstanceDescriptor instance_desc;
+  instance_desc.nextInChain = &native_desc;
+  dawn::native::Instance instance(&instance_desc);
+  wgpu::Instance wgpu_instance(instance.Get());
+
+  wgpu::RequestAdapterOptions adapter_options;
+  adapter_options.backendType = wgpu::BackendType::D3D12;
+  adapter_options.powerPreference = wgpu::PowerPreference::HighPerformance;
+
+  wgpu::Adapter adapter;
+  wgpu::RequestAdapterStatus adapter_status =
+      wgpu::RequestAdapterStatus::Error;
+  bool adapter_done = false;
+  wgpu_instance.RequestAdapter(
+      &adapter_options, wgpu::CallbackMode::AllowProcessEvents,
+      [&adapter_done, &adapter_status, &adapter](
+          wgpu::RequestAdapterStatus status, wgpu::Adapter requested_adapter,
+          wgpu::StringView) {
+        adapter_status = status;
+        adapter = std::move(requested_adapter);
+        adapter_done = true;
+      });
+  for (int attempt = 0; !adapter_done && attempt < 500; ++attempt) {
+    wgpu_instance.ProcessEvents();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  if (!adapter_done || adapter_status != wgpu::RequestAdapterStatus::Success ||
+      !adapter) {
+    std::printf(
+        "gpu_output_d3d12_pixel_smoke: blocked dawn=1 adapters=0 "
+        "adapter_status=%u adapter_done=%d "
+        "failure=no D3D12 adapter was enumerated\n",
+        static_cast<unsigned>(adapter_status), adapter_done ? 1 : 0);
+    return 0;
+  }
+
+  wgpu::DeviceDescriptor device_desc;
+  wgpu::Device device = adapter.CreateDevice(&device_desc);
+  if (!device) {
+    std::printf(
+        "gpu_output_d3d12_pixel_smoke: failed dawn=1 adapters=1 device=0\n");
+    return 1;
+  }
+
+  wgpu::Queue queue = device.GetQueue();
+
+  wgpu::TextureDescriptor texture_desc;
+  texture_desc.usage =
+      wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc;
+  texture_desc.dimension = wgpu::TextureDimension::e2D;
+  texture_desc.size = {kWidth, kHeight, 1};
+  texture_desc.format = wgpu::TextureFormat::RGBA8Unorm;
+  texture_desc.mipLevelCount = 1;
+  texture_desc.sampleCount = 1;
+  wgpu::Texture texture = device.CreateTexture(&texture_desc);
+  if (!texture) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_pixel_smoke: failed dawn=1 texture=0\n");
+    return 1;
+  }
+
+  wgpu::TextureView texture_view = texture.CreateView();
+  if (!texture_view) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_pixel_smoke: failed dawn=1 view=0\n");
+    return 1;
+  }
+
+  wgpu::BufferDescriptor readback_desc;
+  readback_desc.usage = wgpu::BufferUsage::CopyDst | wgpu::BufferUsage::MapRead;
+  readback_desc.size = kReadbackBytesPerRow * kHeight;
+  wgpu::Buffer readback = device.CreateBuffer(&readback_desc);
+  if (!readback) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_pixel_smoke: failed dawn=1 readback=0\n");
+    return 1;
+  }
+
+  wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+  wgpu::RenderPassColorAttachment color_attachment;
+  color_attachment.view = texture_view;
+  color_attachment.loadOp = wgpu::LoadOp::Clear;
+  color_attachment.storeOp = wgpu::StoreOp::Store;
+  color_attachment.clearValue = {
+      static_cast<double>(kExpectedR) / 255.0,
+      static_cast<double>(kExpectedG) / 255.0,
+      static_cast<double>(kExpectedB) / 255.0,
+      static_cast<double>(kExpectedA) / 255.0,
+  };
+  wgpu::RenderPassDescriptor pass_desc;
+  pass_desc.colorAttachmentCount = 1;
+  pass_desc.colorAttachments = &color_attachment;
+  {
+    wgpu::RenderPassEncoder pass = encoder.BeginRenderPass(&pass_desc);
+    pass.End();
+  }
+
+  wgpu::TexelCopyTextureInfo copy_source;
+  copy_source.texture = texture;
+  copy_source.aspect = wgpu::TextureAspect::All;
+  wgpu::TexelCopyBufferInfo copy_destination;
+  copy_destination.buffer = readback;
+  copy_destination.layout.bytesPerRow = kReadbackBytesPerRow;
+  copy_destination.layout.rowsPerImage = kHeight;
+  wgpu::Extent3D copy_size = {kWidth, kHeight, 1};
+  encoder.CopyTextureToBuffer(&copy_source, &copy_destination, &copy_size);
+  wgpu::CommandBuffer commands = encoder.Finish();
+  queue.Submit(1, &commands);
+
+  wgpu::MapAsyncStatus map_status = wgpu::MapAsyncStatus::Error;
+  bool map_done = false;
+  readback.MapAsync(
+      wgpu::MapMode::Read, 0, readback_desc.size,
+      wgpu::CallbackMode::AllowProcessEvents,
+      [&map_done, &map_status](wgpu::MapAsyncStatus status,
+                               wgpu::StringView) {
+        map_status = status;
+        map_done = true;
+      });
+  for (int attempt = 0; !map_done && attempt < 500; ++attempt) {
+    device.Tick();
+    wgpu_instance.ProcessEvents();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  if (!map_done || map_status != wgpu::MapAsyncStatus::Success) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_pixel_smoke: failed dawn=1 map_status=%u "
+                 "map_done=%d\n",
+                 static_cast<unsigned>(map_status), map_done ? 1 : 0);
+    return 1;
+  }
+
+  const auto* pixels =
+      static_cast<const uint8_t*>(readback.GetConstMappedRange());
+  if (!pixels) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_pixel_smoke: failed dawn=1 mapped=0\n");
+    return 1;
+  }
+
+  uint32_t matching_pixels = 0;
+  uint32_t nontransparent_pixels = 0;
+  for (uint32_t y = 0; y < kHeight; ++y) {
+    for (uint32_t x = 0; x < kWidth; ++x) {
+      const uint8_t* pixel =
+          pixels + y * kReadbackBytesPerRow + x * kBytesPerPixel;
+      if (pixel[3] != 0) {
+        ++nontransparent_pixels;
+      }
+      if (pixel[0] == kExpectedR && pixel[1] == kExpectedG &&
+          pixel[2] == kExpectedB && pixel[3] == kExpectedA) {
+        ++matching_pixels;
+      }
+    }
+  }
+  const uint8_t first_r = pixels[0];
+  const uint8_t first_g = pixels[1];
+  const uint8_t first_b = pixels[2];
+  const uint8_t first_a = pixels[3];
+  readback.Unmap();
+
+  if (matching_pixels != kWidth * kHeight) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_pixel_smoke: failed dawn=1 "
+                 "expected_rgba=%02x%02x%02x%02x observed_first=%02x%02x%02x%02x "
+                 "matching=%u nontransparent=%u\n",
+                 kExpectedR, kExpectedG, kExpectedB, kExpectedA, first_r,
+                 first_g, first_b, first_a, matching_pixels,
+                 nontransparent_pixels);
+    return 1;
+  }
+
+  std::printf(
+      "gpu_output_d3d12_pixel_smoke: ok dawn=1 path=dawn_d3d12_clear_copy_readback "
+      "adapters=%zu size=%ux%u format=RGBA8Unorm observed_first=%02x%02x%02x%02x "
+      "matching_pixels=%u nontransparent_pixels=%u graphite=0 viz=0\n",
+      size_t{1}, kWidth, kHeight, first_r, first_g, first_b, first_a,
+      matching_pixels, nontransparent_pixels);
+  return 0;
+#elif !BUILDFLAG(USE_DAWN) || !BUILDFLAG(SKIA_USE_DAWN)
+  std::printf(
+      "gpu_output_d3d12_pixel_smoke: blocked use_dawn=%d skia_use_dawn=%d "
+      "failure=standalone generated buildflags compile out Dawn/Graphite, "
+      "and this renderer build has not consumed generated Dawn native "
+      "libraries/headers yet\n",
+      BUILDFLAG(USE_DAWN) ? 1 : 0, BUILDFLAG(SKIA_USE_DAWN) ? 1 : 0);
+  return 0;
+#else
+  std::printf(
+      "gpu_output_d3d12_pixel_smoke: blocked use_dawn=1 skia_use_dawn=1 "
+      "failure=Dawn/Graphite buildflags are enabled, but standalone has not "
+      "yet wired a D3D12 DawnContextProvider into SharedContextState and Viz "
+      "SkiaOutputSurface\n");
+  return 0;
+#endif
+}
+
 int RunGpuBorrowedVkImageBackingSmoke() {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer.viewport = {128.0f, 64.0f};
@@ -7035,6 +7265,7 @@ int main(int argc, char** argv) {
   bool gpu_output_smoke = false;
   bool gpu_output_vulkan_smoke = false;
   bool gpu_output_vulkan_pixel_smoke = false;
+  bool gpu_output_d3d12_pixel_smoke = false;
   bool gpu_borrowed_vkimage_backing_smoke = false;
   bool gpu_borrowed_vkimage_render_copy_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
@@ -7171,6 +7402,8 @@ int main(int argc, char** argv) {
       gpu_output_vulkan_smoke = true;
     } else if (arg == "--gpu-output-vulkan-pixel-smoke") {
       gpu_output_vulkan_pixel_smoke = true;
+    } else if (arg == "--gpu-output-d3d12-pixel-smoke") {
+      gpu_output_d3d12_pixel_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-backing-smoke") {
       gpu_borrowed_vkimage_backing_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-render-copy-smoke") {
@@ -7350,6 +7583,10 @@ int main(int argc, char** argv) {
 
   if (gpu_output_vulkan_pixel_smoke) {
     return RunGpuOutputVulkanPixelSmoke();
+  }
+
+  if (gpu_output_d3d12_pixel_smoke) {
+    return RunGpuOutputD3D12PixelSmoke();
   }
 
   if (gpu_borrowed_vkimage_backing_smoke) {

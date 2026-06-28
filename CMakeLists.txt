@@ -22,6 +22,20 @@ option(BLINK_STANDALONE_OPTIMIZE_BOUNDARY
   "Compile standalone Blink boundary/stub/resource bridge sources with release optimization." ON)
 option(BLINK_STANDALONE_OPTIMIZE_APP
   "Compile standalone benchmark/presenter application sources with release optimization." ON)
+option(BLINK_STANDALONE_DAWN_D3D12
+  "Enable experimental standalone Dawn/D3D12 benchmark wiring." OFF)
+set(BLINK_STANDALONE_DAWN_D3D12_LIBS
+  ""
+  CACHE STRING
+  "Semicolon-separated Dawn static libraries built with D3D12 enabled.")
+set(BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR
+  ""
+  CACHE PATH
+  "Path to Dawn generated include directory from the D3D12 Dawn build.")
+set(BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR
+  ""
+  CACHE PATH
+  "Path to the Dawn source checkout used for the D3D12 Dawn build.")
 unset(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT CACHE)
 option(BLINK_STANDALONE_V8_SYNC_DEPS
   "Allow the V8 compatibility wrapper to run gclient sync in its generated work root." OFF)
@@ -1029,7 +1043,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
     ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
   )
-
   target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
     BLINK_CORE_IMPLEMENTATION=1
     BLINK_IMPLEMENTATION=1
@@ -1258,6 +1271,45 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     )
   endif()
   blink_standalone_copy_icu_data(blink_standalone_renderer_c_api_dll)
+
+  if(BLINK_STANDALONE_DAWN_D3D12)
+    if("${BLINK_STANDALONE_DAWN_D3D12_LIBS}" STREQUAL "")
+      message(FATAL_ERROR
+        "BLINK_STANDALONE_DAWN_D3D12 requires BLINK_STANDALONE_DAWN_D3D12_LIBS.")
+    endif()
+    if(NOT EXISTS "${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}")
+      message(FATAL_ERROR
+        "BLINK_STANDALONE_DAWN_D3D12 requires BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR.")
+    endif()
+    if(NOT EXISTS "${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}")
+      message(FATAL_ERROR
+        "BLINK_STANDALONE_DAWN_D3D12 requires BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR.")
+    endif()
+    foreach(dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
+      if(NOT EXISTS "${dawn_lib}")
+        message(FATAL_ERROR
+          "BLINK_STANDALONE_DAWN_D3D12 library does not exist: ${dawn_lib}")
+      endif()
+    endforeach()
+    target_include_directories(blink_standalone_render_benchmark_skia PRIVATE
+      ${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}
+      ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}
+      ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}/include
+    )
+    target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
+      BLINK_STANDALONE_HAVE_DAWN_D3D12=1)
+    target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
+      ${BLINK_STANDALONE_DAWN_D3D12_LIBS}
+      d3d12
+      dxguid
+      onecore
+      user32
+    )
+    if(MSVC)
+      target_link_options(blink_standalone_render_benchmark_skia PRIVATE
+        /FORCE:MULTIPLE)
+    endif()
+  endif()
 
   set(BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST
     ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_link_manifest.json
