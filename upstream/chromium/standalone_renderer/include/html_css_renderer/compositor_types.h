@@ -166,6 +166,7 @@ struct FrameInput {
   bool request_png_snapshot = false;
   bool request_raw_frame = false;
   bool request_gpu_frame = false;
+  bool request_vulkan_gpu_frame = false;
   bool force_document_reload = false;
   FrameResultCollection result_collection = FrameResultCollection::kFull;
   std::optional<Size> viewport;

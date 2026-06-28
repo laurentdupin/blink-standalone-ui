@@ -40,6 +40,7 @@
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -65,6 +66,7 @@
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
+#include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
@@ -89,11 +91,15 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/in_process_gpu_thread_holder.h"
+#include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/command_buffer/service/shared_context_state.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "gpu/ipc/raster_in_process_context.h"
 #include "gpu/ipc/service/image_transport_surface.h"
+#include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_implementation.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
@@ -117,8 +123,11 @@
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/encode/SkPngEncoder.h"
 #include "ui/gl/buildflags.h"
+#include "ui/gl/gl_context.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_surface.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/presenter.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -736,6 +745,8 @@ struct LiveRawFrameOutput {
 struct LiveGpuFrameOutput {
   bool shared_image_available = false;
   bool is_software = false;
+  bool vk_context_provider_available = false;
+  bool shared_context_state_is_vulkan = false;
   int width = 0;
   int height = 0;
   std::string format;
@@ -937,17 +948,230 @@ const char* StandaloneCopyOutputErrorName(viz::CopyOutputResult::Error error) {
   return "unknown";
 }
 
+class StandaloneOffscreenVulkanGaneshContext {
+ public:
+  StandaloneOffscreenVulkanGaneshContext() = default;
+
+  StandaloneOffscreenVulkanGaneshContext(
+      const StandaloneOffscreenVulkanGaneshContext&) = delete;
+  StandaloneOffscreenVulkanGaneshContext& operator=(
+      const StandaloneOffscreenVulkanGaneshContext&) = delete;
+
+  ~StandaloneOffscreenVulkanGaneshContext() { Reset(); }
+
+  bool EnsureInitialized(std::string* failure_reason) {
+    if (initialized_) {
+      return true;
+    }
+    if (failed_) {
+      SetFailure(failure_reason, failure_reason_);
+      return false;
+    }
+
+    vulkan_implementation_ = gpu::CreateVulkanImplementation(false);
+    if (!vulkan_implementation_) {
+      return Fail(failure_reason,
+                  "offscreen Vulkan output failed to create implementation");
+    }
+    if (!vulkan_implementation_->InitializeVulkanInstance(true)) {
+      return Fail(failure_reason,
+                  "offscreen Vulkan output failed to initialize instance");
+    }
+    vulkan_context_provider_ =
+        viz::VulkanInProcessContextProvider::Create(
+            vulkan_implementation_.get());
+    if (!vulkan_context_provider_) {
+      return Fail(failure_reason,
+                  "offscreen Vulkan output failed to create context provider");
+    }
+
+    if (gl::GetGLImplementation() == gl::kGLImplementationNone) {
+      if (!gl::init::InitializeStaticGLBindingsOneOff()) {
+        return Fail(failure_reason,
+                    "offscreen Vulkan output failed to initialize GL bindings");
+      }
+      if (gl::GetGLImplementation() != gl::kGLImplementationDisabled &&
+          !gl::init::InitializeGLOneOffPlatformImplementation(
+              /*disable_gl_drawing=*/false, /*init_extensions=*/true,
+              gl::GpuPreference::kDefault)) {
+        return Fail(failure_reason,
+                    "offscreen Vulkan output failed to initialize GL platform");
+      }
+    }
+
+    share_group_ = base::MakeRefCounted<gl::GLShareGroup>();
+    gl_surface_ =
+        gl::init::CreateOffscreenGLSurface(gl::GetDefaultDisplay(),
+                                           gfx::Size());
+    if (!gl_surface_) {
+      return Fail(failure_reason,
+                  "offscreen Vulkan output failed to create GL surface");
+    }
+
+    gpu::GpuPreferences gpu_preferences;
+    gpu_preferences.gr_context_type = gpu::GrContextType::kVulkan;
+    gl::GLContextAttribs attribs =
+        gpu::gles2::GenerateGLContextAttribsForCompositor(
+            gpu_preferences.use_passthrough_cmd_decoder);
+    gl_context_ =
+        gl::init::CreateGLContext(share_group_.get(), gl_surface_.get(),
+                                  attribs);
+    if (!gl_context_ || !gl_context_->MakeCurrent(gl_surface_.get())) {
+      return Fail(failure_reason,
+                  "offscreen Vulkan output failed to create GL context");
+    }
+
+    gpu::GpuFeatureInfo gpu_feature_info;
+    gpu::GpuDriverBugWorkarounds workarounds(
+        gpu_feature_info.enabled_gpu_driver_bug_workarounds);
+    context_state_ = base::MakeRefCounted<gpu::SharedContextState>(
+        share_group_, gl_surface_, gl_context_,
+        /*use_virtualized_gl_contexts=*/false, base::DoNothing(),
+        gpu::GrContextType::kVulkan, vulkan_context_provider_.get());
+    if (!context_state_->InitializeSkia(
+            gpu_preferences, workarounds, /*gr_cache=*/nullptr,
+            /*persistent_cache=*/nullptr,
+            /*use_shader_cache_shm_count=*/nullptr,
+            /*progress_reporter=*/nullptr) ||
+        !context_state_->gr_context() ||
+        context_state_->vk_context_provider() !=
+            vulkan_context_provider_.get() ||
+        !context_state_->GrContextIsVulkan()) {
+      return Fail(failure_reason,
+                  "offscreen Vulkan output failed to initialize Ganesh");
+    }
+
+    if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
+      owning_task_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
+    }
+    initialized_ = true;
+    return true;
+  }
+
+  scoped_refptr<gpu::SharedContextState> context_state() const {
+    return context_state_;
+  }
+
+  viz::VulkanContextProvider* vulkan_context_provider() const {
+    return vulkan_context_provider_.get();
+  }
+
+  bool initialized() const { return initialized_; }
+
+ private:
+  struct Resources {
+    std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation;
+    scoped_refptr<viz::VulkanInProcessContextProvider>
+        vulkan_context_provider;
+    scoped_refptr<gl::GLShareGroup> share_group;
+    scoped_refptr<gl::GLSurface> gl_surface;
+    scoped_refptr<gl::GLContext> gl_context;
+    scoped_refptr<gpu::SharedContextState> context_state;
+  };
+
+  void Reset() {
+    Resources resources;
+    resources.vulkan_implementation = std::move(vulkan_implementation_);
+    resources.vulkan_context_provider = std::move(vulkan_context_provider_);
+    resources.share_group = std::move(share_group_);
+    resources.gl_surface = std::move(gl_surface_);
+    resources.gl_context = std::move(gl_context_);
+    resources.context_state = std::move(context_state_);
+    auto owning_task_runner = std::move(owning_task_runner_);
+    initialized_ = false;
+
+    if (!resources.vulkan_implementation &&
+        !resources.vulkan_context_provider && !resources.share_group &&
+        !resources.gl_surface && !resources.gl_context &&
+        !resources.context_state) {
+      return;
+    }
+
+    if (owning_task_runner &&
+        !owning_task_runner->RunsTasksInCurrentSequence()) {
+      base::WaitableEvent destroyed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      owning_task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](Resources resources, base::WaitableEvent* destroyed) {
+                DestroyResources(std::move(resources));
+                destroyed->Signal();
+              },
+              std::move(resources), &destroyed));
+      destroyed.Wait();
+      return;
+    }
+
+    DestroyResources(std::move(resources));
+  }
+
+  static void DestroyResources(Resources resources) {
+    resources.context_state.reset();
+    if (resources.gl_context && resources.gl_surface &&
+        resources.gl_context->IsCurrent(resources.gl_surface.get())) {
+      resources.gl_context->ReleaseCurrent(resources.gl_surface.get());
+    }
+    resources.gl_context.reset();
+    resources.gl_surface.reset();
+    resources.share_group.reset();
+    if (resources.vulkan_context_provider) {
+      resources.vulkan_context_provider->Destroy();
+      resources.vulkan_context_provider.reset();
+    }
+    resources.vulkan_implementation.reset();
+  }
+
+  bool Fail(std::string* failure_reason, const char* reason) {
+    failed_ = true;
+    failure_reason_ = reason ? reason : "";
+    SetFailure(failure_reason, failure_reason_);
+    Reset();
+    return false;
+  }
+
+  static void SetFailure(std::string* failure_reason,
+                         const std::string& reason) {
+    if (failure_reason && failure_reason->empty()) {
+      *failure_reason = reason;
+    }
+  }
+
+  bool initialized_ = false;
+  bool failed_ = false;
+  std::string failure_reason_;
+  std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation_;
+  scoped_refptr<viz::VulkanInProcessContextProvider>
+      vulkan_context_provider_;
+  scoped_refptr<gl::GLShareGroup> share_group_;
+  scoped_refptr<gl::GLSurface> gl_surface_;
+  scoped_refptr<gl::GLContext> gl_context_;
+  scoped_refptr<gpu::SharedContextState> context_state_;
+  scoped_refptr<base::SingleThreadTaskRunner> owning_task_runner_;
+};
+
 class StandaloneSkiaOutputSurfaceDependency final
     : public viz::SkiaOutputSurfaceDependency {
  public:
   StandaloneSkiaOutputSurfaceDependency(
       std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
       gpu::SurfaceHandle surface_handle,
-      std::string* failure_reason)
+      std::string* failure_reason,
+      bool use_vulkan_offscreen,
+      bool* vulkan_context_provider_available,
+      bool* shared_context_state_is_vulkan)
       : gpu_thread_holder_(std::move(gpu_thread_holder)),
         surface_handle_(surface_handle),
         failure_reason_(failure_reason),
+        use_vulkan_offscreen_(use_vulkan_offscreen),
+        vulkan_context_provider_available_(vulkan_context_provider_available),
+        shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
         client_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
+    vulkan_gpu_preferences_ = gpu_thread_holder_
+                                  ? gpu_thread_holder_->gpu_preferences()
+                                  : gpu::GpuPreferences();
+    vulkan_gpu_preferences_.gr_context_type = gpu::GrContextType::kVulkan;
   }
 
   StandaloneSkiaOutputSurfaceDependency(
@@ -981,6 +1205,17 @@ class StandaloneSkiaOutputSurfaceDependency final
   }
 
   scoped_refptr<gpu::SharedContextState> GetSharedContextState() override {
+    if (use_vulkan_offscreen_ && IsOffscreen()) {
+      if (!vulkan_context_.EnsureInitialized(failure_reason_)) {
+        return nullptr;
+      }
+      if (shared_context_state_is_vulkan_) {
+        *shared_context_state_is_vulkan_ =
+            vulkan_context_.context_state() &&
+            vulkan_context_.context_state()->GrContextIsVulkan();
+      }
+      return vulkan_context_.context_state();
+    }
     return gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
                               : nullptr;
   }
@@ -988,6 +1223,16 @@ class StandaloneSkiaOutputSurfaceDependency final
   gpu::raster::GrShaderCache* GetGrShaderCache() override { return nullptr; }
 
   viz::VulkanContextProvider* GetVulkanContextProvider() override {
+    if (use_vulkan_offscreen_ && IsOffscreen()) {
+      if (!vulkan_context_.EnsureInitialized(failure_reason_)) {
+        return nullptr;
+      }
+      if (vulkan_context_provider_available_) {
+        *vulkan_context_provider_available_ =
+            vulkan_context_.vulkan_context_provider() != nullptr;
+      }
+      return vulkan_context_.vulkan_context_provider();
+    }
     return nullptr;
   }
 
@@ -996,6 +1241,9 @@ class StandaloneSkiaOutputSurfaceDependency final
   }
 
   const gpu::GpuPreferences& GetGpuPreferences() const override {
+    if (use_vulkan_offscreen_ && surface_handle_ == gpu::kNullSurfaceHandle) {
+      return vulkan_gpu_preferences_;
+    }
     return gpu_thread_holder_->gpu_preferences();
   }
 
@@ -1071,6 +1319,11 @@ class StandaloneSkiaOutputSurfaceDependency final
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   gpu::SurfaceHandle surface_handle_ = gpu::kNullSurfaceHandle;
   raw_ptr<std::string> failure_reason_ = nullptr;
+  bool use_vulkan_offscreen_ = false;
+  gpu::GpuPreferences vulkan_gpu_preferences_;
+  raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
+  raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
+  StandaloneOffscreenVulkanGaneshContext vulkan_context_;
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
 };
 
@@ -1301,7 +1554,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       int* did_not_produce_count = nullptr,
       int* last_frame_skipped_reason = nullptr,
       int* last_did_not_produce_has_damage = nullptr,
-      bool async_compositor_frame_ack = false)
+      bool async_compositor_frame_ack = false,
+      bool use_vulkan_offscreen_output = false)
       : cc::LayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
                                std::move(compositor_task_runner),
@@ -1331,7 +1585,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         did_not_produce_count_(did_not_produce_count),
         last_frame_skipped_reason_(last_frame_skipped_reason),
         last_did_not_produce_has_damage_(
-            last_did_not_produce_has_damage) {
+            last_did_not_produce_has_damage),
+        use_vulkan_offscreen_output_(use_vulkan_offscreen_output) {
     // Standalone screenshot/readback consumers compare CSS top-left pixel
     // coordinates. Disable Viz backing/output-surface padding that is useful
     // for production buffer reuse but changes observable CopyOutput bounds.
@@ -1530,7 +1785,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
               std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
                   gpu_thread_holder_, gpu::kNullSurfaceHandle,
-                  failure_reason_));
+                  failure_reason_, use_vulkan_offscreen_output_,
+                  &vulkan_context_provider_available_,
+                  &vulkan_shared_context_state_is_vulkan_));
       std::unique_ptr<viz::OutputSurface> output_surface =
           viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
                                              renderer_settings_,
@@ -1579,7 +1836,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     auto display_controller =
         std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
             std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
-                gpu_thread_holder_, surface_handle, failure_reason_));
+                gpu_thread_holder_, surface_handle, failure_reason_,
+                /*use_vulkan_offscreen=*/false,
+                /*vulkan_context_provider_available=*/nullptr,
+                /*shared_context_state_is_vulkan=*/nullptr));
     TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
     std::unique_ptr<viz::OutputSurface> output_surface =
         viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
@@ -1714,6 +1974,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         LiveGpuFrameOutput gpu_frame;
         gpu_frame.shared_image_available = true;
         gpu_frame.is_software = shared_image->is_software();
+        gpu_frame.vk_context_provider_available =
+            vulkan_context_provider_available_;
+        gpu_frame.shared_context_state_is_vulkan =
+            vulkan_shared_context_state_is_vulkan_;
         gpu_frame.width = shared_image->size().width();
         gpu_frame.height = shared_image->size().height();
         gpu_frame.format = shared_image->format().ToString();
@@ -1860,6 +2124,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   std::unique_ptr<viz::Display> display_;
   bool display_uses_software_output_ = false;
+  bool vulkan_context_provider_available_ = false;
+  bool vulkan_shared_context_state_is_vulkan_ = false;
   uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
@@ -1882,6 +2148,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<int> did_not_produce_count_ = nullptr;
   raw_ptr<int> last_frame_skipped_reason_ = nullptr;
   raw_ptr<int> last_did_not_produce_has_damage_ = nullptr;
+  bool use_vulkan_offscreen_output_ = false;
 };
 
 struct OriginalElementAttributeValue {
@@ -2026,6 +2293,24 @@ class StandaloneCcLayerHost final
   }
   bool viz_display_created() const { return viz_display_created_; }
   bool skia_gpu_reached() const { return skia_gpu_reached_; }
+  bool use_vulkan_offscreen_output() const {
+    return use_vulkan_offscreen_output_;
+  }
+  void SetUseVulkanOffscreenOutput(bool enabled) {
+    if (use_vulkan_offscreen_output_ == enabled) {
+      return;
+    }
+    use_vulkan_offscreen_output_ = enabled;
+    layer_tree_host_.reset();
+    animation_host_.reset();
+    frame_sink_manager_.reset();
+    frame_sink_id_registered_ = false;
+    attached_root_layer_ = nullptr;
+    root_layer_attached_ = false;
+    frame_sink_bound_ = false;
+    frame_sink_requested_ = false;
+    frame_sink_failure_reason_.clear();
+  }
   gfx::Size submitted_output_size() const { return submitted_output_size_; }
   gfx::Size viz_display_output_size() const { return viz_display_output_size_; }
   int commit_count() const { return commit_count_; }
@@ -2037,6 +2322,11 @@ class StandaloneCcLayerHost final
   }
 
   void RequestNextGpuFrameOutput() {
+    RequestNextGpuFrameOutput(/*use_vulkan_offscreen_output=*/false);
+  }
+
+  void RequestNextGpuFrameOutput(bool use_vulkan_offscreen_output) {
+    DCHECK_EQ(use_vulkan_offscreen_output_, use_vulkan_offscreen_output);
     RequestNextCopyOutput(/*wants_png=*/false, /*wants_raw=*/false,
                           /*wants_gpu=*/true);
   }
@@ -2418,7 +2708,8 @@ class StandaloneCcLayerHost final
             /*did_not_produce_count=*/nullptr,
             /*last_frame_skipped_reason=*/nullptr,
             /*last_did_not_produce_has_damage=*/nullptr,
-            settings_.single_thread_proxy_scheduler);
+            settings_.single_thread_proxy_scheduler,
+            use_vulkan_offscreen_output_);
     TraceLiveFrameProbeStage("cc host CreateFrameSink before SetLayerTreeFrameSink");
     layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
     TraceLiveFrameProbeStage("cc host CreateFrameSink after SetLayerTreeFrameSink");
@@ -2581,6 +2872,7 @@ class StandaloneCcLayerHost final
   bool copy_output_gpu_requested_ = false;
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
+  bool use_vulkan_offscreen_output_ = false;
   std::vector<uint8_t> copy_output_png_;
   LiveRawFrameOutput copy_output_raw_frame_;
   LiveGpuFrameOutput copy_output_gpu_frame_;
@@ -3034,6 +3326,7 @@ struct LiveFramePaintProbeCache {
   bool copy_output_raw_requested = false;
   bool copy_output_png_requested = false;
   bool copy_output_gpu_requested = false;
+  bool copy_output_gpu_use_vulkan_offscreen = false;
   bool copy_output_png_completed = false;
   bool copy_output_png_succeeded = false;
   std::vector<uint8_t> copy_output_png;
@@ -3393,6 +3686,7 @@ void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
     cache.copy_output_png_requested = false;
     cache.copy_output_raw_requested = false;
     cache.copy_output_gpu_requested = false;
+    cache.copy_output_gpu_use_vulkan_offscreen = false;
   }
 }
 
@@ -3493,9 +3787,14 @@ bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
   cache.cc_frame_sink_failure_reason.clear();
   if (cache.copy_output_png_requested || cache.copy_output_raw_requested ||
       cache.copy_output_gpu_requested) {
-    cache.cc_layer_host->RequestNextCopyOutput(
-        cache.copy_output_png_requested, cache.copy_output_raw_requested,
-        cache.copy_output_gpu_requested);
+    if (cache.copy_output_gpu_requested) {
+      cache.cc_layer_host->RequestNextGpuFrameOutput(
+          cache.copy_output_gpu_use_vulkan_offscreen);
+    } else {
+      cache.cc_layer_host->RequestNextCopyOutput(
+          cache.copy_output_png_requested, cache.copy_output_raw_requested,
+          /*wants_gpu=*/false);
+    }
   }
   const auto composite_start = StandaloneProbeClock::now();
   const bool submitted =
@@ -13549,6 +13848,10 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
   if (!cache.cc_layer_host) {
     cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
   }
+  if (cache.copy_output_gpu_requested) {
+    cache.cc_layer_host->SetUseVulkanOffscreenOutput(
+        cache.copy_output_gpu_use_vulkan_offscreen);
+  }
   cache.cc_frame_sink_failure_reason.clear();
   if (!cache.cc_layer_host->EnsureHostForScheduler(
           gfx::Size(cache.viewport_width, cache.viewport_height),
@@ -13564,9 +13867,14 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
   }
   if (cache.copy_output_png_requested || cache.copy_output_raw_requested ||
       cache.copy_output_gpu_requested) {
-    cache.cc_layer_host->RequestNextCopyOutput(
-        cache.copy_output_png_requested, cache.copy_output_raw_requested,
-        cache.copy_output_gpu_requested);
+    if (cache.copy_output_gpu_requested) {
+      cache.cc_layer_host->RequestNextGpuFrameOutput(
+          cache.copy_output_gpu_use_vulkan_offscreen);
+    } else {
+      cache.cc_layer_host->RequestNextCopyOutput(
+          cache.copy_output_png_requested, cache.copy_output_raw_requested,
+          /*wants_gpu=*/false);
+    }
   }
 
   std::optional<LiveFramePaintProbeResult> lifecycle_stop_result;
@@ -14166,6 +14474,7 @@ void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_png_requested = true;
   cache.copy_output_gpu_requested = false;
+  cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_png.clear();
@@ -14179,6 +14488,7 @@ void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_raw_requested = true;
   cache.copy_output_gpu_requested = false;
+  cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_raw_frame = LiveRawFrameOutput();
@@ -14190,6 +14500,7 @@ void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer() {
 void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_gpu_requested = true;
+  cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_png_requested = false;
   cache.copy_output_raw_requested = false;
   cache.copy_output_png_completed = false;
@@ -14198,6 +14509,22 @@ void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer() {
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
+  cache.initialized = false;
+}
+
+void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.copy_output_gpu_requested = true;
+  cache.copy_output_gpu_use_vulkan_offscreen = true;
+  cache.copy_output_png_requested = false;
+  cache.copy_output_raw_requested = false;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_png.clear();
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
+  cache.copy_output_failure.clear();
+  cache.cc_layer_host.reset();
   cache.initialized = false;
 }
 
@@ -15776,6 +16103,8 @@ int StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
     int* width,
     int* height,
     int* is_software,
+    int* vk_context_provider,
+    int* is_vulkan_context,
     char* format,
     int format_capacity,
     char* mailbox,
@@ -15796,6 +16125,14 @@ int StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
   }
   if (is_software) {
     *is_software = gpu_frame.is_software ? 1 : 0;
+  }
+  if (vk_context_provider) {
+    *vk_context_provider =
+        gpu_frame.vk_context_provider_available ? 1 : 0;
+  }
+  if (is_vulkan_context) {
+    *is_vulkan_context =
+        gpu_frame.shared_context_state_is_vulkan ? 1 : 0;
   }
   if (format && format_capacity > 0) {
     const int copy_count =

@@ -88,6 +88,7 @@ void StandaloneBlinkLiveFrameBridgeSetNativeWindowForStandaloneRenderer(
 void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -317,6 +318,8 @@ int StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
     int* width,
     int* height,
     int* is_software,
+    int* vk_context_provider,
+    int* is_vulkan_context,
     char* format,
     int format_capacity,
     char* mailbox,
@@ -1244,11 +1247,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     CompositorFrameResult result;
     result.png_snapshot_requested = input.request_png_snapshot;
     result.raw_frame_requested = input.request_raw_frame;
-    result.gpu_frame_requested = input.request_gpu_frame;
+    result.gpu_frame_requested =
+        input.request_gpu_frame || input.request_vulkan_gpu_frame;
     result.successor_snapshot = snapshot_;
     const bool collect_full_result =
         input.request_png_snapshot || input.request_raw_frame ||
-        input.request_gpu_frame ||
+        input.request_gpu_frame || input.request_vulkan_gpu_frame ||
         input.result_collection == FrameResultCollection::kFull;
     probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
         collect_full_result ? 1 : 0);
@@ -1274,7 +1278,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (input.request_raw_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
     }
-    if (input.request_gpu_frame) {
+    if (input.request_vulkan_gpu_frame) {
+      probe::StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer();
+    } else if (input.request_gpu_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer();
     }
     probe::StandaloneBlinkLiveFrameBridgeSetDeviceScaleFactorForStandaloneRenderer(
@@ -1571,7 +1577,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!last_frame_result_)
       return true;
     if (input.request_png_snapshot || input.request_raw_frame ||
-        input.request_gpu_frame)
+        input.request_gpu_frame || input.request_vulkan_gpu_frame)
       return true;
     if (input.force_document_reload)
       return true;
@@ -2007,11 +2013,14 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     int width = 0;
     int height = 0;
     int is_software = 0;
+    int vk_context_provider = 0;
+    int is_vulkan_context = 0;
     std::array<char, 64> format{};
     std::array<char, 128> mailbox{};
     std::array<char, 128> creation_sync_token{};
     if (!probe::StandaloneBlinkLiveFrameBridgeGpuFrameInfoForStandaloneRenderer(
             probe_html.c_str(), &width, &height, &is_software,
+            &vk_context_provider, &is_vulkan_context,
             format.data(), static_cast<int>(format.size()),
             mailbox.data(), static_cast<int>(mailbox.size()),
             creation_sync_token.data(),
@@ -2028,6 +2037,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
     result.gpu_frame.shared_image_available = true;
     result.gpu_frame.is_software = is_software != 0;
+    result.gpu_frame.vk_context_provider_available =
+        vk_context_provider != 0;
+    result.gpu_frame.shared_context_state_is_vulkan =
+        is_vulkan_context != 0;
     result.gpu_frame.width = width;
     result.gpu_frame.height = height;
     result.gpu_frame.format = format.data();

@@ -46,6 +46,8 @@ struct CompositorFrameTiming {
 struct GpuFrameOutput {
   bool shared_image_available = false;
   bool is_software = false;
+  bool vk_context_provider_available = false;
+  bool shared_context_state_is_vulkan = false;
   int width = 0;
   int height = 0;
   std::string format;
