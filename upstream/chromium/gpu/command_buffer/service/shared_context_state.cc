@@ -75,7 +75,9 @@
 #include "gpu/vulkan/fuchsia/vulkan_fuchsia_ext.h"
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #endif
 
@@ -395,7 +397,9 @@ SharedContextState::~SharedContextState() {
 
 gpu::GraphiteSharedContext* SharedContextState::graphite_shared_context()
     const {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   if (dawn_context_provider_) {
     return dawn_context_provider_->GetGraphiteSharedContext();
   }
@@ -411,16 +415,20 @@ bool SharedContextState::IsUsingGL() const {
 }
 
 bool SharedContextState::IsGraphiteDawn() const {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  return false;
-#else
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   return gr_context_type() == GrContextType::kGraphiteDawn &&
          dawn_context_provider();
+#else
+  return false;
 #endif
 }
 
 bool SharedContextState::IsGraphiteDawnMetal() const {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   return IsGraphiteDawn() &&
          dawn_context_provider()->backend_type() == wgpu::BackendType::Metal;
 #else
@@ -429,7 +437,9 @@ bool SharedContextState::IsGraphiteDawnMetal() const {
 }
 
 bool SharedContextState::IsGraphiteDawnD3D() const {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   return IsGraphiteDawn() &&
          (dawn_context_provider()->backend_type() == wgpu::BackendType::D3D11 ||
           dawn_context_provider()->backend_type() == wgpu::BackendType::D3D12);
@@ -439,7 +449,9 @@ bool SharedContextState::IsGraphiteDawnD3D() const {
 }
 
 bool SharedContextState::IsGraphiteDawnD3D11() const {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   return IsGraphiteDawn() &&
          dawn_context_provider()->backend_type() == wgpu::BackendType::D3D11;
 #else
@@ -448,7 +460,9 @@ bool SharedContextState::IsGraphiteDawnD3D11() const {
 }
 
 bool SharedContextState::IsGraphiteDawnVulkan() const {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   return IsGraphiteDawn() &&
          dawn_context_provider()->backend_type() == wgpu::BackendType::Vulkan;
 #else
@@ -457,7 +471,9 @@ bool SharedContextState::IsGraphiteDawnVulkan() const {
 }
 
 bool SharedContextState::IsGraphiteDawnVulkanSwiftShader() const {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   return IsGraphiteDawn() &&
          dawn_context_provider()->is_vulkan_swiftshader_adapter();
 #else
@@ -677,7 +693,9 @@ bool SharedContextState::InitializeGraphite(
 
   gpu::GraphiteSharedContext* graphite_shared_context = nullptr;
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   CHECK_EQ(gr_context_type_, GrContextType::kGraphiteDawn);
   CHECK(dawn_context_provider_);
   if (dawn_context_provider_->InitializeGraphiteContext(
@@ -685,7 +703,7 @@ bool SharedContextState::InitializeGraphite(
     graphite_shared_context =
         dawn_context_provider_->GetGraphiteSharedContext();
   }
-#endif  // BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
   if (!graphite_shared_context) {
     // Note: the caller will handle this case by exiting the GPU process.
@@ -1366,7 +1384,9 @@ std::optional<error::ContextLostReason> SharedContextState::GetResetStatus(
     }
   }
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   if (gr_context_type_ == GrContextType::kGraphiteDawn &&
       dawn_context_provider_) {
     return dawn_context_provider_->GetResetStatus();
@@ -1463,14 +1483,16 @@ int32_t SharedContextState::GetMaxTextureSize() {
     NOTREACHED();
 #endif
   } else {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
     if (dawn_context_provider()) {
       wgpu::Limits limits = {};
       auto succeded = dawn_context_provider()->GetDevice().GetLimits(&limits);
       CHECK(succeded);
       max_texture_size = limits.maxTextureDimension2D;
     }
-#endif  // BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
   }
   DCHECK_GT(max_texture_size, 0);
   max_texture_size_ = max_texture_size;
@@ -1486,7 +1508,9 @@ Microsoft::WRL::ComPtr<ID3D11Device> SharedContextState::GetD3D11Device()
     case GrContextType::kGL:
     case GrContextType::kVulkan:
       return gl::QueryD3D11DeviceObjectFromANGLE();
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
     case GrContextType::kGraphiteDawn:
       return dawn_context_provider_->GetD3D11Device();
 #endif

@@ -13,7 +13,8 @@
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include "gpu/command_buffer/service/shared_image/wrapped_graphite_texture_backing.h"
 #endif
 #include "gpu/command_buffer/service/shared_image/wrapped_sk_image_backing.h"
@@ -26,7 +27,9 @@
 #include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
 #include "third_party/skia/include/gpu/ganesh/GrTypes.h"
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #endif
 
@@ -79,7 +82,8 @@ WrappedSkImageBackingFactory::WrappedSkImageBackingFactory(
     scoped_refptr<SharedContextState> context_state)
     : SharedImageBackingFactory(GetSupportedUsage(context_state.get())),
       context_state_(std::move(context_state)),
-#if defined(HTML_CSS_RENDERER_STANDALONE)
+#if defined(HTML_CSS_RENDERER_STANDALONE) && \
+    !defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
       use_graphite_(false),
 #else
       use_graphite_(context_state_->graphite_shared_context()),
@@ -96,7 +100,8 @@ WrappedSkImageBackingFactory::CreateSharedImage(const Mailbox& mailbox,
                                                 SurfaceHandle surface_handle,
                                                 bool is_thread_safe) {
   if (use_graphite_) {
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
     auto backing = std::make_unique<WrappedGraphiteTextureBacking>(
         base::PassKey<WrappedSkImageBackingFactory>(), mailbox, si_info,
         context_state_, is_thread_safe);
@@ -125,7 +130,8 @@ WrappedSkImageBackingFactory::CreateSharedImage(
     bool is_thread_safe,
     base::span<const uint8_t> data) {
   if (use_graphite_) {
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
     auto backing = std::make_unique<WrappedGraphiteTextureBacking>(
         base::PassKey<WrappedSkImageBackingFactory>(), mailbox, si_info,
         context_state_, is_thread_safe);

@@ -959,7 +959,8 @@ OverlayImageRepresentation::BeginScopedReadAccess() {
 ///////////////////////////////////////////////////////////////////////////////
 // DawnImageRepresentation
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 DawnImageRepresentation::ScopedAccess::ScopedAccess(
     base::PassKey<DawnImageRepresentation> /* pass_key */,
     DawnImageRepresentation* representation,
@@ -1061,7 +1062,7 @@ DawnBufferRepresentation::BeginScopedAccess(wgpu::BufferUsage usage) {
       base::PassKey<DawnBufferRepresentation>(), this, std::move(buffer),
       AccessMode::kWrite);
 }
-#endif  // !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 // SharedImageRepresentationFactoryRef

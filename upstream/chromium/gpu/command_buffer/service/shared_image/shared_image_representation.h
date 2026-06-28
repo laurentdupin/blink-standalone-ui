@@ -30,11 +30,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_fence.h"
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include <dawn/dawn_proc_table.h>
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
 #include <dawn/webgpu_cpp.h>
-#endif
 #endif
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -792,7 +791,8 @@ class GPU_GLES2_EXPORT SkiaGraphiteImageRepresentation
   BeginReadAccess() = 0;
 };
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 ///////////////////////////////////////////////////////////////////////////////
 // DawnImageRepresentation
 

@@ -1292,12 +1292,14 @@ class StandaloneSkiaOutputSurfaceDependency final
       gpu::SurfaceHandle surface_handle,
       std::string* failure_reason,
       bool use_vulkan_offscreen,
+      bool use_d3d12_offscreen,
       bool* vulkan_context_provider_available,
       bool* shared_context_state_is_vulkan)
       : gpu_thread_holder_(std::move(gpu_thread_holder)),
         surface_handle_(surface_handle),
         failure_reason_(failure_reason),
         use_vulkan_offscreen_(use_vulkan_offscreen),
+        use_d3d12_offscreen_(use_d3d12_offscreen),
         vulkan_context_provider_available_(vulkan_context_provider_available),
         shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
         client_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()) {
@@ -1305,6 +1307,11 @@ class StandaloneSkiaOutputSurfaceDependency final
                                   ? gpu_thread_holder_->gpu_preferences()
                                   : gpu::GpuPreferences();
     vulkan_gpu_preferences_.gr_context_type = gpu::GrContextType::kVulkan;
+    d3d12_gpu_preferences_ = gpu_thread_holder_
+                                  ? gpu_thread_holder_->gpu_preferences()
+                                  : gpu::GpuPreferences();
+    d3d12_gpu_preferences_.gr_context_type =
+        gpu::GrContextType::kGraphiteDawn;
   }
 
   StandaloneSkiaOutputSurfaceDependency(
@@ -1381,12 +1388,22 @@ class StandaloneSkiaOutputSurfaceDependency final
   }
 
   gpu::DawnContextProvider* GetDawnContextProvider() override {
+#if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    if (use_d3d12_offscreen_ && IsOffscreen()) {
+      return gpu_thread_holder_ ? gpu_thread_holder_->dawn_context_provider()
+                                : nullptr;
+    }
+#endif
     return nullptr;
   }
 
   const gpu::GpuPreferences& GetGpuPreferences() const override {
     if (use_vulkan_offscreen_ && surface_handle_ == gpu::kNullSurfaceHandle) {
       return vulkan_gpu_preferences_;
+    }
+    if (use_d3d12_offscreen_ && surface_handle_ == gpu::kNullSurfaceHandle) {
+      return d3d12_gpu_preferences_;
     }
     return gpu_thread_holder_->gpu_preferences();
   }
@@ -2424,7 +2441,9 @@ class StandaloneSkiaOutputSurfaceDependency final
   gpu::SurfaceHandle surface_handle_ = gpu::kNullSurfaceHandle;
   raw_ptr<std::string> failure_reason_ = nullptr;
   bool use_vulkan_offscreen_ = false;
+  bool use_d3d12_offscreen_ = false;
   gpu::GpuPreferences vulkan_gpu_preferences_;
+  gpu::GpuPreferences d3d12_gpu_preferences_;
   raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
   raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
@@ -2660,7 +2679,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       int* last_frame_skipped_reason = nullptr,
       int* last_did_not_produce_has_damage = nullptr,
       bool async_compositor_frame_ack = false,
-      bool use_vulkan_offscreen_output = false)
+      bool use_vulkan_offscreen_output = false,
+      bool use_d3d12_offscreen_output = false)
       : cc::LayerTreeFrameSink(std::move(compositor_context_provider),
                                std::move(worker_context_provider),
                                std::move(compositor_task_runner),
@@ -2691,7 +2711,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         last_frame_skipped_reason_(last_frame_skipped_reason),
         last_did_not_produce_has_damage_(
             last_did_not_produce_has_damage),
-        use_vulkan_offscreen_output_(use_vulkan_offscreen_output) {
+        use_vulkan_offscreen_output_(use_vulkan_offscreen_output),
+        use_d3d12_offscreen_output_(use_d3d12_offscreen_output) {
     // Standalone screenshot/readback consumers compare CSS top-left pixel
     // coordinates. Disable Viz backing/output-surface padding that is useful
     // for production buffer reuse but changes observable CopyOutput bounds.
@@ -2994,7 +3015,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       }
       auto dependency = std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
           gpu_thread_holder_, gpu::kNullSurfaceHandle, failure_reason_,
-          use_vulkan_offscreen_output_, &vulkan_context_provider_available_,
+          use_vulkan_offscreen_output_, use_d3d12_offscreen_output_,
+          &vulkan_context_provider_available_,
           &vulkan_shared_context_state_is_vulkan_);
       offscreen_skia_dependency_ = dependency.get();
       auto display_controller =
@@ -3051,6 +3073,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
             std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
                 gpu_thread_holder_, surface_handle, failure_reason_,
                 /*use_vulkan_offscreen=*/false,
+                /*use_d3d12_offscreen=*/false,
                 /*vulkan_context_provider_available=*/nullptr,
                 /*shared_context_state_is_vulkan=*/nullptr));
     TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
@@ -3357,6 +3380,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   bool display_uses_software_output_ = false;
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
+  bool use_d3d12_offscreen_output_ = false;
   uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
@@ -3530,11 +3554,22 @@ class StandaloneCcLayerHost final
   bool use_vulkan_offscreen_output() const {
     return use_vulkan_offscreen_output_;
   }
+  bool use_d3d12_offscreen_output() const {
+    return use_d3d12_offscreen_output_;
+  }
   void SetUseVulkanOffscreenOutput(bool enabled) {
-    if (use_vulkan_offscreen_output_ == enabled) {
+    SetGpuOffscreenOutputMode(enabled, /*use_d3d12=*/false);
+  }
+  void SetUseD3D12OffscreenOutput(bool enabled) {
+    SetGpuOffscreenOutputMode(/*use_vulkan=*/false, enabled);
+  }
+  void SetGpuOffscreenOutputMode(bool use_vulkan, bool use_d3d12) {
+    if (use_vulkan_offscreen_output_ == use_vulkan &&
+        use_d3d12_offscreen_output_ == use_d3d12) {
       return;
     }
-    use_vulkan_offscreen_output_ = enabled;
+    use_vulkan_offscreen_output_ = use_vulkan;
+    use_d3d12_offscreen_output_ = use_d3d12;
     active_frame_sink_ = nullptr;
     layer_tree_host_.reset();
     animation_host_.reset();
@@ -3557,11 +3592,14 @@ class StandaloneCcLayerHost final
   }
 
   void RequestNextGpuFrameOutput() {
-    RequestNextGpuFrameOutput(/*use_vulkan_offscreen_output=*/false);
+    RequestNextGpuFrameOutput(/*use_vulkan_offscreen_output=*/false,
+                              /*use_d3d12_offscreen_output=*/false);
   }
 
-  void RequestNextGpuFrameOutput(bool use_vulkan_offscreen_output) {
+  void RequestNextGpuFrameOutput(bool use_vulkan_offscreen_output,
+                                 bool use_d3d12_offscreen_output = false) {
     DCHECK_EQ(use_vulkan_offscreen_output_, use_vulkan_offscreen_output);
+    DCHECK_EQ(use_d3d12_offscreen_output_, use_d3d12_offscreen_output);
     RequestNextCopyOutput(/*wants_png=*/false, /*wants_raw=*/false,
                           /*wants_gpu=*/true);
   }
@@ -3913,8 +3951,10 @@ class StandaloneCcLayerHost final
     if (!gpu_thread_holder_) {
       gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
       gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
-          use_vulkan_offscreen_output_ ? gpu::GrContextType::kVulkan
-                                       : gpu::GrContextType::kGL;
+          use_d3d12_offscreen_output_
+              ? gpu::GrContextType::kGraphiteDawn
+              : (use_vulkan_offscreen_output_ ? gpu::GrContextType::kVulkan
+                                              : gpu::GrContextType::kGL);
     }
     TraceLiveFrameProbeStage("cc host CreateFrameSink after gpu holder");
     TraceLiveFrameProbeStage("cc host CreateFrameSink before context providers");
@@ -3966,7 +4006,7 @@ class StandaloneCcLayerHost final
             /*last_frame_skipped_reason=*/nullptr,
             /*last_did_not_produce_has_damage=*/nullptr,
             settings_.single_thread_proxy_scheduler,
-            use_vulkan_offscreen_output_);
+            use_vulkan_offscreen_output_, use_d3d12_offscreen_output_);
     active_frame_sink_ = layer_tree_frame_sink.get();
     TraceLiveFrameProbeStage("cc host CreateFrameSink before SetLayerTreeFrameSink");
     layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
@@ -4134,6 +4174,7 @@ class StandaloneCcLayerHost final
   bool copy_output_completed_ = false;
   bool copy_output_succeeded_ = false;
   bool use_vulkan_offscreen_output_ = false;
+  bool use_d3d12_offscreen_output_ = false;
   std::vector<uint8_t> copy_output_png_;
   LiveRawFrameOutput copy_output_raw_frame_;
   LiveGpuFrameOutput copy_output_gpu_frame_;
@@ -4588,6 +4629,7 @@ struct LiveFramePaintProbeCache {
   bool copy_output_png_requested = false;
   bool copy_output_gpu_requested = false;
   bool copy_output_gpu_use_vulkan_offscreen = false;
+  bool copy_output_gpu_use_d3d12_offscreen = false;
   bool copy_output_png_completed = false;
   bool copy_output_png_succeeded = false;
   std::vector<uint8_t> copy_output_png;
@@ -4951,6 +4993,7 @@ void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
     cache.copy_output_raw_requested = false;
     cache.copy_output_gpu_requested = false;
     cache.copy_output_gpu_use_vulkan_offscreen = false;
+    cache.copy_output_gpu_use_d3d12_offscreen = false;
   }
 }
 
@@ -5053,7 +5096,8 @@ bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
       cache.copy_output_gpu_requested) {
     if (cache.copy_output_gpu_requested) {
       cache.cc_layer_host->RequestNextGpuFrameOutput(
-          cache.copy_output_gpu_use_vulkan_offscreen);
+          cache.copy_output_gpu_use_vulkan_offscreen,
+          cache.copy_output_gpu_use_d3d12_offscreen);
     } else {
       cache.cc_layer_host->RequestNextCopyOutput(
           cache.copy_output_png_requested, cache.copy_output_raw_requested,
@@ -15113,8 +15157,9 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
     cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
   }
   if (cache.copy_output_gpu_requested) {
-    cache.cc_layer_host->SetUseVulkanOffscreenOutput(
-        cache.copy_output_gpu_use_vulkan_offscreen);
+    cache.cc_layer_host->SetGpuOffscreenOutputMode(
+        cache.copy_output_gpu_use_vulkan_offscreen,
+        cache.copy_output_gpu_use_d3d12_offscreen);
   }
   cache.cc_frame_sink_failure_reason.clear();
   if (!cache.cc_layer_host->EnsureHostForScheduler(
@@ -15133,7 +15178,8 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
       cache.copy_output_gpu_requested) {
     if (cache.copy_output_gpu_requested) {
       cache.cc_layer_host->RequestNextGpuFrameOutput(
-          cache.copy_output_gpu_use_vulkan_offscreen);
+          cache.copy_output_gpu_use_vulkan_offscreen,
+          cache.copy_output_gpu_use_d3d12_offscreen);
     } else {
       cache.cc_layer_host->RequestNextCopyOutput(
           cache.copy_output_png_requested, cache.copy_output_raw_requested,
@@ -15739,6 +15785,7 @@ void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer() {
   cache.copy_output_png_requested = true;
   cache.copy_output_gpu_requested = false;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
+  cache.copy_output_gpu_use_d3d12_offscreen = false;
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_png.clear();
@@ -15753,6 +15800,7 @@ void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer() {
   cache.copy_output_raw_requested = true;
   cache.copy_output_gpu_requested = false;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
+  cache.copy_output_gpu_use_d3d12_offscreen = false;
   cache.copy_output_png_completed = false;
   cache.copy_output_png_succeeded = false;
   cache.copy_output_raw_frame = LiveRawFrameOutput();
@@ -15765,6 +15813,7 @@ void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_gpu_requested = true;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
+  cache.copy_output_gpu_use_d3d12_offscreen = false;
   cache.copy_output_png_requested = false;
   cache.copy_output_raw_requested = false;
   cache.copy_output_png_completed = false;
@@ -15780,6 +15829,24 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() 
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.copy_output_gpu_requested = true;
   cache.copy_output_gpu_use_vulkan_offscreen = true;
+  cache.copy_output_gpu_use_d3d12_offscreen = false;
+  cache.copy_output_png_requested = false;
+  cache.copy_output_raw_requested = false;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_png.clear();
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
+  cache.copy_output_failure.clear();
+  cache.cc_layer_host.reset();
+  cache.initialized = false;
+}
+
+void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  cache.copy_output_gpu_requested = true;
+  cache.copy_output_gpu_use_vulkan_offscreen = false;
+  cache.copy_output_gpu_use_d3d12_offscreen = true;
   cache.copy_output_png_requested = false;
   cache.copy_output_raw_requested = false;
   cache.copy_output_png_completed = false;

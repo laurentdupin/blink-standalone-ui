@@ -89,6 +89,7 @@ void StandaloneBlinkLiveFrameBridgeRequestPngSnapshotForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer();
+void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer();
 const char*
 StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageBackingSmokeForStandaloneRenderer();
 const char*
@@ -1254,11 +1255,13 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.png_snapshot_requested = input.request_png_snapshot;
     result.raw_frame_requested = input.request_raw_frame;
     result.gpu_frame_requested =
-        input.request_gpu_frame || input.request_vulkan_gpu_frame;
+        input.request_gpu_frame || input.request_vulkan_gpu_frame ||
+        input.request_d3d12_gpu_frame;
     result.successor_snapshot = snapshot_;
     const bool collect_full_result =
         input.request_png_snapshot || input.request_raw_frame ||
         input.request_gpu_frame || input.request_vulkan_gpu_frame ||
+        input.request_d3d12_gpu_frame ||
         input.result_collection == FrameResultCollection::kFull;
     probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
         collect_full_result ? 1 : 0);
@@ -1284,7 +1287,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (input.request_raw_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestRawFrameForStandaloneRenderer();
     }
-    if (input.request_vulkan_gpu_frame) {
+    if (input.request_d3d12_gpu_frame) {
+      probe::StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer();
+    } else if (input.request_vulkan_gpu_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer();
     } else if (input.request_gpu_frame) {
       probe::StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer();
@@ -1619,7 +1624,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!last_frame_result_)
       return true;
     if (input.request_png_snapshot || input.request_raw_frame ||
-        input.request_gpu_frame || input.request_vulkan_gpu_frame)
+        input.request_gpu_frame || input.request_vulkan_gpu_frame ||
+        input.request_d3d12_gpu_frame)
       return true;
     if (input.force_document_reload)
       return true;
@@ -1688,7 +1694,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.frame_skipped_due_to_no_demand = true;
     result.png_snapshot_requested = input.request_png_snapshot;
     result.raw_frame_requested = input.request_raw_frame;
-    result.gpu_frame_requested = input.request_gpu_frame;
+    result.gpu_frame_requested =
+        input.request_gpu_frame || input.request_vulkan_gpu_frame ||
+        input.request_d3d12_gpu_frame;
     result.png_snapshot_available = false;
     result.png_snapshot_failure.clear();
     result.png_snapshot_bytes.clear();

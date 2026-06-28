@@ -28,6 +28,49 @@ DawnCachingInterface::DawnCachingInterface(scoped_refptr<MemoryCache> backend,
 
 DawnCachingInterface::~DawnCachingInterface() = default;
 
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+size_t DawnCachingInterface::FindKey(std::string_view key) {
+  if (memory_cache() == nullptr) {
+    return 0u;
+  }
+  auto entry = memory_cache()->Find(key);
+  if (!entry) {
+    return 0u;
+  }
+  return entry->DataSize();
+}
+
+size_t DawnCachingInterface::LoadData(std::string_view key,
+                                      std::span<uint8_t> dest) {
+  if (memory_cache() == nullptr) {
+    return 0u;
+  }
+  auto entry = memory_cache()->Find(key);
+  if (!entry) {
+    return 0u;
+  }
+
+  // Verify that the size being copied out is identical.
+  DCHECK(dest.size() == entry->DataSize());
+
+  return entry->ReadData(dest.data(), dest.size());
+}
+
+void DawnCachingInterface::StoreData(std::string_view key,
+                                     std::span<const uint8_t> src) {
+  if (memory_cache() == nullptr || src.empty()) {
+    return;
+  }
+  memory_cache()->Store(key, src);
+
+  // Send the cache entry to be stored on the host-side if applicable.
+  if (cache_blob_callback_) {
+    std::string key_str_copy(key);
+    std::string src_str(reinterpret_cast<const char*>(src.data()), src.size());
+    cache_blob_callback_.Run(key_str_copy, src_str);
+  }
+}
+#else
 size_t DawnCachingInterface::FindKey(std::span<const std::byte> key) {
   if (memory_cache() == nullptr) {
     return 0u;
@@ -79,6 +122,7 @@ void DawnCachingInterface::StoreData(std::span<const std::byte> key,
     cache_blob_callback_.Run(key_str_copy, src_str);
   }
 }
+#endif
 
 size_t DawnCachingInterface::LoadData(const void* key,
                                       size_t key_size,

@@ -33,6 +33,34 @@ def read_cmake_cache_value(cache_path, name):
   return None
 
 
+def cmake_list(value):
+  if not value:
+    return []
+  return [part for part in value.split(";") if part]
+
+
+def chromium_libcxx_cxx_flags(cache_path):
+  include_dirs = cmake_list(read_cmake_cache_value(
+      cache_path, "BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS"))
+  defines = cmake_list(read_cmake_cache_value(
+      cache_path, "BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES"))
+  if include_dirs and not defines:
+    defines = [
+        "_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE",
+        "_LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS",
+        "_LIBCPP_INSTRUMENTED_WITH_ASAN=0",
+        "CR_LIBCXX_REVISION=5abc7f839700f0f17338434e1c1c6a8c87c00c11",
+        "ABSL_ALLOCATOR_NOTHROW=1",
+        "_HAS_NODISCARD",
+    ]
+  flags = []
+  for include_dir in include_dirs:
+    flags.append("/I" + include_dir)
+  for define in defines:
+    flags.append("/D" + define)
+  return " ".join(flags)
+
+
 def pinned_dawn_revision(repo_root):
   deps_path = repo_root / "upstream" / "chromium" / "third_party" / "skia" / "DEPS"
   text = deps_path.read_text(encoding="utf-8")
@@ -89,6 +117,7 @@ def main():
   cxx = args.cxx or read_cmake_cache_value(cache_path, "CMAKE_CXX_COMPILER")
   if not cc or not cxx:
     raise RuntimeError("Could not determine C/C++ compiler; pass --cc and --cxx")
+  cxx_flags = chromium_libcxx_cxx_flags(cache_path)
 
   revision = pinned_dawn_revision(repo_root)
   ensure_dawn_checkout(dawn_dir, revision)
@@ -106,6 +135,7 @@ def main():
       "-DCMAKE_BUILD_TYPE=Release",
       f"-DCMAKE_C_COMPILER={cc}",
       f"-DCMAKE_CXX_COMPILER={cxx}",
+      f"-DCMAKE_CXX_FLAGS={cxx_flags}",
       "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
       "-DABSL_MSVC_STATIC_RUNTIME=ON",
       "-DDAWN_ENABLE_D3D12=ON",

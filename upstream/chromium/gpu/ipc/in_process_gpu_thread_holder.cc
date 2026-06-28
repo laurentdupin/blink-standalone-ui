@@ -14,6 +14,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/feature_info.h"
+#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
@@ -192,6 +193,22 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
 
   TraceStandaloneGpuThreadHolderStage(
       "InitializeOnGpuThread before shared context state");
+#if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  if (gpu_preferences_.gr_context_type == GrContextType::kGraphiteDawn) {
+    TraceStandaloneGpuThreadHolderStage(
+        "InitializeOnGpuThread before Dawn D3D12 context provider");
+    dawn_context_provider_ = DawnContextProvider::CreateWithBackend(
+        wgpu::BackendType::D3D12, /*force_fallback_adapter=*/false,
+        gpu_preferences_, gpu_feature_info_);
+    if (!dawn_context_provider_) {
+      TraceStandaloneGpuThreadHolderStage(
+          "InitializeOnGpuThread failed Dawn D3D12 context provider");
+      completion->Signal();
+      return;
+    }
+  }
+#endif
 #if BUILDFLAG(ENABLE_VULKAN)
   if (gpu_preferences_.gr_context_type == GrContextType::kVulkan) {
     TraceStandaloneGpuThreadHolderStage(
@@ -227,6 +244,8 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
 #else
       nullptr
 #endif
+      ,
+      dawn_context_provider_.get()
   );
   TraceStandaloneGpuThreadHolderStage("InitializeOnGpuThread before InitializeGL");
   TraceStandaloneGpuThreadHolderPointer("workarounds before InitializeGL",
@@ -243,7 +262,8 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
                                  /*persistent_cache=*/nullptr,
                                  /*use_shader_cache_shm_count=*/nullptr,
                                  /*progress_reporter=*/nullptr);
-  if (!context_state_->gr_context()) {
+  if (!context_state_->gr_context() &&
+      !context_state_->graphite_shared_context()) {
     TraceStandaloneGpuThreadHolderStage(
         "InitializeOnGpuThread failed InitializeSkia");
     completion->Signal();
@@ -272,6 +292,7 @@ void InProcessGpuThreadHolder::DeleteOnGpuThread() {
   shared_image_manager_.reset();
 
   context_state_.reset();
+  dawn_context_provider_.reset();
 #if BUILDFLAG(ENABLE_VULKAN)
   if (vulkan_context_provider_) {
     vulkan_context_provider_->Destroy();

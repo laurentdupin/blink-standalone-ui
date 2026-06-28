@@ -491,6 +491,37 @@ void GpuPersistentCache::InitializeCache(
 }
 
 #if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+size_t GpuPersistentCache::FindKey(std::string_view key) {
+  size_t discovered_size = 0;
+  auto buffer_provider = [&discovered_size](size_t content_size) {
+    discovered_size = content_size;
+    return base::span<uint8_t>();
+  };
+  LoadImpl(key, std::move(buffer_provider));
+  return discovered_size;
+}
+
+size_t GpuPersistentCache::LoadData(std::string_view key,
+                                    std::span<uint8_t> dest) {
+  size_t discovered_size = 0;
+
+  auto buffer_provider = [dest, &discovered_size](size_t content_size) {
+    discovered_size = content_size;
+    if (dest.size() >= content_size) {
+      return base::span<uint8_t>(dest.data(), content_size);
+    }
+    return base::span<uint8_t>();
+  };
+
+  CacheLoadResult result = LoadImpl(key, std::move(buffer_provider));
+  if (!IsCacheHitResult(result) || dest.empty()) {
+    RecordCacheLoadResultHistogram(result);
+  }
+
+  return discovered_size;
+}
+#else
 size_t GpuPersistentCache::FindKey(std::span<const std::byte> key) {
   std::string_view key_str(reinterpret_cast<const char*>(key.data()),
                            key.size());
@@ -525,6 +556,7 @@ size_t GpuPersistentCache::LoadData(std::span<const std::byte> key,
 
   return discovered_size;
 }
+#endif
 
 size_t GpuPersistentCache::LoadData(const void* key,
                                     size_t key_size,
@@ -776,6 +808,16 @@ GpuPersistentCache::CacheLoadResult GpuPersistentCache::LoadImpl(
 }
 
 #if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+void GpuPersistentCache::StoreData(std::string_view key,
+                                   std::span<const uint8_t> src) {
+  // Serialized VkPipelineCache entries won't be loaded again until the GPU
+  // process restarts. Storing this entry in the memory cache isn't useful but
+  // does evict otherwise useful data.
+  const bool skip_memory_cache = IsVkPipelineCache(key);
+  StoreImpl(key, src, skip_memory_cache);
+}
+#else
 void GpuPersistentCache::StoreData(std::span<const std::byte> key,
                                    std::span<const std::byte> src) {
   std::string_view key_str(reinterpret_cast<const char*>(key.data()),
@@ -789,6 +831,7 @@ void GpuPersistentCache::StoreData(std::span<const std::byte> key,
   const bool skip_memory_cache = IsVkPipelineCache(key_str);
   StoreImpl(key_str, value_span, skip_memory_cache);
 }
+#endif
 
 void GpuPersistentCache::StoreData(const void* key,
                                    size_t key_size,

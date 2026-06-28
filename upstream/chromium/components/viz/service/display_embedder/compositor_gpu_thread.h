@@ -44,7 +44,9 @@ class VIZ_SERVICE_EXPORT CompositorGpuThread : public base::Thread {
     raw_ptr<gpu::VulkanImplementation> vulkan_implementation = nullptr;
     raw_ptr<gpu::VulkanDeviceQueue> device_queue = nullptr;
 #endif
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
     raw_ptr<gpu::DawnContextProvider> dawn_context_provider = nullptr;
 #endif
   };
@@ -98,7 +100,9 @@ class VIZ_SERVICE_EXPORT CompositorGpuThread : public base::Thread {
 
   scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   std::unique_ptr<gpu::DawnContextProvider> dawn_context_provider_;
 #endif
 

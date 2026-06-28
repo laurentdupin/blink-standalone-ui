@@ -36,6 +36,9 @@ set(BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR
   ""
   CACHE PATH
   "Path to the Dawn source checkout used for the D3D12 Dawn build.")
+set(BLINK_STANDALONE_DAWN_D3D12_BUILDFLAGS_DIR
+  ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium/standalone_renderer/stubs/dawn_d3d12_buildflags
+)
 unset(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT CACHE)
 option(BLINK_STANDALONE_V8_SYNC_DEPS
   "Allow the V8 compatibility wrapper to run gclient sync in its generated work root." OFF)
@@ -610,6 +613,65 @@ endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/angle_runtime.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/abseil_sources.cmake)
+
+set(BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES)
+if(BLINK_STANDALONE_DAWN_D3D12)
+  set(BLINK_STANDALONE_DAWN_D3D12_ADDED_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/image_context_impl.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_device_dawn.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/dawn_context_provider.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/dawn_instance.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/dawn_platform.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/dxgi_shared_handle_manager.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/d3d_image_backing.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/d3d_image_backing_factory.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/d3d_image_representation.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/d3d_image_utils.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/d3d11_image_same_adapter_copy_strategy.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/dawn_copy_strategy.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/dawn_fallback_image_representation.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/dawn_shared_texture_cache.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/gl_texture_passthrough_fallback_image_representation.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/skia_graphite_dawn_image_representation.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/wrapped_graphite_texture_backing.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnBackendTexture.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnQueueManager.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnSharedContext.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnTextureInfo.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnGraphiteUtils.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/common/dxgi_helpers.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnCaps.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnBuffer.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnCommandBuffer.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnComputePipeline.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnErrorChecker.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnGraphicsPipeline.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnResourceProvider.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnSampler.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/gpu/graphite/dawn/DawnTexture.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/src/sksl/codegen/SkSLWGSLCodeGenerator.cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/ui/gfx/buffer_usage_util.cc
+  )
+  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_DAWN_D3D12_ADDED_SOURCES}
+  )
+  set(BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES
+    ${BLINK_STANDALONE_DAWN_D3D12_ADDED_SOURCES}
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/compositor_gpu_thread.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/compositor_gpu_thread.h
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_surface_dependency_impl.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/components/viz/service/display_embedder/skia_output_surface_impl_on_gpu.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/ipc/in_process_gpu_thread_holder.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_context_state.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_backing.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_backing.h
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_format_service_utils.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_representation.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/shared_image_representation.h
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/wrapped_sk_image_backing_factory.cc
+  )
+endif()
 
 if(NOT BLINK_STANDALONE_ICU_SOURCE_ROOT STREQUAL
    "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu")
@@ -1291,20 +1353,42 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
           "BLINK_STANDALONE_DAWN_D3D12 library does not exist: ${dawn_lib}")
       endif()
     endforeach()
+    set_property(SOURCE ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
+      APPEND PROPERTY INCLUDE_DIRECTORIES
+        ${BLINK_STANDALONE_DAWN_D3D12_BUILDFLAGS_DIR}
+        ${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}
+        ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}
+        ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}/include
+    )
+    set_property(SOURCE ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
+      APPEND PROPERTY COMPILE_DEFINITIONS
+        BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER=1
+        BLINK_STANDALONE_HAVE_DAWN_D3D12=1
+    )
+    target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
+      ${BLINK_STANDALONE_DAWN_D3D12_BUILDFLAGS_DIR}
+      ${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}
+    )
     target_include_directories(blink_standalone_render_benchmark_skia PRIVATE
       ${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}
       ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}
       ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}/include
     )
     target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
-      BLINK_STANDALONE_HAVE_DAWN_D3D12=1)
-    target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
-      ${BLINK_STANDALONE_DAWN_D3D12_LIBS}
-      d3d12
-      dxguid
-      onecore
-      user32
+      BLINK_STANDALONE_HAVE_DAWN_D3D12=1
     )
+    foreach(dawn_link_target IN ITEMS
+        blink_standalone_render_benchmark_skia
+        blink_standalone_renderer_c_api
+        blink_standalone_renderer_c_api_dll)
+      target_link_libraries(${dawn_link_target} PRIVATE
+        ${BLINK_STANDALONE_DAWN_D3D12_LIBS}
+        d3d12
+        dxguid
+        onecore
+        user32
+      )
+    endforeach()
     if(MSVC)
       target_link_options(blink_standalone_render_benchmark_skia PRIVATE
         /FORCE:MULTIPLE)

@@ -12,7 +12,8 @@
 #include "gpu/gpu_gles2_export.h"
 #include "gpu/vulkan/buildflags.h"
 #include "skia/buildflags.h"
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include "third_party/dawn/include/dawn/webgpu.h"
 #include "third_party/dawn/include/dawn/webgpu_cpp.h"
 #endif
@@ -140,7 +141,8 @@ GPU_GLES2_EXPORT VkFormat ToVkFormat(viz::SharedImageFormat format,
 GPU_GLES2_EXPORT DXGI_FORMAT ToDXGIFormat(viz::SharedImageFormat format);
 #endif  // BUILDFLAG(IS_WIN)
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 // Following functions return the appropriate Dawn format for a
 // SharedImageFormat. Returns wgpu::TextureFormat format for given `format`.
 // Note that this will return a multi-planar Dawn format for multi-planar
@@ -209,12 +211,15 @@ GPU_GLES2_EXPORT skgpu::graphite::TextureInfo GraphitePromiseTextureInfo(
     bool mipmapped = false);
 
 #if BUILDFLAG(ENABLE_VULKAN) && BUILDFLAG(SKIA_USE_DAWN) && \
-    !defined(HTML_CSS_RENDERER_STANDALONE)
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 GPU_GLES2_EXPORT wgpu::YCbCrVkDescriptor ToDawnYCbCrVkDescriptor(
     const VulkanYCbCrInfo& ycbcr_info);
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 GPU_GLES2_EXPORT skgpu::graphite::DawnTextureInfo DawnBackendTextureInfo(
     viz::SharedImageFormat format,
     bool readonly,

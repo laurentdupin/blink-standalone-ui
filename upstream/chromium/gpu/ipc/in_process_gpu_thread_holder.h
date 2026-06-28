@@ -19,6 +19,7 @@
 
 namespace gpu {
 class CommandBufferTaskExecutor;
+class DawnContextProvider;
 class Scheduler;
 class SharedImageManager;
 class SyncPointManager;
@@ -65,6 +66,9 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds();
   const GpuPreferences& gpu_preferences() const { return gpu_preferences_; }
   const GpuFeatureInfo& gpu_feature_info() const { return gpu_feature_info_; }
+  DawnContextProvider* dawn_context_provider() const {
+    return dawn_context_provider_.get();
+  }
 
   // gpu::GpuInProcessThreadServiceDelegate implementation:
   scoped_refptr<gpu::SharedContextState> GetSharedContextState() override;
@@ -82,6 +86,7 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<SharedContextState> context_state_;
+  std::unique_ptr<DawnContextProvider> dawn_context_provider_;
 #if BUILDFLAG(ENABLE_VULKAN)
   std::unique_ptr<VulkanImplementation> vulkan_implementation_;
   scoped_refptr<viz::VulkanInProcessContextProvider>

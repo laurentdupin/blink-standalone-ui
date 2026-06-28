@@ -8,7 +8,8 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 // clang-format off
 #include <webgpu/webgpu_cpp.h>
 // clang-format on
@@ -80,7 +81,8 @@ class GPU_GLES2_EXPORT DXGISharedHandleState
   // Releases keyed mutex if all pending access for given device are ended.
   void ReleaseKeyedMutex(Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device);
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   // Returns the cached Dawn SharedTextureMemory associated with given device.
   wgpu::SharedTextureMemory GetSharedTextureMemory(const wgpu::Device& device);
   // Inserts the SharedTextureMemory for this device, if not already present.
@@ -122,7 +124,8 @@ class GPU_GLES2_EXPORT DXGISharedHandleState
   // Note that it's ok to use raw WGPUDevice pointers here since the shared
   // texture memory acts like a weak pointer to the device, and we can detect if
   // the entry is valid by checking SharedTextureMemory::IsDeviceLost().
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   using DawnSharedTextureMemoryCache =
       base::flat_map<WGPUDevice, wgpu::SharedTextureMemory>;
   DawnSharedTextureMemoryCache dawn_shared_texture_memory_cache_

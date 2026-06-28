@@ -164,7 +164,11 @@ Microsoft::WRL::ComPtr<ID3D11Device> GetD3D11Device(
   // instead.
   Microsoft::WRL::ComPtr<ID3D11Device> dawn_d3d11_device;
   if (backend_type == wgpu::BackendType::D3D11) {
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    return nullptr;
+#else
     dawn_d3d11_device = dawn::native::d3d11::GetD3D11Device(device.Get());
+#endif
   } else if (base::FeatureList::IsEnabled(features::kDCompOnD3D12) &&
              backend_type == wgpu::BackendType::D3D12 && is_graphite_device) {
     Microsoft::WRL::ComPtr<ID3D11On12Device> dawn_d3d12_device;
@@ -355,7 +359,6 @@ bool D3DImageBacking::PersistentGraphiteDawnAccess::BeginAccess(
     signaled_value = wait_fence->GetFenceValue();
     desc.fenceCount = 1;
     desc.fences = &shared_fence;
-    desc.signaledValueCount = 1;
     desc.signaledValues = &signaled_value;
   }
 
@@ -446,9 +449,13 @@ bool D3DImageBacking::PersistentGraphiteDawnAccess::IsGraphiteDevice(
 
 bool D3DImageBacking::PersistentGraphiteDawnAccess::IsGraphiteD3D11Device(
     const Microsoft::WRL::ComPtr<ID3D11Device>& d3d11_device) const {
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  return false;
+#else
   auto graphite_d3d11_device =
       dawn::native::d3d11::GetD3D11Device(device_.Get());
   return d3d11_device.Get() == graphite_d3d11_device.Get();
+#endif
 }
 
 // GraphiteTextureHolder keeps a ref to DawnSharedTextureCache and
@@ -1034,9 +1041,11 @@ void D3DImageBacking::InitPersistentGraphiteDawnAccess(
 
 #if DCHECK_IS_ON()
   // This is only supported if graphite and ANGLE shares the same D3D11 device.
+#if !defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   auto dawn_d3d11_device = dawn::native::d3d11::GetD3D11Device(device.Get());
   auto angle_d3d11_device = gl::QueryD3D11DeviceObjectFromANGLE();
   DCHECK(dawn_d3d11_device == angle_d3d11_device);
+#endif
 #endif
 
   // Query all supported usage of the texture memory.
@@ -1338,7 +1347,6 @@ wgpu::Texture D3DImageBacking::BeginAccessDawn(
   desc.concurrentRead = !write_access && is_clear;
   desc.fenceCount = shared_fences.size();
   desc.fences = shared_fences.data();
-  desc.signaledValueCount = signaled_values.size();
   desc.signaledValues = signaled_values.data();
   desc.nextInChain = &swapchain_begin_state;
 
@@ -1421,8 +1429,6 @@ void D3DImageBacking::EndAccessDawn(const wgpu::Device& device,
   // OK since we check for it explicitly below.
   wgpu::SharedTextureMemoryEndAccessState end_state = {};
   shared_texture_memory.EndAccess(texture.Get(), &end_state);
-  CHECK(end_state.fenceCount == end_state.signaledValueCount);
-
   D3DSharedFenceSet signaled_fences;
   if (use_cross_device_fence_synchronization()) {
     auto& cached_fences = dawn_signaled_fences_map_[device.Get()];
@@ -1870,7 +1876,6 @@ wgpu::Buffer D3DImageBacking::BeginAccessDawnBuffer(
   desc.initialized = true;
   desc.fenceCount = shared_fences.size();
   desc.fences = shared_fences.data();
-  desc.signaledValueCount = signaled_values.size();
   desc.signaledValues = signaled_values.data();
 
   wgpu::Buffer buffer =
@@ -1900,8 +1905,6 @@ void D3DImageBacking::EndAccessDawnBuffer(const wgpu::Device& device,
 
   wgpu::SharedBufferMemoryEndAccessState end_state = {};
   dawn_shared_buffer_memory_.EndAccess(buffer.Get(), &end_state);
-  CHECK(end_state.fenceCount == end_state.signaledValueCount);
-
   D3DSharedFenceSet signaled_fences;
   signaled_fences.reserve(end_state.fenceCount);
   for (size_t i = 0; i < end_state.fenceCount; ++i) {

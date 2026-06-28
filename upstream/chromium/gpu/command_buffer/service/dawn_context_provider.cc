@@ -4,6 +4,8 @@
 
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <vector>
 
@@ -42,6 +44,7 @@
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/config/gpu_util.h"
+#include "third_party/dawn/include/dawn/dawn_proc.h"
 #include "third_party/dawn/include/dawn/webgpu_cpp_print.h"
 #include "third_party/skia/include/gpu/graphite/Context.h"
 #include "third_party/skia/include/gpu/graphite/dawn/DawnBackendContext.h"
@@ -68,6 +71,15 @@
 
 namespace gpu {
 namespace {
+
+void TraceStandaloneDawnStage(const char* stage) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (!std::getenv("HTML_CSS_RENDERER_TRACE_GPU_INIT"))
+    return;
+  std::fprintf(stderr, "dawn_context.stage=%s\n", stage ? stage : "");
+  std::fflush(stderr);
+#endif
+}
 
 // Used as a flag to test dawn initialization failure.
 BASE_FEATURE(kForceDawnInitializeFailure, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -506,6 +518,12 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
 
 #if BUILDFLAG(IS_WIN)
   Microsoft::WRL::ComPtr<ID3D11Device> GetD3D11Device() const {
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    // The standalone D3D12 probe builds Dawn without the D3D11 backend. Keep
+    // D3D11/D3D11On12 helpers disabled until the D3D12 SharedImage path is
+    // explicitly proven.
+    return nullptr;
+#else
     if (backend_type() == wgpu::BackendType::D3D11) {
       return dawn::native::d3d11::GetD3D11Device(device_.Get());
     }
@@ -534,6 +552,7 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
       return d3d11_device;
     }
     return nullptr;
+#endif
   }
 
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue() const {
@@ -544,6 +563,9 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
   }
 
   void FlushD3D11CommandsIfDelayed() const {
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    return;
+#else
     if (backend_type() != wgpu::BackendType::D3D11) {
       return;
     }
@@ -564,6 +586,7 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> context;
     d3d11_device->GetImmediateContext(&context);
     context->Flush();
+#endif
   }
 #endif
 
@@ -822,6 +845,12 @@ bool DawnSharedContext::Initialize(
     const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
     DawnContextProvider::ValidateAdapterFn validate_adapter_fn) {
+  TraceStandaloneDawnStage("Initialize begin");
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  DawnProcTable procs = dawn::native::GetProcs();
+  dawnProcSetProcs(&procs);
+  TraceStandaloneDawnStage("after dawnProcSetProcs");
+#endif
   // Make Dawn experimental API and WGSL features available since access to this
   // instance doesn't exit the GPU process.
   // LogInfo will be used to receive instance level errors. For example failures
@@ -829,9 +858,11 @@ bool DawnSharedContext::Initialize(
   dawn::native::DawnInstanceDescriptor dawn_instance_desc;
   dawn_instance_desc.SetLoggingCallback(&DawnSharedContext::InstanceLogInfo,
                                         this);
+  TraceStandaloneDawnStage("before DawnInstance Create");
   instance_ = webgpu::DawnInstance::Create(&platform_, gpu_preferences,
                                            webgpu::SafetyLevel::kUnsafe,
                                            &dawn_instance_desc);
+  TraceStandaloneDawnStage("after DawnInstance Create");
 
   std::vector<const char*> enabled_toggles =
       GetEnabledToggles(backend_type, force_fallback_adapter, gpu_preferences);
@@ -856,6 +887,7 @@ bool DawnSharedContext::Initialize(
 
 #if BUILDFLAG(IS_WIN)
   dawn::native::d3d::RequestAdapterOptionsLUID adapter_options_luid;
+#if !defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   if ((adapter_options.backendType == wgpu::BackendType::D3D11 ||
        adapter_options.backendType == wgpu::BackendType::D3D12) &&
       GetANGLED3D11DeviceLUID(&adapter_options_luid.adapterLUID)) {
@@ -863,6 +895,7 @@ bool DawnSharedContext::Initialize(
     adapter_options_luid.nextInChain = adapter_options.nextInChain;
     adapter_options.nextInChain = &adapter_options_luid;
   }
+#endif
 
   // Share D3D11 device with ANGLE to reduce synchronization overhead.
   dawn::native::d3d11::RequestAdapterOptionsD3D11Device
@@ -919,13 +952,17 @@ bool DawnSharedContext::Initialize(
 #endif
 
   adapter_options.featureLevel = wgpu::FeatureLevel::Core;
+  TraceStandaloneDawnStage("before EnumerateAdapters core");
   std::vector<dawn::native::Adapter> adapters =
       instance_->EnumerateAdapters(&adapter_options);
+  TraceStandaloneDawnStage("after EnumerateAdapters core");
 
   if (adapters.empty()) {
     LOG(ERROR) << "No adapters found for non compatibility mode.";
     adapter_options.featureLevel = wgpu::FeatureLevel::Compatibility;
+    TraceStandaloneDawnStage("before EnumerateAdapters compatibility");
     adapters = instance_->EnumerateAdapters(&adapter_options);
+    TraceStandaloneDawnStage("after EnumerateAdapters compatibility");
   }
 
   if (adapters.empty()) {
@@ -937,6 +974,7 @@ bool DawnSharedContext::Initialize(
     return false;
   }
   adapter_ = wgpu::Adapter(adapters[0].Get());
+  TraceStandaloneDawnStage("after adapter wrap");
 
   if (!validate_adapter_fn(backend_type, adapter_)) {
     LogInitFailure("Validate adapter failed.",
@@ -1000,6 +1038,7 @@ bool DawnSharedContext::Initialize(
 
   std::vector<wgpu::FeatureName> features =
       GetRequiredFeatures(backend_type, adapter_);
+  TraceStandaloneDawnStage("after required features");
   descriptor.requiredFeatures = features.data();
   descriptor.requiredFeatureCount = std::size(features);
 
@@ -1012,6 +1051,7 @@ bool DawnSharedContext::Initialize(
     return false;
   }
   descriptor.requiredLimits = &supportedLimits;
+  TraceStandaloneDawnStage("after adapter limits");
 
   // ANGLE always tries creating D3D11 device with debug layer when dcheck is
   // on, so tries creating dawn device with backend validation as well.
@@ -1038,7 +1078,9 @@ bool DawnSharedContext::Initialize(
        it != backend_validation_levels.rend(); ++it) {
     auto level = *it;
     instance_->SetBackendValidationLevel(level);
+    TraceStandaloneDawnStage("before CreateDevice");
     device_ = adapter_.CreateDevice(&descriptor);
+    TraceStandaloneDawnStage("after CreateDevice");
     if (device_) {
       break;
     }
@@ -1051,6 +1093,7 @@ bool DawnSharedContext::Initialize(
   }
 
   device_.SetLoggingCallback(&DawnSharedContext::DeviceLogInfo, this);
+  TraceStandaloneDawnStage("after SetLoggingCallback");
 
   backend_type_ = backend_type;
   is_vulkan_swiftshader_adapter_ =

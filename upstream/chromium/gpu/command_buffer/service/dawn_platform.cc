@@ -373,8 +373,10 @@ bool DawnPlatform::IsFeatureEnabled(dawn::platform::Features feature) {
     case dawn::platform::Features::kWebGPUDecomposeUniformBuffers:
       return base::FeatureList::IsEnabled(
           features::kWebGPUDecomposeUniformBuffers);
+#if !defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
     case dawn::platform::Features::kWebGPUUseHLSL2021:
       return base::FeatureList::IsEnabled(features::kWebGPUUseHLSL2021);
+#endif
     default:
       return false;
   }

@@ -594,17 +594,28 @@ creating a D3D12 adapter/device, clearing an `RGBA8Unorm` texture, copying it to
 a readback buffer, and validating deterministic pixels. This is a D3D12 texture
 pixel proof, not yet a standalone HTML/Viz output proof.
 
-The next code task is to move from the Dawn texture proof to Chromium's
-Graphite/Viz path: enable real `USE_DAWN` and `SKIA_USE_DAWN` buildflags, wire
-`dawn_context_provider.cc`/`dawn_instance.cc`/`dawn_platform.cc` and the
-Graphite/Dawn SharedImage files, and make
-`DawnContextProvider::CreateWithBackend(wgpu::BackendType::D3D12, ...)`
-initialize from the standalone runtime. Only after that provider exists can
-`StandaloneSkiaOutputSurfaceDependency::GetDawnContextProvider()` return a real
-provider and a D3D12 `SharedContextState`/Viz output smoke attempt rendered HTML
-pixels.
+The next implementation step moved from the Dawn texture proof to Chromium's
+Graphite/Viz path. The opt-in compile surface behind
+`BLINK_STANDALONE_DAWN_D3D12`: standalone Dawn buildflag overrides, a scoped
+`BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER` guard, and the minimum
+Dawn/Graphite/D3D source files. The following objects compile in the benchmark
+target:
+`dawn_context_provider`, `dawn_instance`, `dawn_platform`,
+`skia_output_device_dawn`, `image_context_impl`,
+`wrapped_graphite_texture_backing`, `skia_graphite_dawn_image_representation`,
+`dawn_fallback_image_representation`, `d3d_image_backing`,
+`d3d_image_backing_factory`, `d3d_image_representation`, `d3d_image_utils`,
+`dxgi_shared_handle_manager`, and the SharedImage Dawn utility objects.
 
-Until those pieces exist, same-device D3D12 external targets are design-only.
+`--gpu-output-d3d12-render-pixel-smoke` now initializes a standalone Dawn D3D12
+provider, creates a Graphite-backed `SharedContextState`, drives Viz/SkiaRenderer
+for deterministic HTML/CSS content, obtains a D3D12-backed CopyOutput
+SharedImage, then performs a system-memory CopyOutput readback from the same
+runtime and verifies the expected CSS background and box colors. This is a
+pixel-bearing rendered HTML proof for the internal D3D12 Graphite/Viz path.
+
+Until a borrowed/external target proof exists, same-device D3D12 external targets
+remain design-only.
 The expected future shape is an adapter around an externally supplied
 `ID3D12Device*` and `ID3D12CommandQueue*`, a copy or render path into a supplied
 `ID3D12Resource*`, explicit resource-state transitions, and fence wait/signal

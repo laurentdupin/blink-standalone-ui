@@ -184,7 +184,8 @@ void DXGISharedHandleState::ReleaseKeyedMutex(
   }
 }
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 wgpu::SharedTextureMemory DXGISharedHandleState::GetSharedTextureMemory(
     const wgpu::Device& device) {
   base::AutoLock auto_lock(lock_);

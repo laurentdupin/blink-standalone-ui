@@ -537,7 +537,8 @@ DXGI_FORMAT ToDXGIFormat(viz::SharedImageFormat format) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 wgpu::TextureFormat ToDawnFormat(viz::SharedImageFormat format) {
   if (format == viz::SinglePlaneFormat::kRGBA_8888 ||
       format == viz::SinglePlaneFormat::kRGBX_8888) {
@@ -667,7 +668,7 @@ wgpu::TextureAspect ToDawnTextureAspect(bool is_yuv_plane, int plane_index) {
     return wgpu::TextureAspect::Plane2Only;
   }
 }
-#endif  // !defined(HTML_CSS_RENDERER_STANDALONE)
+#endif
 
 skgpu::graphite::TextureInfo GraphiteBackendTextureInfo(
     GrContextType gr_context_type,

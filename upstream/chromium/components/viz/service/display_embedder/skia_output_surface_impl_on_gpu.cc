@@ -129,11 +129,14 @@
 #endif
 
 #if BUILDFLAG(SKIA_USE_DAWN) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)) && \
-    !defined(HTML_CSS_RENDERER_STANDALONE)
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "components/viz/service/display_embedder/skia_output_device_dawn.h"
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/dawn_platform.h"
 #endif
@@ -2146,7 +2149,9 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForVulkan() {
 #endif  // !BUILDFLAG(ENABLE_VULKAN)
 
 bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   if (dependency_->IsOffscreen()) {
     output_device_ = std::make_unique<SkiaOutputDeviceOffscreen>(
         context_state_, gfx::SurfaceOrigin::kBottomLeft,
@@ -2426,7 +2431,9 @@ bool SkiaOutputSurfaceImplOnGpu::PresentFrame(OutputSurfaceFrame frame) {
   output_device_->Present(frame.sub_buffer_rect, buffer_presented_callback_,
                           std::move(frame));
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   if (auto* dawn_context_provider = context_state_->dawn_context_provider()) {
     dawn_context_provider->GetDawnPlatform()->OnFramePresented();
   }

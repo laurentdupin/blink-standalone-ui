@@ -23,6 +23,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/task/single_thread_task_executor.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
@@ -178,6 +179,7 @@ void PrintUsage() {
       "[--gpu-output-vulkan-smoke] "
       "[--gpu-output-vulkan-pixel-smoke] "
       "[--gpu-output-d3d12-pixel-smoke] "
+      "[--gpu-output-d3d12-render-pixel-smoke] "
       "[--gpu-vulkan-ganesh-context-smoke] "
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
@@ -6366,6 +6368,129 @@ int RunGpuOutputD3D12PixelSmoke() {
 #endif
 }
 
+int RunGpuOutputD3D12RenderPixelSmoke() {
+#if !BUILDFLAG(IS_WIN)
+  std::printf(
+      "gpu_output_d3d12_render_pixel_smoke: blocked platform=non_windows "
+      "native_d3d12=0 failure=native D3D12 is a Windows backend; Linux and "
+      "other platforms need Vulkan or a separately proven translation layer\n");
+  return 0;
+#else
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {128.0f, 64.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      "</style><div id='box'></div>";
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(stderr,
+                 "gpu_output_d3d12_render_pixel_smoke: failed "
+                 "failure=runtime initialization failed\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_d3d12_gpu_frame = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult result =
+      runtime->AdvanceFrame(input);
+  if (!result.gpu_frame.shared_image_available ||
+      result.gpu_frame.mailbox.empty() || !result.viz_display_created ||
+      !result.skia_renderer_gpu_path_reached ||
+      !result.shared_image_interface_available || result.gpu_frame.is_software) {
+    std::fprintf(
+        stderr,
+        "gpu_output_d3d12_render_pixel_smoke: failed failure=setup "
+        "shared_image=%d mailbox=%s software=%d viz_display=%d skia_gpu=%d "
+        "shared_interface=%d copy_failure=%s\n",
+        result.gpu_frame.shared_image_available ? 1 : 0,
+        result.gpu_frame.mailbox.c_str(),
+        result.gpu_frame.is_software ? 1 : 0,
+        result.viz_display_created ? 1 : 0,
+        result.skia_renderer_gpu_path_reached ? 1 : 0,
+        result.shared_image_interface_available ? 1 : 0,
+        result.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : result.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput readback_input;
+  readback_input.viewport = runtime->Snapshot().viewport;
+  readback_input.request_raw_frame = true;
+  readback_input.result_collection =
+      html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult readback_result =
+      runtime->AdvanceFrame(readback_input);
+  const html_css_renderer::RawFrameOutput& raw = readback_result.raw_frame;
+  auto raw_pixel_matches = [&raw](int x,
+                                  int y,
+                                  uint8_t expected_red,
+                                  uint8_t expected_green,
+                                  uint8_t expected_blue) {
+    if (raw.width <= x || raw.height <= y || raw.stride < raw.width * 4 ||
+        raw.pixels.empty() ||
+        (raw.pixel_format != html_css_renderer::RawFramePixelFormat::kRGBA8 &&
+         raw.pixel_format != html_css_renderer::RawFramePixelFormat::kBGRA8)) {
+      return false;
+    }
+    const uint8_t* pixel =
+        raw.pixels.data() + static_cast<size_t>(y) * raw.stride +
+        static_cast<size_t>(x) * 4;
+    const uint8_t red =
+        raw.pixel_format == html_css_renderer::RawFramePixelFormat::kRGBA8
+            ? pixel[0]
+            : pixel[2];
+    const uint8_t green = pixel[1];
+    const uint8_t blue =
+        raw.pixel_format == html_css_renderer::RawFramePixelFormat::kRGBA8
+            ? pixel[2]
+            : pixel[0];
+    const auto near_channel = [](uint8_t actual, uint8_t expected) {
+      const int delta = static_cast<int>(actual) - static_cast<int>(expected);
+      return delta >= -12 && delta <= 12;
+    };
+    return pixel[3] != 0 && near_channel(red, expected_red) &&
+           near_channel(green, expected_green) &&
+           near_channel(blue, expected_blue);
+  };
+  if (!readback_result.raw_frame_requested ||
+      readback_result.raw_frame_failure.size() > 0 ||
+      !raw_pixel_matches(4, 4, 0x12, 0x34, 0x56) ||
+      !raw_pixel_matches(24, 24, 0xd0, 0x63, 0x29)) {
+    std::fprintf(
+        stderr,
+        "gpu_output_d3d12_render_pixel_smoke: failed failure=raw readback "
+        "raw_requested=%d raw=%dx%d bytes=%zu format=%d raw_failure=%s\n",
+        readback_result.raw_frame_requested ? 1 : 0, raw.width, raw.height,
+        raw.pixels.size(), static_cast<int>(raw.pixel_format),
+        readback_result.raw_frame_failure.c_str());
+    return 1;
+  }
+
+  std::printf(
+      "gpu_output_d3d12_render_pixel_smoke: ok rendered_html=1 graphite=1 "
+      "viz=1 shared_image=1 readback=1 size=%dx%d format=%s mailbox=%s "
+      "raw=%dx%d\n",
+      result.gpu_frame.width, result.gpu_frame.height,
+      result.gpu_frame.format.c_str(), result.gpu_frame.mailbox.c_str(),
+      raw.width, raw.height);
+  return 0;
+#endif
+}
+
 int RunGpuBorrowedVkImageBackingSmoke() {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer.viewport = {128.0f, 64.0f};
@@ -7246,6 +7371,10 @@ int main(int argc, char** argv) {
   InitializeStandaloneFeatureList();
   base::SingleThreadTaskExecutor main_task_executor(
       base::MessagePumpType::DEFAULT, /*is_main_thread=*/true);
+  if (!base::ThreadPoolInstance::Get()) {
+    base::ThreadPoolInstance::CreateAndStartWithDefaultParams(
+        "blink_standalone_render_benchmark");
+  }
   if (!perfetto::Tracing::IsInitialized())
     base::trace_event::InitializeInProcessPerfettoBackend();
 
@@ -7266,6 +7395,7 @@ int main(int argc, char** argv) {
   bool gpu_output_vulkan_smoke = false;
   bool gpu_output_vulkan_pixel_smoke = false;
   bool gpu_output_d3d12_pixel_smoke = false;
+  bool gpu_output_d3d12_render_pixel_smoke = false;
   bool gpu_borrowed_vkimage_backing_smoke = false;
   bool gpu_borrowed_vkimage_render_copy_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
@@ -7404,6 +7534,8 @@ int main(int argc, char** argv) {
       gpu_output_vulkan_pixel_smoke = true;
     } else if (arg == "--gpu-output-d3d12-pixel-smoke") {
       gpu_output_d3d12_pixel_smoke = true;
+    } else if (arg == "--gpu-output-d3d12-render-pixel-smoke") {
+      gpu_output_d3d12_render_pixel_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-backing-smoke") {
       gpu_borrowed_vkimage_backing_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-render-copy-smoke") {
@@ -7587,6 +7719,10 @@ int main(int argc, char** argv) {
 
   if (gpu_output_d3d12_pixel_smoke) {
     return RunGpuOutputD3D12PixelSmoke();
+  }
+
+  if (gpu_output_d3d12_render_pixel_smoke) {
+    return RunGpuOutputD3D12RenderPixelSmoke();
   }
 
   if (gpu_borrowed_vkimage_backing_smoke) {

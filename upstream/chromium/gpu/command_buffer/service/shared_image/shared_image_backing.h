@@ -33,7 +33,8 @@
 #include "ui/gfx/gpu_memory_buffer_handle.h"
 #include "ui/gfx/native_pixmap.h"
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include <dawn/webgpu_cpp.h>
 #endif
 
@@ -94,7 +95,8 @@ struct AccessParams {
   ~AccessParams();
 
   scoped_refptr<SharedContextState> context_state = nullptr;
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   wgpu::Device wgpu_device = nullptr;
 #endif
   // Other context types can be added here in the future.
@@ -320,7 +322,8 @@ class GPU_GLES2_EXPORT SharedImageBacking {
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state);
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   virtual std::unique_ptr<DawnImageRepresentation> ProduceDawn(
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,

@@ -32,7 +32,9 @@
 #include "gpu/vulkan/vulkan_implementation.h"
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
 #include "gpu/command_buffer/service/dawn_context_provider.h"
 #endif
 
@@ -84,7 +86,9 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
   }
 #endif
 
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
   if (params.gpu_channel_manager->gpu_preferences().gr_context_type ==
       gpu::GrContextType::kGraphiteDawn) {
     compositor_gpu_thread->dawn_context_provider_ =
@@ -176,7 +180,9 @@ CompositorGpuThread::GetSharedContextState() {
 #else
       /*vulkan_context_provider=*/nullptr,
 #endif
-#if BUILDFLAG(SKIA_USE_DAWN) && !defined(HTML_CSS_RENDERER_STANDALONE)
+#if BUILDFLAG(SKIA_USE_DAWN) && \
+    (!defined(HTML_CSS_RENDERER_STANDALONE) || \
+     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER))
       dawn_context_provider_.get(),
 #else
       /*dawn_context_provider=*/nullptr,
