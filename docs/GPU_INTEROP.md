@@ -273,12 +273,35 @@ SharedImage setup must run on the GPU task sequence. Moving the prototype work
 to the GPU thread avoided the sequence crash, but the smoke still failed
 recoverably with `Borrowed VkImage target requires a Vulkan Ganesh context`.
 
-This means the next real implementation step is not just a new backing class.
-The standalone offscreen GPU-output path must first provide a Vulkan Ganesh
-`SharedContextState` or a separate Vulkan Skia context compatible with
-`SharedImageManager`/`SharedImageRepresentationFactory`. Without that context,
-a borrowed Vulkan image cannot be exposed as a writable Skia representation in
-the benchmark/runtime path, and a smoke would only validate fallback metadata.
+The reason is the current offscreen context topology. The benchmark/offscreen
+path uses `gpu::InProcessGpuThreadHolder`, which initializes an offscreen GL
+surface and GL context, constructs `SharedContextState` from that GL share group
+and surface, and calls `InitializeGL()`/`InitializeSkia()`. The custom
+`StandaloneSkiaOutputSurfaceDependency` returns that shared context state to
+Viz, but `GetVulkanContextProvider()` is hard-coded to `nullptr`. As a result,
+`SkiaOutputSurfaceImplOnGpu::Initialize()` takes the GL/offscreen output-device
+path (`SkiaOutputDeviceOffscreen`) rather than `InitializeForVulkan()`, even
+though the frame still reaches the GPU SkiaRenderer and can produce a SharedImage
+mailbox.
+
+The SDL Vulkan path does not solve this because `VulkanWindowHost` is a
+separate native-window presenter. It creates its own `gpu::VulkanImplementation`,
+`gpu::VulkanDeviceQueue`, Win32 surface, swapchain, and command pool, but it
+does not create or expose a `SharedContextState`, a
+`viz::VulkanInProcessContextProvider`, or an offscreen Skia/Vulkan render target.
+It proves Chromium-owned Vulkan presentation to an HWND, not a reusable
+offscreen Vulkan Ganesh context.
+
+The imported Chromium tree does contain `viz::VulkanInProcessContextProvider`,
+`SkiaOutputDeviceVulkan`, and `SkiaOutputDeviceVulkanSecondaryCB`, and they are
+buildable in the generated Windows build. They are not currently wired into
+`StandaloneCompositorRuntime` or `StandaloneSkiaOutputSurfaceDependency`. A real
+prototype must either create a Vulkan-backed `SharedContextState` around a
+`VulkanInProcessContextProvider` for the offscreen runtime, or add an offscreen
+Vulkan output-surface variant that can be used without an HWND/swapchain. Until
+that exists, a borrowed Vulkan image cannot be exposed as a writable Skia
+representation in the benchmark/runtime path, and a smoke would only validate
+fallback metadata.
 
 The smallest honest next implementation is:
 
@@ -286,8 +309,12 @@ The smallest honest next implementation is:
    `ExternalVkImageBacking`, with explicit non-ownership of `VkImage` and memory
    handles.
 2. Wire or create a Vulkan Ganesh `SharedContextState` for the standalone
-   offscreen GPU-output path, and run borrowed backing setup on the GPU task
-   sequence.
+   offscreen GPU-output path. This likely means teaching
+   `StandaloneSkiaOutputSurfaceDependency` to expose a real
+   `viz::VulkanInProcessContextProvider` and ensuring
+   `SkiaOutputSurfaceImplOnGpu` selects its Vulkan/offscreen device path instead
+   of the current GL `SkiaOutputDeviceOffscreen` path. Borrowed backing setup
+   must run on the GPU task sequence.
 3. Decide the required embedder metadata: at minimum image size, format, usage,
    current/final layout, queue family, and synchronization; likely also
    `VkDeviceMemory`, allocation size, and memory type unless Skia validation
