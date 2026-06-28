@@ -201,6 +201,9 @@ bool ShouldTryStandaloneProviderResource(const FetchParameters& params,
   if (factory.GetType() == ResourceType::kCSSStyleSheet) {
     return !params.Url().ProtocolIsData();
   }
+  if (factory.GetType() == ResourceType::kFont) {
+    return !params.Url().ProtocolIsData();
+  }
   return false;
 }
 
@@ -245,6 +248,16 @@ Resource* CreateStandaloneProviderResource(
         params.Options().initiator_info.name == fetch_initiator_type_names::kCSS
             ? html_css_renderer::StandaloneResourceInitiator::kCssImport
             : html_css_renderer::StandaloneResourceInitiator::kStylesheetLink;
+  } else if (factory.GetType() == ResourceType::kFont) {
+    request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kFont;
+    request.accepted_mime_types.push_back("font/woff2");
+    request.accepted_mime_types.push_back("font/woff");
+    request.accepted_mime_types.push_back("font/ttf");
+    request.accepted_mime_types.push_back("font/otf");
+    request.accepted_mime_types.push_back("application/font-woff");
+    request.accepted_mime_types.push_back("application/octet-stream");
+    request.initiator =
+        html_css_renderer::StandaloneResourceInitiator::kFontFace;
   } else {
     request.type_hint = html_css_renderer::StandaloneResourceTypeHint::kImage;
     request.accepted_mime_types.push_back("image/png");

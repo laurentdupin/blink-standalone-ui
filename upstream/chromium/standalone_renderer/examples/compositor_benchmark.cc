@@ -152,6 +152,7 @@ void PrintUsage() {
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
+      "[--c-api-resource-provider-font-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
       "[--c-api-css-filter-blur-smoke] "
@@ -734,6 +735,209 @@ int RunCApiResourceProviderSmoke() {
       provider_state.css_background_request_count,
       provider_state.not_found_count, provider_state.release_count,
       stats.resource_red_e84444, stats.resource_green_237a57);
+  return 0;
+}
+
+struct CApiResourceProviderFontSmokeState {
+  std::vector<uint8_t> font_bytes = {0x77, 0x4f, 0x46, 0x32, 0x00, 0x00,
+                                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+  std::string font_css =
+      "@font-face{font-family:'ProviderFont';"
+      "src:url('asset://provider-font.woff2') format('woff2');}"
+      "body{margin:0;background:#112233;color:white}"
+      "#font-text{font-family:'ProviderFont',serif;font-size:24px}";
+  std::string blocked_font_css =
+      "@font-face{font-family:'BlockedProviderFont';"
+      "src:url('asset://blocked-font.woff2') format('woff2');}"
+      "body{margin:0;background:#112233;color:white}"
+      "#font-text{font-family:'BlockedProviderFont',serif;font-size:24px}";
+  int request_count = 0;
+  int stylesheet_request_count = 0;
+  int font_request_count = 0;
+  int font_face_initiator_count = 0;
+  int font_success_count = 0;
+  int font_blocked_count = 0;
+  int release_count = 0;
+  bool block_fonts = false;
+};
+
+blink_standalone_resource_status_t CApiResourceProviderFontSmokeLoad(
+    void* user_data,
+    const blink_standalone_resource_request_t* request,
+    blink_standalone_resource_response_t* response) {
+  auto* state = static_cast<CApiResourceProviderFontSmokeState*>(user_data);
+  if (!state || !request || !response || !request->url) {
+    return BLINK_STANDALONE_RESOURCE_STATUS_ERROR;
+  }
+  ++state->request_count;
+  if (request->type_hint == BLINK_STANDALONE_RESOURCE_TYPE_STYLESHEET) {
+    ++state->stylesheet_request_count;
+  }
+  if (request->type_hint == BLINK_STANDALONE_RESOURCE_TYPE_FONT) {
+    ++state->font_request_count;
+  }
+  if (request->initiator == BLINK_STANDALONE_RESOURCE_INITIATOR_FONT_FACE) {
+    ++state->font_face_initiator_count;
+  }
+
+  const std::string url = request->url;
+  if (url.find("font-theme.css") != std::string::npos) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes = reinterpret_cast<const uint8_t*>(state->font_css.data());
+    response->byte_count = state->font_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  if (url.find("font-blocked.css") != std::string::npos) {
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "text/css";
+    response->bytes =
+        reinterpret_cast<const uint8_t*>(state->blocked_font_css.data());
+    response->byte_count = state->blocked_font_css.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  if (url.find("provider-font.woff2") != std::string::npos ||
+      url.find("blocked-font.woff2") != std::string::npos) {
+    if (state->block_fonts ||
+        url.find("blocked-font.woff2") != std::string::npos) {
+      ++state->font_blocked_count;
+      response->status = BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED;
+      return BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED;
+    }
+    ++state->font_success_count;
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "font/woff2";
+    response->bytes = state->font_bytes.data();
+    response->byte_count = state->font_bytes.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  response->status = BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+  return BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+}
+
+void CApiResourceProviderFontSmokeRelease(
+    void* user_data,
+    blink_standalone_resource_response_t*) {
+  auto* state = static_cast<CApiResourceProviderFontSmokeState*>(user_data);
+  if (state) {
+    ++state->release_count;
+  }
+}
+
+int RunCApiResourceProviderFontSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 220;
+  config.height = 100;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_font_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  CApiResourceProviderFontSmokeState provider_state;
+  status = blink_standalone_renderer_set_resource_provider(
+      renderer, CApiResourceProviderFontSmokeLoad,
+      CApiResourceProviderFontSmokeRelease, &provider_state,
+      BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_NETWORK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_font_smoke: provider set failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><link rel='stylesheet' href='asset://font-theme.css'>"
+      "<div id='font-text'>Provider Font Route</div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 0.0)
+               : status;
+  blink_standalone_frame_output_t output = {};
+  blink_standalone_status_code_t output_status =
+      blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      provider_state.stylesheet_request_count < 1 ||
+      provider_state.font_request_count < 1 ||
+      provider_state.font_face_initiator_count < 1 ||
+      provider_state.font_success_count < 1 ||
+      provider_state.font_blocked_count != 0 ||
+      provider_state.release_count != provider_state.request_count) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_font_smoke: font route failed status=%d "
+        "output_status=%d requests=%d stylesheets=%d fonts=%d font_face=%d "
+        "font_ok=%d blocked=%d releases=%d error=%s\n",
+        status, output_status, provider_state.request_count,
+        provider_state.stylesheet_request_count,
+        provider_state.font_request_count,
+        provider_state.font_face_initiator_count,
+        provider_state.font_success_count, provider_state.font_blocked_count,
+        provider_state.release_count,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  const int requests_before_blocked = provider_state.request_count;
+  const int blocked_before = provider_state.font_blocked_count;
+  const char* blocked_html =
+      "<!doctype html><link rel='stylesheet' href='asset://font-blocked.css'>"
+      "<div id='font-text'>Blocked Font Route</div>";
+  status =
+      blink_standalone_renderer_set_document_html(renderer, blocked_html, "",
+                                                  "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 1.0 / 60.0)
+               : status;
+  output = {};
+  output_status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      provider_state.request_count <= requests_before_blocked ||
+      provider_state.font_blocked_count <= blocked_before ||
+      provider_state.release_count != provider_state.request_count) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_font_smoke: blocked font did not fail "
+        "recoverably status=%d output_status=%d requests=%d before=%d "
+        "blocked=%d before_blocked=%d releases=%d error=%s\n",
+        status, output_status, provider_state.request_count,
+        requests_before_blocked, provider_state.font_blocked_count,
+        blocked_before, provider_state.release_count,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_resource_provider_font_smoke: ok requests=%d stylesheets=%d "
+      "fonts=%d font_face=%d font_ok=%d blocked=%d releases=%d "
+      "decode=unsupported\n",
+      provider_state.request_count, provider_state.stylesheet_request_count,
+      provider_state.font_request_count,
+      provider_state.font_face_initiator_count,
+      provider_state.font_success_count, provider_state.font_blocked_count,
+      provider_state.release_count);
   return 0;
 }
 
@@ -5944,6 +6148,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-viewport-resize-smoke" ||
         arg == "--c-api-resource-provider-smoke" ||
         arg == "--c-api-resource-provider-data-url-smoke" ||
+        arg == "--c-api-resource-provider-font-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-css-filter-blur-smoke" ||
@@ -5999,6 +6204,7 @@ int main(int argc, char** argv) {
   bool c_api_viewport_resize_smoke = false;
   bool c_api_resource_provider_smoke = false;
   bool c_api_resource_provider_data_url_smoke = false;
+  bool c_api_resource_provider_font_smoke = false;
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
   bool c_api_css_filter_blur_smoke = false;
@@ -6130,6 +6336,8 @@ int main(int argc, char** argv) {
       c_api_resource_provider_smoke = true;
     } else if (arg == "--c-api-resource-provider-data-url-smoke") {
       c_api_resource_provider_data_url_smoke = true;
+    } else if (arg == "--c-api-resource-provider-font-smoke") {
+      c_api_resource_provider_font_smoke = true;
     } else if (arg == "--c-api-empty-resource-smoke") {
       c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-transparent-background-smoke") {
@@ -6299,6 +6507,10 @@ int main(int argc, char** argv) {
 
   if (c_api_resource_provider_data_url_smoke) {
     return RunCApiResourceProviderDataUrlSmoke();
+  }
+
+  if (c_api_resource_provider_font_smoke) {
+    return RunCApiResourceProviderFontSmoke();
   }
 
   if (c_api_empty_resource_smoke) {

@@ -1066,6 +1066,7 @@ extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
+#include "third_party/blink/renderer/platform/fonts/font_custom_platform_data.h"
 #include "third_party/blink/renderer/platform/fonts/plain_text_painter.h"
 #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_image_cache.h"
@@ -15778,13 +15779,67 @@ network::mojom::ReferrerPolicy ReferrerUtils::MojoReferrerPolicyResolveDefault(
              : policy;
 }
 
-FontResource* FontResource::Fetch(FetchParameters&,
-                                  ResourceFetcher*,
-                                  FontResourceClient*) {
+FontResource* FontResource::Fetch(FetchParameters& params,
+                                  ResourceFetcher* fetcher,
+                                  FontResourceClient* client) {
+  if (!fetcher) {
+    return nullptr;
+  }
+  params.SetRequestContext(mojom::blink::RequestContextType::FONT);
+  params.SetRequestDestination(network::mojom::RequestDestination::kFont);
+  return To<FontResource>(
+      fetcher->RequestResource(params, FontResourceFactory(), client));
+}
+FontResource::FontResource(const ResourceRequest& request,
+                           const ResourceLoaderOptions& options)
+    : Resource(request, ResourceType::kFont, options),
+      load_limit_state_(LoadLimitState::kLoadNotStarted),
+      cors_failed_(false) {}
+FontResource::~FontResource() = default;
+void FontResource::DidAddClient(ResourceClient* client) {
+  Resource::DidAddClient(client);
+}
+void FontResource::SetRevalidatingRequest(const ResourceRequestHead&) {
+  load_limit_state_ = LoadLimitState::kLoadNotStarted;
+}
+void FontResource::StartLoadLimitTimersIfNecessary(
+    base::SingleThreadTaskRunner*) {}
+const FontCustomPlatformData* FontResource::GetCustomFontData() {
+  if (ErrorOccurred()) {
+    return nullptr;
+  }
+  if (Data()) {
+    ots_parsing_message_ =
+        "Web font decoding is unsupported in this standalone build.";
+    SetStatus(ResourceStatus::kDecodeError);
+  }
   return nullptr;
+}
+bool FontResource::IsLowPriorityLoadingAllowedForRemoteFont() const {
+  return true;
+}
+void FontResource::WillReloadAfterDiskCacheMiss() {
+  load_limit_state_ = LoadLimitState::kLoadNotStarted;
+}
+void FontResource::OnMemoryDump(WebMemoryDumpLevelOfDetail,
+                                WebProcessMemoryDump*) const {}
+void FontResource::AddClearDataObserver(
+    FontResourceClearDataObserver* observer) const {
+  if (observer) {
+    clear_data_observers_.insert(observer);
+  }
+}
+std::unique_ptr<BackgroundResponseProcessorFactory>
+FontResource::MaybeCreateBackgroundResponseProcessorFactory() {
+  return nullptr;
+}
+void FontResource::NotifyFinished() {
+  Resource::NotifyFinished();
 }
 void FontResource::Trace(Visitor* visitor) const {
   Resource::Trace(visitor);
+  visitor->Trace(font_data_);
+  visitor->Trace(clear_data_observers_);
 }
 CSSPaintImageGenerator* CSSPaintImageGenerator::Create(const String&,
                                                        const Document&,
