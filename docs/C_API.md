@@ -114,7 +114,14 @@ is explicitly enabled.
 Currently provider-backed resource coverage includes:
 
 - Image resources used by elements and CSS image values.
-- CSS background-image resources.
+- CSS image values, including `background-image`, `mask-image`, and
+  `-webkit-mask-image`, currently reported with the existing
+  `BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE` initiator.
+- Top-level SVG image resources used through element or CSS image URLs are
+  routed through the provider, but SVG image decoding/rendering currently fails
+  closed because the standalone SVG image-document loader is not linked. Nested
+  external resource fetches from inside SVG documents are not provider-routed in
+  this standalone profile.
 - Linked stylesheets via `<link rel="stylesheet" href="...">`.
 - Simple CSS imports from provider-loaded stylesheets, including
   `@import url(...)` and quoted `@import "..."` forms.

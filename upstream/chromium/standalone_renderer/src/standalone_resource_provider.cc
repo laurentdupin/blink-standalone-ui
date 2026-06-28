@@ -424,7 +424,8 @@ StandaloneResourceResult FinalizeProviderMemoryResult(
                        "resource provider returned image bytes without MIME");
   }
   if (IsSvgImageMime(result.mime_type)) {
-    result.error = "encoded SVG available; real Blink SVG image path not linked";
+    result.status = StandaloneResourceStatus::kUnsupportedMime;
+    result.error = "SVG image rendering is unsupported in this standalone build";
     return result;
   }
   if (result.encoded_bytes.empty()) {
@@ -565,8 +566,8 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
     }
   }
   if (IsSvgImageMime(result.mime_type)) {
-    result.status = StandaloneResourceStatus::kSuccess;
-    result.error = "encoded SVG available; real Blink SVG image path not linked";
+    result.status = StandaloneResourceStatus::kUnsupportedMime;
+    result.error = "SVG image rendering is unsupported in this standalone build";
     return result;
   }
   return DecodeOrClassifyImageBytes(std::move(result));
@@ -707,8 +708,8 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
     return result;
   }
   if (IsSvgImageMime(result.mime_type)) {
-    result.status = StandaloneResourceStatus::kSuccess;
-    result.error = "encoded SVG available; real Blink SVG image path not linked";
+    result.status = StandaloneResourceStatus::kUnsupportedMime;
+    result.error = "SVG image rendering is unsupported in this standalone build";
     return result;
   }
   return DecodeOrClassifyImageBytes(std::move(result));

@@ -173,6 +173,7 @@ void PrintUsage() {
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
       "[--c-api-resource-provider-font-smoke] "
+      "[--c-api-resource-provider-mask-svg-smoke] "
       "[--c-api-empty-resource-smoke] "
       "[--c-api-transparent-background-smoke] "
       "[--c-api-css-filter-blur-smoke] "
@@ -1211,6 +1212,208 @@ int RunCApiResourceProviderDataUrlSmoke() {
       provider_state.data_url_img_request_count,
       provider_state.data_url_css_background_request_count,
       provider_state.blocked_count, provider_state.release_count);
+  return 0;
+}
+
+struct CApiResourceProviderMaskSvgSmokeState {
+  std::vector<uint8_t> white_mask_bmp = MakeSolidBmp(4, 4, 0xff, 0xff, 0xff);
+  std::string svg_icon =
+      "<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32'>"
+      "<rect width='32' height='32' fill='rgb(208,99,41)'/>"
+      "</svg>";
+  int request_count = 0;
+  int image_request_count = 0;
+  int img_element_request_count = 0;
+  int css_image_request_count = 0;
+  int mask_request_count = 0;
+  int svg_request_count = 0;
+  int blocked_count = 0;
+  int release_count = 0;
+};
+
+blink_standalone_resource_status_t CApiResourceProviderMaskSvgSmokeLoad(
+    void* user_data,
+    const blink_standalone_resource_request_t* request,
+    blink_standalone_resource_response_t* response) {
+  auto* state =
+      static_cast<CApiResourceProviderMaskSvgSmokeState*>(user_data);
+  if (!state || !request || !response || !request->url) {
+    return BLINK_STANDALONE_RESOURCE_STATUS_ERROR;
+  }
+  ++state->request_count;
+  if (request->type_hint == BLINK_STANDALONE_RESOURCE_TYPE_IMAGE) {
+    ++state->image_request_count;
+  }
+  if (request->initiator == BLINK_STANDALONE_RESOURCE_INITIATOR_IMG_ELEMENT) {
+    ++state->img_element_request_count;
+  }
+  if (request->initiator ==
+      BLINK_STANDALONE_RESOURCE_INITIATOR_CSS_BACKGROUND_IMAGE) {
+    ++state->css_image_request_count;
+  }
+
+  const std::string url = request->url;
+  if (url.find("blocked") != std::string::npos) {
+    ++state->blocked_count;
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED;
+    return BLINK_STANDALONE_RESOURCE_STATUS_BLOCKED;
+  }
+  if (url.find("mask.bmp") != std::string::npos) {
+    ++state->mask_request_count;
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "image/bmp";
+    response->bytes = state->white_mask_bmp.data();
+    response->byte_count = state->white_mask_bmp.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  if (url.find("icon.svg") != std::string::npos) {
+    ++state->svg_request_count;
+    response->status = BLINK_STANDALONE_RESOURCE_STATUS_OK;
+    response->mime_type = "image/svg+xml";
+    response->bytes = reinterpret_cast<const uint8_t*>(state->svg_icon.data());
+    response->byte_count = state->svg_icon.size();
+    response->resolved_url_or_cache_key = request->url;
+    return BLINK_STANDALONE_RESOURCE_STATUS_OK;
+  }
+  response->status = BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+  return BLINK_STANDALONE_RESOURCE_STATUS_NOT_FOUND;
+}
+
+void CApiResourceProviderMaskSvgSmokeRelease(
+    void* user_data,
+    blink_standalone_resource_response_t*) {
+  auto* state =
+      static_cast<CApiResourceProviderMaskSvgSmokeState*>(user_data);
+  if (state) {
+    ++state->release_count;
+  }
+}
+
+int RunCApiResourceProviderMaskSvgSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 180;
+  config.height = 100;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_mask_svg_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  CApiResourceProviderMaskSvgSmokeState provider_state;
+  status = blink_standalone_renderer_set_resource_provider(
+      renderer, CApiResourceProviderMaskSvgSmokeLoad,
+      CApiResourceProviderMaskSvgSmokeRelease, &provider_state,
+      BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_FILE_FALLBACK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_DISABLE_NETWORK |
+          BLINK_STANDALONE_RESOURCE_PROVIDER_REQUIRE_PROVIDER_FOR_EXTERNAL);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_resource_provider_mask_svg_smoke: provider set "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><style>body{margin:0;background:#112233}"
+      "#masked{position:absolute;left:0;top:0;width:60px;height:60px;"
+      "background:#237a57;-webkit-mask-image:url('asset://mask.bmp');"
+      "-webkit-mask-size:60px 60px;mask-image:url('asset://mask.bmp');"
+      "mask-size:60px 60px}"
+      "#svg-img{position:absolute;left:80px;top:0;width:40px;height:40px}"
+      "</style><div id='masked'></div>"
+      "<img id='svg-img' src='asset://icon.svg'>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 0.0)
+               : status;
+  blink_standalone_frame_output_t output = {};
+  blink_standalone_status_code_t output_status =
+      blink_standalone_renderer_get_latest_output(renderer, &output);
+  const FramePixelContentStats stats = AnalyzeFramePixelContent(output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      provider_state.request_count < 2 ||
+      provider_state.image_request_count < 2 ||
+      provider_state.mask_request_count < 1 ||
+      provider_state.svg_request_count < 1 ||
+      provider_state.css_image_request_count < 1 ||
+      provider_state.img_element_request_count < 1 ||
+      provider_state.release_count != provider_state.request_count ||
+      stats.nontransparent < 1000) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_mask_svg_smoke: route failed status=%d "
+        "output_status=%d requests=%d images=%d img=%d css_image=%d "
+        "mask=%d svg=%d releases=%d nontransparent=%zu error=%s\n",
+        status, output_status, provider_state.request_count,
+        provider_state.image_request_count,
+        provider_state.img_element_request_count,
+        provider_state.css_image_request_count, provider_state.mask_request_count,
+        provider_state.svg_request_count, provider_state.release_count,
+        stats.nontransparent, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+
+  const int blocked_before = provider_state.blocked_count;
+  const int requests_before_blocked = provider_state.request_count;
+  const char* blocked_html =
+      "<!doctype html><style>body{margin:0;background:#112233}"
+      "#masked{position:absolute;left:0;top:0;width:60px;height:60px;"
+      "background:#237a57;-webkit-mask-image:url('asset://blocked-mask.bmp');"
+      "-webkit-mask-size:60px 60px}"
+      "#svg-img{position:absolute;left:80px;top:0;width:40px;height:40px}"
+      "</style><div id='masked'></div>"
+      "<img id='svg-img' src='asset://blocked-icon.svg'>";
+  status =
+      blink_standalone_renderer_set_document_html(renderer, blocked_html, "",
+                                                  "");
+  status = status == BLINK_STANDALONE_STATUS_OK
+               ? blink_standalone_renderer_advance_frame(renderer, 1.0 / 60.0)
+               : status;
+  output = {};
+  output_status = blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK ||
+      provider_state.request_count <= requests_before_blocked ||
+      provider_state.blocked_count < blocked_before + 2 ||
+      provider_state.release_count != provider_state.request_count) {
+    std::fprintf(
+        stderr,
+        "c_api_resource_provider_mask_svg_smoke: blocked resources did not "
+        "fail recoverably status=%d output_status=%d requests=%d before=%d "
+        "blocked=%d before_blocked=%d releases=%d error=%s\n",
+        status, output_status, provider_state.request_count,
+        requests_before_blocked, provider_state.blocked_count, blocked_before,
+        provider_state.release_count,
+        blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_renderer_release_latest_output(renderer);
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_resource_provider_mask_svg_smoke: ok requests=%d images=%d "
+      "img=%d css_image=%d mask=%d svg=%d blocked=%d releases=%d "
+      "svg_nested_external=unsupported\n",
+      provider_state.request_count, provider_state.image_request_count,
+      provider_state.img_element_request_count,
+      provider_state.css_image_request_count, provider_state.mask_request_count,
+      provider_state.svg_request_count, provider_state.blocked_count,
+      provider_state.release_count);
   return 0;
 }
 
@@ -6554,6 +6757,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-resource-provider-smoke" ||
         arg == "--c-api-resource-provider-data-url-smoke" ||
         arg == "--c-api-resource-provider-font-smoke" ||
+        arg == "--c-api-resource-provider-mask-svg-smoke" ||
         arg == "--c-api-empty-resource-smoke" ||
         arg == "--c-api-transparent-background-smoke" ||
         arg == "--c-api-css-filter-blur-smoke" ||
@@ -6615,6 +6819,7 @@ int main(int argc, char** argv) {
   bool c_api_resource_provider_smoke = false;
   bool c_api_resource_provider_data_url_smoke = false;
   bool c_api_resource_provider_font_smoke = false;
+  bool c_api_resource_provider_mask_svg_smoke = false;
   bool c_api_empty_resource_smoke = false;
   bool c_api_transparent_background_smoke = false;
   bool c_api_css_filter_blur_smoke = false;
@@ -6758,6 +6963,8 @@ int main(int argc, char** argv) {
       c_api_resource_provider_data_url_smoke = true;
     } else if (arg == "--c-api-resource-provider-font-smoke") {
       c_api_resource_provider_font_smoke = true;
+    } else if (arg == "--c-api-resource-provider-mask-svg-smoke") {
+      c_api_resource_provider_mask_svg_smoke = true;
     } else if (arg == "--c-api-empty-resource-smoke") {
       c_api_empty_resource_smoke = true;
     } else if (arg == "--c-api-transparent-background-smoke") {
@@ -6951,6 +7158,10 @@ int main(int argc, char** argv) {
 
   if (c_api_resource_provider_font_smoke) {
     return RunCApiResourceProviderFontSmoke();
+  }
+
+  if (c_api_resource_provider_mask_svg_smoke) {
+    return RunCApiResourceProviderMaskSvgSmoke();
   }
 
   if (c_api_empty_resource_smoke) {

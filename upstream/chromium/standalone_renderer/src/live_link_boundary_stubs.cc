@@ -5377,6 +5377,14 @@ Resource* CreateStandaloneProviderBackedResource(
                             task_runner);
     return resource;
   }
+  if (result.mime_type == "image/svg+xml") {
+    // The standalone profile routes top-level SVG image bytes through the
+    // provider, but SVG image-document loading is not linked here. Do not hand
+    // encoded SVG to Blink's SVG document path; fail the image recoverably.
+    resource->FinishAsError(ResourceError::CancelledError(params.Url()),
+                            task_runner);
+    return resource;
+  }
 
   ResourceResponse response;
   response.SetHttpStatusCode(200);
