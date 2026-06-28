@@ -183,6 +183,7 @@ void PrintUsage() {
       "[--gpu-vulkan-ganesh-context-smoke] "
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
+      "[--gpu-borrowed-d3d12-render-copy-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
@@ -6491,6 +6492,78 @@ int RunGpuOutputD3D12RenderPixelSmoke() {
 #endif
 }
 
+int RunGpuBorrowedD3D12RenderCopySmoke() {
+#if !BUILDFLAG(IS_WIN)
+  std::printf(
+      "gpu_borrowed_d3d12_render_copy_smoke: blocked platform=non_windows "
+      "native_d3d12=0 failure=native D3D12 is a Windows backend; Linux and "
+      "other platforms need Vulkan or a separately proven translation layer\n");
+  return 0;
+#else
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {128.0f, 64.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      "</style><div id='box'></div>";
+
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(stderr,
+                 "gpu_borrowed_d3d12_render_copy_smoke: failed "
+                 "failure=runtime initialization failed\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_d3d12_gpu_frame = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult frame =
+      runtime->AdvanceFrame(input);
+  if (!frame.gpu_frame.shared_image_available ||
+      frame.gpu_frame.mailbox.empty() || !frame.viz_display_created ||
+      !frame.skia_renderer_gpu_path_reached ||
+      !frame.shared_image_interface_available || frame.gpu_frame.is_software) {
+    std::fprintf(
+        stderr,
+        "gpu_borrowed_d3d12_render_copy_smoke: failed setup "
+        "shared_image=%d mailbox=%s software=%d viz_display=%d skia_gpu=%d "
+        "shared_interface=%d copy_failure=%s\n",
+        frame.gpu_frame.shared_image_available ? 1 : 0,
+        frame.gpu_frame.mailbox.c_str(),
+        frame.gpu_frame.is_software ? 1 : 0,
+        frame.viz_display_created ? 1 : 0,
+        frame.skia_renderer_gpu_path_reached ? 1 : 0,
+        frame.shared_image_interface_available ? 1 : 0,
+        frame.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : frame.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  const std::string result_line =
+      runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
+  if (result_line.find("gpu_borrowed_d3d12_render_copy_smoke: ok") != 0 &&
+      result_line.find("gpu_borrowed_d3d12_render_copy_smoke: blocked") != 0) {
+    std::fprintf(stderr, "%s\n", result_line.c_str());
+    return 1;
+  }
+  std::printf("%s\n", result_line.c_str());
+  return 0;
+#endif
+}
+
 int RunGpuBorrowedVkImageBackingSmoke() {
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer.viewport = {128.0f, 64.0f};
@@ -7398,6 +7471,7 @@ int main(int argc, char** argv) {
   bool gpu_output_d3d12_render_pixel_smoke = false;
   bool gpu_borrowed_vkimage_backing_smoke = false;
   bool gpu_borrowed_vkimage_render_copy_smoke = false;
+  bool gpu_borrowed_d3d12_render_copy_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
   bool gpu_vulkan_ganesh_context_smoke = false;
   bool c_api_smoke = false;
@@ -7540,6 +7614,8 @@ int main(int argc, char** argv) {
       gpu_borrowed_vkimage_backing_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-render-copy-smoke") {
       gpu_borrowed_vkimage_render_copy_smoke = true;
+    } else if (arg == "--gpu-borrowed-d3d12-render-copy-smoke") {
+      gpu_borrowed_d3d12_render_copy_smoke = true;
     } else if (arg == "--gpu-external-vulkan-device-smoke") {
       gpu_external_vulkan_device_smoke = true;
     } else if (arg == "--gpu-vulkan-ganesh-context-smoke") {
@@ -7731,6 +7807,10 @@ int main(int argc, char** argv) {
 
   if (gpu_borrowed_vkimage_render_copy_smoke) {
     return RunGpuBorrowedVkImageRenderCopySmoke();
+  }
+
+  if (gpu_borrowed_d3d12_render_copy_smoke) {
+    return RunGpuBorrowedD3D12RenderCopySmoke();
   }
 
   if (gpu_external_vulkan_device_smoke) {

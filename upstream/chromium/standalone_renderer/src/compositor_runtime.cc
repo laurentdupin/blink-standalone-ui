@@ -95,6 +95,8 @@ StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageBackingSmokeForStandaloneRendere
 const char*
 StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageRenderCopySmokeForStandaloneRenderer();
 const char*
+StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRenderer();
+const char*
 StandaloneBlinkLiveFrameBridgeRunGpuOutputVulkanPixelSmokeForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
@@ -1604,6 +1606,18 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     const char* result =
         ::blink::standalone_renderer_probe::
             StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageRenderCopySmokeForStandaloneRenderer();
+    return result ? result : "";
+  }
+
+  std::string RunBorrowedD3D12RenderCopySmokeForTesting() override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    const char* result =
+        ::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRenderer();
     return result ? result : "";
   }
 

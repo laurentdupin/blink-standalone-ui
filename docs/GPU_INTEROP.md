@@ -614,12 +614,19 @@ SharedImage, then performs a system-memory CopyOutput readback from the same
 runtime and verifies the expected CSS background and box colors. This is a
 pixel-bearing rendered HTML proof for the internal D3D12 Graphite/Viz path.
 
-Until a borrowed/external target proof exists, same-device D3D12 external targets
-remain design-only.
-The expected future shape is an adapter around an externally supplied
-`ID3D12Device*` and `ID3D12CommandQueue*`, a copy or render path into a supplied
-`ID3D12Resource*`, explicit resource-state transitions, and fence wait/signal
-ownership.
+`--gpu-borrowed-d3d12-render-copy-smoke` is the matching internal external
+target proof. It creates a stand-in `ID3D12Resource` on the active Dawn D3D12
+device, registers it as a borrowed SharedImage backing, asks Viz to write the
+rendered HTML CopyOutput into that destination through `BlitRequest`, and then
+verifies deterministic CSS pixels with a direct D3D12 readback. The backing does
+not own or destroy the target resource; the smoke releases the SharedImage
+registration before destroying the stand-in resource.
+
+This proves that the standalone D3D12 Graphite/Viz path can write rendered HTML
+pixels into a borrowed D3D12 texture destination. It is still not a public
+Godot-facing ABI. The public API must replace the stand-in resource with
+embedder-provided `ID3D12Device*`, `ID3D12CommandQueue*`, `ID3D12Resource*`,
+resource-state metadata, and fence wait/signal ownership.
 
 ### Future ABI Direction
 
@@ -649,14 +656,20 @@ Until then, adding C ABI entry points would only create a dead API surface.
   `gpu::VulkanDeviceQueue` wrapper can borrow existing Vulkan device/queue
   handles inside this standalone build and create Chromium helper state without
   double-destroying the borrowed device.
-- No `--gpu-external-vulkan-target-smoke` exists yet. Same-device target image
-  writes are blocked because the standalone runtime cannot access the
-  service-side `VkImage` behind the CopyOutput SharedImage mailbox and cannot
-  register a raw embedder `VkImage` as a writable SharedImage destination.
-- Embedder-owned Vulkan `VkImage` targeting is blocked pending the runtime
-  ownership, same-device, copy, and synchronization wiring above.
-- D3D12 GPU target support is still design-only. The current blocker is not a
-  missing public ABI: standalone has a Dawn D3D12 texture pixel proof, but still
-  does not wire a Dawn provider into Viz and does not CMake-wire the
-  Graphite/Dawn SharedImage implementation files needed for a D3D12
-  `SharedContextState` or CopyOutput smoke.
+- `--gpu-output-vulkan-pixel-smoke` validates pixel-bearing rendered HTML output
+  from the offscreen Vulkan CopyOutput source.
+- `--gpu-borrowed-vkimage-render-copy-smoke` validates that rendered HTML pixels
+  can be written through Viz `BlitRequest` into a borrowed Vulkan `VkImage`
+  backing and read back for verification.
+- `--gpu-output-d3d12-pixel-smoke` validates a standalone Dawn D3D12 GPU texture
+  clear/copy/readback path.
+- `--gpu-output-d3d12-render-pixel-smoke` validates pixel-bearing rendered HTML
+  output from the D3D12 Graphite/Viz path.
+- `--gpu-borrowed-d3d12-render-copy-smoke` validates that rendered HTML pixels
+  can be written through Viz `BlitRequest` into a borrowed D3D12
+  `ID3D12Resource` backing and read back for verification.
+- Public GPU C ABI work is still pending. The internal proofs now exist for
+  Vulkan and D3D12 rendered-output plus borrowed-target writes, but a public
+  embedder API still needs explicit device/queue/resource ownership, layout or
+  resource-state transitions, synchronization, alpha/color-space metadata, DSF,
+  and failure/capability reporting.

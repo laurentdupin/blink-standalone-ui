@@ -130,7 +130,8 @@ enum class SharedImageBackingType {
   kWrappedGraphiteTexture = 18,
   kDawn = 19,
   kStandaloneBorrowedVkImage = 20,
-  kMaxValue = kStandaloneBorrowedVkImage
+  kStandaloneBorrowedD3D12Texture = 21,
+  kMaxValue = kStandaloneBorrowedD3D12Texture
 };
 
 #if BUILDFLAG(IS_WIN)

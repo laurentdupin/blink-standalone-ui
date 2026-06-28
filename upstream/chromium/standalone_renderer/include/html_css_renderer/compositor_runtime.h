@@ -146,6 +146,7 @@ class StandaloneCompositorRuntime {
   virtual bool HasLiveBody() const = 0;
   virtual std::string RunBorrowedVkImageBackingSmokeForTesting() = 0;
   virtual std::string RunBorrowedVkImageRenderCopySmokeForTesting() = 0;
+  virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
 };
 

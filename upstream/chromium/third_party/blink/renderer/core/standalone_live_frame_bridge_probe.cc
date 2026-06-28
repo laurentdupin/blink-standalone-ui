@@ -20,6 +20,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <unordered_map>
 #include <vector>
@@ -96,6 +97,8 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/skia_graphite_dawn_image_representation.h"
+#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/in_process_gpu_thread_holder.h"
@@ -146,6 +149,14 @@
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/presenter.h"
+
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#include <d3d12.h>
+#include <wrl/client.h>
+
+#include "gpu/command_buffer/service/shared_image/d3d_image_utils.h"
+#endif
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -1046,6 +1057,28 @@ struct StandaloneVulkanGpuOutputPixelSmokeResult {
   std::string failure;
 };
 
+struct StandaloneBorrowedD3D12RenderCopySmokeResult {
+  bool source_available = false;
+  bool context_available = false;
+  bool target_created = false;
+  bool shared_texture_memory = false;
+  bool registered = false;
+  bool viz_blit_request = false;
+  bool readback_verified = false;
+  bool backing_released = false;
+  bool target_destroyed = false;
+  bool blocked = false;
+  int width = 0;
+  int height = 0;
+  std::string path = "viz_blit_request";
+  std::string format = "RGBA_8888";
+  std::string source_mailbox;
+  std::string observed_background;
+  std::string observed_box;
+  size_t nontransparent_pixels = 0;
+  std::string failure;
+};
+
 std::string StandaloneBorrowedVkImageRenderCopySmokeLine(
     const StandaloneBorrowedVkImageRenderCopySmokeResult& result) {
   std::ostringstream out;
@@ -1100,6 +1133,37 @@ std::string StandaloneVulkanGpuOutputPixelSmokeLine(
       << " nontransparent_pixels=" << result.nontransparent_pixels
       << " context=" << (result.context_available ? 1 : 0)
       << " readback=" << (result.readback_verified ? 1 : 0);
+  return out.str();
+}
+
+std::string StandaloneBorrowedD3D12RenderCopySmokeLine(
+    const StandaloneBorrowedD3D12RenderCopySmokeResult& result) {
+  std::ostringstream out;
+  out << "gpu_borrowed_d3d12_render_copy_smoke: ";
+  if (result.failure.empty()) {
+    out << "ok";
+  } else if (result.blocked) {
+    out << "blocked reason=" << result.failure;
+  } else {
+    out << "failed failure=" << result.failure;
+  }
+  out << " path=" << result.path
+      << " viz_blit_request=" << (result.viz_blit_request ? 1 : 0)
+      << " target=" << result.width << "x" << result.height
+      << " format=" << result.format
+      << " source=" << (result.source_available ? 1 : 0)
+      << " source_mailbox=" << result.source_mailbox
+      << " observed_background=" << result.observed_background
+      << " observed_box=" << result.observed_box
+      << " nontransparent_pixels=" << result.nontransparent_pixels
+      << " context=" << (result.context_available ? 1 : 0)
+      << " target_created=" << (result.target_created ? 1 : 0)
+      << " shared_texture_memory=" << (result.shared_texture_memory ? 1 : 0)
+      << " registered=" << (result.registered ? 1 : 0)
+      << " readback=" << (result.readback_verified ? 1 : 0)
+      << " backing_released=" << (result.backing_released ? 1 : 0)
+      << " target_destroyed=" << (result.target_destroyed ? 1 : 0)
+      << " ownership=borrowed";
   return out.str();
 }
 
@@ -1283,6 +1347,331 @@ StandaloneBorrowedVkImageBacking::ProduceSkiaGanesh(
   return std::make_unique<SkiaRepresentation>(
       context_state_->gr_context(), manager, this, tracker);
 }
+
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+class StandaloneBorrowedD3D12TextureBacking final
+    : public gpu::ClearTrackingSharedImageBacking {
+ public:
+  StandaloneBorrowedD3D12TextureBacking(
+      const gpu::Mailbox& mailbox,
+      const gpu::SharedImageInfo& si_info,
+      scoped_refptr<gpu::SharedContextState> context_state,
+      Microsoft::WRL::ComPtr<ID3D12Resource> resource)
+      : gpu::ClearTrackingSharedImageBacking(
+            mailbox,
+            si_info,
+            /*estimated_size=*/
+            static_cast<size_t>(std::max(0, si_info.size.width())) *
+                static_cast<size_t>(std::max(0, si_info.size.height())) * 4u,
+            /*is_thread_safe=*/false),
+        context_state_(std::move(context_state)),
+        resource_(std::move(resource)) {}
+
+  StandaloneBorrowedD3D12TextureBacking(
+      const StandaloneBorrowedD3D12TextureBacking&) = delete;
+  StandaloneBorrowedD3D12TextureBacking& operator=(
+      const StandaloneBorrowedD3D12TextureBacking&) = delete;
+
+  ~StandaloneBorrowedD3D12TextureBacking() override {
+    DCHECK(!access_open_);
+    texture_ = nullptr;
+    shared_texture_memory_ = nullptr;
+  }
+
+  gpu::SharedImageBackingType GetType() const override {
+    return gpu::SharedImageBackingType::kStandaloneBorrowedD3D12Texture;
+  }
+
+  void Update(std::unique_ptr<gfx::GpuFence> in_fence) override {}
+
+  bool shared_texture_memory_created() const {
+    return shared_texture_memory_ != nullptr;
+  }
+
+  bool ReadbackToPixels(std::vector<uint32_t>* pixels) {
+    if (!pixels || !context_state_ || !context_state_->dawn_context_provider() ||
+        !resource_) {
+      return false;
+    }
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
+        context_state_->dawn_context_provider()->GetD3D12CommandQueue();
+    if (!queue) {
+      return false;
+    }
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
+      return false;
+    }
+    D3D12_RESOURCE_DESC texture_desc = resource_->GetDesc();
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT row_count = 0;
+    UINT64 row_size_bytes = 0;
+    UINT64 total_bytes = 0;
+    device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &footprint,
+                                  &row_count, &row_size_bytes, &total_bytes);
+    if (row_count == 0 || row_size_bytes == 0 || total_bytes == 0) {
+      return false;
+    }
+    D3D12_HEAP_PROPERTIES readback_heap = {};
+    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+    readback_heap.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    readback_heap.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    readback_heap.CreationNodeMask = 1;
+    readback_heap.VisibleNodeMask = 1;
+    D3D12_RESOURCE_DESC buffer_desc = {};
+    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer_desc.Alignment = 0;
+    buffer_desc.Width = total_bytes;
+    buffer_desc.Height = 1;
+    buffer_desc.DepthOrArraySize = 1;
+    buffer_desc.MipLevels = 1;
+    buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
+    buffer_desc.SampleDesc.Count = 1;
+    buffer_desc.SampleDesc.Quality = 0;
+    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    buffer_desc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+    if (FAILED(device->CreateCommittedResource(
+            &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+            D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+            IID_PPV_ARGS(&readback))) ||
+        !readback) {
+      return false;
+    }
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+    if (FAILED(device->CreateCommandAllocator(
+            D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&allocator))) ||
+        !allocator) {
+      return false;
+    }
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+    if (FAILED(device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                         allocator.Get(), nullptr,
+                                         IID_PPV_ARGS(&command_list))) ||
+        !command_list) {
+      return false;
+    }
+
+    D3D12_TEXTURE_COPY_LOCATION src = {};
+    src.pResource = resource_.Get();
+    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    src.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION dst = {};
+    dst.pResource = readback.Get();
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst.PlacedFootprint = footprint;
+    command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    if (FAILED(command_list->Close())) {
+      return false;
+    }
+    ID3D12CommandList* command_lists[] = {command_list.Get()};
+    queue->ExecuteCommandLists(1, command_lists);
+
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    if (FAILED(device->CreateFence(0, D3D12_FENCE_FLAG_NONE,
+                                   IID_PPV_ARGS(&fence))) ||
+        !fence) {
+      return false;
+    }
+    HANDLE event_handle = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!event_handle) {
+      return false;
+    }
+    constexpr UINT64 kFenceValue = 1;
+    if (FAILED(queue->Signal(fence.Get(), kFenceValue))) {
+      ::CloseHandle(event_handle);
+      return false;
+    }
+    if (fence->GetCompletedValue() < kFenceValue) {
+      if (FAILED(fence->SetEventOnCompletion(kFenceValue, event_handle))) {
+        ::CloseHandle(event_handle);
+        return false;
+      }
+      ::WaitForSingleObject(event_handle, 5000);
+    }
+    ::CloseHandle(event_handle);
+    if (fence->GetCompletedValue() < kFenceValue) {
+      return false;
+    }
+
+    void* mapped = nullptr;
+    D3D12_RANGE read_range = {0, static_cast<SIZE_T>(total_bytes)};
+    if (FAILED(readback->Map(0, &read_range, &mapped)) || !mapped) {
+      return false;
+    }
+    const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
+    const uint32_t width = static_cast<uint32_t>(size().width());
+    const uint32_t height = static_cast<uint32_t>(size().height());
+    constexpr uint32_t kBytesPerPixel = 4;
+    pixels->assign(static_cast<size_t>(width) * static_cast<size_t>(height), 0);
+    for (uint32_t y = 0; y < height; ++y) {
+      const uint8_t* row =
+          mapped_bytes + footprint.Offset +
+          static_cast<size_t>(y) * footprint.Footprint.RowPitch;
+      for (uint32_t x = 0; x < width; ++x) {
+        const uint8_t* p = row + static_cast<size_t>(x) * kBytesPerPixel;
+        (*pixels)[static_cast<size_t>(y) * width + x] =
+            SkColorSetARGB(p[3], p[0], p[1], p[2]);
+      }
+    }
+    D3D12_RANGE written_range = {0, 0};
+    readback->Unmap(0, &written_range);
+    return true;
+  }
+
+ protected:
+  std::unique_ptr<gpu::DawnImageRepresentation> ProduceDawn(
+      gpu::SharedImageManager* manager,
+      gpu::MemoryTypeTracker* tracker,
+      const wgpu::Device& device,
+      wgpu::BackendType backend_type,
+      std::vector<wgpu::TextureFormat> view_formats,
+      scoped_refptr<gpu::SharedContextState> context_state) override;
+
+  std::unique_ptr<gpu::SkiaGraphiteImageRepresentation> ProduceSkiaGraphite(
+      gpu::SharedImageManager* manager,
+      gpu::MemoryTypeTracker* tracker,
+      scoped_refptr<gpu::SharedContextState> context_state) override;
+
+ private:
+  class DawnRepresentation final : public gpu::DawnImageRepresentation {
+   public:
+    DawnRepresentation(gpu::SharedImageManager* manager,
+                       StandaloneBorrowedD3D12TextureBacking* backing,
+                       gpu::MemoryTypeTracker* tracker,
+                       wgpu::Device device,
+                       wgpu::BackendType backend_type)
+        : gpu::DawnImageRepresentation(manager, backing, tracker),
+          device_(std::move(device)),
+          backend_type_(backend_type) {}
+
+    ~DawnRepresentation() override { EndAccess(); }
+
+   private:
+    wgpu::Texture BeginAccess(wgpu::TextureUsage usage,
+                              wgpu::TextureUsage internal_usage) override {
+      return borrowed_backing()->BeginDawnAccess(device_, backend_type_, usage,
+                                                 internal_usage);
+    }
+
+    void EndAccess() override {
+      if (device_) {
+        borrowed_backing()->EndDawnAccess();
+      }
+    }
+
+    StandaloneBorrowedD3D12TextureBacking* borrowed_backing() {
+      return static_cast<StandaloneBorrowedD3D12TextureBacking*>(backing());
+    }
+
+    wgpu::Device device_;
+    wgpu::BackendType backend_type_;
+  };
+
+  wgpu::SharedTextureMemory EnsureSharedTextureMemory(
+      const wgpu::Device& device) {
+    if (!shared_texture_memory_) {
+      shared_texture_memory_ =
+          gpu::CreateDawnSharedTextureMemory(device, resource_);
+    }
+    return shared_texture_memory_;
+  }
+
+  wgpu::Texture BeginDawnAccess(wgpu::Device device,
+                                wgpu::BackendType backend_type,
+                                wgpu::TextureUsage usage,
+                                wgpu::TextureUsage internal_usage) {
+    if (backend_type != wgpu::BackendType::D3D12 || access_open_ ||
+        !resource_) {
+      return nullptr;
+    }
+    wgpu::SharedTextureMemory shared_texture_memory =
+        EnsureSharedTextureMemory(device);
+    if (!shared_texture_memory) {
+      return nullptr;
+    }
+    texture_ = gpu::CreateDawnSharedTexture(
+        shared_texture_memory, usage, internal_usage,
+        base::span<const wgpu::TextureFormat>());
+    if (!texture_) {
+      return nullptr;
+    }
+
+    write_access_ = (usage & gpu::DawnImageRepresentation::kWriteUsage) !=
+                    wgpu::TextureUsage::None;
+    wgpu::SharedTextureMemoryBeginAccessDescriptor begin_desc = {};
+    begin_desc.initialized = IsCleared();
+    begin_desc.concurrentRead = !write_access_ && IsCleared();
+    if (shared_texture_memory.BeginAccess(texture_, &begin_desc) !=
+        wgpu::Status::Success) {
+      texture_ = nullptr;
+      return nullptr;
+    }
+    access_open_ = true;
+    return texture_;
+  }
+
+  void EndDawnAccess() {
+    if (!access_open_ || !shared_texture_memory_ || !texture_) {
+      return;
+    }
+    wgpu::SharedTextureMemoryEndAccessState end_state = {};
+    shared_texture_memory_.EndAccess(texture_.Get(), &end_state);
+    if (write_access_) {
+      SetCleared();
+    }
+    texture_ = nullptr;
+    access_open_ = false;
+    write_access_ = false;
+  }
+
+  scoped_refptr<gpu::SharedContextState> context_state_;
+  Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+  wgpu::SharedTextureMemory shared_texture_memory_;
+  wgpu::Texture texture_;
+  bool access_open_ = false;
+  bool write_access_ = false;
+};
+
+std::unique_ptr<gpu::DawnImageRepresentation>
+StandaloneBorrowedD3D12TextureBacking::ProduceDawn(
+    gpu::SharedImageManager* manager,
+    gpu::MemoryTypeTracker* tracker,
+    const wgpu::Device& device,
+    wgpu::BackendType backend_type,
+    std::vector<wgpu::TextureFormat> view_formats,
+    scoped_refptr<gpu::SharedContextState> context_state) {
+  if (context_state != context_state_ || backend_type != wgpu::BackendType::D3D12) {
+    return nullptr;
+  }
+  return std::make_unique<DawnRepresentation>(manager, this, tracker, device,
+                                              backend_type);
+}
+
+std::unique_ptr<gpu::SkiaGraphiteImageRepresentation>
+StandaloneBorrowedD3D12TextureBacking::ProduceSkiaGraphite(
+    gpu::SharedImageManager* manager,
+    gpu::MemoryTypeTracker* tracker,
+    scoped_refptr<gpu::SharedContextState> context_state) {
+  if (context_state != context_state_ ||
+      !context_state_->dawn_context_provider()) {
+    return nullptr;
+  }
+  wgpu::Device device = context_state_->dawn_context_provider()->GetDevice();
+  wgpu::BackendType backend_type =
+      context_state_->dawn_context_provider()->backend_type();
+  auto dawn_representation = ProduceDawn(
+      manager, tracker, device, backend_type, {}, context_state);
+  if (!dawn_representation) {
+    return nullptr;
+  }
+  return std::make_unique<gpu::SkiaGraphiteDawnImageRepresentation>(
+      std::move(dawn_representation), context_state,
+      context_state->gpu_main_graphite_recorder(), manager, this, tracker);
+}
+#endif  // BUILDFLAG(IS_WIN) &&
+        // BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER
 
 class StandaloneSkiaOutputSurfaceDependency final
     : public viz::SkiaOutputSurfaceDependency {
@@ -2174,6 +2563,118 @@ class StandaloneSkiaOutputSurfaceDependency final
     DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
   }
 
+  std::string PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+      const gfx::Size& target_size,
+      scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      scoped_refptr<gpu::ClientSharedImage> shared_image;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 const gfx::Size& target_size,
+                 scoped_refptr<gpu::ClientSharedImage>* shared_image,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result =
+                    self
+                        ->PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
+                            target_size, shared_image);
+                completed->Signal();
+              },
+              base::Unretained(this), target_size, &shared_image, &result,
+              &completed));
+      if (!posted) {
+        return "gpu_borrowed_d3d12_render_copy_smoke: failed "
+               "failure=failed to post borrowed D3D12 blit target setup "
+               "path=viz_blit_request viz_blit_request=1";
+      }
+      completed.Wait();
+      if (result.empty() && target_shared_image) {
+        *target_shared_image = std::move(shared_image);
+      }
+      return result;
+    }
+    return PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
+        target_size, target_shared_image);
+#else
+    StandaloneBorrowedD3D12RenderCopySmokeResult result;
+    result.blocked = true;
+    result.failure = "native D3D12 borrowed target requires Windows and "
+                     "experimental Dawn D3D12 render support";
+    return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
+#endif
+  }
+
+  std::string VerifyBorrowedD3D12RenderCopyBlitTargetForTesting() {
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result = self
+                              ->VerifyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+                completed->Signal();
+              },
+              base::Unretained(this), &result, &completed));
+      if (!posted) {
+        return "gpu_borrowed_d3d12_render_copy_smoke: failed "
+               "failure=failed to post borrowed D3D12 target verification "
+               "path=viz_blit_request viz_blit_request=1";
+      }
+      completed.Wait();
+      return result;
+    }
+    return VerifyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+#else
+    StandaloneBorrowedD3D12RenderCopySmokeResult result;
+    result.blocked = true;
+    result.failure = "native D3D12 borrowed target requires Windows and "
+                     "experimental Dawn D3D12 render support";
+    return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
+#endif
+  }
+
+  void DiscardBorrowedD3D12RenderCopyBlitTargetForTesting() {
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      if (task_runner->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  [](StandaloneSkiaOutputSurfaceDependency* self,
+                     base::WaitableEvent* completed) {
+                    self
+                        ->DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+                    completed->Signal();
+                  },
+                  base::Unretained(this), &completed))) {
+        completed.Wait();
+      }
+      return;
+    }
+    DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+#endif
+  }
+
  private:
   struct BorrowedVkImageRenderCopyBlitTarget {
     gfx::Size size;
@@ -2449,6 +2950,252 @@ class StandaloneSkiaOutputSurfaceDependency final
   scoped_refptr<base::SingleThreadTaskRunner> client_task_runner_;
   std::unique_ptr<BorrowedVkImageRenderCopyBlitTarget>
       borrowed_blit_target_;
+
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  struct BorrowedD3D12RenderCopyBlitTarget {
+    gfx::Size size;
+    std::string format = "RGBA_8888";
+    gpu::Mailbox mailbox;
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource;
+    raw_ptr<StandaloneBorrowedD3D12TextureBacking> backing = nullptr;
+    raw_ptr<gpu::MemoryTypeTracker> registration_tracker = nullptr;
+    std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
+    scoped_refptr<gpu::ClientSharedImage> client_shared_image;
+    bool target_created = false;
+    bool shared_texture_memory_created = false;
+    bool registered = false;
+  };
+
+  std::string PrepareBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
+      const gfx::Size& target_size,
+      scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
+    DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+    StandaloneBorrowedD3D12RenderCopySmokeResult result;
+    result.viz_blit_request = true;
+    result.width = target_size.width();
+    result.height = target_size.height();
+
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence();
+      return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
+    };
+
+    if (!target_shared_image) {
+      return finish_with_failure("borrowed D3D12 target output pointer is null");
+    }
+    if (target_size.IsEmpty()) {
+      return finish_with_failure("borrowed D3D12 target size is empty");
+    }
+    if (!use_d3d12_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "borrowed D3D12 target requires offscreen D3D12 output");
+    }
+    gpu::SharedImageManager* manager = GetSharedImageManager();
+    if (!manager) {
+      return finish_with_failure("SharedImageManager is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->IsGraphiteDawnD3D() ||
+        !context_state->dawn_context_provider()) {
+      return finish_with_failure(
+          "offscreen runtime has no D3D12 Graphite/Dawn SharedContextState");
+    }
+    if (context_state->dawn_context_provider()->backend_type() !=
+        wgpu::BackendType::D3D12) {
+      return finish_with_failure("Dawn context provider is not D3D12");
+    }
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
+        context_state->dawn_context_provider()->GetD3D12CommandQueue();
+    if (!queue) {
+      return finish_with_failure("Dawn D3D12 command queue is unavailable");
+    }
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
+      return finish_with_failure("Dawn D3D12 device is unavailable");
+    }
+    result.context_available = true;
+
+    D3D12_HEAP_PROPERTIES heap_properties = {};
+    heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    heap_properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heap_properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+    heap_properties.CreationNodeMask = 1;
+    heap_properties.VisibleNodeMask = 1;
+
+    D3D12_RESOURCE_DESC resource_desc = {};
+    resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    resource_desc.Alignment = 0;
+    resource_desc.Width = static_cast<UINT64>(target_size.width());
+    resource_desc.Height = static_cast<UINT>(target_size.height());
+    resource_desc.DepthOrArraySize = 1;
+    resource_desc.MipLevels = 1;
+    resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    resource_desc.SampleDesc.Count = 1;
+    resource_desc.SampleDesc.Quality = 0;
+    resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+
+    auto target = std::make_unique<BorrowedD3D12RenderCopyBlitTarget>();
+    target->size = target_size;
+    HRESULT hr = device->CreateCommittedResource(
+        &heap_properties, D3D12_HEAP_FLAG_NONE, &resource_desc,
+        D3D12_RESOURCE_STATE_COMMON, nullptr,
+        IID_PPV_ARGS(&target->resource));
+    if (FAILED(hr) || !target->resource) {
+      return finish_with_failure("stand-in D3D12 target resource creation failed");
+    }
+    target->target_created = true;
+    result.target_created = true;
+
+    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
+    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
+    const gpu::SharedImageUsageSet usage =
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ |
+        gpu::SHARED_IMAGE_USAGE_DISPLAY_WRITE;
+    gpu::SharedImageInfo si_info(format, target_size, color_space,
+                                 kTopLeft_GrSurfaceOrigin,
+                                 kPremul_SkAlphaType, usage,
+                                 "StandaloneBorrowedD3D12BlitTargetSmoke");
+    target->mailbox = gpu::Mailbox::Generate();
+    target->registration_tracker = context_state->memory_type_tracker();
+    auto backing = std::make_unique<StandaloneBorrowedD3D12TextureBacking>(
+        target->mailbox, si_info, context_state, target->resource);
+    target->backing = backing.get();
+    target->factory_ref =
+        manager->Register(std::move(backing), target->registration_tracker);
+    if (!target->factory_ref) {
+      return finish_with_failure("borrowed D3D12 target registration failed");
+    }
+    target->registered = true;
+    result.registered = true;
+
+    gpu::SharedImageMetadata metadata;
+    metadata.format = format;
+    metadata.size = target_size;
+    metadata.color_space = color_space;
+    metadata.surface_origin = kTopLeft_GrSurfaceOrigin;
+    metadata.alpha_type = kPremul_SkAlphaType;
+    metadata.usage = usage;
+    target->client_shared_image = gpu::ClientSharedImage::CreateForTesting(
+        target->mailbox, metadata, gpu::SyncToken(), /*texture_target=*/3553u,
+        /*is_software=*/false);
+    if (!target->client_shared_image) {
+      return finish_with_failure(
+          "borrowed D3D12 target ClientSharedImage failed");
+    }
+
+    *target_shared_image = target->client_shared_image;
+    borrowed_d3d12_blit_target_ = std::move(target);
+    return "";
+  }
+
+  std::string VerifyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence() {
+    StandaloneBorrowedD3D12RenderCopySmokeResult result;
+    result.viz_blit_request = true;
+    if (borrowed_d3d12_blit_target_) {
+      result.width = borrowed_d3d12_blit_target_->size.width();
+      result.height = borrowed_d3d12_blit_target_->size.height();
+      result.format = borrowed_d3d12_blit_target_->format;
+      result.target_created = borrowed_d3d12_blit_target_->target_created;
+      result.registered = borrowed_d3d12_blit_target_->registered;
+      result.shared_texture_memory =
+          borrowed_d3d12_blit_target_->backing &&
+          borrowed_d3d12_blit_target_->backing
+              ->shared_texture_memory_created();
+    }
+
+    auto finish_with_failure = [&](std::string failure) {
+      result.failure = std::move(failure);
+      DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(&result);
+      return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
+    };
+
+    if (!borrowed_d3d12_blit_target_ || !borrowed_d3d12_blit_target_->backing) {
+      return finish_with_failure("borrowed D3D12 target is not prepared");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->IsGraphiteDawnD3D() ||
+        !context_state->dawn_context_provider()) {
+      return finish_with_failure(
+          "offscreen runtime has no D3D12 Graphite/Dawn SharedContextState");
+    }
+    result.context_available = true;
+
+    std::vector<uint32_t> readback_pixels;
+    if (!borrowed_d3d12_blit_target_->backing->ReadbackToPixels(
+            &readback_pixels)) {
+      return finish_with_failure("borrowed D3D12 target readback failed");
+    }
+    const int width = result.width;
+    const int height = result.height;
+    if (width <= 0 || height <= 0 ||
+        readback_pixels.size() !=
+            static_cast<size_t>(width) * static_cast<size_t>(height)) {
+      return finish_with_failure("borrowed D3D12 readback dimensions invalid");
+    }
+    for (uint32_t pixel : readback_pixels) {
+      if (SkColorGetA(pixel) != 0) {
+        ++result.nontransparent_pixels;
+      }
+    }
+    auto pixel_at = [&](int x, int y) {
+      return readback_pixels[static_cast<size_t>(y) *
+                                 static_cast<size_t>(width) +
+                             static_cast<size_t>(x)];
+    };
+    const SkColor expected_background = SkColorSetARGB(255, 0x12, 0x34, 0x56);
+    const SkColor expected_box = SkColorSetARGB(255, 0xd0, 0x63, 0x29);
+    const SkColor observed_background = pixel_at(4, 4);
+    const SkColor observed_box =
+        pixel_at(std::min(width - 1, 24), std::min(height - 1, 24));
+    result.observed_background = StandaloneFormatColor(observed_background);
+    result.observed_box = StandaloneFormatColor(observed_box);
+    if (result.nontransparent_pixels == 0) {
+      return finish_with_failure(
+          "offscreen D3D12 BlitRequest populated a transparent target");
+    }
+    if (!StandaloneColorClose(observed_background, expected_background) ||
+        !StandaloneColorClose(observed_box, expected_box)) {
+      return finish_with_failure(
+          "borrowed D3D12 target pixel verification failed");
+    }
+    result.readback_verified = true;
+    result.shared_texture_memory =
+        borrowed_d3d12_blit_target_->backing->shared_texture_memory_created();
+    DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(&result);
+    return StandaloneBorrowedD3D12RenderCopySmokeLine(result);
+  }
+
+  void DestroyBorrowedD3D12RenderCopyBlitTargetOnCurrentSequence(
+      StandaloneBorrowedD3D12RenderCopySmokeResult* result = nullptr) {
+    if (!borrowed_d3d12_blit_target_) {
+      return;
+    }
+    borrowed_d3d12_blit_target_->client_shared_image.reset();
+    borrowed_d3d12_blit_target_->backing = nullptr;
+    if (borrowed_d3d12_blit_target_->factory_ref) {
+      borrowed_d3d12_blit_target_->factory_ref.reset();
+      if (result) {
+        result->backing_released = true;
+      }
+    }
+    if (borrowed_d3d12_blit_target_->resource) {
+      borrowed_d3d12_blit_target_->resource.Reset();
+      if (result) {
+        result->target_destroyed = true;
+      }
+    }
+    borrowed_d3d12_blit_target_.reset();
+  }
+
+  std::unique_ptr<BorrowedD3D12RenderCopyBlitTarget>
+      borrowed_d3d12_blit_target_;
+#endif
 };
 
 class StandaloneInProcessRasterContextProvider final
@@ -2966,6 +3713,72 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
     return offscreen_skia_dependency_
         ->VerifyBorrowedVkImageRenderCopyBlitTargetForTesting();
+  }
+
+  std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
+    if (!display_) {
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=Viz "
+             "Display is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed "
+             "failure=offscreen D3D12 Skia dependency is not available";
+    }
+
+    gfx::Size output_size = viewport_;
+    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    scoped_refptr<gpu::ClientSharedImage> blit_target;
+    std::string prepare_result =
+        offscreen_skia_dependency_
+            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+                output_size, &blit_target);
+    if (!prepare_result.empty()) {
+      return prepare_result;
+    }
+    if (!blit_target || blit_target->mailbox().IsZero()) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed "
+             "failure=borrowed D3D12 target SharedImage is unavailable "
+             "path=viz_blit_request viz_blit_request=1";
+    }
+
+    RequestCopyOutput(output_size,
+                      /*wants_png=*/false,
+                      /*wants_raw=*/false,
+                      /*wants_gpu=*/true, std::move(blit_target));
+    DrawVizDisplayNow();
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+      base::OneShotTimer timeout;
+      copy_output_run_loop_ = &run_loop;
+      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+      run_loop.Run();
+      timeout.Stop();
+      copy_output_run_loop_ = nullptr;
+    }
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed "
+             "failure=Viz BlitRequest CopyOutput did not complete "
+             "path=viz_blit_request viz_blit_request=1";
+    }
+    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+      std::string failure =
+          copy_output_failure_ && !copy_output_failure_->empty()
+              ? *copy_output_failure_
+              : "Viz BlitRequest CopyOutput failed";
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=" +
+             failure + " path=viz_blit_request viz_blit_request=1";
+    }
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    return offscreen_skia_dependency_
+        ->VerifyBorrowedD3D12RenderCopyBlitTargetForTesting();
   }
 
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
@@ -3633,6 +4446,13 @@ class StandaloneCcLayerHost final
              "LayerTreeFrameSink is not available";
     }
     return active_frame_sink_->RunBorrowedVkImageRenderCopySmokeForTesting();
+  }
+  std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
+    if (!active_frame_sink_) {
+      return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunBorrowedD3D12RenderCopySmokeForTesting();
   }
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
     if (!active_frame_sink_) {
@@ -15901,6 +16721,27 @@ StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageRenderCopySmokeForStandaloneRend
   }
   smoke_result =
       cache.cc_layer_host->RunBorrowedVkImageRenderCopySmokeForTesting();
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRenderer() {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.copy_output_gpu_frame.shared_image_available) {
+    smoke_result =
+        "gpu_borrowed_d3d12_render_copy_smoke: failed failure=D3D12 "
+        "SharedImage CopyOutput did not initialize before render-copy smoke";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_borrowed_d3d12_render_copy_smoke: failed failure=cc layer host "
+        "is not available";
+    return smoke_result.c_str();
+  }
+  smoke_result =
+      cache.cc_layer_host->RunBorrowedD3D12RenderCopySmokeForTesting();
   return smoke_result.c_str();
 }
 

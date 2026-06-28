@@ -71,6 +71,10 @@ const char* BackingTypeToString(SharedImageBackingType type) {
       return "WrappedGraphiteTexture";
     case SharedImageBackingType::kDawn:
       return "DawnImageBacking";
+    case SharedImageBackingType::kStandaloneBorrowedVkImage:
+      return "StandaloneBorrowedVkImage";
+    case SharedImageBackingType::kStandaloneBorrowedD3D12Texture:
+      return "StandaloneBorrowedD3D12Texture";
   }
   NOTREACHED();
 }
