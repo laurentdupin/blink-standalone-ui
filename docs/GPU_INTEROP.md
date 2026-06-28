@@ -308,6 +308,31 @@ borrowed target ownership or BlitRequest destination registration; it is the
 offscreen Vulkan SkiaOutputSurface/CopyOutput source surface integration between
 Viz's submitted cc frame and `CopyOutputRGBAInTexture()`.
 
+The next focused audit narrowed that blocker further. Instrumentation showed
+that `SkiaOutputSurfaceImplOnGpu::FinishPaintCurrentFrame()` reaches the Vulkan
+path and `scoped_output_device_paint_->Draw(ddl)` returns success, but an
+immediate readback of the same source `SkSurface` used by
+`CopyOutputRGBAInTexture()` is still fully transparent before the SharedImage
+copy starts. This rules out the borrowed destination, BlitRequest destination
+registration, and texture-copy destination write as the first content-loss
+point.
+
+The standalone cc frame sink still creates its compositor and worker raster
+providers through `StandaloneInProcessRasterContextProvider`, and frame-sink
+creation forces the in-process GPU holder's `gr_context_type` to
+`gpu::GrContextType::kGL`. The opt-in offscreen output surface is Vulkan-only,
+so the current diagnostic path mixes a GL command-buffer/raster content path
+with a separate Vulkan Ganesh output surface. A bounded test that changed that
+GPU holder preference to `gpu::GrContextType::kVulkan` failed earlier:
+`gpu::RasterInProcessContext` could not create its `SharedContextState`
+(`GrContext creation failed`), the `LayerTreeFrameSink` did not initialize, and
+no Viz `Display` or SharedImage CopyOutput was produced. That makes the next
+missing integration step explicit: the standalone runtime needs a coherent
+Vulkan-capable cc/raster command-buffer context provider, or a real
+Chromium-supported SharedImage interop bridge between the existing GL raster
+resources and the Vulkan Skia output surface. Flipping the existing GL holder
+to Vulkan is not sufficient in this checkout.
+
 The remaining implementation steps before public ABI are:
 
 1. Define the external target metadata and synchronization contract: at minimum
@@ -318,9 +343,12 @@ The remaining implementation steps before public ABI are:
    acquire/release layout and semaphore handling, still without destroying
    borrowed `VkImage`, memory, image views, semaphores, or fences.
 3. Make the offscreen Vulkan CopyOutput/BlitRequest path produce rendered HTML
-   pixels, not just a SharedImage mailbox. The current pixel-content smoke shows
-   the cc frame has content but the Vulkan CopyOutput source SharedImage is
-   transparent.
+   pixels, not just a SharedImage mailbox. The current pixel-content smoke
+   shows the cc frame has content but the Vulkan CopyOutput source SharedImage
+   is transparent. Root DDL replay reports success, but the source
+   `SkSurface` is already transparent before CopyOutput. The current standalone
+   gap is a coherent Vulkan cc/raster context path, or equivalent
+   Chromium-owned GL-to-Vulkan SharedImage interop, for the offscreen runtime.
 4. Once CopyOutput content is non-empty, keep the destination as a service-side
    SharedImage and validate either direct Viz `BlitRequest` into the borrowed
    target or a service-side SharedImage-to-SharedImage copy into it. Only after
