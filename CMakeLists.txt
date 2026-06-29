@@ -1465,6 +1465,69 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     CACHE PATH
     "Output directory for the embeddable C API DLL/import-library runtime package."
   )
+  set(_blink_standalone_dawn_d3d12_runtime_sidecars)
+  set(_blink_standalone_dawn_d3d12_runtime_copy_commands)
+  set(_blink_standalone_dawn_d3d12_runtime_sidecars_json)
+  if(BLINK_STANDALONE_DAWN_D3D12 AND BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR)
+    set(_blink_standalone_dawn_d3d12_sidecar_search_dirs)
+    get_filename_component(
+      _blink_standalone_dawn_d3d12_gen_dir
+      "${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}"
+      DIRECTORY
+    )
+    get_filename_component(
+      _blink_standalone_dawn_d3d12_build_dir
+      "${_blink_standalone_dawn_d3d12_gen_dir}"
+      DIRECTORY
+    )
+    list(APPEND _blink_standalone_dawn_d3d12_sidecar_search_dirs
+      "${_blink_standalone_dawn_d3d12_build_dir}"
+    )
+    foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
+      get_filename_component(_blink_standalone_dawn_lib_dir
+        "${_blink_standalone_dawn_lib}" DIRECTORY)
+      set(_blink_standalone_dawn_candidate_dir
+        "${_blink_standalone_dawn_lib_dir}")
+      foreach(_blink_standalone_dawn_parent_step RANGE 0 5)
+        list(APPEND _blink_standalone_dawn_d3d12_sidecar_search_dirs
+          "${_blink_standalone_dawn_candidate_dir}")
+        get_filename_component(_blink_standalone_dawn_candidate_dir
+          "${_blink_standalone_dawn_candidate_dir}" DIRECTORY)
+      endforeach()
+    endforeach()
+    list(REMOVE_DUPLICATES _blink_standalone_dawn_d3d12_sidecar_search_dirs)
+    foreach(_blink_standalone_dawn_sidecar IN ITEMS
+        d3dcompiler_47.dll
+        dxcompiler.dll
+        dxil.dll)
+      set(_blink_standalone_dawn_sidecar_path)
+      foreach(_blink_standalone_dawn_search_dir IN LISTS
+          _blink_standalone_dawn_d3d12_sidecar_search_dirs)
+        if(NOT _blink_standalone_dawn_sidecar_path AND
+            EXISTS "${_blink_standalone_dawn_search_dir}/${_blink_standalone_dawn_sidecar}")
+          set(_blink_standalone_dawn_sidecar_path
+            "${_blink_standalone_dawn_search_dir}/${_blink_standalone_dawn_sidecar}"
+          )
+        endif()
+      endforeach()
+      if(NOT _blink_standalone_dawn_sidecar_path)
+        continue()
+      endif()
+      list(APPEND _blink_standalone_dawn_d3d12_runtime_sidecars
+        "${_blink_standalone_dawn_sidecar_path}"
+      )
+      list(APPEND _blink_standalone_dawn_d3d12_runtime_copy_commands
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${_blink_standalone_dawn_sidecar_path}"
+          "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/${_blink_standalone_dawn_sidecar}"
+      )
+      file(TO_CMAKE_PATH "${_blink_standalone_dawn_sidecar_path}"
+        _blink_standalone_dawn_sidecar_manifest_path)
+      string(APPEND _blink_standalone_dawn_d3d12_runtime_sidecars_json
+        ",\n    \"${_blink_standalone_dawn_sidecar_manifest_path}\""
+      )
+    endforeach()
+  endif()
   set(_blink_standalone_renderer_c_api_link_manifest_content [=[
 {
   "schema_version": 1,
@@ -1482,7 +1545,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "runtime_sidecars": [
     "$<TARGET_FILE:blink_angle_libEGL>",
     "$<TARGET_FILE:blink_angle_libGLESv2>",
-    "@BLINK_STANDALONE_ICU_DATA_FILE@"
+    "@BLINK_STANDALONE_ICU_DATA_FILE@"@_blink_standalone_dawn_d3d12_runtime_sidecars_json@
   ],
   "third_party_targets": [
     "freetype",
@@ -1558,6 +1621,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
       "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/blink_standalone_renderer_c_api_link_manifest.json"
+    ${_blink_standalone_dawn_d3d12_runtime_copy_commands}
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API runtime package: ${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
   )
