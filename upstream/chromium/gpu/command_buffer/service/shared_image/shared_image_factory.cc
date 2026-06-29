@@ -239,8 +239,12 @@ SharedImageFactory::SharedImageFactory(
       std::make_unique<SharedMemoryImageBackingFactory>();
   factories_.push_back(std::move(shared_memory_backing_factory));
 
-  // if GL is disabled, it only needs SharedMemoryImageBackingFactory.
-  if (gl::GetGLImplementation() == gl::kGLImplementationDisabled) {
+  // If GL is disabled and no Skia GPU context is active, only the shared
+  // memory factory is needed. Standalone Graphite/Dawn D3D12 can run without a
+  // GL implementation, but still needs the wrapped Skia backing factory for
+  // Viz CopyOutput SharedImages.
+  if (gl::GetGLImplementation() == gl::kGLImplementationDisabled &&
+      gr_context_type_ == GrContextType::kNone) {
     return;
   }
 

@@ -203,6 +203,8 @@ void PrintUsage() {
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-vulkan-external-target-current-document-smoke] "
       "[--c-api-d3d12-external-target-current-document-smoke] "
+      "[--c-api-d3d12-external-target-filter-backdrop-smoke] "
+      "[--c-api-d3d12-external-target-transparent-filter-backdrop-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
@@ -808,10 +810,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   uint32_t expected_background = 0xff123456u,
                                   uint32_t expected_box = 0xffd06329u,
                                   const char* background_css = "#123456",
-                                  const char* box_css = "#d06329") {
+                                  const char* box_css = "#d06329",
+                                  uint32_t width = 128,
+                                  uint32_t height = 64,
+                                  const char* extra_css = "",
+                                  const char* extra_body = "",
+                                  bool require_full_nontransparent = true) {
   blink_standalone_renderer_config_t config = {};
-  config.width = 128;
-  config.height = 64;
+  config.width = width;
+  config.height = height;
   config.device_scale_factor = 1.0f;
   config.no_script_profile = 1;
   blink_standalone_renderer_t* renderer = nullptr;
@@ -833,17 +840,18 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       background_css +
       ";}#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
       "background:" +
-      box_css + ";}</style><div id='box'></div>";
+      box_css + ";}" + extra_css + "</style><div id='box'></div>" +
+      extra_body;
 
   blink_standalone_external_gpu_target_t target = {};
   target.common.backend = backend;
   target.common.flags =
       require_external_target ? 0
                               : BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN;
-  target.common.logical_width = 128;
-  target.common.logical_height = 64;
-  target.common.physical_width = 128;
-  target.common.physical_height = 64;
+  target.common.logical_width = width;
+  target.common.logical_height = height;
+  target.common.physical_width = width;
+  target.common.physical_height = height;
   target.common.device_scale_factor = 1.0f;
   target.common.pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
   target.common.alpha_mode = BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
@@ -945,7 +953,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       return 1;
     }
     vulkan_target_image = gpu::VulkanImage::Create(
-        vulkan_owner_queue.get(), gfx::Size(128, 64),
+        vulkan_owner_queue.get(),
+        gfx::Size(static_cast<int>(width), static_cast<int>(height)),
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
@@ -962,8 +971,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         vulkan_owner_queue->GetVulkanPhysicalDevice();
     target.vulkan.vk_device_memory = vulkan_target_image->device_memory();
     target.vulkan.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
-    target.vulkan.width = 128;
-    target.vulkan.height = 64;
+    target.vulkan.width = width;
+    target.vulkan.height = height;
     target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
     target.vulkan.required_final_layout =
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1001,8 +1010,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     heap_properties.VisibleNodeMask = 1;
     D3D12_RESOURCE_DESC resource_desc = {};
     resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    resource_desc.Width = 128;
-    resource_desc.Height = 64;
+    resource_desc.Width = width;
+    resource_desc.Height = height;
     resource_desc.DepthOrArraySize = 1;
     resource_desc.MipLevels = 1;
     resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -1056,8 +1065,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     blink_standalone_renderer_destroy(renderer);
     return 0;
 #endif
-    target.d3d12.width = 128;
-    target.d3d12.height = 64;
+    target.d3d12.width = width;
+    target.d3d12.height = height;
   }
 
   status =
@@ -1098,7 +1107,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   status =
       blink_standalone_renderer_render_to_gpu_target(renderer, &target, &result);
   if (status != BLINK_STANDALONE_STATUS_OK || result.target_written == 0 ||
-      result.backend != backend || result.width != 128 || result.height != 64) {
+      result.backend != backend || result.width != width ||
+      result.height != height) {
     std::fprintf(stderr,
                  "%s: failed status=%d result_status=%u backend=%u "
                  "written=%u size=%ux%u error=%s\n",
@@ -1125,8 +1135,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     std::vector<uint32_t> pixels;
     std::string failure;
     if (!ReadbackD3D12TextureForSmoke(d3d12_device.Get(), d3d12_queue.Get(),
-                                      d3d12_resource.Get(), 128, 64, &pixels,
-                                      &failure)) {
+                                      d3d12_resource.Get(), width, height,
+                                      &pixels, &failure)) {
       std::fprintf(stderr, "%s: failed external_readback=0 failure=%s\n",
                    label, failure.c_str());
       if (target.d3d12.shared_handle) {
@@ -1137,7 +1147,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       return 1;
     }
     auto pixel_at = [&](uint32_t x, uint32_t y) {
-      return pixels[static_cast<size_t>(y) * 128u + x];
+      return pixels[static_cast<size_t>(y) * width + x];
     };
     observed_background = pixel_at(4, 4);
     observed_box = pixel_at(20, 20);
@@ -1154,7 +1164,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     if (observed_background != expected_background ||
         observed_box != expected_box ||
         background_pixels == 0 || box_pixels == 0 ||
-        nontransparent_pixels != 128u * 64u) {
+        (require_full_nontransparent &&
+         nontransparent_pixels != width * height)) {
       std::fprintf(stderr,
                    "%s: failed external_readback=1 "
                    "observed_background=%08x observed_box=%08x "
@@ -1175,7 +1186,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     std::vector<uint32_t> pixels;
     std::string failure;
     if (!ReadbackVulkanImageForSmoke(vulkan_owner_queue.get(),
-                                     vulkan_target_image.get(), 128, 64,
+                                     vulkan_target_image.get(), width, height,
                                      &pixels, &failure)) {
       std::fprintf(stderr, "%s: failed vulkan_external_readback=0 failure=%s\n",
                    label, failure.c_str());
@@ -1184,7 +1195,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       return 1;
     }
     auto pixel_at = [&](uint32_t x, uint32_t y) {
-      const uint32_t rgba = pixels[static_cast<size_t>(y) * 128u + x];
+      const uint32_t rgba = pixels[static_cast<size_t>(y) * width + x];
       return (rgba & 0xff000000u) | ((rgba & 0x000000ffu) << 16) |
              (rgba & 0x0000ff00u) | ((rgba & 0x00ff0000u) >> 16);
     };
@@ -1207,7 +1218,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     if (observed_background != expected_background ||
         observed_box != expected_box ||
         background_pixels == 0 || box_pixels == 0 ||
-        nontransparent_pixels == 0) {
+        (require_full_nontransparent && nontransparent_pixels == 0)) {
       std::fprintf(stderr,
                    "%s: failed vulkan_external_readback=1 "
                    "observed_background=%08x observed_box=%08x "
@@ -1273,6 +1284,55 @@ int RunCApiD3D12ExternalTargetCurrentDocumentSmoke() {
       /*expected_box=*/0xff237a57u,
       /*background_css=*/"#144a80",
       /*box_css=*/"#237a57");
+}
+
+int RunCApiD3D12ExternalTargetFilterBackdropSmoke() {
+  const char* extra_css =
+      "#blurred{position:absolute;left:160px;top:96px;width:480px;"
+      "height:220px;background:#d06329;filter:blur(6px) saturate(130%);}"
+      "#backdrop{position:absolute;left:640px;top:120px;width:360px;"
+      "height:220px;border-radius:28px;background:rgba(255,255,255,.22);"
+      "backdrop-filter:blur(12px) saturate(180%) brightness(1.08);"
+      "-webkit-backdrop-filter:blur(12px) saturate(180%) brightness(1.08);}"
+      "#stripe{position:absolute;left:0;top:360px;width:1280px;height:160px;"
+      "background:linear-gradient(90deg,#144a80,#237a57,#d06329);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_filter_backdrop_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff144a80u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"#144a80",
+      /*box_css=*/"#237a57",
+      /*width=*/1280,
+      /*height=*/720,
+      extra_css,
+      /*extra_body=*/
+      "<div id='blurred'></div><div id='backdrop'></div><div id='stripe'></div>");
+}
+
+int RunCApiD3D12ExternalTargetTransparentFilterBackdropSmoke() {
+  const char* extra_css =
+      "#box{width:260px;height:160px;}"
+      "#blurred{position:absolute;left:360px;top:96px;width:480px;"
+      "height:220px;background:#d06329;filter:blur(6px) saturate(130%);}"
+      "#backdrop{position:absolute;left:720px;top:120px;width:360px;"
+      "height:220px;border-radius:28px;background:rgba(255,255,255,.22);"
+      "backdrop-filter:blur(12px) saturate(180%) brightness(1.08);"
+      "-webkit-backdrop-filter:blur(12px) saturate(180%) brightness(1.08);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_transparent_filter_backdrop_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0x00000000u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"rgba(0,0,0,0)",
+      /*box_css=*/"#237a57",
+      /*width=*/1280,
+      /*height=*/720,
+      extra_css,
+      /*extra_body=*/"<div id='blurred'></div><div id='backdrop'></div>",
+      /*require_full_nontransparent=*/false);
 }
 
 std::vector<uint8_t> MakeSolidBmp(int width,
@@ -8490,6 +8550,8 @@ int main(int argc, char** argv) {
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_vulkan_external_target_current_document_smoke = false;
   bool c_api_d3d12_external_target_current_document_smoke = false;
+  bool c_api_d3d12_external_target_filter_backdrop_smoke = false;
+  bool c_api_d3d12_external_target_transparent_filter_backdrop_smoke = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_resource_provider_smoke = false;
@@ -8648,6 +8710,13 @@ int main(int argc, char** argv) {
     } else if (arg ==
                "--c-api-d3d12-external-target-current-document-smoke") {
       c_api_d3d12_external_target_current_document_smoke = true;
+    } else if (arg ==
+               "--c-api-d3d12-external-target-filter-backdrop-smoke") {
+      c_api_d3d12_external_target_filter_backdrop_smoke = true;
+    } else if (
+        arg ==
+        "--c-api-d3d12-external-target-transparent-filter-backdrop-smoke") {
+      c_api_d3d12_external_target_transparent_filter_backdrop_smoke = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
@@ -8867,6 +8936,14 @@ int main(int argc, char** argv) {
 
   if (c_api_d3d12_external_target_current_document_smoke) {
     return RunCApiD3D12ExternalTargetCurrentDocumentSmoke();
+  }
+
+  if (c_api_d3d12_external_target_filter_backdrop_smoke) {
+    return RunCApiD3D12ExternalTargetFilterBackdropSmoke();
+  }
+
+  if (c_api_d3d12_external_target_transparent_filter_backdrop_smoke) {
+    return RunCApiD3D12ExternalTargetTransparentFilterBackdropSmoke();
   }
 
   if (c_api_smoke) {
