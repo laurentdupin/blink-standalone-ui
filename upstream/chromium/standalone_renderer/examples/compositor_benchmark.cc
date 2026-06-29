@@ -206,10 +206,12 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-pending-resize-smoke] "
       "[--c-api-vulkan-external-target-fps-timing-smoke] "
       "[--c-api-vulkan-external-target-click-timing-smoke] "
+      "[--c-api-vulkan-external-target-click-resize-pending-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-d3d12-external-target-resize-smoke] "
       "[--c-api-d3d12-external-target-click-timing-smoke] "
+      "[--c-api-d3d12-external-target-button-activation-smoke] "
       "[--c-api-vulkan-update-output-smoke] "
       "[--c-api-d3d12-update-output-smoke] "
       "[--c-api-vulkan-external-target-current-document-smoke] "
@@ -833,7 +835,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   int repeated_update_output_iterations = 0,
                                   bool exercise_resize_sequence = false,
                                   int repeated_click_output_iterations = 0,
-                                  bool tolerate_pending_resize_retry = false) {
+                                  bool tolerate_pending_resize_retry = false,
+                                  bool use_button_action_document = false,
+                                  bool exercise_host_pending_resize_boundary =
+                                      false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
@@ -854,13 +859,23 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
           ? BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET
           : BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
 
+  const std::string box_element =
+      use_button_action_document
+          ? "<button id='box' type='button' data-godot-action='play'>Play</button>"
+          : "<div id='box'></div>";
+  const std::string box_control_css =
+      use_button_action_document
+          ? "appearance:none;-webkit-appearance:none;border:0;padding:0;"
+            "color:white;text-align:center;"
+          : "";
   const std::string html =
       std::string("<!doctype html><style>") +
       "html,body{margin:0;width:100%;height:100%;background:" +
       background_css +
       ";}#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
       "background:" +
-      box_css + ";}" + extra_css + "</style><div id='box'></div>" +
+      box_css + ";" + box_control_css + "}" + extra_css + "</style>" +
+      box_element +
       extra_body;
 
   blink_standalone_external_gpu_target_t target = {};
@@ -1348,14 +1363,91 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                             require_full_nontransparent)) {
     return cleanup_and_fail();
   }
+  if (use_button_action_document) {
+    blink_standalone_hit_metadata_t hit = {};
+    status = blink_standalone_renderer_hit_test(renderer, 24.0f, 24.0f, &hit);
+    if (status == BLINK_STANDALONE_STATUS_OK) {
+      if (std::string(hit.element_id ? hit.element_id : "") != "box" ||
+          std::string(hit.data_godot_action ? hit.data_godot_action : "") !=
+              "play") {
+        std::fprintf(stderr,
+                     "%s: button/action hit metadata mismatch element=%s "
+                     "action=%s count=%zu\n",
+                     label, hit.element_id ? hit.element_id : "",
+                     hit.data_godot_action ? hit.data_godot_action : "",
+                     blink_standalone_renderer_hit_metadata_count(renderer));
+        return cleanup_and_fail();
+      }
+    } else {
+      std::printf(
+          "%s: button/action metadata unavailable after gpu-only frame "
+          "status=%d count=%zu\n",
+          label, status, blink_standalone_renderer_hit_metadata_count(renderer));
+    }
+  }
+  if (exercise_host_pending_resize_boundary) {
+    status = blink_standalone_renderer_mouse_move(renderer, 24.0f, 24.0f, 0);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "%s: pre-resize mouse move failed status=%d error=%s\n",
+                   label, status, blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+    status = blink_standalone_renderer_mouse_down(
+        renderer, 24.0f, 24.0f, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "%s: pre-resize mouse down failed status=%d error=%s\n",
+                   label, status, blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+    blink_standalone_update_result_t pre_resize_down_update = {};
+    status = blink_standalone_renderer_update(renderer, 0.125,
+                                              &pre_resize_down_update);
+    if (status != BLINK_STANDALONE_STATUS_OK ||
+        pre_resize_down_update.needs_output == 0) {
+      std::fprintf(stderr,
+                   "%s: pre-resize mouse down update failed status=%d "
+                   "needs_output=%u error=%s\n",
+                   label, status, pre_resize_down_update.needs_output,
+                   blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+    status = blink_standalone_renderer_mouse_up(
+        renderer, 24.0f, 24.0f, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "%s: pre-resize mouse up failed status=%d error=%s\n",
+                   label, status, blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+    blink_standalone_update_result_t pre_resize_up_update = {};
+    status = blink_standalone_renderer_update(renderer, 0.150,
+                                              &pre_resize_up_update);
+    if (status != BLINK_STANDALONE_STATUS_OK ||
+        pre_resize_up_update.needs_output == 0) {
+      std::fprintf(stderr,
+                   "%s: pre-resize mouse up update failed status=%d "
+                   "needs_output=%u error=%s\n",
+                   label, status, pre_resize_up_update.needs_output,
+                   blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+  }
 
   if (exercise_resize_sequence) {
     struct ResizeStep {
       uint32_t width;
       uint32_t height;
     };
-    const ResizeStep resize_steps[] = {
-        {1280, 720}, {1152, 648}, {1800, 1000}, {900, 600}, {2548, 1320}};
+    const std::vector<ResizeStep> resize_steps =
+        exercise_host_pending_resize_boundary
+            ? std::vector<ResizeStep>{{2532, 1281}}
+            : std::vector<ResizeStep>{{1280, 720},
+                                      {1152, 648},
+                                      {1800, 1000},
+                                      {900, 600},
+                                      {2548, 1320}};
     for (const ResizeStep& step : resize_steps) {
       status = blink_standalone_renderer_set_viewport(
           renderer, static_cast<int>(step.width), static_cast<int>(step.height),
@@ -1392,6 +1484,80 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         }
       }
 #endif
+      if (exercise_host_pending_resize_boundary) {
+        blink_standalone_gpu_render_result_t pre_update_render = {};
+        status = blink_standalone_renderer_render_to_gpu_target(
+            renderer, &target, &pre_update_render);
+        if (status == BLINK_STANDALONE_STATUS_PENDING &&
+            pre_update_render.target_written == 0) {
+          ++pending_resize_retries;
+          blink_standalone_update_result_t host_update = {};
+          status = blink_standalone_renderer_update(
+              renderer, 0.500 + static_cast<double>(target.common.generation) *
+                                    0.016,
+              &host_update);
+          if (status != BLINK_STANDALONE_STATUS_OK ||
+              host_update.needs_output == 0) {
+            std::fprintf(stderr,
+                         "%s: host-frame update after pre-update pending "
+                         "failed status=%d needs_output=%u skipped=%u "
+                         "error=%s\n",
+                         label, status, host_update.needs_output,
+                         host_update.frame_skipped_due_to_no_demand,
+                         blink_standalone_renderer_last_error(renderer));
+            return cleanup_and_fail();
+          }
+          int retry_count = 0;
+          blink_standalone_gpu_render_result_t retry_render = {};
+          do {
+            retry_render = blink_standalone_gpu_render_result_t{};
+            status = blink_standalone_renderer_render_to_gpu_target(
+                renderer, &target, &retry_render);
+            if (status == BLINK_STANDALONE_STATUS_PENDING &&
+                retry_render.target_written == 0) {
+              ++retry_count;
+              ++pending_resize_retries;
+              std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            } else {
+              break;
+            }
+          } while (retry_count < 8);
+          if (status != BLINK_STANDALONE_STATUS_OK ||
+              retry_render.target_written == 0 ||
+              retry_render.backend != backend ||
+              retry_render.width != active_width ||
+              retry_render.height != active_height) {
+            std::fprintf(stderr,
+                         "%s: host-boundary retry render %ux%u failed "
+                         "status=%d result_status=%u backend=%u written=%u "
+                         "size=%ux%u error=%s\n",
+                         label, active_width, active_height, status,
+                         retry_render.status, retry_render.backend,
+                         retry_render.target_written, retry_render.width,
+                         retry_render.height,
+                         blink_standalone_renderer_last_error(renderer));
+            return cleanup_and_fail();
+          }
+          if (!verify_target_pixels("host-boundary-resize",
+                                    expected_background, expected_box,
+                                    require_full_nontransparent)) {
+            return cleanup_and_fail();
+          }
+          continue;
+        }
+        if (status == BLINK_STANDALONE_STATUS_OK &&
+            pre_update_render.target_written != 0 &&
+            pre_update_render.backend == backend &&
+            pre_update_render.width == active_width &&
+            pre_update_render.height == active_height) {
+          if (!verify_target_pixels("host-boundary-resize-direct",
+                                    expected_background, expected_box,
+                                    require_full_nontransparent)) {
+            return cleanup_and_fail();
+          }
+          continue;
+        }
+      }
       blink_standalone_update_result_t resize_update = {};
       status = blink_standalone_renderer_update(
           renderer, 0.250 + static_cast<double>(target.common.generation) *
@@ -1410,7 +1576,40 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       blink_standalone_gpu_render_result_t resize_render = {};
       status = blink_standalone_renderer_render_to_gpu_target(
           renderer, &target, &resize_render);
-      if (tolerate_pending_resize_retry) {
+      if (exercise_host_pending_resize_boundary &&
+          status == BLINK_STANDALONE_STATUS_PENDING &&
+          resize_render.target_written == 0) {
+        ++pending_resize_retries;
+        blink_standalone_update_result_t host_update = {};
+        status = blink_standalone_renderer_update(
+            renderer, 0.500 + static_cast<double>(target.common.generation) *
+                                  0.016,
+            &host_update);
+        if (status != BLINK_STANDALONE_STATUS_OK ||
+            host_update.needs_output == 0) {
+          std::fprintf(stderr,
+                       "%s: host-frame update after pending failed "
+                       "status=%d needs_output=%u skipped=%u error=%s\n",
+                       label, status, host_update.needs_output,
+                       host_update.frame_skipped_due_to_no_demand,
+                       blink_standalone_renderer_last_error(renderer));
+          return cleanup_and_fail();
+        }
+        int retry_count = 0;
+        do {
+          resize_render = blink_standalone_gpu_render_result_t{};
+          status = blink_standalone_renderer_render_to_gpu_target(
+              renderer, &target, &resize_render);
+          if (status == BLINK_STANDALONE_STATUS_PENDING &&
+              resize_render.target_written == 0) {
+            ++retry_count;
+            ++pending_resize_retries;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          } else {
+            break;
+          }
+        } while (retry_count < 8);
+      } else if (tolerate_pending_resize_retry) {
         int retry_count = 0;
         while (status == BLINK_STANDALONE_STATUS_PENDING &&
                resize_render.target_written == 0 && retry_count < 8) {
@@ -1977,6 +2176,30 @@ int RunCApiVulkanExternalTargetClickTimingSmoke() {
       /*repeated_click_output_iterations=*/8);
 }
 
+int RunCApiVulkanExternalTargetClickResizePendingSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_click_resize_pending_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"#box{cursor:pointer;}#box:active{background:#00a050;}",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/true,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/true);
+}
+
 int RunCApiVulkanInvalidTargetMetadataSmoke() {
   return RunCApiExternalGpuTargetSmoke(
       BLINK_STANDALONE_GPU_BACKEND_VULKAN,
@@ -2058,6 +2281,29 @@ int RunCApiD3D12ExternalTargetClickTimingSmoke() {
       /*repeated_update_output_iterations=*/0,
       /*exercise_resize_sequence=*/true,
       /*repeated_click_output_iterations=*/8);
+}
+
+int RunCApiD3D12ExternalTargetButtonActivationSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_button_activation_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/1280,
+      /*height=*/721,
+      /*extra_css=*/"#box{cursor:pointer;}#box:active{background:#00a050;}",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/4,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/true);
 }
 
 int RunCApiD3D12UpdateOutputSmoke() {
@@ -9478,9 +9724,11 @@ int main(int argc, char** argv) {
         arg == "--c-api-vulkan-external-target-pending-resize-smoke" ||
         arg == "--c-api-vulkan-external-target-fps-timing-smoke" ||
         arg == "--c-api-vulkan-external-target-click-timing-smoke" ||
+        arg == "--c-api-vulkan-external-target-click-resize-pending-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
         arg == "--c-api-d3d12-external-target-resize-smoke" ||
         arg == "--c-api-d3d12-external-target-click-timing-smoke" ||
+        arg == "--c-api-d3d12-external-target-button-activation-smoke" ||
         arg == "--c-api-vulkan-update-output-smoke" ||
         arg == "--c-api-d3d12-update-output-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
@@ -9547,10 +9795,12 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_pending_resize_smoke = false;
   bool c_api_vulkan_external_target_fps_timing_smoke = false;
   bool c_api_vulkan_external_target_click_timing_smoke = false;
+  bool c_api_vulkan_external_target_click_resize_pending_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_d3d12_external_target_resize_smoke = false;
   bool c_api_d3d12_external_target_click_timing_smoke = false;
+  bool c_api_d3d12_external_target_button_activation_smoke = false;
   bool c_api_vulkan_update_output_smoke = false;
   bool c_api_d3d12_update_output_smoke = false;
   bool c_api_vulkan_external_target_current_document_smoke = false;
@@ -9718,6 +9968,9 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_fps_timing_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-click-timing-smoke") {
       c_api_vulkan_external_target_click_timing_smoke = true;
+    } else if (
+        arg == "--c-api-vulkan-external-target-click-resize-pending-smoke") {
+      c_api_vulkan_external_target_click_resize_pending_smoke = true;
     } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
       c_api_vulkan_invalid_target_metadata_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
@@ -9726,6 +9979,9 @@ int main(int argc, char** argv) {
       c_api_d3d12_external_target_resize_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-click-timing-smoke") {
       c_api_d3d12_external_target_click_timing_smoke = true;
+    } else if (
+        arg == "--c-api-d3d12-external-target-button-activation-smoke") {
+      c_api_d3d12_external_target_button_activation_smoke = true;
     } else if (arg == "--c-api-vulkan-update-output-smoke") {
       c_api_vulkan_update_output_smoke = true;
     } else if (arg == "--c-api-d3d12-update-output-smoke") {
@@ -9974,6 +10230,10 @@ int main(int argc, char** argv) {
     return RunCApiVulkanExternalTargetClickTimingSmoke();
   }
 
+  if (c_api_vulkan_external_target_click_resize_pending_smoke) {
+    return RunCApiVulkanExternalTargetClickResizePendingSmoke();
+  }
+
   if (c_api_vulkan_invalid_target_metadata_smoke) {
     return RunCApiVulkanInvalidTargetMetadataSmoke();
   }
@@ -9988,6 +10248,10 @@ int main(int argc, char** argv) {
 
   if (c_api_d3d12_external_target_click_timing_smoke) {
     return RunCApiD3D12ExternalTargetClickTimingSmoke();
+  }
+
+  if (c_api_d3d12_external_target_button_activation_smoke) {
+    return RunCApiD3D12ExternalTargetButtonActivationSmoke();
   }
 
   if (c_api_vulkan_update_output_smoke) {

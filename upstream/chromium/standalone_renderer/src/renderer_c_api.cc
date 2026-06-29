@@ -1221,6 +1221,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   *result = blink_standalone_update_result_t{};
   ClearLastError(renderer);
+  const bool had_gpu_source_frame_pending = renderer->gpu_source_frame_pending;
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
   input.device_scale_factor = renderer->device_scale_factor;
@@ -1243,16 +1244,22 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->resource_provider_dirty = false;
   renderer->gpu_prepare_required_after_update =
       renderer->latest_result.needs_output;
-  renderer->gpu_source_frame_pending = false;
+  renderer->gpu_source_frame_pending =
+      had_gpu_source_frame_pending && !renderer->latest_result.needs_output &&
+      renderer->latest_result.frame_skipped_due_to_no_demand;
   renderer->dirty_rects.clear();
 
   result->status = BLINK_STANDALONE_STATUS_OK;
   result->frame_advanced = renderer->latest_result.frame_advanced ? 1 : 0;
   result->frame_skipped_due_to_no_demand =
       renderer->latest_result.frame_skipped_due_to_no_demand ? 1 : 0;
-  result->needs_output = renderer->latest_result.needs_output ? 1 : 0;
+  result->needs_output =
+      (renderer->latest_result.needs_output ||
+       renderer->gpu_source_frame_pending)
+          ? 1
+          : 0;
   result->needs_begin_frame = renderer->latest_result.needs_begin_frame ? 1 : 0;
-  result->full_frame_damage = renderer->latest_result.needs_output ? 1 : 0;
+  result->full_frame_damage = result->needs_output ? 1 : 0;
   result->damage_rect_count = 0;
   return BLINK_STANDALONE_STATUS_OK;
 }
