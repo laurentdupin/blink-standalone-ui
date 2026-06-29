@@ -476,6 +476,36 @@ renderer, passes only the C ABI handles/metadata, calls
 `blink_standalone_renderer_render_to_gpu_target()`, then reads the caller-owned
 image back and verifies deterministic rendered CSS pixels.
 
+For Godot integration, this means the HTML module should create the interop
+target itself on Godot's active Vulkan `VkDevice`, allocate and own the matching
+`VkDeviceMemory`, pass the raw handles plus allocation metadata to Blink, then
+wrap the same `VkImage` in Godot with `RenderingDevice::texture_create_from_extension()`.
+This is preferable to trying to reuse an ordinary Godot RD texture, because
+Godot does not currently expose the allocation size, memory type index, or
+`VkDeviceMemory` needed by the borrowed Skia/Vulkan wrapper.
+
+The current Vulkan target writer requires:
+
+- `vk_image`
+- `vk_device_memory`
+- `vk_format == VK_FORMAT_R8G8B8A8_UNORM`
+- matching width/height
+- `image_tiling`
+- `image_usage_flags` including render/copy/sample usage equivalent to the
+  validated smoke (`COLOR_ATTACHMENT`, `SAMPLED`, `TRANSFER_SRC`,
+  `TRANSFER_DST`)
+- `allocation_size`
+- `memory_type_index`
+- the same queue family used in `configure_vulkan_external_device`
+
+`allocation_offset`, shared-memory handle import, explicit wait/signal
+semaphores, and explicit current/final layout ownership are reserved in the ABI
+but not consumed by the current implementation. The validated synchronous path
+waits for the render-copy work to complete before returning and leaves the
+target usable as `VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL`. Godot should still
+treat this as a synchronous first product path; async semaphore/timeline
+integration should be a separate checkpoint.
+
 The current Win32 Vulkan implementation requires these instance extensions when
 it creates Chromium's instance:
 
@@ -698,6 +728,25 @@ the expected CSS background and box colors. Raw `ID3D12Resource*` adoption is
 not advertised as public support because it is only valid with an explicit
 same-device setup contract; cross-device callers must use the shared-handle
 path.
+
+For Godot integration, the intended D3D12 vertical slice is therefore a
+module-owned shareable `ID3D12Resource`: create the resource on Godot's active
+D3D12 device with shared-handle support, call `ID3D12Device::CreateSharedHandle`,
+pass that handle to Blink, and wrap the same `ID3D12Resource*` in Godot with
+`RenderingDevice::texture_create_from_extension()`. Blink opens the shared
+handle during `render_to_gpu_target()` and releases its opened resource before
+the synchronous call returns; Godot must keep the original resource alive for
+the duration of the call and may close the `HANDLE` after the call returns if it
+will recreate/pass it on subsequent renders. Raw `ID3D12Resource*` without a
+shared handle remains unsupported by the public C API.
+
+The D3D12 `current_state`, `required_final_state`, wait fence, and signal fence
+fields are reserved for a future explicit async/state contract. The current
+validated path is synchronous; the smoke uses a shared texture created in
+`D3D12_RESOURCE_STATE_COMMON` and verifies caller-side readback after return.
+For Godot sampling, the safe first assumption is that rendering is complete
+when `render_to_gpu_target()` returns, with explicit state/fence integration
+tracked as follow-up work.
 
 The Vulkan public path now has the same real handle-adoption proof for the
 same-device case. `blink_standalone_renderer_configure_vulkan_external_device()`

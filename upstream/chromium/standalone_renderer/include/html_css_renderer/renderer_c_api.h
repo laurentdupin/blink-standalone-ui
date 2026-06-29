@@ -223,17 +223,31 @@ typedef struct blink_standalone_gpu_target_common {
 } blink_standalone_gpu_target_common_t;
 
 typedef struct blink_standalone_vulkan_external_target {
+  /* Raw VkImage owned by the embedder. The renderer must already have been
+   * configured with blink_standalone_renderer_configure_vulkan_external_device
+   * for the same VkDevice/queue domain. */
   void* vk_image;
+  /* Optional duplicate of the configured device/physical-device handles for
+   * caller diagnostics. The current same-device writer validates against the
+   * configured renderer device and uses vk_image/vk_device_memory metadata. */
   void* vk_device;
   void* vk_physical_device;
+  /* Required today: Skia/Vulkan wrapping needs allocation metadata for the
+   * borrowed image. Blink never frees this memory. */
   void* vk_device_memory;
+  /* Reserved for future cross-device external-memory import; ignored by the
+   * current same-device path. */
   void* shared_memory_handle;
   uint32_t vk_format;
   uint32_t width;
   uint32_t height;
+  /* Reserved for explicit layout ownership. The current implementation writes
+   * synchronously and leaves the validated target usable as
+   * VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL. */
   uint32_t current_layout;
   uint32_t required_final_layout;
   uint32_t queue_family_index;
+  /* allocation_offset is reserved and currently expected to be zero. */
   uint64_t allocation_offset;
   uint64_t allocation_size;
   uint32_t memory_type_index;
@@ -243,6 +257,8 @@ typedef struct blink_standalone_vulkan_external_target {
   uint32_t level_count;
   uint32_t sharing_mode;
   uint32_t external_memory_handle_type;
+  /* Reserved for explicit async synchronization. The current implementation is
+   * synchronous for validated smokes and does not consume or signal these. */
   void* wait_semaphore;
   uint64_t wait_value;
   void* signal_semaphore;
@@ -250,6 +266,9 @@ typedef struct blink_standalone_vulkan_external_target {
 } blink_standalone_vulkan_external_target_t;
 
 typedef struct blink_standalone_vulkan_external_device {
+  /* Raw Vulkan handles borrowed from the embedder. Call once after renderer
+   * creation and before document/frame use. Blink wraps these handles in
+   * non-owning Chromium Vulkan objects and never destroys the VkDevice/queue. */
   void* vk_instance;
   void* vk_physical_device;
   void* vk_device;
@@ -263,15 +282,25 @@ typedef struct blink_standalone_vulkan_external_device {
 } blink_standalone_vulkan_external_device_t;
 
 typedef struct blink_standalone_d3d12_external_target {
+  /* Raw ID3D12Resource* is reserved for a future same-device D3D12 setup API.
+   * The public D3D12 path currently requires shared_handle. */
   void* d3d12_device;
   void* d3d12_command_queue;
   void* d3d12_resource;
+  /* Required today for external D3D12 targets. The renderer opens the handle
+   * during render_to_gpu_target and does not retain it after the synchronous
+   * call returns. */
   void* shared_handle;
   uint32_t dxgi_format;
   uint32_t width;
   uint32_t height;
+  /* Reserved for explicit resource-state ownership. The current validated path
+   * is synchronous and suitable for caller-side readback/sampling after return
+   * when the target resource was created with simultaneous access/shared usage. */
   uint32_t current_state;
   uint32_t required_final_state;
+  /* Reserved for explicit async synchronization. The current implementation is
+   * synchronous for validated smokes and does not consume or signal these. */
   void* wait_fence;
   uint64_t wait_value;
   void* signal_fence;
