@@ -61,7 +61,8 @@ class GPU_GLES2_EXPORT DawnContextProvider {
       const GpuPreferences& gpu_preferences,
       const GpuFeatureInfo& gpu_feature_info,
       gl::ProgressReporter* progress_reporter = nullptr,
-      ValidateAdapterFn validate_adapter_fn = DefaultValidateAdapterFn);
+      ValidateAdapterFn validate_adapter_fn = DefaultValidateAdapterFn,
+      std::optional<LUID> adapter_luid = std::nullopt);
 
   // Creates a new context provider for use on a different thread that shares
   // the wgpu::Device/Adapter/Instance with `existing`.

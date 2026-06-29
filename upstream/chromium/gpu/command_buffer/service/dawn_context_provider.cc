@@ -501,7 +501,8 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
                   bool force_fallback_adapter,
                   const GpuPreferences& gpu_preferences,
                   const GpuDriverBugWorkarounds& workarounds,
-                  DawnContextProvider::ValidateAdapterFn validate_adapter_fn);
+                  DawnContextProvider::ValidateAdapterFn validate_adapter_fn,
+                  std::optional<LUID> adapter_luid);
   void SetCachingInterface(
       std::unique_ptr<webgpu::DawnCachingInterface> dawn_caching_interface);
   void SetCachingInterface(scoped_refptr<GpuPersistentCache> persistent_cache);
@@ -844,7 +845,8 @@ bool DawnSharedContext::Initialize(
     bool force_fallback_adapter,
     const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
-    DawnContextProvider::ValidateAdapterFn validate_adapter_fn) {
+    DawnContextProvider::ValidateAdapterFn validate_adapter_fn,
+    std::optional<LUID> adapter_luid) {
   TraceStandaloneDawnStage("Initialize begin");
 #if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   DawnProcTable procs = dawn::native::GetProcs();
@@ -887,9 +889,17 @@ bool DawnSharedContext::Initialize(
 
 #if BUILDFLAG(IS_WIN)
   dawn::native::d3d::RequestAdapterOptionsLUID adapter_options_luid;
+  if ((adapter_options.backendType == wgpu::BackendType::D3D11 ||
+       adapter_options.backendType == wgpu::BackendType::D3D12) &&
+      adapter_luid) {
+    adapter_options_luid.adapterLUID = *adapter_luid;
+    adapter_options_luid.nextInChain = adapter_options.nextInChain;
+    adapter_options.nextInChain = &adapter_options_luid;
+  }
 #if !defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
   if ((adapter_options.backendType == wgpu::BackendType::D3D11 ||
        adapter_options.backendType == wgpu::BackendType::D3D12) &&
+      !adapter_luid &&
       GetANGLED3D11DeviceLUID(&adapter_options_luid.adapterLUID)) {
     // Request the GPU that ANGLE is using if possible.
     adapter_options_luid.nextInChain = adapter_options.nextInChain;
@@ -1305,7 +1315,8 @@ std::unique_ptr<DawnContextProvider> DawnContextProvider::CreateWithBackend(
     const GpuPreferences& gpu_preferences,
     const GpuFeatureInfo& gpu_feature_info,
     gl::ProgressReporter* progress_reporter,
-    ValidateAdapterFn validate_adapter_fn) {
+    ValidateAdapterFn validate_adapter_fn,
+    std::optional<LUID> adapter_luid) {
   bool use_thread_safe_graphite_context =
       features::IsDrDcEnabled(gpu_feature_info) &&
       features::IsGraphiteContextThreadSafe();
@@ -1315,7 +1326,7 @@ std::unique_ptr<DawnContextProvider> DawnContextProvider::CreateWithBackend(
       gpu_feature_info.enabled_gpu_driver_bug_workarounds);
   if (!dawn_shared_context->Initialize(backend_type, force_fallback_adapter,
                                        gpu_preferences, workarounds,
-                                       validate_adapter_fn)) {
+                                       validate_adapter_fn, adapter_luid)) {
     return nullptr;
   }
   return base::WrapUnique(

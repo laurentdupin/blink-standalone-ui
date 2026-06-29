@@ -6,17 +6,23 @@
 #define GPU_IPC_IN_PROCESS_GPU_THREAD_HOLDER_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/component_export.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/threading/thread.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/ipc/gpu_in_process_thread_service.h"
 #include "gpu/vulkan/buildflags.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <d3d12.h>
+#endif
 
 namespace gpu {
 class CommandBufferTaskExecutor;
@@ -73,6 +79,10 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
       std::unique_ptr<VulkanDeviceQueue> vulkan_device_queue);
 #endif
 
+#if BUILDFLAG(IS_WIN)
+  void SetExternalD3D12AdapterLuidForTesting(LUID adapter_luid);
+#endif
+
   Scheduler* scheduler();
   SyncPointManager* sync_point_manager();
   SharedImageManager* shared_image_manager();
@@ -100,6 +110,9 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<SharedContextState> context_state_;
   std::unique_ptr<DawnContextProvider> dawn_context_provider_;
+#if BUILDFLAG(IS_WIN)
+  std::optional<LUID> external_d3d12_adapter_luid_;
+#endif
 #if BUILDFLAG(ENABLE_VULKAN)
   std::unique_ptr<VulkanImplementation> vulkan_implementation_;
   raw_ptr<VulkanImplementation> pending_external_vulkan_implementation_ =

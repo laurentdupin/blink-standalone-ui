@@ -40,11 +40,23 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 
+#if BUILDFLAG(IS_WIN)
+#include <d3d12.h>
+#endif
+
 #if BUILDFLAG(ENABLE_VULKAN)
 namespace blink::standalone_renderer_probe {
 void StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
     void* vulkan_implementation,
     void* vulkan_device_queue);
+}  // namespace blink::standalone_renderer_probe
+#endif
+
+#if BUILDFLAG(IS_WIN)
+namespace blink::standalone_renderer_probe {
+void StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
+    uint32_t adapter_luid_low,
+    int32_t adapter_luid_high);
 }  // namespace blink::standalone_renderer_probe
 #endif
 
@@ -598,6 +610,11 @@ struct blink_standalone_renderer {
   std::unique_ptr<gpu::VulkanDeviceQueue> external_vulkan_device_queue;
   bool external_vulkan_configured = false;
 #endif
+#if BUILDFLAG(IS_WIN)
+  bool external_d3d12_configured = false;
+  uint32_t external_d3d12_adapter_luid_low = 0;
+  int32_t external_d3d12_adapter_luid_high = 0;
+#endif
   html_css_renderer::CompositorFrameResult latest_result;
   std::vector<blink_standalone_rect_t> dirty_rects;
   std::vector<html_css_renderer::MouseInputEvent> pending_mouse_events;
@@ -733,6 +750,14 @@ blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* rend
         StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
         renderer->external_vulkan_implementation.get(),
         renderer->external_vulkan_device_queue.release());
+  }
+#endif
+#if BUILDFLAG(IS_WIN)
+  if (renderer->external_d3d12_configured) {
+    blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
+            renderer->external_d3d12_adapter_luid_low,
+            renderer->external_d3d12_adapter_luid_high);
   }
 #endif
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
@@ -1192,6 +1217,46 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 #else
   return SetLastError(renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
                       "configure_vulkan_external_device failed: Vulkan is not enabled");
+#endif
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_configure_d3d12_external_device(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_d3d12_external_device_t* device) {
+  if (!renderer || !device) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "configure_d3d12_external_device failed: renderer and device are required");
+  }
+  if (renderer->runtime && !renderer->html.empty()) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "configure_d3d12_external_device failed: D3D12 device must be configured before first frame/runtime initialization");
+  }
+#if BUILDFLAG(IS_WIN)
+  uint32_t luid_low = device->adapter_luid_low;
+  int32_t luid_high = device->adapter_luid_high;
+  if (luid_low == 0 && luid_high == 0) {
+    if (!device->d3d12_device) {
+      return SetLastError(
+          renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+          "configure_d3d12_external_device failed: pass adapter LUID or ID3D12Device");
+    }
+    LUID luid = static_cast<ID3D12Device*>(device->d3d12_device)
+                    ->GetAdapterLuid();
+    luid_low = luid.LowPart;
+    luid_high = luid.HighPart;
+  }
+  renderer->runtime.reset();
+  renderer->latest_result = html_css_renderer::CompositorFrameResult();
+  renderer->external_d3d12_adapter_luid_low = luid_low;
+  renderer->external_d3d12_adapter_luid_high = luid_high;
+  renderer->external_d3d12_configured = true;
+  return InitializeRuntime(renderer);
+#else
+  return SetLastError(
+      renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+      "configure_d3d12_external_device failed: D3D12 is only available on Windows");
 #endif
 }
 

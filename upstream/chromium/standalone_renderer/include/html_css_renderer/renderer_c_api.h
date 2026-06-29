@@ -283,7 +283,10 @@ typedef struct blink_standalone_vulkan_external_device {
 
 typedef struct blink_standalone_d3d12_external_target {
   /* Raw ID3D12Resource* is reserved for a future same-device D3D12 setup API.
-   * The public D3D12 path currently requires shared_handle. */
+   * The public D3D12 path currently requires shared_handle. Call
+   * blink_standalone_renderer_configure_d3d12_external_device before document
+   * use when the shared handle comes from an embedder-owned D3D12 device so
+   * Blink can choose the matching adapter before creating its Dawn device. */
   void* d3d12_device;
   void* d3d12_command_queue;
   void* d3d12_resource;
@@ -306,6 +309,19 @@ typedef struct blink_standalone_d3d12_external_target {
   void* signal_fence;
   uint64_t signal_value;
 } blink_standalone_d3d12_external_target_t;
+
+typedef struct blink_standalone_d3d12_external_device {
+  /* Optional borrowed ID3D12Device*. */
+  void* d3d12_device;
+  /* Optional borrowed ID3D12CommandQueue*. Reserved for future same-device
+   * Dawn setup; the current implementation uses the adapter LUID only. */
+  void* d3d12_command_queue;
+  /* Optional explicit DXGI adapter LUID. If both fields are zero, Blink derives
+   * the LUID from d3d12_device via ID3D12Device::GetAdapterLuid(). */
+  uint32_t adapter_luid_low;
+  int32_t adapter_luid_high;
+  uint32_t node_mask;
+} blink_standalone_d3d12_external_device_t;
 
 /* Explicit GPU output target. CPU raw output remains the default path and is
  * requested only through advance_frame/get_latest_output. render_to_gpu_target
@@ -437,6 +453,9 @@ BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gpu_backend_c
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_configure_vulkan_external_device(
     blink_standalone_renderer_t* renderer,
     const blink_standalone_vulkan_external_device_t* device);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_configure_d3d12_external_device(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_d3d12_external_device_t* device);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_to_gpu_target(
     blink_standalone_renderer_t* renderer,
     const blink_standalone_external_gpu_target_t* target,

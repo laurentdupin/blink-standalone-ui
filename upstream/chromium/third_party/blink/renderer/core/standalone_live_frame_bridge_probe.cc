@@ -315,6 +315,9 @@ raw_ptr<gpu::VulkanImplementation>
     g_pending_external_vulkan_implementation_for_testing = nullptr;
 std::unique_ptr<gpu::VulkanDeviceQueue>
     g_pending_external_vulkan_device_queue_for_testing;
+#if BUILDFLAG(IS_WIN)
+std::optional<LUID> g_pending_external_d3d12_adapter_luid_for_testing;
+#endif
 }  // namespace
 
 void StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
@@ -339,6 +342,29 @@ void InstallPendingExternalVulkanForTesting(
       g_pending_external_vulkan_implementation_for_testing,
       std::move(g_pending_external_vulkan_device_queue_for_testing));
   g_pending_external_vulkan_implementation_for_testing = nullptr;
+#endif
+}
+
+void StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
+    uint32_t adapter_luid_low,
+    int32_t adapter_luid_high) {
+#if BUILDFLAG(IS_WIN)
+  LUID luid = {};
+  luid.LowPart = adapter_luid_low;
+  luid.HighPart = adapter_luid_high;
+  g_pending_external_d3d12_adapter_luid_for_testing = luid;
+#endif
+}
+
+void InstallPendingExternalD3D12AdapterLuidForTesting(
+    gpu::InProcessGpuThreadHolder* holder) {
+#if BUILDFLAG(IS_WIN)
+  if (!holder || !g_pending_external_d3d12_adapter_luid_for_testing) {
+    return;
+  }
+  holder->SetExternalD3D12AdapterLuidForTesting(
+      *g_pending_external_d3d12_adapter_luid_for_testing);
+  g_pending_external_d3d12_adapter_luid_for_testing.reset();
 #endif
 }
 
@@ -1383,6 +1409,13 @@ StandaloneBorrowedVkImageBacking::ProduceSkiaGanesh(
 
 #if BUILDFLAG(IS_WIN) && \
     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+std::string HResultHex(HRESULT hr) {
+  std::ostringstream out;
+  out << "0x" << std::hex << std::setw(8) << std::setfill('0')
+      << static_cast<unsigned long>(hr);
+  return out.str();
+}
+
 class StandaloneBorrowedD3D12TextureBacking final
     : public gpu::ClearTrackingSharedImageBacking {
  public:
@@ -3170,7 +3203,8 @@ class StandaloneSkiaOutputSurfaceDependency final
           IID_PPV_ARGS(&opened_shared_resource));
       if (FAILED(hr) || !opened_shared_resource) {
         return finish_with_failure(
-            "borrowed external D3D12 shared handle open failed");
+            "borrowed external D3D12 shared handle open failed hr=" +
+            HResultHex(hr));
       }
       external_resource = opened_shared_resource.Get();
     }
@@ -5000,6 +5034,10 @@ class StandaloneCcLayerHost final
                                               : gpu::GrContextType::kGL);
       if (use_vulkan_offscreen_output_) {
         InstallPendingExternalVulkanForTesting(gpu_thread_holder_.get());
+      }
+      if (use_d3d12_offscreen_output_) {
+        InstallPendingExternalD3D12AdapterLuidForTesting(
+            gpu_thread_holder_.get());
       }
     }
     TraceLiveFrameProbeStage("cc host CreateFrameSink after gpu holder");

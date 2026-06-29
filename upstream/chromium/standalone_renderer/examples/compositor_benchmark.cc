@@ -1023,11 +1023,27 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     }
     target.d3d12.d3d12_device = d3d12_device.Get();
     target.d3d12.d3d12_command_queue = d3d12_queue.Get();
+    target.d3d12.d3d12_resource = d3d12_resource.Get();
     target.d3d12.shared_handle = d3d12_shared_handle;
     target.d3d12.dxgi_format = DXGI_FORMAT_R8G8B8A8_UNORM;
     target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
     target.d3d12.required_final_state =
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    blink_standalone_d3d12_external_device_t d3d12_external_device = {};
+    d3d12_external_device.d3d12_device = d3d12_device.Get();
+    d3d12_external_device.d3d12_command_queue = d3d12_queue.Get();
+    status = blink_standalone_renderer_configure_d3d12_external_device(
+        renderer, &d3d12_external_device);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr, "%s: failed configure_d3d12 status=%d error=%s\n",
+                   label, status,
+                   blink_standalone_renderer_last_error(renderer));
+      if (target.d3d12.shared_handle) {
+        CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+      }
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
 #else
     std::fprintf(stderr, "%s: blocked platform=non_windows\n", label);
     blink_standalone_renderer_destroy(renderer);

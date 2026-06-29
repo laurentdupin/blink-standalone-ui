@@ -117,6 +117,14 @@ void InProcessGpuThreadHolder::AdoptExternalVulkanForTesting(
 }
 #endif
 
+#if BUILDFLAG(IS_WIN)
+void InProcessGpuThreadHolder::SetExternalD3D12AdapterLuidForTesting(
+    LUID adapter_luid) {
+  DCHECK(!task_executor_);
+  external_d3d12_adapter_luid_ = adapter_luid;
+}
+#endif
+
 Scheduler* InProcessGpuThreadHolder::scheduler() {
   GetTaskExecutor();
   return scheduler_.get();
@@ -213,7 +221,9 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
         "InitializeOnGpuThread before Dawn D3D12 context provider");
     dawn_context_provider_ = DawnContextProvider::CreateWithBackend(
         wgpu::BackendType::D3D12, /*force_fallback_adapter=*/false,
-        gpu_preferences_, gpu_feature_info_);
+        gpu_preferences_, gpu_feature_info_, /*progress_reporter=*/nullptr,
+        DawnContextProvider::DefaultValidateAdapterFn,
+        external_d3d12_adapter_luid_);
     if (!dawn_context_provider_) {
       TraceStandaloneGpuThreadHolderStage(
           "InitializeOnGpuThread failed Dawn D3D12 context provider");
