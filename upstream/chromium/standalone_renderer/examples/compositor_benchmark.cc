@@ -200,6 +200,8 @@ void PrintUsage() {
       "[--gpu-external-vulkan-runtime-target-smoke] "
       "[--gpu-borrowed-d3d12-render-copy-smoke] "
       "[--c-api-vulkan-external-target-smoke] "
+      "[--c-api-vulkan-external-target-large-smoke] "
+      "[--c-api-vulkan-invalid-target-metadata-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-vulkan-update-output-smoke] "
       "[--c-api-d3d12-update-output-smoke] "
@@ -819,7 +821,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   const char* extra_css = "",
                                   const char* extra_body = "",
                                   bool require_full_nontransparent = true,
-                                  bool exercise_update_output_sequence = false) {
+                                  bool exercise_update_output_sequence = false,
+                                  bool expect_invalid_vulkan_metadata = false) {
   blink_standalone_renderer_config_t config = {};
   config.width = width;
   config.height = height;
@@ -1106,10 +1109,43 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     cleanup_vulkan_target();
     return 0;
   }
+  if (expect_invalid_vulkan_metadata) {
+    if (backend != BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+      std::fprintf(stderr, "%s: invalid metadata smoke requires Vulkan\n",
+                   label);
+      blink_standalone_renderer_destroy(renderer);
+      cleanup_vulkan_target();
+      return 1;
+    }
+    target.vulkan.allocation_size = 0;
+  }
 
   blink_standalone_gpu_render_result_t result = {};
   status =
       blink_standalone_renderer_render_to_gpu_target(renderer, &target, &result);
+  if (expect_invalid_vulkan_metadata) {
+    const char* last_error = blink_standalone_renderer_last_error(renderer);
+    const bool error_matches =
+        last_error &&
+        std::string(last_error).find("missing allocation_size") !=
+            std::string::npos;
+    if (status != BLINK_STANDALONE_STATUS_INVALID_ARGUMENT ||
+        result.target_written != 0 || !error_matches) {
+      std::fprintf(stderr,
+                   "%s: invalid metadata was not rejected cleanly status=%d "
+                   "result_status=%u written=%u error=%s\n",
+                   label, status, result.status, result.target_written,
+                   last_error ? last_error : "");
+      blink_standalone_renderer_destroy(renderer);
+      cleanup_vulkan_target();
+      return 1;
+    }
+    std::printf("%s: ok rejected_invalid_metadata=1 error=%s\n", label,
+                last_error);
+    blink_standalone_renderer_destroy(renderer);
+    cleanup_vulkan_target();
+    return 0;
+  }
   if (status != BLINK_STANDALONE_STATUS_OK || result.target_written == 0 ||
       result.backend != backend || result.width != width ||
       result.height != height) {
@@ -1328,6 +1364,37 @@ int RunCApiVulkanExternalTargetSmoke() {
       BLINK_STANDALONE_GPU_BACKEND_VULKAN,
       "c_api_vulkan_external_target_smoke",
       /*require_external_target=*/true);
+}
+
+int RunCApiVulkanExternalTargetLargeSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_large_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320);
+}
+
+int RunCApiVulkanInvalidTargetMetadataSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_invalid_target_metadata_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/true);
 }
 
 int RunCApiVulkanUpdateOutputSmoke() {
@@ -8758,6 +8825,8 @@ int main(int argc, char** argv) {
         arg == "--c-api-backdrop-filter-rounded-smoke" ||
         arg == "--c-api-backdrop-filter-chain-smoke" ||
         arg == "--c-api-backdrop-filter-unsupported-smoke" ||
+        arg == "--c-api-vulkan-external-target-large-smoke" ||
+        arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
         arg == "--c-api-vulkan-update-output-smoke" ||
         arg == "--c-api-d3d12-update-output-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
@@ -8819,6 +8888,8 @@ int main(int argc, char** argv) {
   bool gpu_external_vulkan_device_smoke = false;
   bool gpu_vulkan_ganesh_context_smoke = false;
   bool c_api_vulkan_external_target_smoke = false;
+  bool c_api_vulkan_external_target_large_smoke = false;
+  bool c_api_vulkan_invalid_target_metadata_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_vulkan_update_output_smoke = false;
   bool c_api_d3d12_update_output_smoke = false;
@@ -8977,6 +9048,10 @@ int main(int argc, char** argv) {
       gpu_vulkan_ganesh_context_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-smoke") {
       c_api_vulkan_external_target_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-large-smoke") {
+      c_api_vulkan_external_target_large_smoke = true;
+    } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
+      c_api_vulkan_invalid_target_metadata_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
       c_api_d3d12_external_target_smoke = true;
     } else if (arg == "--c-api-vulkan-update-output-smoke") {
@@ -9205,6 +9280,14 @@ int main(int argc, char** argv) {
 
   if (c_api_vulkan_external_target_smoke) {
     return RunCApiVulkanExternalTargetSmoke();
+  }
+
+  if (c_api_vulkan_external_target_large_smoke) {
+    return RunCApiVulkanExternalTargetLargeSmoke();
+  }
+
+  if (c_api_vulkan_invalid_target_metadata_smoke) {
+    return RunCApiVulkanInvalidTargetMetadataSmoke();
   }
 
   if (c_api_d3d12_external_target_smoke) {

@@ -233,7 +233,8 @@ typedef struct blink_standalone_vulkan_external_target {
   void* vk_device;
   void* vk_physical_device;
   /* Required today: Skia/Vulkan wrapping needs allocation metadata for the
-   * borrowed image. Blink never frees this memory. */
+   * borrowed image. Blink never frees this memory. allocation_offset must be
+   * zero in the current same-device path and allocation_size must be non-zero. */
   void* vk_device_memory;
   /* Reserved for future cross-device external-memory import; ignored by the
    * current same-device path. */
@@ -252,7 +253,13 @@ typedef struct blink_standalone_vulkan_external_target {
   uint64_t allocation_size;
   uint32_t memory_type_index;
   uint32_t image_tiling;
+  /* Must include COLOR_ATTACHMENT, SAMPLED, and TRANSFER_DST usage bits for the
+   * current Viz blit request path. TRANSFER_SRC is only needed by callers that
+   * read the image back themselves for diagnostics. */
   uint32_t image_usage_flags;
+  /* Current path supports single-sample, single-level 2D targets. Zero is
+   * accepted for backward compatibility and treated as unspecified; embedders
+   * should pass sample_count=1 and level_count=1. */
   uint32_t sample_count;
   uint32_t level_count;
   uint32_t sharing_mode;

@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -647,6 +648,71 @@ blink_standalone_status_code_t SetLastError(
   }
   return code;
 }
+
+#if BUILDFLAG(ENABLE_VULKAN)
+bool ValidateVulkanExternalTarget(
+    const blink_standalone_external_gpu_target_t& target,
+    std::string* failure) {
+  const auto fail = [&](const char* reason) {
+    if (failure) {
+      std::ostringstream out;
+      out << "render_to_gpu_target failed: invalid Vulkan external target "
+          << reason << " common=" << target.common.physical_width << "x"
+          << target.common.physical_height << " target="
+          << target.vulkan.width << "x" << target.vulkan.height
+          << " vk_image=" << target.vulkan.vk_image
+          << " vk_memory=" << target.vulkan.vk_device_memory
+          << " format=" << target.vulkan.vk_format
+          << " allocation_size=" << target.vulkan.allocation_size
+          << " allocation_offset=" << target.vulkan.allocation_offset
+          << " memory_type_index=" << target.vulkan.memory_type_index
+          << " tiling=" << target.vulkan.image_tiling
+          << " usage=0x" << std::hex << target.vulkan.image_usage_flags
+          << std::dec << " sample_count=" << target.vulkan.sample_count
+          << " level_count=" << target.vulkan.level_count
+          << " queue_family=" << target.vulkan.queue_family_index;
+      *failure = out.str();
+    }
+    return false;
+  };
+  if (!target.vulkan.vk_image) {
+    return fail("missing vk_image");
+  }
+  if (!target.vulkan.vk_device_memory) {
+    return fail("missing vk_device_memory");
+  }
+  if (target.common.physical_width == 0 || target.common.physical_height == 0) {
+    return fail("missing common physical size");
+  }
+  if (target.vulkan.width != target.common.physical_width ||
+      target.vulkan.height != target.common.physical_height) {
+    return fail("size mismatch");
+  }
+  if (target.vulkan.vk_format != VK_FORMAT_R8G8B8A8_UNORM) {
+    return fail("unsupported vk_format");
+  }
+  if (target.vulkan.allocation_offset != 0) {
+    return fail("non-zero allocation_offset is not supported");
+  }
+  if (target.vulkan.allocation_size == 0) {
+    return fail("missing allocation_size");
+  }
+  if (target.vulkan.sample_count != 0 &&
+      target.vulkan.sample_count != VK_SAMPLE_COUNT_1_BIT) {
+    return fail("unsupported sample_count");
+  }
+  if (target.vulkan.level_count != 0 && target.vulkan.level_count != 1) {
+    return fail("unsupported level_count");
+  }
+  constexpr uint32_t kRequiredUsage =
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+      VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  if ((target.vulkan.image_usage_flags & kRequiredUsage) != kRequiredUsage) {
+    return fail("missing required image_usage_flags");
+  }
+  return true;
+}
+#endif
 
 const char* DomMutationTypeName(html_css_renderer::DomMutationType type) {
   switch (type) {
@@ -1380,6 +1446,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         return SetLastError(
             renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
             "render_to_gpu_target failed: Vulkan external targets require configure_vulkan_external_device before first frame");
+      }
+      std::string validation_failure;
+      if (!ValidateVulkanExternalTarget(*target, &validation_failure)) {
+        result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+        return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                            validation_failure);
       }
       html_css_renderer::ExternalVulkanImageTarget external_target;
       external_target.vk_image = target->vulkan.vk_image;
