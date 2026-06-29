@@ -845,6 +845,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   int repeated_after_resize_render_iterations =
                                       0,
                                   bool omit_d3d12_resource_hint_after_resize =
+                                      false,
+                                  bool rotate_d3d12_shared_handle_after_resize =
                                       false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
@@ -1704,6 +1706,29 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         target.vulkan.current_layout = target.vulkan.required_final_layout;
 #if BUILDFLAG(IS_WIN)
         target.d3d12.current_state = target.d3d12.required_final_state;
+        if (rotate_d3d12_shared_handle_after_resize &&
+            backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+            d3d12_resource) {
+          HANDLE rotated_handle = nullptr;
+          HRESULT rotate_hr = d3d12_device->CreateSharedHandle(
+              d3d12_resource.Get(), nullptr, GENERIC_ALL, nullptr,
+              &rotated_handle);
+          if (FAILED(rotate_hr) || !rotated_handle) {
+            std::fprintf(stderr,
+                         "%s: post-resize repeated render %d failed to "
+                         "rotate D3D12 shared handle hr=0x%08lx\n",
+                         label, i, static_cast<unsigned long>(rotate_hr));
+            return cleanup_and_fail();
+          }
+          if (target.d3d12.shared_handle) {
+            CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+          }
+          d3d12_shared_handle = rotated_handle;
+          target.d3d12.shared_handle = d3d12_shared_handle;
+          if (!omit_d3d12_resource_hint_after_resize) {
+            target.d3d12.d3d12_resource = d3d12_resource.Get();
+          }
+        }
 #endif
         blink_standalone_gpu_render_result_t repeated_render = {};
         status = blink_standalone_renderer_render_to_gpu_target(
@@ -2437,7 +2462,8 @@ int RunCApiD3D12ExternalTargetRepeatedFrameSmoke() {
       /*exercise_host_pending_resize_boundary=*/false,
       /*repeated_same_target_render_iterations=*/0,
       /*repeated_after_resize_render_iterations=*/4,
-      /*omit_d3d12_resource_hint_after_resize=*/true);
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/true);
 }
 
 int RunCApiD3D12UpdateOutputSmoke() {

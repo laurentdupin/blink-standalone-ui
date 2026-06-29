@@ -3260,7 +3260,12 @@ class StandaloneSkiaOutputSurfaceDependency final
           resource_device && SameD3D12Device(resource_device.Get(), device.Get());
     }
     if (shared_handle && !can_use_external_resource_directly) {
-      if (shared_handle == cached_external_d3d12_shared_handle_ &&
+      const bool cache_handle_hit =
+          shared_handle == cached_external_d3d12_shared_handle_;
+      const bool cache_resource_hit =
+          external_resource &&
+          external_resource == cached_external_d3d12_resource_hint_;
+      if ((cache_handle_hit || cache_resource_hit) &&
           cached_external_d3d12_opened_resource_) {
         opened_shared_resource = cached_external_d3d12_opened_resource_;
       } else {
@@ -3268,11 +3273,16 @@ class StandaloneSkiaOutputSurfaceDependency final
             static_cast<HANDLE>(shared_handle),
             IID_PPV_ARGS(&opened_shared_resource));
         if (FAILED(hr) || !opened_shared_resource) {
-          return finish_with_failure(
-              "borrowed external D3D12 shared handle open failed hr=" +
-              HResultHex(hr));
+          std::ostringstream failure;
+          failure << "borrowed external D3D12 shared handle open failed hr="
+                  << HResultHex(hr)
+                  << " cache_handle_hit=" << (cache_handle_hit ? 1 : 0)
+                  << " cache_resource_hit=" << (cache_resource_hit ? 1 : 0)
+                  << " has_resource=" << (external_resource ? 1 : 0);
+          return finish_with_failure(failure.str());
         }
         cached_external_d3d12_shared_handle_ = shared_handle;
+        cached_external_d3d12_resource_hint_ = external_resource;
         cached_external_d3d12_opened_resource_ = opened_shared_resource;
       }
       external_resource = opened_shared_resource.Get();
@@ -3480,6 +3490,7 @@ class StandaloneSkiaOutputSurfaceDependency final
   std::unique_ptr<BorrowedD3D12RenderCopyBlitTarget>
       borrowed_d3d12_blit_target_;
   void* cached_external_d3d12_shared_handle_ = nullptr;
+  raw_ptr<ID3D12Resource> cached_external_d3d12_resource_hint_ = nullptr;
   Microsoft::WRL::ComPtr<ID3D12Resource>
       cached_external_d3d12_opened_resource_;
 #endif
