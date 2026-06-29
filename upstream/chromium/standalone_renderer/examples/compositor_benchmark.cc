@@ -1365,6 +1365,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                      blink_standalone_renderer_last_error(renderer));
         return cleanup_and_fail();
       }
+      status = blink_standalone_renderer_mouse_move(
+          renderer, 549.0f + static_cast<float>(i % 7), 422.0f, 0);
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr,
+                     "%s: timed mouse move %d failed status=%d error=%s\n",
+                     label, i, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
 
       blink_standalone_update_result_t update_result = {};
       const auto update_start = std::chrono::steady_clock::now();

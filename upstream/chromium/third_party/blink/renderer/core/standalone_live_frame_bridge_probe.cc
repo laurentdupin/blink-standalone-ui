@@ -5907,6 +5907,7 @@ struct LiveFramePaintProbeCache {
   bool copy_output_raw_requested = false;
   bool copy_output_png_requested = false;
   bool copy_output_gpu_requested = false;
+  bool copy_output_gpu_prepare_requested = false;
   bool copy_output_gpu_use_vulkan_offscreen = false;
   bool copy_output_gpu_use_d3d12_offscreen = false;
   bool copy_output_png_completed = false;
@@ -16483,9 +16484,15 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
   if (!cache.cc_layer_host) {
     cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
   }
+  const bool lightweight_update_without_output_request =
+      !cache.collect_frame_diagnostics && !cache.copy_output_png_requested &&
+      !cache.copy_output_raw_requested && !cache.copy_output_gpu_requested &&
+      !cache.copy_output_gpu_prepare_requested;
   if (cache.copy_output_gpu_requested ||
-      cache.copy_output_gpu_use_vulkan_offscreen ||
-      cache.copy_output_gpu_use_d3d12_offscreen) {
+      cache.copy_output_gpu_prepare_requested ||
+      (!lightweight_update_without_output_request &&
+       (cache.copy_output_gpu_use_vulkan_offscreen ||
+        cache.copy_output_gpu_use_d3d12_offscreen))) {
     cache.cc_layer_host->SetGpuOffscreenOutputMode(
         cache.copy_output_gpu_use_vulkan_offscreen,
         cache.copy_output_gpu_use_d3d12_offscreen);
@@ -16497,6 +16504,20 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
           &cache.cc_frame_sink_failure_reason)) {
     SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     return false;
+  }
+  if (lightweight_update_without_output_request) {
+    std::optional<LiveFramePaintProbeResult> lifecycle_stop_result =
+        UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
+            cache, input_html, html_content_already_loaded, document,
+            frame_view, result,
+            StandaloneCcFrameAdvanceMode::kSchedulerCallback);
+    SyncStandaloneCcTimingForStandaloneRenderer(cache);
+    SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+    cache.timing_cc_scheduler_run_loop_ms = 0.0;
+    if (lifecycle_stop_result) {
+      cache.result = *lifecycle_stop_result;
+    }
+    return true;
   }
   const bool mouse_move_only_fast_path =
       CanProcessMouseMoveOnlyFrameWithoutCcScheduler(cache) &&
@@ -17183,6 +17204,7 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() 
       cache.copy_output_gpu_use_d3d12_offscreen ||
       !cache.copy_output_gpu_use_vulkan_offscreen;
   cache.copy_output_gpu_requested = true;
+  cache.copy_output_gpu_prepare_requested = false;
   cache.copy_output_gpu_use_vulkan_offscreen = true;
   cache.copy_output_gpu_use_d3d12_offscreen = false;
   cache.copy_output_png_requested = false;
@@ -17205,6 +17227,7 @@ void StandaloneBlinkLiveFrameBridgePrepareVulkanGpuFrameForStandaloneRenderer() 
       cache.copy_output_gpu_use_d3d12_offscreen ||
       !cache.copy_output_gpu_use_vulkan_offscreen;
   cache.copy_output_gpu_requested = false;
+  cache.copy_output_gpu_prepare_requested = true;
   cache.copy_output_gpu_use_vulkan_offscreen = true;
   cache.copy_output_gpu_use_d3d12_offscreen = false;
   cache.copy_output_png_requested = false;
@@ -17227,6 +17250,7 @@ void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer() {
       cache.copy_output_gpu_use_vulkan_offscreen ||
       !cache.copy_output_gpu_use_d3d12_offscreen;
   cache.copy_output_gpu_requested = true;
+  cache.copy_output_gpu_prepare_requested = false;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_gpu_use_d3d12_offscreen = true;
   cache.copy_output_png_requested = false;
@@ -17249,6 +17273,7 @@ void StandaloneBlinkLiveFrameBridgePrepareD3D12GpuFrameForStandaloneRenderer() {
       cache.copy_output_gpu_use_vulkan_offscreen ||
       !cache.copy_output_gpu_use_d3d12_offscreen;
   cache.copy_output_gpu_requested = false;
+  cache.copy_output_gpu_prepare_requested = true;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_gpu_use_d3d12_offscreen = true;
   cache.copy_output_png_requested = false;
@@ -17350,6 +17375,7 @@ StandaloneBlinkLiveFrameBridgeRenderExternalVkImageToTargetForStandaloneRenderer
     return result.c_str();
   }
   result = cache.cc_layer_host->RenderExternalVkImageToTarget(vulkan_image);
+  cache.copy_output_gpu_prepare_requested = false;
   return result.c_str();
 }
 
@@ -17425,6 +17451,7 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
   result =
       cache.cc_layer_host->RenderExternalD3D12ToTarget(d3d12_resource,
                                                        shared_handle);
+  cache.copy_output_gpu_prepare_requested = false;
   return result.c_str();
 }
 

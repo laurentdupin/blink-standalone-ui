@@ -623,6 +623,7 @@ struct blink_standalone_renderer {
   std::vector<html_css_renderer::KeyboardInputEvent> pending_keyboard_events;
   std::vector<html_css_renderer::DomMutation> pending_dom_mutations;
   std::optional<html_css_renderer::WheelInput> pending_wheel;
+  bool gpu_prepare_required_after_update = false;
   blink_standalone_status_code_t last_error_code =
       BLINK_STANDALONE_STATUS_OK;
   std::string last_error;
@@ -1093,6 +1094,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->resource_base_path = resource_base_path ? resource_base_path : "";
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
   renderer->dirty_rects.clear();
+  renderer->gpu_prepare_required_after_update = false;
   ClearPendingInput(renderer);
   return BLINK_STANDALONE_STATUS_OK;
 }
@@ -1163,6 +1165,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->resource_provider_dirty = false;
+  renderer->gpu_prepare_required_after_update = false;
   renderer->dirty_rects.clear();
   for (const html_css_renderer::Rect& rect :
        renderer->latest_result.raw_frame.dirty_rects) {
@@ -1213,6 +1216,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->resource_provider_dirty = false;
+  renderer->gpu_prepare_required_after_update =
+      renderer->latest_result.needs_output;
   renderer->dirty_rects.clear();
 
   result->status = BLINK_STANDALONE_STATUS_OK;
@@ -1452,7 +1457,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   const bool external_target = d3d12_external || vulkan_external;
   const bool collect_updated_frame =
       external_target && renderer->latest_result.frame_advanced &&
-      renderer->latest_result.needs_output && !HasPendingFrameInput(renderer);
+      renderer->latest_result.needs_output &&
+      !renderer->gpu_prepare_required_after_update &&
+      !HasPendingFrameInput(renderer);
   if (!collect_updated_frame) {
     blink_standalone_status_code_t status =
         AdvanceGpuFrameForBackend(renderer, backend,
@@ -1526,6 +1533,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->status = BLINK_STANDALONE_STATUS_OK;
   result->target_written = 1;
   renderer->latest_result.needs_output = false;
+  renderer->gpu_prepare_required_after_update = false;
   if (result->width == 0) {
     result->width = static_cast<uint32_t>(
         renderer->latest_result.viz_display_output_size.width);
