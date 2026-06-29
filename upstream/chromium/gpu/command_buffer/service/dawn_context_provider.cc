@@ -420,6 +420,34 @@ const char* HRESULTToString(HRESULT result) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
+const char* DawnErrorTypeToString(wgpu::ErrorType error_type) {
+  switch (error_type) {
+    case wgpu::ErrorType::NoError:
+      return "NoError";
+    case wgpu::ErrorType::Validation:
+      return "Validation";
+    case wgpu::ErrorType::OutOfMemory:
+      return "OutOfMemory";
+    case wgpu::ErrorType::Internal:
+      return "Internal";
+    case wgpu::ErrorType::Unknown:
+      return "Unknown";
+  }
+}
+
+const char* DawnDeviceLostReasonToString(wgpu::DeviceLostReason reason) {
+  switch (reason) {
+    case wgpu::DeviceLostReason::Unknown:
+      return "Unknown";
+    case wgpu::DeviceLostReason::Destroyed:
+      return "Destroyed";
+    case wgpu::DeviceLostReason::FailedCreation:
+      return "FailedCreation";
+    case wgpu::DeviceLostReason::CallbackCancelled:
+      return "CallbackCancelled";
+  }
+}
+
 const char* BackendTypeToString(wgpu::BackendType backend_type) {
   switch (backend_type) {
     case wgpu::BackendType::D3D11:
@@ -592,6 +620,7 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
 #endif
 
   std::optional<error::ContextLostReason> GetResetStatus() const;
+  std::string GetContextLostMessageForDiagnostics() const;
   void MarkContextLost(error::ContextLostReason reason);
 
   std::unique_ptr<GraphiteSharedContext> CreateGraphiteSharedContext(
@@ -774,6 +803,7 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
   mutable base::Lock context_lost_lock_;
   std::optional<error::ContextLostReason> context_lost_reason_
       GUARDED_BY(context_lost_lock_);
+  std::string context_lost_message_ GUARDED_BY(context_lost_lock_);
 
   THREAD_CHECKER(main_thread_checker_);
 };
@@ -1041,6 +1071,10 @@ bool DawnSharedContext::Initialize(
       [](const wgpu::Device&, wgpu::DeviceLostReason reason,
          wgpu::StringView message, DawnSharedContext* state) {
         if (reason != wgpu::DeviceLostReason::Destroyed) {
+          LOG(ERROR) << "Dawn device lost: reason="
+                     << DawnDeviceLostReasonToString(reason)
+                     << ", message="
+                     << static_cast<std::string_view>(message);
           state->OnError(wgpu::ErrorType::Unknown, message);
         }
       },
@@ -1148,7 +1182,20 @@ void DawnSharedContext::SetCachingInterface(
 std::optional<error::ContextLostReason> DawnSharedContext::GetResetStatus()
     const {
   base::AutoLock auto_lock(context_lost_lock_);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (context_lost_reason_.has_value()) {
+    LOG(ERROR) << "Standalone Dawn reset status: reason="
+               << static_cast<int>(context_lost_reason_.value())
+               << ", backend=" << BackendTypeToString(backend_type_)
+               << ", last_error=" << context_lost_message_;
+  }
+#endif
   return context_lost_reason_;
+}
+
+std::string DawnSharedContext::GetContextLostMessageForDiagnostics() const {
+  base::AutoLock auto_lock(context_lost_lock_);
+  return context_lost_message_;
 }
 
 void DawnSharedContext::MarkContextLost(error::ContextLostReason reason) {
@@ -1160,7 +1207,24 @@ void DawnSharedContext::MarkContextLost(error::ContextLostReason reason) {
 
 void DawnSharedContext::OnError(wgpu::ErrorType error_type,
                                 wgpu::StringView message) {
+  const std::string_view message_view = static_cast<std::string_view>(message);
+  LOG(ERROR) << "Dawn error: type=" << DawnErrorTypeToString(error_type)
+             << ", backend=" << BackendTypeToString(backend_type_)
+             << ", message=" << message_view;
 #if BUILDFLAG(IS_WIN)
+  if (backend_type_ == wgpu::BackendType::D3D12) {
+    Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device =
+        dawn::native::d3d12::GetD3D12Device(device_.Get());
+    if (d3d12_device) {
+      HRESULT result = d3d12_device->GetDeviceRemovedReason();
+      if (const char* result_string = HRESULTToString(result)) {
+        LOG(ERROR) << "D3D12 device removed reason: " << result_string;
+      } else {
+        LOG(ERROR) << "D3D12 device removed reason: "
+                   << base::StringPrintf("Unknown error(0x%08lX)", result);
+      }
+    }
+  }
   if (auto d3d11_device = GetD3D11Device()) {
     static crash_reporter::CrashKeyString<64> reason_message_key(
         "d3d11-device-removed-reason");
@@ -1177,8 +1241,7 @@ void DawnSharedContext::OnError(wgpu::ErrorType error_type,
   }
 #endif
 
-  DumpWithoutCrashingOnError(error_type,
-                             static_cast<std::string_view>(message));
+  DumpWithoutCrashingOnError(error_type, message_view);
 
   error::ContextLostReason reason = error::kUnknown;
   switch (error_type) {
@@ -1191,6 +1254,12 @@ void DawnSharedContext::OnError(wgpu::ErrorType error_type,
     default:
       reason = error::kUnknown;
       break;
+  }
+  {
+    base::AutoLock auto_lock(context_lost_lock_);
+    if (context_lost_message_.empty()) {
+      context_lost_message_ = std::string(message_view);
+    }
   }
   MarkContextLost(reason);
 }
