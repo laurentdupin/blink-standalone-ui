@@ -624,6 +624,7 @@ struct blink_standalone_renderer {
   std::vector<html_css_renderer::DomMutation> pending_dom_mutations;
   std::optional<html_css_renderer::WheelInput> pending_wheel;
   bool gpu_prepare_required_after_update = false;
+  bool gpu_source_frame_pending = false;
   blink_standalone_status_code_t last_error_code =
       BLINK_STANDALONE_STATUS_OK;
   std::string last_error;
@@ -1105,6 +1106,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
   renderer->dirty_rects.clear();
   renderer->gpu_prepare_required_after_update = false;
+  renderer->gpu_source_frame_pending = false;
   ClearPendingInput(renderer);
   return BLINK_STANDALONE_STATUS_OK;
 }
@@ -1176,6 +1178,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->resource_provider_dirty = false;
   renderer->gpu_prepare_required_after_update = false;
+  renderer->gpu_source_frame_pending = false;
   renderer->dirty_rects.clear();
   for (const html_css_renderer::Rect& rect :
        renderer->latest_result.raw_frame.dirty_rects) {
@@ -1228,6 +1231,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->resource_provider_dirty = false;
   renderer->gpu_prepare_required_after_update =
       renderer->latest_result.needs_output;
+  renderer->gpu_source_frame_pending = false;
   renderer->dirty_rects.clear();
 
   result->status = BLINK_STANDALONE_STATUS_OK;
@@ -1468,6 +1472,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   const bool collect_updated_frame =
       external_target && renderer->latest_result.frame_advanced &&
       renderer->latest_result.needs_output &&
+      !renderer->gpu_source_frame_pending &&
+      !FrameResultHasGpuPreparePending(renderer->latest_result) &&
       !renderer->gpu_prepare_required_after_update &&
       !HasPendingFrameInput(renderer);
   if (!collect_updated_frame) {
@@ -1481,11 +1487,13 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     }
     if (external_target &&
         FrameResultHasGpuPreparePending(renderer->latest_result)) {
+      renderer->gpu_source_frame_pending = true;
       result->status = BLINK_STANDALONE_STATUS_PENDING;
       return SetLastError(
           renderer, BLINK_STANDALONE_STATUS_PENDING,
           "render_to_gpu_target pending: GPU source frame is not ready");
     }
+    renderer->gpu_source_frame_pending = false;
   }
 
   std::string target_result;
@@ -1551,6 +1559,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->target_written = 1;
   renderer->latest_result.needs_output = false;
   renderer->gpu_prepare_required_after_update = false;
+  renderer->gpu_source_frame_pending = false;
   if (result->width == 0) {
     result->width = static_cast<uint32_t>(
         renderer->latest_result.viz_display_output_size.width);

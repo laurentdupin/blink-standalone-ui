@@ -203,6 +203,7 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-smoke] "
       "[--c-api-vulkan-external-target-large-smoke] "
       "[--c-api-vulkan-external-target-resize-smoke] "
+      "[--c-api-vulkan-external-target-pending-resize-smoke] "
       "[--c-api-vulkan-external-target-fps-timing-smoke] "
       "[--c-api-vulkan-external-target-click-timing-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
@@ -831,7 +832,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool expect_invalid_vulkan_metadata = false,
                                   int repeated_update_output_iterations = 0,
                                   bool exercise_resize_sequence = false,
-                                  int repeated_click_output_iterations = 0) {
+                                  int repeated_click_output_iterations = 0,
+                                  bool tolerate_pending_resize_retry = false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
@@ -1219,6 +1221,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   uint32_t background_pixels = 0;
   uint32_t box_pixels = 0;
   uint32_t nontransparent_pixels = 0;
+  int pending_resize_retries = 0;
   auto verify_target_pixels = [&](const char* stage,
                                   uint32_t stage_expected_background,
                                   uint32_t stage_expected_box,
@@ -1390,6 +1393,17 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       blink_standalone_gpu_render_result_t resize_render = {};
       status = blink_standalone_renderer_render_to_gpu_target(
           renderer, &target, &resize_render);
+      if (tolerate_pending_resize_retry) {
+        int retry_count = 0;
+        while (status == BLINK_STANDALONE_STATUS_PENDING &&
+               resize_render.target_written == 0 && retry_count < 8) {
+          ++retry_count;
+          ++pending_resize_retries;
+          resize_render = blink_standalone_gpu_render_result_t{};
+          status = blink_standalone_renderer_render_to_gpu_target(
+              renderer, &target, &resize_render);
+        }
+      }
       if (status != BLINK_STANDALONE_STATUS_OK ||
           resize_render.target_written == 0 || resize_render.backend != backend ||
           resize_render.width != active_width ||
@@ -1799,11 +1813,13 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   std::printf(
       "%s: ok backend=%u capabilities=%u target_written=%u size=%ux%u "
       "format=%u generation=%llu observed_background=%08x observed_box=%08x "
-      "background_pixels=%u box_pixels=%u nontransparent_pixels=%u\n",
+      "background_pixels=%u box_pixels=%u nontransparent_pixels=%u "
+      "pending_resize_retries=%d\n",
       label, result.backend, capabilities, result.target_written, result.width,
       result.height, result.pixel_format,
       static_cast<unsigned long long>(result.generation), observed_background,
-      observed_box, background_pixels, box_pixels, nontransparent_pixels);
+      observed_box, background_pixels, box_pixels, nontransparent_pixels,
+      pending_resize_retries);
 #if BUILDFLAG(IS_WIN)
   if (target.d3d12.shared_handle) {
     CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
@@ -1852,6 +1868,28 @@ int RunCApiVulkanExternalTargetResizeSmoke() {
       /*expect_invalid_vulkan_metadata=*/false,
       /*repeated_update_output_iterations=*/0,
       /*exercise_resize_sequence=*/true);
+}
+
+int RunCApiVulkanExternalTargetPendingResizeSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_pending_resize_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/true);
 }
 
 int RunCApiVulkanExternalTargetFpsTimingSmoke() {
@@ -2906,6 +2944,14 @@ int RunCApiResourceProviderMaskSvgSmoke() {
   blink_standalone_frame_output_t output = {};
   blink_standalone_status_code_t output_status =
       blink_standalone_renderer_get_latest_output(renderer, &output);
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      output_status != BLINK_STANDALONE_STATUS_OK) {
+    blink_standalone_renderer_release_latest_output(renderer);
+    status = blink_standalone_renderer_advance_frame(renderer, 1.0 / 60.0);
+    output = {};
+    output_status = blink_standalone_renderer_get_latest_output(renderer,
+                                                                &output);
+  }
   const FramePixelContentStats stats = AnalyzeFramePixelContent(output);
   if (status != BLINK_STANDALONE_STATUS_OK ||
       output_status != BLINK_STANDALONE_STATUS_OK ||
@@ -9384,6 +9430,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-backdrop-filter-unsupported-smoke" ||
         arg == "--c-api-vulkan-external-target-large-smoke" ||
         arg == "--c-api-vulkan-external-target-resize-smoke" ||
+        arg == "--c-api-vulkan-external-target-pending-resize-smoke" ||
         arg == "--c-api-vulkan-external-target-fps-timing-smoke" ||
         arg == "--c-api-vulkan-external-target-click-timing-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
@@ -9452,6 +9499,7 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_smoke = false;
   bool c_api_vulkan_external_target_large_smoke = false;
   bool c_api_vulkan_external_target_resize_smoke = false;
+  bool c_api_vulkan_external_target_pending_resize_smoke = false;
   bool c_api_vulkan_external_target_fps_timing_smoke = false;
   bool c_api_vulkan_external_target_click_timing_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
@@ -9619,6 +9667,8 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_large_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-resize-smoke") {
       c_api_vulkan_external_target_resize_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-pending-resize-smoke") {
+      c_api_vulkan_external_target_pending_resize_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-fps-timing-smoke") {
       c_api_vulkan_external_target_fps_timing_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-click-timing-smoke") {
@@ -9865,6 +9915,10 @@ int main(int argc, char** argv) {
 
   if (c_api_vulkan_external_target_resize_smoke) {
     return RunCApiVulkanExternalTargetResizeSmoke();
+  }
+
+  if (c_api_vulkan_external_target_pending_resize_smoke) {
+    return RunCApiVulkanExternalTargetPendingResizeSmoke();
   }
 
   if (c_api_vulkan_external_target_fps_timing_smoke) {
