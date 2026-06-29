@@ -6244,8 +6244,6 @@ void ImportCopyOutputPngFromCcHostForStandaloneRenderer(
     cache.copy_output_png_requested = false;
     cache.copy_output_raw_requested = false;
     cache.copy_output_gpu_requested = false;
-    cache.copy_output_gpu_use_vulkan_offscreen = false;
-    cache.copy_output_gpu_use_d3d12_offscreen = false;
   }
 }
 
@@ -17102,6 +17100,9 @@ void StandaloneBlinkLiveFrameBridgeRequestGpuFrameForStandaloneRenderer() {
 
 void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool backend_changed =
+      cache.copy_output_gpu_use_d3d12_offscreen ||
+      !cache.copy_output_gpu_use_vulkan_offscreen;
   cache.copy_output_gpu_requested = true;
   cache.copy_output_gpu_use_vulkan_offscreen = true;
   cache.copy_output_gpu_use_d3d12_offscreen = false;
@@ -17113,12 +17114,17 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() 
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
-  cache.cc_layer_host.reset();
+  if (backend_changed) {
+    cache.cc_layer_host.reset();
+  }
   cache.initialized = false;
 }
 
 void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool backend_changed =
+      cache.copy_output_gpu_use_vulkan_offscreen ||
+      !cache.copy_output_gpu_use_d3d12_offscreen;
   cache.copy_output_gpu_requested = true;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_gpu_use_d3d12_offscreen = true;
@@ -17130,7 +17136,9 @@ void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer() {
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
-  cache.cc_layer_host.reset();
+  if (backend_changed) {
+    cache.cc_layer_host.reset();
+  }
   cache.initialized = false;
 }
 
