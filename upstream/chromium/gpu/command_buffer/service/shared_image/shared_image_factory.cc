@@ -7,6 +7,7 @@
 #include <inttypes.h>
 
 #include <memory>
+#include <sstream>
 
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
@@ -1131,6 +1132,24 @@ void SharedImageFactory::LogGetFactoryFailed(gpu::SharedImageUsageSet usage,
              << ", gmb_type: " << GmbTypeToString(gmb_type)
              << ", size: " << size.ToString()
              << ", debug_label: " << debug_label;
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  std::ostringstream standalone_factories;
+  bool first_factory = true;
+  for (const auto& factory : factories_) {
+    if (!first_factory) {
+      standalone_factories << ",";
+    }
+    first_factory = false;
+    standalone_factories << SharedImageBackingTypeToString(
+        factory->GetBackingType());
+  }
+  LOG(ERROR) << "Standalone SharedImageFactory diagnostics: gl="
+             << static_cast<int>(gl::GetGLImplementation())
+             << ", gr_context_type=" << static_cast<int>(gr_context_type_)
+             << ", registered_factories=[" << standalone_factories.str()
+             << "]";
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Do not dump crash reports for Reven ChromeOS boards.

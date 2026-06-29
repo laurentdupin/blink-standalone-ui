@@ -275,7 +275,8 @@ bool WrappedSkImageBackingFactory::IsSupportedForAccessStream(
   }
 
   if (use_graphite_) {
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
+#if !defined(HTML_CSS_RENDERER_STANDALONE) || \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
     // We create a temporary backing just to check for support.
     // TODO(crbug.com/394385381): Consider refactoring this to not require a
     // context_state or a backing instance.
