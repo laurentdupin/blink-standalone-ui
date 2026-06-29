@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <sstream>
@@ -201,9 +202,11 @@ void PrintUsage() {
       "[--gpu-borrowed-d3d12-render-copy-smoke] "
       "[--c-api-vulkan-external-target-smoke] "
       "[--c-api-vulkan-external-target-large-smoke] "
+      "[--c-api-vulkan-external-target-resize-smoke] "
       "[--c-api-vulkan-external-target-fps-timing-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
+      "[--c-api-d3d12-external-target-resize-smoke] "
       "[--c-api-vulkan-update-output-smoke] "
       "[--c-api-d3d12-update-output-smoke] "
       "[--c-api-vulkan-external-target-current-document-smoke] "
@@ -824,7 +827,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool require_full_nontransparent = true,
                                   bool exercise_update_output_sequence = false,
                                   bool expect_invalid_vulkan_metadata = false,
-                                  int repeated_update_output_iterations = 0) {
+                                  int repeated_update_output_iterations = 0,
+                                  bool exercise_resize_sequence = false) {
+  uint32_t active_width = width;
+  uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
   config.width = width;
   config.height = height;
@@ -879,7 +885,11 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   std::vector<std::string> vulkan_device_extension_storage;
   std::vector<const char*> vulkan_instance_extensions;
   std::vector<const char*> vulkan_device_extensions;
-  auto cleanup_vulkan_target = [&] {
+  std::function<bool(uint32_t, uint32_t)> create_vulkan_target;
+#if BUILDFLAG(IS_WIN)
+  std::function<bool(uint32_t, uint32_t)> create_d3d12_target;
+#endif
+  auto destroy_vulkan_target = [&] {
     if (vulkan_owner_queue) {
       vkDeviceWaitIdle(vulkan_owner_queue->GetVulkanDevice());
     }
@@ -887,6 +897,9 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       vulkan_target_image->Destroy();
       vulkan_target_image.reset();
     }
+  };
+  auto cleanup_vulkan_target = [&] {
+    destroy_vulkan_target();
     if (vulkan_owner_queue) {
       vulkan_owner_queue->Destroy();
       vulkan_owner_queue.reset();
@@ -961,38 +974,48 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       vulkan_owner_queue->Destroy();
       return 1;
     }
-    vulkan_target_image = gpu::VulkanImage::Create(
-        vulkan_owner_queue.get(),
-        gfx::Size(static_cast<int>(width), static_cast<int>(height)),
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    if (!vulkan_target_image || vulkan_target_image->image() == VK_NULL_HANDLE) {
+    create_vulkan_target = [&](uint32_t target_width,
+                               uint32_t target_height) {
+      destroy_vulkan_target();
+      vulkan_target_image = gpu::VulkanImage::Create(
+          vulkan_owner_queue.get(),
+          gfx::Size(static_cast<int>(target_width),
+                    static_cast<int>(target_height)),
+          VK_FORMAT_R8G8B8A8_UNORM,
+          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+              VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+              VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+      if (!vulkan_target_image ||
+          vulkan_target_image->image() == VK_NULL_HANDLE) {
+        return false;
+      }
+      target.vulkan.vk_image = vulkan_target_image->image();
+      target.vulkan.vk_device = vulkan_owner_queue->GetVulkanDevice();
+      target.vulkan.vk_physical_device =
+          vulkan_owner_queue->GetVulkanPhysicalDevice();
+      target.vulkan.vk_device_memory = vulkan_target_image->device_memory();
+      target.vulkan.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
+      target.vulkan.width = target_width;
+      target.vulkan.height = target_height;
+      target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+      target.vulkan.required_final_layout =
+          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      target.vulkan.queue_family_index =
+          vulkan_owner_queue->GetVulkanQueueIndex();
+      target.vulkan.allocation_size = vulkan_target_image->device_size();
+      target.vulkan.memory_type_index = vulkan_target_image->memory_type_index();
+      target.vulkan.image_tiling = vulkan_target_image->image_tiling();
+      target.vulkan.image_usage_flags = vulkan_target_image->usage();
+      target.vulkan.sample_count = VK_SAMPLE_COUNT_1_BIT;
+      target.vulkan.level_count = 1;
+      return true;
+    };
+    if (!create_vulkan_target(active_width, active_height)) {
       std::fprintf(stderr, "%s: failed vulkan_target_image=0\n", label);
       blink_standalone_renderer_destroy(renderer);
       vulkan_owner_queue->Destroy();
       return 1;
     }
-    target.vulkan.vk_image = vulkan_target_image->image();
-    target.vulkan.vk_device = vulkan_owner_queue->GetVulkanDevice();
-    target.vulkan.vk_physical_device =
-        vulkan_owner_queue->GetVulkanPhysicalDevice();
-    target.vulkan.vk_device_memory = vulkan_target_image->device_memory();
-    target.vulkan.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
-    target.vulkan.width = width;
-    target.vulkan.height = height;
-    target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    target.vulkan.required_final_layout =
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    target.vulkan.queue_family_index =
-        vulkan_owner_queue->GetVulkanQueueIndex();
-    target.vulkan.allocation_size = vulkan_target_image->device_size();
-    target.vulkan.memory_type_index = vulkan_target_image->memory_type_index();
-    target.vulkan.image_tiling = vulkan_target_image->image_tiling();
-    target.vulkan.image_usage_flags = vulkan_target_image->usage();
-    target.vulkan.sample_count = VK_SAMPLE_COUNT_1_BIT;
-    target.vulkan.level_count = 1;
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
 #if BUILDFLAG(IS_WIN)
     HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0,
@@ -1013,47 +1036,59 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       blink_standalone_renderer_destroy(renderer);
       return 1;
     }
-    D3D12_HEAP_PROPERTIES heap_properties = {};
-    heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
-    heap_properties.CreationNodeMask = 1;
-    heap_properties.VisibleNodeMask = 1;
-    D3D12_RESOURCE_DESC resource_desc = {};
-    resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    resource_desc.Width = width;
-    resource_desc.Height = height;
-    resource_desc.DepthOrArraySize = 1;
-    resource_desc.MipLevels = 1;
-    resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    resource_desc.SampleDesc.Count = 1;
-    resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
-                          D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
-    hr = d3d12_device->CreateCommittedResource(
-        &heap_properties, D3D12_HEAP_FLAG_SHARED, &resource_desc,
-        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&d3d12_resource));
-    if (FAILED(hr) || !d3d12_resource) {
-      std::fprintf(stderr, "%s: failed d3d12_resource=0 hr=0x%08lx\n", label,
-                   static_cast<unsigned long>(hr));
+    create_d3d12_target = [&](uint32_t target_width, uint32_t target_height) {
+      if (d3d12_shared_handle) {
+        CloseHandle(d3d12_shared_handle);
+        d3d12_shared_handle = nullptr;
+      }
+      d3d12_resource.Reset();
+      target.d3d12.d3d12_resource = nullptr;
+      target.d3d12.shared_handle = nullptr;
+      D3D12_HEAP_PROPERTIES heap_properties = {};
+      heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+      heap_properties.CreationNodeMask = 1;
+      heap_properties.VisibleNodeMask = 1;
+      D3D12_RESOURCE_DESC resource_desc = {};
+      resource_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+      resource_desc.Width = target_width;
+      resource_desc.Height = target_height;
+      resource_desc.DepthOrArraySize = 1;
+      resource_desc.MipLevels = 1;
+      resource_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+      resource_desc.SampleDesc.Count = 1;
+      resource_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+      resource_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                            D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+      HRESULT create_hr = d3d12_device->CreateCommittedResource(
+          &heap_properties, D3D12_HEAP_FLAG_SHARED, &resource_desc,
+          D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&d3d12_resource));
+      if (FAILED(create_hr) || !d3d12_resource) {
+        return false;
+      }
+      create_hr = d3d12_device->CreateSharedHandle(
+          d3d12_resource.Get(), nullptr, GENERIC_ALL, nullptr,
+          &d3d12_shared_handle);
+      if (FAILED(create_hr) || !d3d12_shared_handle) {
+        d3d12_resource.Reset();
+        return false;
+      }
+      target.d3d12.d3d12_device = d3d12_device.Get();
+      target.d3d12.d3d12_command_queue = d3d12_queue.Get();
+      target.d3d12.d3d12_resource = d3d12_resource.Get();
+      target.d3d12.shared_handle = d3d12_shared_handle;
+      target.d3d12.dxgi_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+      target.d3d12.width = target_width;
+      target.d3d12.height = target_height;
+      target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+      target.d3d12.required_final_state =
+          D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+      return true;
+    };
+    if (!create_d3d12_target(active_width, active_height)) {
+      std::fprintf(stderr, "%s: failed d3d12 target creation\n", label);
       blink_standalone_renderer_destroy(renderer);
       return 1;
     }
-    hr = d3d12_device->CreateSharedHandle(d3d12_resource.Get(), nullptr,
-                                          GENERIC_ALL, nullptr,
-                                          &d3d12_shared_handle);
-    if (FAILED(hr) || !d3d12_shared_handle) {
-      std::fprintf(stderr, "%s: failed d3d12_shared_handle=0 hr=0x%08lx\n",
-                   label, static_cast<unsigned long>(hr));
-      blink_standalone_renderer_destroy(renderer);
-      return 1;
-    }
-    target.d3d12.d3d12_device = d3d12_device.Get();
-    target.d3d12.d3d12_command_queue = d3d12_queue.Get();
-    target.d3d12.d3d12_resource = d3d12_resource.Get();
-    target.d3d12.shared_handle = d3d12_shared_handle;
-    target.d3d12.dxgi_format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
-    target.d3d12.required_final_state =
-        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     blink_standalone_d3d12_external_device_t d3d12_external_device = {};
     d3d12_external_device.d3d12_device = d3d12_device.Get();
     d3d12_external_device.d3d12_command_queue = d3d12_queue.Get();
@@ -1074,8 +1109,6 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     blink_standalone_renderer_destroy(renderer);
     return 0;
 #endif
-    target.d3d12.width = width;
-    target.d3d12.height = height;
   }
 
   status =
@@ -1149,8 +1182,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     return 0;
   }
   if (status != BLINK_STANDALONE_STATUS_OK || result.target_written == 0 ||
-      result.backend != backend || result.width != width ||
-      result.height != height) {
+      result.backend != backend || result.width != active_width ||
+      result.height != active_height) {
     std::fprintf(stderr,
                  "%s: failed status=%d result_status=%u backend=%u "
                  "written=%u size=%ux%u error=%s\n",
@@ -1197,15 +1230,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       std::vector<uint32_t> pixels;
       std::string failure;
       if (!ReadbackD3D12TextureForSmoke(d3d12_device.Get(), d3d12_queue.Get(),
-                                        d3d12_resource.Get(), width, height,
-                                        &pixels, &failure)) {
+                                        d3d12_resource.Get(), active_width,
+                                        active_height, &pixels, &failure)) {
         std::fprintf(stderr,
                      "%s: failed %s external_readback=0 failure=%s\n", label,
                      stage, failure.c_str());
         return false;
       }
       auto pixel_at = [&](uint32_t x, uint32_t y) {
-        return pixels[static_cast<size_t>(y) * width + x];
+        return pixels[static_cast<size_t>(y) * active_width + x];
       };
       observed_background = pixel_at(4, 4);
       observed_box = pixel_at(20, 20);
@@ -1223,7 +1256,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
           observed_box != stage_expected_box || background_pixels == 0 ||
           box_pixels == 0 ||
           (stage_require_full_nontransparent &&
-           nontransparent_pixels != width * height)) {
+           nontransparent_pixels != active_width * active_height)) {
         std::fprintf(stderr,
                      "%s: failed %s external_readback=1 "
                      "observed_background=%08x observed_box=%08x "
@@ -1240,15 +1273,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       std::vector<uint32_t> pixels;
       std::string failure;
       if (!ReadbackVulkanImageForSmoke(vulkan_owner_queue.get(),
-                                       vulkan_target_image.get(), width, height,
-                                       &pixels, &failure)) {
+                                       vulkan_target_image.get(), active_width,
+                                       active_height, &pixels, &failure)) {
         std::fprintf(stderr,
                      "%s: failed %s vulkan_external_readback=0 failure=%s\n",
                      label, stage, failure.c_str());
         return false;
       }
       auto pixel_at = [&](uint32_t x, uint32_t y) {
-        const uint32_t rgba = pixels[static_cast<size_t>(y) * width + x];
+        const uint32_t rgba = pixels[static_cast<size_t>(y) * active_width + x];
         return (rgba & 0xff000000u) | ((rgba & 0x000000ffu) << 16) |
                (rgba & 0x0000ff00u) | ((rgba & 0x00ff0000u) >> 16);
       };
@@ -1293,6 +1326,89 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     return cleanup_and_fail();
   }
 
+  if (exercise_resize_sequence) {
+    struct ResizeStep {
+      uint32_t width;
+      uint32_t height;
+    };
+    const ResizeStep resize_steps[] = {
+        {1280, 720}, {1152, 648}, {1800, 1000}, {900, 600}, {2548, 1320}};
+    for (const ResizeStep& step : resize_steps) {
+      status = blink_standalone_renderer_set_viewport(
+          renderer, static_cast<int>(step.width), static_cast<int>(step.height),
+          1.0f);
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr, "%s: resize set_viewport %ux%u failed status=%d "
+                             "error=%s\n",
+                     label, step.width, step.height, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      active_width = step.width;
+      active_height = step.height;
+      target.common.logical_width = active_width;
+      target.common.logical_height = active_height;
+      target.common.physical_width = active_width;
+      target.common.physical_height = active_height;
+      target.common.generation++;
+      if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+        if (!create_vulkan_target ||
+            !create_vulkan_target(active_width, active_height)) {
+          std::fprintf(stderr, "%s: resize Vulkan target %ux%u failed\n",
+                       label, active_width, active_height);
+          return cleanup_and_fail();
+        }
+      }
+#if BUILDFLAG(IS_WIN)
+      if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+        if (!create_d3d12_target ||
+            !create_d3d12_target(active_width, active_height)) {
+          std::fprintf(stderr, "%s: resize D3D12 target %ux%u failed\n",
+                       label, active_width, active_height);
+          return cleanup_and_fail();
+        }
+      }
+#endif
+      blink_standalone_update_result_t resize_update = {};
+      status = blink_standalone_renderer_update(
+          renderer, 0.250 + static_cast<double>(target.common.generation) *
+                                0.016,
+          &resize_update);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          resize_update.needs_output == 0) {
+        std::fprintf(stderr,
+                     "%s: resize update %ux%u failed status=%d "
+                     "needs_output=%u error=%s\n",
+                     label, active_width, active_height, status,
+                     resize_update.needs_output,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      blink_standalone_gpu_render_result_t resize_render = {};
+      status = blink_standalone_renderer_render_to_gpu_target(
+          renderer, &target, &resize_render);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          resize_render.target_written == 0 || resize_render.backend != backend ||
+          resize_render.width != active_width ||
+          resize_render.height != active_height) {
+        std::fprintf(stderr,
+                     "%s: resize render %ux%u failed status=%d "
+                     "result_status=%u backend=%u written=%u size=%ux%u "
+                     "error=%s\n",
+                     label, active_width, active_height, status,
+                     resize_render.status, resize_render.backend,
+                     resize_render.target_written, resize_render.width,
+                     resize_render.height,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      if (!verify_target_pixels("resize", expected_background, expected_box,
+                                require_full_nontransparent)) {
+        return cleanup_and_fail();
+      }
+    }
+  }
+
   if (exercise_update_output_sequence) {
     constexpr uint32_t kMutatedBox = 0xff00a050u;
     status = blink_standalone_renderer_set_element_style(
@@ -1325,8 +1441,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     if (status != BLINK_STANDALONE_STATUS_OK ||
         update_render_result.target_written == 0 ||
         update_render_result.backend != backend ||
-        update_render_result.width != width ||
-        update_render_result.height != height) {
+        update_render_result.width != active_width ||
+        update_render_result.height != active_height) {
       std::fprintf(stderr,
                    "%s: update render failed status=%d result_status=%u "
                    "backend=%u written=%u size=%ux%u error=%s\n",
@@ -1413,8 +1529,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       if (status != BLINK_STANDALONE_STATUS_OK ||
           timed_render_result.target_written == 0 ||
           timed_render_result.backend != backend ||
-          timed_render_result.width != width ||
-          timed_render_result.height != height) {
+          timed_render_result.width != active_width ||
+          timed_render_result.height != active_height) {
         std::fprintf(stderr,
                      "%s: timed render %d failed status=%d result_status=%u "
                      "backend=%u written=%u size=%ux%u elapsed_ms=%.3f "
@@ -1544,6 +1660,26 @@ int RunCApiVulkanExternalTargetLargeSmoke() {
       /*height=*/1320);
 }
 
+int RunCApiVulkanExternalTargetResizeSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_resize_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true);
+}
+
 int RunCApiVulkanExternalTargetFpsTimingSmoke() {
   return RunCApiExternalGpuTargetSmoke(
       BLINK_STANDALONE_GPU_BACKEND_VULKAN,
@@ -1604,6 +1740,26 @@ int RunCApiD3D12ExternalTargetSmoke() {
       BLINK_STANDALONE_GPU_BACKEND_D3D12,
       "c_api_d3d12_external_target_smoke",
       /*require_external_target=*/true);
+}
+
+int RunCApiD3D12ExternalTargetResizeSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_resize_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true);
 }
 
 int RunCApiD3D12UpdateOutputSmoke() {
@@ -9011,8 +9167,10 @@ int main(int argc, char** argv) {
         arg == "--c-api-backdrop-filter-chain-smoke" ||
         arg == "--c-api-backdrop-filter-unsupported-smoke" ||
         arg == "--c-api-vulkan-external-target-large-smoke" ||
+        arg == "--c-api-vulkan-external-target-resize-smoke" ||
         arg == "--c-api-vulkan-external-target-fps-timing-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
+        arg == "--c-api-d3d12-external-target-resize-smoke" ||
         arg == "--c-api-vulkan-update-output-smoke" ||
         arg == "--c-api-d3d12-update-output-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
@@ -9075,9 +9233,11 @@ int main(int argc, char** argv) {
   bool gpu_vulkan_ganesh_context_smoke = false;
   bool c_api_vulkan_external_target_smoke = false;
   bool c_api_vulkan_external_target_large_smoke = false;
+  bool c_api_vulkan_external_target_resize_smoke = false;
   bool c_api_vulkan_external_target_fps_timing_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
+  bool c_api_d3d12_external_target_resize_smoke = false;
   bool c_api_vulkan_update_output_smoke = false;
   bool c_api_d3d12_update_output_smoke = false;
   bool c_api_vulkan_external_target_current_document_smoke = false;
@@ -9237,12 +9397,16 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-large-smoke") {
       c_api_vulkan_external_target_large_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-resize-smoke") {
+      c_api_vulkan_external_target_resize_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-fps-timing-smoke") {
       c_api_vulkan_external_target_fps_timing_smoke = true;
     } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
       c_api_vulkan_invalid_target_metadata_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
       c_api_d3d12_external_target_smoke = true;
+    } else if (arg == "--c-api-d3d12-external-target-resize-smoke") {
+      c_api_d3d12_external_target_resize_smoke = true;
     } else if (arg == "--c-api-vulkan-update-output-smoke") {
       c_api_vulkan_update_output_smoke = true;
     } else if (arg == "--c-api-d3d12-update-output-smoke") {
@@ -9475,6 +9639,10 @@ int main(int argc, char** argv) {
     return RunCApiVulkanExternalTargetLargeSmoke();
   }
 
+  if (c_api_vulkan_external_target_resize_smoke) {
+    return RunCApiVulkanExternalTargetResizeSmoke();
+  }
+
   if (c_api_vulkan_external_target_fps_timing_smoke) {
     return RunCApiVulkanExternalTargetFpsTimingSmoke();
   }
@@ -9485,6 +9653,10 @@ int main(int argc, char** argv) {
 
   if (c_api_d3d12_external_target_smoke) {
     return RunCApiD3D12ExternalTargetSmoke();
+  }
+
+  if (c_api_d3d12_external_target_resize_smoke) {
+    return RunCApiD3D12ExternalTargetResizeSmoke();
   }
 
   if (c_api_vulkan_update_output_smoke) {

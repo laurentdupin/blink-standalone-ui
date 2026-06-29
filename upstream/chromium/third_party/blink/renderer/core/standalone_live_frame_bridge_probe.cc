@@ -3880,9 +3880,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
              "Vulkan image is null";
     }
 
-    gfx::Size output_size = viewport_;
-    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
-      output_size = *viz_display_output_size_;
+    gfx::Size output_size(vulkan_image->width, vulkan_image->height);
+    if (output_size.IsEmpty()) {
+      output_size = viewport_;
+      if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+        output_size = *viz_display_output_size_;
+      }
     }
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
@@ -3900,6 +3903,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         *viz_display_output_size_ = output_size;
       }
       DrawVizDisplayNow();
+    } else if (local_surface_id_.is_valid()) {
+      display_->SetLocalSurfaceId(local_surface_id_,
+                                  last_submitted_device_scale_factor_);
+      display_->Resize(output_size);
+      if (viz_display_output_size_) {
+        *viz_display_output_size_ = output_size;
+      }
     }
     if (!offscreen_skia_dependency_) {
       return "gpu_external_vkimage_render_copy: failed "
@@ -4048,7 +4058,11 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
 
     gfx::Size output_size = viewport_;
-    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+    if (external_resource) {
+      const D3D12_RESOURCE_DESC desc = external_resource->GetDesc();
+      output_size =
+          gfx::Size(static_cast<int>(desc.Width), static_cast<int>(desc.Height));
+    } else if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
     }
     if (!display_) {
@@ -4067,6 +4081,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         *viz_display_output_size_ = output_size;
       }
       DrawVizDisplayNow();
+    } else if (local_surface_id_.is_valid()) {
+      display_->SetLocalSurfaceId(local_surface_id_,
+                                  last_submitted_device_scale_factor_);
+      display_->Resize(output_size);
+      if (viz_display_output_size_) {
+        *viz_display_output_size_ = output_size;
+      }
     }
     if (!offscreen_skia_dependency_) {
       return "gpu_external_d3d12_render_copy: failed "
