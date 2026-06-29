@@ -672,6 +672,9 @@ if(BLINK_STANDALONE_DAWN_D3D12)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu/command_buffer/service/shared_image/wrapped_sk_image_backing_factory.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/standalone_live_frame_bridge_probe.cc
   )
+  list(REMOVE_ITEM BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
+  )
 endif()
 
 if(NOT BLINK_STANDALONE_ICU_SOURCE_ROOT STREQUAL
@@ -1019,6 +1022,22 @@ if(NOT MSVC)
     $<TARGET_OBJECTS:blink_live_compiler_rt_atomic>
   )
 endif()
+if(BLINK_STANDALONE_DAWN_D3D12)
+  add_library(blink_standalone_dawn_d3d12_render_objects OBJECT
+    ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
+  )
+  add_dependencies(blink_standalone_dawn_d3d12_render_objects
+    blink_angle_libEGL
+    blink_angle_libGLESv2
+  )
+  blink_standalone_add_v8_compat_dependency(
+    blink_standalone_dawn_d3d12_render_objects)
+  set_property(TARGET blink_standalone_dawn_d3d12_render_objects PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded")
+  list(APPEND BLINK_STANDALONE_LIVE_OBJECTS
+    $<TARGET_OBJECTS:blink_standalone_dawn_d3d12_render_objects>
+  )
+endif()
 
 add_library(blink_standalone_live_renderer_objects OBJECT
   ${BLINK_STANDALONE_LIVE_SOURCES}
@@ -1226,16 +1245,22 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     get_target_property(property_value blink_standalone_render_benchmark_skia
       ${property_name})
     if(property_value AND NOT property_value STREQUAL "property_value-NOTFOUND")
-      if(property_name STREQUAL "INCLUDE_DIRECTORIES")
-        target_include_directories(blink_standalone_live_renderer_objects PRIVATE
-          ${property_value})
-      elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
-        target_compile_definitions(blink_standalone_live_renderer_objects PRIVATE
-          ${property_value})
-      elseif(property_name STREQUAL "COMPILE_OPTIONS")
-        target_compile_options(blink_standalone_live_renderer_objects PRIVATE
-          ${property_value})
-      endif()
+      foreach(live_object_target IN ITEMS
+          blink_standalone_live_renderer_objects
+          blink_standalone_dawn_d3d12_render_objects)
+        if(TARGET ${live_object_target})
+          if(property_name STREQUAL "INCLUDE_DIRECTORIES")
+            target_include_directories(${live_object_target} PRIVATE
+              ${property_value})
+          elseif(property_name STREQUAL "COMPILE_DEFINITIONS")
+            target_compile_definitions(${live_object_target} PRIVATE
+              ${property_value})
+          elseif(property_name STREQUAL "COMPILE_OPTIONS")
+            target_compile_options(${live_object_target} PRIVATE
+              ${property_value})
+          endif()
+        endif()
+      endforeach()
     endif()
   endforeach()
 
@@ -1245,6 +1270,12 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   target_link_libraries(blink_standalone_live_renderer_objects PRIVATE
     LibXml2::LibXml2
   )
+  if(TARGET blink_standalone_dawn_d3d12_render_objects)
+    target_compile_definitions(blink_standalone_dawn_d3d12_render_objects
+      PRIVATE LIBXML_STATIC)
+    target_link_libraries(blink_standalone_dawn_d3d12_render_objects PRIVATE
+      LibXml2::LibXml2)
+  endif()
   target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
     BLINK_STANDALONE_RENDERER_C_API_STATIC=1
   )
@@ -1378,6 +1409,20 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
       BLINK_STANDALONE_HAVE_DAWN_D3D12=1
     )
+    if(TARGET blink_standalone_dawn_d3d12_render_objects)
+      target_include_directories(
+        blink_standalone_dawn_d3d12_render_objects BEFORE PRIVATE
+          ${BLINK_STANDALONE_DAWN_D3D12_BUILDFLAGS_DIR}
+          ${BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR}
+          ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}
+          ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}/include
+      )
+      target_compile_definitions(
+        blink_standalone_dawn_d3d12_render_objects PRIVATE
+          BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER=1
+          BLINK_STANDALONE_HAVE_DAWN_D3D12=1
+      )
+    endif()
     foreach(dawn_link_target IN ITEMS
         blink_standalone_render_benchmark_skia
         blink_standalone_renderer_c_api
