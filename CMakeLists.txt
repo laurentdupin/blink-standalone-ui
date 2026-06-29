@@ -1023,9 +1023,22 @@ if(NOT MSVC)
   )
 endif()
 if(BLINK_STANDALONE_DAWN_D3D12)
-  list(REMOVE_ITEM BLINK_STANDALONE_LIVE_SOURCES
-    ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
-  )
+  set(_blink_standalone_dawn_render_sources_normalized)
+  foreach(source IN LISTS BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES)
+    file(TO_CMAKE_PATH "${source}" normalized_source)
+    list(APPEND _blink_standalone_dawn_render_sources_normalized
+      "${normalized_source}")
+  endforeach()
+  set(_blink_standalone_live_sources_without_dawn)
+  foreach(source IN LISTS BLINK_STANDALONE_LIVE_SOURCES)
+    file(TO_CMAKE_PATH "${source}" normalized_source)
+    if(NOT normalized_source IN_LIST
+        _blink_standalone_dawn_render_sources_normalized)
+      list(APPEND _blink_standalone_live_sources_without_dawn "${source}")
+    endif()
+  endforeach()
+  set(BLINK_STANDALONE_LIVE_SOURCES
+    ${_blink_standalone_live_sources_without_dawn})
   add_library(blink_standalone_dawn_d3d12_render_objects OBJECT
     ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
   )
