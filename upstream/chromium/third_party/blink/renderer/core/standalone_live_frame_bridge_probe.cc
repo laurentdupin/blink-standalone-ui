@@ -3261,7 +3261,6 @@ class StandaloneSkiaOutputSurfaceDependency final
     }
     if (shared_handle && !can_use_external_resource_directly) {
       if (shared_handle == cached_external_d3d12_shared_handle_ &&
-          external_resource == cached_external_d3d12_resource_hint_ &&
           cached_external_d3d12_opened_resource_) {
         opened_shared_resource = cached_external_d3d12_opened_resource_;
       } else {
@@ -3274,7 +3273,6 @@ class StandaloneSkiaOutputSurfaceDependency final
               HResultHex(hr));
         }
         cached_external_d3d12_shared_handle_ = shared_handle;
-        cached_external_d3d12_resource_hint_ = external_resource;
         cached_external_d3d12_opened_resource_ = opened_shared_resource;
       }
       external_resource = opened_shared_resource.Get();
@@ -3482,7 +3480,6 @@ class StandaloneSkiaOutputSurfaceDependency final
   std::unique_ptr<BorrowedD3D12RenderCopyBlitTarget>
       borrowed_d3d12_blit_target_;
   void* cached_external_d3d12_shared_handle_ = nullptr;
-  raw_ptr<ID3D12Resource> cached_external_d3d12_resource_hint_ = nullptr;
   Microsoft::WRL::ComPtr<ID3D12Resource>
       cached_external_d3d12_opened_resource_;
 #endif

@@ -1185,6 +1185,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
            result.target_written == 0 &&
            initial_pending_retries < kMaxInitialPendingRetries) {
       ++initial_pending_retries;
+      blink_standalone_update_result_t pending_update = {};
+      status = blink_standalone_renderer_update(
+          renderer, 0.010 + static_cast<double>(initial_pending_retries) *
+                              0.016,
+          &pending_update);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          pending_update.needs_output == 0) {
+        break;
+      }
       target.common.generation++;
       target.vulkan.current_layout = target.vulkan.required_final_layout;
 #if BUILDFLAG(IS_WIN)
@@ -1485,9 +1494,13 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       }
 #endif
       if (exercise_host_pending_resize_boundary) {
+        target.common.flags |=
+            BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE;
         blink_standalone_gpu_render_result_t pre_update_render = {};
         status = blink_standalone_renderer_render_to_gpu_target(
             renderer, &target, &pre_update_render);
+        target.common.flags &=
+            ~BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE;
         if (status == BLINK_STANDALONE_STATUS_PENDING &&
             pre_update_render.target_written == 0) {
           ++pending_resize_retries;
@@ -1924,6 +1937,21 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         if (status == BLINK_STANDALONE_STATUS_PENDING &&
             click_render_result.target_written == 0) {
           ++click_pending_count;
+          blink_standalone_update_result_t pending_update = {};
+          status = blink_standalone_renderer_update(
+              renderer, 0.950 + static_cast<double>(iteration) * 0.050 +
+                            static_cast<double>(attempt) * 0.004,
+              &pending_update);
+          if (status != BLINK_STANDALONE_STATUS_OK ||
+              pending_update.needs_output == 0) {
+            std::fprintf(stderr,
+                         "%s: click %s pending update %d attempt %d failed "
+                         "status=%d needs_output=%u error=%s\n",
+                         label, stage, iteration, attempt, status,
+                         pending_update.needs_output,
+                         blink_standalone_renderer_last_error(renderer));
+            return false;
+          }
           std::this_thread::sleep_for(std::chrono::milliseconds(1));
           continue;
         }

@@ -63,6 +63,9 @@ typedef enum blink_standalone_gpu_target_flags {
    * without requiring an embedder-created native texture. Production embedders
    * should pass real backend handles instead. */
   BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN = 1u << 0,
+  /* Test-only hook: force one recoverable PENDING result before the target
+   * writer runs. Used by benchmark smokes to validate host retry lifecycle. */
+  BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE = 1u << 1,
 } blink_standalone_gpu_target_flags_t;
 
 typedef enum blink_standalone_alpha_mode {

@@ -1222,6 +1222,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   *result = blink_standalone_update_result_t{};
   ClearLastError(renderer);
   const bool had_gpu_source_frame_pending = renderer->gpu_source_frame_pending;
+  html_css_renderer::CompositorFrameResult previous_result;
+  if (had_gpu_source_frame_pending) {
+    previous_result = renderer->latest_result;
+  }
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
   input.device_scale_factor = renderer->device_scale_factor;
@@ -1242,23 +1246,34 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->resource_provider_dirty = false;
-  renderer->gpu_prepare_required_after_update =
-      renderer->latest_result.needs_output;
   renderer->gpu_source_frame_pending =
       had_gpu_source_frame_pending && !renderer->latest_result.needs_output &&
       renderer->latest_result.frame_skipped_due_to_no_demand;
+  const bool update_skipped_for_pending_retry =
+      renderer->gpu_source_frame_pending;
+  const bool update_frame_advanced = renderer->latest_result.frame_advanced;
+  const bool update_frame_skipped =
+      renderer->latest_result.frame_skipped_due_to_no_demand;
+  const bool update_needs_begin_frame =
+      renderer->latest_result.needs_begin_frame;
+  if (update_skipped_for_pending_retry) {
+    renderer->latest_result = std::move(previous_result);
+  }
+  renderer->gpu_prepare_required_after_update =
+      renderer->latest_result.needs_output &&
+      !update_skipped_for_pending_retry;
   renderer->dirty_rects.clear();
 
   result->status = BLINK_STANDALONE_STATUS_OK;
-  result->frame_advanced = renderer->latest_result.frame_advanced ? 1 : 0;
+  result->frame_advanced = update_frame_advanced ? 1 : 0;
   result->frame_skipped_due_to_no_demand =
-      renderer->latest_result.frame_skipped_due_to_no_demand ? 1 : 0;
+      update_frame_skipped ? 1 : 0;
   result->needs_output =
       (renderer->latest_result.needs_output ||
        renderer->gpu_source_frame_pending)
           ? 1
           : 0;
-  result->needs_begin_frame = renderer->latest_result.needs_begin_frame ? 1 : 0;
+  result->needs_begin_frame = update_needs_begin_frame ? 1 : 0;
   result->full_frame_damage = result->needs_output ? 1 : 0;
   result->damage_rect_count = 0;
   return BLINK_STANDALONE_STATUS_OK;
@@ -1463,6 +1478,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   const bool internal_standin =
       (target->common.flags &
        BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN) != 0;
+  const bool force_pending_once =
+      (target->common.flags &
+       BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE) != 0;
   const bool d3d12_external =
       backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
       target->d3d12.shared_handle != nullptr;
@@ -1491,15 +1509,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   const bool collect_updated_frame =
       external_target && renderer->latest_result.frame_advanced &&
       renderer->latest_result.needs_output &&
-      !renderer->gpu_source_frame_pending &&
       !FrameResultHasGpuPreparePending(renderer->latest_result) &&
       !renderer->gpu_prepare_required_after_update &&
       !HasPendingFrameInput(renderer);
   if (!collect_updated_frame) {
+    const bool request_prepared_external_source =
+        external_target && renderer->gpu_source_frame_pending;
     blink_standalone_status_code_t status =
         AdvanceGpuFrameForBackend(renderer, backend,
                                   /*require_source_gpu_frame=*/
-                                  !external_target);
+                                  !external_target ||
+                                      request_prepared_external_source);
     if (status != BLINK_STANDALONE_STATUS_OK) {
       result->status = status;
       return status;
@@ -1513,6 +1533,13 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
           "render_to_gpu_target pending: GPU source frame is not ready");
     }
     renderer->gpu_source_frame_pending = false;
+  }
+  if (force_pending_once) {
+    renderer->gpu_source_frame_pending = true;
+    result->status = BLINK_STANDALONE_STATUS_PENDING;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_PENDING,
+        "render_to_gpu_target pending: forced internal retry test");
   }
 
   std::string target_result;
