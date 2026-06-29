@@ -1436,6 +1436,65 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         label, repeated_update_output_iterations,
         update_total_ms / repeated_update_output_iterations, update_max_ms,
         render_total_ms / repeated_update_output_iterations, render_max_ms);
+
+    // Warm the hover state once, then verify inert moves stay bounded and do
+    // not request output. This catches scheduler/frame-sink timeout regressions
+    // seen in large-window visible embedder runs.
+    status = blink_standalone_renderer_mouse_move(renderer, 549.0f, 422.0f, 0);
+    blink_standalone_update_result_t warm_mouse_update = {};
+    if (status != BLINK_STANDALONE_STATUS_OK ||
+        blink_standalone_renderer_update(renderer, 0.400,
+                                         &warm_mouse_update) !=
+            BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr, "%s: mouse warmup update failed status=%d error=%s\n",
+                   label, status, blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+    constexpr int kInertMouseIterations = 12;
+    double inert_update_total_ms = 0.0;
+    double inert_update_max_ms = 0.0;
+    for (int i = 0; i < kInertMouseIterations; ++i) {
+      status = blink_standalone_renderer_mouse_move(
+          renderer, 549.0f + static_cast<float>(i % 3), 422.0f, 0);
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr,
+                     "%s: inert mouse move %d failed status=%d error=%s\n",
+                     label, i, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      blink_standalone_update_result_t inert_update = {};
+      const auto inert_start = std::chrono::steady_clock::now();
+      status = blink_standalone_renderer_update(
+          renderer, 0.500 + static_cast<double>(i) * 0.016, &inert_update);
+      const auto inert_end = std::chrono::steady_clock::now();
+      const double inert_ms =
+          std::chrono::duration<double, std::milli>(inert_end - inert_start)
+              .count();
+      inert_update_total_ms += inert_ms;
+      inert_update_max_ms = std::max(inert_update_max_ms, inert_ms);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          inert_update.needs_output != 0) {
+        std::fprintf(stderr,
+                     "%s: inert mouse update %d failed status=%d "
+                     "needs_output=%u elapsed_ms=%.3f error=%s\n",
+                     label, i, status, inert_update.needs_output, inert_ms,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      if (inert_ms > 250.0) {
+        std::fprintf(stderr,
+                     "%s: inert mouse update %d exceeded latency budget "
+                     "elapsed_ms=%.3f\n",
+                     label, i, inert_ms);
+        return cleanup_and_fail();
+      }
+    }
+    std::printf(
+        "%s: inert_mouse iterations=%d update_avg_ms=%.3f "
+        "update_max_ms=%.3f\n",
+        label, kInertMouseIterations,
+        inert_update_total_ms / kInertMouseIterations, inert_update_max_ms);
   }
 
   std::printf(

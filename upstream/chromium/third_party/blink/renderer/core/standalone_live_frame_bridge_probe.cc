@@ -16451,6 +16451,28 @@ UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
   return std::nullopt;
 }
 
+bool CanProcessMouseMoveOnlyFrameWithoutCcScheduler(
+    const LiveFramePaintProbeCache& cache) {
+  if (cache.requested_mouse_input_events.empty()) {
+    return false;
+  }
+  if (cache.copy_output_png_requested || cache.copy_output_raw_requested ||
+      cache.copy_output_gpu_requested || cache.requested_wheel_scroll ||
+      !cache.requested_keyboard_input_events.empty() ||
+      !cache.requested_dom_mutations.empty()) {
+    return false;
+  }
+  for (const StandaloneMouseInputEventForRenderer& event :
+       cache.requested_mouse_input_events) {
+    if (WebMouseEventTypeForStandaloneRenderer(event.type) !=
+            WebInputEvent::Type::kMouseMove ||
+        event.button != 0 || event.modifiers != 0 || event.click_count != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRenderer(
     LiveFramePaintProbeCache& cache,
     const std::string& input_html,
@@ -16475,6 +16497,27 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
           &cache.cc_frame_sink_failure_reason)) {
     SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     return false;
+  }
+  const bool mouse_move_only_fast_path =
+      CanProcessMouseMoveOnlyFrameWithoutCcScheduler(cache) &&
+      cache.cc_layer_host->root_layer_attached() &&
+      cache.cc_layer_host->frame_sink_bound();
+  if (mouse_move_only_fast_path) {
+    std::optional<LiveFramePaintProbeResult> lifecycle_stop_result =
+        UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
+            cache, input_html, html_content_already_loaded, document,
+            frame_view, result,
+            StandaloneCcFrameAdvanceMode::kSchedulerCallback);
+    SyncStandaloneCcTimingForStandaloneRenderer(cache);
+    SyncStandaloneCcHostStateForStandaloneRenderer(cache);
+    cache.timing_cc_scheduler_run_loop_ms = 0.0;
+    if (lifecycle_stop_result) {
+      cache.result = *lifecycle_stop_result;
+    }
+    if (!cache.needs_output && !cache.copy_output_png_requested &&
+        !cache.copy_output_raw_requested && !cache.copy_output_gpu_requested) {
+      return true;
+    }
   }
   if (!cache.cc_layer_host->EnsureFrameSinkReadyForScheduler(
           &cache.cc_frame_sink_failure_reason)) {
