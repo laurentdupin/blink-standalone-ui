@@ -1422,7 +1422,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kAnalyticClip] = {
             /*name=*/"AnalyticClip",
-            /*staticFn=*/"sk_analytic_clip",
+            /*staticFn=*/"sk_analytic_clip_legacy",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{{{ "rect",           SkSLType::kFloat4 },
                            { "radiusPlusHalf", SkSLType::kFloat2 },
@@ -1431,7 +1431,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kAnalyticAndAtlasClip] = {
             /*name=*/"AnalyticAndAtlasClip",
-            /*staticFn=*/"sk_analytic_and_atlas_clip",
+            /*staticFn=*/"sk_analytic_and_atlas_clip_legacy",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{{{ "rect",           SkSLType::kFloat4 },
                            { "radiusPlusHalf", SkSLType::kFloat2 },
