@@ -32,6 +32,7 @@
 #include "gpu/vulkan/buildflags.h"
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_instance.h"
 #endif
@@ -1177,7 +1178,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!implementation->InitializeBorrowed()) {
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED,
-        "configure_vulkan_external_device failed: could not wrap borrowed Vulkan instance");
+        "configure_vulkan_external_device failed: could not wrap borrowed Vulkan instance or bind instance functions");
+  }
+  const gfx::ExtensionSet enabled_device_extensions =
+      MakeExtensionSet(implementation->enabled_device_extensions());
+  if (!gpu::GetVulkanFunctionPointers()->BindDeviceFunctionPointers(
+          static_cast<VkDevice>(device->vk_device),
+          device->api_version ? device->api_version
+                              : gpu::kVulkanRequiredApiVersion,
+          enabled_device_extensions)) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED,
+        "configure_vulkan_external_device failed: could not bind borrowed Vulkan device functions");
   }
 
   VkPhysicalDeviceFeatures2 features = {
@@ -1202,8 +1214,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
           static_cast<VkDevice>(device->vk_device),
           static_cast<VkQueue>(device->vk_queue),
           /*vk_queue_lock_context=*/nullptr, device->queue_family_index,
-          MakeExtensionSet(implementation->enabled_device_extensions()),
-          features, properties, driver_properties, /*vma_allocator=*/VK_NULL_HANDLE,
+          enabled_device_extensions, features, properties, driver_properties,
+          /*vma_allocator=*/VK_NULL_HANDLE,
           /*register_memory_dump_provider=*/false)) {
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED,
