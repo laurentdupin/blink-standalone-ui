@@ -122,6 +122,8 @@ int StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
     const char* body_html);
+int StandaloneBlinkLiveFrameBridgeNeedsOutputForStandaloneRenderer(
+    const char* body_html);
 int StandaloneBlinkLiveFrameBridgePaintChunkCountForStandaloneRenderer(
     const char* body_html);
 int StandaloneBlinkLiveFrameBridgeDisplayItemCountForStandaloneRenderer(
@@ -1256,6 +1258,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!NeedsFrameForInput(input))
       return MakeSkippedFrameResult(input);
 
+    const bool frame_input_requires_output = FrameInputRequiresOutput(input);
     const auto runtime_start = RuntimeClock::now();
     const auto apply_state_start = RuntimeClock::now();
     ApplyInput(input);
@@ -1394,6 +1397,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             probe_html.c_str());
     result.needs_begin_frame =
         probe::StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
+            probe_html.c_str()) != 0;
+    result.needs_output =
+        frame_input_requires_output ||
+        probe::StandaloneBlinkLiveFrameBridgeNeedsOutputForStandaloneRenderer(
             probe_html.c_str()) != 0;
     result.root_layer_available =
         probe::StandaloneBlinkLiveFrameBridgeCompositorRootLayerForStandaloneRenderer(
@@ -1738,15 +1745,18 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
     if (input.resource_provider_changed)
       return true;
-    if (!SameStringMap(input.element_attributes_by_id_and_name,
+    if (!input.element_attributes_by_id_and_name.empty() &&
+        !SameStringMap(input.element_attributes_by_id_and_name,
                        snapshot_.element_attributes_by_id_and_name)) {
       return true;
     }
-    if (!SamePointMap(input.scroll_offsets_by_element_id,
+    if (!input.scroll_offsets_by_element_id.empty() &&
+        !SamePointMap(input.scroll_offsets_by_element_id,
                       snapshot_.scroll_offsets_by_element_id)) {
       return true;
     }
-    if (!SameStringMap(input.form_values_by_element_id,
+    if (!input.form_values_by_element_id.empty() &&
+        !SameStringMap(input.form_values_by_element_id,
                        snapshot_.form_values_by_element_id)) {
       return true;
     }
@@ -1774,11 +1784,69 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return false;
   }
 
+  bool FrameInputRequestsOutput(const FrameInput& input) const {
+    return input.request_png_snapshot || input.request_raw_frame ||
+           input.request_gpu_frame || input.request_vulkan_gpu_frame ||
+           input.request_d3d12_gpu_frame;
+  }
+
+  bool FrameInputRequiresOutput(const FrameInput& input) const {
+    if (!last_frame_result_)
+      return true;
+    if (FrameInputRequestsOutput(input))
+      return true;
+    if (input.force_document_reload)
+      return true;
+    if (input.viewport && !SameSize(*input.viewport, snapshot_.viewport))
+      return true;
+    if (input.device_scale_factor &&
+        *input.device_scale_factor != snapshot_.device_scale_factor) {
+      return true;
+    }
+    if (input.html_override && *input.html_override != snapshot_.html)
+      return true;
+    if (input.stylesheets_override &&
+        !SameStylesheets(*input.stylesheets_override, snapshot_.stylesheets)) {
+      return true;
+    }
+    if (input.resource_root && *input.resource_root != resource_root_)
+      return true;
+    if (input.resource_base_path &&
+        *input.resource_base_path != resource_base_path_) {
+      return true;
+    }
+    if (input.resource_provider_changed)
+      return true;
+    if (!input.element_attributes_by_id_and_name.empty() &&
+        !SameStringMap(input.element_attributes_by_id_and_name,
+                       snapshot_.element_attributes_by_id_and_name)) {
+      return true;
+    }
+    if (!input.scroll_offsets_by_element_id.empty() &&
+        !SamePointMap(input.scroll_offsets_by_element_id,
+                      snapshot_.scroll_offsets_by_element_id)) {
+      return true;
+    }
+    if (!input.form_values_by_element_id.empty() &&
+        !SameStringMap(input.form_values_by_element_id,
+                       snapshot_.form_values_by_element_id)) {
+      return true;
+    }
+    if (!input.keyboard.pressed_key_codes.empty())
+      return true;
+    if (!input.keyboard_events.empty())
+      return true;
+    if (!input.dom_mutations.empty())
+      return true;
+    return false;
+  }
+
   CompositorFrameResult MakeSkippedFrameResult(const FrameInput& input) const {
     CompositorFrameResult result = *last_frame_result_;
     result.timing = CompositorFrameTiming();
     result.frame_advanced = false;
     result.frame_skipped_due_to_no_demand = true;
+    result.needs_output = false;
     result.png_snapshot_requested = input.request_png_snapshot;
     result.raw_frame_requested = input.request_raw_frame;
     result.gpu_frame_requested =

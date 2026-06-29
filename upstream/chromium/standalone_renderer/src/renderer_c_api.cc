@@ -1100,6 +1100,48 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_b
   return renderer && renderer->latest_result.needs_begin_frame ? 1 : 0;
 }
 
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_update(
+    blink_standalone_renderer_t* renderer,
+    double timeline_time_seconds,
+    blink_standalone_update_result_t* result) {
+  if (!renderer || !renderer->runtime || !result) {
+    return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  *result = blink_standalone_update_result_t{};
+  ClearLastError(renderer);
+  html_css_renderer::FrameInput input;
+  input.viewport = renderer->viewport;
+  input.device_scale_factor = renderer->device_scale_factor;
+  input.html_override = renderer->html;
+  input.resource_root = renderer->resource_root;
+  input.resource_base_path = renderer->resource_base_path;
+  if (renderer->resource_provider_dirty) {
+    input.resource_provider = renderer->resource_provider;
+    input.resource_provider_flags = renderer->resource_provider_flags;
+    input.resource_provider_changed = true;
+  }
+  input.timeline_time_seconds = timeline_time_seconds;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  input.mouse_events = std::move(renderer->pending_mouse_events);
+  input.keyboard_events = std::move(renderer->pending_keyboard_events);
+  input.dom_mutations = std::move(renderer->pending_dom_mutations);
+  input.wheel = renderer->pending_wheel;
+  ClearPendingInput(renderer);
+  renderer->latest_result = renderer->runtime->AdvanceFrame(input);
+  renderer->resource_provider_dirty = false;
+  renderer->dirty_rects.clear();
+
+  result->status = BLINK_STANDALONE_STATUS_OK;
+  result->frame_advanced = renderer->latest_result.frame_advanced ? 1 : 0;
+  result->frame_skipped_due_to_no_demand =
+      renderer->latest_result.frame_skipped_due_to_no_demand ? 1 : 0;
+  result->needs_output = renderer->latest_result.needs_output ? 1 : 0;
+  result->needs_begin_frame = renderer->latest_result.needs_begin_frame ? 1 : 0;
+  result->full_frame_damage = renderer->latest_result.needs_output ? 1 : 0;
+  result->damage_rect_count = 0;
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
 extern "C" BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gpu_backend_capabilities(
     const blink_standalone_renderer_t* renderer,
     uint32_t backend) {

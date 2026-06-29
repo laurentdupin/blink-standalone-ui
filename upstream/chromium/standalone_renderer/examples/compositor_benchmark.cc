@@ -219,6 +219,7 @@ void PrintUsage() {
       "[--c-api-backdrop-filter-chain-smoke] "
       "[--c-api-backdrop-filter-unsupported-smoke] "
       "[--c-api-separated-click-smoke] "
+      "[--c-api-frame-scheduling-smoke] "
       "[--c-api-text-input-smoke] "
       "[--c-api-form-control-mutation-smoke] "
       "[--c-api-absolute-form-mutation-smoke] "
@@ -2992,6 +2993,20 @@ bool AdvanceCApiFrameForSmoke(blink_standalone_renderer_t* renderer,
   return false;
 }
 
+bool UpdateCApiFrameForSmoke(blink_standalone_renderer_t* renderer,
+                             double time,
+                             const char* label,
+                             blink_standalone_update_result_t* result) {
+  const blink_standalone_status_code_t status =
+      blink_standalone_renderer_update(renderer, time, result);
+  if (status == BLINK_STANDALONE_STATUS_OK) {
+    return true;
+  }
+  std::fprintf(stderr, "%s: update failed status=%d error=%s\n", label, status,
+               blink_standalone_renderer_last_error(renderer));
+  return false;
+}
+
 bool ClickPointForSmoke(blink_standalone_renderer_t* renderer,
                         float x,
                         float y,
@@ -3063,6 +3078,154 @@ bool KeyPressForSmoke(blink_standalone_renderer_t* renderer,
   }
   *time += 0.016;
   return true;
+}
+
+int RunCApiFrameSchedulingSmoke() {
+  constexpr const char* kLabel = "c_api_frame_scheduling_smoke";
+  blink_standalone_renderer_config_t config = {};
+  config.width = 220;
+  config.height = 150;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr, "%s: create failed status=%d\n", kLabel, status);
+    return 1;
+  }
+  std::unique_ptr<blink_standalone_renderer_t,
+                  decltype(&blink_standalone_renderer_destroy)>
+      renderer_guard(renderer, blink_standalone_renderer_destroy);
+  const char* html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#112233}"
+      "#hot{position:absolute;left:80px;top:40px;width:80px;height:40px;"
+      "background:#2878d8}"
+      "#hot:hover{background:#d06329}"
+      "#name{position:absolute;left:0;top:105px;width:120px;height:24px}"
+      "</style><div id='hot'></div><input id='name' value='seed'>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: set html failed status=%d error=%s\n", kLabel,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return 1;
+  }
+  double time = 0.016;
+  if (!AdvanceCApiFrameForSmoke(renderer, time, kLabel)) {
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_update_result_t inert_first = {};
+  blink_standalone_renderer_mouse_move(renderer, 10.0f, 10.0f, 0);
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &inert_first)) {
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_update_result_t inert_stable = {};
+  blink_standalone_renderer_mouse_move(renderer, 12.0f, 12.0f, 0);
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &inert_stable)) {
+    return 1;
+  }
+  if (inert_stable.needs_output != 0 ||
+      inert_stable.frame_skipped_due_to_no_demand != 0) {
+    std::fprintf(stderr,
+                 "%s: stable inert mouse move demanded output=%u skipped=%u\n",
+                 kLabel, inert_stable.needs_output,
+                 inert_stable.frame_skipped_due_to_no_demand);
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_update_result_t hover_enter = {};
+  blink_standalone_renderer_mouse_move(renderer, 90.0f, 50.0f, 0);
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &hover_enter)) {
+    return 1;
+  }
+  if (hover_enter.needs_output == 0) {
+    std::fprintf(stderr, "%s: hover transition did not demand output\n",
+                 kLabel);
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_update_result_t hover_stable = {};
+  blink_standalone_renderer_mouse_move(renderer, 94.0f, 54.0f, 0);
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &hover_stable)) {
+    return 1;
+  }
+  if (hover_stable.needs_output != 0) {
+    std::fprintf(stderr,
+                 "%s: stable hover mouse move demanded output=%u\n", kLabel,
+                 hover_stable.needs_output);
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_update_result_t mouse_down = {};
+  blink_standalone_renderer_mouse_down(
+      renderer, 90.0f, 50.0f, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &mouse_down)) {
+    return 1;
+  }
+  if (mouse_down.needs_output == 0) {
+    std::fprintf(stderr, "%s: mouse down did not demand output\n", kLabel);
+    return 1;
+  }
+  time += 0.016;
+
+  blink_standalone_update_result_t mouse_up = {};
+  blink_standalone_renderer_mouse_up(
+      renderer, 90.0f, 50.0f, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &mouse_up)) {
+    return 1;
+  }
+  if (mouse_up.needs_output == 0) {
+    std::fprintf(stderr, "%s: mouse up did not demand output\n", kLabel);
+    return 1;
+  }
+  time += 0.016;
+
+  status = blink_standalone_renderer_focus_element(renderer, "name");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: focus mutation failed status=%d error=%s\n",
+                 kLabel, status, blink_standalone_renderer_last_error(renderer));
+    return 1;
+  }
+  blink_standalone_update_result_t focus = {};
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &focus)) {
+    return 1;
+  }
+  if (focus.needs_output == 0) {
+    std::fprintf(stderr, "%s: focus mutation did not demand output\n", kLabel);
+    return 1;
+  }
+  time += 0.016;
+
+  status = blink_standalone_renderer_text_input(renderer, "Z");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: text input failed status=%d error=%s\n", kLabel,
+                 status, blink_standalone_renderer_last_error(renderer));
+    return 1;
+  }
+  blink_standalone_update_result_t text = {};
+  if (!UpdateCApiFrameForSmoke(renderer, time, kLabel, &text)) {
+    return 1;
+  }
+  if (text.needs_output == 0) {
+    std::fprintf(stderr, "%s: text input did not demand output\n", kLabel);
+    return 1;
+  }
+
+  std::printf(
+      "%s: ok inert_first=%u inert_stable=%u hover_enter=%u hover_stable=%u "
+      "down=%u up=%u focus=%u text=%u\n",
+      kLabel, inert_first.needs_output, inert_stable.needs_output,
+      hover_enter.needs_output, hover_stable.needs_output,
+      mouse_down.needs_output, mouse_up.needs_output, focus.needs_output,
+      text.needs_output);
+  return 0;
 }
 
 int RunCApiDomMutationSmoke() {
@@ -8490,6 +8653,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-backdrop-filter-chain-smoke" ||
         arg == "--c-api-backdrop-filter-unsupported-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
+        arg == "--c-api-frame-scheduling-smoke" ||
         arg == "--c-api-dom-mutation-smoke" ||
         arg == "--c-api-fragment-mutation-smoke" ||
         arg == "--c-api-structural-dom-mutation-smoke" ||
@@ -8567,6 +8731,7 @@ int main(int argc, char** argv) {
   bool c_api_backdrop_filter_chain_smoke = false;
   bool c_api_backdrop_filter_unsupported_smoke = false;
   bool c_api_separated_click_smoke = false;
+  bool c_api_frame_scheduling_smoke = false;
   bool c_api_dom_mutation_smoke = false;
   bool c_api_fragment_mutation_smoke = false;
   bool c_api_structural_dom_mutation_smoke = false;
@@ -8747,6 +8912,8 @@ int main(int argc, char** argv) {
       c_api_backdrop_filter_unsupported_smoke = true;
     } else if (arg == "--c-api-separated-click-smoke") {
       c_api_separated_click_smoke = true;
+    } else if (arg == "--c-api-frame-scheduling-smoke") {
+      c_api_frame_scheduling_smoke = true;
     } else if (arg == "--c-api-dom-mutation-smoke") {
       c_api_dom_mutation_smoke = true;
     } else if (arg == "--c-api-fragment-mutation-smoke") {
@@ -9004,6 +9171,10 @@ int main(int argc, char** argv) {
 
   if (c_api_separated_click_smoke) {
     return RunCApiSeparatedClickSmoke();
+  }
+
+  if (c_api_frame_scheduling_smoke) {
+    return RunCApiFrameSchedulingSmoke();
   }
 
   if (c_api_dom_mutation_smoke) {

@@ -79,6 +79,7 @@ struct CompositorFrameResult {
   int paint_chunk_count = 0;
   int display_item_count = 0;
   bool needs_begin_frame = false;
+  bool needs_output = false;
   bool png_snapshot_requested = false;
   bool png_snapshot_available = false;
   std::string png_snapshot_failure;

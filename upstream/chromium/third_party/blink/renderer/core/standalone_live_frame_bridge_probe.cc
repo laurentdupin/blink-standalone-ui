@@ -6027,6 +6027,7 @@ struct LiveFramePaintProbeCache {
   bool needs_animation_timing_update = false;
   bool needs_lifecycle_update = false;
   bool needs_begin_frame = false;
+  bool needs_output = false;
   double timing_total_ms = 0.0;
   double timing_input_setup_ms = 0.0;
   double timing_html_document_setup_ms = 0.0;
@@ -13828,6 +13829,8 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
   cache.pointer_activation_node_id = kInvalidDOMNodeId;
   cache.pointer_activation_down_node_id = kInvalidDOMNodeId;
   PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(document);
+  const std::string initial_hover_element_id = cache.pointer_hover_element_id;
+  const std::string initial_active_element_id = cache.pointer_hit_element_id;
 
   if (cache.requested_mouse_input_events.empty()) {
     return;
@@ -13888,6 +13891,10 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
       TraceLiveFrameProbeStage("after HandleMouseReleaseEvent");
     }
     last_result = WebInputEventResultForStandaloneRenderer(dispatch_result);
+    if (event_type == WebInputEvent::Type::kMouseDown ||
+        event_type == WebInputEvent::Type::kMouseUp) {
+      cache.needs_output = true;
+    }
     if (cache.trace_stages) {
       char buffer[256];
       std::snprintf(buffer, sizeof(buffer),
@@ -13905,6 +13912,10 @@ void DispatchMouseInputEventsForStandaloneRenderer(Document& document,
   cache.pointer_state_applied = cache.mouse_input_events_dispatched;
   cache.pointer_state_status = cache.mouse_input_status;
   PopulatePointerDiagnosticsFromDocumentForStandaloneRenderer(document);
+  if (cache.pointer_hover_element_id != initial_hover_element_id ||
+      cache.pointer_hit_element_id != initial_active_element_id) {
+    cache.needs_output = true;
+  }
   cache.pointer_focus_applied =
       cache.pointer_focus_requested && !cache.pointer_focused_element_id.empty();
   cache.pointer_focus_status =
@@ -14055,6 +14066,7 @@ void DispatchKeyboardInputEventsForStandaloneRenderer(Document& document,
     }
     if (handled) {
       cache.keyboard_input_events_dispatched = true;
+      cache.needs_output = true;
       MarkStandaloneInputEventLayout(document, frame_view);
     }
     ++cache.keyboard_input_event_dispatch_count;
@@ -14310,7 +14322,8 @@ void MarkAnimatedPaintPropertyTargetsForStandaloneRenderer(Document& document) {
 
 void UpdateFrameSchedulingStateForStandaloneRenderer(
     Document& document,
-    LocalFrameView& frame_view) {
+    LocalFrameView& frame_view,
+    bool has_standalone_animation_source) {
   LiveFramePaintProbeCache& cache = ProbeCache();
   cache.active_animation_count = 0;
   for (Animation* animation : document.Timeline().GetAnimations()) {
@@ -14329,6 +14342,9 @@ void UpdateFrameSchedulingStateForStandaloneRenderer(
   cache.needs_begin_frame = cache.active_animation_count > 0 ||
                             cache.needs_animation_timing_update ||
                             cache.needs_lifecycle_update;
+  cache.needs_output = cache.needs_output ||
+                       (has_standalone_animation_source &&
+                        cache.active_animation_count > 0);
 }
 
 bool UpdateLifecycleToLayoutCleanForStandaloneRenderer(
@@ -16377,6 +16393,10 @@ UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
   }
   if (cache.scroll_offset_changed || cache.element_scroll_offset_changed ||
       cache.wheel_scroll_changed) {
+    if (cache.scroll_offset_requested || cache.element_scroll_offset_requested ||
+        cache.requested_wheel_scroll) {
+      cache.needs_output = true;
+    }
     TraceLiveFrameProbeStage("before post-scroll lifecycle update");
     result.lifecycle_reached_paint_clean =
         UpdateAllLifecyclePhasesForTestForStandaloneRenderer(frame_view) ? 1
@@ -16390,7 +16410,9 @@ UpdateStandaloneBlinkLifecyclePacAndCcForStandaloneRenderer(
       SyncStandaloneCcHostStateForStandaloneRenderer(cache);
     }
   }
-  UpdateFrameSchedulingStateForStandaloneRenderer(document, frame_view);
+  UpdateFrameSchedulingStateForStandaloneRenderer(
+      document, frame_view,
+      HtmlContainsStandaloneAnimationForRenderer(input_html));
   cache.timing_prepaint_and_paint_lifecycle_ms =
       StandaloneProbeElapsedMs(paint_lifecycle_start,
                                StandaloneProbeClock::now());
@@ -16536,6 +16558,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   cache.needs_animation_timing_update = false;
   cache.needs_lifecycle_update = false;
   cache.needs_begin_frame = false;
+  cache.needs_output = false;
   cache.compositor_root_layer_available = false;
   cache.compositor_layer_count = 0;
   SyncStandaloneCcHostStateForStandaloneRenderer(cache);
@@ -16593,6 +16616,7 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
                                          cache.requested_dom_mutations);
   TraceLiveFrameProbeStage("after ApplyDomMutations");
   if (cache.dom_mutations_applied) {
+    cache.needs_output = true;
     TraceLiveFrameProbeStage("before post-dom-mutation pending tasks");
     blink::test::RunPendingTasks();
     TraceLiveFrameProbeStage("after post-dom-mutation pending tasks");
@@ -18021,6 +18045,12 @@ int StandaloneBlinkLiveFrameBridgeNeedsBeginFrameForStandaloneRenderer(
     const char* body_html) {
   RunLiveFramePaintProbe(body_html);
   return ProbeCache().needs_begin_frame ? 1 : 0;
+}
+
+int StandaloneBlinkLiveFrameBridgeNeedsOutputForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().needs_output ? 1 : 0;
 }
 
 int StandaloneBlinkLiveFrameBridgePointerObservedStateForStandaloneRenderer(

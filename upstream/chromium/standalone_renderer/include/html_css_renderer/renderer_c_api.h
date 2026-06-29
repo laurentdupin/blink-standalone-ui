@@ -346,6 +346,16 @@ typedef struct blink_standalone_gpu_render_result {
   uint64_t generation;
 } blink_standalone_gpu_render_result_t;
 
+typedef struct blink_standalone_update_result {
+  uint32_t status;
+  uint32_t frame_advanced;
+  uint32_t frame_skipped_due_to_no_demand;
+  uint32_t needs_output;
+  uint32_t needs_begin_frame;
+  uint32_t full_frame_damage;
+  uint32_t damage_rect_count;
+} blink_standalone_update_result_t;
+
 /* Pointers returned in this struct are owned by the renderer and are valid
  * until the next output release, renderer mutation, frame advance, or destroy.
  * Call release_latest_output when the embedder has finished reading pixels. */
@@ -445,6 +455,14 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_advance_frame(
     blink_standalone_renderer_t* renderer,
     double timeline_time_seconds);
+/* Applies queued input/mutations/timeline without requesting raw pixels or a
+ * GPU target write. Embedders should call this once per host frame while input
+ * or animation work is pending, then call advance_frame/render_to_gpu_target
+ * only if needs_output is non-zero or an explicit/manual render is required. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_update(
+    blink_standalone_renderer_t* renderer,
+    double timeline_time_seconds,
+    blink_standalone_update_result_t* result);
 BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
     const blink_standalone_renderer_t* renderer);
 BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gpu_backend_capabilities(
