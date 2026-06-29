@@ -92,6 +92,8 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgePrepareVulkanGpuFrameForStandaloneRenderer();
 void StandaloneBlinkLiveFrameBridgePrepareD3D12GpuFrameForStandaloneRenderer();
+int StandaloneBlinkLiveFrameBridgeGpuPreparePendingForStandaloneRenderer(
+    const char* body_html);
 const char*
 StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageBackingSmokeForStandaloneRenderer();
 const char*
@@ -1502,6 +1504,11 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     CopyPngSnapshot(probe_html, result);
     CopyRawFrame(probe_html, result);
     CopyGpuFrame(probe_html, result);
+    if (probe::StandaloneBlinkLiveFrameBridgeGpuPreparePendingForStandaloneRenderer(
+            probe_html.c_str())) {
+      result.gpu_frame_failure = "GPU external target source frame is pending";
+      result.diagnostics.emplace_back(result.gpu_frame_failure);
+    }
     if (collect_full_result) {
       AppendFrameDiagnostics(probe_html, result);
     } else if (!result.cc_root_layer_attached ||

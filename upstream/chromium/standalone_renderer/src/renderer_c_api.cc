@@ -979,6 +979,16 @@ bool HasPendingFrameInput(const blink_standalone_renderer* renderer) {
          renderer->pending_wheel.has_value();
 }
 
+bool FrameResultHasGpuPreparePending(
+    const html_css_renderer::CompositorFrameResult& result) {
+  if (result.gpu_frame_failure == "GPU external target source frame is pending") {
+    return true;
+  }
+  return std::find(result.diagnostics.begin(), result.diagnostics.end(),
+                   "GPU external target source frame is pending") !=
+         result.diagnostics.end();
+}
+
 blink_standalone_status_code_t AdvanceGpuFrameForBackend(
     blink_standalone_renderer* renderer,
     uint32_t backend,
@@ -1468,6 +1478,13 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     if (status != BLINK_STANDALONE_STATUS_OK) {
       result->status = status;
       return status;
+    }
+    if (external_target &&
+        FrameResultHasGpuPreparePending(renderer->latest_result)) {
+      result->status = BLINK_STANDALONE_STATUS_PENDING;
+      return SetLastError(
+          renderer, BLINK_STANDALONE_STATUS_PENDING,
+          "render_to_gpu_target pending: GPU source frame is not ready");
     }
   }
 

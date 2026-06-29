@@ -5017,6 +5017,8 @@ class StandaloneCcLayerHost final
   bool ScheduleFrameWithPendingLayerTreeUpdateForScheduler(
       std::function<void()> pre_attach_root_update,
       std::function<void()> update,
+      base::TimeDelta scheduler_timeout,
+      bool* timed_out,
       std::string* failure_reason) {
     if (!layer_tree_host_) {
       SetFailure(failure_reason,
@@ -5026,6 +5028,9 @@ class StandaloneCcLayerHost final
     compositor_frame_submitted_ = false;
     scheduler_begin_main_frame_seen_ = false;
     scheduler_pending_update_ran_ = false;
+    if (timed_out) {
+      *timed_out = false;
+    }
     timing_root_preattach_ms_ = 0.0;
     timing_pending_update_ms_ = 0.0;
     timing_scheduler_run_loop_ms_ = 0.0;
@@ -5050,11 +5055,20 @@ class StandaloneCcLayerHost final
     UpdateViewportForScheduler(logical_viewport_, device_scale_factor_);
     SetPendingLayerTreeUpdateForScheduler(std::move(update));
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    base::OneShotTimer timeout_timer;
     scheduler_frame_run_loop_ = &run_loop;
     // Keep synchronous embedder ticks responsive if cc posts the frame but the
     // standalone scheduler callback that normally quits this loop is missed.
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(250));
+    timeout_timer.Start(
+        FROM_HERE, scheduler_timeout,
+        base::BindOnce(
+            [](base::RunLoop* loop, bool* timed_out) {
+              if (timed_out) {
+                *timed_out = true;
+              }
+              loop->Quit();
+            },
+            &run_loop, timed_out));
 
     TraceLiveFrameProbeStage("cc host scheduler before posted SetNeedsCommit");
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
@@ -5068,12 +5082,17 @@ class StandaloneCcLayerHost final
     scheduler_frame_start_time_ = StandaloneProbeClock::now();
     const auto run_loop_start = StandaloneProbeClock::now();
     run_loop.Run();
+    timeout_timer.Stop();
     timing_scheduler_run_loop_ms_ =
         StandaloneProbeElapsedMs(run_loop_start, StandaloneProbeClock::now());
     TraceLiveFrameProbeStage("cc host scheduler after run loop");
     scheduler_frame_run_loop_ = nullptr;
     scheduler_frame_start_time_.reset();
     ClearPendingLayerTreeUpdateForScheduler();
+    if (timed_out && *timed_out && !compositor_frame_submitted_) {
+      SetFailure(failure_reason, "cc scheduler frame is pending");
+      return false;
+    }
     if (!scheduler_pending_update_ran_) {
       SetFailure(failure_reason,
                  "cc scheduler did not run the pending standalone frame update");
@@ -5931,6 +5950,7 @@ struct LiveFramePaintProbeCache {
   bool copy_output_png_requested = false;
   bool copy_output_gpu_requested = false;
   bool copy_output_gpu_prepare_requested = false;
+  bool copy_output_gpu_prepare_pending = false;
   bool copy_output_gpu_use_vulkan_offscreen = false;
   bool copy_output_gpu_use_d3d12_offscreen = false;
   bool copy_output_png_completed = false;
@@ -16599,10 +16619,21 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
 
   TraceLiveFrameProbeStage("before standalone cc scheduler frame");
   const auto scheduler_start = StandaloneProbeClock::now();
+  const bool bounded_vulkan_prepare =
+      cache.copy_output_gpu_prepare_requested &&
+      cache.copy_output_gpu_use_vulkan_offscreen &&
+      cache.cc_layer_host->frame_sink_bound() &&
+      cache.cc_layer_host->root_layer_attached();
+  bool scheduler_timed_out = false;
   const bool submitted =
       cache.cc_layer_host->ScheduleFrameWithPendingLayerTreeUpdateForScheduler(
           std::move(pre_attach_root), std::move(update),
+          bounded_vulkan_prepare ? base::Milliseconds(16)
+                                 : base::Milliseconds(250),
+          bounded_vulkan_prepare ? &scheduler_timed_out : nullptr,
           &cache.cc_frame_sink_failure_reason);
+  cache.copy_output_gpu_prepare_pending =
+      bounded_vulkan_prepare && scheduler_timed_out && !submitted;
   SyncStandaloneCcTimingForStandaloneRenderer(cache);
   cache.timing_cc_composite_ms +=
       StandaloneProbeElapsedMs(scheduler_start, StandaloneProbeClock::now());
@@ -17238,6 +17269,7 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() 
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
+  cache.copy_output_gpu_prepare_pending = false;
   if (backend_changed) {
     cache.cc_layer_host.reset();
   }
@@ -17261,6 +17293,7 @@ void StandaloneBlinkLiveFrameBridgePrepareVulkanGpuFrameForStandaloneRenderer() 
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
+  cache.copy_output_gpu_prepare_pending = false;
   if (backend_changed) {
     cache.cc_layer_host.reset();
   }
@@ -17284,6 +17317,7 @@ void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer() {
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
+  cache.copy_output_gpu_prepare_pending = false;
   if (backend_changed) {
     cache.cc_layer_host.reset();
   }
@@ -17307,6 +17341,7 @@ void StandaloneBlinkLiveFrameBridgePrepareD3D12GpuFrameForStandaloneRenderer() {
   cache.copy_output_raw_frame = LiveRawFrameOutput();
   cache.copy_output_gpu_frame = LiveGpuFrameOutput();
   cache.copy_output_failure.clear();
+  cache.copy_output_gpu_prepare_pending = false;
   if (backend_changed) {
     cache.cc_layer_host.reset();
   }
@@ -18177,6 +18212,12 @@ int StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
   }
   out[copied] = '\0';
   return copied;
+}
+
+int StandaloneBlinkLiveFrameBridgeGpuPreparePendingForStandaloneRenderer(
+    const char* body_html) {
+  RunLiveFramePaintProbe(body_html);
+  return ProbeCache().copy_output_gpu_prepare_pending ? 1 : 0;
 }
 
 int StandaloneBlinkLiveFrameBridgeCcAttachFailureForStandaloneRenderer(

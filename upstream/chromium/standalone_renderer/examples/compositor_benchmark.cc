@@ -1632,51 +1632,70 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     double click_render_total_ms = 0.0;
     double click_render_max_ms = 0.0;
     int click_render_count = 0;
+    int click_pending_count = 0;
     const auto render_click_stage = [&](const char* stage,
                                         int iteration,
                                         uint32_t stage_expected_box) {
-      target.common.generation++;
-      target.vulkan.current_layout = target.vulkan.required_final_layout;
+      constexpr int kMaxPendingRetries = 8;
+      for (int attempt = 0; attempt <= kMaxPendingRetries; ++attempt) {
+        target.common.generation++;
+        target.vulkan.current_layout = target.vulkan.required_final_layout;
 #if BUILDFLAG(IS_WIN)
-      target.d3d12.current_state = target.d3d12.required_final_state;
+        target.d3d12.current_state = target.d3d12.required_final_state;
 #endif
-      blink_standalone_gpu_render_result_t click_render_result = {};
-      const auto render_start = std::chrono::steady_clock::now();
-      status = blink_standalone_renderer_render_to_gpu_target(
-          renderer, &target, &click_render_result);
-      const auto render_end = std::chrono::steady_clock::now();
-      const double render_ms =
-          std::chrono::duration<double, std::milli>(render_end - render_start)
-              .count();
-      click_render_total_ms += render_ms;
-      click_render_max_ms = std::max(click_render_max_ms, render_ms);
-      ++click_render_count;
-      if (status != BLINK_STANDALONE_STATUS_OK ||
-          click_render_result.target_written == 0 ||
-          click_render_result.backend != backend ||
-          click_render_result.width != active_width ||
-          click_render_result.height != active_height) {
-        std::fprintf(stderr,
-                     "%s: click %s render %d failed status=%d "
-                     "result_status=%u backend=%u written=%u size=%ux%u "
-                     "elapsed_ms=%.3f error=%s\n",
-                     label, stage, iteration, status,
-                     click_render_result.status, click_render_result.backend,
-                     click_render_result.target_written,
-                     click_render_result.width, click_render_result.height,
-                     render_ms, blink_standalone_renderer_last_error(renderer));
-        return false;
+        blink_standalone_gpu_render_result_t click_render_result = {};
+        const auto render_start = std::chrono::steady_clock::now();
+        status = blink_standalone_renderer_render_to_gpu_target(
+            renderer, &target, &click_render_result);
+        const auto render_end = std::chrono::steady_clock::now();
+        const double render_ms =
+            std::chrono::duration<double, std::milli>(render_end - render_start)
+                .count();
+        click_render_total_ms += render_ms;
+        click_render_max_ms = std::max(click_render_max_ms, render_ms);
+        ++click_render_count;
+        if (render_ms > 100.0) {
+          std::fprintf(stderr,
+                       "%s: click %s render %d attempt %d exceeded latency "
+                       "budget elapsed_ms=%.3f status=%d result_status=%u "
+                       "error=%s\n",
+                       label, stage, iteration, attempt, render_ms, status,
+                       click_render_result.status,
+                       blink_standalone_renderer_last_error(renderer));
+          return false;
+        }
+        if (status == BLINK_STANDALONE_STATUS_PENDING &&
+            click_render_result.target_written == 0) {
+          ++click_pending_count;
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          continue;
+        }
+        if (status != BLINK_STANDALONE_STATUS_OK ||
+            click_render_result.target_written == 0 ||
+            click_render_result.backend != backend ||
+            click_render_result.width != active_width ||
+            click_render_result.height != active_height) {
+          std::fprintf(stderr,
+                       "%s: click %s render %d failed status=%d "
+                       "result_status=%u backend=%u written=%u size=%ux%u "
+                       "elapsed_ms=%.3f error=%s\n",
+                       label, stage, iteration, status,
+                       click_render_result.status, click_render_result.backend,
+                       click_render_result.target_written,
+                       click_render_result.width, click_render_result.height,
+                       render_ms, blink_standalone_renderer_last_error(renderer));
+          return false;
+        }
+        return verify_target_pixels(stage, expected_background,
+                                    stage_expected_box,
+                                    require_full_nontransparent);
       }
-      if (render_ms > 500.0) {
-        std::fprintf(stderr,
-                     "%s: click %s render %d exceeded latency budget "
-                     "elapsed_ms=%.3f\n",
-                     label, stage, iteration, render_ms);
-        return false;
-      }
-      return verify_target_pixels(stage, expected_background,
-                                  stage_expected_box,
-                                  require_full_nontransparent);
+      std::fprintf(stderr,
+                   "%s: click %s render %d stayed pending after retries "
+                   "pending_count=%d error=%s\n",
+                   label, stage, iteration, click_pending_count,
+                   blink_standalone_renderer_last_error(renderer));
+      return false;
     };
     for (int i = 0; i < repeated_click_output_iterations; ++i) {
       const float x = 24.0f + static_cast<float>(i % 5);
@@ -1769,10 +1788,12 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     const int click_update_count = repeated_click_output_iterations * 2;
     std::printf(
         "%s: click_timing iterations=%d update_avg_ms=%.3f "
-        "update_max_ms=%.3f render_avg_ms=%.3f render_max_ms=%.3f\n",
+        "update_max_ms=%.3f render_avg_ms=%.3f render_max_ms=%.3f "
+        "pending=%d\n",
         label, repeated_click_output_iterations,
         click_update_total_ms / click_update_count, click_update_max_ms,
-        click_render_total_ms / click_render_count, click_render_max_ms);
+        click_render_total_ms / click_render_count, click_render_max_ms,
+        click_pending_count);
   }
 
   std::printf(

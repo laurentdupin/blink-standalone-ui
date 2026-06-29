@@ -33,6 +33,7 @@ typedef enum blink_standalone_status_code {
   BLINK_STANDALONE_STATUS_RENDER_FAILED = 3,
   BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED = 4,
   BLINK_STANDALONE_STATUS_UNSUPPORTED = 5,
+  BLINK_STANDALONE_STATUS_PENDING = 6,
 } blink_standalone_status_code_t;
 
 /* Raw frame bytes are currently RGBA8 or BGRA8. Inspect pixel_format and stride
