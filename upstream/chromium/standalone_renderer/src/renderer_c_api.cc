@@ -970,9 +970,18 @@ bool StartsWith(const std::string& value, const char* prefix) {
   return value.rfind(prefix, 0) == 0;
 }
 
+bool HasPendingFrameInput(const blink_standalone_renderer* renderer) {
+  return renderer->resource_provider_dirty ||
+         !renderer->pending_mouse_events.empty() ||
+         !renderer->pending_keyboard_events.empty() ||
+         !renderer->pending_dom_mutations.empty() ||
+         renderer->pending_wheel.has_value();
+}
+
 blink_standalone_status_code_t AdvanceGpuFrameForBackend(
     blink_standalone_renderer* renderer,
-    uint32_t backend) {
+    uint32_t backend,
+    bool require_source_gpu_frame) {
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
   input.device_scale_factor = renderer->device_scale_factor;
@@ -991,17 +1000,26 @@ blink_standalone_status_code_t AdvanceGpuFrameForBackend(
   input.wheel = renderer->pending_wheel;
   ClearPendingInput(renderer);
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
-    input.request_vulkan_gpu_frame = true;
+    if (require_source_gpu_frame) {
+      input.request_vulkan_gpu_frame = true;
+    } else {
+      input.prepare_vulkan_gpu_frame = true;
+    }
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
-    input.request_d3d12_gpu_frame = true;
+    if (require_source_gpu_frame) {
+      input.request_d3d12_gpu_frame = true;
+    } else {
+      input.prepare_d3d12_gpu_frame = true;
+    }
   } else {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "render_to_gpu_target failed: unsupported GPU backend");
   }
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->resource_provider_dirty = false;
-  if (!renderer->latest_result.gpu_frame.shared_image_available ||
-      renderer->latest_result.gpu_frame.is_software) {
+  if (require_source_gpu_frame &&
+      (!renderer->latest_result.gpu_frame.shared_image_available ||
+       renderer->latest_result.gpu_frame.is_software)) {
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
         renderer->latest_result.gpu_frame_failure.empty()
@@ -1431,11 +1449,19 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "or wait for embedder handle adoption");
   }
 
-  blink_standalone_status_code_t status =
-      AdvanceGpuFrameForBackend(renderer, backend);
-  if (status != BLINK_STANDALONE_STATUS_OK) {
-    result->status = status;
-    return status;
+  const bool external_target = d3d12_external || vulkan_external;
+  const bool collect_updated_frame =
+      external_target && renderer->latest_result.frame_advanced &&
+      renderer->latest_result.needs_output && !HasPendingFrameInput(renderer);
+  if (!collect_updated_frame) {
+    blink_standalone_status_code_t status =
+        AdvanceGpuFrameForBackend(renderer, backend,
+                                  /*require_source_gpu_frame=*/
+                                  !external_target);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      result->status = status;
+      return status;
+    }
   }
 
   std::string target_result;
@@ -1499,6 +1525,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   result->status = BLINK_STANDALONE_STATUS_OK;
   result->target_written = 1;
+  renderer->latest_result.needs_output = false;
   if (result->width == 0) {
     result->width = static_cast<uint32_t>(
         renderer->latest_result.viz_display_output_size.width);

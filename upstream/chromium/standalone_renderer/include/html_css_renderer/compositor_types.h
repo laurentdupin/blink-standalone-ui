@@ -168,6 +168,8 @@ struct FrameInput {
   bool request_gpu_frame = false;
   bool request_vulkan_gpu_frame = false;
   bool request_d3d12_gpu_frame = false;
+  bool prepare_vulkan_gpu_frame = false;
+  bool prepare_d3d12_gpu_frame = false;
   bool force_document_reload = false;
   FrameResultCollection result_collection = FrameResultCollection::kFull;
   std::optional<Size> viewport;

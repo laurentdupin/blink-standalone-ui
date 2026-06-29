@@ -201,6 +201,7 @@ void PrintUsage() {
       "[--gpu-borrowed-d3d12-render-copy-smoke] "
       "[--c-api-vulkan-external-target-smoke] "
       "[--c-api-vulkan-external-target-large-smoke] "
+      "[--c-api-vulkan-external-target-fps-timing-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-vulkan-update-output-smoke] "
@@ -822,7 +823,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   const char* extra_body = "",
                                   bool require_full_nontransparent = true,
                                   bool exercise_update_output_sequence = false,
-                                  bool expect_invalid_vulkan_metadata = false) {
+                                  bool expect_invalid_vulkan_metadata = false,
+                                  int repeated_update_output_iterations = 0) {
   blink_standalone_renderer_config_t config = {};
   config.width = width;
   config.height = height;
@@ -1341,6 +1343,101 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     }
   }
 
+  if (repeated_update_output_iterations > 0) {
+    double update_total_ms = 0.0;
+    double update_max_ms = 0.0;
+    double render_total_ms = 0.0;
+    double render_max_ms = 0.0;
+    uint32_t expected_timed_box = expected_box;
+    for (int i = 0; i < repeated_update_output_iterations; ++i) {
+      const bool green = (i % 2) == 0;
+      expected_timed_box = green ? 0xff00a050u : 0xffd06329u;
+      status = blink_standalone_renderer_set_element_style(
+          renderer, "box",
+          green ? "position:absolute;left:16px;top:12px;width:80px;"
+                  "height:32px;background:#00a050"
+                : "position:absolute;left:16px;top:12px;width:80px;"
+                  "height:32px;background:#d06329");
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr, "%s: timed style mutation %d failed status=%d "
+                             "error=%s\n",
+                     label, i, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+
+      blink_standalone_update_result_t update_result = {};
+      const auto update_start = std::chrono::steady_clock::now();
+      status = blink_standalone_renderer_update(
+          renderer, 0.100 + static_cast<double>(i) * 0.016, &update_result);
+      const auto update_end = std::chrono::steady_clock::now();
+      const double update_ms =
+          std::chrono::duration<double, std::milli>(update_end - update_start)
+              .count();
+      update_total_ms += update_ms;
+      update_max_ms = std::max(update_max_ms, update_ms);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          update_result.needs_output == 0) {
+        std::fprintf(stderr,
+                     "%s: timed update %d failed status=%d needs_output=%u "
+                     "error=%s\n",
+                     label, i, status, update_result.needs_output,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+
+      target.common.generation++;
+      target.vulkan.current_layout = target.vulkan.required_final_layout;
+#if BUILDFLAG(IS_WIN)
+      target.d3d12.current_state = target.d3d12.required_final_state;
+#endif
+      blink_standalone_gpu_render_result_t timed_render_result = {};
+      const auto render_start = std::chrono::steady_clock::now();
+      status = blink_standalone_renderer_render_to_gpu_target(
+          renderer, &target, &timed_render_result);
+      const auto render_end = std::chrono::steady_clock::now();
+      const double render_ms =
+          std::chrono::duration<double, std::milli>(render_end - render_start)
+              .count();
+      render_total_ms += render_ms;
+      render_max_ms = std::max(render_max_ms, render_ms);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          timed_render_result.target_written == 0 ||
+          timed_render_result.backend != backend ||
+          timed_render_result.width != width ||
+          timed_render_result.height != height) {
+        std::fprintf(stderr,
+                     "%s: timed render %d failed status=%d result_status=%u "
+                     "backend=%u written=%u size=%ux%u elapsed_ms=%.3f "
+                     "error=%s\n",
+                     label, i, status, timed_render_result.status,
+                     timed_render_result.backend,
+                     timed_render_result.target_written,
+                     timed_render_result.width, timed_render_result.height,
+                     render_ms, blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      if (render_ms > 4500.0) {
+        std::fprintf(stderr,
+                     "%s: timed render %d exceeded timeout budget "
+                     "elapsed_ms=%.3f\n",
+                     label, i, render_ms);
+        return cleanup_and_fail();
+      }
+    }
+    if (!verify_target_pixels("timed-final", expected_background,
+                              expected_timed_box,
+                              require_full_nontransparent)) {
+      return cleanup_and_fail();
+    }
+    std::printf(
+        "%s: timing iterations=%d update_avg_ms=%.3f update_max_ms=%.3f "
+        "render_avg_ms=%.3f render_max_ms=%.3f\n",
+        label, repeated_update_output_iterations,
+        update_total_ms / repeated_update_output_iterations, update_max_ms,
+        render_total_ms / repeated_update_output_iterations, render_max_ms);
+  }
+
   std::printf(
       "%s: ok backend=%u capabilities=%u target_written=%u size=%ux%u "
       "format=%u generation=%llu observed_background=%08x observed_box=%08x "
@@ -1377,6 +1474,26 @@ int RunCApiVulkanExternalTargetLargeSmoke() {
       /*box_css=*/"#d06329",
       /*width=*/2548,
       /*height=*/1320);
+}
+
+int RunCApiVulkanExternalTargetFpsTimingSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_fps_timing_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"#counter{position:absolute;left:120px;top:12px;"
+                    "font:32px sans-serif;color:white}",
+      /*extra_body=*/"<div id='counter'>fps</div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/12);
 }
 
 int RunCApiVulkanInvalidTargetMetadataSmoke() {
@@ -8826,6 +8943,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-backdrop-filter-chain-smoke" ||
         arg == "--c-api-backdrop-filter-unsupported-smoke" ||
         arg == "--c-api-vulkan-external-target-large-smoke" ||
+        arg == "--c-api-vulkan-external-target-fps-timing-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
         arg == "--c-api-vulkan-update-output-smoke" ||
         arg == "--c-api-d3d12-update-output-smoke" ||
@@ -8889,6 +9007,7 @@ int main(int argc, char** argv) {
   bool gpu_vulkan_ganesh_context_smoke = false;
   bool c_api_vulkan_external_target_smoke = false;
   bool c_api_vulkan_external_target_large_smoke = false;
+  bool c_api_vulkan_external_target_fps_timing_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_vulkan_update_output_smoke = false;
@@ -9050,6 +9169,8 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-large-smoke") {
       c_api_vulkan_external_target_large_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-fps-timing-smoke") {
+      c_api_vulkan_external_target_fps_timing_smoke = true;
     } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
       c_api_vulkan_invalid_target_metadata_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
@@ -9284,6 +9405,10 @@ int main(int argc, char** argv) {
 
   if (c_api_vulkan_external_target_large_smoke) {
     return RunCApiVulkanExternalTargetLargeSmoke();
+  }
+
+  if (c_api_vulkan_external_target_fps_timing_smoke) {
+    return RunCApiVulkanExternalTargetFpsTimingSmoke();
   }
 
   if (c_api_vulkan_invalid_target_metadata_smoke) {

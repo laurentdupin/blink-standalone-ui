@@ -3756,6 +3756,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       hit_test_region_list = client_->BuildHitTestData();
     }
     const float device_scale_factor = frame.device_scale_factor();
+    last_submitted_device_scale_factor_ = device_scale_factor;
     gfx::Size output_size = viewport_;
     if (!frame.render_pass_list.empty()) {
       output_size = frame.render_pass_list.back()->output_rect.size();
@@ -3874,14 +3875,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   std::string RenderExternalVkImageToTarget(
       const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
-    if (!display_) {
-      return "gpu_external_vkimage_render_copy: failed failure=Viz Display is "
-             "not initialized";
-    }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_external_vkimage_render_copy: failed "
-             "failure=offscreen Vulkan Skia dependency is not available";
-    }
     if (!vulkan_image) {
       return "gpu_external_vkimage_render_copy: failed failure=external "
              "Vulkan image is null";
@@ -3890,6 +3883,27 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     gfx::Size output_size = viewport_;
     if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
+    }
+    if (!display_) {
+      if (!local_surface_id_.is_valid()) {
+        return "gpu_external_vkimage_render_copy: failed failure=Viz Display "
+               "cannot initialize without LocalSurfaceId";
+      }
+      if (!EnsureVizDisplay(output_size)) {
+        return "gpu_external_vkimage_render_copy: failed failure=Viz Display "
+               "could not initialize";
+      }
+      display_->SetLocalSurfaceId(local_surface_id_,
+                                  last_submitted_device_scale_factor_);
+      display_->Resize(output_size);
+      if (viz_display_output_size_) {
+        *viz_display_output_size_ = output_size;
+      }
+      DrawVizDisplayNow();
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_external_vkimage_render_copy: failed "
+             "failure=offscreen Vulkan Skia dependency is not available";
     }
     scoped_refptr<gpu::ClientSharedImage> blit_target;
     std::string prepare_result =
@@ -4028,14 +4042,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                                           void* shared_handle) {
     ID3D12Resource* external_resource =
         static_cast<ID3D12Resource*>(d3d12_resource);
-    if (!display_) {
-      return "gpu_external_d3d12_render_copy: failed failure=Viz Display is "
-             "not initialized";
-    }
-    if (!offscreen_skia_dependency_) {
-      return "gpu_external_d3d12_render_copy: failed "
-             "failure=offscreen D3D12 Skia dependency is not available";
-    }
     if (!external_resource && !shared_handle) {
       return "gpu_external_d3d12_render_copy: failed failure=external D3D12 "
              "resource/shared handle is null";
@@ -4044,6 +4050,27 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     gfx::Size output_size = viewport_;
     if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
+    }
+    if (!display_) {
+      if (!local_surface_id_.is_valid()) {
+        return "gpu_external_d3d12_render_copy: failed failure=Viz Display "
+               "cannot initialize without LocalSurfaceId";
+      }
+      if (!EnsureVizDisplay(output_size)) {
+        return "gpu_external_d3d12_render_copy: failed failure=Viz Display "
+               "could not initialize";
+      }
+      display_->SetLocalSurfaceId(local_surface_id_,
+                                  last_submitted_device_scale_factor_);
+      display_->Resize(output_size);
+      if (viz_display_output_size_) {
+        *viz_display_output_size_ = output_size;
+      }
+      DrawVizDisplayNow();
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_external_d3d12_render_copy: failed "
+             "failure=offscreen D3D12 Skia dependency is not available";
     }
     scoped_refptr<gpu::ClientSharedImage> blit_target;
     std::string prepare_result =
@@ -4583,6 +4610,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
   bool use_d3d12_offscreen_output_ = false;
+  float last_submitted_device_scale_factor_ = 1.0f;
   uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
@@ -6342,6 +6370,12 @@ bool SubmitStandaloneBlinkCompositorStateToCcForStandaloneRenderer(
 
   TraceLiveFrameProbeStage(before_stage);
   cache.cc_frame_sink_failure_reason.clear();
+  if (cache.copy_output_gpu_use_vulkan_offscreen ||
+      cache.copy_output_gpu_use_d3d12_offscreen) {
+    cache.cc_layer_host->SetGpuOffscreenOutputMode(
+        cache.copy_output_gpu_use_vulkan_offscreen,
+        cache.copy_output_gpu_use_d3d12_offscreen);
+  }
   if (cache.copy_output_png_requested || cache.copy_output_raw_requested ||
       cache.copy_output_gpu_requested) {
     if (cache.copy_output_gpu_requested) {
@@ -16427,7 +16461,9 @@ bool ScheduleStandaloneBlinkCompositorStateThroughCcSchedulerForStandaloneRender
   if (!cache.cc_layer_host) {
     cache.cc_layer_host = std::make_unique<StandaloneCcLayerHost>();
   }
-  if (cache.copy_output_gpu_requested) {
+  if (cache.copy_output_gpu_requested ||
+      cache.copy_output_gpu_use_vulkan_offscreen ||
+      cache.copy_output_gpu_use_d3d12_offscreen) {
     cache.cc_layer_host->SetGpuOffscreenOutputMode(
         cache.copy_output_gpu_use_vulkan_offscreen,
         cache.copy_output_gpu_use_d3d12_offscreen);
@@ -17120,12 +17156,56 @@ void StandaloneBlinkLiveFrameBridgeRequestVulkanGpuFrameForStandaloneRenderer() 
   cache.initialized = false;
 }
 
+void StandaloneBlinkLiveFrameBridgePrepareVulkanGpuFrameForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool backend_changed =
+      cache.copy_output_gpu_use_d3d12_offscreen ||
+      !cache.copy_output_gpu_use_vulkan_offscreen;
+  cache.copy_output_gpu_requested = false;
+  cache.copy_output_gpu_use_vulkan_offscreen = true;
+  cache.copy_output_gpu_use_d3d12_offscreen = false;
+  cache.copy_output_png_requested = false;
+  cache.copy_output_raw_requested = false;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_png.clear();
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
+  cache.copy_output_failure.clear();
+  if (backend_changed) {
+    cache.cc_layer_host.reset();
+  }
+  cache.initialized = false;
+}
+
 void StandaloneBlinkLiveFrameBridgeRequestD3D12GpuFrameForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   const bool backend_changed =
       cache.copy_output_gpu_use_vulkan_offscreen ||
       !cache.copy_output_gpu_use_d3d12_offscreen;
   cache.copy_output_gpu_requested = true;
+  cache.copy_output_gpu_use_vulkan_offscreen = false;
+  cache.copy_output_gpu_use_d3d12_offscreen = true;
+  cache.copy_output_png_requested = false;
+  cache.copy_output_raw_requested = false;
+  cache.copy_output_png_completed = false;
+  cache.copy_output_png_succeeded = false;
+  cache.copy_output_png.clear();
+  cache.copy_output_raw_frame = LiveRawFrameOutput();
+  cache.copy_output_gpu_frame = LiveGpuFrameOutput();
+  cache.copy_output_failure.clear();
+  if (backend_changed) {
+    cache.cc_layer_host.reset();
+  }
+  cache.initialized = false;
+}
+
+void StandaloneBlinkLiveFrameBridgePrepareD3D12GpuFrameForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool backend_changed =
+      cache.copy_output_gpu_use_vulkan_offscreen ||
+      !cache.copy_output_gpu_use_d3d12_offscreen;
+  cache.copy_output_gpu_requested = false;
   cache.copy_output_gpu_use_vulkan_offscreen = false;
   cache.copy_output_gpu_use_d3d12_offscreen = true;
   cache.copy_output_png_requested = false;
@@ -17220,14 +17300,6 @@ StandaloneBlinkLiveFrameBridgeRenderExternalVkImageToTargetForStandaloneRenderer
         "image is null";
     return result.c_str();
   }
-  if (!cache.copy_output_gpu_frame.shared_image_available ||
-      !cache.copy_output_gpu_frame.vk_context_provider_available ||
-      !cache.copy_output_gpu_frame.shared_context_state_is_vulkan) {
-    result =
-        "gpu_external_vkimage_render_copy: failed failure=Vulkan SharedImage "
-        "CopyOutput did not initialize before external render-copy";
-    return result.c_str();
-  }
   if (!cache.cc_layer_host) {
     result =
         "gpu_external_vkimage_render_copy: failed failure=cc layer host is not "
@@ -17299,12 +17371,6 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
     result =
         "gpu_external_d3d12_render_copy: failed failure=external D3D12 "
         "resource/shared handle is null";
-    return result.c_str();
-  }
-  if (!cache.copy_output_gpu_frame.shared_image_available) {
-    result =
-        "gpu_external_d3d12_render_copy: failed failure=D3D12 SharedImage "
-        "CopyOutput did not initialize before external render-copy";
     return result.c_str();
   }
   if (!cache.cc_layer_host) {
