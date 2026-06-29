@@ -1177,6 +1177,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   ClearPendingInput(renderer);
   renderer->latest_result = renderer->runtime->AdvanceFrame(input);
   renderer->resource_provider_dirty = false;
+  if (renderer->latest_result.raw_frame.pixels.empty()) {
+    html_css_renderer::FrameInput retry_input;
+    retry_input.viewport = renderer->viewport;
+    retry_input.device_scale_factor = renderer->device_scale_factor;
+    retry_input.html_override = renderer->html;
+    retry_input.resource_root = renderer->resource_root;
+    retry_input.resource_base_path = renderer->resource_base_path;
+    retry_input.timeline_time_seconds = timeline_time_seconds;
+    retry_input.request_raw_frame = true;
+    retry_input.result_collection = html_css_renderer::FrameResultCollection::kFull;
+    renderer->latest_result = renderer->runtime->AdvanceFrame(retry_input);
+  }
   renderer->gpu_prepare_required_after_update = false;
   renderer->gpu_source_frame_pending = false;
   renderer->dirty_rects.clear();
@@ -1546,6 +1558,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   const bool expected_result_prefix =
       StartsWith(target_result, "gpu_borrowed_") ||
       StartsWith(target_result, "gpu_external_");
+  if (target_result.find("cannot initialize without LocalSurfaceId") !=
+      std::string::npos) {
+    renderer->gpu_source_frame_pending = true;
+    result->status = BLINK_STANDALONE_STATUS_PENDING;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_PENDING,
+        "render_to_gpu_target pending: GPU source frame is not ready");
+  }
   if (!expected_result_prefix ||
       target_result.find(": ok") == std::string::npos) {
     result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;

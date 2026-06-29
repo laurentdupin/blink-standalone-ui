@@ -1163,6 +1163,23 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   blink_standalone_gpu_render_result_t result = {};
   status =
       blink_standalone_renderer_render_to_gpu_target(renderer, &target, &result);
+  if (!expect_invalid_vulkan_metadata) {
+    constexpr int kMaxInitialPendingRetries = 8;
+    int initial_pending_retries = 0;
+    while (status == BLINK_STANDALONE_STATUS_PENDING &&
+           result.target_written == 0 &&
+           initial_pending_retries < kMaxInitialPendingRetries) {
+      ++initial_pending_retries;
+      target.common.generation++;
+      target.vulkan.current_layout = target.vulkan.required_final_layout;
+#if BUILDFLAG(IS_WIN)
+      target.d3d12.current_state = target.d3d12.required_final_state;
+#endif
+      result = blink_standalone_gpu_render_result_t{};
+      status = blink_standalone_renderer_render_to_gpu_target(renderer, &target,
+                                                              &result);
+    }
+  }
   if (expect_invalid_vulkan_metadata) {
     const char* last_error = blink_standalone_renderer_last_error(renderer);
     const bool error_matches =
@@ -1481,6 +1498,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     double update_max_ms = 0.0;
     double render_total_ms = 0.0;
     double render_max_ms = 0.0;
+    int render_count = 0;
+    int pending_count = 0;
     uint32_t expected_timed_box = expected_box;
     for (int i = 0; i < repeated_update_output_iterations; ++i) {
       const bool green = (i % 2) == 0;
@@ -1528,21 +1547,44 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         return cleanup_and_fail();
       }
 
-      target.common.generation++;
-      target.vulkan.current_layout = target.vulkan.required_final_layout;
-#if BUILDFLAG(IS_WIN)
-      target.d3d12.current_state = target.d3d12.required_final_state;
-#endif
       blink_standalone_gpu_render_result_t timed_render_result = {};
-      const auto render_start = std::chrono::steady_clock::now();
-      status = blink_standalone_renderer_render_to_gpu_target(
-          renderer, &target, &timed_render_result);
-      const auto render_end = std::chrono::steady_clock::now();
-      const double render_ms =
-          std::chrono::duration<double, std::milli>(render_end - render_start)
-              .count();
-      render_total_ms += render_ms;
-      render_max_ms = std::max(render_max_ms, render_ms);
+      constexpr int kMaxPendingRetries = 8;
+      int attempt = 0;
+      double last_render_ms = 0.0;
+      for (; attempt <= kMaxPendingRetries; ++attempt) {
+        target.common.generation++;
+        target.vulkan.current_layout = target.vulkan.required_final_layout;
+#if BUILDFLAG(IS_WIN)
+        target.d3d12.current_state = target.d3d12.required_final_state;
+#endif
+        timed_render_result = blink_standalone_gpu_render_result_t{};
+        const auto render_start = std::chrono::steady_clock::now();
+        status = blink_standalone_renderer_render_to_gpu_target(
+            renderer, &target, &timed_render_result);
+        const auto render_end = std::chrono::steady_clock::now();
+        const double render_ms =
+            std::chrono::duration<double, std::milli>(render_end - render_start)
+                .count();
+        last_render_ms = render_ms;
+        render_total_ms += render_ms;
+        render_max_ms = std::max(render_max_ms, render_ms);
+        ++render_count;
+        if (status == BLINK_STANDALONE_STATUS_PENDING &&
+            timed_render_result.target_written == 0) {
+          ++pending_count;
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          continue;
+        }
+        break;
+      }
+      if (attempt > kMaxPendingRetries) {
+        std::fprintf(stderr,
+                     "%s: timed render %d stayed pending after retries "
+                     "pending_count=%d error=%s\n",
+                     label, i, pending_count,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
       if (status != BLINK_STANDALONE_STATUS_OK ||
           timed_render_result.target_written == 0 ||
           timed_render_result.backend != backend ||
@@ -1556,14 +1598,15 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                      timed_render_result.backend,
                      timed_render_result.target_written,
                      timed_render_result.width, timed_render_result.height,
-                     render_ms, blink_standalone_renderer_last_error(renderer));
+                     last_render_ms,
+                     blink_standalone_renderer_last_error(renderer));
         return cleanup_and_fail();
       }
-      if (render_ms > 4500.0) {
+      if (last_render_ms > 4500.0) {
         std::fprintf(stderr,
                      "%s: timed render %d exceeded timeout budget "
                      "elapsed_ms=%.3f\n",
-                     label, i, render_ms);
+                     label, i, last_render_ms);
         return cleanup_and_fail();
       }
     }
@@ -1574,10 +1617,11 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     }
     std::printf(
         "%s: timing iterations=%d update_avg_ms=%.3f update_max_ms=%.3f "
-        "render_avg_ms=%.3f render_max_ms=%.3f\n",
+        "render_avg_ms=%.3f render_max_ms=%.3f pending=%d\n",
         label, repeated_update_output_iterations,
         update_total_ms / repeated_update_output_iterations, update_max_ms,
-        render_total_ms / repeated_update_output_iterations, render_max_ms);
+        render_total_ms / std::max(1, render_count), render_max_ms,
+        pending_count);
 
     // Warm the hover state once, then verify inert moves stay bounded and do
     // not request output. This catches scheduler/frame-sink timeout regressions
@@ -2493,6 +2537,7 @@ int RunCApiResourceProviderFontSmoke() {
   status = status == BLINK_STANDALONE_STATUS_OK
                ? blink_standalone_renderer_advance_frame(renderer, 0.0)
                : status;
+  const char* advance_error = blink_standalone_renderer_last_error(renderer);
   blink_standalone_frame_output_t output = {};
   blink_standalone_status_code_t output_status =
       blink_standalone_renderer_get_latest_output(renderer, &output);
@@ -2508,13 +2553,13 @@ int RunCApiResourceProviderFontSmoke() {
         stderr,
         "c_api_resource_provider_font_smoke: font route failed status=%d "
         "output_status=%d requests=%d stylesheets=%d fonts=%d font_face=%d "
-        "font_ok=%d blocked=%d releases=%d error=%s\n",
+        "font_ok=%d blocked=%d releases=%d advance_error=%s error=%s\n",
         status, output_status, provider_state.request_count,
         provider_state.stylesheet_request_count,
         provider_state.font_request_count,
         provider_state.font_face_initiator_count,
         provider_state.font_success_count, provider_state.font_blocked_count,
-        provider_state.release_count,
+        provider_state.release_count, advance_error ? advance_error : "",
         blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_release_latest_output(renderer);
     blink_standalone_renderer_destroy(renderer);

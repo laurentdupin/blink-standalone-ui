@@ -2648,6 +2648,28 @@ class StandaloneSkiaOutputSurfaceDependency final
     DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
   }
 
+  void WaitForBorrowedVkImageRenderCopyBlitTargetForTesting() {
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      if (task_runner->PostTask(
+              FROM_HERE,
+              base::BindOnce(
+                  [](StandaloneSkiaOutputSurfaceDependency* self,
+                     base::WaitableEvent* completed) {
+                    self->WaitForBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+                    completed->Signal();
+                  },
+                  base::Unretained(this), &completed))) {
+        completed.Wait();
+      }
+      return;
+    }
+    WaitForBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
+  }
+
   std::string PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
       const gfx::Size& target_size,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
@@ -3104,6 +3126,25 @@ class StandaloneSkiaOutputSurfaceDependency final
     borrowed_blit_target_.reset();
   }
 
+  void WaitForBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence() {
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider()) {
+      return;
+    }
+    if (context_state->gr_context()) {
+      context_state->gr_context()->flushAndSubmit(GrSyncCpu::kYes);
+      context_state->gr_context()->performDeferredCleanup(
+          std::chrono::milliseconds(0));
+    }
+    gpu::VulkanDeviceQueue* device_queue =
+        context_state->vk_context_provider()->GetDeviceQueue();
+    if (device_queue) {
+      vkDeviceWaitIdle(device_queue->GetVulkanDevice());
+    }
+  }
+
   void SetFailure(const char* reason) {
     if (failure_reason_ && reason && failure_reason_->empty()) {
       *failure_reason_ = reason;
@@ -3197,7 +3238,15 @@ class StandaloneSkiaOutputSurfaceDependency final
     auto target = std::make_unique<BorrowedD3D12RenderCopyBlitTarget>();
     target->size = target_size;
     Microsoft::WRL::ComPtr<ID3D12Resource> opened_shared_resource;
-    if (shared_handle) {
+    bool can_use_external_resource_directly = false;
+    if (external_resource) {
+      Microsoft::WRL::ComPtr<ID3D12Device> resource_device;
+      can_use_external_resource_directly =
+          SUCCEEDED(external_resource->GetDevice(
+              IID_PPV_ARGS(&resource_device))) &&
+          resource_device && resource_device.Get() == device.Get();
+    }
+    if (shared_handle && !can_use_external_resource_directly) {
       HRESULT hr = device->OpenSharedHandle(
           static_cast<HANDLE>(shared_handle),
           IID_PPV_ARGS(&opened_shared_resource));
@@ -3887,6 +3936,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         output_size = *viz_display_output_size_;
       }
     }
+    ResetOffscreenVizDisplayForExternalTargetResize(output_size);
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
         return "gpu_external_vkimage_render_copy: failed failure=Viz Display "
@@ -3961,6 +4011,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return "gpu_external_vkimage_render_copy: failed failure=" + failure;
     }
     ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    offscreen_skia_dependency_
+        ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
     offscreen_skia_dependency_
         ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
     std::ostringstream out;
@@ -4065,6 +4117,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     } else if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
     }
+    ResetOffscreenVizDisplayForExternalTargetResize(output_size);
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
         return "gpu_external_d3d12_render_copy: failed failure=Viz Display "
@@ -4357,6 +4410,19 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     TraceLiveFrameProbeStage("direct frame sink after Display initialize");
     return true;
+  }
+
+  void ResetOffscreenVizDisplayForExternalTargetResize(
+      const gfx::Size& output_size) {
+    if (g_standalone_native_window_handle || !display_ ||
+        !viz_display_output_size_ || viz_display_output_size_->IsEmpty() ||
+        *viz_display_output_size_ == output_size) {
+      return;
+    }
+    TraceLiveFrameProbeStage(
+        "direct frame sink reset offscreen Display for external target resize");
+    display_.reset();
+    offscreen_skia_dependency_ = nullptr;
   }
 
   void DrawVizDisplayNow() {
@@ -5174,12 +5240,20 @@ class StandaloneCcLayerHost final
     }
     TraceLiveFrameProbeStage(
         "cc host posted frame-sink init pending update commit");
-    if (next_composite_requires_forced_redraw_) {
+    const bool force_redraw = next_composite_requires_forced_redraw_;
+    if (force_redraw) {
+      if (attached_root_layer_) {
+        attached_root_layer_->SetNeedsDisplay();
+      }
       layer_tree_host_->SetNeedsRecalculateRasterScales();
     }
     layer_tree_host_->SetNeedsUpdateLayers();
     layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(physical_viewport_));
-    layer_tree_host_->SetNeedsCommit();
+    if (force_redraw) {
+      layer_tree_host_->SetNeedsCommitWithForcedRedraw();
+    } else {
+      layer_tree_host_->SetNeedsCommit();
+    }
     next_composite_requires_forced_redraw_ = false;
     commit_requested_ = true;
   }
@@ -5365,6 +5439,15 @@ class StandaloneCcLayerHost final
                                         true);
     const auto update_start = StandaloneProbeClock::now();
     update();
+    if (copy_output_requested_) {
+      TraceLiveFrameProbeStage(
+          "cc host UpdateLayerTreeHost forcing CopyOutput damage");
+      if (attached_root_layer_) {
+        attached_root_layer_->SetNeedsDisplay();
+      }
+      layer_tree_host_->SetNeedsUpdateLayers();
+      layer_tree_host_->SetNeedsRedrawRect(gfx::Rect(physical_viewport_));
+    }
     timing_pending_update_ms_ =
         StandaloneProbeElapsedMs(update_start, StandaloneProbeClock::now());
     scheduler_pending_update_ran_ = true;
@@ -19056,7 +19139,25 @@ int StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
     char* buffer,
     int buffer_size) {
   RunLiveFramePaintProbe(body_html);
-  const std::string& failure = ProbeCache().copy_output_failure;
+  const LiveFramePaintProbeCache& cache = ProbeCache();
+  std::string failure = cache.copy_output_failure;
+  if (failure.empty()) {
+    std::ostringstream out;
+    out << "Viz CopyOutput did not produce output"
+        << " completed=" << (cache.copy_output_png_completed ? 1 : 0)
+        << " succeeded=" << (cache.copy_output_png_succeeded ? 1 : 0)
+        << " png_requested=" << (cache.copy_output_png_requested ? 1 : 0)
+        << " raw_requested=" << (cache.copy_output_raw_requested ? 1 : 0)
+        << " gpu_requested=" << (cache.copy_output_gpu_requested ? 1 : 0)
+        << " host=" << (cache.cc_host_created ? 1 : 0)
+        << " root=" << (cache.cc_root_layer_attached ? 1 : 0)
+        << " sink=" << (cache.cc_frame_sink_bound ? 1 : 0)
+        << " submitted=" << (cache.cc_compositor_frame_submitted ? 1 : 0)
+        << " display=" << (cache.cc_viz_display_created ? 1 : 0)
+        << " commits=" << cache.cc_commit_count
+        << " frame_sink_failure=" << cache.cc_frame_sink_failure_reason;
+    failure = out.str();
+  }
   if (!buffer || buffer_size <= 0) {
     return 0;
   }

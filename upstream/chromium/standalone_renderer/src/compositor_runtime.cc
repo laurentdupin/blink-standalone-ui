@@ -2183,7 +2183,14 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!probe::StandaloneBlinkLiveFrameBridgeRawFrameInfoForStandaloneRenderer(
             probe_html.c_str(), &width, &height, &stride, &pixel_format,
             &premultiplied_alpha)) {
-      result.raw_frame_failure = "Viz CopyOutput raw frame info was not produced";
+      std::array<char, 256> failure{};
+      const int copied =
+          probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
+              probe_html.c_str(), failure.data(),
+              static_cast<int>(failure.size()));
+      result.raw_frame_failure =
+          copied > 0 ? failure.data()
+                     : "Viz CopyOutput raw frame info was not produced";
       return;
     }
     const int byte_size =
