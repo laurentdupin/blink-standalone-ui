@@ -13,6 +13,7 @@
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
+#include "gpu/command_buffer/service/shared_image/compound_image_backing.h"
 #if !defined(HTML_CSS_RENDERER_STANDALONE) || \
     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include "gpu/command_buffer/service/shared_image/wrapped_graphite_texture_backing.h"
@@ -75,6 +76,82 @@ bool GraphiteSupportsCompressedTextures(
 #endif
   return false;
 }
+
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+void LogWrappedSkImageSupportRejection(const char* reason,
+                                       SharedImageUsageSet usage,
+                                       viz::SharedImageFormat format,
+                                       const gfx::Size& size,
+                                       bool thread_safe,
+                                       gfx::GpuMemoryBufferType gmb_type,
+                                       GrContextType gr_context_type,
+                                       const SharedContextState* context_state,
+                                       bool use_graphite) {
+  LOG(ERROR) << "Standalone WrappedSkImage rejected: reason=" << reason
+             << ", usage=" << usage.ToString()
+             << ", format=" << format.ToString()
+             << ", size=" << size.ToString()
+             << ", thread_safe=" << thread_safe
+             << ", gmb_type=" << static_cast<int>(gmb_type)
+             << ", gr_context_type=" << static_cast<int>(gr_context_type)
+             << ", use_graphite=" << use_graphite
+             << ", context_lost="
+             << (context_state ? context_state->context_lost() : true)
+             << ", is_graphite_dawn="
+             << (context_state ? context_state->IsGraphiteDawn() : false)
+             << ", is_graphite_dawn_d3d="
+             << (context_state ? context_state->IsGraphiteDawnD3D() : false)
+             << ", is_graphite_dawn_vulkan="
+             << (context_state ? context_state->IsGraphiteDawnVulkan()
+                               : false)
+             << ", is_using_gl="
+             << (context_state ? context_state->IsUsingGL() : false)
+             << ", has_ganesh_context="
+             << (context_state && context_state->gr_context());
+}
+
+void LogWrappedSkImageAccessStreamRejection(
+    const char* reason,
+    SharedImageAccessStream stream,
+    viz::SharedImageFormat format,
+    const AccessParams* params,
+    const SharedContextState* factory_context_state,
+    bool use_graphite) {
+  LOG(ERROR) << "Standalone WrappedSkImage access stream rejected: reason="
+             << reason << ", stream=" << static_cast<int>(stream)
+             << ", format=" << format.ToString()
+             << ", use_graphite=" << use_graphite
+             << ", has_params=" << !!params
+             << ", params_context_state="
+             << (params ? params->context_state.get() : nullptr)
+             << ", factory_context_state=" << factory_context_state
+             << ", params_matches_factory="
+             << (!params || !params->context_state ||
+                 params->context_state == factory_context_state)
+             << ", factory_context_lost="
+             << (factory_context_state ? factory_context_state->context_lost()
+                                       : true)
+             << ", factory_is_graphite_dawn="
+             << (factory_context_state ? factory_context_state->IsGraphiteDawn()
+                                       : false)
+             << ", factory_is_graphite_dawn_d3d="
+             << (factory_context_state
+                     ? factory_context_state->IsGraphiteDawnD3D()
+                     : false)
+             << ", factory_is_graphite_dawn_vulkan="
+             << (factory_context_state
+                     ? factory_context_state->IsGraphiteDawnVulkan()
+                     : false)
+             << ", params_is_graphite_dawn="
+             << (params && params->context_state
+                     ? params->context_state->IsGraphiteDawn()
+                     : false)
+             << ", params_is_graphite_dawn_d3d="
+             << (params && params->context_state
+                     ? params->context_state->IsGraphiteDawnD3D()
+                     : false);
+}
+#endif
 
 }  // namespace
 
@@ -162,10 +239,20 @@ bool WrappedSkImageBackingFactory::IsSupported(
     GrContextType gr_context_type,
     base::span<const uint8_t> pixel_data) {
   if (gmb_type != gfx::EMPTY_BUFFER) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    LogWrappedSkImageSupportRejection(
+        "non-empty-gmb", usage, format, size, thread_safe, gmb_type,
+        gr_context_type, context_state_.get(), use_graphite_);
+#endif
     return false;
   }
 
   if (!GetSupportedUsage(context_state_.get()).HasAll(usage)) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    LogWrappedSkImageSupportRejection(
+        "unsupported-usage", usage, format, size, thread_safe, gmb_type,
+        gr_context_type, context_state_.get(), use_graphite_);
+#endif
     return false;
   }
 
@@ -182,6 +269,11 @@ bool WrappedSkImageBackingFactory::IsSupported(
                      context_state_->IsGraphiteDawnVulkan();
     bool is_dawn_metal = context_state_->IsGraphiteDawnMetal();
     if (!is_drdc_enabled_ || (!is_vulkan && !is_dawn_metal)) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      LogWrappedSkImageSupportRejection(
+          "unsupported-thread-safe", usage, format, size, thread_safe,
+          gmb_type, gr_context_type, context_state_.get(), use_graphite_);
+#endif
       return false;
     }
   }
@@ -199,17 +291,32 @@ bool WrappedSkImageBackingFactory::IsSupported(
     // For BGRX_8888/BGR_565 there is no equivalent SkColorType. Skia will use
     // the RGBX_8888/RGB_565 color type on upload so R/B channels are reversed.
     if (usage.Has(SHARED_IMAGE_USAGE_CPU_UPLOAD) || !pixel_data.empty()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      LogWrappedSkImageSupportRejection(
+          "unsupported-bgr-upload", usage, format, size, thread_safe,
+          gmb_type, gr_context_type, context_state_.get(), use_graphite_);
+#endif
       return false;
     }
   }
 
   if (context_state_->context_lost()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    LogWrappedSkImageSupportRejection(
+        "context-lost", usage, format, size, thread_safe, gmb_type,
+        gr_context_type, context_state_.get(), use_graphite_);
+#endif
     return false;
   }
 
   if (format.IsCompressed()) {
     if (pixel_data.empty()) {
       // ETC1 is only supported with initial pixel upload.
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+      LogWrappedSkImageSupportRejection(
+          "compressed-without-pixel-data", usage, format, size, thread_safe,
+          gmb_type, gr_context_type, context_state_.get(), use_graphite_);
+#endif
       return false;
     }
     if (use_graphite_) {
@@ -232,11 +339,21 @@ bool WrappedSkImageBackingFactory::IsSupported(
       if ((color_type == kAlpha_8_SkColorType ||
            color_type == kR8_unorm_SkColorType) &&
           context_state_->feature_info()->workarounds().r8_egl_images_broken) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        LogWrappedSkImageSupportRejection(
+            "r8-egl-images-broken", usage, format, size, thread_safe,
+            gmb_type, gr_context_type, context_state_.get(), use_graphite_);
+#endif
         return false;
       }
       auto backend_format = context_state_->gr_context()->defaultBackendFormat(
           color_type, GrRenderable::kYes);
       if (!backend_format.isValid()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+        LogWrappedSkImageSupportRejection(
+            "invalid-ganesh-backend-format", usage, format, size, thread_safe,
+            gmb_type, gr_context_type, context_state_.get(), use_graphite_);
+#endif
         return false;
       }
     }
@@ -271,6 +388,11 @@ bool WrappedSkImageBackingFactory::IsSupportedForAccessStream(
   // `SharedContextState` in `IsSupported`, this restriction can be relaxed.
   if (params && params->context_state &&
       params->context_state != context_state_) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    LogWrappedSkImageAccessStreamRejection(
+        "context-state-mismatch", stream, format, params, context_state_.get(),
+        use_graphite_);
+#endif
     return false;
   }
 
@@ -283,8 +405,20 @@ bool WrappedSkImageBackingFactory::IsSupportedForAccessStream(
     AccessParams access_params = params ? *params : AccessParams();
     bool supported = WrappedGraphiteTextureBacking::CheckSupportForAccessStream(
         stream, format, access_params);
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (!supported) {
+      LogWrappedSkImageAccessStreamRejection(
+          "graphite-backing-rejected-stream", stream, format, params,
+          context_state_.get(), use_graphite_);
+    }
+#endif
     return supported;
 #else
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    LogWrappedSkImageAccessStreamRejection(
+        "standalone-graphite-disabled", stream, format, params,
+        context_state_.get(), use_graphite_);
+#endif
     return false;
 #endif
   }
