@@ -247,6 +247,17 @@ base::AtomicSequenceNumber g_next_command_buffer_id;
 void SharedContextState::compileError(const char* shader,
                                       const char* errors,
                                       bool shaderWasCached) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+  if (context_lost()) {
+    LOG(ERROR) << "Standalone Skia shader compilation error after context "
+                  "loss (was cached = "
+               << shaderWasCached << ")"
+               << "\n------------------------\n"
+               << shader << "\nErrors:\n"
+               << errors;
+    return;
+  }
+#endif
   if (!context_lost()) {
     LOG(ERROR) << "Skia shader compilation error (was cached = "
                << shaderWasCached << ")" << "\n"
@@ -688,8 +699,9 @@ bool SharedContextState::InitializeGraphite(
     const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
     GpuProcessShmCount* use_shader_cache_shm_count) {
-  const skgpu::graphite::ContextOptions context_options =
+  skgpu::graphite::ContextOptions context_options =
       GetDefaultGraphiteContextOptions(workarounds);
+  context_options.fShaderErrorHandler = this;
 
   gpu::GraphiteSharedContext* graphite_shared_context = nullptr;
 
