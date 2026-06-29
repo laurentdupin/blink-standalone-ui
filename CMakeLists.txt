@@ -1483,6 +1483,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     list(APPEND _blink_standalone_dawn_d3d12_sidecar_search_dirs
       "${_blink_standalone_dawn_d3d12_build_dir}"
     )
+    if(DEFINED ENV{SystemRoot})
+      list(APPEND _blink_standalone_dawn_d3d12_sidecar_search_dirs
+        "$ENV{SystemRoot}/System32"
+      )
+    endif()
     foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
       get_filename_component(_blink_standalone_dawn_lib_dir
         "${_blink_standalone_dawn_lib}" DIRECTORY)
@@ -1511,6 +1516,14 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
         endif()
       endforeach()
       if(NOT _blink_standalone_dawn_sidecar_path)
+        if(_blink_standalone_dawn_sidecar STREQUAL "d3dcompiler_47.dll")
+          message(FATAL_ERROR
+            "BLINK_STANDALONE_DAWN_D3D12 is enabled, but "
+            "d3dcompiler_47.dll was not found in the generated Dawn build "
+            "tree or the Windows runtime. Rebuild the Dawn D3D12 inputs or "
+            "install the Windows D3D compiler runtime before packaging the C "
+            "API.")
+        endif()
         continue()
       endif()
       list(APPEND _blink_standalone_dawn_d3d12_runtime_sidecars
