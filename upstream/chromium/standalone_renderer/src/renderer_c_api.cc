@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -18,18 +19,178 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/message_loop/message_pump_type.h"
+#include "base/notimplemented.h"
+#include "base/notreached.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/trace_event/trace_event_impl.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/vulkan/buildflags.h"
+#if BUILDFLAG(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_implementation.h"
+#include "gpu/vulkan/vulkan_instance.h"
+#endif
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/standalone_process.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "third_party/perfetto/include/perfetto/tracing/tracing.h"
 
+#if BUILDFLAG(ENABLE_VULKAN)
+namespace blink::standalone_renderer_probe {
+void StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
+    void* vulkan_implementation,
+    void* vulkan_device_queue);
+}  // namespace blink::standalone_renderer_probe
+#endif
+
 namespace {
+
+#if BUILDFLAG(ENABLE_VULKAN)
+base::FilePath StandaloneVulkanLoaderPath() {
+#if BUILDFLAG(IS_WIN)
+  return base::FilePath(FILE_PATH_LITERAL("vulkan-1.dll"));
+#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  return base::FilePath(FILE_PATH_LITERAL("libvulkan.so.1"));
+#else
+  return base::FilePath();
+#endif
+}
+
+std::vector<std::string> CopyStringArray(const char* const* values,
+                                         size_t count) {
+  std::vector<std::string> strings;
+  strings.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    if (values[i] && values[i][0]) {
+      strings.emplace_back(values[i]);
+    }
+  }
+  return strings;
+}
+
+std::vector<const char*> StringPointers(const std::vector<std::string>& values) {
+  std::vector<const char*> pointers;
+  pointers.reserve(values.size());
+  for (const std::string& value : values) {
+    pointers.push_back(value.c_str());
+  }
+  return pointers;
+}
+
+gfx::ExtensionSet MakeExtensionSet(
+    const std::vector<std::string>& extensions) {
+  gfx::ExtensionSet set;
+  for (const std::string& extension : extensions) {
+    set.insert(extension);
+  }
+  return set;
+}
+
+class BorrowedVulkanImplementation final : public gpu::VulkanImplementation {
+ public:
+  BorrowedVulkanImplementation(
+      VkInstance instance,
+      VkPhysicalDevice physical_device,
+      uint32_t api_version,
+      std::vector<std::string> enabled_instance_extensions,
+      std::vector<std::string> enabled_device_extensions)
+      : gpu::VulkanImplementation(/*use_swiftshader=*/false),
+        instance_(instance),
+        physical_device_(physical_device),
+        api_version_(api_version),
+        enabled_instance_extensions_(std::move(enabled_instance_extensions)),
+        enabled_device_extensions_(std::move(enabled_device_extensions)) {}
+
+  bool InitializeBorrowed() {
+    enabled_instance_extension_pointers_ =
+        StringPointers(enabled_instance_extensions_);
+    return vulkan_instance_.InitializeExternalBorrowed(
+        StandaloneVulkanLoaderPath(), instance_, physical_device_, api_version_,
+        enabled_instance_extension_pointers_);
+  }
+
+  bool InitializeVulkanInstance(bool using_surface = true) override {
+    return vulkan_instance_.vk_instance() != VK_NULL_HANDLE;
+  }
+
+  gpu::VulkanInstance* GetVulkanInstance() override {
+    return &vulkan_instance_;
+  }
+
+  std::unique_ptr<gpu::VulkanSurface> CreateViewSurface(
+      gfx::AcceleratedWidget window) override {
+    return nullptr;
+  }
+
+  bool GetPhysicalDevicePresentationSupport(
+      VkPhysicalDevice device,
+      const std::vector<VkQueueFamilyProperties>& queue_family_properties,
+      uint32_t queue_family_index) override {
+    return true;
+  }
+
+  std::vector<const char*> GetRequiredDeviceExtensions() override {
+    return StringPointers(enabled_device_extensions_);
+  }
+
+  std::vector<const char*> GetOptionalDeviceExtensions() override {
+    return {};
+  }
+
+  VkFence CreateVkFenceForGpuFence(VkDevice vk_device) override {
+    NOTREACHED();
+  }
+
+  std::unique_ptr<gfx::GpuFence> ExportVkFenceToGpuFence(
+      VkDevice vk_device,
+      VkFence vk_fence) override {
+    NOTREACHED();
+  }
+
+  VkExternalSemaphoreHandleTypeFlagBits
+  GetExternalSemaphoreHandleType() override {
+#if BUILDFLAG(IS_WIN)
+    return VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+#else
+    return VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT;
+#endif
+  }
+
+  bool CanImportGpuMemoryBuffer(
+      gpu::VulkanDeviceQueue* device_queue,
+      gfx::GpuMemoryBufferType memory_buffer_type) override {
+    return false;
+  }
+
+  std::unique_ptr<gpu::VulkanImage> CreateImageFromGpuMemoryHandle(
+      gpu::VulkanDeviceQueue* device_queue,
+      gfx::GpuMemoryBufferHandle gmb_handle,
+      gfx::Size size,
+      VkFormat vk_format,
+      const gfx::ColorSpace& color_space) override {
+    NOTIMPLEMENTED();
+    return nullptr;
+  }
+
+  const std::vector<std::string>& enabled_device_extensions() const {
+    return enabled_device_extensions_;
+  }
+
+ private:
+  VkInstance instance_ = VK_NULL_HANDLE;
+  VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
+  uint32_t api_version_ = 0;
+  std::vector<std::string> enabled_instance_extensions_;
+  std::vector<std::string> enabled_device_extensions_;
+  std::vector<const char*> enabled_instance_extension_pointers_;
+  gpu::VulkanInstance vulkan_instance_;
+};
+#endif
 
 void EnsureStandaloneCApiProcessInitialized() {
   static std::once_flag once;
@@ -431,6 +592,12 @@ struct blink_standalone_renderer {
       resource_provider;
   uint32_t resource_provider_flags = 0;
   bool resource_provider_dirty = false;
+#if BUILDFLAG(ENABLE_VULKAN)
+  std::unique_ptr<BorrowedVulkanImplementation>
+      external_vulkan_implementation;
+  std::unique_ptr<gpu::VulkanDeviceQueue> external_vulkan_device_queue;
+  bool external_vulkan_configured = false;
+#endif
   html_css_renderer::CompositorFrameResult latest_result;
   std::vector<blink_standalone_rect_t> dirty_rects;
   std::vector<html_css_renderer::MouseInputEvent> pending_mouse_events;
@@ -558,6 +725,16 @@ bool IsTextSelectionCapable(const html_css_renderer::FormControlEntry& entry) {
 }
 
 blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* renderer) {
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (renderer->external_vulkan_configured &&
+      renderer->external_vulkan_implementation &&
+      renderer->external_vulkan_device_queue) {
+    blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
+        renderer->external_vulkan_implementation.get(),
+        renderer->external_vulkan_device_queue.release());
+  }
+#endif
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
   create_info.renderer.viewport = renderer->viewport;
   create_info.renderer.device_scale_factor = renderer->device_scale_factor;
@@ -908,7 +1085,13 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gp
       return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE;
     case BLINK_STANDALONE_GPU_BACKEND_VULKAN:
       return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
-             BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
+             BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN
+#if BUILDFLAG(ENABLE_VULKAN)
+             | (renderer->external_vulkan_configured
+                    ? BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET
+                    : 0)
+#endif
+          ;
     case BLINK_STANDALONE_GPU_BACKEND_D3D12:
 #if defined(_WIN32)
       return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
@@ -921,6 +1104,95 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gp
     default:
       return 0;
   }
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_configure_vulkan_external_device(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_vulkan_external_device_t* device) {
+  if (!renderer || !device) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "configure_vulkan_external_device failed: renderer and device are required");
+  }
+  if (renderer->runtime && !renderer->html.empty()) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "configure_vulkan_external_device failed: Vulkan device must be configured before first frame/runtime initialization");
+  }
+  renderer->runtime.reset();
+  renderer->latest_result = html_css_renderer::CompositorFrameResult();
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (!device->vk_instance ||
+      !device->vk_physical_device || !device->vk_device ||
+      !device->vk_queue || device->queue_family_index == UINT32_MAX) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "configure_vulkan_external_device failed: native Vulkan handles are required");
+  }
+  const bool invalid_instance_extensions =
+      device->enabled_instance_extension_count > 0 &&
+      !device->enabled_instance_extensions;
+  const bool invalid_device_extensions =
+      device->enabled_device_extension_count > 0 &&
+      !device->enabled_device_extensions;
+  if (invalid_instance_extensions || invalid_device_extensions) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "configure_vulkan_external_device failed: extension arrays are required when extension counts are non-zero");
+  }
+
+  auto implementation = std::make_unique<BorrowedVulkanImplementation>(
+      static_cast<VkInstance>(device->vk_instance),
+      static_cast<VkPhysicalDevice>(device->vk_physical_device),
+      device->api_version,
+      CopyStringArray(device->enabled_instance_extensions,
+                      device->enabled_instance_extension_count),
+      CopyStringArray(device->enabled_device_extensions,
+                      device->enabled_device_extension_count));
+  if (!implementation->InitializeBorrowed()) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED,
+        "configure_vulkan_external_device failed: could not wrap borrowed Vulkan instance");
+  }
+
+  VkPhysicalDeviceFeatures2 features = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+  vkGetPhysicalDeviceFeatures2(
+      static_cast<VkPhysicalDevice>(device->vk_physical_device), &features);
+  VkPhysicalDeviceProperties properties = {};
+  vkGetPhysicalDeviceProperties(
+      static_cast<VkPhysicalDevice>(device->vk_physical_device), &properties);
+  VkPhysicalDeviceDriverProperties driver_properties = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+  VkPhysicalDeviceProperties2 properties2 = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+  properties2.pNext = &driver_properties;
+  vkGetPhysicalDeviceProperties2(
+      static_cast<VkPhysicalDevice>(device->vk_physical_device), &properties2);
+
+  auto queue = std::make_unique<gpu::VulkanDeviceQueue>(
+      static_cast<VkInstance>(device->vk_instance));
+  if (!queue->InitializeForCompositorGpuThread(
+          static_cast<VkPhysicalDevice>(device->vk_physical_device),
+          static_cast<VkDevice>(device->vk_device),
+          static_cast<VkQueue>(device->vk_queue),
+          /*vk_queue_lock_context=*/nullptr, device->queue_family_index,
+          MakeExtensionSet(implementation->enabled_device_extensions()),
+          features, properties, driver_properties, /*vma_allocator=*/VK_NULL_HANDLE,
+          /*register_memory_dump_provider=*/false)) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INITIALIZATION_FAILED,
+        "configure_vulkan_external_device failed: could not wrap borrowed Vulkan device queue");
+  }
+
+  renderer->external_vulkan_implementation = std::move(implementation);
+  renderer->external_vulkan_device_queue = std::move(queue);
+  renderer->external_vulkan_configured = true;
+  return InitializeRuntime(renderer);
+#else
+  return SetLastError(renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+                      "configure_vulkan_external_device failed: Vulkan is not enabled");
+#endif
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_to_gpu_target(
@@ -953,6 +1225,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   const bool d3d12_external =
       backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
       target->d3d12.shared_handle != nullptr;
+  const bool vulkan_external =
+      backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN &&
+      target->vulkan.vk_image != nullptr;
   if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
       !target->d3d12.shared_handle && target->d3d12.d3d12_resource) {
     result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
@@ -962,7 +1237,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "same-device setup, which is not part of this checkpoint; pass a "
         "shared_handle for the external D3D12 target path");
   }
-  if (!internal_standin && !d3d12_external) {
+  if (!internal_standin && !d3d12_external && !vulkan_external) {
     result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
@@ -980,7 +1255,32 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 
   std::string smoke_result;
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
-    smoke_result = renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
+    if (vulkan_external) {
+      if (!renderer->external_vulkan_configured) {
+        result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+        return SetLastError(
+            renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+            "render_to_gpu_target failed: Vulkan external targets require configure_vulkan_external_device before first frame");
+      }
+      html_css_renderer::ExternalVulkanImageTarget external_target;
+      external_target.vk_image = target->vulkan.vk_image;
+      external_target.vk_device_memory = target->vulkan.vk_device_memory;
+      external_target.width = static_cast<int>(target->vulkan.width);
+      external_target.height = static_cast<int>(target->vulkan.height);
+      external_target.vk_format = target->vulkan.vk_format;
+      external_target.image_tiling = target->vulkan.image_tiling;
+      external_target.allocation_size = target->vulkan.allocation_size;
+      external_target.memory_type_index = target->vulkan.memory_type_index;
+      external_target.image_usage_flags = target->vulkan.image_usage_flags;
+      external_target.image_create_flags = 0;
+      external_target.queue_family_index = target->vulkan.queue_family_index;
+      smoke_result =
+          renderer->runtime->RunExternalVkImageRenderCopyForTesting(
+              external_target);
+    } else {
+      smoke_result =
+          renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
+    }
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
     if (d3d12_external) {
       smoke_result = renderer->runtime->RunExternalD3D12RenderCopyForTesting(

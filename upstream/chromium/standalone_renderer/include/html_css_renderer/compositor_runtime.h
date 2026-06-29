@@ -131,6 +131,20 @@ struct NativePresentationResult {
   std::vector<std::string> diagnostics;
 };
 
+struct ExternalVulkanImageTarget {
+  void* vk_image = nullptr;
+  void* vk_device_memory = nullptr;
+  int width = 0;
+  int height = 0;
+  uint32_t vk_format = 0;
+  uint32_t image_tiling = 0;
+  uint64_t allocation_size = 0;
+  uint32_t memory_type_index = 0;
+  uint32_t image_usage_flags = 0;
+  uint32_t image_create_flags = 0;
+  uint32_t queue_family_index = 0;
+};
+
 class StandaloneCompositorRuntime {
  public:
   virtual ~StandaloneCompositorRuntime() = default;
@@ -146,6 +160,8 @@ class StandaloneCompositorRuntime {
   virtual bool HasLiveBody() const = 0;
   virtual std::string RunBorrowedVkImageBackingSmokeForTesting() = 0;
   virtual std::string RunBorrowedVkImageRenderCopySmokeForTesting() = 0;
+  virtual std::string RunExternalVkImageRenderCopyForTesting(
+      const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
   virtual std::string RunExternalD3D12RenderCopyForTesting(
       void* d3d12_resource,

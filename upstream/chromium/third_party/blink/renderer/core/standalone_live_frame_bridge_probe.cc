@@ -110,8 +110,11 @@
 #include "gpu/ipc/raster_in_process_context.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
 #include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_implementation.h"
+#include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "base/time/time.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
@@ -308,7 +311,37 @@ namespace {
 void* g_standalone_native_window_handle = nullptr;
 gfx::Size g_standalone_native_window_size;
 bool g_standalone_defer_image_attribute_loads = false;
+raw_ptr<gpu::VulkanImplementation>
+    g_pending_external_vulkan_implementation_for_testing = nullptr;
+std::unique_ptr<gpu::VulkanDeviceQueue>
+    g_pending_external_vulkan_device_queue_for_testing;
 }  // namespace
+
+void StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
+    void* vulkan_implementation,
+    void* vulkan_device_queue) {
+#if BUILDFLAG(ENABLE_VULKAN)
+  g_pending_external_vulkan_implementation_for_testing =
+      static_cast<gpu::VulkanImplementation*>(vulkan_implementation);
+  g_pending_external_vulkan_device_queue_for_testing.reset(
+      static_cast<gpu::VulkanDeviceQueue*>(vulkan_device_queue));
+#endif
+}
+
+void InstallPendingExternalVulkanForTesting(
+    gpu::InProcessGpuThreadHolder* holder) {
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (!holder || !g_pending_external_vulkan_implementation_for_testing ||
+      !g_pending_external_vulkan_device_queue_for_testing) {
+    return;
+  }
+  holder->AdoptExternalVulkanForTesting(
+      g_pending_external_vulkan_implementation_for_testing,
+      std::move(g_pending_external_vulkan_device_queue_for_testing));
+  g_pending_external_vulkan_implementation_for_testing = nullptr;
+#endif
+}
+
 extern "C" bool StandaloneRendererDeferImageAttributeLoads() {
   return g_standalone_defer_image_attribute_loads;
 }
@@ -2474,6 +2507,15 @@ class StandaloneSkiaOutputSurfaceDependency final
   std::string PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
       const gfx::Size& target_size,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
+    return PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+        target_size, nullptr, nullptr, target_shared_image);
+  }
+
+  std::string PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+      const gfx::Size& target_size,
+      gpu::VulkanImage* external_image,
+      const html_css_renderer::ExternalVulkanImageTarget* external_target,
+      scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
     if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
             GpuTaskRunnerIfOffSequenceForTesting()) {
       base::WaitableEvent completed(
@@ -2486,16 +2528,26 @@ class StandaloneSkiaOutputSurfaceDependency final
           base::BindOnce(
               [](StandaloneSkiaOutputSurfaceDependency* self,
                  const gfx::Size& target_size,
+                 uintptr_t external_image,
+                 uintptr_t external_target,
                  scoped_refptr<gpu::ClientSharedImage>* shared_image,
                  std::string* result, base::WaitableEvent* completed) {
                 *result =
                     self
                         ->PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
-                            target_size, shared_image);
+                            target_size,
+                            reinterpret_cast<gpu::VulkanImage*>(
+                                external_image),
+                            reinterpret_cast<const html_css_renderer::
+                                                 ExternalVulkanImageTarget*>(
+                                external_target),
+                            shared_image);
                 completed->Signal();
               },
-              base::Unretained(this), target_size, &shared_image, &result,
-              &completed));
+              base::Unretained(this), target_size,
+              reinterpret_cast<uintptr_t>(external_image),
+              reinterpret_cast<uintptr_t>(external_target), &shared_image,
+              &result, &completed));
       if (!posted) {
         return "gpu_borrowed_vkimage_render_copy_smoke: failed "
                "failure=failed to post borrowed blit target setup to "
@@ -2509,7 +2561,7 @@ class StandaloneSkiaOutputSurfaceDependency final
       return result;
     }
     return PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
-        target_size, target_shared_image);
+        target_size, external_image, external_target, target_shared_image);
   }
 
   std::string VerifyBorrowedVkImageRenderCopyBlitTargetForTesting() {
@@ -2698,16 +2750,20 @@ class StandaloneSkiaOutputSurfaceDependency final
     std::string format = "RGBA_8888";
     gpu::Mailbox mailbox;
     std::unique_ptr<gpu::VulkanImage> image;
+    raw_ptr<gpu::VulkanImage> external_image = nullptr;
     raw_ptr<gpu::MemoryTypeTracker> registration_tracker = nullptr;
     std::unique_ptr<gpu::SharedImageRepresentationFactoryRef> factory_ref;
     scoped_refptr<gpu::ClientSharedImage> client_shared_image;
     bool target_created = false;
+    bool external_resource = false;
     bool backend_texture_valid = false;
     bool registered = false;
   };
 
   std::string PrepareBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(
       const gfx::Size& target_size,
+      gpu::VulkanImage* external_image,
+      const html_css_renderer::ExternalVulkanImageTarget* external_target,
       scoped_refptr<gpu::ClientSharedImage>* target_shared_image) {
     DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence();
     StandaloneBorrowedVkImageRenderCopySmokeResult result;
@@ -2754,12 +2810,57 @@ class StandaloneSkiaOutputSurfaceDependency final
 
     auto target = std::make_unique<BorrowedVkImageRenderCopyBlitTarget>();
     target->size = target_size;
-    target->image = gpu::VulkanImage::Create(
-        device_queue, target_size, VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-    if (!target->image || target->image->image() == VK_NULL_HANDLE) {
-      return finish_with_failure("stand-in blit target VkImage creation failed");
+    gpu::VulkanImage* target_image = external_image;
+    if (external_target) {
+      if (!external_target->vk_image || !external_target->vk_device_memory ||
+          external_target->width != target_size.width() ||
+          external_target->height != target_size.height() ||
+          external_target->vk_format != VK_FORMAT_R8G8B8A8_UNORM ||
+          external_target->allocation_size == 0) {
+        return finish_with_failure(
+            "raw external Vulkan target metadata is incomplete or does not "
+            "match the active renderer size/format");
+      }
+      target->image = gpu::VulkanImage::CreateBorrowed(
+          device_queue, static_cast<VkImage>(external_target->vk_image),
+          static_cast<VkDeviceMemory>(external_target->vk_device_memory),
+          target_size, static_cast<VkFormat>(external_target->vk_format),
+          static_cast<VkImageTiling>(external_target->image_tiling),
+          static_cast<VkDeviceSize>(external_target->allocation_size),
+          external_target->memory_type_index,
+          static_cast<VkImageUsageFlags>(external_target->image_usage_flags),
+          static_cast<VkImageCreateFlags>(external_target->image_create_flags),
+          external_target->queue_family_index);
+      target_image = target->image.get();
+      if (!target_image || target_image->image() == VK_NULL_HANDLE) {
+        return finish_with_failure(
+            "raw external Vulkan target wrapper creation failed");
+      }
+      target->external_resource = true;
+    } else if (external_image) {
+      if (external_image->image() == VK_NULL_HANDLE ||
+          !external_image->device_queue() ||
+          external_image->device_queue()->GetVulkanDevice() !=
+              device_queue->GetVulkanDevice() ||
+          external_image->size() != target_size ||
+          external_image->format() != VK_FORMAT_R8G8B8A8_UNORM) {
+        return finish_with_failure(
+            "borrowed external Vulkan target metadata does not match the "
+            "active renderer Vulkan device/size/format");
+      }
+      target->external_image = external_image;
+      target->external_resource = true;
+    } else {
+      target->image = gpu::VulkanImage::Create(
+          device_queue, target_size, VK_FORMAT_R8G8B8A8_UNORM,
+          VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+              VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+              VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+      target_image = target->image.get();
+      if (!target_image || target_image->image() == VK_NULL_HANDLE) {
+        return finish_with_failure(
+            "stand-in blit target VkImage creation failed");
+      }
     }
     target->target_created = true;
     result.target_created = true;
@@ -2767,12 +2868,14 @@ class StandaloneSkiaOutputSurfaceDependency final
     const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
     const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
     const GrVkImageInfo vk_image_info =
-        gpu::CreateGrVkImageInfo(target->image.get(), format, color_space);
+        gpu::CreateGrVkImageInfo(target_image, format, color_space);
     const GrBackendTexture backend_texture =
         GrBackendTextures::MakeVk(target_size.width(), target_size.height(),
                                   vk_image_info);
     if (!backend_texture.isValid()) {
-      target->image->Destroy();
+      if (target->image) {
+        target->image->Destroy();
+      }
       return finish_with_failure("Skia backend texture wrapping failed");
     }
     target->backend_texture_valid = true;
@@ -2792,7 +2895,9 @@ class StandaloneSkiaOutputSurfaceDependency final
             target->mailbox, si_info, context_state, backend_texture),
         target->registration_tracker);
     if (!target->factory_ref) {
-      target->image->Destroy();
+      if (target->image) {
+        target->image->Destroy();
+      }
       return finish_with_failure("borrowed blit target registration failed");
     }
     target->registered = true;
@@ -2810,7 +2915,9 @@ class StandaloneSkiaOutputSurfaceDependency final
         /*is_software=*/false);
     if (!target->client_shared_image) {
       target->factory_ref.reset();
-      target->image->Destroy();
+      if (target->image) {
+        target->image->Destroy();
+      }
       return finish_with_failure("borrowed blit target ClientSharedImage failed");
     }
 
@@ -2924,7 +3031,22 @@ class StandaloneSkiaOutputSurfaceDependency final
 
     read_access.reset();
     read_representation.reset();
+    context_state->gr_context()->flushAndSubmit(GrSyncCpu::kYes);
+    context_state->gr_context()->performDeferredCleanup(
+        std::chrono::milliseconds(0));
+    if (context_state && context_state->vk_context_provider() &&
+        context_state->vk_context_provider()->GetDeviceQueue()) {
+      vkDeviceWaitIdle(
+          context_state->vk_context_provider()->GetDeviceQueue()
+              ->GetVulkanDevice());
+    }
     DestroyBorrowedVkImageRenderCopyBlitTargetOnCurrentSequence(&result);
+    if (context_state && context_state->vk_context_provider() &&
+        context_state->vk_context_provider()->GetDeviceQueue()) {
+      vkDeviceWaitIdle(
+          context_state->vk_context_provider()->GetDeviceQueue()
+              ->GetVulkanDevice());
+    }
     return StandaloneBorrowedVkImageRenderCopySmokeLine(result);
   }
 
@@ -3708,6 +3830,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   std::string RunBorrowedVkImageRenderCopySmokeForTesting() {
+    return RunVkImageRenderCopyForTesting(nullptr);
+  }
+
+  std::string RunExternalVkImageRenderCopyForTesting(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+    return RunVkImageRenderCopyForTesting(vulkan_image);
+  }
+
+  std::string RunVkImageRenderCopyForTesting(
+      const html_css_renderer::ExternalVulkanImageTarget* external_target) {
     if (!display_) {
       return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=Viz "
              "Display is not initialized";
@@ -3725,7 +3857,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     std::string prepare_result =
         offscreen_skia_dependency_
             ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
-                output_size, &blit_target);
+                output_size, nullptr, external_target, &blit_target);
     if (!prepare_result.empty()) {
       return prepare_result;
     }
@@ -4010,13 +4142,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     params.expected_display_time = now + interval;
     const bool drew = display_->DrawAndSwap(params);
     TraceLiveFrameProbeStage("direct frame sink after Display DrawAndSwap");
+    TraceLiveFrameProbeStage("direct frame sink before DrawAndSwap result");
     if (!drew) {
       SetFailure("Viz Display DrawAndSwap returned false");
       return;
     }
+    TraceLiveFrameProbeStage("direct frame sink before gpu reached flag");
     if (!display_uses_software_output_ && skia_gpu_reached_) {
       *skia_gpu_reached_ = true;
     }
+    TraceLiveFrameProbeStage("direct frame sink after gpu reached flag");
   }
 
   void RequestCopyOutput(const gfx::Size& output_size,
@@ -4517,6 +4652,15 @@ class StandaloneCcLayerHost final
     }
     return active_frame_sink_->RunBorrowedVkImageRenderCopySmokeForTesting();
   }
+  std::string RunExternalVkImageRenderCopyForTesting(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+    if (!active_frame_sink_) {
+      return "gpu_borrowed_vkimage_render_copy_smoke: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunExternalVkImageRenderCopyForTesting(
+        vulkan_image);
+  }
   std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
     if (!active_frame_sink_) {
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=active "
@@ -4854,6 +4998,9 @@ class StandaloneCcLayerHost final
               ? gpu::GrContextType::kGraphiteDawn
               : (use_vulkan_offscreen_output_ ? gpu::GrContextType::kVulkan
                                               : gpu::GrContextType::kGL);
+      if (use_vulkan_offscreen_output_) {
+        InstallPendingExternalVulkanForTesting(gpu_thread_holder_.get());
+      }
     }
     TraceLiveFrameProbeStage("cc host CreateFrameSink after gpu holder");
     TraceLiveFrameProbeStage("cc host CreateFrameSink before context providers");
@@ -16800,6 +16947,28 @@ StandaloneBlinkLiveFrameBridgeRunBorrowedVkImageRenderCopySmokeForStandaloneRend
   }
   smoke_result =
       cache.cc_layer_host->RunBorrowedVkImageRenderCopySmokeForTesting();
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunExternalVkImageRenderCopyForStandaloneRenderer(
+    const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!vulkan_image) {
+    smoke_result =
+        "gpu_borrowed_vkimage_render_copy_smoke: failed failure=external "
+        "Vulkan image is null";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_borrowed_vkimage_render_copy_smoke: failed failure=cc layer host "
+        "is not available";
+    return smoke_result.c_str();
+  }
+  smoke_result =
+      cache.cc_layer_host->RunExternalVkImageRenderCopyForTesting(vulkan_image);
   return smoke_result.c_str();
 }
 

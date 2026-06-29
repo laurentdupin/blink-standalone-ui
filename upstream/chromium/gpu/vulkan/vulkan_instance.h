@@ -44,6 +44,12 @@ class COMPONENT_EXPORT(VULKAN) VulkanInstance {
       const base::FilePath& vulkan_loader_library_path);
   bool InitializeInstance(const std::vector<const char*>& required_extensions,
                           const std::vector<const char*>& required_layers);
+  bool InitializeExternalBorrowed(
+      const base::FilePath& vulkan_loader_library_path,
+      VkInstance vk_instance,
+      VkPhysicalDevice vk_physical_device,
+      uint32_t used_api_version,
+      const std::vector<const char*>& enabled_instance_extensions);
 
   const VulkanInfo& vulkan_info() const { return vulkan_info_; }
   skgpu::VulkanPreferredFeatures& skia_features() { return skia_features_; }

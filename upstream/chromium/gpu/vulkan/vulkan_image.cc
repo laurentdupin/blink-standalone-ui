@@ -113,6 +113,36 @@ std::unique_ptr<VulkanImage> VulkanImage::Create(
   return image;
 }
 
+// static
+std::unique_ptr<VulkanImage> VulkanImage::CreateBorrowed(
+    VulkanDeviceQueue* device_queue,
+    VkImage vk_image,
+    VkDeviceMemory vk_device_memory,
+    const gfx::Size& size,
+    VkFormat format,
+    VkImageTiling image_tiling,
+    VkDeviceSize device_size,
+    uint32_t memory_type_index,
+    VkImageUsageFlags usage,
+    VkImageCreateFlags flags,
+    uint32_t queue_family_index) {
+  auto image = std::make_unique<VulkanImage>(base::PassKey<VulkanImage>());
+  image->device_queue_ = device_queue;
+  image->is_borrowed_ = true;
+  image->image_ = vk_image;
+  image->borrowed_device_memory_ = vk_device_memory;
+  image->borrowed_device_size_ = device_size;
+  image->borrowed_memory_type_index_ = memory_type_index;
+  image->queue_family_index_ = queue_family_index;
+  image->create_info_.extent = {static_cast<uint32_t>(size.width()),
+                                static_cast<uint32_t>(size.height()), 1};
+  image->create_info_.format = format;
+  image->create_info_.tiling = image_tiling;
+  image->create_info_.usage = usage;
+  image->create_info_.flags = flags;
+  return image;
+}
+
 VulkanImage::VulkanImage(base::PassKey<VulkanImage> pass_key) {}
 
 VulkanImage::~VulkanImage() {
@@ -130,18 +160,24 @@ void VulkanImage::Destroy() {
     return;
 
   VkDevice vk_device = device_queue_->GetVulkanDevice();
-  if (image_ != VK_NULL_HANDLE) {
+  if (!is_borrowed_ && image_ != VK_NULL_HANDLE) {
     vkDestroyImage(vk_device, image_, nullptr /* pAllocator */);
     image_ = VK_NULL_HANDLE;
   }
 
-  for (auto& memory : memories_) {
-    if (memory) {
-      memory->Destroy();
-      memory.reset();
+  if (!is_borrowed_) {
+    for (auto& memory : memories_) {
+      if (memory) {
+        memory->Destroy();
+        memory.reset();
+      }
     }
   }
 
+  image_ = VK_NULL_HANDLE;
+  borrowed_device_memory_ = VK_NULL_HANDLE;
+  borrowed_device_size_ = 0;
+  borrowed_memory_type_index_ = 0;
   device_queue_ = nullptr;
 }
 

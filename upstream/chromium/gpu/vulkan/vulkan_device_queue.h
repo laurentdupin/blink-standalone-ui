@@ -83,7 +83,11 @@ class COMPONENT_EXPORT(VULKAN) VulkanDeviceQueue
       uint32_t vk_queue_index,
       gfx::ExtensionSet enabled_extensions,
       const VkPhysicalDeviceFeatures2& vk_physical_device_features2,
-      VmaAllocator vma_allocator);
+      const VkPhysicalDeviceProperties& vk_physical_device_properties,
+      const VkPhysicalDeviceDriverProperties&
+          vk_physical_device_driver_properties,
+      VmaAllocator vma_allocator,
+      bool register_memory_dump_provider = true);
 
   const gfx::ExtensionSet& enabled_extensions() const {
     return enabled_extensions_;
@@ -163,6 +167,8 @@ class COMPONENT_EXPORT(VULKAN) VulkanDeviceQueue
   VkPhysicalDevice vk_physical_device_ = VK_NULL_HANDLE;
   VkPhysicalDeviceProperties vk_physical_device_properties_;
   VkPhysicalDeviceDriverProperties vk_physical_device_driver_properties_;
+  bool register_memory_dump_provider_ = true;
+  bool memory_dump_provider_registered_ = false;
   uint64_t drm_device_id_ = 0;
   VkDevice owned_vk_device_ = VK_NULL_HANDLE;
   VkDevice vk_device_ = VK_NULL_HANDLE;

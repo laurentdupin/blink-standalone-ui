@@ -30,6 +30,7 @@
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
 #include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_device_queue.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #endif
 
@@ -103,6 +104,18 @@ CommandBufferTaskExecutor* InProcessGpuThreadHolder::GetTaskExecutor() {
   }
   return task_executor_.get();
 }
+
+#if BUILDFLAG(ENABLE_VULKAN)
+void InProcessGpuThreadHolder::AdoptExternalVulkanForTesting(
+    VulkanImplementation* vulkan_implementation,
+    std::unique_ptr<VulkanDeviceQueue> vulkan_device_queue) {
+  DCHECK(!task_executor_);
+  DCHECK(vulkan_implementation);
+  DCHECK(vulkan_device_queue);
+  pending_external_vulkan_implementation_ = vulkan_implementation;
+  pending_external_vulkan_device_queue_ = std::move(vulkan_device_queue);
+}
+#endif
 
 Scheduler* InProcessGpuThreadHolder::scheduler() {
   GetTaskExecutor();
@@ -211,22 +224,33 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
 #endif
 #if BUILDFLAG(ENABLE_VULKAN)
   if (gpu_preferences_.gr_context_type == GrContextType::kVulkan) {
-    TraceStandaloneGpuThreadHolderStage(
-        "InitializeOnGpuThread before Vulkan implementation");
-    vulkan_implementation_ = CreateVulkanImplementation(false);
-    if (!vulkan_implementation_ ||
-        !vulkan_implementation_->InitializeVulkanInstance(true)) {
+    if (pending_external_vulkan_implementation_ &&
+        pending_external_vulkan_device_queue_) {
       TraceStandaloneGpuThreadHolderStage(
-          "InitializeOnGpuThread failed Vulkan implementation");
-      vulkan_implementation_.reset();
-      completion->Signal();
-      return;
+          "InitializeOnGpuThread before external Vulkan context provider");
+      vulkan_context_provider_ =
+          viz::VulkanInProcessContextProvider::CreateForCompositorGpuThread(
+              pending_external_vulkan_implementation_.get(),
+              std::move(pending_external_vulkan_device_queue_));
+      pending_external_vulkan_implementation_ = nullptr;
+    } else {
+      TraceStandaloneGpuThreadHolderStage(
+          "InitializeOnGpuThread before Vulkan implementation");
+      vulkan_implementation_ = CreateVulkanImplementation(false);
+      if (!vulkan_implementation_ ||
+          !vulkan_implementation_->InitializeVulkanInstance(true)) {
+        TraceStandaloneGpuThreadHolderStage(
+            "InitializeOnGpuThread failed Vulkan implementation");
+        vulkan_implementation_.reset();
+        completion->Signal();
+        return;
+      }
+      TraceStandaloneGpuThreadHolderStage(
+          "InitializeOnGpuThread before Vulkan context provider");
+      vulkan_context_provider_ =
+          viz::VulkanInProcessContextProvider::Create(
+              vulkan_implementation_.get());
     }
-    TraceStandaloneGpuThreadHolderStage(
-        "InitializeOnGpuThread before Vulkan context provider");
-    vulkan_context_provider_ =
-        viz::VulkanInProcessContextProvider::Create(
-            vulkan_implementation_.get());
     if (!vulkan_context_provider_) {
       TraceStandaloneGpuThreadHolderStage(
           "InitializeOnGpuThread failed Vulkan context provider");

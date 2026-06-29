@@ -34,8 +34,11 @@
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/vulkan/init/vulkan_factory.h"
+#include "gpu/vulkan/vulkan_command_buffer.h"
 #include "gpu/vulkan/vulkan_command_pool.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
+#include "gpu/vulkan/vulkan_function_pointers.h"
+#include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "html_css_renderer/compositor_runtime.h"
 #include "html_css_renderer/css_file_loader.h"
@@ -71,6 +74,12 @@ extern "C" const char*
 StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
     int width,
     int height);
+
+namespace blink::standalone_renderer_probe {
+void StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
+    void* vulkan_implementation,
+    void* vulkan_device_queue);
+}
 
 namespace {
 
@@ -188,6 +197,7 @@ void PrintUsage() {
       "[--gpu-vulkan-ganesh-context-smoke] "
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
+      "[--gpu-external-vulkan-runtime-target-smoke] "
       "[--gpu-borrowed-d3d12-render-copy-smoke] "
       "[--c-api-vulkan-external-target-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
@@ -522,6 +532,144 @@ int RunCApiSmoke() {
   return 0;
 }
 
+bool FindVulkanMemoryTypeForSmoke(VkPhysicalDevice physical_device,
+                                  uint32_t memory_type_bits,
+                                  VkMemoryPropertyFlags required_flags,
+                                  uint32_t* memory_type_index) {
+  if (!memory_type_index) {
+    return false;
+  }
+  VkPhysicalDeviceMemoryProperties properties = {};
+  vkGetPhysicalDeviceMemoryProperties(physical_device, &properties);
+  for (uint32_t i = 0; i < properties.memoryTypeCount; ++i) {
+    if (((1u << i) & memory_type_bits) == 0) {
+      continue;
+    }
+    if ((properties.memoryTypes[i].propertyFlags & required_flags) ==
+        required_flags) {
+      *memory_type_index = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ReadbackVulkanImageForSmoke(gpu::VulkanDeviceQueue* queue,
+                                 gpu::VulkanImage* image,
+                                 uint32_t width,
+                                 uint32_t height,
+                                 std::vector<uint32_t>* pixels,
+                                 std::string* failure) {
+  auto fail = [&](const char* message) {
+    if (failure) {
+      *failure = message;
+    }
+    return false;
+  };
+  if (!queue || !image || image->image() == VK_NULL_HANDLE || !pixels ||
+      width == 0 || height == 0) {
+    return fail("invalid Vulkan readback arguments");
+  }
+
+  const VkDevice device = queue->GetVulkanDevice();
+  const VkDeviceSize byte_count =
+      static_cast<VkDeviceSize>(width) * height * sizeof(uint32_t);
+  VkBuffer buffer = VK_NULL_HANDLE;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  auto cleanup = [&] {
+    if (memory != VK_NULL_HANDLE) {
+      vkFreeMemory(device, memory, nullptr);
+      memory = VK_NULL_HANDLE;
+    }
+    if (buffer != VK_NULL_HANDLE) {
+      vkDestroyBuffer(device, buffer, nullptr);
+      buffer = VK_NULL_HANDLE;
+    }
+  };
+
+  VkBufferCreateInfo buffer_info = {};
+  buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer_info.size = byte_count;
+  buffer_info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+  buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  if (vkCreateBuffer(device, &buffer_info, nullptr, &buffer) != VK_SUCCESS) {
+    return fail("Vulkan readback buffer creation failed");
+  }
+
+  VkMemoryRequirements requirements = {};
+  vkGetBufferMemoryRequirements(device, buffer, &requirements);
+  uint32_t memory_type_index = 0;
+  if (!FindVulkanMemoryTypeForSmoke(
+          queue->GetVulkanPhysicalDevice(), requirements.memoryTypeBits,
+          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+              VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+          &memory_type_index)) {
+    cleanup();
+    return fail("Vulkan readback host-visible memory type not found");
+  }
+  VkMemoryAllocateInfo allocate_info = {};
+  allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate_info.allocationSize = requirements.size;
+  allocate_info.memoryTypeIndex = memory_type_index;
+  if (vkAllocateMemory(device, &allocate_info, nullptr, &memory) !=
+      VK_SUCCESS) {
+    cleanup();
+    return fail("Vulkan readback memory allocation failed");
+  }
+  if (vkBindBufferMemory(device, buffer, memory, 0) != VK_SUCCESS) {
+    cleanup();
+    return fail("Vulkan readback buffer bind failed");
+  }
+
+  auto command_pool = queue->CreateCommandPool();
+  if (!command_pool) {
+    cleanup();
+    return fail("Vulkan readback command pool creation failed");
+  }
+  auto command_buffer = command_pool->CreatePrimaryCommandBuffer();
+  if (!command_buffer) {
+    command_pool->Destroy();
+    cleanup();
+    return fail("Vulkan readback command buffer creation failed");
+  }
+  {
+    gpu::ScopedSingleUseCommandBufferRecorder recorder(*command_buffer);
+    command_buffer->TransitionImageLayout(
+        image->image(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    command_buffer->CopyImageToBuffer(buffer, image->image(), width, height,
+                                      width, height);
+    command_buffer->TransitionImageLayout(
+        image->image(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  }
+  if (!command_buffer->Submit(/*num_wait_semaphores=*/0,
+                              /*wait_semaphores=*/nullptr,
+                              /*num_signal_semaphores=*/0,
+                              /*signal_semaphores=*/nullptr)) {
+    command_buffer->Destroy();
+    command_pool->Destroy();
+    cleanup();
+    return fail("Vulkan readback command submit failed");
+  }
+  command_buffer->Wait(UINT64_MAX);
+  command_buffer->Destroy();
+  command_buffer.reset();
+  command_pool->Destroy();
+
+  void* mapped = nullptr;
+  if (vkMapMemory(device, memory, 0, byte_count, 0, &mapped) != VK_SUCCESS ||
+      !mapped) {
+    cleanup();
+    return fail("Vulkan readback memory map failed");
+  }
+  pixels->resize(static_cast<size_t>(width) * height);
+  std::memcpy(pixels->data(), mapped, static_cast<size_t>(byte_count));
+  vkUnmapMemory(device, memory);
+  cleanup();
+  return true;
+}
+
 #if BUILDFLAG(IS_WIN)
 bool ReadbackD3D12TextureForSmoke(ID3D12Device* device,
                                   ID3D12CommandQueue* queue,
@@ -668,20 +816,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     return 1;
   }
 
-  const uint32_t capabilities =
-      blink_standalone_renderer_gpu_backend_capabilities(renderer, backend);
   const uint32_t required_capability =
       require_external_target
           ? BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET
           : BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
-  if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0 ||
-      (capabilities & required_capability) == 0) {
-    std::fprintf(stderr,
-                 "%s: blocked backend unavailable capabilities=%u\n", label,
-                 capabilities);
-    blink_standalone_renderer_destroy(renderer);
-    return 0;
-  }
 
   const char* html =
       "<!doctype html><style>"
@@ -689,13 +827,6 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
       "background:#d06329;}"
       "</style><div id='box'></div>";
-  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
-  if (status != BLINK_STANDALONE_STATUS_OK) {
-    std::fprintf(stderr, "%s: set document failed status=%d error=%s\n", label,
-                 status, blink_standalone_renderer_last_error(renderer));
-    blink_standalone_renderer_destroy(renderer);
-    return 1;
-  }
 
   blink_standalone_external_gpu_target_t target = {};
   target.common.backend = backend;
@@ -717,9 +848,126 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   Microsoft::WRL::ComPtr<ID3D12Resource> d3d12_resource;
   HANDLE d3d12_shared_handle = nullptr;
 #endif
+  std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation;
+  std::unique_ptr<gpu::VulkanDeviceQueue> vulkan_owner_queue;
+  std::unique_ptr<gpu::VulkanImage> vulkan_target_image;
+  std::vector<std::string> vulkan_instance_extension_storage;
+  std::vector<std::string> vulkan_device_extension_storage;
+  std::vector<const char*> vulkan_instance_extensions;
+  std::vector<const char*> vulkan_device_extensions;
+  auto cleanup_vulkan_target = [&] {
+    if (vulkan_owner_queue) {
+      vkDeviceWaitIdle(vulkan_owner_queue->GetVulkanDevice());
+    }
+    if (vulkan_target_image) {
+      vulkan_target_image->Destroy();
+      vulkan_target_image.reset();
+    }
+    if (vulkan_owner_queue) {
+      vulkan_owner_queue->Destroy();
+      vulkan_owner_queue.reset();
+    }
+  };
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+    vulkan_implementation = gpu::CreateVulkanImplementation(false);
+    if (!vulkan_implementation ||
+        !vulkan_implementation->InitializeVulkanInstance(true)) {
+      std::fprintf(stderr, "%s: blocked vulkan_implementation=0\n", label);
+      blink_standalone_renderer_destroy(renderer);
+      return 0;
+    }
+    vulkan_owner_queue = gpu::CreateVulkanDeviceQueue(
+        vulkan_implementation.get(),
+        gpu::VulkanDeviceQueue::GRAPHICS_QUEUE_FLAG,
+        /*gpu_info=*/nullptr,
+        /*heap_memory_limit=*/0,
+        /*is_thread_safe=*/true);
+    if (!vulkan_owner_queue) {
+      std::fprintf(stderr, "%s: blocked vulkan_owner_queue=0\n", label);
+      blink_standalone_renderer_destroy(renderer);
+      return 0;
+    }
+    const auto& instance_extensions =
+        vulkan_implementation->GetVulkanInstance()
+            ->vulkan_info()
+            .enabled_instance_extensions;
+    vulkan_instance_extension_storage.reserve(instance_extensions.size());
+    vulkan_instance_extensions.reserve(instance_extensions.size());
+    for (const char* extension : instance_extensions) {
+      vulkan_instance_extension_storage.emplace_back(extension);
+      vulkan_instance_extensions.push_back(
+          vulkan_instance_extension_storage.back().c_str());
+    }
+    vulkan_device_extension_storage.reserve(
+        vulkan_owner_queue->enabled_extensions().size());
+    vulkan_device_extensions.reserve(
+        vulkan_owner_queue->enabled_extensions().size());
+    for (std::string_view extension :
+         vulkan_owner_queue->enabled_extensions()) {
+      vulkan_device_extension_storage.emplace_back(extension);
+      vulkan_device_extensions.push_back(
+          vulkan_device_extension_storage.back().c_str());
+    }
+    blink_standalone_vulkan_external_device_t vulkan_device = {};
+    vulkan_device.vk_instance = vulkan_owner_queue->GetVulkanInstance();
+    vulkan_device.vk_physical_device =
+        vulkan_owner_queue->GetVulkanPhysicalDevice();
+    vulkan_device.vk_device = vulkan_owner_queue->GetVulkanDevice();
+    vulkan_device.vk_queue = vulkan_owner_queue->GetVulkanQueue();
+    vulkan_device.queue_family_index =
+        vulkan_owner_queue->GetVulkanQueueIndex();
+    vulkan_device.api_version =
+        vulkan_implementation->GetVulkanInstance()
+            ->vulkan_info()
+            .used_api_version;
+    vulkan_device.enabled_instance_extensions =
+        vulkan_instance_extensions.data();
+    vulkan_device.enabled_instance_extension_count =
+        vulkan_instance_extensions.size();
+    vulkan_device.enabled_device_extensions = vulkan_device_extensions.data();
+    vulkan_device.enabled_device_extension_count =
+        vulkan_device_extensions.size();
+    status = blink_standalone_renderer_configure_vulkan_external_device(
+        renderer, &vulkan_device);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr, "%s: failed configure_vulkan status=%d error=%s\n",
+                   label, status,
+                   blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_destroy(renderer);
+      vulkan_owner_queue->Destroy();
+      return 1;
+    }
+    vulkan_target_image = gpu::VulkanImage::Create(
+        vulkan_owner_queue.get(), gfx::Size(128, 64),
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    if (!vulkan_target_image || vulkan_target_image->image() == VK_NULL_HANDLE) {
+      std::fprintf(stderr, "%s: failed vulkan_target_image=0\n", label);
+      blink_standalone_renderer_destroy(renderer);
+      vulkan_owner_queue->Destroy();
+      return 1;
+    }
+    target.vulkan.vk_image = vulkan_target_image->image();
+    target.vulkan.vk_device = vulkan_owner_queue->GetVulkanDevice();
+    target.vulkan.vk_physical_device =
+        vulkan_owner_queue->GetVulkanPhysicalDevice();
+    target.vulkan.vk_device_memory = vulkan_target_image->device_memory();
+    target.vulkan.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
     target.vulkan.width = 128;
     target.vulkan.height = 64;
+    target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    target.vulkan.required_final_layout =
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    target.vulkan.queue_family_index =
+        vulkan_owner_queue->GetVulkanQueueIndex();
+    target.vulkan.allocation_size = vulkan_target_image->device_size();
+    target.vulkan.memory_type_index = vulkan_target_image->memory_type_index();
+    target.vulkan.image_tiling = vulkan_target_image->image_tiling();
+    target.vulkan.image_usage_flags = vulkan_target_image->usage();
+    target.vulkan.sample_count = VK_SAMPLE_COUNT_1_BIT;
+    target.vulkan.level_count = 1;
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
 #if BUILDFLAG(IS_WIN)
     HRESULT hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0,
@@ -789,6 +1037,39 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     target.d3d12.height = 64;
   }
 
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "%s: set document failed status=%d error=%s\n", label,
+                 status, blink_standalone_renderer_last_error(renderer));
+#if BUILDFLAG(IS_WIN)
+    if (target.d3d12.shared_handle) {
+      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+    }
+#endif
+    blink_standalone_renderer_destroy(renderer);
+    if (vulkan_target_image) {
+      cleanup_vulkan_target();
+    }
+    return 1;
+  }
+
+  const uint32_t capabilities =
+      blink_standalone_renderer_gpu_backend_capabilities(renderer, backend);
+  if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0 ||
+      (capabilities & required_capability) == 0) {
+    std::fprintf(stderr,
+                 "%s: blocked backend unavailable capabilities=%u\n", label,
+                 capabilities);
+#if BUILDFLAG(IS_WIN)
+    if (target.d3d12.shared_handle) {
+      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
+    }
+#endif
+    blink_standalone_renderer_destroy(renderer);
+    cleanup_vulkan_target();
+    return 0;
+  }
+
   blink_standalone_gpu_render_result_t result = {};
   status =
       blink_standalone_renderer_render_to_gpu_target(renderer, &target, &result);
@@ -806,6 +1087,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     }
 #endif
     blink_standalone_renderer_destroy(renderer);
+    cleanup_vulkan_target();
     return 1;
   }
 
@@ -827,6 +1109,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
       }
       blink_standalone_renderer_destroy(renderer);
+      cleanup_vulkan_target();
       return 1;
     }
     auto pixel_at = [&](uint32_t x, uint32_t y) {
@@ -858,10 +1141,59 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
       }
       blink_standalone_renderer_destroy(renderer);
+      cleanup_vulkan_target();
       return 1;
     }
   }
 #endif
+  if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+    std::vector<uint32_t> pixels;
+    std::string failure;
+    if (!ReadbackVulkanImageForSmoke(vulkan_owner_queue.get(),
+                                     vulkan_target_image.get(), 128, 64,
+                                     &pixels, &failure)) {
+      std::fprintf(stderr, "%s: failed vulkan_external_readback=0 failure=%s\n",
+                   label, failure.c_str());
+      blink_standalone_renderer_destroy(renderer);
+      cleanup_vulkan_target();
+      return 1;
+    }
+    auto pixel_at = [&](uint32_t x, uint32_t y) {
+      const uint32_t rgba = pixels[static_cast<size_t>(y) * 128u + x];
+      return (rgba & 0xff000000u) | ((rgba & 0x000000ffu) << 16) |
+             (rgba & 0x0000ff00u) | ((rgba & 0x00ff0000u) >> 16);
+    };
+    observed_background = pixel_at(4, 4);
+    observed_box = pixel_at(20, 20);
+    for (uint32_t rgba : pixels) {
+      const uint32_t pixel = (rgba & 0xff000000u) |
+                             ((rgba & 0x000000ffu) << 16) |
+                             (rgba & 0x0000ff00u) |
+                             ((rgba & 0x00ff0000u) >> 16);
+      if ((pixel >> 24) != 0) {
+        ++nontransparent_pixels;
+      }
+      if (pixel == 0xff123456u) {
+        ++background_pixels;
+      } else if (pixel == 0xffd06329u) {
+        ++box_pixels;
+      }
+    }
+    if (observed_background != 0xff123456u || observed_box != 0xffd06329u ||
+        background_pixels == 0 || box_pixels == 0 ||
+        nontransparent_pixels == 0) {
+      std::fprintf(stderr,
+                   "%s: failed vulkan_external_readback=1 "
+                   "observed_background=%08x observed_box=%08x "
+                   "background_pixels=%u box_pixels=%u "
+                   "nontransparent_pixels=%u\n",
+                   label, observed_background, observed_box,
+                   background_pixels, box_pixels, nontransparent_pixels);
+      blink_standalone_renderer_destroy(renderer);
+      cleanup_vulkan_target();
+      return 1;
+    }
+  }
 
   std::printf(
       "%s: ok backend=%u capabilities=%u target_written=%u size=%ux%u "
@@ -877,6 +1209,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   }
 #endif
   blink_standalone_renderer_destroy(renderer);
+  cleanup_vulkan_target();
   return 0;
 }
 
@@ -6909,6 +7242,8 @@ int RunGpuBorrowedD3D12RenderCopySmoke() {
   input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
   html_css_renderer::CompositorFrameResult frame =
       runtime->AdvanceFrame(input);
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke after AdvanceFrame");
   if (!frame.gpu_frame.shared_image_available ||
       frame.gpu_frame.mailbox.empty() || !frame.viz_display_created ||
       !frame.skia_renderer_gpu_path_reached ||
@@ -7072,6 +7407,199 @@ int RunGpuBorrowedVkImageRenderCopySmoke() {
   return 0;
 }
 
+int RunGpuExternalVulkanRuntimeTargetSmoke() {
+  std::unique_ptr<gpu::VulkanImplementation> implementation =
+      gpu::CreateVulkanImplementation(false);
+  if (!implementation) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_runtime_target_smoke: failed "
+                 "failure=Vulkan implementation creation failed\n");
+    return 1;
+  }
+  if (!implementation->InitializeVulkanInstance(true)) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_runtime_target_smoke: failed "
+                 "failure=Vulkan instance initialization failed\n");
+    return 1;
+  }
+
+  std::unique_ptr<gpu::VulkanDeviceQueue> owner_queue =
+      gpu::CreateVulkanDeviceQueue(
+          implementation.get(), gpu::VulkanDeviceQueue::GRAPHICS_QUEUE_FLAG,
+          /*gpu_info=*/nullptr,
+          /*heap_memory_limit=*/0,
+          /*is_thread_safe=*/true);
+  if (!owner_queue) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_runtime_target_smoke: failed "
+                 "failure=Vulkan device queue creation failed\n");
+    return 1;
+  }
+
+  const VkInstance borrowed_instance = owner_queue->GetVulkanInstance();
+  const VkPhysicalDevice borrowed_physical_device =
+      owner_queue->GetVulkanPhysicalDevice();
+  const VkDevice borrowed_device = owner_queue->GetVulkanDevice();
+  const VkQueue borrowed_queue = owner_queue->GetVulkanQueue();
+  const uint32_t borrowed_queue_family = owner_queue->GetVulkanQueueIndex();
+  const gfx::ExtensionSet borrowed_extensions =
+      owner_queue->enabled_extensions();
+
+  auto runtime_queue_wrapper =
+      std::make_unique<gpu::VulkanDeviceQueue>(borrowed_instance);
+  const bool runtime_queue_initialized =
+      runtime_queue_wrapper->InitializeForCompositorGpuThread(
+          borrowed_physical_device, borrowed_device, borrowed_queue,
+          owner_queue->GetVulkanQueueLockContext(), borrowed_queue_family,
+          borrowed_extensions, owner_queue->enabled_device_features_2(),
+          owner_queue->vk_physical_device_properties(),
+          owner_queue->vk_physical_device_driver_properties(),
+          owner_queue->vma_allocator(),
+          /*register_memory_dump_provider=*/false);
+  if (!runtime_queue_initialized) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_runtime_target_smoke: failed "
+                 "failure=non-owning runtime queue wrapper initialization "
+                 "failed\n");
+    owner_queue->Destroy();
+    return 1;
+  }
+
+  blink::standalone_renderer_probe::
+      StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
+          implementation.get(), runtime_queue_wrapper.release());
+
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {128.0f, 64.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      "</style><div id='box'></div>";
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_runtime_target_smoke: failed "
+                 "failure=runtime initialization failed\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    owner_queue->Destroy();
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_vulkan_gpu_frame = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult frame =
+      runtime->AdvanceFrame(input);
+  if (!frame.gpu_frame.shared_image_available ||
+      !frame.gpu_frame.vk_context_provider_available ||
+      !frame.gpu_frame.shared_context_state_is_vulkan ||
+      !frame.viz_display_created || !frame.skia_renderer_gpu_path_reached ||
+      frame.gpu_frame.is_software) {
+    std::fprintf(
+        stderr,
+        "gpu_external_vulkan_runtime_target_smoke: failed setup "
+        "shared_image=%d vk_context_provider=%d is_vulkan=%d "
+        "viz_display=%d skia_gpu=%d software=%d failure=%s\n",
+        frame.gpu_frame.shared_image_available ? 1 : 0,
+        frame.gpu_frame.vk_context_provider_available ? 1 : 0,
+        frame.gpu_frame.shared_context_state_is_vulkan ? 1 : 0,
+        frame.viz_display_created ? 1 : 0,
+        frame.skia_renderer_gpu_path_reached ? 1 : 0,
+        frame.gpu_frame.is_software ? 1 : 0,
+        frame.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : frame.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    runtime.reset();
+    owner_queue->Destroy();
+    return 1;
+  }
+
+  const gfx::Size target_size(128, 64);
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before caller VkImage create");
+  std::unique_ptr<gpu::VulkanImage> target_image = gpu::VulkanImage::Create(
+      owner_queue.get(), target_size, VK_FORMAT_R8G8B8A8_UNORM,
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+          VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke after caller VkImage create");
+  if (!target_image || target_image->image() == VK_NULL_HANDLE) {
+    std::fprintf(stderr,
+                 "gpu_external_vulkan_runtime_target_smoke: failed "
+                 "failure=caller-owned VkImage creation failed\n");
+    runtime.reset();
+    owner_queue->Destroy();
+    return 1;
+  }
+
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before external VkImage render copy");
+  html_css_renderer::ExternalVulkanImageTarget external_target;
+  external_target.vk_image = target_image->image();
+  external_target.vk_device_memory = target_image->device_memory();
+  external_target.width = target_size.width();
+  external_target.height = target_size.height();
+  external_target.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
+  external_target.image_tiling = target_image->image_tiling();
+  external_target.allocation_size = target_image->device_size();
+  external_target.memory_type_index = target_image->memory_type_index();
+  external_target.image_usage_flags = target_image->usage();
+  external_target.image_create_flags = target_image->flags();
+  external_target.queue_family_index = owner_queue->GetVulkanQueueIndex();
+  const std::string result_line =
+      runtime->RunExternalVkImageRenderCopyForTesting(external_target);
+  vkDeviceWaitIdle(owner_queue->GetVulkanDevice());
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke after external VkImage render copy");
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before result validation");
+  if (result_line.find("gpu_borrowed_vkimage_render_copy_smoke: ok") != 0) {
+    std::fprintf(stderr,
+                 "%s frame_shared_image=%d frame_vk_context=%d "
+                 "frame_is_vulkan=%d frame_mailbox=%s frame_failure=%s\n",
+                 result_line.c_str(),
+                 frame.gpu_frame.shared_image_available ? 1 : 0,
+                 frame.gpu_frame.vk_context_provider_available ? 1 : 0,
+                 frame.gpu_frame.shared_context_state_is_vulkan ? 1 : 0,
+                 frame.gpu_frame.mailbox.c_str(),
+                 frame.gpu_frame_failure.c_str());
+    runtime.reset();
+    target_image->Destroy();
+    owner_queue->Destroy();
+    return 1;
+  }
+
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before success print");
+  std::printf(
+      "gpu_external_vulkan_runtime_target_smoke: ok external_provider=1 "
+      "caller_image=1 %s\n",
+      result_line.c_str());
+  vkDeviceWaitIdle(owner_queue->GetVulkanDevice());
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before runtime teardown");
+  runtime.reset();
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before caller VkImage destroy");
+  target_image->Destroy();
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke before owner queue destroy");
+  owner_queue->Destroy();
+  html_css_renderer::SetStandaloneCrashBreadcrumb(
+      "vulkan runtime smoke done");
+  return 0;
+}
+
 int RunGpuExternalVulkanDeviceSmoke() {
   std::unique_ptr<gpu::VulkanImplementation> implementation =
       gpu::CreateVulkanImplementation(false);
@@ -7110,6 +7638,9 @@ int RunGpuExternalVulkanDeviceSmoke() {
 
   bool borrowed_initialized = false;
   bool command_pool_initialized = false;
+  bool context_provider_created = false;
+  bool borrowed_gr_context_initialized = false;
+  bool borrowed_gr_context_available = false;
   {
     auto borrowed_queue_wrapper =
         std::make_unique<gpu::VulkanDeviceQueue>(borrowed_instance);
@@ -7138,6 +7669,56 @@ int RunGpuExternalVulkanDeviceSmoke() {
       return 1;
     }
     command_pool->Destroy();
+
+    auto compositor_queue_wrapper =
+        std::make_unique<gpu::VulkanDeviceQueue>(borrowed_instance);
+    const bool compositor_queue_initialized =
+        compositor_queue_wrapper->InitializeForCompositorGpuThread(
+            borrowed_physical_device, borrowed_device, borrowed_queue,
+            /*vk_queue_lock_context=*/nullptr, borrowed_queue_family,
+            borrowed_extensions, owned_queue->enabled_device_features_2(),
+            owned_queue->vk_physical_device_properties(),
+            owned_queue->vk_physical_device_driver_properties(),
+            owned_queue->vma_allocator(),
+            /*register_memory_dump_provider=*/false);
+    if (!compositor_queue_initialized) {
+      std::fprintf(stderr,
+                   "gpu_external_vulkan_device_smoke: non-owning compositor "
+                   "Vulkan queue wrapper initialization failed\n");
+      borrowed_queue_wrapper->Destroy();
+      owned_queue->Destroy();
+      return 1;
+    }
+
+    scoped_refptr<viz::VulkanInProcessContextProvider>
+        borrowed_context_provider =
+            viz::VulkanInProcessContextProvider::CreateForCompositorGpuThread(
+                implementation.get(), std::move(compositor_queue_wrapper));
+    context_provider_created = borrowed_context_provider != nullptr;
+    if (!borrowed_context_provider) {
+      std::fprintf(stderr,
+                   "gpu_external_vulkan_device_smoke: borrowed Vulkan context "
+                   "provider creation failed\n");
+      borrowed_queue_wrapper->Destroy();
+      owned_queue->Destroy();
+      return 1;
+    }
+    GrContextOptions context_options;
+    borrowed_gr_context_initialized =
+        borrowed_context_provider->InitializeGrContext(context_options);
+    borrowed_gr_context_available =
+        borrowed_context_provider->GetGrContext() != nullptr;
+    borrowed_context_provider->Destroy();
+    if (!borrowed_gr_context_initialized || !borrowed_gr_context_available) {
+      std::fprintf(stderr,
+                   "gpu_external_vulkan_device_smoke: borrowed Vulkan Skia "
+                   "context initialization failed initialized=%d gr_context=%d\n",
+                   borrowed_gr_context_initialized ? 1 : 0,
+                   borrowed_gr_context_available ? 1 : 0);
+      borrowed_queue_wrapper->Destroy();
+      owned_queue->Destroy();
+      return 1;
+    }
     borrowed_queue_wrapper->Destroy();
   }
 
@@ -7145,9 +7726,12 @@ int RunGpuExternalVulkanDeviceSmoke() {
 
   std::printf(
       "gpu_external_vulkan_device_smoke: ok borrowed_queue=%d "
-      "command_pool=%d queue_family=%u extensions=%zu owns_device=0\n",
+      "command_pool=%d context_provider=%d gr_context=%d queue_family=%u "
+      "extensions=%zu owns_device=0\n",
       borrowed_initialized ? 1 : 0, command_pool_initialized ? 1 : 0,
-      borrowed_queue_family, borrowed_extensions.size());
+      context_provider_created ? 1 : 0,
+      borrowed_gr_context_available ? 1 : 0, borrowed_queue_family,
+      borrowed_extensions.size());
   return 0;
 }
 
@@ -7850,6 +8434,7 @@ int main(int argc, char** argv) {
   bool gpu_output_d3d12_render_pixel_smoke = false;
   bool gpu_borrowed_vkimage_backing_smoke = false;
   bool gpu_borrowed_vkimage_render_copy_smoke = false;
+  bool gpu_external_vulkan_runtime_target_smoke = false;
   bool gpu_borrowed_d3d12_render_copy_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
   bool gpu_vulkan_ganesh_context_smoke = false;
@@ -7995,6 +8580,8 @@ int main(int argc, char** argv) {
       gpu_borrowed_vkimage_backing_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-render-copy-smoke") {
       gpu_borrowed_vkimage_render_copy_smoke = true;
+    } else if (arg == "--gpu-external-vulkan-runtime-target-smoke") {
+      gpu_external_vulkan_runtime_target_smoke = true;
     } else if (arg == "--gpu-borrowed-d3d12-render-copy-smoke") {
       gpu_borrowed_d3d12_render_copy_smoke = true;
     } else if (arg == "--gpu-external-vulkan-device-smoke") {
@@ -8192,6 +8779,10 @@ int main(int argc, char** argv) {
 
   if (gpu_borrowed_vkimage_render_copy_smoke) {
     return RunGpuBorrowedVkImageRenderCopySmoke();
+  }
+
+  if (gpu_external_vulkan_runtime_target_smoke) {
+    return RunGpuExternalVulkanRuntimeTargetSmoke();
   }
 
   if (gpu_borrowed_d3d12_render_copy_smoke) {

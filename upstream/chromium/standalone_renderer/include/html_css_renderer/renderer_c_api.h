@@ -236,6 +236,7 @@ typedef struct blink_standalone_vulkan_external_target {
   uint32_t queue_family_index;
   uint64_t allocation_offset;
   uint64_t allocation_size;
+  uint32_t memory_type_index;
   uint32_t image_tiling;
   uint32_t image_usage_flags;
   uint32_t sample_count;
@@ -247,6 +248,19 @@ typedef struct blink_standalone_vulkan_external_target {
   void* signal_semaphore;
   uint64_t signal_value;
 } blink_standalone_vulkan_external_target_t;
+
+typedef struct blink_standalone_vulkan_external_device {
+  void* vk_instance;
+  void* vk_physical_device;
+  void* vk_device;
+  void* vk_queue;
+  uint32_t queue_family_index;
+  uint32_t api_version;
+  const char* const* enabled_instance_extensions;
+  size_t enabled_instance_extension_count;
+  const char* const* enabled_device_extensions;
+  size_t enabled_device_extension_count;
+} blink_standalone_vulkan_external_device_t;
 
 typedef struct blink_standalone_d3d12_external_target {
   void* d3d12_device;
@@ -391,6 +405,9 @@ BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
 BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gpu_backend_capabilities(
     const blink_standalone_renderer_t* renderer,
     uint32_t backend);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_configure_vulkan_external_device(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_vulkan_external_device_t* device);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_to_gpu_target(
     blink_standalone_renderer_t* renderer,
     const blink_standalone_external_gpu_target_t* target,

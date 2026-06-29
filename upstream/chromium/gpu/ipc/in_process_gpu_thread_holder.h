@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/component_export.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/threading/thread.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
@@ -24,6 +25,7 @@ class Scheduler;
 class SharedImageManager;
 class SyncPointManager;
 class VulkanImplementation;
+class VulkanDeviceQueue;
 
 }  // namespace gpu
 
@@ -60,6 +62,17 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   // executor will be created the first time this is called.
   CommandBufferTaskExecutor* GetTaskExecutor();
 
+#if BUILDFLAG(ENABLE_VULKAN)
+  // Testing-only hook for standalone embedders: installs an already-created
+  // Vulkan implementation/device queue before GetTaskExecutor() initializes
+  // GPU state. The holder borrows |vulkan_implementation| and takes wrapper
+  // ownership of |vulkan_device_queue|, but not VkInstance/VkDevice/VkQueue
+  // ownership when the supplied VulkanDeviceQueue is non-owning.
+  void AdoptExternalVulkanForTesting(
+      VulkanImplementation* vulkan_implementation,
+      std::unique_ptr<VulkanDeviceQueue> vulkan_device_queue);
+#endif
+
   Scheduler* scheduler();
   SyncPointManager* sync_point_manager();
   SharedImageManager* shared_image_manager();
@@ -89,6 +102,9 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   std::unique_ptr<DawnContextProvider> dawn_context_provider_;
 #if BUILDFLAG(ENABLE_VULKAN)
   std::unique_ptr<VulkanImplementation> vulkan_implementation_;
+  raw_ptr<VulkanImplementation> pending_external_vulkan_implementation_ =
+      nullptr;
+  std::unique_ptr<VulkanDeviceQueue> pending_external_vulkan_device_queue_;
   scoped_refptr<viz::VulkanInProcessContextProvider>
       vulkan_context_provider_;
 #endif

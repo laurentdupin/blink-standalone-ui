@@ -398,9 +398,11 @@ bool VulkanDeviceQueue::Initialize(
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
+  if (register_memory_dump_provider_ &&
+      base::SingleThreadTaskRunner::HasCurrentDefault()) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         this, "vulkan", base::SingleThreadTaskRunner::GetCurrentDefault());
+    memory_dump_provider_registered_ = true;
   }
 
   return true;
@@ -443,9 +445,11 @@ bool VulkanDeviceQueue::InitCommon(VkPhysicalDevice vk_physical_device,
 
   cleanup_helper_ = std::make_unique<VulkanFenceHelper>(this);
 
-  if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
+  if (register_memory_dump_provider_ &&
+      base::SingleThreadTaskRunner::HasCurrentDefault()) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
         this, "vulkan", base::SingleThreadTaskRunner::GetCurrentDefault());
+    memory_dump_provider_registered_ = true;
   }
   return true;
 }
@@ -514,7 +518,11 @@ bool VulkanDeviceQueue::InitializeForCompositorGpuThread(
     uint32_t vk_queue_index,
     gfx::ExtensionSet enabled_extensions,
     const VkPhysicalDeviceFeatures2& vk_physical_device_features2,
-    VmaAllocator vma_allocator) {
+    const VkPhysicalDeviceProperties& vk_physical_device_properties,
+    const VkPhysicalDeviceDriverProperties&
+        vk_physical_device_driver_properties,
+    VmaAllocator vma_allocator,
+    bool register_memory_dump_provider) {
   // Currently VulkanDeviceQueue for drdc thread(aka CompositorGpuThread) uses
   // the same vulkan queue as the gpu main thread. Now since both gpu main and
   // drdc threads would be accessing/submitting work to the same queue, all the
@@ -532,6 +540,9 @@ bool VulkanDeviceQueue::InitializeForCompositorGpuThread(
   GetVulkanFunctionPointers()->per_queue_lock_map[vk_queue] =
       std::make_unique<gpu::VulkanQueueLock>(vk_queue_lock_context);
   enabled_device_features_2_ = vk_physical_device_features2;
+  vk_physical_device_properties_ = vk_physical_device_properties;
+  vk_physical_device_driver_properties_ = vk_physical_device_driver_properties;
+  register_memory_dump_provider_ = register_memory_dump_provider;
 
   // Note that CompositorGpuThread uses same vma allocator as gpu main thread.
   vma_allocator_ = vma_allocator;
@@ -542,8 +553,11 @@ bool VulkanDeviceQueue::InitializeForCompositorGpuThread(
 }
 
 void VulkanDeviceQueue::Destroy() {
-  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
-      this);
+  if (memory_dump_provider_registered_) {
+    base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+        this);
+    memory_dump_provider_registered_ = false;
+  }
 #if BUILDFLAG(IS_ANDROID)
   metric_ = nullptr;
 #endif

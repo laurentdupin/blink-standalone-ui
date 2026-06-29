@@ -42,10 +42,22 @@ LONG WINAPI StandaloneUnhandledExceptionFilter(EXCEPTION_POINTERS* exception) {
                             ? exception->ExceptionRecord->ExceptionAddress
                             : nullptr;
   const void* module_base = GetModuleHandle(nullptr);
+  HMODULE fault_module = nullptr;
+  char fault_module_path[MAX_PATH] = {};
+  if (address) {
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       static_cast<const char*>(address), &fault_module);
+    if (fault_module) {
+      GetModuleFileNameA(fault_module, fault_module_path,
+                         static_cast<DWORD>(sizeof(fault_module_path)));
+    }
+  }
   std::fprintf(stderr,
                "standalone_crash exception=0x%08lx address=%p module_base=%p "
-               "breadcrumb=%s\n",
+               "fault_module=%p fault_module_path=%s breadcrumb=%s\n",
                static_cast<unsigned long>(code), address, module_base,
+               fault_module, fault_module_path[0] ? fault_module_path : "",
                g_standalone_crash_breadcrumb);
   void* stack[64] = {};
   const USHORT frame_count = CaptureStackBackTrace(0, 64, stack, nullptr);

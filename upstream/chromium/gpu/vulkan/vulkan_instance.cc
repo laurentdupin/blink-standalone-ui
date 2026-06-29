@@ -126,6 +126,43 @@ bool VulkanInstance::InitializeInstance(
   return CreateInstance(required_extensions, required_layers);
 }
 
+bool VulkanInstance::InitializeExternalBorrowed(
+    const base::FilePath& vulkan_loader_library_path,
+    VkInstance vk_instance,
+    VkPhysicalDevice vk_physical_device,
+    uint32_t used_api_version,
+    const std::vector<const char*>& enabled_instance_extensions) {
+  DCHECK(!vk_instance_);
+  DCHECK_NE(vk_instance, VK_NULL_HANDLE);
+  DCHECK_NE(vk_physical_device, VK_NULL_HANDLE);
+
+  if (!BindUnassignedFunctionPointers(vulkan_loader_library_path)) {
+    return false;
+  }
+  if (!CollectBasicInfo({})) {
+    return false;
+  }
+
+  vk_instance_ = vk_instance;
+  vulkan_info_.used_api_version =
+      used_api_version ? used_api_version : kVulkanRequiredApiVersion;
+  vulkan_info_.enabled_instance_extensions = enabled_instance_extensions;
+
+  gfx::ExtensionSet enabled_extensions(
+      std::begin(vulkan_info_.enabled_instance_extensions),
+      std::end(vulkan_info_.enabled_instance_extensions));
+  VulkanFunctionPointers* vulkan_function_pointers =
+      gpu::GetVulkanFunctionPointers();
+  if (!vulkan_function_pointers->BindInstanceFunctionPointers(
+          vk_instance_, vulkan_info_.used_api_version, enabled_extensions)) {
+    vk_instance_ = VK_NULL_HANDLE;
+    return false;
+  }
+
+  skia_features_.init(vulkan_info_.used_api_version);
+  return CollectDeviceInfo(vk_physical_device);
+}
+
 bool VulkanInstance::CreateInstance(
     const std::vector<const char*>& required_extensions,
     const std::vector<const char*>& required_layers) {

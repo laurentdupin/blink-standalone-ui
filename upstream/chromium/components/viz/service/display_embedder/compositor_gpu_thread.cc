@@ -76,7 +76,10 @@ std::unique_ptr<CompositorGpuThread> CompositorGpuThread::Create(
         device_queue->GetVulkanQueueLockContext(),
         device_queue->GetVulkanQueueIndex(), device_queue->enabled_extensions(),
         device_queue->enabled_device_features_2(),
-        device_queue->vma_allocator());
+        device_queue->vk_physical_device_properties(),
+        device_queue->vk_physical_device_driver_properties(),
+        device_queue->vma_allocator(),
+        /*register_memory_dump_provider=*/false);
     compositor_gpu_thread->vulkan_context_provider_ =
         VulkanInProcessContextProvider::CreateForCompositorGpuThread(
             params.vulkan_implementation,

@@ -81,6 +81,18 @@ class COMPONENT_EXPORT(VULKAN) VulkanImage {
       uint32_t memory_type_index,
       VkImageUsageFlags usage,
       VkImageCreateFlags flags);
+  static std::unique_ptr<VulkanImage> CreateBorrowed(
+      VulkanDeviceQueue* device_queue,
+      VkImage image,
+      VkDeviceMemory device_memory,
+      const gfx::Size& size,
+      VkFormat format,
+      VkImageTiling image_tiling,
+      VkDeviceSize device_size,
+      uint32_t memory_type_index,
+      VkImageUsageFlags usage,
+      VkImageCreateFlags flags,
+      uint32_t queue_family_index);
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   static std::unique_ptr<VulkanImage> CreateWithExternalMemoryAndModifiers(
@@ -125,9 +137,15 @@ class COMPONENT_EXPORT(VULKAN) VulkanImage {
   VkImageCreateFlags flags() const { return create_info_.flags; }
   VkImageUsageFlags usage() const { return create_info_.usage; }
   VkDeviceSize device_size(size_t plane = 0) const {
+    if (is_borrowed_) {
+      return borrowed_device_size_;
+    }
     return memories_[0]->size();
   }
   uint32_t memory_type_index(size_t plane = 0) const {
+    if (is_borrowed_) {
+      return borrowed_memory_type_index_;
+    }
     return memories_[0]->type_index();
   }
   VkImageTiling image_tiling() const { return create_info_.tiling; }
@@ -138,6 +156,9 @@ class COMPONENT_EXPORT(VULKAN) VulkanImage {
   }
   VkImage image() const { return image_; }
   VkDeviceMemory device_memory(size_t i = 0) const {
+    if (is_borrowed_) {
+      return borrowed_device_memory_;
+    }
     return memories_[0]->device_memory();
   }
   VkExternalMemoryHandleTypeFlags handle_types() const { return handle_types_; }
@@ -217,12 +238,16 @@ class COMPONENT_EXPORT(VULKAN) VulkanImage {
 #endif
 
   raw_ptr<VulkanDeviceQueue> device_queue_ = nullptr;
+  bool is_borrowed_ = false;
   VkImageCreateInfo create_info_{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
   // Image has multi planes and planes are not joint.
   bool disjoint_planes_ = false;
   uint32_t queue_family_index_ = VK_QUEUE_FAMILY_IGNORED;
   std::optional<VulkanYCbCrInfo> ycbcr_info_;
   VkImage image_ = VK_NULL_HANDLE;
+  VkDeviceMemory borrowed_device_memory_ = VK_NULL_HANDLE;
+  VkDeviceSize borrowed_device_size_ = 0;
+  uint32_t borrowed_memory_type_index_ = 0;
   // Device memory for each plane.
   std::array<std::unique_ptr<VulkanMemory>, 4> memories_;
   VkExternalMemoryHandleTypeFlags handle_types_ = 0;
