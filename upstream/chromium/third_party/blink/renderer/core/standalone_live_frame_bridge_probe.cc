@@ -4125,7 +4125,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
-                                          void* shared_handle) {
+                                          void* shared_handle,
+                                          int width,
+                                          int height) {
     ID3D12Resource* external_resource =
         static_cast<ID3D12Resource*>(d3d12_resource);
     if (!external_resource && !shared_handle) {
@@ -4133,13 +4135,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
              "resource/shared handle is null";
     }
 
-    gfx::Size output_size = viewport_;
-    if (external_resource) {
+    gfx::Size output_size(width, height);
+    if (output_size.IsEmpty() && external_resource) {
       const D3D12_RESOURCE_DESC desc = external_resource->GetDesc();
       output_size =
           gfx::Size(static_cast<int>(desc.Width), static_cast<int>(desc.Height));
-    } else if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+    } else if (output_size.IsEmpty() && viz_display_output_size_ &&
+               !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
+    } else if (output_size.IsEmpty()) {
+      output_size = viewport_;
     }
     ResetOffscreenVizDisplayForExternalTargetResize(output_size);
     if (!display_) {
@@ -5009,13 +5014,15 @@ class StandaloneCcLayerHost final
         d3d12_resource, shared_handle);
   }
   std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
-                                          void* shared_handle) {
+                                          void* shared_handle,
+                                          int width,
+                                          int height) {
     if (!active_frame_sink_) {
       return "gpu_external_d3d12_render_copy: failed failure=active "
              "LayerTreeFrameSink is not available";
     }
-    return active_frame_sink_->RenderExternalD3D12ToTarget(d3d12_resource,
-                                                           shared_handle);
+    return active_frame_sink_->RenderExternalD3D12ToTarget(
+        d3d12_resource, shared_handle, width, height);
   }
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
     if (!active_frame_sink_) {
@@ -17598,7 +17605,9 @@ StandaloneBlinkLiveFrameBridgeRunExternalD3D12RenderCopyForStandaloneRenderer(
 const char*
 StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
     void* d3d12_resource,
-    void* shared_handle) {
+    void* shared_handle,
+    int width,
+    int height) {
   static std::string result;
   LiveFramePaintProbeCache& cache = ProbeCache();
   if (!d3d12_resource && !shared_handle) {
@@ -17615,7 +17624,8 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
   }
   result =
       cache.cc_layer_host->RenderExternalD3D12ToTarget(d3d12_resource,
-                                                       shared_handle);
+                                                       shared_handle, width,
+                                                       height);
   cache.copy_output_gpu_prepare_requested = false;
   return result.c_str();
 }

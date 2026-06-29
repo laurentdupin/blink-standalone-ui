@@ -1577,8 +1577,16 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     }
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
     if (d3d12_external) {
+      const int d3d12_target_width =
+          target->d3d12.width ? static_cast<int>(target->d3d12.width)
+                              : static_cast<int>(target->common.physical_width);
+      const int d3d12_target_height =
+          target->d3d12.height
+              ? static_cast<int>(target->d3d12.height)
+              : static_cast<int>(target->common.physical_height);
       target_result = renderer->runtime->RenderExternalD3D12ToTarget(
-          target->d3d12.d3d12_resource, target->d3d12.shared_handle);
+          target->d3d12.d3d12_resource, target->d3d12.shared_handle,
+          d3d12_target_width, d3d12_target_height);
     } else {
       target_result =
           renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting();

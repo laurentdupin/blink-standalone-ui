@@ -113,7 +113,9 @@ StandaloneBlinkLiveFrameBridgeRunExternalD3D12RenderCopyForStandaloneRenderer(
 const char*
 StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
     void* d3d12_resource,
-    void* shared_handle);
+    void* shared_handle,
+    int width,
+    int height);
 const char*
 StandaloneBlinkLiveFrameBridgeRunGpuOutputVulkanPixelSmokeForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
@@ -1702,7 +1704,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   }
 
   std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
-                                          void* shared_handle) override {
+                                          void* shared_handle,
+                                          int width,
+                                          int height) override {
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
     ScopedTypefaceResourceRegistryContext scoped_typefaces(
@@ -1711,7 +1715,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     const char* result =
         ::blink::standalone_renderer_probe::
             StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
-                d3d12_resource, shared_handle);
+                d3d12_resource, shared_handle, width, height);
     return result ? result : "";
   }
 

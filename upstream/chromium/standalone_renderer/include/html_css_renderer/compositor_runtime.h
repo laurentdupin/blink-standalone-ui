@@ -170,7 +170,9 @@ class StandaloneCompositorRuntime {
       void* d3d12_resource,
       void* shared_handle) = 0;
   virtual std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
-                                                  void* shared_handle) = 0;
+                                                  void* shared_handle,
+                                                  int width,
+                                                  int height) = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
 };
 
