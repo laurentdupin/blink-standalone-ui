@@ -5051,8 +5051,10 @@ class StandaloneCcLayerHost final
     SetPendingLayerTreeUpdateForScheduler(std::move(update));
     base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
     scheduler_frame_run_loop_ = &run_loop;
+    // Keep synchronous embedder ticks responsive if cc posts the frame but the
+    // standalone scheduler callback that normally quits this loop is missed.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-        FROM_HERE, run_loop.QuitClosure(), base::Seconds(2));
+        FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(250));
 
     TraceLiveFrameProbeStage("cc host scheduler before posted SetNeedsCommit");
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(

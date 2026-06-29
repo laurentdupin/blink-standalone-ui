@@ -204,9 +204,11 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-large-smoke] "
       "[--c-api-vulkan-external-target-resize-smoke] "
       "[--c-api-vulkan-external-target-fps-timing-smoke] "
+      "[--c-api-vulkan-external-target-click-timing-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-d3d12-external-target-resize-smoke] "
+      "[--c-api-d3d12-external-target-click-timing-smoke] "
       "[--c-api-vulkan-update-output-smoke] "
       "[--c-api-d3d12-update-output-smoke] "
       "[--c-api-vulkan-external-target-current-document-smoke] "
@@ -828,7 +830,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool exercise_update_output_sequence = false,
                                   bool expect_invalid_vulkan_metadata = false,
                                   int repeated_update_output_iterations = 0,
-                                  bool exercise_resize_sequence = false) {
+                                  bool exercise_resize_sequence = false,
+                                  int repeated_click_output_iterations = 0) {
   uint32_t active_width = width;
   uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
@@ -1622,6 +1625,156 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         inert_update_total_ms / kInertMouseIterations, inert_update_max_ms);
   }
 
+  if (repeated_click_output_iterations > 0) {
+    constexpr uint32_t kActiveBox = 0xff00a050u;
+    double click_update_total_ms = 0.0;
+    double click_update_max_ms = 0.0;
+    double click_render_total_ms = 0.0;
+    double click_render_max_ms = 0.0;
+    int click_render_count = 0;
+    const auto render_click_stage = [&](const char* stage,
+                                        int iteration,
+                                        uint32_t stage_expected_box) {
+      target.common.generation++;
+      target.vulkan.current_layout = target.vulkan.required_final_layout;
+#if BUILDFLAG(IS_WIN)
+      target.d3d12.current_state = target.d3d12.required_final_state;
+#endif
+      blink_standalone_gpu_render_result_t click_render_result = {};
+      const auto render_start = std::chrono::steady_clock::now();
+      status = blink_standalone_renderer_render_to_gpu_target(
+          renderer, &target, &click_render_result);
+      const auto render_end = std::chrono::steady_clock::now();
+      const double render_ms =
+          std::chrono::duration<double, std::milli>(render_end - render_start)
+              .count();
+      click_render_total_ms += render_ms;
+      click_render_max_ms = std::max(click_render_max_ms, render_ms);
+      ++click_render_count;
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          click_render_result.target_written == 0 ||
+          click_render_result.backend != backend ||
+          click_render_result.width != active_width ||
+          click_render_result.height != active_height) {
+        std::fprintf(stderr,
+                     "%s: click %s render %d failed status=%d "
+                     "result_status=%u backend=%u written=%u size=%ux%u "
+                     "elapsed_ms=%.3f error=%s\n",
+                     label, stage, iteration, status,
+                     click_render_result.status, click_render_result.backend,
+                     click_render_result.target_written,
+                     click_render_result.width, click_render_result.height,
+                     render_ms, blink_standalone_renderer_last_error(renderer));
+        return false;
+      }
+      if (render_ms > 500.0) {
+        std::fprintf(stderr,
+                     "%s: click %s render %d exceeded latency budget "
+                     "elapsed_ms=%.3f\n",
+                     label, stage, iteration, render_ms);
+        return false;
+      }
+      return verify_target_pixels(stage, expected_background,
+                                  stage_expected_box,
+                                  require_full_nontransparent);
+    };
+    for (int i = 0; i < repeated_click_output_iterations; ++i) {
+      const float x = 24.0f + static_cast<float>(i % 5);
+      const float y = 24.0f;
+      status = blink_standalone_renderer_mouse_move(renderer, x, y, 0);
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr,
+                     "%s: click mouse move %d failed status=%d error=%s\n",
+                     label, i, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      status = blink_standalone_renderer_mouse_down(
+          renderer, x, y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr,
+                     "%s: click mouse down %d failed status=%d error=%s\n",
+                     label, i, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      blink_standalone_update_result_t down_update = {};
+      const auto down_start = std::chrono::steady_clock::now();
+      status = blink_standalone_renderer_update(
+          renderer, 0.900 + static_cast<double>(i) * 0.050, &down_update);
+      const auto down_end = std::chrono::steady_clock::now();
+      const double down_ms =
+          std::chrono::duration<double, std::milli>(down_end - down_start)
+              .count();
+      click_update_total_ms += down_ms;
+      click_update_max_ms = std::max(click_update_max_ms, down_ms);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          down_update.needs_output == 0) {
+        std::fprintf(stderr,
+                     "%s: click mouse down update %d failed status=%d "
+                     "needs_output=%u elapsed_ms=%.3f error=%s\n",
+                     label, i, status, down_update.needs_output, down_ms,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      if (down_ms > 250.0) {
+        std::fprintf(stderr,
+                     "%s: click mouse down update %d exceeded latency budget "
+                     "elapsed_ms=%.3f\n",
+                     label, i, down_ms);
+        return cleanup_and_fail();
+      }
+      if (!render_click_stage("click-down", i, kActiveBox)) {
+        return cleanup_and_fail();
+      }
+
+      status = blink_standalone_renderer_mouse_up(
+          renderer, x, y, BLINK_STANDALONE_MOUSE_BUTTON_LEFT, 0, 1);
+      if (status != BLINK_STANDALONE_STATUS_OK) {
+        std::fprintf(stderr,
+                     "%s: click mouse up %d failed status=%d error=%s\n",
+                     label, i, status,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      blink_standalone_update_result_t up_update = {};
+      const auto up_start = std::chrono::steady_clock::now();
+      status = blink_standalone_renderer_update(
+          renderer, 0.925 + static_cast<double>(i) * 0.050, &up_update);
+      const auto up_end = std::chrono::steady_clock::now();
+      const double up_ms =
+          std::chrono::duration<double, std::milli>(up_end - up_start).count();
+      click_update_total_ms += up_ms;
+      click_update_max_ms = std::max(click_update_max_ms, up_ms);
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          up_update.needs_output == 0) {
+        std::fprintf(stderr,
+                     "%s: click mouse up update %d failed status=%d "
+                     "needs_output=%u elapsed_ms=%.3f error=%s\n",
+                     label, i, status, up_update.needs_output, up_ms,
+                     blink_standalone_renderer_last_error(renderer));
+        return cleanup_and_fail();
+      }
+      if (up_ms > 250.0) {
+        std::fprintf(stderr,
+                     "%s: click mouse up update %d exceeded latency budget "
+                     "elapsed_ms=%.3f\n",
+                     label, i, up_ms);
+        return cleanup_and_fail();
+      }
+      if (!render_click_stage("click-up", i, expected_box)) {
+        return cleanup_and_fail();
+      }
+    }
+    const int click_update_count = repeated_click_output_iterations * 2;
+    std::printf(
+        "%s: click_timing iterations=%d update_avg_ms=%.3f "
+        "update_max_ms=%.3f render_avg_ms=%.3f render_max_ms=%.3f\n",
+        label, repeated_click_output_iterations,
+        click_update_total_ms / click_update_count, click_update_max_ms,
+        click_render_total_ms / click_render_count, click_render_max_ms);
+  }
+
   std::printf(
       "%s: ok backend=%u capabilities=%u target_written=%u size=%ux%u "
       "format=%u generation=%llu observed_background=%08x observed_box=%08x "
@@ -1700,6 +1853,27 @@ int RunCApiVulkanExternalTargetFpsTimingSmoke() {
       /*repeated_update_output_iterations=*/12);
 }
 
+int RunCApiVulkanExternalTargetClickTimingSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_click_timing_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"#box{cursor:pointer;}#box:active{background:#00a050;}",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true,
+      /*repeated_click_output_iterations=*/8);
+}
+
 int RunCApiVulkanInvalidTargetMetadataSmoke() {
   return RunCApiExternalGpuTargetSmoke(
       BLINK_STANDALONE_GPU_BACKEND_VULKAN,
@@ -1760,6 +1934,27 @@ int RunCApiD3D12ExternalTargetResizeSmoke() {
       /*expect_invalid_vulkan_metadata=*/false,
       /*repeated_update_output_iterations=*/0,
       /*exercise_resize_sequence=*/true);
+}
+
+int RunCApiD3D12ExternalTargetClickTimingSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_click_timing_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"#box{cursor:pointer;}#box:active{background:#00a050;}",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true,
+      /*repeated_click_output_iterations=*/8);
 }
 
 int RunCApiD3D12UpdateOutputSmoke() {
@@ -9169,8 +9364,10 @@ int main(int argc, char** argv) {
         arg == "--c-api-vulkan-external-target-large-smoke" ||
         arg == "--c-api-vulkan-external-target-resize-smoke" ||
         arg == "--c-api-vulkan-external-target-fps-timing-smoke" ||
+        arg == "--c-api-vulkan-external-target-click-timing-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
         arg == "--c-api-d3d12-external-target-resize-smoke" ||
+        arg == "--c-api-d3d12-external-target-click-timing-smoke" ||
         arg == "--c-api-vulkan-update-output-smoke" ||
         arg == "--c-api-d3d12-update-output-smoke" ||
         arg == "--c-api-separated-click-smoke" ||
@@ -9235,9 +9432,11 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_large_smoke = false;
   bool c_api_vulkan_external_target_resize_smoke = false;
   bool c_api_vulkan_external_target_fps_timing_smoke = false;
+  bool c_api_vulkan_external_target_click_timing_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_d3d12_external_target_resize_smoke = false;
+  bool c_api_d3d12_external_target_click_timing_smoke = false;
   bool c_api_vulkan_update_output_smoke = false;
   bool c_api_d3d12_update_output_smoke = false;
   bool c_api_vulkan_external_target_current_document_smoke = false;
@@ -9401,12 +9600,16 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_resize_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-fps-timing-smoke") {
       c_api_vulkan_external_target_fps_timing_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-click-timing-smoke") {
+      c_api_vulkan_external_target_click_timing_smoke = true;
     } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
       c_api_vulkan_invalid_target_metadata_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
       c_api_d3d12_external_target_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-resize-smoke") {
       c_api_d3d12_external_target_resize_smoke = true;
+    } else if (arg == "--c-api-d3d12-external-target-click-timing-smoke") {
+      c_api_d3d12_external_target_click_timing_smoke = true;
     } else if (arg == "--c-api-vulkan-update-output-smoke") {
       c_api_vulkan_update_output_smoke = true;
     } else if (arg == "--c-api-d3d12-update-output-smoke") {
@@ -9647,6 +9850,10 @@ int main(int argc, char** argv) {
     return RunCApiVulkanExternalTargetFpsTimingSmoke();
   }
 
+  if (c_api_vulkan_external_target_click_timing_smoke) {
+    return RunCApiVulkanExternalTargetClickTimingSmoke();
+  }
+
   if (c_api_vulkan_invalid_target_metadata_smoke) {
     return RunCApiVulkanInvalidTargetMetadataSmoke();
   }
@@ -9657,6 +9864,10 @@ int main(int argc, char** argv) {
 
   if (c_api_d3d12_external_target_resize_smoke) {
     return RunCApiD3D12ExternalTargetResizeSmoke();
+  }
+
+  if (c_api_d3d12_external_target_click_timing_smoke) {
+    return RunCApiD3D12ExternalTargetClickTimingSmoke();
   }
 
   if (c_api_vulkan_update_output_smoke) {
