@@ -162,10 +162,14 @@ class StandaloneCompositorRuntime {
   virtual std::string RunBorrowedVkImageRenderCopySmokeForTesting() = 0;
   virtual std::string RunExternalVkImageRenderCopyForTesting(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
+  virtual std::string RenderExternalVkImageToTarget(
+      const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
   virtual std::string RunExternalD3D12RenderCopyForTesting(
       void* d3d12_resource,
       void* shared_handle) = 0;
+  virtual std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
+                                                  void* shared_handle) = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
 };
 

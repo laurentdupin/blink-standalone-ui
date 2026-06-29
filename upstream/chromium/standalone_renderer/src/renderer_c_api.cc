@@ -1330,7 +1330,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     return status;
   }
 
-  std::string smoke_result;
+  std::string target_result;
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
     if (vulkan_external) {
       if (!renderer->external_vulkan_configured) {
@@ -1351,19 +1351,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       external_target.image_usage_flags = target->vulkan.image_usage_flags;
       external_target.image_create_flags = 0;
       external_target.queue_family_index = target->vulkan.queue_family_index;
-      smoke_result =
-          renderer->runtime->RunExternalVkImageRenderCopyForTesting(
-              external_target);
+      target_result =
+          renderer->runtime->RenderExternalVkImageToTarget(external_target);
     } else {
-      smoke_result =
+      target_result =
           renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
     }
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
     if (d3d12_external) {
-      smoke_result = renderer->runtime->RunExternalD3D12RenderCopyForTesting(
+      target_result = renderer->runtime->RenderExternalD3D12ToTarget(
           target->d3d12.d3d12_resource, target->d3d12.shared_handle);
     } else {
-      smoke_result =
+      target_result =
           renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
     }
   } else {
@@ -1372,14 +1371,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                         "render_to_gpu_target failed: backend is not a GPU target backend");
   }
 
-  if (!StartsWith(smoke_result, "gpu_borrowed_") ||
-      smoke_result.find(": ok") == std::string::npos) {
+  const bool expected_result_prefix =
+      StartsWith(target_result, "gpu_borrowed_") ||
+      StartsWith(target_result, "gpu_external_");
+  if (!expected_result_prefix ||
+      target_result.find(": ok") == std::string::npos) {
     result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
-        smoke_result.empty()
+        target_result.empty()
             ? "render_to_gpu_target failed: GPU target writer returned no result"
-            : smoke_result);
+            : target_result);
   }
   result->status = BLINK_STANDALONE_STATUS_OK;
   result->target_written = 1;

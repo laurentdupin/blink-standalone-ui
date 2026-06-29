@@ -3872,6 +3872,80 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     return RunVkImageRenderCopyForTesting(vulkan_image);
   }
 
+  std::string RenderExternalVkImageToTarget(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+    if (!display_) {
+      return "gpu_external_vkimage_render_copy: failed failure=Viz Display is "
+             "not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_external_vkimage_render_copy: failed "
+             "failure=offscreen Vulkan Skia dependency is not available";
+    }
+    if (!vulkan_image) {
+      return "gpu_external_vkimage_render_copy: failed failure=external "
+             "Vulkan image is null";
+    }
+
+    gfx::Size output_size = viewport_;
+    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    scoped_refptr<gpu::ClientSharedImage> blit_target;
+    std::string prepare_result =
+        offscreen_skia_dependency_
+            ->PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+                output_size, nullptr, vulkan_image, &blit_target);
+    if (!prepare_result.empty()) {
+      return "gpu_external_vkimage_render_copy: failed failure=" +
+             prepare_result;
+    }
+    if (!blit_target || blit_target->mailbox().IsZero()) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return "gpu_external_vkimage_render_copy: failed failure=external "
+             "Vulkan blit target SharedImage is unavailable";
+    }
+
+    RequestCopyOutput(output_size,
+                      /*wants_png=*/false,
+                      /*wants_raw=*/false,
+                      /*wants_gpu=*/true, std::move(blit_target));
+    DrawVizDisplayNow();
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+      base::OneShotTimer timeout;
+      copy_output_run_loop_ = &run_loop;
+      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+      run_loop.Run();
+      timeout.Stop();
+      copy_output_run_loop_ = nullptr;
+    }
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return "gpu_external_vkimage_render_copy: failed failure=Viz "
+             "BlitRequest CopyOutput did not complete";
+    }
+    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+      std::string failure =
+          copy_output_failure_ && !copy_output_failure_->empty()
+              ? *copy_output_failure_
+              : "Viz BlitRequest CopyOutput failed";
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return "gpu_external_vkimage_render_copy: failed failure=" + failure;
+    }
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    offscreen_skia_dependency_
+        ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+    std::ostringstream out;
+    out << "gpu_external_vkimage_render_copy: ok"
+        << " path=viz_blit_request"
+        << " target=" << output_size.width() << "x" << output_size.height();
+    return out.str();
+  }
+
   std::string RunVkImageRenderCopyForTesting(
       const html_css_renderer::ExternalVulkanImageTarget* external_target) {
     if (!display_) {
@@ -3948,6 +4022,82 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     ID3D12Resource* external_resource =
         static_cast<ID3D12Resource*>(d3d12_resource);
     return RunD3D12RenderCopyForTesting(external_resource, shared_handle);
+  }
+
+  std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
+                                          void* shared_handle) {
+    ID3D12Resource* external_resource =
+        static_cast<ID3D12Resource*>(d3d12_resource);
+    if (!display_) {
+      return "gpu_external_d3d12_render_copy: failed failure=Viz Display is "
+             "not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_external_d3d12_render_copy: failed "
+             "failure=offscreen D3D12 Skia dependency is not available";
+    }
+    if (!external_resource && !shared_handle) {
+      return "gpu_external_d3d12_render_copy: failed failure=external D3D12 "
+             "resource/shared handle is null";
+    }
+
+    gfx::Size output_size = viewport_;
+    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    scoped_refptr<gpu::ClientSharedImage> blit_target;
+    std::string prepare_result =
+        offscreen_skia_dependency_
+            ->PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+                output_size, external_resource, shared_handle, &blit_target);
+    if (!prepare_result.empty()) {
+      return "gpu_external_d3d12_render_copy: failed failure=" +
+             prepare_result;
+    }
+    if (!blit_target || blit_target->mailbox().IsZero()) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return "gpu_external_d3d12_render_copy: failed failure=external D3D12 "
+             "target SharedImage is unavailable";
+    }
+
+    RequestCopyOutput(output_size,
+                      /*wants_png=*/false,
+                      /*wants_raw=*/false,
+                      /*wants_gpu=*/true, std::move(blit_target));
+    DrawVizDisplayNow();
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+      base::OneShotTimer timeout;
+      copy_output_run_loop_ = &run_loop;
+      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+      run_loop.Run();
+      timeout.Stop();
+      copy_output_run_loop_ = nullptr;
+    }
+    if (copy_output_completed_ && !*copy_output_completed_) {
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return "gpu_external_d3d12_render_copy: failed failure=Viz BlitRequest "
+             "CopyOutput did not complete";
+    }
+    if (copy_output_succeeded_ && !*copy_output_succeeded_) {
+      std::string failure =
+          copy_output_failure_ && !copy_output_failure_->empty()
+              ? *copy_output_failure_
+              : "Viz BlitRequest CopyOutput failed";
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return "gpu_external_d3d12_render_copy: failed failure=" + failure;
+    }
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    offscreen_skia_dependency_
+        ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+    std::ostringstream out;
+    out << "gpu_external_d3d12_render_copy: ok"
+        << " path=viz_blit_request"
+        << " target=" << output_size.width() << "x" << output_size.height();
+    return out.str();
   }
 
   std::string RunD3D12RenderCopyForTesting(ID3D12Resource* external_resource,
@@ -4695,6 +4845,14 @@ class StandaloneCcLayerHost final
     return active_frame_sink_->RunExternalVkImageRenderCopyForTesting(
         vulkan_image);
   }
+  std::string RenderExternalVkImageToTarget(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+    if (!active_frame_sink_) {
+      return "gpu_external_vkimage_render_copy: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RenderExternalVkImageToTarget(vulkan_image);
+  }
   std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
     if (!active_frame_sink_) {
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=active "
@@ -4710,6 +4868,15 @@ class StandaloneCcLayerHost final
     }
     return active_frame_sink_->RunExternalD3D12RenderCopyForTesting(
         d3d12_resource, shared_handle);
+  }
+  std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
+                                          void* shared_handle) {
+    if (!active_frame_sink_) {
+      return "gpu_external_d3d12_render_copy: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RenderExternalD3D12ToTarget(d3d12_resource,
+                                                           shared_handle);
   }
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
     if (!active_frame_sink_) {
@@ -17011,6 +17178,35 @@ StandaloneBlinkLiveFrameBridgeRunExternalVkImageRenderCopyForStandaloneRenderer(
 }
 
 const char*
+StandaloneBlinkLiveFrameBridgeRenderExternalVkImageToTargetForStandaloneRenderer(
+    const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+  static std::string result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!vulkan_image) {
+    result =
+        "gpu_external_vkimage_render_copy: failed failure=external Vulkan "
+        "image is null";
+    return result.c_str();
+  }
+  if (!cache.copy_output_gpu_frame.shared_image_available ||
+      !cache.copy_output_gpu_frame.vk_context_provider_available ||
+      !cache.copy_output_gpu_frame.shared_context_state_is_vulkan) {
+    result =
+        "gpu_external_vkimage_render_copy: failed failure=Vulkan SharedImage "
+        "CopyOutput did not initialize before external render-copy";
+    return result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    result =
+        "gpu_external_vkimage_render_copy: failed failure=cc layer host is not "
+        "available";
+    return result.c_str();
+  }
+  result = cache.cc_layer_host->RenderExternalVkImageToTarget(vulkan_image);
+  return result.c_str();
+}
+
+const char*
 StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRenderer() {
   static std::string smoke_result;
   LiveFramePaintProbeCache& cache = ProbeCache();
@@ -17059,6 +17255,36 @@ StandaloneBlinkLiveFrameBridgeRunExternalD3D12RenderCopyForStandaloneRenderer(
       cache.cc_layer_host->RunExternalD3D12RenderCopyForTesting(d3d12_resource,
                                                                 shared_handle);
   return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
+    void* d3d12_resource,
+    void* shared_handle) {
+  static std::string result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!d3d12_resource && !shared_handle) {
+    result =
+        "gpu_external_d3d12_render_copy: failed failure=external D3D12 "
+        "resource/shared handle is null";
+    return result.c_str();
+  }
+  if (!cache.copy_output_gpu_frame.shared_image_available) {
+    result =
+        "gpu_external_d3d12_render_copy: failed failure=D3D12 SharedImage "
+        "CopyOutput did not initialize before external render-copy";
+    return result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    result =
+        "gpu_external_d3d12_render_copy: failed failure=cc layer host is not "
+        "available";
+    return result.c_str();
+  }
+  result =
+      cache.cc_layer_host->RenderExternalD3D12ToTarget(d3d12_resource,
+                                                       shared_handle);
+  return result.c_str();
 }
 
 const char*
