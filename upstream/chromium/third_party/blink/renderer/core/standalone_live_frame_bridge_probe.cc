@@ -4538,6 +4538,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     TraceLiveFrameProbeStage(
         "direct frame sink reset offscreen Display for external target resize");
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    if (offscreen_skia_dependency_) {
+      offscreen_skia_dependency_
+          ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+    }
     display_.reset();
     offscreen_skia_dependency_ = nullptr;
   }

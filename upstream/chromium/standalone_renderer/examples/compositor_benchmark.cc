@@ -203,6 +203,7 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-smoke] "
       "[--c-api-vulkan-external-target-large-smoke] "
       "[--c-api-vulkan-external-target-resize-smoke] "
+      "[--c-api-vulkan-external-target-rapid-resize-smoke] "
       "[--c-api-vulkan-external-target-pending-resize-smoke] "
       "[--c-api-vulkan-external-target-fps-timing-smoke] "
       "[--c-api-vulkan-external-target-click-timing-smoke] "
@@ -858,7 +859,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                       false,
                                   bool expect_invalid_uncached_d3d12_handle_after_resize =
                                       false,
-                                  bool full_viewport_button_document = false) {
+                                  bool full_viewport_button_document = false,
+                                  bool exercise_rapid_resize_sequence = false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
@@ -1544,16 +1546,27 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       uint32_t width;
       uint32_t height;
     };
-    const std::vector<ResizeStep> resize_steps =
-        exercise_host_pending_resize_boundary
-            ? std::vector<ResizeStep>{{2532, 1281}}
-        : repeated_after_resize_render_iterations > 0
-            ? std::vector<ResizeStep>{{width, height + 1}}
-            : std::vector<ResizeStep>{{1280, 720},
-                                      {1152, 648},
-                                      {1800, 1000},
-                                      {900, 600},
-                                      {2548, 1320}};
+    std::vector<ResizeStep> resize_steps;
+    if (exercise_host_pending_resize_boundary) {
+      resize_steps = {{2532, 1281}};
+    } else if (repeated_after_resize_render_iterations > 0) {
+      resize_steps = {{width, height + 1}};
+    } else if (exercise_rapid_resize_sequence) {
+      resize_steps = {{2512, 1301}, {2476, 1284}, {2440, 1267},
+                      {2404, 1250}, {2368, 1223}, {2336, 1206},
+                      {2316, 1199}, {2296, 1191}, {2240, 1164},
+                      {2160, 1120}, {2048, 1088}, {1920, 1080},
+                      {1800, 1000}, {1600, 900},  {1400, 780},
+                      {1280, 720},  {1152, 648},  {1024, 600},
+                      {900, 600},   {1152, 648},  {1280, 720},
+                      {1800, 1000}, {2316, 1199}, {2548, 1320}};
+    } else {
+      resize_steps = {{1280, 720},
+                      {1152, 648},
+                      {1800, 1000},
+                      {900, 600},
+                      {2548, 1320}};
+    }
     for (const ResizeStep& step : resize_steps) {
       status = blink_standalone_renderer_set_viewport(
           renderer, static_cast<int>(step.width), static_cast<int>(step.height),
@@ -2398,6 +2411,39 @@ int RunCApiVulkanExternalTargetResizeSmoke() {
       /*expect_invalid_vulkan_metadata=*/false,
       /*repeated_update_output_iterations=*/0,
       /*exercise_resize_sequence=*/true);
+}
+
+int RunCApiVulkanExternalTargetRapidResizeSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_rapid_resize_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/2548,
+      /*height=*/1320,
+      /*extra_css=*/"",
+      /*extra_body=*/"",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/true,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/true);
 }
 
 int RunCApiVulkanExternalTargetPendingResizeSmoke() {
@@ -10330,6 +10376,7 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_smoke = false;
   bool c_api_vulkan_external_target_large_smoke = false;
   bool c_api_vulkan_external_target_resize_smoke = false;
+  bool c_api_vulkan_external_target_rapid_resize_smoke = false;
   bool c_api_vulkan_external_target_pending_resize_smoke = false;
   bool c_api_vulkan_external_target_fps_timing_smoke = false;
   bool c_api_vulkan_external_target_click_timing_smoke = false;
@@ -10507,6 +10554,8 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_large_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-resize-smoke") {
       c_api_vulkan_external_target_resize_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-rapid-resize-smoke") {
+      c_api_vulkan_external_target_rapid_resize_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-pending-resize-smoke") {
       c_api_vulkan_external_target_pending_resize_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-fps-timing-smoke") {
@@ -10779,6 +10828,10 @@ int main(int argc, char** argv) {
 
   if (c_api_vulkan_external_target_resize_smoke) {
     return RunCApiVulkanExternalTargetResizeSmoke();
+  }
+
+  if (c_api_vulkan_external_target_rapid_resize_smoke) {
+    return RunCApiVulkanExternalTargetRapidResizeSmoke();
   }
 
   if (c_api_vulkan_external_target_pending_resize_smoke) {
