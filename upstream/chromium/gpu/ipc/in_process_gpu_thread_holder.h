@@ -22,6 +22,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include <d3d12.h>
+#include <wrl/client.h>
 #endif
 
 namespace gpu {
@@ -80,7 +81,10 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
 #endif
 
 #if BUILDFLAG(IS_WIN)
-  void SetExternalD3D12AdapterLuidForTesting(LUID adapter_luid);
+  void SetExternalD3D12AdapterLuidForTesting(
+      LUID adapter_luid,
+      ID3D12Device* d3d12_device = nullptr,
+      ID3D12CommandQueue* d3d12_command_queue = nullptr);
 #endif
 
   Scheduler* scheduler();
@@ -112,6 +116,8 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   std::unique_ptr<DawnContextProvider> dawn_context_provider_;
 #if BUILDFLAG(IS_WIN)
   std::optional<LUID> external_d3d12_adapter_luid_;
+  Microsoft::WRL::ComPtr<ID3D12Device> external_d3d12_device_;
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> external_d3d12_command_queue_;
 #endif
 #if BUILDFLAG(ENABLE_VULKAN)
   std::unique_ptr<VulkanImplementation> vulkan_implementation_;

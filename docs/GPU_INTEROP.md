@@ -717,83 +717,34 @@ stand-in target on the active standalone GPU device and verifies rendered HTML
 pixels through the same public C API call. It remains useful as an internal
 diagnostic, but it is not treated as real embedder handle support.
 
-The D3D12 public path has a real handle-adoption proof in the standalone
-benchmark, but the current API contract is narrower than the Vulkan same-device
-contract. `blink_standalone_renderer_configure_d3d12_external_device()` uses
-the supplied `ID3D12Device*` only to derive an adapter LUID before Blink creates
-its own Dawn D3D12 device. It does not adopt the embedder's `ID3D12Device` or
-`ID3D12CommandQueue`.
+The D3D12 public path now has an experimental same-device mode when the runtime
+is built with the tracked Dawn native overlay from
+`standalone_renderer/patches/dawn_d3d12_native`. The overlay adds a native Dawn
+D3D12 request option that borrows `ID3D12Device` and `ID3D12CommandQueue`
+handles instead of calling `D3D12CreateDevice()` and
+`ID3D12Device::CreateCommandQueue()` internally. Chromium then exposes that path
+through `gpu::DawnContextProvider::CreateWithExternalD3D12Device(...)`,
+`gpu::InProcessGpuThreadHolder`, and
+`blink_standalone_renderer_configure_d3d12_external_device()`.
 
-That leaves two valid D3D12 target modes today:
+That leaves two D3D12 target modes:
 
 - Same-device direct resource, when the supplied `ID3D12Resource*` belongs to
-  the active Blink/Dawn D3D12 device. This is what the internal borrowed-target
-  proof exercises, but embedders cannot force this with the current public ABI
-  because Blink still creates its own Dawn device.
-- Cross-device shared-handle import, when Blink's Dawn D3D12 device can
-  successfully call `ID3D12Device::OpenSharedHandle()` on the caller's handle.
-  The caller must create the target on a compatible adapter/device domain with
-  `D3D12_HEAP_FLAG_SHARED`, expose it with `CreateSharedHandle()`, keep the
-  original resource alive for the call, and pass a handle that is valid for
-  Blink's active Dawn device. If `OpenSharedHandle()` returns `E_INVALIDARG`,
-  Blink cannot write the target; this is reported as invalid target metadata,
-  not as a CPU fallback.
+  the configured embedder `ID3D12Device`. This is the preferred Godot path. The
+  target smoke configures the caller device/queue, supplies a caller-created
+  resource, and verifies deterministic HTML pixels at `1280x721` after repeated
+  output and mouse down/up activation frames.
+- Shared-handle import, when Blink can successfully call
+  `ID3D12Device::OpenSharedHandle()` on the caller's handle from the active Dawn
+  D3D12 device. This remains useful for compatible resources, but first-use
+  `OpenSharedHandle(E_INVALIDARG)` is a real invalid-target failure and does not
+  fall back to CPU.
 
-The Dawn native D3D12 API confirms this boundary:
-`SharedTextureMemoryD3D12ResourceDescriptor` requires the `ID3D12Resource` to be
-created from the same `ID3D12Device` used by the `WGPUDevice`. For true
-Godot-owned D3D12 textures, the next ABI step is therefore a same-device Dawn
-setup API that lets Blink initialize or wrap its Graphite/Dawn context using the
-embedder's `ID3D12Device` and `ID3D12CommandQueue`. A stable public target key
-is still useful after first import succeeds, but it cannot fix a fresh target
-whose shared handle cannot be opened by Blink's Dawn device.
-
-The current checkout does not contain that Dawn adoption seam. The standalone
-configuration path stores only an adapter LUID:
-
-- `blink_standalone_renderer_configure_d3d12_external_device()` derives an LUID
-  from the supplied `ID3D12Device` or from the explicit LUID fields.
-- `gpu::InProcessGpuThreadHolder` forwards that LUID to
-  `gpu::DawnContextProvider::CreateWithBackend(wgpu::BackendType::D3D12, ...)`.
-- `gpu::DawnContextProvider` uses
-  `dawn::native::d3d::RequestAdapterOptionsLUID` to request a Dawn adapter.
-
-After that point Dawn owns creation. In the pinned Dawn native source built by
-`standalone_renderer/tools/build_dawn_d3d12_native.py`,
-`dawn::native::d3d12::PhysicalDevice::InitializeImpl()` calls
-`D3D12CreateDevice()`, `dawn::native::d3d12::Device::Initialize()` takes that
-device from the physical device, and `dawn::native::d3d12::Queue::Initialize()`
-calls `ID3D12Device::CreateCommandQueue()`. The public Dawn D3D12 backend API in
-this checkout exposes `GetD3D12Device()` and `GetD3D12CommandQueue()` for a
-Dawn-created `WGPUDevice`, but it does not expose a factory that creates a
-`WGPUDevice` from caller-owned `ID3D12Device`/`ID3D12CommandQueue` handles.
-
-The smallest real same-device D3D12 implementation therefore starts in Dawn,
-not in the standalone C API alone:
-
-1. Import or patch a pinned Dawn native source tree, not only the generated
-   `build/dawn_probe` output, with an external D3D12 device descriptor/factory
-   that borrows `ID3D12Device` and `ID3D12CommandQueue` handles.
-2. Add the matching Dawn native D3D12 implementation mode so
-   `PhysicalDeviceD3D12` does not call `D3D12CreateDevice()` and `QueueD3D12`
-   does not create a separate command queue when external handles are supplied.
-   Ownership must stay explicit: Dawn/Blink may `AddRef` while configured, but
-   must not destroy or assume lifetime beyond the renderer/device contract.
-3. Add `gpu::DawnContextProvider::CreateWithExternalD3D12Device(...)` and plumb
-   it through `gpu::InProcessGpuThreadHolder`, the standalone Viz dependency,
-   and `blink_standalone_renderer_configure_d3d12_external_device()`.
-4. Add a public capability/configuration bit for same-device D3D12 adoption so
-   embedders can distinguish this mode from the current adapter-LUID selection
-   path.
-5. Validate with a smoke that compares COM identity for the configured
-   embedder device, the active Dawn device, and the caller-created target
-   resource before rendering deterministic HTML pixels into that resource.
-
-Until those pieces exist, `direct_resource_compatible=0` is expected for
-Godot-created D3D12 targets even when Godot passes `ID3D12Device*` and
-`ID3D12CommandQueue*` to the current configure call. The remaining functional
-options are a shared handle that Blink's Dawn-created device can open, or the
-internal stand-in target created on Blink's Dawn device.
+The public C API still expects a `shared_handle` alongside the resource to select
+the external D3D12 target path, but compatible direct `ID3D12Resource*` use is
+preferred once same-device configuration succeeds. Builds without the Dawn
+overlay keep the older adapter-LUID path and cannot make Godot-owned resources
+direct-compatible.
 
 For current diagnostics, D3D12 shared-handle failures include cache hit state,
 raw and canonical resource identity pointers, `direct_resource_compatible`, and
@@ -852,9 +803,10 @@ out of scope for this checkpoint.
   call for Vulkan using caller-created raw Vulkan device handles and a
   caller-created raw `VkImage`, with caller-side readback of deterministic
   rendered HTML pixels.
-- Real D3D12 shared-handle adoption is available on Windows. Raw D3D12 resource
-  pointer adoption still requires a same-device setup contract and is rejected
-  by the public C API.
+- Real D3D12 same-device adoption is available on Windows in builds that include
+  the experimental Dawn native overlay. The public path still expects a shared
+  handle to select external-target mode, but direct `ID3D12Resource*` use is
+  preferred when the resource belongs to the configured device.
 - Real Vulkan same-device embedder-owned native handle adoption is available
   when `blink_standalone_renderer_configure_vulkan_external_device()` succeeds.
   Cross-device Vulkan external-memory import is not implemented and should
@@ -867,9 +819,10 @@ The validated GPU target paths are now:
 1. Vulkan same-device: the embedder supplies raw Vulkan device/queue handles
    before document/frame use, then supplies raw caller-owned `VkImage` target
    metadata per render call.
-2. D3D12 shared handle: the embedder supplies a caller-created texture exposed
-   through a DXGI shared handle, and the renderer opens/writes that target on
-   its active Dawn D3D12 device.
+2. D3D12 same-device: the embedder configures `ID3D12Device` and
+   `ID3D12CommandQueue`, then supplies a caller-created texture/resource target
+   with a shared handle. The renderer adopts the device/queue in experimental
+   Dawn-overlay builds and writes the direct-compatible resource.
 
 The remaining GPU interop work is integration hardening rather than the initial
 pixel proof:
@@ -880,5 +833,5 @@ pixel proof:
 - add Godot-side Vulkan/D3D12 backend wiring behind explicit capability checks;
 - keep cross-device Vulkan external-memory import explicitly unsupported until
   a separate OPAQUE_WIN32/fd import path is implemented and validated;
-- keep raw D3D12 `ID3D12Resource*` pointer adoption unsupported unless a
-  same-device setup API analogous to Vulkan is added.
+- relax the current D3D12 requirement for a companion shared handle only after
+  the direct-resource-only public path and diagnostics are validated.

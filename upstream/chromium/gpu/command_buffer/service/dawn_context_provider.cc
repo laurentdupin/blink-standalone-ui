@@ -57,7 +57,11 @@
 #include <d3d11on12.h>
 
 #include "third_party/dawn/include/dawn/native/D3D11Backend.h"
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#include "dawn/native/D3D12Backend.h"
+#else
 #include "third_party/dawn/include/dawn/native/D3D12Backend.h"
+#endif
 #include "ui/gl/direct_composition_support.h"
 #include "ui/gl/gl_angle_util_win.h"
 #endif
@@ -531,6 +535,15 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
                   const GpuDriverBugWorkarounds& workarounds,
                   DawnContextProvider::ValidateAdapterFn validate_adapter_fn,
                   std::optional<LUID> adapter_luid);
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  void SetExternalD3D12DeviceForInitialize(
+      Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device,
+      Microsoft::WRL::ComPtr<ID3D12CommandQueue> d3d12_command_queue) {
+    external_d3d12_device_ = std::move(d3d12_device);
+    external_d3d12_command_queue_ = std::move(d3d12_command_queue);
+  }
+#endif
   void SetCachingInterface(
       std::unique_ptr<webgpu::DawnCachingInterface> dawn_caching_interface);
   void SetCachingInterface(scoped_refptr<GpuPersistentCache> persistent_cache);
@@ -804,6 +817,11 @@ class DawnSharedContext : public base::RefCountedThreadSafe<DawnSharedContext>,
   std::optional<error::ContextLostReason> context_lost_reason_
       GUARDED_BY(context_lost_lock_);
   std::string context_lost_message_ GUARDED_BY(context_lost_lock_);
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  Microsoft::WRL::ComPtr<ID3D12Device> external_d3d12_device_;
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> external_d3d12_command_queue_;
+#endif
 
   THREAD_CHECKER(main_thread_checker_);
 };
@@ -934,6 +952,19 @@ bool DawnSharedContext::Initialize(
     // Request the GPU that ANGLE is using if possible.
     adapter_options_luid.nextInChain = adapter_options.nextInChain;
     adapter_options.nextInChain = &adapter_options_luid;
+  }
+#endif
+
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  dawn::native::d3d12::RequestAdapterOptionsD3D12Device
+      adapter_options_d3d12_device;
+  if (adapter_options.backendType == wgpu::BackendType::D3D12 &&
+      external_d3d12_device_ && external_d3d12_command_queue_) {
+    adapter_options_d3d12_device.device = external_d3d12_device_;
+    adapter_options_d3d12_device.commandQueue =
+        external_d3d12_command_queue_;
+    adapter_options_d3d12_device.nextInChain = adapter_options.nextInChain;
+    adapter_options.nextInChain = &adapter_options_d3d12_device;
   }
 #endif
 
@@ -1401,6 +1432,42 @@ std::unique_ptr<DawnContextProvider> DawnContextProvider::CreateWithBackend(
   return base::WrapUnique(
       new DawnContextProvider(std::move(dawn_shared_context)));
 }
+
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+std::unique_ptr<DawnContextProvider>
+DawnContextProvider::CreateWithExternalD3D12Device(
+    Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device,
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> d3d12_command_queue,
+    const GpuPreferences& gpu_preferences,
+    const GpuFeatureInfo& gpu_feature_info,
+    gl::ProgressReporter* progress_reporter,
+    ValidateAdapterFn validate_adapter_fn,
+    std::optional<LUID> adapter_luid) {
+  if (!d3d12_device || !d3d12_command_queue) {
+    return nullptr;
+  }
+  if (!adapter_luid) {
+    adapter_luid = d3d12_device->GetAdapterLuid();
+  }
+  bool use_thread_safe_graphite_context =
+      features::IsDrDcEnabled(gpu_feature_info) &&
+      features::IsGraphiteContextThreadSafe();
+  auto dawn_shared_context = base::MakeRefCounted<DawnSharedContext>(
+      progress_reporter, use_thread_safe_graphite_context);
+  dawn_shared_context->SetExternalD3D12DeviceForInitialize(
+      std::move(d3d12_device), std::move(d3d12_command_queue));
+  GpuDriverBugWorkarounds workarounds(
+      gpu_feature_info.enabled_gpu_driver_bug_workarounds);
+  if (!dawn_shared_context->Initialize(
+          wgpu::BackendType::D3D12, /*force_fallback_adapter=*/false,
+          gpu_preferences, workarounds, validate_adapter_fn, adapter_luid)) {
+    return nullptr;
+  }
+  return base::WrapUnique(
+      new DawnContextProvider(std::move(dawn_shared_context)));
+}
+#endif
 
 std::unique_ptr<DawnContextProvider>
 DawnContextProvider::CreateWithSharedDevice(

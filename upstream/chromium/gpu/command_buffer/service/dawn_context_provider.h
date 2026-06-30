@@ -63,6 +63,17 @@ class GPU_GLES2_EXPORT DawnContextProvider {
       gl::ProgressReporter* progress_reporter = nullptr,
       ValidateAdapterFn validate_adapter_fn = DefaultValidateAdapterFn,
       std::optional<LUID> adapter_luid = std::nullopt);
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  static std::unique_ptr<DawnContextProvider> CreateWithExternalD3D12Device(
+      Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device,
+      Microsoft::WRL::ComPtr<ID3D12CommandQueue> d3d12_command_queue,
+      const GpuPreferences& gpu_preferences,
+      const GpuFeatureInfo& gpu_feature_info,
+      gl::ProgressReporter* progress_reporter = nullptr,
+      ValidateAdapterFn validate_adapter_fn = DefaultValidateAdapterFn,
+      std::optional<LUID> adapter_luid = std::nullopt);
+#endif
 
   // Creates a new context provider for use on a different thread that shares
   // the wgpu::Device/Adapter/Instance with `existing`.

@@ -294,10 +294,11 @@ typedef struct blink_standalone_vulkan_external_device {
 
 typedef struct blink_standalone_d3d12_external_target {
   /* Raw ID3D12Resource* is used only when it is compatible with the active
-   * Blink/Dawn D3D12 device. The current public configure call does not adopt
-   * the embedder's ID3D12Device/queue; it uses the adapter LUID to choose
-   * Blink's Dawn adapter. Cross-device callers must pass shared_handle and that
-   * handle must be openable by Blink's Dawn D3D12 device. */
+   * Blink/Dawn D3D12 device. Experimental Dawn builds that include the
+   * standalone external-device patch adopt the configured ID3D12Device/queue,
+   * allowing the direct resource path to be used for caller-created targets on
+   * that device. Cross-device callers must pass shared_handle and that handle
+   * must be openable by Blink's Dawn D3D12 device. */
   void* d3d12_device;
   void* d3d12_command_queue;
   void* d3d12_resource;
@@ -322,11 +323,12 @@ typedef struct blink_standalone_d3d12_external_target {
 } blink_standalone_d3d12_external_target_t;
 
 typedef struct blink_standalone_d3d12_external_device {
-  /* Optional borrowed ID3D12Device*. The current implementation derives the
-   * adapter LUID from this device; it does not adopt the device or queue. */
+  /* Optional borrowed ID3D12Device*. Experimental Dawn D3D12 builds adopt this
+   * device as the active Blink/Dawn device. Other builds derive the adapter LUID
+   * from this device and create a separate Dawn device. */
   void* d3d12_device;
-  /* Optional borrowed ID3D12CommandQueue*. Reserved for future same-device
-   * Dawn setup; ignored by the current implementation. */
+  /* Optional borrowed ID3D12CommandQueue*. Experimental Dawn D3D12 builds adopt
+   * this queue with the borrowed device. Other builds ignore it. */
   void* d3d12_command_queue;
   /* Optional explicit DXGI adapter LUID. If both fields are zero, Blink derives
    * the LUID from d3d12_device via ID3D12Device::GetAdapterLuid(). */

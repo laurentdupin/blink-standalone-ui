@@ -1496,8 +1496,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       snapshot_.active_element_id = result.successor_snapshot.active_element_id;
     }
 
+    ImportHitTestEntries(probe_html, result);
     if (collect_full_result) {
-      ImportHitTestEntries(probe_html, result);
       ImportFormControlEntries(probe_html, result);
       ImportBackdropFilterRegions(probe_html, result);
       ImportScrollableElementEntries(probe_html, result);
@@ -1881,7 +1881,6 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.gpu_frame = GpuFrameOutput();
     if (input.result_collection == FrameResultCollection::kMinimal) {
       result.raw_paint_artifact_audit_json.clear();
-      result.hit_test_entries.clear();
       result.form_control_entries.clear();
       result.backdrop_filter_regions.clear();
       result.scrollable_element_entries.clear();

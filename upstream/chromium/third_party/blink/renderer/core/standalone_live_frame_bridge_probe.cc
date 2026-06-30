@@ -153,12 +153,13 @@
 #include "ui/gl/init/gl_factory.h"
 #include "ui/gl/presenter.h"
 
-#if BUILDFLAG(IS_WIN) && \
-    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#if BUILDFLAG(IS_WIN)
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include "gpu/command_buffer/service/shared_image/d3d_image_utils.h"
+#endif
 #endif
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/document_lifecycle.h"
@@ -317,6 +318,10 @@ std::unique_ptr<gpu::VulkanDeviceQueue>
     g_pending_external_vulkan_device_queue_for_testing;
 #if BUILDFLAG(IS_WIN)
 std::optional<LUID> g_pending_external_d3d12_adapter_luid_for_testing;
+Microsoft::WRL::ComPtr<ID3D12Device>
+    g_pending_external_d3d12_device_for_testing;
+Microsoft::WRL::ComPtr<ID3D12CommandQueue>
+    g_pending_external_d3d12_command_queue_for_testing;
 #endif
 }  // namespace
 
@@ -347,12 +352,18 @@ void InstallPendingExternalVulkanForTesting(
 
 void StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
     uint32_t adapter_luid_low,
-    int32_t adapter_luid_high) {
+    int32_t adapter_luid_high,
+    void* d3d12_device,
+    void* d3d12_command_queue) {
 #if BUILDFLAG(IS_WIN)
   LUID luid = {};
   luid.LowPart = adapter_luid_low;
   luid.HighPart = adapter_luid_high;
   g_pending_external_d3d12_adapter_luid_for_testing = luid;
+  g_pending_external_d3d12_device_for_testing =
+      static_cast<ID3D12Device*>(d3d12_device);
+  g_pending_external_d3d12_command_queue_for_testing =
+      static_cast<ID3D12CommandQueue*>(d3d12_command_queue);
 #endif
 }
 
@@ -363,8 +374,12 @@ void InstallPendingExternalD3D12AdapterLuidForTesting(
     return;
   }
   holder->SetExternalD3D12AdapterLuidForTesting(
-      *g_pending_external_d3d12_adapter_luid_for_testing);
+      *g_pending_external_d3d12_adapter_luid_for_testing,
+      g_pending_external_d3d12_device_for_testing.Get(),
+      g_pending_external_d3d12_command_queue_for_testing.Get());
   g_pending_external_d3d12_adapter_luid_for_testing.reset();
+  g_pending_external_d3d12_device_for_testing.Reset();
+  g_pending_external_d3d12_command_queue_for_testing.Reset();
 #endif
 }
 
@@ -17023,11 +17038,11 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   }
   cache.hit_test_entries.clear();
   cache.scrollable_element_entries.clear();
+  CollectLiveHitTestEntriesForStandaloneRenderer(&document,
+                                                 cache.hit_test_entries);
   if (cache.collect_frame_diagnostics) {
     cache.image_reachability =
         CollectImageReachabilityForStandaloneRenderer(document, input_html);
-    CollectLiveHitTestEntriesForStandaloneRenderer(&document,
-                                                   cache.hit_test_entries);
     CollectLiveScrollableElementEntriesForStandaloneRenderer(
         &document, cache.scrollable_element_entries);
     cache.sticky_position_diagnostics_json =
@@ -17113,9 +17128,9 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
         " skia_gpu=" +
         std::to_string(cache.cc_skia_gpu_reached ? 1 : 0));
   }
+  SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
+      artifact, cache.hit_test_entries);
   if (cache.collect_frame_diagnostics) {
-    SortLiveHitTestEntriesByPaintOrderForStandaloneRenderer(
-        artifact, cache.hit_test_entries);
     SortLiveScrollableElementEntriesByPaintOrderForStandaloneRenderer(
         artifact, cache.scrollable_element_entries);
   }

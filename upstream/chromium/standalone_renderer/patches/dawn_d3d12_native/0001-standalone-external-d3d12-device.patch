@@ -1,0 +1,316 @@
+diff --git a/include/dawn/native/D3D12Backend.h b/include/dawn/native/D3D12Backend.h
+index e27c671aa..acdf113b8 100644
+--- a/include/dawn/native/D3D12Backend.h
++++ b/include/dawn/native/D3D12Backend.h
+@@ -55,6 +55,19 @@ DAWN_NATIVE_EXPORT Microsoft::WRL::ComPtr<ID3D11On12Device> GetOrCreateD3D11On12
+ DAWN_NATIVE_EXPORT Microsoft::WRL::ComPtr<ID3D12CommandQueue> GetD3D12CommandQueue(
+     WGPUDevice device);
+
++// May be chained on RequestAdapterOptions. This native-only extension is used
++// by the standalone renderer to initialize Dawn on a caller-owned D3D12 device
++// and direct command queue. Dawn retains COM references while the WGPUDevice is
++// alive, but ownership remains with the caller.
++struct DAWN_NATIVE_EXPORT RequestAdapterOptionsD3D12Device : wgpu::ChainedStruct {
++    RequestAdapterOptionsD3D12Device() {
++        sType = static_cast<wgpu::SType>(0x0005FF12);
++    }
++
++    Microsoft::WRL::ComPtr<ID3D12Device> device;
++    Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue;
++};
++
+ DAWN_NATIVE_EXPORT uint64_t SetExternalMemoryReservation(WGPUDevice device,
+                                                          uint64_t requestedReservationSize,
+                                                          MemorySegment memorySegment);
+diff --git a/src/dawn/native/ChainUtilsImpl.inl b/src/dawn/native/ChainUtilsImpl.inl
+index e989813d8..b67547b82 100644
+--- a/src/dawn/native/ChainUtilsImpl.inl
++++ b/src/dawn/native/ChainUtilsImpl.inl
+@@ -42,6 +42,7 @@ struct SharedTextureMemoryD3D11Texture2DDescriptor;
+ }
+
+ namespace d3d12 {
++struct RequestAdapterOptionsD3D12Device;
+ struct SharedBufferMemoryD3D12ResourceDescriptor;
+ struct SharedTextureMemoryD3D12ResourceDescriptor;
+ }
+@@ -74,6 +75,10 @@ template <>
+ constexpr inline wgpu::SType STypeForImpl<d3d11::RequestAdapterOptionsD3D11Device> =
+     wgpu::SType(WGPUSType_RequestAdapterOptionsD3D11Device);
+
++template <>
++constexpr inline wgpu::SType STypeForImpl<d3d12::RequestAdapterOptionsD3D12Device> =
++    wgpu::SType(0x0005FF12);
++
+ template <>
+ constexpr inline wgpu::SType STypeForImpl<opengl::RequestAdapterOptionsGetGLProc> =
+     wgpu::SType(WGPUSType_RequestAdapterOptionsGetGLProc);
+@@ -86,6 +91,7 @@ template <>
+ struct AdditionalExtensions<RequestAdapterOptions> {
+     using List = AdditionalExtensionsList<const d3d::RequestAdapterOptionsLUID*,
+                                           const d3d11::RequestAdapterOptionsD3D11Device*,
++                                          const d3d12::RequestAdapterOptionsD3D12Device*,
+                                           const opengl::RequestAdapterOptionsGetGLProc*,
+                                           const opengl::RequestAdapterOptionsAngleVirtualizationGroup*>;
+ };
+diff --git a/src/dawn/native/d3d12/BackendD3D12.cpp b/src/dawn/native/d3d12/BackendD3D12.cpp
+index 005fa02dc..e5fb97a42 100644
+--- a/src/dawn/native/d3d12/BackendD3D12.cpp
++++ b/src/dawn/native/d3d12/BackendD3D12.cpp
+@@ -31,7 +31,9 @@
+ #include <utility>
+
+ #include "dawn/common/Log.h"
++#include "dawn/native/ChainUtils.h"
+ #include "dawn/native/D3D12Backend.h"
++#include "dawn/native/D3DBackend.h"
+ #include "dawn/native/Instance.h"
+ #include "dawn/native/d3d/D3DError.h"
+ #include "dawn/native/d3d12/PhysicalDeviceD3D12.h"
+@@ -39,6 +41,57 @@
+ #include "dawn/native/d3d12/UtilsD3D12.h"
+
+ namespace dawn::native::d3d12 {
++namespace {
++
++MaybeError ValidateRequestOptions(const UnpackedPtr<RequestAdapterOptions>& options,
++                                  IDXGIFactory4* factory,
++                                  ComPtr<IDXGIAdapter>* dxgiAdapter,
++                                  ComPtr<ID3D12Device>* d3d12Device,
++                                  ComPtr<ID3D12CommandQueue>* d3d12CommandQueue) {
++    auto* d3d12DeviceOption = options.Get<RequestAdapterOptionsD3D12Device>();
++    if (!d3d12DeviceOption) {
++        return {};
++    }
++
++    DAWN_INVALID_IF(!d3d12DeviceOption->device,
++                    "RequestAdapterOptionsD3D12Device::device is null.");
++    DAWN_INVALID_IF(!d3d12DeviceOption->commandQueue,
++                    "RequestAdapterOptionsD3D12Device::commandQueue is null.");
++
++    ComPtr<ID3D12Device> queueDevice;
++    DAWN_TRY(CheckHRESULT(
++        d3d12DeviceOption->commandQueue->GetDevice(IID_PPV_ARGS(&queueDevice)),
++        "D3D12 command queue GetDevice"));
++
++    ComPtr<IUnknown> optionDeviceIdentity;
++    ComPtr<IUnknown> queueDeviceIdentity;
++    DAWN_TRY(CheckHRESULT(d3d12DeviceOption->device.As(&optionDeviceIdentity),
++                          "D3D12 device QueryInterface IUnknown"));
++    DAWN_TRY(CheckHRESULT(queueDevice.As(&queueDeviceIdentity),
++                          "D3D12 queue device QueryInterface IUnknown"));
++    DAWN_INVALID_IF(optionDeviceIdentity.Get() != queueDeviceIdentity.Get(),
++                    "RequestAdapterOptionsD3D12Device device and commandQueue do not belong to "
++                    "the same ID3D12Device.");
++
++    LUID adapterLuid = d3d12DeviceOption->device->GetAdapterLuid();
++    if (auto* luidOptions = options.Get<d3d::RequestAdapterOptionsLUID>()) {
++        DAWN_INVALID_IF(
++            memcmp(&adapterLuid, &luidOptions->adapterLUID, sizeof(LUID)) != 0,
++            "RequestAdapterOptionsLUID and RequestAdapterOptionsD3D12Device don't match.");
++    }
++
++    ComPtr<IDXGIAdapter1> adapter;
++    DAWN_TRY(CheckHRESULT(factory->EnumAdapterByLuid(adapterLuid, IID_PPV_ARGS(&adapter)),
++                          "EnumAdapterByLuid"));
++
++    *dxgiAdapter = std::move(adapter);
++    *d3d12Device = d3d12DeviceOption->device;
++    *d3d12CommandQueue = d3d12DeviceOption->commandQueue;
++
++    return {};
++}
++
++}  // namespace
+
+ Backend::Backend(InstanceBase* instance) : Base(instance, wgpu::BackendType::D3D12) {}
+
+@@ -135,10 +188,51 @@ ComPtr<IDxcValidator> Backend::GetDxcValidator() const {
+
+ ResultOrError<Ref<PhysicalDeviceBase>> Backend::CreatePhysicalDeviceFromIDXGIAdapter(
+     ComPtr<IDXGIAdapter> dxgiAdapter) {
++    return CreatePhysicalDevice(std::move(dxgiAdapter), /*d3d12Device=*/{},
++                                /*d3d12CommandQueue=*/{});
++}
++
++std::vector<Ref<PhysicalDeviceBase>> Backend::DiscoverPhysicalDevices(
++    const UnpackedPtr<RequestAdapterOptions>& options) {
++    if (options->forceFallbackAdapter) {
++        return {};
++    }
++
++    ComPtr<IDXGIAdapter> dxgiAdapter;
++    ComPtr<ID3D12Device> d3d12Device;
++    ComPtr<ID3D12CommandQueue> d3d12CommandQueue;
++    if (GetInstance()->ConsumedError(
++            ValidateRequestOptions(options, GetFactory(), &dxgiAdapter, &d3d12Device,
++                                   &d3d12CommandQueue))) {
++        return {};
++    }
++
++    if (d3d12Device) {
++        Ref<PhysicalDeviceBase> physicalDevice;
++        if (GetInstance()->ConsumedErrorAndWarnOnce(
++                CreatePhysicalDevice(std::move(dxgiAdapter), std::move(d3d12Device),
++                                     std::move(d3d12CommandQueue)),
++                &physicalDevice) ||
++            !physicalDevice->SupportsFeatureLevel(options->featureLevel, GetInstance())) {
++            return {};
++        }
++        return {std::move(physicalDevice)};
++    }
++
++    return Base::DiscoverPhysicalDevices(options);
++}
++
++ResultOrError<Ref<PhysicalDeviceBase>> Backend::CreatePhysicalDevice(
++    ComPtr<IDXGIAdapter> dxgiAdapter,
++    ComPtr<ID3D12Device> d3d12Device,
++    ComPtr<ID3D12CommandQueue> d3d12CommandQueue) {
+     ComPtr<IDXGIAdapter3> dxgiAdapter3;
+     DAWN_TRY(CheckHRESULT(dxgiAdapter.As(&dxgiAdapter3), "DXGIAdapter retrieval"));
+     Ref<PhysicalDevice> physicalDevice =
+-        AcquireRef(new PhysicalDevice(this, std::move(dxgiAdapter3)));
++        d3d12Device ? AcquireRef(new PhysicalDevice(this, std::move(dxgiAdapter3),
++                                                    std::move(d3d12Device),
++                                                    std::move(d3d12CommandQueue)))
++                    : AcquireRef(new PhysicalDevice(this, std::move(dxgiAdapter3)));
+     DAWN_TRY(physicalDevice->Initialize());
+
+     return {std::move(physicalDevice)};
+diff --git a/src/dawn/native/d3d12/BackendD3D12.h b/src/dawn/native/d3d12/BackendD3D12.h
+index 447076af4..06c617a3c 100644
+--- a/src/dawn/native/d3d12/BackendD3D12.h
++++ b/src/dawn/native/d3d12/BackendD3D12.h
+@@ -59,11 +59,19 @@ class Backend final : public d3d::Backend {
+
+     const PlatformFunctions* GetFunctions() const;
+
++    std::vector<Ref<PhysicalDeviceBase>> DiscoverPhysicalDevices(
++        const UnpackedPtr<RequestAdapterOptions>& options) override;
++
+   protected:
+     ResultOrError<Ref<PhysicalDeviceBase>> CreatePhysicalDeviceFromIDXGIAdapter(
+         ComPtr<IDXGIAdapter> dxgiAdapter) override;
+
+   private:
++    ResultOrError<Ref<PhysicalDeviceBase>> CreatePhysicalDevice(
++        ComPtr<IDXGIAdapter> dxgiAdapter,
++        ComPtr<ID3D12Device> d3d12Device,
++        ComPtr<ID3D12CommandQueue> d3d12CommandQueue);
++
+     ComPtr<IDxcLibrary> mDxcLibrary;
+     ComPtr<IDxcCompiler3> mDxcCompiler;
+     ComPtr<IDxcValidator> mDxcValidator;
+diff --git a/src/dawn/native/d3d12/PhysicalDeviceD3D12.cpp b/src/dawn/native/d3d12/PhysicalDeviceD3D12.cpp
+index 44787d3f9..b8ec45179 100644
+--- a/src/dawn/native/d3d12/PhysicalDeviceD3D12.cpp
++++ b/src/dawn/native/d3d12/PhysicalDeviceD3D12.cpp
+@@ -66,6 +66,15 @@ const D3D12_MESSAGE_ID DAWN_MESSAGE_ID_CREATERESOURCE_INVALIDALIGNMENT_SMALLRESO
+ PhysicalDevice::PhysicalDevice(Backend* backend, ComPtr<IDXGIAdapter3> hardwareAdapter)
+     : Base(backend, std::move(hardwareAdapter), wgpu::BackendType::D3D12) {}
+
++PhysicalDevice::PhysicalDevice(Backend* backend,
++                               ComPtr<IDXGIAdapter3> hardwareAdapter,
++                               ComPtr<ID3D12Device> d3d12Device,
++                               ComPtr<ID3D12CommandQueue> d3d12CommandQueue)
++    : Base(backend, std::move(hardwareAdapter), wgpu::BackendType::D3D12),
++      mD3d12Device(std::move(d3d12Device)),
++      mD3d12CommandQueue(std::move(d3d12CommandQueue)),
++      mIsSharedD3D12Device(true) {}
++
+ PhysicalDevice::~PhysicalDevice() {
+     CleanUpDebugLayerFilters();
+ }
+@@ -100,15 +109,21 @@ ComPtr<ID3D12Device> PhysicalDevice::GetDevice() const {
+     return mD3d12Device;
+ }
+
++ComPtr<ID3D12CommandQueue> PhysicalDevice::GetCommandQueue() const {
++    return mD3d12CommandQueue;
++}
++
+ MaybeError PhysicalDevice::InitializeImpl() {
+     DAWN_TRY(Base::InitializeImpl());
+     // D3D12 cannot check for feature support without a device.
+     // Create the device to populate the adapter properties then reuse it when needed for actual
+     // rendering.
+     const PlatformFunctions* functions = GetBackend()->GetFunctions();
+-    if (FAILED(functions->d3d12CreateDevice(GetHardwareAdapter(), D3D_FEATURE_LEVEL_11_0,
+-                                            __uuidof(ID3D12Device), &mD3d12Device))) {
+-        return DAWN_INTERNAL_ERROR("D3D12CreateDevice failed");
++    if (!mIsSharedD3D12Device) {
++        if (FAILED(functions->d3d12CreateDevice(GetHardwareAdapter(), D3D_FEATURE_LEVEL_11_0,
++                                                __uuidof(ID3D12Device), &mD3d12Device))) {
++            return DAWN_INTERNAL_ERROR("D3D12CreateDevice failed");
++        }
+     }
+
+     // Check if we should block the use of D3D12 on the current device.
+diff --git a/src/dawn/native/d3d12/PhysicalDeviceD3D12.h b/src/dawn/native/d3d12/PhysicalDeviceD3D12.h
+index 2c5f58fbd..d2d909684 100644
+--- a/src/dawn/native/d3d12/PhysicalDeviceD3D12.h
++++ b/src/dawn/native/d3d12/PhysicalDeviceD3D12.h
+@@ -40,6 +40,10 @@ class Backend;
+ class PhysicalDevice : public d3d::PhysicalDevice {
+   public:
+     PhysicalDevice(Backend* backend, ComPtr<IDXGIAdapter3> hardwareAdapter);
++    PhysicalDevice(Backend* backend,
++                   ComPtr<IDXGIAdapter3> hardwareAdapter,
++                   ComPtr<ID3D12Device> d3d12Device,
++                   ComPtr<ID3D12CommandQueue> d3d12CommandQueue);
+     ~PhysicalDevice() override;
+
+     // PhysicalDeviceBase Implementation
+@@ -54,6 +58,7 @@ class PhysicalDevice : public d3d::PhysicalDevice {
+     const D3D12DeviceInfo& GetDeviceInfo() const;
+     Backend* GetBackend() const;
+     ComPtr<ID3D12Device> GetDevice() const;
++    ComPtr<ID3D12CommandQueue> GetCommandQueue() const;
+
+     bool SupportsBufferMapExtendedUsages() const;
+
+@@ -94,6 +99,8 @@ class PhysicalDevice : public d3d::PhysicalDevice {
+     uint32_t ComputeSubgroupMaxSize() const;
+
+     ComPtr<ID3D12Device> mD3d12Device;
++    ComPtr<ID3D12CommandQueue> mD3d12CommandQueue;
++    bool mIsSharedD3D12Device = false;
+
+     D3D12DeviceInfo mDeviceInfo = {};
+ };
+diff --git a/src/dawn/native/d3d12/QueueD3D12.cpp b/src/dawn/native/d3d12/QueueD3D12.cpp
+index 6b2d1cd2d..90eea4eff 100644
+--- a/src/dawn/native/d3d12/QueueD3D12.cpp
++++ b/src/dawn/native/d3d12/QueueD3D12.cpp
+@@ -42,6 +42,7 @@
+ #include "dawn/native/d3d/D3DError.h"
+ #include "dawn/native/d3d12/CommandBufferD3D12.h"
+ #include "dawn/native/d3d12/DeviceD3D12.h"
++#include "dawn/native/d3d12/PhysicalDeviceD3D12.h"
+ #include "dawn/native/d3d12/SharedFenceD3D12.h"
+ #include "dawn/native/d3d12/UtilsD3D12.h"
+ #include "dawn/platform/DawnPlatform.h"
+@@ -64,12 +65,16 @@ MaybeError Queue::Initialize() {
+     SetLabelImpl();
+
+     ID3D12Device* d3d12Device = ToBackend(GetDevice())->GetD3D12Device();
+-
+-    D3D12_COMMAND_QUEUE_DESC queueDesc = {};
+-    queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+-    queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+-    DAWN_TRY(CheckHRESULT(d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&mCommandQueue)),
+-                          "D3D12 create command queue"));
++    mCommandQueue = ToBackend(ToBackend(GetDevice())->GetPhysicalDevice())->GetCommandQueue();
++
++    if (mCommandQueue == nullptr) {
++        D3D12_COMMAND_QUEUE_DESC queueDesc = {};
++        queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
++        queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
++        DAWN_TRY(CheckHRESULT(
++            d3d12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&mCommandQueue)),
++            "D3D12 create command queue"));
++    }
+
+     // If PIX is not attached, the QueryInterface fails. Hence, no need to check the return
+     // value.

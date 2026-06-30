@@ -44,6 +44,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include <d3d12.h>
+#include <wrl/client.h>
 #endif
 
 #if BUILDFLAG(ENABLE_VULKAN)
@@ -58,7 +59,9 @@ void StandaloneBlinkLiveFrameBridgeInstallExternalVulkanForTesting(
 namespace blink::standalone_renderer_probe {
 void StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
     uint32_t adapter_luid_low,
-    int32_t adapter_luid_high);
+    int32_t adapter_luid_high,
+    void* d3d12_device,
+    void* d3d12_command_queue);
 }  // namespace blink::standalone_renderer_probe
 #endif
 
@@ -616,6 +619,8 @@ struct blink_standalone_renderer {
   bool external_d3d12_configured = false;
   uint32_t external_d3d12_adapter_luid_low = 0;
   int32_t external_d3d12_adapter_luid_high = 0;
+  Microsoft::WRL::ComPtr<ID3D12Device> external_d3d12_device;
+  Microsoft::WRL::ComPtr<ID3D12CommandQueue> external_d3d12_command_queue;
 #endif
   html_css_renderer::CompositorFrameResult latest_result;
   std::vector<blink_standalone_rect_t> dirty_rects;
@@ -826,7 +831,9 @@ blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* rend
     blink::standalone_renderer_probe::
         StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
             renderer->external_d3d12_adapter_luid_low,
-            renderer->external_d3d12_adapter_luid_high);
+            renderer->external_d3d12_adapter_luid_high,
+            renderer->external_d3d12_device.Get(),
+            renderer->external_d3d12_command_queue.Get());
   }
 #endif
   html_css_renderer::CompositorRuntimeCreateInfo create_info;
@@ -1442,6 +1449,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
   renderer->external_d3d12_adapter_luid_low = luid_low;
   renderer->external_d3d12_adapter_luid_high = luid_high;
+  renderer->external_d3d12_device =
+      static_cast<ID3D12Device*>(device->d3d12_device);
+  renderer->external_d3d12_command_queue =
+      static_cast<ID3D12CommandQueue*>(device->d3d12_command_queue);
   renderer->external_d3d12_configured = true;
   return InitializeRuntime(renderer);
 #else
@@ -1511,6 +1522,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       renderer->latest_result.needs_output &&
       !FrameResultHasGpuPreparePending(renderer->latest_result) &&
       !renderer->gpu_prepare_required_after_update &&
+      !renderer->gpu_source_frame_pending &&
       !HasPendingFrameInput(renderer);
   if (!collect_updated_frame) {
     const bool request_prepared_external_source =

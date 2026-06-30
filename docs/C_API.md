@@ -65,33 +65,33 @@ carries `ID3D12Device*`, `ID3D12CommandQueue*`, `ID3D12Resource*`, shared
 handle, DXGI format, extent, current/final resource state, and wait/signal
 fence metadata.
 
-The current D3D12 configure call does not adopt the embedder's
-`ID3D12Device`/queue. It derives an adapter LUID and Blink creates its own Dawn
-D3D12 device. A supplied `ID3D12Resource*` is used directly only if it belongs
-to that active Blink/Dawn device; otherwise the shared handle must be openable
-by Blink's Dawn device. A stable target key cannot repair first-use
-`OpenSharedHandle` failure.
+When the runtime is built with the experimental Dawn D3D12 native overlay,
+`blink_standalone_renderer_configure_d3d12_external_device()` borrows the
+embedder's `ID3D12Device` and `ID3D12CommandQueue` and makes them the active
+Blink/Dawn D3D12 device/queue for that renderer. A supplied `ID3D12Resource*`
+can then be used directly when its COM identity is compatible with that active
+device. Builds without the overlay keep the older adapter-LUID behavior: Blink
+creates its own Dawn D3D12 device and the shared handle must be openable by that
+device. A stable target key cannot repair first-use `OpenSharedHandle` failure.
 
-Making `ID3D12Device*` / `ID3D12CommandQueue*` same-device adoption real
-requires a lower-level Dawn native D3D12 entry point that can create or wrap a
-`WGPUDevice` from caller-owned D3D12 handles. The Dawn backend currently exposed
-to the standalone build only lets Chromium select an adapter by LUID and then
-lets Dawn create its own D3D12 device and queue. The reserved C ABI fields are
-therefore not a same-device contract until that Dawn/Chromium provider seam is
-implemented and capability-gated.
+The first same-device D3D12 slice remains synchronous. `render_to_gpu_target()`
+waits for the validated smoke path before returning; explicit wait/signal fence
+fields are ABI-reserved and are not consumed yet. The current D3D12 public path
+still expects a `shared_handle` alongside the resource to select the external
+target mode, but a compatible direct `ID3D12Resource*` is preferred after
+same-device configuration.
 
 GPU target calls never silently fall back to CPU output. Unsupported backends,
 unavailable platform support, invalid target metadata, or native handles that
 this build cannot yet adopt return a non-OK status and renderer-local
 diagnostics.
 
-Current validation supports the explicit
-`BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN` flag. It creates a borrowed
-stand-in target on the active standalone GPU device and proves the public C API
-can drive the same rendered-output target writer used by the internal Vulkan and
-D3D12 proofs. Real embedder-owned `VkImage` / `ID3D12Resource` handle adoption
-is reserved by the ABI but still returns unsupported until the next GPU interop
-checkpoint wires device/queue/resource ownership and synchronization.
+Current validation covers both explicit stand-in targets and public external
+targets. The public Vulkan path writes deterministic rendered pixels into a
+caller-owned `VkImage`. The public D3D12 path, when built with the experimental
+Dawn overlay, writes deterministic rendered pixels into a caller-created
+same-device `ID3D12Resource` target. Production-grade async synchronization and
+resource-state ownership are still reserved follow-up work.
 
 ## Backdrop Filter Metadata
 

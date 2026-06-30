@@ -119,9 +119,13 @@ void InProcessGpuThreadHolder::AdoptExternalVulkanForTesting(
 
 #if BUILDFLAG(IS_WIN)
 void InProcessGpuThreadHolder::SetExternalD3D12AdapterLuidForTesting(
-    LUID adapter_luid) {
+    LUID adapter_luid,
+    ID3D12Device* d3d12_device,
+    ID3D12CommandQueue* d3d12_command_queue) {
   DCHECK(!task_executor_);
   external_d3d12_adapter_luid_ = adapter_luid;
+  external_d3d12_device_ = d3d12_device;
+  external_d3d12_command_queue_ = d3d12_command_queue;
 }
 #endif
 
@@ -219,11 +223,21 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
   if (gpu_preferences_.gr_context_type == GrContextType::kGraphiteDawn) {
     TraceStandaloneGpuThreadHolderStage(
         "InitializeOnGpuThread before Dawn D3D12 context provider");
-    dawn_context_provider_ = DawnContextProvider::CreateWithBackend(
-        wgpu::BackendType::D3D12, /*force_fallback_adapter=*/false,
-        gpu_preferences_, gpu_feature_info_, /*progress_reporter=*/nullptr,
-        DawnContextProvider::DefaultValidateAdapterFn,
-        external_d3d12_adapter_luid_);
+    if (external_d3d12_device_ && external_d3d12_command_queue_) {
+      dawn_context_provider_ =
+          DawnContextProvider::CreateWithExternalD3D12Device(
+              external_d3d12_device_, external_d3d12_command_queue_,
+              gpu_preferences_, gpu_feature_info_,
+              /*progress_reporter=*/nullptr,
+              DawnContextProvider::DefaultValidateAdapterFn,
+              external_d3d12_adapter_luid_);
+    } else {
+      dawn_context_provider_ = DawnContextProvider::CreateWithBackend(
+          wgpu::BackendType::D3D12, /*force_fallback_adapter=*/false,
+          gpu_preferences_, gpu_feature_info_, /*progress_reporter=*/nullptr,
+          DawnContextProvider::DefaultValidateAdapterFn,
+          external_d3d12_adapter_luid_);
+    }
     if (!dawn_context_provider_) {
       TraceStandaloneGpuThreadHolderStage(
           "InitializeOnGpuThread failed Dawn D3D12 context provider");

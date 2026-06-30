@@ -22,6 +22,20 @@ def run(command, cwd=None):
   subprocess.run(command, cwd=cwd, check=True)
 
 
+def git_command(dawn_dir, *args):
+  return ["git", "-c", f"safe.directory={dawn_dir}", *args]
+
+
+def add_git_safe_directory_to_environment(path):
+  try:
+    count = int(os.environ.get("GIT_CONFIG_COUNT", "0"))
+  except ValueError:
+    count = 0
+  os.environ[f"GIT_CONFIG_KEY_{count}"] = "safe.directory"
+  os.environ[f"GIT_CONFIG_VALUE_{count}"] = str(path)
+  os.environ["GIT_CONFIG_COUNT"] = str(count + 1)
+
+
 def read_cmake_cache_value(cache_path, name):
   if not cache_path.exists():
     return None
@@ -74,17 +88,29 @@ def pinned_dawn_revision(repo_root):
 def ensure_dawn_checkout(dawn_dir, revision):
   dawn_dir.mkdir(parents=True, exist_ok=True)
   if not (dawn_dir / ".git").exists():
-    run(["git", "init"], cwd=dawn_dir)
-    run(["git", "remote", "add", "origin",
-         "https://dawn.googlesource.com/dawn.git"], cwd=dawn_dir)
-  current = subprocess.run(["git", "rev-parse", "HEAD"], cwd=dawn_dir,
+    run(git_command(dawn_dir, "init"), cwd=dawn_dir)
+    run(git_command(dawn_dir, "remote", "add", "origin",
+                    "https://dawn.googlesource.com/dawn.git"), cwd=dawn_dir)
+  current = subprocess.run(git_command(dawn_dir, "rev-parse", "HEAD"), cwd=dawn_dir,
                            text=True, stdout=subprocess.PIPE,
                            stderr=subprocess.DEVNULL)
   if current.returncode == 0 and current.stdout.strip() == revision:
+    run(git_command(dawn_dir, "reset", "--hard", revision), cwd=dawn_dir)
     return
-  run(["git", "-c", "protocol.version=2", "fetch", "--depth", "1",
-       "--filter=blob:none", "origin", revision], cwd=dawn_dir)
-  run(["git", "checkout", "--detach", "FETCH_HEAD"], cwd=dawn_dir)
+  run(git_command(dawn_dir, "-c", "protocol.version=2", "fetch", "--depth", "1",
+                  "--filter=blob:none", "origin", revision), cwd=dawn_dir)
+  run(git_command(dawn_dir, "checkout", "--detach", "FETCH_HEAD"), cwd=dawn_dir)
+  run(git_command(dawn_dir, "reset", "--hard", revision), cwd=dawn_dir)
+
+
+def apply_dawn_patches(repo_root, dawn_dir):
+  patch_dir = (repo_root / "upstream" / "chromium" / "standalone_renderer" /
+               "patches" / "dawn_d3d12_native")
+  if not patch_dir.exists():
+    return
+  for patch_path in sorted(patch_dir.glob("*.patch")):
+    run(git_command(dawn_dir, "apply", "--check", str(patch_path)), cwd=dawn_dir)
+    run(git_command(dawn_dir, "apply", str(patch_path)), cwd=dawn_dir)
 
 
 def main():
@@ -105,6 +131,7 @@ def main():
   work_dir = (repo_root / args.work_dir).resolve()
   dawn_dir = work_dir / "dawn"
   dawn_build_dir = work_dir / "cmake_d3d12"
+  add_git_safe_directory_to_environment(dawn_dir)
   renderer_build_dir = (repo_root / args.renderer_build_dir).resolve()
   cache_path = renderer_build_dir / "CMakeCache.txt"
 
@@ -121,6 +148,7 @@ def main():
 
   revision = pinned_dawn_revision(repo_root)
   ensure_dawn_checkout(dawn_dir, revision)
+  apply_dawn_patches(repo_root, dawn_dir)
 
   if not args.no_fetch_deps:
     run([sys.executable, str(dawn_dir / "tools" / "fetch_dawn_dependencies.py"),
