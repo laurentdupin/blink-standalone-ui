@@ -22,6 +22,19 @@ The current standalone build includes ANGLE `libEGL` and `libGLESv2` runtime
 targets, but the configured ANGLE runtime is not a proven Godot OpenGL texture
 interop path. The existing validated GPU target writers are Vulkan and D3D12.
 
+The existing offscreen OpenGL path is Chromium-owned. `gpu::InProcessGpuThreadHolder`
+creates the GL `SharedContextState`, and `viz::SkiaOutputDeviceOffscreen`
+allocates and owns its own `GrBackendTexture`/`SkSurface`. That path can produce
+Chromium-owned output, but it does not borrow or wrap an embedder texture.
+
+Chromium also has a useful service-side copy primitive:
+`gpu::CopySharedImageHelper::CopySharedImageToGLTexture()`. It can copy a
+SharedImage mailbox into a destination OpenGL texture id by wrapping that
+texture with `CreateSkSurfaceWrappingGLTexture()`. In this checkout it is only
+usable when the destination texture is a valid service texture in Chromium's GL
+context/share group. It is not currently a public standalone path for a Godot
+texture or FBO.
+
 ## Candidate Producer Paths
 
 ### Native OpenGL Texture Or FBO
@@ -42,6 +55,19 @@ Chromium has GL SharedImage concepts, but this standalone cut has not proven a
 service-side GL SharedImage target that wraps a caller-owned Godot texture. This
 is likely the right Chromium-shaped architecture if the necessary GL factory and
 access stream can be wired.
+
+The imported GL SharedImage pieces are not enough yet:
+
+- `gpu::WrappedSkImageBackingFactory` allocates Chromium-owned GL/Skia backing
+  storage. It rejects non-empty GPU-memory-buffer handles and has no raw
+  `GLuint`/FBO borrow path.
+- `gpu::SharedImageManager::ProduceGLTexture()` and
+  `ProduceGLTexturePassthrough()` need an existing registered backing; they do
+  not register an arbitrary caller-owned texture by themselves.
+- `gpu::ClientSharedImage::CreateGLTexture()` and
+  `BeginGLAccessForCopySharedImage()` are fail-closed in
+  `gpu_shared_image_phase3_bridge.cc`, so the standalone client cannot use
+  client-side mailbox GL access as a workaround.
 
 ### Readback Then Upload
 
@@ -76,7 +102,31 @@ Before exposing a Godot-facing ABI, Blink needs standalone smokes that:
 
 ## Current Blocker
 
-The blocker is not Godot API shape yet. Blink first needs a service-side
+The blocker is not Godot API shape alone. Blink first needs a service-side
 OpenGL/ANGLE/SharedImage producer that can write to a caller-owned GL target.
 Until that smoke exists, explicit OpenGL3 GPU should return unsupported and
 Godot should continue using CPU raw/default output for Compatibility.
+
+The precise missing pieces are:
+
+1. A standalone renderer hook to adopt or share with the embedder's OpenGL
+   context/share group on the correct GPU sequence, or an ANGLE/EGL equivalent
+   with a proven Windows and Godot Compatibility contract.
+2. A borrowed GL target registration path, either a new SharedImage backing for
+   caller-owned `GLuint` texture/FBO targets or a service-texture registration
+   layer that makes the caller target valid for
+   `CopySharedImageHelper::CopySharedImageToGLTexture()`.
+3. A lifetime and synchronization contract. Blink must know when the caller's
+   texture/FBO is alive, which context owns it, whether the texture target and
+   internal format are compatible, and whether completion is synchronous or
+   signaled through `GLsync`.
+4. A pixel-bearing smoke that renders deterministic HTML through Viz/Skia into
+   that caller-owned GL target, then verifies repeated frames and resize without
+   CPU raw fallback.
+
+The smallest useful implementation step is an internal-only GL copy smoke that
+creates a texture in Chromium's service GL context and uses
+`CopySharedImageHelper::CopySharedImageToGLTexture()` to copy the rendered
+SharedImage mailbox into it. That would prove the service copy primitive, but it
+would still not be a Godot/OpenGL3 producer proof until the texture is genuinely
+caller-owned or shareable with the caller's context.

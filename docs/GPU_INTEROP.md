@@ -382,8 +382,13 @@ silently route through CPU/native-window paths. Both would be misleading.
 
 OpenGL3 explicit GPU output is not a supported backend today. The standalone
 package builds ANGLE `libEGL` and `libGLESv2` sidecars for Chromium runtime use,
-but that does not prove a Godot-owned OpenGL texture or FBO producer path. See
-`docs/OPENGL3_GPU.md` for the current audit, likely ABI shape, and required
+but that does not prove a Godot-owned OpenGL texture or FBO producer path. The
+current GL offscreen path owns its `SharedContextState` and Skia surface, and
+the available `CopySharedImageHelper::CopySharedImageToGLTexture()` primitive
+requires a destination texture that is valid in Chromium's service GL context.
+This checkout has no standalone hook to adopt/share Godot's OpenGL context and
+no SharedImage backing that borrows a raw caller-owned `GLuint` texture or FBO.
+See `docs/OPENGL3_GPU.md` for the current audit, likely ABI shape, and required
 producer smoke before any public OpenGL backend value is added.
 
 ## Required Implementation Steps
