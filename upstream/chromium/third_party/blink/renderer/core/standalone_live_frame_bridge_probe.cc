@@ -4064,7 +4064,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       if (viz_display_output_size_) {
         *viz_display_output_size_ = output_size;
       }
-      DrawVizDisplayNow();
     } else if (local_surface_id_.is_valid()) {
       display_->SetLocalSurfaceId(local_surface_id_,
                                   last_submitted_device_scale_factor_);
@@ -4537,7 +4536,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     TraceLiveFrameProbeStage(
-        "direct frame sink reset offscreen Display for external target resize");
+        "direct frame sink drain offscreen Display for external target resize");
     ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
     if (offscreen_skia_dependency_) {
       offscreen_skia_dependency_
@@ -4545,8 +4544,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
     }
-    display_.reset();
-    offscreen_skia_dependency_ = nullptr;
   }
 
   void DrawVizDisplayNow() {

@@ -860,7 +860,9 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool expect_invalid_uncached_d3d12_handle_after_resize =
                                       false,
                                   bool full_viewport_button_document = false,
-                                  bool exercise_rapid_resize_sequence = false) {
+                                  bool exercise_rapid_resize_sequence = false,
+                                  bool force_pending_during_rapid_resize =
+                                      false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
@@ -1567,6 +1569,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                       {900, 600},
                       {2548, 1320}};
     }
+    int resize_step_index = 0;
     for (const ResizeStep& step : resize_steps) {
       status = blink_standalone_renderer_set_viewport(
           renderer, static_cast<int>(step.width), static_cast<int>(step.height),
@@ -1606,7 +1609,11 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         }
       }
 #endif
-      if (exercise_host_pending_resize_boundary) {
+      const bool force_resize_pending =
+          exercise_host_pending_resize_boundary ||
+          (force_pending_during_rapid_resize &&
+           (resize_step_index % 4 == 1 || step.width == 2316));
+      if (force_resize_pending) {
         target.common.flags |=
             BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE;
         blink_standalone_gpu_render_result_t pre_update_render = {};
@@ -1670,6 +1677,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                     /*quiet=*/false)) {
             return cleanup_and_fail();
           }
+          ++resize_step_index;
           continue;
         }
         if (status == BLINK_STANDALONE_STATUS_OK &&
@@ -1683,6 +1691,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                     /*quiet=*/false)) {
             return cleanup_and_fail();
           }
+          ++resize_step_index;
           continue;
         }
       }
@@ -1893,6 +1902,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         ++invalid_uncached_d3d12_target_checks;
       }
 #endif
+      ++resize_step_index;
     }
   }
 
@@ -2443,7 +2453,8 @@ int RunCApiVulkanExternalTargetRapidResizeSmoke() {
       /*invalidate_d3d12_shared_handle_after_resize=*/false,
       /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
       /*full_viewport_button_document=*/false,
-      /*exercise_rapid_resize_sequence=*/true);
+      /*exercise_rapid_resize_sequence=*/true,
+      /*force_pending_during_rapid_resize=*/true);
 }
 
 int RunCApiVulkanExternalTargetPendingResizeSmoke() {
