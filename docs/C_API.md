@@ -72,6 +72,14 @@ to that active Blink/Dawn device; otherwise the shared handle must be openable
 by Blink's Dawn device. A stable target key cannot repair first-use
 `OpenSharedHandle` failure.
 
+Making `ID3D12Device*` / `ID3D12CommandQueue*` same-device adoption real
+requires a lower-level Dawn native D3D12 entry point that can create or wrap a
+`WGPUDevice` from caller-owned D3D12 handles. The Dawn backend currently exposed
+to the standalone build only lets Chromium select an adapter by LUID and then
+lets Dawn create its own D3D12 device and queue. The reserved C ABI fields are
+therefore not a same-device contract until that Dawn/Chromium provider seam is
+implemented and capability-gated.
+
 GPU target calls never silently fall back to CPU output. Unsupported backends,
 unavailable platform support, invalid target metadata, or native handles that
 this build cannot yet adopt return a non-OK status and renderer-local

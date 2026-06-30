@@ -748,6 +748,53 @@ embedder's `ID3D12Device` and `ID3D12CommandQueue`. A stable public target key
 is still useful after first import succeeds, but it cannot fix a fresh target
 whose shared handle cannot be opened by Blink's Dawn device.
 
+The current checkout does not contain that Dawn adoption seam. The standalone
+configuration path stores only an adapter LUID:
+
+- `blink_standalone_renderer_configure_d3d12_external_device()` derives an LUID
+  from the supplied `ID3D12Device` or from the explicit LUID fields.
+- `gpu::InProcessGpuThreadHolder` forwards that LUID to
+  `gpu::DawnContextProvider::CreateWithBackend(wgpu::BackendType::D3D12, ...)`.
+- `gpu::DawnContextProvider` uses
+  `dawn::native::d3d::RequestAdapterOptionsLUID` to request a Dawn adapter.
+
+After that point Dawn owns creation. In the pinned Dawn native source built by
+`standalone_renderer/tools/build_dawn_d3d12_native.py`,
+`dawn::native::d3d12::PhysicalDevice::InitializeImpl()` calls
+`D3D12CreateDevice()`, `dawn::native::d3d12::Device::Initialize()` takes that
+device from the physical device, and `dawn::native::d3d12::Queue::Initialize()`
+calls `ID3D12Device::CreateCommandQueue()`. The public Dawn D3D12 backend API in
+this checkout exposes `GetD3D12Device()` and `GetD3D12CommandQueue()` for a
+Dawn-created `WGPUDevice`, but it does not expose a factory that creates a
+`WGPUDevice` from caller-owned `ID3D12Device`/`ID3D12CommandQueue` handles.
+
+The smallest real same-device D3D12 implementation therefore starts in Dawn,
+not in the standalone C API alone:
+
+1. Import or patch a pinned Dawn native source tree, not only the generated
+   `build/dawn_probe` output, with an external D3D12 device descriptor/factory
+   that borrows `ID3D12Device` and `ID3D12CommandQueue` handles.
+2. Add the matching Dawn native D3D12 implementation mode so
+   `PhysicalDeviceD3D12` does not call `D3D12CreateDevice()` and `QueueD3D12`
+   does not create a separate command queue when external handles are supplied.
+   Ownership must stay explicit: Dawn/Blink may `AddRef` while configured, but
+   must not destroy or assume lifetime beyond the renderer/device contract.
+3. Add `gpu::DawnContextProvider::CreateWithExternalD3D12Device(...)` and plumb
+   it through `gpu::InProcessGpuThreadHolder`, the standalone Viz dependency,
+   and `blink_standalone_renderer_configure_d3d12_external_device()`.
+4. Add a public capability/configuration bit for same-device D3D12 adoption so
+   embedders can distinguish this mode from the current adapter-LUID selection
+   path.
+5. Validate with a smoke that compares COM identity for the configured
+   embedder device, the active Dawn device, and the caller-created target
+   resource before rendering deterministic HTML pixels into that resource.
+
+Until those pieces exist, `direct_resource_compatible=0` is expected for
+Godot-created D3D12 targets even when Godot passes `ID3D12Device*` and
+`ID3D12CommandQueue*` to the current configure call. The remaining functional
+options are a shared handle that Blink's Dawn-created device can open, or the
+internal stand-in target created on Blink's Dawn device.
+
 For current diagnostics, D3D12 shared-handle failures include cache hit state,
 raw and canonical resource identity pointers, `direct_resource_compatible`, and
 the active/resource adapter LUIDs. If those LUIDs differ, cross-device import is
