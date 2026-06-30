@@ -1554,7 +1554,9 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     } else if (repeated_after_resize_render_iterations > 0) {
       resize_steps = {{width, height + 1}};
     } else if (exercise_rapid_resize_sequence) {
-      resize_steps = {{2512, 1301}, {2476, 1284}, {2444, 1241},
+      resize_steps = {{2546, 1320}, {2379, 1320}, {2376, 1320},
+                      {2373, 1320}, {2371, 1320}, {2333, 1320},
+                      {2512, 1301}, {2476, 1284}, {2444, 1241},
                       {2440, 1267}, {2404, 1250}, {2368, 1223},
                       {2364, 1196}, {2336, 1206}, {2316, 1199},
                       {2300, 1160}, {2296, 1191}, {2240, 1164},
@@ -1614,7 +1616,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       const bool force_resize_pending =
           exercise_host_pending_resize_boundary ||
           (force_pending_during_rapid_resize &&
-           (resize_step_index % 4 == 1 || step.width == 2316));
+           (resize_step_index % 4 == 1 || step.width == 2371 ||
+            step.width == 2316));
       if (force_resize_pending) {
         target.common.flags |=
             BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE;
@@ -1626,6 +1629,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         if (status == BLINK_STANDALONE_STATUS_PENDING &&
             pre_update_render.target_written == 0) {
           ++pending_resize_retries;
+          if (exercise_rapid_resize_sequence) {
+            ++resize_step_index;
+            continue;
+          }
           blink_standalone_update_result_t host_update = {};
           status = blink_standalone_renderer_update(
               renderer, 0.500 + static_cast<double>(target.common.generation) *

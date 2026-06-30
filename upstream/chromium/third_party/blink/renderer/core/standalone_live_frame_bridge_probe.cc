@@ -4412,6 +4412,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
     offscreen_skia_dependency_
         ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+    if (!g_standalone_native_window_handle) {
+      display_.reset();
+      offscreen_skia_dependency_ = nullptr;
+      if (viz_display_output_size_) {
+        *viz_display_output_size_ = gfx::Size();
+      }
+    }
   }
 
  private:
