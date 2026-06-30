@@ -1429,6 +1429,22 @@ bool SameD3D12Device(ID3D12Device* a, ID3D12Device* b) {
   return a_identity.Get() == b_identity.Get();
 }
 
+Microsoft::WRL::ComPtr<IUnknown> D3D12ResourceIdentity(
+    ID3D12Resource* resource) {
+  Microsoft::WRL::ComPtr<IUnknown> identity;
+  if (!resource ||
+      FAILED(resource->QueryInterface(IID_PPV_ARGS(&identity)))) {
+    return identity;
+  }
+  return identity;
+}
+
+std::string PointerHex(const void* ptr) {
+  std::ostringstream out;
+  out << "0x" << std::hex << reinterpret_cast<uintptr_t>(ptr);
+  return out.str();
+}
+
 class StandaloneBorrowedD3D12TextureBacking final
     : public gpu::ClearTrackingSharedImageBacking {
  public:
@@ -3251,6 +3267,8 @@ class StandaloneSkiaOutputSurfaceDependency final
     auto target = std::make_unique<BorrowedD3D12RenderCopyBlitTarget>();
     target->size = target_size;
     Microsoft::WRL::ComPtr<ID3D12Resource> opened_shared_resource;
+    Microsoft::WRL::ComPtr<IUnknown> external_resource_identity =
+        D3D12ResourceIdentity(external_resource);
     bool can_use_external_resource_directly = false;
     if (external_resource) {
       Microsoft::WRL::ComPtr<ID3D12Device> resource_device;
@@ -3265,7 +3283,13 @@ class StandaloneSkiaOutputSurfaceDependency final
       const bool cache_resource_hit =
           external_resource &&
           external_resource == cached_external_d3d12_resource_hint_;
-      if ((cache_handle_hit || cache_resource_hit) &&
+      const bool cache_resource_identity_hit =
+          external_resource_identity &&
+          cached_external_d3d12_resource_identity_ &&
+          external_resource_identity.Get() ==
+              cached_external_d3d12_resource_identity_.Get();
+      if ((cache_handle_hit || cache_resource_hit ||
+           cache_resource_identity_hit) &&
           cached_external_d3d12_opened_resource_) {
         opened_shared_resource = cached_external_d3d12_opened_resource_;
       } else {
@@ -3278,11 +3302,21 @@ class StandaloneSkiaOutputSurfaceDependency final
                   << HResultHex(hr)
                   << " cache_handle_hit=" << (cache_handle_hit ? 1 : 0)
                   << " cache_resource_hit=" << (cache_resource_hit ? 1 : 0)
-                  << " has_resource=" << (external_resource ? 1 : 0);
+                  << " cache_resource_identity_hit="
+                  << (cache_resource_identity_hit ? 1 : 0)
+                  << " has_resource=" << (external_resource ? 1 : 0)
+                  << " resource_ptr=" << PointerHex(external_resource)
+                  << " cached_resource_ptr="
+                  << PointerHex(cached_external_d3d12_resource_hint_.get())
+                  << " resource_identity="
+                  << PointerHex(external_resource_identity.Get())
+                  << " cached_resource_identity="
+                  << PointerHex(cached_external_d3d12_resource_identity_.Get());
           return finish_with_failure(failure.str());
         }
         cached_external_d3d12_shared_handle_ = shared_handle;
         cached_external_d3d12_resource_hint_ = external_resource;
+        cached_external_d3d12_resource_identity_ = external_resource_identity;
         cached_external_d3d12_opened_resource_ = opened_shared_resource;
       }
       external_resource = opened_shared_resource.Get();
@@ -3491,6 +3525,7 @@ class StandaloneSkiaOutputSurfaceDependency final
       borrowed_d3d12_blit_target_;
   void* cached_external_d3d12_shared_handle_ = nullptr;
   raw_ptr<ID3D12Resource> cached_external_d3d12_resource_hint_ = nullptr;
+  Microsoft::WRL::ComPtr<IUnknown> cached_external_d3d12_resource_identity_;
   Microsoft::WRL::ComPtr<ID3D12Resource>
       cached_external_d3d12_opened_resource_;
 #endif

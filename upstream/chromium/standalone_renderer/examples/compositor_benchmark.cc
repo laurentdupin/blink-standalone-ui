@@ -847,6 +847,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool omit_d3d12_resource_hint_after_resize =
                                       false,
                                   bool rotate_d3d12_shared_handle_after_resize =
+                                      false,
+                                  bool alias_d3d12_resource_hint_after_resize =
                                       false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
@@ -905,6 +907,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device;
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> d3d12_queue;
   Microsoft::WRL::ComPtr<ID3D12Resource> d3d12_resource;
+  Microsoft::WRL::ComPtr<ID3D12Resource1> d3d12_resource_alias;
   HANDLE d3d12_shared_handle = nullptr;
 #endif
   std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation;
@@ -1071,6 +1074,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         d3d12_shared_handle = nullptr;
       }
       d3d12_resource.Reset();
+      d3d12_resource_alias.Reset();
       target.d3d12.d3d12_resource = nullptr;
       target.d3d12.shared_handle = nullptr;
       D3D12_HEAP_PROPERTIES heap_properties = {};
@@ -1726,7 +1730,13 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
           d3d12_shared_handle = rotated_handle;
           target.d3d12.shared_handle = d3d12_shared_handle;
           if (!omit_d3d12_resource_hint_after_resize) {
-            target.d3d12.d3d12_resource = d3d12_resource.Get();
+            if (alias_d3d12_resource_hint_after_resize &&
+                SUCCEEDED(d3d12_resource.As(&d3d12_resource_alias)) &&
+                d3d12_resource_alias) {
+              target.d3d12.d3d12_resource = d3d12_resource_alias.Get();
+            } else {
+              target.d3d12.d3d12_resource = d3d12_resource.Get();
+            }
           }
         }
 #endif
@@ -2463,7 +2473,8 @@ int RunCApiD3D12ExternalTargetRepeatedFrameSmoke() {
       /*repeated_same_target_render_iterations=*/0,
       /*repeated_after_resize_render_iterations=*/4,
       /*omit_d3d12_resource_hint_after_resize=*/false,
-      /*rotate_d3d12_shared_handle_after_resize=*/true);
+      /*rotate_d3d12_shared_handle_after_resize=*/true,
+      /*alias_d3d12_resource_hint_after_resize=*/true);
 }
 
 int RunCApiD3D12UpdateOutputSmoke() {
