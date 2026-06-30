@@ -1,0 +1,14 @@
+diff --git a/src/partition_alloc/BUILD.gn b/src/partition_alloc/BUILD.gn
+index 8385dac..f4bffd2 100644
+--- a/src/partition_alloc/BUILD.gn
++++ b/src/partition_alloc/BUILD.gn
+@@ -34,6 +34,9 @@ partition_alloc_dchecks_are_on =
+ # but if any third_party code wants to use, remove build_with_chromium.
+ use_partition_alloc_as_malloc_on_win_component_build =
+     build_with_chromium && is_win && is_component_build
++if (!build_with_chromium) {
++  not_needed([ "use_partition_alloc_as_malloc_on_win_component_build" ])
++}
+
+ # TODO(crbug.com/40276913): Split PartitionAlloc into a public and
+ # private parts. The public config would include add the "./include" dir and

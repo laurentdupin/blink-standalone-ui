@@ -97,8 +97,6 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
-#include "gpu/command_buffer/service/shared_image/skia_graphite_dawn_image_representation.h"
-#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/ipc/in_process_gpu_thread_holder.h"
@@ -158,7 +156,9 @@
 #include <wrl/client.h>
 
 #if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/shared_image/d3d_image_utils.h"
+#include "gpu/command_buffer/service/shared_image/skia_graphite_dawn_image_representation.h"
 #endif
 #endif
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -254,6 +254,10 @@
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/gfx/ca_layer_params.h"
+
+namespace gpu {
+class DawnContextProvider;
+}  // namespace gpu
 
 namespace blink::standalone_renderer_probe {
 

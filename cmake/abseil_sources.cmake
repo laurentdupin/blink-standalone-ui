@@ -1,7 +1,6 @@
 set(BLINK_STANDALONE_ABSEIL_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/casts.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/cycleclock.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/hardening.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/low_level_alloc.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/raw_logging.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/spinlock.cc

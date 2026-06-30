@@ -1,0 +1,1091 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index 167d9a9003d..c7f7c046c1d 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -1843,15 +1843,17 @@ config("toolchain") {
+     }
+   }
+
+-  cflags += [
+-    # Disable warnings about offsetof being used on non-standard-layout types.
+-    # offsetof is only specified for standard-layout types, but its behaviour
+-    # on non-standard-layout types is implementation defined (rather than UB),
+-    # and our supported compilers have the expected reasonable behaviour.
+-    "-Wno-invalid-offsetof",
+-  ]
++  if (!is_win || is_clang) {
++    cflags += [
++      # Disable warnings about offsetof being used on non-standard-layout types.
++      # offsetof is only specified for standard-layout types, but its behaviour
++      # on non-standard-layout types is implementation defined (rather than UB),
++      # and our supported compilers have the expected reasonable behaviour.
++      "-Wno-invalid-offsetof",
++    ]
++  }
+
+-  if (!is_clang) {
++  if (!is_clang && !is_win) {
+     cflags += [
+       # Disable gcc warnings for optimizations based on the assumption that
+       # signed overflow does not occur. Generates false positives (see
+diff --git a/include/cppgc/heap.h b/include/cppgc/heap.h
+index 2968a0af197..6abbd9aab4a 100644
+--- a/include/cppgc/heap.h
++++ b/include/cppgc/heap.h
+@@ -15,6 +15,10 @@
+ #include "cppgc/platform.h"
+ #include "v8config.h"  // NOLINT(build/include_directory)
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#include <intrin.h>
++#endif
++
+ /**
+  * cppgc - A C++ garbage collection library.
+  */
+@@ -37,7 +41,11 @@ class Heap;
+  */
+ class V8_EXPORT StackStartMarker {
+  public:
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  StackStartMarker() : stack_start_(_AddressOfReturnAddress()) {}
++#else
+   StackStartMarker() : stack_start_(__builtin_frame_address(0)) {}
++#endif
+   void* stack_start() const { return stack_start_; }
+
+  private:
+diff --git a/include/cppgc/member.h b/include/cppgc/member.h
+index c028bcd0688..02607974af7 100644
+--- a/include/cppgc/member.h
++++ b/include/cppgc/member.h
+@@ -35,9 +35,9 @@ class V8_TRIVIAL_ABI MemberBase {
+  public:
+   using RawStorage = StorageType;
+
+- protected:
+   struct AtomicInitializerTag {};
+
++ protected:
+   V8_INLINE MemberBase() = default;
+   V8_INLINE explicit MemberBase(const void* value) : raw_(value) {}
+   V8_INLINE MemberBase(const void* value, AtomicInitializerTag)
+diff --git a/include/v8-internal.h b/include/v8-internal.h
+index 0df576d6baf..becf7c074c4 100644
+--- a/include/v8-internal.h
++++ b/include/v8-internal.h
+@@ -516,7 +516,11 @@ struct TagRange {
+   constexpr TagRange(Tag first, Tag last) : first(first), last(last) {
+ #ifdef V8_ENABLE_CHECKS
+     // This would typically be a DCHECK, but that's not available here.
++#if defined(_MSC_VER) && !defined(__clang__)
++    if (first > last) __assume(0);  // Invalid tag range.
++#else
+     if (first > last) __builtin_unreachable();  // Invalid tag range.
++#endif
+ #endif
+   }
+
+diff --git a/include/v8config.h b/include/v8config.h
+index 1b560f0ba79..bdbc730f6fd 100644
+--- a/include/v8config.h
++++ b/include/v8config.h
+@@ -728,7 +728,9 @@ path. Add it with -I<path> to the command line
+ //
+ // [[no_unique_address]] comes in C++20 but supported in clang with
+ // -std >= c++11.
+-#if V8_HAS_CPP_ATTRIBUTE_NO_UNIQUE_ADDRESS
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#define V8_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
++#elif V8_HAS_CPP_ATTRIBUTE_NO_UNIQUE_ADDRESS
+ #if defined(V8_CC_MSVC) && V8_HAS_CPP_ATTRIBUTE(msvc::no_unique_address)
+ // Unfortunately MSVC ignores [[no_unique_address]] (see
+ // https://devblogs.microsoft.com/cppblog/msvc-cpp20-and-the-std-cpp20-switch/#msvc-extensions-and-abi),
+diff --git a/src/builtins/builtins-number-tsa.cc b/src/builtins/builtins-number-tsa.cc
+index 8bf79e8e86b..0d89d093f2d 100644
+--- a/src/builtins/builtins-number-tsa.cc
++++ b/src/builtins/builtins-number-tsa.cc
+@@ -19,8 +19,7 @@ class NumberBuiltinsAssemblerTS
+     : public TurboshaftBuiltinsAssembler<NumberBuiltinsReducer,
+                                          FeedbackCollectorReducer> {
+  public:
+-  using Base = TurboshaftBuiltinsAssembler<NumberBuiltinsReducer,
+-                                           FeedbackCollectorReducer>;
++  using Base = TurboshaftBuiltinsAssembler;
+
+   using Base::Asm;
+   using Base::Base;
+diff --git a/src/common/ptr-compr-inl.h b/src/common/ptr-compr-inl.h
+index 3da41510a52..61148128ad1 100644
+--- a/src/common/ptr-compr-inl.h
++++ b/src/common/ptr-compr-inl.h
+@@ -47,8 +47,10 @@ Address V8HeapCompressionSchemeImpl<Cage>::GetPtrComprCageBaseAddress(
+     PtrComprCageBase cage_base) {
+   Address base = cage_base.address();
+   V8_ASSUME((base & kPtrComprCageBaseMask) == base);
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+   base = reinterpret_cast<Address>(V8_ASSUME_ALIGNED(
+       reinterpret_cast<void*>(base), kPtrComprCageBaseAlignment));
++#endif
+   return base;
+ }
+
+@@ -77,8 +79,12 @@ Address V8HeapCompressionSchemeImpl<Cage>::base() {
+   // casting to an Address). To increase our chances we additionally encode the
+   // same information in this V8_ASSUME.
+   V8_ASSUME((base & kPtrComprCageBaseMask) == base);
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  return base;
++#else
+   return reinterpret_cast<Address>(V8_ASSUME_ALIGNED(
+       reinterpret_cast<void*>(base), kPtrComprCageBaseAlignment));
++#endif
+ }
+
+ // static
+diff --git a/src/compiler/turboshaft/operations.h b/src/compiler/turboshaft/operations.h
+index 2ac4bdbac29..2562f356f53 100644
+--- a/src/compiler/turboshaft/operations.h
++++ b/src/compiler/turboshaft/operations.h
+@@ -541,7 +541,12 @@ class InputsRepFactory {
+   };
+ };
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(push, 1)
++struct EffectDimensions {
++#else
+ struct __attribute__((packed)) EffectDimensions {
++#endif
+   // Produced by loads, consumed by operations that should not move before loads
+   // because they change memory.
+   bool load_heap_memory : 1;
+@@ -593,6 +598,9 @@ struct __attribute__((packed)) EffectDimensions {
+     return bits() != other.bits();
+   }
+ };
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(pop)
++#endif
+ static_assert(sizeof(EffectDimensions) == sizeof(EffectDimensions::Bits));
+
+ // Possible reorderings are restricted using two bit vectors: `produces` and
+@@ -636,7 +644,12 @@ static_assert(sizeof(EffectDimensions) == sizeof(EffectDimensions::Bits));
+ // they become more restricted in their movement. Note that calls are not the
+ // most side-effectful operations, as they do not leave the heap in an
+ // inconsistent state, so they do not need to be marked as raw heap access.
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(push, 1)
++struct OpEffects {
++#else
+ struct __attribute__((packed)) OpEffects {
++#endif
+   EffectDimensions produces;
+   EffectDimensions consumes;
+
+@@ -859,6 +872,9 @@ struct __attribute__((packed)) OpEffects {
+     return IsSubsetOf(OpEffects().CanDependOnChecks());
+   }
+ };
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(pop)
++#endif
+ static_assert(sizeof(OpEffects) == sizeof(OpEffects::Bits));
+
+ V8_INLINE size_t hash_value(OpEffects effects) {
+@@ -3051,7 +3067,12 @@ struct ConstantOp : FixedArityOperationT<0, ConstantOp> {
+ // When result_rep is RegisterRepresentation::Compressed(), then the load does
+ // not decompress the value.
+ struct LoadOp : OperationT<LoadOp> {
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(push, 1)
++  struct Kind {
++#else
+   struct __attribute__((packed)) Kind {
++#endif
+     // The `base` input is a tagged pointer to a HeapObject.
+     bool tagged_base : 1;
+     // The effective address might be unaligned. This is only set to true if
+@@ -3186,6 +3207,9 @@ struct LoadOp : OperationT<LoadOp> {
+              is_atomic == other.is_atomic && trap_on_null == other.trap_on_null;
+     }
+   };
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(pop)
++#endif
+   Kind kind;
+   MemoryRepresentation loaded_rep;
+   RegisterRepresentation result_rep;
+diff --git a/src/compiler/turboshaft/random-rescheduling-phase.cc b/src/compiler/turboshaft/random-rescheduling-phase.cc
+index 271a953bdae..4bf695b4d23 100644
+--- a/src/compiler/turboshaft/random-rescheduling-phase.cc
++++ b/src/compiler/turboshaft/random-rescheduling-phase.cc
+@@ -87,7 +87,7 @@ class ReschedulingReducer : public Next {
+ };
+
+ class RandomRescheduler : public Assembler<ReschedulingReducer, GraphVisitor> {
+-  using Base = Assembler<ReschedulingReducer, GraphVisitor>;
++  using Base = Assembler;
+   enum class OpState {
+     kPending,  // This operation is not yet emitted and not yet ready to do so.
+     kReady,    // This operation is not yet emitted but is ready to be emitted.
+diff --git a/src/execution/isolate-data.h b/src/execution/isolate-data.h
+index 52f4b224996..5a1ffb1cf78 100644
+--- a/src/execution/isolate-data.h
++++ b/src/execution/isolate-data.h
+@@ -32,6 +32,14 @@ namespace wasm {
+ class StackMemory;
+ }
+
++template <size_t Size>
++struct IsolateDataPadding {
++  uint8_t bytes[Size];
++};
++
++template <>
++struct IsolateDataPadding<0> {};
++
+ #define BUILTINS_WITH_DISPATCH_ADAPTER(V, CamelName, underscore_name, ...) \
+   V(CamelName, CamelName##SharedFun)
+
+@@ -345,8 +353,8 @@ class IsolateData final {
+   uint8_t has_lazy_closures_ = 0;
+
+   // Ensure the following tables are kSystemPointerSize-byte aligned.
+-  V8_NO_UNIQUE_ADDRESS uint8_t
+-      tables_alignment_padding_[kTablesAlignmentPaddingSize];
++  V8_NO_UNIQUE_ADDRESS IsolateDataPadding<kTablesAlignmentPaddingSize>
++      tables_alignment_padding_;
+
+   // A pointer to the static offsets vector (used to pass results from the
+   // irregexp engine to the rest of V8), or nullptr if the static offsets
+@@ -455,7 +463,8 @@ class IsolateData final {
+   uint8_t is_date_cache_used_ = false;
+
+   // Padding for aligning raw_arguments_.
+-  V8_NO_UNIQUE_ADDRESS uint8_t raw_arguments_padding_[kRawArgumentsPaddingSize];
++  V8_NO_UNIQUE_ADDRESS IsolateDataPadding<kRawArgumentsPaddingSize>
++      raw_arguments_padding_;
+
+   // Storage for raw values passed from CSA/Torque to runtime functions.
+   struct RawArgument {
+@@ -476,7 +485,8 @@ class IsolateData final {
+   // following the IsolateData field predictable. This solves the issue with
+   // C++ compilers for 32-bit platforms which are not consistent at aligning
+   // int64_t fields.
+-  V8_NO_UNIQUE_ADDRESS uint8_t trailing_padding_[kTrailingPaddingSize];
++  V8_NO_UNIQUE_ADDRESS IsolateDataPadding<kTrailingPaddingSize>
++      trailing_padding_;
+
+   V8_INLINE static void AssertPredictableLayout();
+
+@@ -500,10 +510,19 @@ void IsolateData::AssertPredictableLayout() {
+   static_assert(std::is_standard_layout_v<LinearAllocationArea>);
+ #define V(PureName, Size, Name)                                             \
+   static_assert(std::is_standard_layout_v<decltype(IsolateData::Name##_)>); \
+-  static_assert(offsetof(IsolateData, Name##_) == k##PureName##Offset);
++  static_assert((Size) == 0 ||                                               \
++                offsetof(IsolateData, Name##_) == k##PureName##Offset);
+   ISOLATE_DATA_FIELDS(V)
+ #undef V
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  static constexpr size_t kMsvcNoUniqueAddressTrailingSize =
++      (IsolateData::kSizeOffset + kSystemPointerSize) &
++      ~(kSystemPointerSize - 1);
++  static_assert(sizeof(IsolateData) == IsolateData::kSizeOffset ||
++                sizeof(IsolateData) == kMsvcNoUniqueAddressTrailingSize);
++#else
+   static_assert(sizeof(IsolateData) == IsolateData::kSizeOffset);
++#endif
+ }
+
+ }  // namespace internal
+diff --git a/src/execution/isolate.h b/src/execution/isolate.h
+index fb6d1c0d3e8..d2604f8a38f 100644
+--- a/src/execution/isolate.h
++++ b/src/execution/isolate.h
+@@ -552,8 +552,12 @@ using DebugObjectCache = std::vector<Handle<HeapObject>>;
+
+ // Do not use this variable directly, use Isolate::Current() instead.
+ // Defined outside of Isolate because Isolate uses V8_EXPORT_PRIVATE.
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++extern thread_local Isolate* g_current_isolate_ V8_CONSTINIT;
++#else
+ __attribute__((tls_model(V8_TLS_MODEL))) extern thread_local Isolate*
+     g_current_isolate_ V8_CONSTINIT;
++#endif
+
+ // HiddenFactory exists so Isolate can privately inherit from it without making
+ // Factory's members available to Isolate directly.
+diff --git a/src/execution/simulator.h b/src/execution/simulator.h
+index a1d638c475e..9702411a39e 100644
+--- a/src/execution/simulator.h
++++ b/src/execution/simulator.h
+@@ -181,7 +181,11 @@ class GeneratedCode {
+   }
+ #else
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  DISABLE_CFI_ICALL Return Call(Args... args) {
++#else
+   __attribute__((nodebug)) DISABLE_CFI_ICALL Return Call(Args... args) {
++#endif
+     // When running without a simulator we call the entry directly.
+ // Starboard is a platform abstraction interface that also include Windows
+ // platforms like UWP.
+@@ -225,8 +229,12 @@ class GeneratedCode {
+   }
+ #endif  // USE_SIMULATOR
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  DISABLE_CFI_ICALL Return CallSandboxed(Args... args) {
++#else
+   __attribute__((nodebug)) DISABLE_CFI_ICALL Return
+   CallSandboxed(Args... args) {
++#endif
+     EnterSandboxScope sandboxed;
+     return Call(args...);
+   }
+diff --git a/src/heap/local-heap.h b/src/heap/local-heap.h
+index 3f0f9d6125c..a6cc23467af 100644
+--- a/src/heap/local-heap.h
++++ b/src/heap/local-heap.h
+@@ -35,8 +35,12 @@ class Safepoint;
+
+ // Do not use this variable directly, use LocalHeap::Current() instead.
+ // Defined outside of LocalHeap because LocalHeap uses V8_EXPORT_PRIVATE.
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++extern thread_local LocalHeap* g_current_local_heap_ V8_CONSTINIT;
++#else
+ __attribute__((tls_model(V8_TLS_MODEL))) extern thread_local LocalHeap*
+     g_current_local_heap_ V8_CONSTINIT;
++#endif
+
+ // LocalHeap is used by the GC to track all threads with heap access in order to
+ // stop them before performing a collection. LocalHeaps can be either Parked or
+diff --git a/src/maglev/maglev-range.h b/src/maglev/maglev-range.h
+index daaf98f9398..abfb459d5e9 100644
+--- a/src/maglev/maglev-range.h
++++ b/src/maglev/maglev-range.h
+@@ -25,11 +25,19 @@ inline constexpr bool IsSafeInteger(int64_t value) {
+ }
+
+ inline constexpr bool IsSafeInteger(double value) {
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  if (!(value == value)) return false;
++  double max = static_cast<double>(kMaxSafeInteger);
++  double min = static_cast<double>(kMinSafeInteger);
++  if (value < min || value > max) return false;
++  return value == static_cast<double>(static_cast<int64_t>(value));
++#else
+   if (!std::isfinite(value)) return false;
+   if (value != std::trunc(value)) return false;
+   double max = static_cast<double>(kMaxSafeInteger);
+   double min = static_cast<double>(kMinSafeInteger);
+   return value >= min && value <= max;
++#endif
+ }
+
+ class Range {
+diff --git a/src/objects/backing-store.cc b/src/objects/backing-store.cc
+index 5297cd116b5..62f801a107d 100644
+--- a/src/objects/backing-store.cc
++++ b/src/objects/backing-store.cc
+@@ -325,8 +325,9 @@ std::unique_ptr<BackingStore> BackingStore::TryAllocateAndPartiallyCommitMemory(
+     if (fn()) return true;
+     // Collect garbage and retry.
+     did_retry = true;
++    auto retry_fn = [&fn] { return fn(); };
+     return isolate->heap()->allocator()->RetryCustomAllocate(
+-        fn, internal::AllocationType::kOld,
++        retry_fn, internal::AllocationType::kOld,
+         GarbageCollectionReason::kAllocationFailure);
+   };
+
+diff --git a/src/objects/instance-type-inl.h b/src/objects/instance-type-inl.h
+index 2c083e5a586..ec9fe2eea78 100644
+--- a/src/objects/instance-type-inl.h
++++ b/src/objects/instance-type-inl.h
+@@ -42,25 +42,31 @@ HEAP_OBJECT_TYPE_LIST(DECL_TYPE)
+ // Instance types which are associated with one unique map.
+
+ template <class type>
+-V8_INLINE consteval std::optional<RootIndex> UniqueMapOfInstanceTypeCheck() {
+-  return {};
+-}
++struct UniqueMapOfInstanceTypeCheck {
++  static constexpr bool kHasValue = false;
++  static constexpr RootIndex kValue = RootIndex::kFirstRoot;
++};
+
+ #define INSTANCE_TYPE_MAP(V, rootIndexName, rootAccessorName, class_name) \
+   template <>                                                             \
+-  V8_INLINE consteval std::optional<RootIndex>                            \
+-  UniqueMapOfInstanceTypeCheck<InstanceTypeTraits::class_name>() {        \
+-    return {RootIndex::k##rootIndexName};                                 \
+-  }
++  struct UniqueMapOfInstanceTypeCheck<InstanceTypeTraits::class_name> {   \
++    static constexpr bool kHasValue = true;                               \
++    static constexpr RootIndex kValue = RootIndex::k##rootIndexName;      \
++  };
+ UNIQUE_INSTANCE_TYPE_MAP_LIST_GENERATOR(INSTANCE_TYPE_MAP, _)
+ #undef INSTANCE_TYPE_MAP
+
+ V8_INLINE constexpr std::optional<RootIndex> UniqueMapOfInstanceType(
+     InstanceType type) {
+-#define INSTANCE_TYPE_CHECK(it, forinstancetype)              \
+-  if (type == forinstancetype) {                              \
+-    return InstanceTypeChecker::UniqueMapOfInstanceTypeCheck< \
+-        InstanceTypeChecker::InstanceTypeTraits::it>();       \
++#define INSTANCE_TYPE_CHECK(it, forinstancetype)                          \
++  if (type == forinstancetype) {                                          \
++    using UniqueMapTrait =                                                \
++        InstanceTypeChecker::UniqueMapOfInstanceTypeCheck<                \
++            InstanceTypeChecker::InstanceTypeTraits::it>;                 \
++    if constexpr (UniqueMapTrait::kHasValue) {                            \
++      return std::optional<RootIndex>{UniqueMapTrait::kValue};            \
++    }                                                                     \
++    return std::nullopt;                                                  \
+   }
+   INSTANCE_TYPE_CHECKERS_SINGLE(INSTANCE_TYPE_CHECK);
+ #undef INSTANCE_TYPE_CHECK
+@@ -159,10 +165,11 @@ UniqueMapRangeOfInstanceTypeRange(InstanceType first, InstanceType last) {
+   for (size_t i = 0; i < kUniqueMapRangeOfInstanceTypeRangeList.size(); ++i) {
+     if (kUniqueMapRangeOfInstanceTypeRangeList[i].first.first == first &&
+         kUniqueMapRangeOfInstanceTypeRangeList[i].first.second == last) {
+-      return {kUniqueMapRangeOfInstanceTypeRangeList[i].second};
++      return std::optional<TaggedAddressRange>{
++          kUniqueMapRangeOfInstanceTypeRangeList[i].second};
+     }
+   }
+-  return {};
++  return std::nullopt;
+ }
+
+ inline constexpr std::optional<TaggedAddressRange> UniqueMapRangeOfInstanceType(
+@@ -185,8 +192,13 @@ inline bool CheckInstanceMap(RootIndex expected, Tagged<Map> map) {
+          StaticReadOnlyRootsPointerTable[static_cast<size_t>(expected)];
+ }
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++inline bool CheckInstanceMapRange(TaggedAddressRange expected,
++                                  Tagged<Map> map) {
++#else
+ inline constexpr bool CheckInstanceMapRange(TaggedAddressRange expected,
+                                             Tagged<Map> map) {
++#endif
+   Tagged_t ptr = V8HeapCompressionScheme::CompressObject(map.ptr());
+   // Make the upper limit be the end of the map object, rather than the start;
+   // this helps the C++ optimizer realize there are no "holes" between
+@@ -217,12 +229,14 @@ inline bool MayHaveMapCheckFastCase(InstanceType type) { return false; }
+   V8_INLINE bool Is##type(Tagged<Map> map_object) {                       \
+     constexpr InstanceType forinstancetype =                              \
+         static_cast<InstanceType>(forinstancetype_);                      \
+-    if constexpr (constexpr std::optional<RootIndex> index =              \
+-                      UniqueMapOfInstanceType(forinstancetype)) {         \
++    constexpr std::optional<RootIndex> index =                            \
++        UniqueMapOfInstanceType(forinstancetype);                         \
++    if constexpr (index.has_value()) {                                    \
+       return CheckInstanceMap(*index, map_object);                        \
+     }                                                                     \
+-    if constexpr (constexpr std::optional<TaggedAddressRange> map_range = \
+-                      UniqueMapRangeOfInstanceType(forinstancetype)) {    \
++    constexpr std::optional<TaggedAddressRange> map_range =               \
++        UniqueMapRangeOfInstanceType(forinstancetype);                    \
++    if constexpr (map_range.has_value()) {                                \
+       return CheckInstanceMapRange(*map_range, map_object);               \
+     }                                                                     \
+     return Is##type(map_object->instance_type());                         \
+@@ -283,9 +297,10 @@ struct InstanceRangeChecker<lower_limit, LAST_TYPE> {
+ #define INSTANCE_TYPE_CHECKER_RANGE2(type, first_instance_type,                \
+                                      last_instance_type)                       \
+   V8_INLINE bool Is##type(Tagged<Map> map_object) {                            \
+-    if constexpr (constexpr std::optional<TaggedAddressRange> maybe_range =    \
+-                      UniqueMapRangeOfInstanceTypeRange(first_instance_type,   \
+-                                                        last_instance_type)) { \
++    constexpr std::optional<TaggedAddressRange> maybe_range =                  \
++        UniqueMapRangeOfInstanceTypeRange(first_instance_type,                 \
++                                          last_instance_type);                 \
++    if constexpr (maybe_range.has_value()) {                                   \
+       return CheckInstanceMapRange(*maybe_range, map_object);                  \
+     }                                                                          \
+     return Is##type(map_object->instance_type());                              \
+diff --git a/src/objects/js-interceptor-map.h b/src/objects/js-interceptor-map.h
+index 546a15e1bc6..54c8318063c 100644
+--- a/src/objects/js-interceptor-map.h
++++ b/src/objects/js-interceptor-map.h
+@@ -16,7 +16,11 @@ class InterceptorInfo;
+
+ // Extended map for interceptor objects, it caches named and indexed
+ // InterceptorInfo objects in the Map for faster access.
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++V8_ABSTRACT_OBJECT class JSInterceptorMap : public ExtendedMap {
++#else
+ V8_OBJECT class JSInterceptorMap : public ExtendedMap {
++#endif
+  public:
+   inline Tagged<InterceptorInfo> named_interceptor() const;
+   inline void set_named_interceptor(
+diff --git a/src/objects/map.h b/src/objects/map.h
+index 0319fdb4e25..628b4a13d9e 100644
+--- a/src/objects/map.h
++++ b/src/objects/map.h
+@@ -966,51 +966,58 @@ V8_OBJECT class Map : public HeapObject {
+   static constexpr std::optional<RootIndex> TryGetMapRootIdxFor(
+       InstanceType type) {
+     switch (type) {
+-#define MAKE_CASE(TYPE, Name, name) \
+-  case TYPE:                        \
+-    return RootIndex::k##Name##Map;
++#define MAKE_CASE(TYPE, Name, name)                         \
++  case TYPE:                                                 \
++    return std::optional<RootIndex>{RootIndex::k##Name##Map};
+       STRUCT_LIST(MAKE_CASE)
+ #undef MAKE_CASE
+       case DESCRIPTOR_ARRAY_TYPE:
+-        return RootIndex::kDescriptorArrayMap;
++        return std::optional<RootIndex>{RootIndex::kDescriptorArrayMap};
+       case STRONG_DESCRIPTOR_ARRAY_TYPE:
+-        return RootIndex::kStrongDescriptorArrayMap;
++        return std::optional<RootIndex>{RootIndex::kStrongDescriptorArrayMap};
+       case ON_HEAP_BASIC_BLOCK_PROFILER_DATA_TYPE:
+-        return RootIndex::kOnHeapBasicBlockProfilerDataMap;
++        return std::optional<RootIndex>{
++            RootIndex::kOnHeapBasicBlockProfilerDataMap};
+       case TURBOFAN_BITSET_TYPE_TYPE:
+-        return RootIndex::kTurbofanBitsetTypeMap;
++        return std::optional<RootIndex>{RootIndex::kTurbofanBitsetTypeMap};
+       case TURBOFAN_UNION_TYPE_TYPE:
+-        return RootIndex::kTurbofanUnionTypeMap;
++        return std::optional<RootIndex>{RootIndex::kTurbofanUnionTypeMap};
+       case TURBOFAN_RANGE_TYPE_TYPE:
+-        return RootIndex::kTurbofanRangeTypeMap;
++        return std::optional<RootIndex>{RootIndex::kTurbofanRangeTypeMap};
+       case TURBOFAN_HEAP_CONSTANT_TYPE_TYPE:
+-        return RootIndex::kTurbofanHeapConstantTypeMap;
++        return std::optional<RootIndex>{
++            RootIndex::kTurbofanHeapConstantTypeMap};
+       case TURBOFAN_OTHER_NUMBER_CONSTANT_TYPE_TYPE:
+-        return RootIndex::kTurbofanOtherNumberConstantTypeMap;
++        return std::optional<RootIndex>{
++            RootIndex::kTurbofanOtherNumberConstantTypeMap};
+       case TURBOSHAFT_WORD32_RANGE_TYPE_TYPE:
+-        return RootIndex::kTurboshaftWord32RangeTypeMap;
++        return std::optional<RootIndex>{
++            RootIndex::kTurboshaftWord32RangeTypeMap};
+       case TURBOSHAFT_WORD32_SET_TYPE_TYPE:
+-        return RootIndex::kTurboshaftWord32SetTypeMap;
++        return std::optional<RootIndex>{RootIndex::kTurboshaftWord32SetTypeMap};
+       case TURBOSHAFT_WORD64_RANGE_TYPE_TYPE:
+-        return RootIndex::kTurboshaftWord64RangeTypeMap;
++        return std::optional<RootIndex>{
++            RootIndex::kTurboshaftWord64RangeTypeMap};
+       case TURBOSHAFT_WORD64_SET_TYPE_TYPE:
+-        return RootIndex::kTurboshaftWord64SetTypeMap;
++        return std::optional<RootIndex>{RootIndex::kTurboshaftWord64SetTypeMap};
+       case TURBOSHAFT_FLOAT64_RANGE_TYPE_TYPE:
+-        return RootIndex::kTurboshaftFloat64RangeTypeMap;
++        return std::optional<RootIndex>{
++            RootIndex::kTurboshaftFloat64RangeTypeMap};
+       case TURBOSHAFT_FLOAT64_SET_TYPE_TYPE:
+-        return RootIndex::kTurboshaftFloat64SetTypeMap;
++        return std::optional<RootIndex>{
++            RootIndex::kTurboshaftFloat64SetTypeMap};
+       case SORT_STATE_TYPE:
+-        return RootIndex::kSortStateMap;
++        return std::optional<RootIndex>{RootIndex::kSortStateMap};
+ #if V8_ENABLE_WEBASSEMBLY
+       case WASM_FAST_API_CALL_DATA_TYPE:
+-        return RootIndex::kWasmFastApiCallDataMap;
++        return std::optional<RootIndex>{RootIndex::kWasmFastApiCallDataMap};
+       case WASM_STRING_VIEW_ITER_TYPE:
+-        return RootIndex::kWasmStringViewIterMap;
++        return std::optional<RootIndex>{RootIndex::kWasmStringViewIterMap};
+ #endif  // V8_ENABLE_WEBASSEMBLY
+       default:
+         break;
+     }
+-    return {};
++    return std::nullopt;
+   }
+   static inline Tagged<Map> GetMapFor(ReadOnlyRoots roots, InstanceType type);
+
+diff --git a/src/objects/ordered-hash-table.h b/src/objects/ordered-hash-table.h
+index c394a7bb2ac..cf5816fb652 100644
+--- a/src/objects/ordered-hash-table.h
++++ b/src/objects/ordered-hash-table.h
+@@ -990,7 +990,7 @@ V8_OBJECT class SmallOrderedNameDictionary
+   int32_t hash_;
+ #if TAGGED_SIZE_8_BYTES
+   int32_t padding_0_;
+-#else
++#elif !(defined(V8_CC_MSVC) && !defined(__clang__))
+   char padding_0_[0];
+ #endif
+   uint8_t number_of_elements_;
+diff --git a/src/objects/tagged-field.h b/src/objects/tagged-field.h
+index 6f20d073d06..8319fb5d251 100644
+--- a/src/objects/tagged-field.h
++++ b/src/objects/tagged-field.h
+@@ -150,6 +150,27 @@ static_assert(sizeof(JSDispatchHandleMember) == sizeof(uint32_t));
+ // only used on classes with a FAM) on clang.
+ // Return the zero length array by reference, to avoid array-to-pointer decay
+ // which can lose aliasing information.
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#define FLEXIBLE_ARRAY_MEMBER(Type, name)                                  \
++  using FlexibleDataReturnType = Type[0];                                  \
++  FlexibleDataReturnType& name() {                                         \
++    return *reinterpret_cast<FlexibleDataReturnType*>(                     \
++        reinterpret_cast<char*>(this) + sizeof(*this));                    \
++  }                                                                        \
++  const FlexibleDataReturnType& name() const {                             \
++    return *reinterpret_cast<const FlexibleDataReturnType*>(               \
++        reinterpret_cast<const char*>(this) + sizeof(*this));              \
++  }                                                                        \
++                                                                           \
++ public:                                                                   \
++  template <typename Class>                                                \
++  static constexpr int OffsetOfDataStart() {                               \
++    return static_cast<int>(sizeof(Class));                                \
++  }                                                                        \
++                                                                           \
++ private:                                                                  \
++  using FlexibleDataType = Type
++#else
+ #define FLEXIBLE_ARRAY_MEMBER(Type, name)                                  \
+   using FlexibleDataReturnType = Type[0];                                  \
+   FlexibleDataReturnType& name() { return flexible_array_member_data_; }   \
+@@ -170,6 +191,7 @@ static_assert(sizeof(JSDispatchHandleMember) == sizeof(uint32_t));
+                                                                            \
+  private:                                                                  \
+   using FlexibleDataType = Type
++#endif
+
+ // OFFSET_OF_DATA_START(T) returns the offset of the FLEXIBLE_ARRAY_MEMBER of
+ // the class T.
+diff --git a/src/regexp/regexp-bytecodes-inl.h b/src/regexp/regexp-bytecodes-inl.h
+index 29f81cb6884..490da8d0daa 100644
+--- a/src/regexp/regexp-bytecodes-inl.h
++++ b/src/regexp/regexp-bytecodes-inl.h
+@@ -162,6 +162,7 @@ struct BytecodeOperandNames;
+     static constexpr size_t kCount = detail::CountOf<UNPAREN(OpNames)>(); \
+     static constexpr auto kNames = detail::SplitNames<kCount>(#OpNames);  \
+     static constexpr std::string_view Name(Operand op) {                  \
++      if constexpr (kCount == 0) return {};                               \
+       return kNames[static_cast<size_t>(op)];                             \
+     }                                                                     \
+   };
+@@ -213,8 +214,11 @@ class BytecodeOperandsBase {
+   template <typename Func>
+   static constexpr void ForEachOperand(Func&& f) {
+     constexpr auto filtered_ops = GetOperandsTuple();
+-    std::apply([&](auto... ops) { (..., f.template operator()<ops.value>()); },
+-               filtered_ops);
++    std::apply(
++        [&](auto... ops) {
++          (..., f.template operator()<decltype(ops)::value>());
++        },
++        filtered_ops);
+   }
+
+   // Similar to ForEachOperand, but additionally provides the current index as
+diff --git a/src/regexp/regexp-code-generator.cc b/src/regexp/regexp-code-generator.cc
+index b60ec790e83..f48e9b4705c 100644
+--- a/src/regexp/regexp-code-generator.cc
++++ b/src/regexp/regexp-code-generator.cc
+@@ -83,7 +83,8 @@ auto CodeGenerator::GetArgumentValuesAsTuple() {
+   constexpr auto filtered_ops = Operands::GetOperandsTuple();
+   return std::apply(
+       [&](auto... ops) {
+-        return std::make_tuple(GetArgumentValue<Operands, ops.value>()...);
++        return std::make_tuple(
++            GetArgumentValue<Operands, decltype(ops)::value>()...);
+       },
+       filtered_ops);
+ }
+diff --git a/src/regexp/regexp-interpreter.cc b/src/regexp/regexp-interpreter.cc
+index 3a4c1763571..268f283e276 100644
+--- a/src/regexp/regexp-interpreter.cc
++++ b/src/regexp/regexp-interpreter.cc
+@@ -404,7 +404,8 @@ bool IndexIsInBounds(int index, int length) {
+   __VA_OPT__(auto argument_tuple = std::apply(                              \
+                  [&](auto... ops) {                                         \
+                    return std::make_tuple(                                  \
+-                       Operands::template Get<ops.value>(pc, no_gc)...);    \
++                       Operands::template Get<decltype(ops)::value>(         \
++                           pc, no_gc)...);                                  \
+                  },                                                         \
+                  Operands::GetOperandsTuple());                             \
+              auto [__VA_ARGS__] = argument_tuple;)                          \
+@@ -1123,11 +1124,56 @@ IrregexpInterpreter::Result RawMatch(
+       SET_PC_FROM_OFFSET(on_failure);
+       DISPATCH();
+     }
+-    BYTECODE(SkipUntilOneOfMasked3, bc0_cp_offset, bc0_advance_by, bc0_table,
+-             bc1_cp_offset, bc1_on_failure, bc2_cp_offset, bc3_characters,
+-             bc3_mask, bc4_by, bc5_cp_offset, bc6_characters, bc6_mask,
+-             bc6_on_equal, bc7_characters, bc7_mask, bc7_on_equal,
+-             bc8_characters, bc8_mask, fallthrough_jump_target) {
++    CLOSE_BLOCK
++    BC_LABEL(SkipUntilOneOfMasked3) OPEN_BLOCK
++      constexpr Bytecode current_bc = Bytecode::kSkipUntilOneOfMasked3;
++      using Operands = BytecodeOperands<current_bc>;
++      static_assert(Operands::kCount == 19);
++      const auto bc0_cp_offset =
++          Operands::template Get<Operands::Operand::bc0_cp_offset>(pc, no_gc);
++      const auto bc0_advance_by =
++          Operands::template Get<Operands::Operand::bc0_advance_by>(pc, no_gc);
++      const auto bc0_table =
++          Operands::template Get<Operands::Operand::bc0_table>(pc, no_gc);
++      const auto bc1_cp_offset =
++          Operands::template Get<Operands::Operand::bc1_cp_offset>(pc, no_gc);
++      const auto bc1_on_failure =
++          Operands::template Get<Operands::Operand::bc1_on_failure>(pc, no_gc);
++      const auto bc2_cp_offset =
++          Operands::template Get<Operands::Operand::bc2_cp_offset>(pc, no_gc);
++      const auto bc3_characters =
++          Operands::template Get<Operands::Operand::bc3_characters>(pc, no_gc);
++      const auto bc3_mask =
++          Operands::template Get<Operands::Operand::bc3_mask>(pc, no_gc);
++      const auto bc4_by =
++          Operands::template Get<Operands::Operand::bc4_by>(pc, no_gc);
++      const auto bc5_cp_offset =
++          Operands::template Get<Operands::Operand::bc5_cp_offset>(pc, no_gc);
++      const auto bc6_characters =
++          Operands::template Get<Operands::Operand::bc6_characters>(pc, no_gc);
++      const auto bc6_mask =
++          Operands::template Get<Operands::Operand::bc6_mask>(pc, no_gc);
++      const auto bc6_on_equal =
++          Operands::template Get<Operands::Operand::bc6_on_equal>(pc, no_gc);
++      const auto bc7_characters =
++          Operands::template Get<Operands::Operand::bc7_characters>(pc, no_gc);
++      const auto bc7_mask =
++          Operands::template Get<Operands::Operand::bc7_mask>(pc, no_gc);
++      const auto bc7_on_equal =
++          Operands::template Get<Operands::Operand::bc7_on_equal>(pc, no_gc);
++      const auto bc8_characters =
++          Operands::template Get<Operands::Operand::bc8_characters>(pc, no_gc);
++      const auto bc8_mask =
++          Operands::template Get<Operands::Operand::bc8_mask>(pc, no_gc);
++      const auto fallthrough_jump_target =
++          Operands::template Get<Operands::Operand::fallthrough_jump_target>(
++              pc, no_gc);
++#ifdef ENABLE_DISASSEMBLER
++      MaybeTraceInterpreter(code_base, pc, backtrack_stack.sp(), current,
++                            current_char, Bytecodes::Size(current_bc),
++                            "SkipUntilOneOfMasked3");
++#endif
++    {
+       // We should only get here in 1-byte mode.
+       DCHECK_EQ(1, sizeof(Char));
+
+diff --git a/src/sandbox/external-pointer-inl.h b/src/sandbox/external-pointer-inl.h
+index 07913c8bb4b..80796205bbe 100644
+--- a/src/sandbox/external-pointer-inl.h
++++ b/src/sandbox/external-pointer-inl.h
+@@ -29,6 +29,7 @@ inline void ExternalPointerMember<kTagRange>::Init(Address host_address,
+       host_address, reinterpret_cast<Address>(storage_), isolate, value);
+ }
+
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+ template <ExternalPointerTagRange kTagRange>
+   requires TagWithRedirection<kTagRange>
+ inline void ExternalPointerMember<kTagRange>::Init(Address host_address,
+@@ -38,6 +39,7 @@ inline void ExternalPointerMember<kTagRange>::Init(Address host_address,
+                                  reinterpret_cast<Address>(storage_), isolate,
+                                  RedirectValue(isolate, value));
+ }
++#endif
+
+ template <ExternalPointerTagRange kTagRange>
+ template <ExternalPointerTagRange tag_range>
+@@ -48,6 +50,7 @@ inline Address ExternalPointerMember<kTagRange>::load(
+       reinterpret_cast<Address>(storage_), isolate);
+ }
+
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+ template <ExternalPointerTagRange kTagRange>
+   requires TagWithRedirection<kTagRange>
+ inline Address ExternalPointerMember<kTagRange>::load(
+@@ -57,6 +60,7 @@ inline Address ExternalPointerMember<kTagRange>::load(
+   if (value == kNullAddress) return kNullAddress;
+   return ExternalReference::UnwrapRedirection(value);
+ }
++#endif
+
+ template <ExternalPointerTagRange kTagRange>
+ template <ExternalPointerTag tag>
+@@ -67,6 +71,7 @@ inline void ExternalPointerMember<kTagRange>::store(IsolateForSandbox isolate,
+                                  value);
+ }
+
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+ template <ExternalPointerTagRange kTagRange>
+   requires TagWithRedirection<kTagRange>
+ inline void ExternalPointerMember<kTagRange>::store(IsolateForSandbox isolate,
+@@ -89,6 +94,7 @@ inline void ExternalPointerMember<kTagRange>::store_raw(
+   WriteExternalPointerField<kTag>(reinterpret_cast<Address>(storage_), isolate,
+                                   value);
+ }
++#endif
+
+ template <ExternalPointerTagRange kTagRange>
+ inline ExternalPointer_t ExternalPointerMember<kTagRange>::load_encoded()
+@@ -102,6 +108,7 @@ inline void ExternalPointerMember<kTagRange>::store_encoded(
+   memcpy(storage_, &value, sizeof(ExternalPointer_t));
+ }
+
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+ template <ExternalPointerTagRange kTagRange>
+   requires TagWithRedirection<kTagRange>
+ inline ExternalPointer_t ExternalPointerMember<kTagRange>::load_encoded()
+@@ -141,6 +148,7 @@ inline Address ExternalPointerMember<kTagRange>::RedirectValue(
+   if (value == kNullAddress) return kNullAddress;
+   return ExternalReference::Redirect(value, kRedirectionType);
+ }
++#endif
+
+ template <ExternalPointerTag tag>
+ V8_INLINE void InitExternalPointerField(Address host_address,
+diff --git a/src/sandbox/external-pointer.h b/src/sandbox/external-pointer.h
+index 83c7cb111ee..a2b2e6b46be 100644
+--- a/src/sandbox/external-pointer.h
++++ b/src/sandbox/external-pointer.h
+@@ -44,7 +44,7 @@ class ExternalPointerMember {
+   template <ExternalPointerTagRange tag_range>
+   inline Address load(const IsolateForSandbox isolate) const;
+   inline Address load(const IsolateForSandbox isolate) const {
+-    return load<kTagRange>(isolate);
++    return this->template load<kTagRange>(isolate);
+   }
+
+   template <ExternalPointerTag tag>
+@@ -52,17 +52,35 @@ class ExternalPointerMember {
+   inline void store(IsolateForSandbox isolate, Address value)
+     requires(kTagRange.Size() == 1)
+   {
+-    store<kTagRange.first>(isolate, value);
++    this->template store<kTagRange.first>(isolate, value);
+   }
+
+   inline ExternalPointer_t load_encoded() const;
+   inline void store_encoded(ExternalPointer_t value);
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++  inline Address load_raw(const IsolateForSandbox isolate) const {
++    return this->template load<kTagRange>(isolate);
++  }
++  inline void store_raw(IsolateForSandbox isolate, Address value) {
++    static_assert(kTagRange.Size() == 1);
++    this->template store<kTagRange.first>(isolate, value);
++  }
++  inline void RemoveCallbackRedirectionForSerialization(
++      IsolateForSandbox isolate) {}
++  inline void RestoreCallbackRedirectionAfterDeserialization(
++      IsolateForSandbox isolate) {}
++  inline Address RedirectValue(IsolateForSandbox isolate, Address value) {
++    return value;
++  }
++#endif
++
+   Address storage_address() const {
+     return reinterpret_cast<Address>(storage_);
+   }
+
+  private:
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+   static_assert(
+       ([]() {
+         for (int tag = kTagRange.first; tag <= kTagRange.last; ++tag) {
+@@ -77,10 +95,12 @@ class ExternalPointerMember {
+       "redirection. You may need to use a single tag instead of a tag range, "
+       "or update the NeedsCallbackRedirection specialization to support tag "
+       "ranges.");
++#endif
+
+   alignas(alignof(Tagged_t)) char storage_[sizeof(ExternalPointer_t)];
+ };
+
++#if !(defined(V8_CC_MSVC) && !defined(__clang__))
+ template <ExternalPointerTagRange kTagRange>
+ concept TagWithRedirection =
+     (kTagRange.Size() == 1 &&
+@@ -124,6 +144,7 @@ class ExternalPointerMember<kTagRange> {
+
+   alignas(alignof(Tagged_t)) char storage_[sizeof(ExternalPointer_t)];
+ };
++#endif  // !(defined(V8_CC_MSVC) && !defined(__clang__))
+
+ // Writes the null handle or kNullAddress into the external pointer field.
+ V8_INLINE void InitLazyExternalPointerField(Address field_address);
+diff --git a/src/snapshot/embedded/embedded-file-writer.cc b/src/snapshot/embedded/embedded-file-writer.cc
+index 7ac3b6c8819..352c9a2a387 100644
+--- a/src/snapshot/embedded/embedded-file-writer.cc
++++ b/src/snapshot/embedded/embedded-file-writer.cc
+@@ -138,12 +138,14 @@ void EmbeddedFileWriter::WriteBuiltin(PlatformEmbeddedFileWriterBase* w,
+     if (i == next_cmt_offset) {
+       const char* comment = cmt_it->GetComment();
+       if (strncmp(comment, "CFI:", 4) == 0) {
++#if !(defined(_MSC_VER) && !defined(__clang__))
+         std::string dir(comment + 4);
+         size_t pos = dir.find(" - ");
+         if (pos != std::string::npos) {
+           dir = dir.substr(0, pos);
+         }
+         fprintf(w->fp(), "%s\n", dir.c_str());
++#endif
+       } else {
+         w->Comment(comment);
+       }
+diff --git a/src/torque/implementation-visitor.cc b/src/torque/implementation-visitor.cc
+index 406c1e9d36b..d503e37dc97 100644
+--- a/src/torque/implementation-visitor.cc
++++ b/src/torque/implementation-visitor.cc
+@@ -4068,6 +4068,11 @@ class ClassFieldOffsetGenerator : public FieldOffsetsGenerator {
+     std::string parent_name = use_templates ? "P" : parent->name();
+
+     if (type->IsLayoutDefinedInCpp()) {
++      if (!use_templates && parent && parent->name() == "ExtendedMap" &&
++          !type->fields().empty()) {
++        return "offsetof(" + type->name() + ", " +
++               type->fields().front().name_and_type.name + "_)";
++      }
+       return "sizeof(" + parent_name + ")";
+     }
+
+@@ -4134,6 +4139,7 @@ void CppClassGenerator::GenerateCppObjectLayoutDefinitionAsserts() {
+     // the C++ layout. They are asserted at runtime via DCHECKs in the
+     // hand-rolled conditional-slice accessors.
+     if (!f.offset.has_value()) continue;
++    if (f.name_and_type.type == TypeOracle::GetVoidType()) continue;
+     // Struct-typed fields are split into their component members in C++
+     // (for example PositionInfo -> position_info_start_,
+     // position_info_end_), so there's no single member to take offsetof
+@@ -4155,7 +4161,14 @@ void CppClassGenerator::GenerateCppObjectLayoutDefinitionAsserts() {
+           << " defined in Torque and offset of field " << name_
+           << "::" << f.name_and_type.name << " in C++ do not match\");\n";
+   }
+-  if (!type_->IsAbstract() && type_->HasStaticSize()) {
++  if (name_ == "ExtendedMap" && type_->HasStaticSize()) {
++    impl_ << "#if defined(V8_CC_MSVC) && !defined(__clang__)\n"
++          << "  static_assert(sizeof(ExtendedMap) == kSize ||\n"
++          << "                sizeof(ExtendedMap) == RoundUp<kTaggedSize>(kSize));\n"
++          << "#else\n"
++          << "  static_assert(kSize == sizeof(ExtendedMap));\n"
++          << "#endif\n";
++  } else if (!type_->IsAbstract() && type_->HasStaticSize()) {
+     impl_ << "  static_assert(kSize == sizeof(" + name_ + "));\n";
+   }
+
+diff --git a/src/tracing/trace-event-no-perfetto.h b/src/tracing/trace-event-no-perfetto.h
+index 99e8cd98466..3876162999a 100644
+--- a/src/tracing/trace-event-no-perfetto.h
++++ b/src/tracing/trace-event-no-perfetto.h
+@@ -855,11 +855,19 @@ struct TerminatingFlow {
+       TRACE_EVENT_FLAG_NONE)
+
+ // Macro to efficiently determine if a given category group is enabled.
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#define TRACE_EVENT_CATEGORY_ENABLED(category)                         \
++  ([]() {                                                              \
++    INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category);                  \
++    return INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE(); \
++  }())
++#else
+ #define TRACE_EVENT_CATEGORY_ENABLED(category)                        \
+   ({                                                                  \
+     INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category);                 \
+     INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE(); \
+   })
++#endif
+
+ #define TRACE_EVENT_CATEGORY_GROUP_ENABLED(category_group, ret)             \
+   do {                                                                      \
+diff --git a/src/trap-handler/trap-handler.h b/src/trap-handler/trap-handler.h
+index fa4fc80c9c2..d3e60fb2b45 100644
+--- a/src/trap-handler/trap-handler.h
++++ b/src/trap-handler/trap-handler.h
+@@ -67,6 +67,8 @@ namespace v8::internal::trap_handler {
+ #define TH_EXPORT_PRIVATE __declspec(dllexport)
+ #elif defined(USING_V8_SHARED_PRIVATE)
+ #define TH_EXPORT_PRIVATE __declspec(dllimport)
++#elif defined(V8_CC_MSVC) && !defined(__clang__)
++#define TH_EXPORT_PRIVATE
+ #else
+ #define TH_EXPORT_PRIVATE __attribute__((visibility("default")))
+ #endif  // BUILDING_V8_SHARED_PRIVATE
+diff --git a/src/utils/utils.h b/src/utils/utils.h
+index f0b78c67a7b..80e64e7de1b 100644
+--- a/src/utils/utils.h
++++ b/src/utils/utils.h
+@@ -257,8 +257,10 @@ inline T RoundingAverageUnsigned(T a, T b) {
+
+ // Defines padding field with given names which aligns next field by Alignment
+ // bytes, assuming field definition macro V(CamelName, Size, hacker_name).
+-#define PADDING_FIELD(Alignment, V, Name, hacker_name) \
+-  V(Name, (RoundUp<Alignment>(k##Name##Offset) - k##Name##Offset), hacker_name)
++#define PADDING_FIELD(Alignment, V, Name, hacker_name)                 \
++  V(Name, (RoundUp<Alignment>(static_cast<int>(k##Name##Offset)) - \
++           static_cast<int>(k##Name##Offset)),                         \
++    hacker_name)
+
+ // Size of the field defined by DEFINE_FIELD_OFFSET_CONSTANTS
+ #define FIELD_SIZE(Name) (Name##End + 1 - Name)
+diff --git a/src/wasm/effect-handler.h b/src/wasm/effect-handler.h
+index 35cbcaf9ad8..d10b224695f 100644
+--- a/src/wasm/effect-handler.h
++++ b/src/wasm/effect-handler.h
+@@ -11,7 +11,12 @@ namespace v8 {
+ namespace internal {
+ namespace wasm {
+
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(push, 1)
++struct EffectHandlerTagIndex {
++#else
+ struct __attribute__((packed)) EffectHandlerTagIndex {
++#endif
+   using IsSwitchField = base::BitField<bool, 0, 1>;
+   using IndexField = base::BitField<int, 1, 20>;
+   uint32_t tag_and_kind;
+@@ -26,6 +31,9 @@ struct __attribute__((packed)) EffectHandlerTagIndex {
+
+   uint32_t raw_value() const { return tag_and_kind; }
+ };
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#pragma pack(pop)
++#endif
+ }  // namespace wasm
+ }  // namespace internal
+ }  // namespace v8
+diff --git a/third_party/inspector_protocol/templates/TypeBuilder_h.template b/third_party/inspector_protocol/templates/TypeBuilder_h.template
+index 38b1fcf6da2..2800b1ad661 100644
+--- a/third_party/inspector_protocol/templates/TypeBuilder_h.template
++++ b/third_party/inspector_protocol/templates/TypeBuilder_h.template
+@@ -128,7 +128,7 @@ public:
+       {% if property.optional %}
+         {{type.id}}Builder<STATE>& {{"set" | to_method_case}}{{property_name}}({{property_type.pass_type}} value);  // Defined below
+       {% else %}
+-        {{type.id}}Builder<STATE | {{property_name}}Set>& {{"set" | to_method_case}}{{property_name}}({{property_type.pass_type}} value);  // Defined below
++        {{type.id}}Builder<STATE | {{type.id}}Builder<STATE>::{{property_name}}Set>& {{"set" | to_method_case}}{{property_name}}({{property_type.pass_type}} value);  // Defined below
+       {% endif %}
+     {% endfor %}
+
+diff --git a/third_party/rapidhash-v8/rapidhash.h b/third_party/rapidhash-v8/rapidhash.h
+index c67b400cb43..1512936cefa 100644
+--- a/third_party/rapidhash-v8/rapidhash.h
++++ b/third_party/rapidhash-v8/rapidhash.h
+@@ -153,8 +153,13 @@ struct PlainHashReader {
+ /*
+  *  Likely and unlikely macros.
+  */
++#if defined(V8_CC_MSVC) && !defined(__clang__)
++#define _likely_(x) (x)
++#define _unlikely_(x) (x)
++#else
+ #define _likely_(x) __builtin_expect(x, 1)
+ #define _unlikely_(x) __builtin_expect(x, 0)
++#endif
+
+ /*
+  *  64*64 -> 128bit multiply function.

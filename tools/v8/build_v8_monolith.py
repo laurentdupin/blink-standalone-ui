@@ -10,6 +10,7 @@ material without colliding with upstream/chromium.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -22,7 +23,9 @@ DEFAULT_OUT_NAME = "chromium_static"
 V8_ACTIONS = ("plan", "prepare", "gn-gen", "build")
 DEPOT_TOOLS_WORK_DIR_NAME = "depot_tools"
 
-GN_ARG_VALUES: list[tuple[str, object]] = [
+V8_TOOLCHAINS = ("chromium-clang", "msvc")
+
+GN_ARG_VALUES_COMMON: list[tuple[str, object]] = [
     ("is_debug", False),
     ("target_cpu", "x64"),
     ("v8_target_cpu", "x64"),
@@ -30,12 +33,7 @@ GN_ARG_VALUES: list[tuple[str, object]] = [
     ("v8_monolithic", True),
     ("v8_static_library", True),
     ("v8_use_external_startup_data", False),
-    ("use_lld", True),
-    ("is_clang", True),
-    ("clang_use_chrome_plugins", False),
     ("treat_warnings_as_errors", False),
-    ("use_custom_libcxx", True),
-    ("enable_safe_libcxx", True),
     ("v8_enable_pointer_compression", True),
     ("v8_enable_pointer_compression_shared_cage", True),
     ("v8_enable_webassembly", False),
@@ -50,6 +48,26 @@ GN_ARG_VALUES: list[tuple[str, object]] = [
     ("use_remoteexec", False),
     ("symbol_level", 1),
 ]
+
+GN_ARG_VALUES_BY_TOOLCHAIN: dict[str, list[tuple[str, object]]] = {
+    "chromium-clang": [
+        ("use_lld", True),
+        ("is_clang", True),
+        ("clang_use_chrome_plugins", False),
+        ("use_custom_libcxx", True),
+        ("enable_safe_libcxx", True),
+    ],
+    "msvc": [
+        ("use_lld", False),
+        ("is_clang", False),
+        ("use_custom_libcxx", False),
+        ("use_custom_libcxx_for_host", False),
+        ("enable_safe_libcxx", False),
+        ("v8_enable_partition_alloc", False),
+        ("v8_enable_sandbox", False),
+        ("v8_enable_regexp_interpreter_threaded_dispatch", False),
+    ],
+}
 
 
 GCLIENT_CUSTOM_VARS: dict[str, object] = {
@@ -101,8 +119,13 @@ def quote_gn_value(value: object) -> str:
     raise TypeError(f"Unsupported GN arg type: {type(value)!r}")
 
 
-def gn_args_text(clang_base_path: str | None) -> str:
-    values = list(GN_ARG_VALUES)
+def gn_args_text(toolchain: str, clang_base_path: str | None) -> str:
+    if toolchain not in GN_ARG_VALUES_BY_TOOLCHAIN:
+        raise ValueError(f"unsupported V8 toolchain: {toolchain}")
+    if clang_base_path and toolchain != "chromium-clang":
+        raise ValueError("--clang-base-path is only valid for the chromium-clang toolchain")
+    values = list(GN_ARG_VALUES_COMMON)
+    values.extend(GN_ARG_VALUES_BY_TOOLCHAIN[toolchain])
     if clang_base_path:
         values.append(("clang_base_path", clang_base_path.replace("\\", "/")))
     return "".join(f"{key}={quote_gn_value(value)}\n" for key, value in values)
@@ -236,6 +259,92 @@ def write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
+MSVC_V8_PATCH_DIR = Path(__file__).resolve().parent / "patches" / "msvc"
+MSVC_V8_PATCHES: list[tuple[str, str]] = [
+    (".", "0001-v8-msvc-compat"),
+    ("build", "0002-v8-build-msvc-compat"),
+    ("third_party/partition_alloc", "0003-v8-partition-alloc-msvc-gn"),
+    ("third_party/simdutf", "0004-v8-simdutf-msvc-flags"),
+]
+
+
+def md5_file(path: Path) -> str:
+    return hashlib.md5(path.read_bytes()).hexdigest()
+
+
+def read_patch_manifest(manifest_path: Path) -> list[tuple[str, str, str]]:
+    if not manifest_path.exists():
+        raise RuntimeError(f"required patch manifest is missing: {manifest_path}")
+    entries: list[tuple[str, str, str]] = []
+    for line_number, raw_line in enumerate(manifest_path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) != 3:
+            raise RuntimeError(f"invalid patch manifest line {line_number} in {manifest_path}: {raw_line}")
+        entries.append((parts[0], parts[1], parts[2]))
+    if not entries:
+        raise RuntimeError(f"patch manifest is empty: {manifest_path}")
+    return entries
+
+
+def verify_patch_hashes(root: Path, manifest_path: Path, *, expected_index: int, label: str) -> None:
+    for relative_path, before_md5, after_md5 in read_patch_manifest(manifest_path):
+        expected = before_md5 if expected_index == 1 else after_md5
+        file_path = root / relative_path
+        if not file_path.exists():
+            raise RuntimeError(f"{label} expected patched file is missing: {file_path}")
+        actual = md5_file(file_path)
+        if actual != expected:
+            phase = "before" if expected_index == 1 else "after"
+            raise RuntimeError(
+                f"{label} {phase} MD5 mismatch for {relative_path}: "
+                f"expected {expected}, got {actual}"
+            )
+
+
+def apply_verified_patch(root: Path, patch_path: Path, manifest_path: Path) -> None:
+    if not patch_path.exists():
+        raise RuntimeError(f"required patch file is missing: {patch_path}")
+    if not root.exists():
+        raise RuntimeError(f"patch root is missing: {root}")
+    label = f"{patch_path.name} in {root}"
+    verify_patch_hashes(root, manifest_path, expected_index=1, label=label)
+    run(["git", "apply", "--check", str(patch_path)], cwd=root)
+    run(["git", "apply", str(patch_path)], cwd=root)
+    verify_patch_hashes(root, manifest_path, expected_index=2, label=label)
+    print(f"applied verified patch {patch_path.name}", flush=True)
+
+
+def reset_patch_root(root: Path) -> None:
+    if not (root / ".git").exists():
+        raise RuntimeError(f"MSVC V8 patch root is not a git checkout: {root}")
+    run(["git", "-C", str(root), "reset", "--hard", "HEAD"])
+
+
+def reset_existing_msvc_v8_patch_roots(v8_work_root: Path) -> None:
+    # A failed run can leave verified patches applied in generated dependency
+    # checkouts. Reset them before gclient sync so the next run is idempotent.
+    for relative_root, _ in MSVC_V8_PATCHES:
+        patch_root = v8_work_root if relative_root == "." else v8_work_root / relative_root
+        if (patch_root / ".git").exists():
+            reset_patch_root(patch_root)
+
+
+def apply_msvc_v8_patches(v8_work_root: Path) -> None:
+    # Keep all native-MSVC V8 edits outside the pinned source submodule. The
+    # generated work copy is reset, then each patch is checked against an MD5
+    # before/after manifest so a V8 revision drift fails before compilation.
+    for relative_root, patch_name in MSVC_V8_PATCHES:
+        patch_root = v8_work_root if relative_root == "." else v8_work_root / relative_root
+        reset_patch_root(patch_root)
+        apply_verified_patch(
+            patch_root,
+            MSVC_V8_PATCH_DIR / f"{patch_name}.patch",
+            MSVC_V8_PATCH_DIR / f"{patch_name}.md5",
+        )
+
 def format_tool(command: list[str] | None) -> str:
     return " ".join(command) if command else "<not found>"
 
@@ -274,12 +383,13 @@ def print_plan(args: argparse.Namespace, commit: str, paths: dict[str, Path], to
         print(f"  effective_depot_tools_commit: {paths['effective_depot_tools_commit']}")
     print(f"  git_cache_root: {paths['git_cache_root']}")
     print(f"  tool_shim_root: {paths['tool_shim_root']}")
+    print(f"  toolchain: {args.toolchain}")
     print(f"  sync_deps: {args.sync_deps}")
     print(f"  gclient: {format_tool(tools['gclient'])}")
     print(f"  gn: {format_tool(tools['gn'])}")
     print(f"  ninja: {format_tool(tools['ninja'])}")
     print("  gn_args:")
-    for line in gn_args_text(args.clang_base_path).splitlines():
+    for line in gn_args_text(args.toolchain, args.clang_base_path).splitlines():
         print(f"    {line}")
 
 
@@ -289,6 +399,12 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument("--work-root", required=True, type=Path)
     parser.add_argument("--out-name", default=DEFAULT_OUT_NAME)
     parser.add_argument("--out-dir", type=Path)
+    parser.add_argument(
+        "--toolchain",
+        choices=V8_TOOLCHAINS,
+        default="chromium-clang",
+        help="V8 compatibility compiler/STL mode.",
+    )
     parser.add_argument("--gn")
     parser.add_argument("--ninja")
     parser.add_argument("--gclient")
@@ -333,6 +449,8 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
         args.action = selected
     else:
         args.action = "plan"
+    if args.clang_base_path and args.toolchain != "chromium-clang":
+        parser.error("--clang-base-path is only valid with --toolchain chromium-clang")
     return args
 
 
@@ -415,11 +533,17 @@ def main(argv: Iterable[str]) -> int:
     write_file(gclient_root / ".gclient", gclient_text("https://chromium.googlesource.com/v8/v8.git"))
     ensure_python_shims(shim_root)
     generated_env = {
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0",
         "GIT_CACHE_PATH": str(git_cache_root),
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
     }
     generated_paths = [shim_root]
     if effective_depot_tools_root:
         generated_paths.append(effective_depot_tools_root)
+
+    if args.toolchain == "msvc" and args.sync_deps:
+        reset_existing_msvc_v8_patch_roots(v8_work_root)
 
     if args.sync_deps:
         if not tools["gclient"]:
@@ -431,7 +555,10 @@ def main(argv: Iterable[str]) -> int:
             extra_env=generated_env,
         )
 
-    write_file(out_dir / "args.gn", gn_args_text(args.clang_base_path))
+    if args.toolchain == "msvc":
+        apply_msvc_v8_patches(v8_work_root)
+
+    write_file(out_dir / "args.gn", gn_args_text(args.toolchain, args.clang_base_path))
     if args.action == "prepare":
         return 0
 

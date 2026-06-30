@@ -1,0 +1,39 @@
+diff --git a/config/compiler/BUILD.gn b/config/compiler/BUILD.gn
+index 19d53b2..8f447ff 100644
+--- a/config/compiler/BUILD.gn
++++ b/config/compiler/BUILD.gn
+@@ -701,7 +701,10 @@ config("compiler") {
+       # Required for the __cplusplus macro definition to match the C++ version
+       # on MSVC. clang-cl defines it by default and doesn't need this flag.
+       # See: https://learn.microsoft.com/en-us/cpp/build/reference/zc-cplusplus
+-      cflags_cc += [ "/Zc:__cplusplus" ]
++      cflags_cc += [
++        "/Zc:__cplusplus",
++        "/Zc:preprocessor",
++      ]
+     }
+   } else {
+     cflags_c += [ "-std=c11" ]
+@@ -2556,12 +2559,16 @@ config("default_stack_frames") {
+ # [2]: https://crrev.com/c/5447532
+ config("optimize") {
+   if (is_win) {
+-    # clang-cl's /O2 corresponds to clang's -O3, and really want -O2 for
+-    # consistency with the other platforms.
+-    cflags = [
+-               "/O2",
+-               "/clang:-O2",
+-             ] + common_optimize_on_cflags
++    if (is_clang) {
++      # clang-cl's /O2 corresponds to clang's -O3, and really want -O2 for
++      # consistency with the other platforms.
++      cflags = [
++                 "/O2",
++                 "/clang:-O2",
++               ] + common_optimize_on_cflags
++    } else {
++      cflags = [ "/O2" ] + common_optimize_on_cflags
++    }
+
+     # The `-O3` for clang turns on extra optimizations compared to the standard
+     # `-O2`. But for rust, `-Copt-level=3` is the default and is thus reliable

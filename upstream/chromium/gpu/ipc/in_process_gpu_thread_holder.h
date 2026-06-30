@@ -36,6 +36,13 @@ class VulkanDeviceQueue;
 
 }  // namespace gpu
 
+#if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#define GPU_IN_PROCESS_THREAD_HOLDER_HAS_DAWN_CONTEXT_PROVIDER 1
+#else
+#define GPU_IN_PROCESS_THREAD_HOLDER_HAS_DAWN_CONTEXT_PROVIDER 0
+#endif
+
 namespace viz {
 class VulkanInProcessContextProvider;
 }  // namespace viz
@@ -94,7 +101,11 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   const GpuPreferences& gpu_preferences() const { return gpu_preferences_; }
   const GpuFeatureInfo& gpu_feature_info() const { return gpu_feature_info_; }
   DawnContextProvider* dawn_context_provider() const {
+#if GPU_IN_PROCESS_THREAD_HOLDER_HAS_DAWN_CONTEXT_PROVIDER
     return dawn_context_provider_.get();
+#else
+    return nullptr;
+#endif
   }
 
   // gpu::GpuInProcessThreadServiceDelegate implementation:
@@ -113,7 +124,9 @@ class COMPONENT_EXPORT(GPU_THREAD_HOLDER) InProcessGpuThreadHolder
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<SharedContextState> context_state_;
+#if GPU_IN_PROCESS_THREAD_HOLDER_HAS_DAWN_CONTEXT_PROVIDER
   std::unique_ptr<DawnContextProvider> dawn_context_provider_;
+#endif
 #if BUILDFLAG(IS_WIN)
   std::optional<LUID> external_d3d12_adapter_luid_;
   Microsoft::WRL::ComPtr<ID3D12Device> external_d3d12_device_;

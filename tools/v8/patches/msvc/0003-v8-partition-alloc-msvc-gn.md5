@@ -1,0 +1,3 @@
+# MD5 manifest for 0003-v8-partition-alloc-msvc-gn.patch
+# Format: <relative-path> <before-md5> <after-md5>
+src/partition_alloc/BUILD.gn adcbabba2ff1d2ef96d7a2fe8261dd90 1438acb62a7534c80820580fca6d4936

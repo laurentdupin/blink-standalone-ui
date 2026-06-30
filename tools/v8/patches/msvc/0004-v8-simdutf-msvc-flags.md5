@@ -1,0 +1,3 @@
+# MD5 manifest for 0004-v8-simdutf-msvc-flags.patch
+# Format: <relative-path> <before-md5> <after-md5>
+BUILD.gn 5a3314dc3ec246dd8fe73f4f796d2da3 12f321ce652e5d345113e143cdfffd6a

@@ -49,6 +49,31 @@
       }
     },
     {
+      "name": "x64-Release-MSVC",
+      "displayName": "x64 Release (MSVC cl.exe)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cmake-msvc-release",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/vcpkg_manifest.cmake",
+        "BLINK_STANDALONE_V8_TOOLCHAIN": "msvc",
+        "BLINK_STANDALONE_V8_COMPAT_ACTION": "build",
+        "BLINK_STANDALONE_V8_SYNC_DEPS": "ON",
+        "BLINK_STANDALONE_V8_COMPAT_JOBS": "8"
+      },
+      "environment": {
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0",
+        "VCPKG_ROOT": "C:/vcpkg"
+      }
+    },
+    {
       "name": "x64-Release-GeneratedV8",
       "displayName": "x64 Release with generated V8 compatibility (sync deps)",
       "description": "Configures the self-build flow that can run gclient sync and build v8_monolith from the pinned V8 submodule under the generated build directory.",
@@ -145,6 +170,51 @@
     {
       "name": "x64-Release",
       "configurePreset": "x64-Release"
+    },
+    {
+      "name": "x64-Release-MSVC",
+      "configurePreset": "x64-Release-MSVC"
+    },
+    {
+      "name": "x64-Release-MSVC-v8-compat",
+      "displayName": "Build generated V8 compatibility output with MSVC cl.exe",
+      "configurePreset": "x64-Release-MSVC",
+      "targets": [
+        "blink_standalone_v8_compat"
+      ],
+      "environment": {
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0",
+        "VCPKG_ROOT": "C:/vcpkg"
+      },
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-MSVC-c-api",
+      "displayName": "Build C API DLL with MSVC cl.exe",
+      "configurePreset": "x64-Release-MSVC",
+      "targets": [
+        "blink_standalone_renderer_c_api_dll",
+        "blink_standalone_renderer_c_api_link_manifest"
+      ],
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-MSVC-c-api-package",
+      "displayName": "Package C API runtime with MSVC cl.exe",
+      "configurePreset": "x64-Release-MSVC",
+      "targets": [
+        "blink_standalone_renderer_c_api_runtime_package"
+      ],
+      "jobs": 8
+    },
+    {
+      "name": "x64-Release-MSVC-benchmark",
+      "displayName": "Build render benchmark with MSVC cl.exe",
+      "configurePreset": "x64-Release-MSVC",
+      "targets": [
+        "blink_standalone_render_benchmark_skia"
+      ],
+      "jobs": 8
     },
     {
       "name": "x64-Release-GeneratedV8-v8-compat",

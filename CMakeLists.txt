@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.26)
+﻿cmake_minimum_required(VERSION 3.26)
 project(blink_standalone_ui LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -155,10 +155,58 @@ if(BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
 ]=])
 endif()
 
+set(BLINK_STANDALONE_COMPILER_IS_CLANG_CL OFF)
+set(BLINK_STANDALONE_COMPILER_IS_MSVC_CL OFF)
+if(MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(BLINK_STANDALONE_COMPILER_IS_CLANG_CL ON)
+elseif(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+  set(BLINK_STANDALONE_COMPILER_IS_MSVC_CL ON)
+endif()
+if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+  enable_language(ASM_MASM)
+endif()
+
 if(MSVC)
-  # The V8 monolith is built with Chromium's clang-cl /MT configuration. Keep
-  # standalone objects on the same CRT boundary instead of mixing /MDd with V8.
+  # Keep the Windows renderer and generated V8 compatibility output on the same
+  # static CRT boundary.
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded" CACHE STRING "" FORCE)
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:C>:/utf-8>"
+    "$<$<COMPILE_LANGUAGE:CXX>:/utf-8>"
+  )
+endif()
+if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+  add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:/Zc:preprocessor>")
+endif()
+
+if(NOT DEFINED BLINK_STANDALONE_V8_TOOLCHAIN)
+  if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+    set(_blink_standalone_default_v8_toolchain msvc)
+  else()
+    set(_blink_standalone_default_v8_toolchain chromium-clang)
+  endif()
+  set(BLINK_STANDALONE_V8_TOOLCHAIN
+    ${_blink_standalone_default_v8_toolchain}
+    CACHE STRING
+    "V8/CppGC compatibility toolchain: chromium-clang or msvc."
+  )
+else()
+  set(BLINK_STANDALONE_V8_TOOLCHAIN
+    ${BLINK_STANDALONE_V8_TOOLCHAIN}
+    CACHE STRING
+    "V8/CppGC compatibility toolchain: chromium-clang or msvc."
+  )
+endif()
+set_property(CACHE BLINK_STANDALONE_V8_TOOLCHAIN PROPERTY STRINGS
+  chromium-clang msvc)
+if(NOT BLINK_STANDALONE_V8_TOOLCHAIN MATCHES "^(chromium-clang|msvc)$")
+  message(FATAL_ERROR
+    "BLINK_STANDALONE_V8_TOOLCHAIN must be chromium-clang or msvc.")
+endif()
+
+set(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX OFF)
+if(BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "chromium-clang")
+  set(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX ON)
 endif()
 
 set(BLINK_STANDALONE_CHROMIUM_ROOT
@@ -177,8 +225,11 @@ set(BLINK_STANDALONE_V8_SOURCE_ROOT
   CACHE PATH
   "Pinned V8 source checkout used to create the generated V8/CppGC compatibility build."
 )
-set(BLINK_STANDALONE_V8_COMPAT_WORK_ROOT
+set(_blink_standalone_default_v8_compat_work_root
   ${CMAKE_BINARY_DIR}/v8_compat
+)
+set(BLINK_STANDALONE_V8_COMPAT_WORK_ROOT
+  ${_blink_standalone_default_v8_compat_work_root}
   CACHE PATH
   "Generated work root for the V8/CppGC compatibility build. gclient sync, if enabled, runs only here."
 )
@@ -187,11 +238,28 @@ set(BLINK_STANDALONE_V8_COMPAT_OUT_NAME
   CACHE STRING
   "GN output directory name for the generated V8/CppGC compatibility build."
 )
+set(_blink_standalone_default_v8_compat_out_dir
+  ${_blink_standalone_default_v8_compat_work_root}/src/v8/out/${BLINK_STANDALONE_V8_COMPAT_OUT_NAME}
+)
 set(BLINK_STANDALONE_V8_COMPAT_OUT_DIR
   ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8/out/${BLINK_STANDALONE_V8_COMPAT_OUT_NAME}
   CACHE PATH
   "GN output directory for the generated V8/CppGC compatibility build."
 )
+file(TO_CMAKE_PATH "${_blink_standalone_default_v8_compat_work_root}" _blink_standalone_default_v8_compat_work_root_normalized)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}" _blink_standalone_v8_compat_work_root_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_v8_compat_out_dir}" _blink_standalone_default_v8_compat_out_dir_normalized)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}" _blink_standalone_v8_compat_out_dir_normalized)
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_v8_compat_out_dir_normalized STREQUAL _blink_standalone_default_v8_compat_out_dir_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_V8_COMPAT_OUT_DIR to match BLINK_STANDALONE_V8_COMPAT_WORK_ROOT.")
+  set(BLINK_STANDALONE_V8_COMPAT_OUT_DIR
+    ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8/out/${BLINK_STANDALONE_V8_COMPAT_OUT_NAME}
+    CACHE PATH
+    "GN output directory for the generated V8/CppGC compatibility build."
+    FORCE
+  )
+endif()
 find_program(BLINK_STANDALONE_V8_GN_EXECUTABLE
   NAMES gn.bat gn.cmd gn.exe gn
   HINTS ${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}
@@ -256,11 +324,66 @@ set(BLINK_STANDALONE_V8_COMPAT_JOBS
 set(_blink_standalone_legacy_v8_build_root
   ${CMAKE_CURRENT_SOURCE_DIR}/build/v8_mono2/v8
 )
+set(_blink_standalone_default_v8_build_root
+  ${_blink_standalone_default_v8_compat_work_root}/src/v8
+)
+set(_blink_standalone_default_v8_generated_source_root
+  ${_blink_standalone_default_v8_compat_work_root}/src
+)
+set(_blink_standalone_default_v8_include_dir
+  ${_blink_standalone_default_v8_build_root}/include
+)
 set(BLINK_STANDALONE_V8_BUILD_ROOT
   ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8
   CACHE PATH
   "Generated V8 work copy used by the V8/CppGC compatibility build."
 )
+set(BLINK_STANDALONE_V8_GENERATED_SOURCE_ROOT
+  ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src
+  CACHE PATH
+  "Generated V8 compatibility source root used for Chromium-style v8/include/... includes."
+)
+set(BLINK_STANDALONE_V8_INCLUDE_DIR
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/include
+  CACHE PATH
+  "Patched V8 public include root from the generated V8 compatibility work copy."
+)
+file(TO_CMAKE_PATH "${_blink_standalone_default_v8_build_root}" _blink_standalone_default_v8_build_root_normalized)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_BUILD_ROOT}" _blink_standalone_v8_build_root_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_v8_generated_source_root}" _blink_standalone_default_v8_generated_source_root_normalized)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_GENERATED_SOURCE_ROOT}" _blink_standalone_v8_generated_source_root_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_v8_include_dir}" _blink_standalone_default_v8_include_dir_normalized)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_INCLUDE_DIR}" _blink_standalone_v8_include_dir_normalized)
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_v8_build_root_normalized STREQUAL _blink_standalone_default_v8_build_root_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_V8_BUILD_ROOT to match BLINK_STANDALONE_V8_COMPAT_WORK_ROOT.")
+  set(BLINK_STANDALONE_V8_BUILD_ROOT
+    ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8
+    CACHE PATH
+    "Generated V8 work copy used by the V8/CppGC compatibility build."
+    FORCE
+  )
+endif()
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_v8_generated_source_root_normalized STREQUAL _blink_standalone_default_v8_generated_source_root_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_V8_GENERATED_SOURCE_ROOT to match BLINK_STANDALONE_V8_COMPAT_WORK_ROOT.")
+  set(BLINK_STANDALONE_V8_GENERATED_SOURCE_ROOT
+    ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src
+    CACHE PATH
+    "Generated V8 compatibility source root used for Chromium-style v8/include/... includes."
+    FORCE
+  )
+endif()
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_v8_include_dir_normalized STREQUAL _blink_standalone_default_v8_include_dir_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_V8_INCLUDE_DIR to match BLINK_STANDALONE_V8_BUILD_ROOT.")
+  set(BLINK_STANDALONE_V8_INCLUDE_DIR
+    ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}/src/v8/include
+    CACHE PATH
+    "Patched V8 public include root from the generated V8 compatibility work copy."
+    FORCE
+  )
+endif()
 set(_blink_standalone_default_icu_source_root
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu
 )
@@ -279,6 +402,35 @@ set(BLINK_STANDALONE_ICU_DATA_FILE
   CACHE FILEPATH
   "ICU data sidecar matching BLINK_STANDALONE_ICU_SOURCE_ROOT."
 )
+set(_blink_standalone_v8_icu_data_file
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu/common/icudtl.dat
+)
+if(NOT EXISTS "${BLINK_STANDALONE_ICU_DATA_FILE}")
+  if(EXISTS "${_blink_standalone_v8_icu_data_file}")
+    message(STATUS "Updating BLINK_STANDALONE_ICU_DATA_FILE to the generated V8 ICU data bundle.")
+    set(BLINK_STANDALONE_ICU_SOURCE_ROOT
+      ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu
+      CACHE PATH
+      "ICU source root used by the standalone renderer. Generated V8 ICU is preferred when present so compiled ICU and icudtl.dat versions match."
+      FORCE
+    )
+    set(BLINK_STANDALONE_ICU_DATA_FILE
+      ${_blink_standalone_v8_icu_data_file}
+      CACHE FILEPATH
+      "ICU data sidecar matching BLINK_STANDALONE_ICU_SOURCE_ROOT."
+      FORCE
+    )
+  elseif(BLINK_STANDALONE_ICU_SOURCE_ROOT STREQUAL
+         "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu")
+    message(STATUS "Using generated V8 ICU data bundle path; the V8 compatibility build will create it.")
+    set(BLINK_STANDALONE_ICU_DATA_FILE
+      ${_blink_standalone_v8_icu_data_file}
+      CACHE FILEPATH
+      "ICU data sidecar matching the generated V8 compatibility build."
+      FORCE
+    )
+  endif()
+endif()
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_ICU_DATA_FILE}" _blink_standalone_icu_data_file_normalized)
 if(_blink_standalone_icu_data_file_normalized MATCHES "/out/.*/icudtl\\.dat$")
   message(STATUS "Migrating BLINK_STANDALONE_ICU_DATA_FILE from generated out dir to the matching ICU source data bundle.")
@@ -294,11 +446,18 @@ set(BLINK_STANDALONE_V8_MONOLITH_LIB
   CACHE FILEPATH
   "Source-built V8/CppGC compatibility library for the live Blink renderer."
 )
+set(_blink_standalone_default_v8_monolith_lib
+  ${_blink_standalone_default_v8_compat_out_dir}/obj/v8_monolith.lib
+)
 set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
   ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
   ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
   CACHE STRING
   "Chromium libc++ include roots used for ABI compatibility with the V8/CppGC library."
+)
+set(_blink_standalone_default_libcxx_include_dirs
+  ${_blink_standalone_default_v8_build_root}/buildtools/third_party/libc++
+  ${_blink_standalone_default_v8_build_root}/third_party/libc++/src/include
 )
 set(BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
@@ -318,6 +477,9 @@ set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
   CACHE PATH
   "Directory containing Chromium libc++ object files built with the V8/CppGC compatibility library."
 )
+set(_blink_standalone_default_libcxx_object_dir
+  ${_blink_standalone_default_v8_compat_out_dir}/obj/buildtools/third_party/libc++/libc++
+)
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_BUILD_ROOT}" _blink_standalone_v8_build_root_normalized)
 if(_blink_standalone_v8_build_root_normalized MATCHES "/build/v8_mono2/v8$")
   message(STATUS "Migrating legacy BLINK_STANDALONE_V8_BUILD_ROOT cache value to the generated V8 compatibility work root.")
@@ -332,6 +494,17 @@ set(_blink_standalone_legacy_v8_monolith_lib
   ${_blink_standalone_legacy_v8_build_root}/out/chromium_static/obj/v8_monolith.lib
 )
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_MONOLITH_LIB}" _blink_standalone_v8_monolith_lib_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_v8_monolith_lib}" _blink_standalone_default_v8_monolith_lib_normalized)
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_v8_monolith_lib_normalized STREQUAL _blink_standalone_default_v8_monolith_lib_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_V8_MONOLITH_LIB to match BLINK_STANDALONE_V8_COMPAT_OUT_DIR.")
+  set(BLINK_STANDALONE_V8_MONOLITH_LIB
+    ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
+    CACHE FILEPATH
+    "Source-built V8/CppGC compatibility library for the live Blink renderer."
+    FORCE
+  )
+endif()
 if(_blink_standalone_v8_monolith_lib_normalized MATCHES "/build/v8_mono2/v8/out/chromium_static/obj/v8_monolith\\.lib$")
   message(STATUS "Migrating legacy BLINK_STANDALONE_V8_MONOLITH_LIB cache value to the generated V8 compatibility output.")
   set(BLINK_STANDALONE_V8_MONOLITH_LIB
@@ -345,6 +518,17 @@ set(_blink_standalone_legacy_libcxx_object_dir
   ${_blink_standalone_legacy_v8_build_root}/out/chromium_static/obj/buildtools/third_party/libc++/libc++
 )
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}" _blink_standalone_libcxx_object_dir_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_libcxx_object_dir}" _blink_standalone_default_libcxx_object_dir_normalized)
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_libcxx_object_dir_normalized STREQUAL _blink_standalone_default_libcxx_object_dir_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR to match BLINK_STANDALONE_V8_COMPAT_OUT_DIR.")
+  set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
+    ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/buildtools/third_party/libc++/libc++
+    CACHE PATH
+    "Directory containing Chromium libc++ object files built with the V8/CppGC compatibility library."
+    FORCE
+  )
+endif()
 if(_blink_standalone_libcxx_object_dir_normalized MATCHES "/build/v8_mono2/v8/out/chromium_static/obj/buildtools/third_party/libc\\+\\+/libc\\+\\+$")
   message(STATUS "Migrating legacy BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR cache value to the generated V8 compatibility output.")
   set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
@@ -360,6 +544,19 @@ set(_blink_standalone_legacy_libcxx_include_dirs
 )
 set(_blink_standalone_libcxx_include_dirs_normalized "${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}")
 string(REPLACE "\\" "/" _blink_standalone_libcxx_include_dirs_normalized "${_blink_standalone_libcxx_include_dirs_normalized}")
+set(_blink_standalone_default_libcxx_include_dirs_normalized "${_blink_standalone_default_libcxx_include_dirs}")
+string(REPLACE "\\" "/" _blink_standalone_default_libcxx_include_dirs_normalized "${_blink_standalone_default_libcxx_include_dirs_normalized}")
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_libcxx_include_dirs_normalized STREQUAL _blink_standalone_default_libcxx_include_dirs_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS to match BLINK_STANDALONE_V8_BUILD_ROOT.")
+  set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
+    CACHE STRING
+    "Chromium libc++ include roots used for ABI compatibility with the V8/CppGC library."
+    FORCE
+  )
+endif()
 string(FIND "${_blink_standalone_libcxx_include_dirs_normalized}" "build/v8_mono2/v8" _blink_standalone_legacy_libcxx_include_pos)
 if(NOT _blink_standalone_legacy_libcxx_include_pos EQUAL -1)
   message(STATUS "Migrating legacy BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS cache value to the generated V8 compatibility work root.")
@@ -371,12 +568,20 @@ if(NOT _blink_standalone_legacy_libcxx_include_pos EQUAL -1)
     FORCE
   )
 endif()
+set(BLINK_STANDALONE_STL_INCLUDE_DIRS)
+set(BLINK_STANDALONE_STL_DEFINES)
+if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+  set(BLINK_STANDALONE_STL_INCLUDE_DIRS
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+  )
+  set(BLINK_STANDALONE_STL_DEFINES
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+  )
+endif()
 set(BLINK_STANDALONE_V8_ABI_DEFINES
   V8_COMPRESS_POINTERS
   V8_COMPRESS_POINTERS_IN_SHARED_CAGE
   V8_31BIT_SMIS_ON_64BIT_ARCH
-  V8_ENABLE_SANDBOX
-  V8_ENABLE_PARTITION_ALLOC
   V8_STATIC_ROOTS
   V8_USE_ZLIB
   CPPGC_CAGED_HEAP
@@ -385,10 +590,17 @@ set(BLINK_STANDALONE_V8_ABI_DEFINES
   CPPGC_ENABLE_LARGER_CAGE
   CPPGC_SLIM_WRITE_BARRIER
 )
+if(NOT BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc")
+  list(APPEND BLINK_STANDALONE_V8_ABI_DEFINES
+    V8_ENABLE_PARTITION_ALLOC
+    V8_ENABLE_SANDBOX
+  )
+endif()
 
 set(_blink_standalone_v8_compat_command
   ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/build_v8_monolith.py
+  --toolchain ${BLINK_STANDALONE_V8_TOOLCHAIN}
   --source-v8-root ${BLINK_STANDALONE_V8_SOURCE_ROOT}
   --work-root ${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}
   --out-name ${BLINK_STANDALONE_V8_COMPAT_OUT_NAME}
@@ -448,14 +660,26 @@ elseif(_blink_standalone_v8_compat_action STREQUAL "prepare")
 else()
   set(_blink_standalone_v8_compat_comment "V8/CppGC compatibility build plan")
 endif()
-add_custom_target(blink_standalone_v8_compat
+set(_blink_standalone_v8_compat_stamp
+  ${CMAKE_BINARY_DIR}/CMakeFiles/blink_standalone_v8_compat.stamp
+)
+add_custom_command(
+  OUTPUT ${_blink_standalone_v8_compat_stamp}
   COMMAND ${_blink_standalone_v8_compat_command}
+  COMMAND ${CMAKE_COMMAND} -E touch ${_blink_standalone_v8_compat_stamp}
+  BYPRODUCTS
+    ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+    ${BLINK_STANDALONE_ICU_DATA_FILE}
   USES_TERMINAL
   COMMENT "${_blink_standalone_v8_compat_comment}"
+  VERBATIM
+)
+add_custom_target(blink_standalone_v8_compat
+  DEPENDS ${_blink_standalone_v8_compat_stamp}
 )
 
 function(blink_standalone_add_v8_compat_dependency target_name)
-  if(MSVC)
+  if(WIN32)
     add_dependencies(${target_name} blink_standalone_v8_compat_validate)
   endif()
 endfunction()
@@ -469,46 +693,62 @@ function(blink_standalone_copy_icu_data target_name)
   )
 endfunction()
 
-if(MSVC)
+if(WIN32)
   add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
   set_target_properties(blink_standalone_v8_monolith PROPERTIES
     IMPORTED_LOCATION "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
-    INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
-  )
-  blink_standalone_resolve_libcxx_objects(
-    BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
-    "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}"
-  )
-  set_source_files_properties(${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
-    PROPERTIES
-      GENERATED TRUE
-      EXTERNAL_OBJECT TRUE
+    INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_STL_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
   )
   set(_blink_standalone_libcxx_object_list
     ${CMAKE_BINARY_DIR}/v8_compat_libcxx_objects.txt
   )
-  file(WRITE "${_blink_standalone_libcxx_object_list}" "")
-  foreach(_blink_standalone_libcxx_object_name IN LISTS BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_NAMES)
-    file(APPEND "${_blink_standalone_libcxx_object_list}" "${_blink_standalone_libcxx_object_name}\n")
-  endforeach()
   set(_blink_standalone_v8_compat_validation_command
     ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/validate_v8_compat_output.py
     --monolith-lib ${BLINK_STANDALONE_V8_MONOLITH_LIB}
-    --libcxx-object-dir ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}
-    --object-list ${_blink_standalone_libcxx_object_list}
+  )
+  add_library(blink_standalone_chromium_libcxx INTERFACE)
+  if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+    blink_standalone_resolve_libcxx_objects(
+      BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
+      "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}"
+    )
+    set_source_files_properties(${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
+      PROPERTIES
+        GENERATED TRUE
+        EXTERNAL_OBJECT TRUE
+    )
+    file(WRITE "${_blink_standalone_libcxx_object_list}" "")
+    foreach(_blink_standalone_libcxx_object_name IN LISTS BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_NAMES)
+      file(APPEND "${_blink_standalone_libcxx_object_list}" "${_blink_standalone_libcxx_object_name}\n")
+    endforeach()
+    list(APPEND _blink_standalone_v8_compat_validation_command
+      --libcxx-object-dir ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}
+      --object-list ${_blink_standalone_libcxx_object_list}
+    )
+    target_sources(blink_standalone_chromium_libcxx INTERFACE
+      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
+    )
+  endif()
+  set(_blink_standalone_v8_compat_validate_stamp
+    ${CMAKE_BINARY_DIR}/CMakeFiles/blink_standalone_v8_compat_validate.stamp
+  )
+  add_custom_command(
+    OUTPUT ${_blink_standalone_v8_compat_validate_stamp}
+    COMMAND ${_blink_standalone_v8_compat_validation_command}
+    COMMAND ${CMAKE_COMMAND} -E touch ${_blink_standalone_v8_compat_validate_stamp}
+    DEPENDS
+      ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+      ${_blink_standalone_v8_compat_stamp}
+    COMMENT "Validate V8/CppGC compatibility link outputs"
+    VERBATIM
   )
   add_custom_target(blink_standalone_v8_compat_validate
-    COMMAND ${_blink_standalone_v8_compat_validation_command}
-    COMMENT "Validate V8/CppGC compatibility link outputs"
+    DEPENDS ${_blink_standalone_v8_compat_validate_stamp}
   )
   if(_blink_standalone_v8_compat_action STREQUAL "build")
     add_dependencies(blink_standalone_v8_compat_validate blink_standalone_v8_compat)
   endif()
-  add_library(blink_standalone_chromium_libcxx INTERFACE)
-  target_sources(blink_standalone_chromium_libcxx INTERFACE
-    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
-  )
 endif()
 
 set(BLINK_STANDALONE_FREETYPE_SOURCE
@@ -603,16 +843,14 @@ if(BLINK_STANDALONE_BUILD_SDL_VIEWER)
   endif()
 endif()
 
-if(MSVC AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-  message(FATAL_ERROR
-    "blink-standalone-ui requires clang-cl on Windows. Configure with the "
-    "Visual Studio Clang toolset, for example: cmake -S . -B build/cmake "
-    "-T ClangCL")
-endif()
-
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/live_blink_sources.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/angle_runtime.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/abseil_sources.cmake)
+if(NOT BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc")
+  list(APPEND BLINK_STANDALONE_ABSEIL_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp/absl/base/internal/hardening.cc
+  )
+endif()
 
 set(BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES)
 if(BLINK_STANDALONE_DAWN_D3D12)
@@ -770,13 +1008,17 @@ set(BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/slot_address_and_size.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/slot_start.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/spinning_mutex.cc
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/stack/asm/x64/push_registers_asm.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/stack/stack.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/tagging.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/thread_cache.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/thread_isolation/pkey.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/thread_isolation/thread_isolation.cc
 )
+if(NOT BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+  list(APPEND BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/stack/asm/x64/push_registers_asm.cc
+  )
+endif()
 
 set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
@@ -813,6 +1055,12 @@ endif()
 # Source-built v8_monolith contains the real PartitionAlloc implementation used
 # by V8/CppGC. Do not link the tracked implementation objects into the normal
 # V8-backed renderer as well, or lld reports duplicate PartitionAlloc symbols.
+if(BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc")
+  list(APPEND BLINK_STANDALONE_LIVE_SOURCES
+    ${BLINK_STANDALONE_PARTITION_ALLOC_BASE_SOURCES}
+    ${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
+  )
+endif()
 
 if(BLINK_STANDALONE_PERF_BUILD OR BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
   set(BLINK_STANDALONE_PERF_SKIA_SOURCES
@@ -836,7 +1084,7 @@ if(BLINK_STANDALONE_PERF_BUILD OR BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
     ${BLINK_STANDALONE_PERF_SKIA_SOURCES}
     ${BLINK_STANDALONE_PERF_SKCMS_SOURCES}
   )
-  if(MSVC)
+  if(BLINK_STANDALONE_COMPILER_IS_CLANG_CL)
     set_property(SOURCE
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformHsw.cc
       APPEND PROPERTY COMPILE_OPTIONS
@@ -853,6 +1101,17 @@ if(BLINK_STANDALONE_PERF_BUILD OR BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
         /clang:-mavx512bw
         /clang:-mavx512vl
         /clang:-ffp-contract=off
+    )
+  elseif(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+    set_property(SOURCE
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformHsw.cc
+      APPEND PROPERTY COMPILE_OPTIONS
+        /arch:AVX2
+    )
+    set_property(SOURCE
+      ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/modules/skcms/src/skcms_TransformSkx.cc
+      APPEND PROPERTY COMPILE_OPTIONS
+        /arch:AVX512
     )
   endif()
 endif()
@@ -923,6 +1182,29 @@ blink_standalone_apply_optimization_group(
 blink_standalone_apply_optimization_group(
   app BLINK_STANDALONE_OPTIMIZE_APP ${BLINK_STANDALONE_APP_SOURCES} ${BLINK_STANDALONE_SDL_APP_SOURCES})
 
+if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+  set(BLINK_STANDALONE_MSVC_HEAP_SENSITIVE_SOURCES
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/bounds_checks.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/gwp_asan_support.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/in_slot_metadata.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/internal_allocator.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_bucket.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_utilities.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/style_commands.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_layer_delegate.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/skia/skia_utils.cc
+  )
+  foreach(source IN LISTS BLINK_STANDALONE_MSVC_HEAP_SENSITIVE_SOURCES)
+    set_property(SOURCE ${source} APPEND PROPERTY COMPILE_OPTIONS
+      /Od
+      /Ob0
+      /Oy-
+    )
+  endforeach()
+endif()
+
 function(blink_standalone_json_source_list out_var group_name optimize)
   set(items "")
   foreach(source IN LISTS ARGN)
@@ -971,7 +1253,7 @@ add_library(blink_standalone_abseil OBJECT
   ${BLINK_STANDALONE_ABSEIL_SOURCES}
 )
 target_include_directories(blink_standalone_abseil BEFORE PRIVATE
-  ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+  ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
   ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
 )
 target_include_directories(blink_standalone_abseil PRIVATE
@@ -987,7 +1269,7 @@ target_compile_definitions(blink_standalone_abseil PRIVATE
   _WINSOCK_DEPRECATED_NO_WARNINGS
   UNICODE
   _UNICODE
-  ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+  ${BLINK_STANDALONE_STL_DEFINES}
 )
 set_property(TARGET blink_standalone_abseil PROPERTY
   MSVC_RUNTIME_LIBRARY "MultiThreaded")
@@ -1011,6 +1293,14 @@ set(BLINK_STANDALONE_LIVE_OBJECTS
   $<TARGET_OBJECTS:blink_live_modp_b64>
   $<TARGET_OBJECTS:blink_standalone_abseil>
 )
+if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+  add_library(blink_standalone_partition_alloc_masm OBJECT
+    ${BLINK_STANDALONE_RENDERER_ROOT}/src/partition_alloc_push_registers_masm.asm
+  )
+  list(APPEND BLINK_STANDALONE_LIVE_OBJECTS
+    $<TARGET_OBJECTS:blink_standalone_partition_alloc_masm>
+  )
+endif()
 if(NOT MSVC)
   add_library(blink_live_compiler_rt_atomic OBJECT
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/compiler-rt/src/lib/builtins/atomic.c
@@ -1090,7 +1380,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   endif()
 
   target_include_directories(blink_standalone_render_benchmark_skia BEFORE PRIVATE
-    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+    ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
+    ${BLINK_STANDALONE_V8_INCLUDE_DIR}
+    ${BLINK_STANDALONE_V8_GENERATED_SOURCE_ROOT}
     ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
   )
   target_include_directories(blink_standalone_render_benchmark_skia PRIVATE
@@ -1177,7 +1469,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1
     PNG_INTEL_SSE=1
     ZLIB_IMPLEMENTATION=1
-    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+    ${BLINK_STANDALONE_STL_DEFINES}
     ${BLINK_STANDALONE_V8_ABI_DEFINES}
   )
   set_property(TARGET blink_standalone_render_benchmark_skia PROPERTY
@@ -1202,6 +1494,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     blink_standalone_chromium_libcxx
     blink_standalone_v8_monolith
     d3d11
+    d3d12
     dcomp
     dwmapi
     dxcore
@@ -1229,7 +1522,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
 
   if(MSVC)
     target_compile_options(blink_standalone_render_benchmark_skia PRIVATE
-      /MP8
       /bigobj
       /permissive-
       /Zc:__cplusplus
@@ -1376,6 +1668,10 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     target_link_options(blink_standalone_renderer_c_api_dll PRIVATE
       /MAP:${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_dll.map
       /DEF:${BLINK_STANDALONE_C_API_EXPORTS_DEF}
+    )
+  endif()
+  if(BLINK_STANDALONE_COMPILER_IS_CLANG_CL)
+    target_link_options(blink_standalone_renderer_c_api_dll PRIVATE
       /exclude-all-symbols
       /exclude-symbols:CrashForExceptionInNonABICompliantCodeRange,GetHandleVerifier
     )
@@ -1881,7 +2177,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     endif()
 
     target_include_directories(blink_standalone_sdl_viewer_skia BEFORE PRIVATE
-      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+      ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
+      ${BLINK_STANDALONE_V8_INCLUDE_DIR}
+      ${BLINK_STANDALONE_V8_GENERATED_SOURCE_ROOT}
       ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
     )
     target_include_directories(blink_standalone_sdl_viewer_skia PRIVATE
@@ -1971,7 +2269,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ZLIB_IMPLEMENTATION=1
       SDL_STATIC_LIB=1
       BLINK_STANDALONE_RENDERER_C_API_STATIC=1
-      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+      ${BLINK_STANDALONE_STL_DEFINES}
       ${BLINK_STANDALONE_V8_ABI_DEFINES}
     )
     set_property(TARGET blink_standalone_sdl_viewer_skia PROPERTY
@@ -1997,6 +2295,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     blink_standalone_chromium_libcxx
     blink_standalone_v8_monolith
     d3d11
+    d3d12
     dcomp
     dwmapi
     dxcore
@@ -2014,7 +2313,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     if(MSVC)
       target_compile_options(blink_standalone_sdl_viewer_skia PRIVATE
         /bigobj
-        /MP8
         /permissive-
         /Zc:__cplusplus
         /wd4005

@@ -14,7 +14,6 @@
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/feature_info.h"
-#include "gpu/command_buffer/service/dawn_context_provider.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
@@ -26,6 +25,11 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
+
+#if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+#include "gpu/command_buffer/service/dawn_context_provider.h"
+#endif
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
@@ -293,7 +297,11 @@ void InProcessGpuThreadHolder::InitializeOnGpuThread(
       nullptr
 #endif
       ,
+#if GPU_IN_PROCESS_THREAD_HOLDER_HAS_DAWN_CONTEXT_PROVIDER
       dawn_context_provider_.get()
+#else
+      nullptr
+#endif
   );
   TraceStandaloneGpuThreadHolderStage("InitializeOnGpuThread before InitializeGL");
   TraceStandaloneGpuThreadHolderPointer("workarounds before InitializeGL",
@@ -340,7 +348,9 @@ void InProcessGpuThreadHolder::DeleteOnGpuThread() {
   shared_image_manager_.reset();
 
   context_state_.reset();
+#if GPU_IN_PROCESS_THREAD_HOLDER_HAS_DAWN_CONTEXT_PROVIDER
   dawn_context_provider_.reset();
+#endif
 #if BUILDFLAG(ENABLE_VULKAN)
   if (vulkan_context_provider_) {
     vulkan_context_provider_->Destroy();
