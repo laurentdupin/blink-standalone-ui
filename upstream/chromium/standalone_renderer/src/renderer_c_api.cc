@@ -1539,6 +1539,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     if (external_target &&
         FrameResultHasGpuPreparePending(renderer->latest_result)) {
       renderer->gpu_source_frame_pending = true;
+      renderer->runtime->ReleaseExternalGpuTargetState();
       result->status = BLINK_STANDALONE_STATUS_PENDING;
       return SetLastError(
           renderer, BLINK_STANDALONE_STATUS_PENDING,
@@ -1548,6 +1549,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   if (force_pending_once) {
     renderer->gpu_source_frame_pending = true;
+    renderer->runtime->ReleaseExternalGpuTargetState();
     result->status = BLINK_STANDALONE_STATUS_PENDING;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_PENDING,
@@ -1615,6 +1617,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (target_result.find("cannot initialize without LocalSurfaceId") !=
       std::string::npos) {
     renderer->gpu_source_frame_pending = true;
+    renderer->runtime->ReleaseExternalGpuTargetState();
     result->status = BLINK_STANDALONE_STATUS_PENDING;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_PENDING,

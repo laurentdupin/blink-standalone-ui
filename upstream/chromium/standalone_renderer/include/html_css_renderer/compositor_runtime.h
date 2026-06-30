@@ -173,6 +173,7 @@ class StandaloneCompositorRuntime {
                                                   void* shared_handle,
                                                   int width,
                                                   int height) = 0;
+  virtual void ReleaseExternalGpuTargetState() = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
 };
 

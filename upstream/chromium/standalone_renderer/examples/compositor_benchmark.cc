@@ -1554,10 +1554,12 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     } else if (repeated_after_resize_render_iterations > 0) {
       resize_steps = {{width, height + 1}};
     } else if (exercise_rapid_resize_sequence) {
-      resize_steps = {{2512, 1301}, {2476, 1284}, {2440, 1267},
-                      {2404, 1250}, {2368, 1223}, {2336, 1206},
-                      {2316, 1199}, {2296, 1191}, {2240, 1164},
-                      {2160, 1120}, {2048, 1088}, {1920, 1080},
+      resize_steps = {{2512, 1301}, {2476, 1284}, {2444, 1241},
+                      {2440, 1267}, {2404, 1250}, {2368, 1223},
+                      {2364, 1196}, {2336, 1206}, {2316, 1199},
+                      {2300, 1160}, {2296, 1191}, {2240, 1164},
+                      {2224, 1121}, {2160, 1120}, {2084, 1051},
+                      {2048, 1088}, {1920, 1080}, {1904, 1041},
                       {1800, 1000}, {1600, 900},  {1400, 780},
                       {1280, 720},  {1152, 648},  {1024, 600},
                       {900, 600},   {1152, 648},  {1280, 720},
@@ -1775,6 +1777,34 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       if (!verify_target_pixels("resize", expected_background, expected_box,
                                 require_full_nontransparent, /*quiet=*/false)) {
         return cleanup_and_fail();
+      }
+      if (exercise_rapid_resize_sequence) {
+        target.common.generation++;
+        target.vulkan.current_layout = target.vulkan.required_final_layout;
+        blink_standalone_gpu_render_result_t same_target_render = {};
+        status = blink_standalone_renderer_render_to_gpu_target(
+            renderer, &target, &same_target_render);
+        if (status != BLINK_STANDALONE_STATUS_OK ||
+            same_target_render.target_written == 0 ||
+            same_target_render.backend != backend ||
+            same_target_render.width != active_width ||
+            same_target_render.height != active_height) {
+          std::fprintf(stderr,
+                       "%s: rapid same-target render %ux%u failed status=%d "
+                       "result_status=%u backend=%u written=%u size=%ux%u "
+                       "error=%s\n",
+                       label, active_width, active_height, status,
+                       same_target_render.status, same_target_render.backend,
+                       same_target_render.target_written,
+                       same_target_render.width, same_target_render.height,
+                       blink_standalone_renderer_last_error(renderer));
+          return cleanup_and_fail();
+        }
+        if (!verify_target_pixels("rapid-same-target", expected_background,
+                                  expected_box, require_full_nontransparent,
+                                  /*quiet=*/false)) {
+          return cleanup_and_fail();
+        }
       }
       for (int i = 0; i < repeated_after_resize_render_iterations; ++i) {
         target.common.generation++;

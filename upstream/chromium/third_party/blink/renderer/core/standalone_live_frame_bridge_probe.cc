@@ -4401,6 +4401,19 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         held_gpu_copy_output_shared_image_);
   }
 
+  void ReleaseExternalGpuTargetState() {
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    if (!offscreen_skia_dependency_) {
+      return;
+    }
+    offscreen_skia_dependency_
+        ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+    offscreen_skia_dependency_
+        ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+    offscreen_skia_dependency_
+        ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+  }
+
  private:
   void ReleaseHeldGpuCopyOutputSharedImage(const gpu::SyncToken& sync_token) {
     held_gpu_copy_output_shared_image_.reset();
@@ -5122,6 +5135,11 @@ class StandaloneCcLayerHost final
              "LayerTreeFrameSink is not available";
     }
     return active_frame_sink_->RunGpuOutputVulkanPixelSmokeForTesting();
+  }
+  void ReleaseExternalGpuTargetState() {
+    if (active_frame_sink_) {
+      active_frame_sink_->ReleaseExternalGpuTargetState();
+    }
   }
   bool copy_output_completed() const { return copy_output_completed_; }
   bool copy_output_succeeded() const { return copy_output_succeeded_; }
@@ -17720,6 +17738,14 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
                                                        height);
   cache.copy_output_gpu_prepare_requested = false;
   return result.c_str();
+}
+
+void StandaloneBlinkLiveFrameBridgeReleaseExternalGpuTargetStateForStandaloneRenderer() {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.cc_layer_host) {
+    cache.cc_layer_host->ReleaseExternalGpuTargetState();
+  }
+  cache.copy_output_gpu_prepare_pending = false;
 }
 
 const char*
