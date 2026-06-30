@@ -152,6 +152,20 @@ That static archive is not link-complete by itself on Windows because static
 archives do not fold all transitive static dependencies, and it can conflict
 with the host runtime/STL linkage.
 
+For static-link evaluation, build the static package target:
+
+```powershell
+cmake --build build\cmake-generated-v8-chromium-llvm --target blink_standalone_renderer_c_api_static_package --parallel 8
+```
+
+```text
+build/cmake-generated-v8-chromium-llvm/package/c_api_static/
+```
+
+That package contains the renderer static archive, public C API header, static
+link manifest, and remaining sidecars. See `docs/STATIC_LINKING.md` for the
+current static package contract and the external link-proof milestone.
+
 The intended public ABI surface is the `blink_standalone_renderer_*` C API declared in
 `renderer_c_api.h`. The Windows DLL export table can still include two
 Chromium/V8 runtime-support exports, `GetHandleVerifier` and

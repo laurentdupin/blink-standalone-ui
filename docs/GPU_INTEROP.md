@@ -378,6 +378,14 @@ missing:
 Adding C ABI entry points now would either return unsupported for every call or
 silently route through CPU/native-window paths. Both would be misleading.
 
+## OpenGL3 / Compatibility Status
+
+OpenGL3 explicit GPU output is not a supported backend today. The standalone
+package builds ANGLE `libEGL` and `libGLESv2` sidecars for Chromium runtime use,
+but that does not prove a Godot-owned OpenGL texture or FBO producer path. See
+`docs/OPENGL3_GPU.md` for the current audit, likely ABI shape, and required
+producer smoke before any public OpenGL backend value is added.
+
 ## Required Implementation Steps
 
 The smallest real Vulkan implementation should start by adding runtime-internal
