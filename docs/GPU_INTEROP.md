@@ -717,28 +717,42 @@ stand-in target on the active standalone GPU device and verifies rendered HTML
 pixels through the same public C API call. It remains useful as an internal
 diagnostic, but it is not treated as real embedder handle support.
 
-The D3D12 public path now has a real handle-adoption proof. The public smoke
-`--c-api-d3d12-external-target-smoke` creates a caller-owned D3D12 texture with
-shared-handle export enabled, passes only the shared handle through
-`blink_standalone_renderer_render_to_gpu_target()`, lets the standalone
-renderer open that handle on the active Dawn D3D12 device, writes rendered HTML
-pixels into it through the Viz `BlitRequest` path, and then reads the original
-caller-owned resource back with the caller's device/queue. The smoke verifies
-the expected CSS background and box colors. Raw `ID3D12Resource*` adoption is
-not advertised as public support because it is only valid with an explicit
-same-device setup contract; cross-device callers must use the shared-handle
-path.
+The D3D12 public path has a real handle-adoption proof in the standalone
+benchmark, but the current API contract is narrower than the Vulkan same-device
+contract. `blink_standalone_renderer_configure_d3d12_external_device()` uses
+the supplied `ID3D12Device*` only to derive an adapter LUID before Blink creates
+its own Dawn D3D12 device. It does not adopt the embedder's `ID3D12Device` or
+`ID3D12CommandQueue`.
 
-For Godot integration, the intended D3D12 vertical slice is therefore a
-module-owned shareable `ID3D12Resource`: create the resource on Godot's active
-D3D12 device with shared-handle support, call `ID3D12Device::CreateSharedHandle`,
-pass that handle to Blink, and wrap the same `ID3D12Resource*` in Godot with
-`RenderingDevice::texture_create_from_extension()`. Blink opens the shared
-handle during `render_to_gpu_target()` and releases its opened resource before
-the synchronous call returns; Godot must keep the original resource alive for
-the duration of the call and may close the `HANDLE` after the call returns if it
-will recreate/pass it on subsequent renders. Raw `ID3D12Resource*` without a
-shared handle remains unsupported by the public C API.
+That leaves two valid D3D12 target modes today:
+
+- Same-device direct resource, when the supplied `ID3D12Resource*` belongs to
+  the active Blink/Dawn D3D12 device. This is what the internal borrowed-target
+  proof exercises, but embedders cannot force this with the current public ABI
+  because Blink still creates its own Dawn device.
+- Cross-device shared-handle import, when Blink's Dawn D3D12 device can
+  successfully call `ID3D12Device::OpenSharedHandle()` on the caller's handle.
+  The caller must create the target on a compatible adapter/device domain with
+  `D3D12_HEAP_FLAG_SHARED`, expose it with `CreateSharedHandle()`, keep the
+  original resource alive for the call, and pass a handle that is valid for
+  Blink's active Dawn device. If `OpenSharedHandle()` returns `E_INVALIDARG`,
+  Blink cannot write the target; this is reported as invalid target metadata,
+  not as a CPU fallback.
+
+The Dawn native D3D12 API confirms this boundary:
+`SharedTextureMemoryD3D12ResourceDescriptor` requires the `ID3D12Resource` to be
+created from the same `ID3D12Device` used by the `WGPUDevice`. For true
+Godot-owned D3D12 textures, the next ABI step is therefore a same-device Dawn
+setup API that lets Blink initialize or wrap its Graphite/Dawn context using the
+embedder's `ID3D12Device` and `ID3D12CommandQueue`. A stable public target key
+is still useful after first import succeeds, but it cannot fix a fresh target
+whose shared handle cannot be opened by Blink's Dawn device.
+
+For current diagnostics, D3D12 shared-handle failures include cache hit state,
+raw and canonical resource identity pointers, `direct_resource_compatible`, and
+the active/resource adapter LUIDs. If those LUIDs differ, cross-device import is
+not expected to work without an explicit cross-adapter shared-resource path,
+which this standalone API does not currently implement.
 
 The D3D12 `current_state`, `required_final_state`, wait fence, and signal fence
 fields are reserved for a future explicit async/state contract. The current

@@ -59,10 +59,18 @@ The GPU target ABI is backend neutral. `blink_standalone_external_gpu_target_t`
 contains a common logical/physical target section plus backend-specific Vulkan
 and D3D12 sections. The common section carries logical size, physical size,
 device scale factor, pixel format, alpha mode, color space, generation, and
-flags. The Vulkan section reserves `VkImage`, format, extent, current/final
+flags. The Vulkan section carries `VkImage`, format, extent, current/final
 layout, queue family, and wait/signal semaphore metadata. The D3D12 section
-reserves `ID3D12Device*`, `ID3D12CommandQueue*`, `ID3D12Resource*`, DXGI format,
-extent, current/final resource state, and wait/signal fence metadata.
+carries `ID3D12Device*`, `ID3D12CommandQueue*`, `ID3D12Resource*`, shared
+handle, DXGI format, extent, current/final resource state, and wait/signal
+fence metadata.
+
+The current D3D12 configure call does not adopt the embedder's
+`ID3D12Device`/queue. It derives an adapter LUID and Blink creates its own Dawn
+D3D12 device. A supplied `ID3D12Resource*` is used directly only if it belongs
+to that active Blink/Dawn device; otherwise the shared handle must be openable
+by Blink's Dawn device. A stable target key cannot repair first-use
+`OpenSharedHandle` failure.
 
 GPU target calls never silently fall back to CPU output. Unsupported backends,
 unavailable platform support, invalid target metadata, or native handles that

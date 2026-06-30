@@ -1445,6 +1445,20 @@ std::string PointerHex(const void* ptr) {
   return out.str();
 }
 
+std::string LuidString(const LUID& luid) {
+  std::ostringstream out;
+  out << "0x" << std::hex << static_cast<uint32_t>(luid.HighPart) << ":"
+      << luid.LowPart;
+  return out.str();
+}
+
+std::string D3D12DeviceLuidString(ID3D12Device* device) {
+  if (!device) {
+    return "none";
+  }
+  return LuidString(device->GetAdapterLuid());
+}
+
 class StandaloneBorrowedD3D12TextureBacking final
     : public gpu::ClearTrackingSharedImageBacking {
  public:
@@ -3270,12 +3284,13 @@ class StandaloneSkiaOutputSurfaceDependency final
     Microsoft::WRL::ComPtr<IUnknown> external_resource_identity =
         D3D12ResourceIdentity(external_resource);
     bool can_use_external_resource_directly = false;
+    Microsoft::WRL::ComPtr<ID3D12Device> external_resource_device;
     if (external_resource) {
-      Microsoft::WRL::ComPtr<ID3D12Device> resource_device;
       can_use_external_resource_directly =
           SUCCEEDED(external_resource->GetDevice(
-              IID_PPV_ARGS(&resource_device))) &&
-          resource_device && SameD3D12Device(resource_device.Get(), device.Get());
+              IID_PPV_ARGS(&external_resource_device))) &&
+          external_resource_device &&
+          SameD3D12Device(external_resource_device.Get(), device.Get());
     }
     if (shared_handle && !can_use_external_resource_directly) {
       const bool cache_handle_hit =
@@ -3313,7 +3328,11 @@ class StandaloneSkiaOutputSurfaceDependency final
                   << " cached_resource_identity="
                   << PointerHex(cached_external_d3d12_resource_identity_.Get())
                   << " direct_resource_compatible="
-                  << (can_use_external_resource_directly ? 1 : 0);
+                  << (can_use_external_resource_directly ? 1 : 0)
+                  << " active_device_luid="
+                  << D3D12DeviceLuidString(device.Get())
+                  << " resource_device_luid="
+                  << D3D12DeviceLuidString(external_resource_device.Get());
           return finish_with_failure(failure.str());
         }
         cached_external_d3d12_shared_handle_ = shared_handle;
