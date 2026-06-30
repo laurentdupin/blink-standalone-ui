@@ -166,6 +166,20 @@ That package contains the renderer static archive, public C API header, static
 link manifest, and remaining sidecars. See `docs/STATIC_LINKING.md` for the
 current static package contract and the external link-proof milestone.
 
+The external static raw-output proof is intentionally outside the main renderer
+build graph. Configure it against the generated package:
+
+```powershell
+cmake -S upstream\chromium\standalone_renderer\tools\static_package_probe `
+  -B build\static_package_probe_raw -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_CXX_COMPILER=build\v8_compat_probe_sync2\src\v8\third_party\llvm-build\Release+Asserts\bin\clang-cl.exe `
+  -DCMAKE_LINKER=build\v8_compat_probe_sync2\src\v8\third_party\llvm-build\Release+Asserts\bin\lld-link.exe `
+  -DBLINK_STANDALONE_STATIC_PACKAGE_DIR=build\cmake-generated-v8-chromium-llvm\package\c_api_static
+cmake --build build\static_package_probe_raw --target blink_static_raw_output_smoke --parallel 8
+build\static_package_probe_raw\blink_static_raw_output_smoke.exe
+```
+
 The intended public ABI surface is the `blink_standalone_renderer_*` C API declared in
 `renderer_c_api.h`. The Windows DLL export table can still include two
 Chromium/V8 runtime-support exports, `GetHandleVerifier` and

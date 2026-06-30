@@ -1598,11 +1598,17 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   ],
   "windows_system_libraries": [
     "d3d11.lib",
+    "d3d12.lib",
     "dcomp.lib",
     "dwmapi.lib",
     "dxcore.lib",
+    "dxguid.lib",
     "dxgi.lib",
+    "onecore.lib",
     "kernel32.lib",
+    "user32.lib",
+    "gdi32.lib",
+    "imm32.lib",
     "mincore.lib",
     "ole32.lib",
     "oleaut32.lib",
@@ -1619,6 +1625,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "psapi.lib",
     "setupapi.lib",
     "shlwapi.lib",
+    "synchronization.lib",
+    "uuid.lib",
+    "version.lib",
     "ws2_32.lib",
     "delayimp.lib"
   ],
@@ -1652,8 +1661,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "static_package_target": "blink_standalone_renderer_c_api_static_package",
   "static_package_dir": "@BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR@",
   "static_link_complete_by_itself": false,
-  "status": "create_destroy_link_proof_passed",
-  "contract": "This package is for first-class static-link evaluation. Consumers must still use the public C ABI header and define BLINK_STANDALONE_RENDERER_C_API_STATIC. The package has a tiny external create/destroy link proof, but is not yet validated as a full Godot/SCons static integration; extend the proof to raw output and GPU external-target smokes before treating static linking as product-supported.",
+  "status": "raw_output_link_proof_passed",
+  "contract": "This package is for first-class static-link evaluation. Consumers must still use the public C ABI header and define BLINK_STANDALONE_RENDERER_C_API_STATIC. The package has an external static raw-output proof that creates a renderer, renders deterministic HTML/CSS, reads raw pixels, and verifies hit metadata. It is not yet validated as a full Godot/SCons static integration; extend the proof to GPU external-target smokes before treating static linking as product-supported.",
   "consumer_compile_definitions": [
     "BLINK_STANDALONE_RENDERER_C_API_STATIC=1"
   ],
@@ -1695,11 +1704,17 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   ],
   "windows_system_libraries": [
     "d3d11.lib",
+    "d3d12.lib",
     "dcomp.lib",
     "dwmapi.lib",
     "dxcore.lib",
+    "dxguid.lib",
     "dxgi.lib",
+    "onecore.lib",
     "kernel32.lib",
+    "user32.lib",
+    "gdi32.lib",
+    "imm32.lib",
     "mincore.lib",
     "ole32.lib",
     "oleaut32.lib",
@@ -1716,6 +1731,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "psapi.lib",
     "setupapi.lib",
     "shlwapi.lib",
+    "synchronization.lib",
+    "uuid.lib",
+    "version.lib",
     "ws2_32.lib",
     "delayimp.lib"
   ],
@@ -1731,7 +1749,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "Process-global Chromium, Skia, ICU, ANGLE, Dawn, and V8-adjacent state remains process global.",
     "ANGLE EGL/GLES and ICU data remain runtime sidecars unless separate static sidecar work proves otherwise."
   ],
-  "first_acceptance_checkpoint": "Passed: a tiny external consumer linked from this package metadata and created/destroyed a renderer when icudtl.dat and remaining sidecars were deployed beside the executable. Remaining: extend to CPU raw and GPU external-target smokes before declaring static linking supported."
+  "first_acceptance_checkpoint": "Passed: an external consumer linked from this package metadata, created a renderer, rendered deterministic HTML/CSS, verified raw output dimensions/stride/pixels/dirty rects/hit metadata, and destroyed the renderer when icudtl.dat and remaining sidecars were deployed beside the executable. Remaining: extend to GPU external-target smokes before declaring static linking supported."
 }
 ]=])
   string(CONFIGURE

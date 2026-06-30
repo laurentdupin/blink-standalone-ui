@@ -23,9 +23,9 @@ It exports:
 - runtime sidecars that are still required by the current build.
 
 The manifest intentionally reports `static_link_complete_by_itself: false`.
-The first tiny external link proof now closes for create/destroy only; static
-linking is not yet product-supported until raw output and GPU external-target
-smokes pass from the same package metadata.
+The external static proof now closes for raw output; static linking is not yet
+product-supported until GPU external-target smokes pass from the same package
+metadata.
 
 ## Required Package Contract
 
@@ -83,13 +83,17 @@ expects:
    ChromiumLLVM package: the proof links when only the renderer archive is
    whole-archived, V8 is linked normally, the manifest third-party archive list
    is included, and sidecars are deployed beside the proof executable.
-4. Extend the proof to a CPU raw `--c-api-smoke` equivalent.
+4. Extend the proof to a CPU raw `--c-api-smoke` equivalent. Done by
+   `upstream/chromium/standalone_renderer/tools/static_package_probe`, which
+   consumes the generated static package manifest and public header, renders
+   deterministic HTML/CSS, verifies raw output dimensions/stride/pixels/dirty
+   rects, and verifies hit metadata.
 5. Extend validation to Vulkan and D3D12 external target smokes.
 6. Only after those pass, mark the static package as link-complete for the
    validated toolchain.
 
 ## First Acceptance Checkpoint
 
-The first checkpoint is complete for create/destroy. The remaining first
-product blocker is broader smoke coverage from an external static executable,
-not link closure for renderer creation.
+The raw-output checkpoint is complete. The remaining first product blocker is
+GPU external-target smoke coverage from an external static executable, not CPU
+raw-output link closure.
