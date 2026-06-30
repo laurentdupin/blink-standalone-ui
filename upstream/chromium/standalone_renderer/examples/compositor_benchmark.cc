@@ -849,6 +849,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool rotate_d3d12_shared_handle_after_resize =
                                       false,
                                   bool alias_d3d12_resource_hint_after_resize =
+                                      false,
+                                  bool invalidate_d3d12_shared_handle_after_resize =
+                                      false,
+                                  bool expect_invalid_uncached_d3d12_handle_after_resize =
                                       false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
@@ -1279,6 +1283,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   int pending_resize_retries = 0;
   int repeated_same_target_renders = 0;
   int post_resize_repeated_renders = 0;
+  int invalid_uncached_d3d12_target_checks = 0;
   auto verify_target_pixels = [&](const char* stage,
                                   uint32_t stage_expected_background,
                                   uint32_t stage_expected_box,
@@ -1739,10 +1744,22 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
             }
           }
         }
+        const bool invalidated_d3d12_shared_handle =
+            invalidate_d3d12_shared_handle_after_resize && i == 0 &&
+            backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+            target.d3d12.shared_handle != nullptr;
+        if (invalidated_d3d12_shared_handle) {
+          target.d3d12.shared_handle = reinterpret_cast<void*>(uintptr_t{1});
+        }
 #endif
         blink_standalone_gpu_render_result_t repeated_render = {};
         status = blink_standalone_renderer_render_to_gpu_target(
             renderer, &target, &repeated_render);
+#if BUILDFLAG(IS_WIN)
+        if (invalidated_d3d12_shared_handle) {
+          target.d3d12.shared_handle = d3d12_shared_handle;
+        }
+#endif
         if (status != BLINK_STANDALONE_STATUS_OK ||
             repeated_render.target_written == 0 ||
             repeated_render.backend != backend ||
@@ -1764,6 +1781,59 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         }
         ++post_resize_repeated_renders;
       }
+#if BUILDFLAG(IS_WIN)
+      if (expect_invalid_uncached_d3d12_handle_after_resize &&
+          backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+        target.common.generation++;
+        if (!create_d3d12_target ||
+            !create_d3d12_target(active_width, active_height)) {
+          std::fprintf(stderr,
+                       "%s: invalid uncached D3D12 target setup failed\n",
+                       label);
+          return cleanup_and_fail();
+        }
+        void* valid_shared_handle = target.d3d12.shared_handle;
+        target.d3d12.shared_handle = reinterpret_cast<void*>(uintptr_t{1});
+        blink_standalone_gpu_render_result_t invalid_render = {};
+        status = blink_standalone_renderer_render_to_gpu_target(
+            renderer, &target, &invalid_render);
+        target.d3d12.shared_handle = valid_shared_handle;
+        const char* invalid_error =
+            blink_standalone_renderer_last_error(renderer);
+        const std::string invalid_error_text =
+            invalid_error ? invalid_error : "";
+        const bool direct_resource_succeeded =
+            status == BLINK_STANDALONE_STATUS_OK &&
+            invalid_render.target_written != 0 &&
+            invalid_render.backend == backend &&
+            invalid_render.width == active_width &&
+            invalid_render.height == active_height;
+        const bool invalid_target_reported =
+            status == BLINK_STANDALONE_STATUS_INVALID_ARGUMENT &&
+            invalid_render.target_written == 0 &&
+            invalid_error_text.find(
+                "borrowed external D3D12 shared handle open failed") !=
+                std::string::npos &&
+            invalid_error_text.find("direct_resource_compatible=0") !=
+                std::string::npos;
+        if (!direct_resource_succeeded && !invalid_target_reported) {
+          std::fprintf(stderr,
+                       "%s: invalid uncached D3D12 target was not reported "
+                       "cleanly status=%d result_status=%u written=%u "
+                       "error=%s\n",
+                       label, status, invalid_render.status,
+                       invalid_render.target_written, invalid_error);
+          return cleanup_and_fail();
+        }
+        if (direct_resource_succeeded &&
+            !verify_target_pixels("invalid-handle-direct-resource",
+                                  expected_background, expected_box,
+                                  require_full_nontransparent)) {
+          return cleanup_and_fail();
+        }
+        ++invalid_uncached_d3d12_target_checks;
+      }
+#endif
     }
   }
 
@@ -2198,13 +2268,13 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       "format=%u generation=%llu observed_background=%08x observed_box=%08x "
       "background_pixels=%u box_pixels=%u nontransparent_pixels=%u "
       "pending_resize_retries=%d repeated_same_target=%d "
-      "post_resize_repeated=%d\n",
+      "post_resize_repeated=%d invalid_uncached_d3d12=%d\n",
       label, result.backend, capabilities, result.target_written, result.width,
       result.height, result.pixel_format,
       static_cast<unsigned long long>(result.generation), observed_background,
       observed_box, background_pixels, box_pixels, nontransparent_pixels,
       pending_resize_retries, repeated_same_target_renders,
-      post_resize_repeated_renders);
+      post_resize_repeated_renders, invalid_uncached_d3d12_target_checks);
 #if BUILDFLAG(IS_WIN)
   if (target.d3d12.shared_handle) {
     CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
@@ -2474,7 +2544,9 @@ int RunCApiD3D12ExternalTargetRepeatedFrameSmoke() {
       /*repeated_after_resize_render_iterations=*/4,
       /*omit_d3d12_resource_hint_after_resize=*/false,
       /*rotate_d3d12_shared_handle_after_resize=*/true,
-      /*alias_d3d12_resource_hint_after_resize=*/true);
+      /*alias_d3d12_resource_hint_after_resize=*/true,
+      /*invalidate_d3d12_shared_handle_after_resize=*/true,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/true);
 }
 
 int RunCApiD3D12UpdateOutputSmoke() {

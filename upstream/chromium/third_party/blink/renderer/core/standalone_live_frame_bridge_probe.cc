@@ -3311,7 +3311,9 @@ class StandaloneSkiaOutputSurfaceDependency final
                   << " resource_identity="
                   << PointerHex(external_resource_identity.Get())
                   << " cached_resource_identity="
-                  << PointerHex(cached_external_d3d12_resource_identity_.Get());
+                  << PointerHex(cached_external_d3d12_resource_identity_.Get())
+                  << " direct_resource_compatible="
+                  << (can_use_external_resource_directly ? 1 : 0);
           return finish_with_failure(failure.str());
         }
         cached_external_d3d12_shared_handle_ = shared_handle;
@@ -3344,6 +3346,12 @@ class StandaloneSkiaOutputSurfaceDependency final
       target->resource =
           opened_shared_resource ? opened_shared_resource : external_resource;
       target->external_resource = true;
+      if (!opened_shared_resource && can_use_external_resource_directly) {
+        cached_external_d3d12_shared_handle_ = shared_handle;
+        cached_external_d3d12_resource_hint_ = external_resource;
+        cached_external_d3d12_resource_identity_ = external_resource_identity;
+        cached_external_d3d12_opened_resource_ = external_resource;
+      }
     } else {
       D3D12_HEAP_PROPERTIES heap_properties = {};
       heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;

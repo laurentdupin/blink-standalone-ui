@@ -1610,9 +1610,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   if (!expected_result_prefix ||
       target_result.find(": ok") == std::string::npos) {
-    result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    const bool invalid_external_d3d12_target =
+        backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+        target_result.find(
+            "borrowed external D3D12 shared handle open failed") !=
+            std::string::npos;
+    const blink_standalone_status_code_t failure_status =
+        invalid_external_d3d12_target
+            ? BLINK_STANDALONE_STATUS_INVALID_ARGUMENT
+            : BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    result->status = failure_status;
     return SetLastError(
-        renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+        renderer, failure_status,
         target_result.empty()
             ? "render_to_gpu_target failed: GPU target writer returned no result"
             : target_result);
