@@ -1475,6 +1475,30 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   set(_blink_standalone_dawn_d3d12_static_copy_commands)
   set(_blink_standalone_dawn_d3d12_runtime_sidecars_json)
   set(_blink_standalone_dawn_d3d12_libs_json)
+  set(_blink_standalone_static_vulkan_header_root)
+  if(EXISTS "${CMAKE_BINARY_DIR}/_deps/sdl3-src/src/video/khronos/vulkan/vulkan.h")
+    set(_blink_standalone_static_vulkan_header_root
+      "${CMAKE_BINARY_DIR}/_deps/sdl3-src/src/video/khronos")
+  endif()
+  set(_blink_standalone_static_vulkan_package_note
+    "No packaged Vulkan headers were found. Static external consumers must provide Vulkan headers themselves before they can compile a Vulkan external-target verifier.")
+  set(_blink_standalone_static_vulkan_copy_commands)
+  if(_blink_standalone_static_vulkan_header_root)
+    set(_blink_standalone_static_vulkan_package_note
+      "Packaged Khronos Vulkan headers are copied under include/vulkan with adjacent include/vk_video headers. The static GPU probe dynamically loads vulkan-1.dll at runtime, so no Vulkan loader import library is required by the manifest.")
+    list(APPEND _blink_standalone_static_vulkan_copy_commands
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vulkan"
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vk_video"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${_blink_standalone_static_vulkan_header_root}/vulkan"
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vulkan"
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${_blink_standalone_static_vulkan_header_root}/vk_video"
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vk_video"
+    )
+  endif()
   foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
     file(TO_CMAKE_PATH "${_blink_standalone_dawn_lib}"
       _blink_standalone_dawn_lib_manifest_path)
@@ -1661,14 +1685,17 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "static_package_target": "blink_standalone_renderer_c_api_static_package",
   "static_package_dir": "@BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR@",
   "static_link_complete_by_itself": false,
-  "status": "raw_output_link_proof_passed",
-  "contract": "This package is for first-class static-link evaluation. Consumers must still use the public C ABI header and define BLINK_STANDALONE_RENDERER_C_API_STATIC. The package has an external static raw-output proof that creates a renderer, renders deterministic HTML/CSS, reads raw pixels, and verifies hit metadata. It is not yet validated as a full Godot/SCons static integration; extend the proof to GPU external-target smokes before treating static linking as product-supported.",
+  "status": "gpu_external_target_link_proof_passed",
+  "contract": "This package is for first-class static-link evaluation. Consumers must still use the public C ABI header and define BLINK_STANDALONE_RENDERER_C_API_STATIC. The package has isolated external static proofs that create a renderer, render deterministic HTML/CSS, verify raw CPU output, verify hit metadata, and write deterministic rendered pixels into caller-owned Vulkan and D3D12 external GPU targets through blink_standalone_renderer_render_to_gpu_target(). This isolated proof does not make full Godot editor static consumption product-ready: the current monolithic archive carries Chromium/Skia/ICU/libpng/zlib/VMA/Abseil-style global symbols that can conflict with host-owned third-party libraries. Full Godot static linking is blocked until symbol isolation or a validated dependency split is implemented.",
   "consumer_compile_definitions": [
     "BLINK_STANDALONE_RENDERER_C_API_STATIC=1"
   ],
   "public_headers": [
     "include/html_css_renderer/renderer_c_api.h"
   ],
+  "vulkan_static_probe_contract": "@_blink_standalone_static_vulkan_package_note@",
+  "vulkan_header_package_dir": "include/vulkan",
+  "vulkan_loader_rule": "The external static Vulkan probe loads vulkan-1.dll dynamically with LoadLibrary/GetProcAddress. Consumers do not need a manifest-listed vulkan-1.lib, but the platform Vulkan runtime/driver must be installed.",
   "required_static_archives": [
     "$<TARGET_FILE:blink_standalone_renderer_c_api>",
     "@BLINK_STANDALONE_V8_MONOLITH_LIB@"
@@ -1747,9 +1774,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "Whole-archiving v8_monolith.lib duplicates Chromium zlib symbols.",
     "Adding the Chromium libc++ object list separately duplicates std::__Cr symbols because the renderer static archive already contains those objects.",
     "Process-global Chromium, Skia, ICU, ANGLE, Dawn, and V8-adjacent state remains process global.",
-    "ANGLE EGL/GLES and ICU data remain runtime sidecars unless separate static sidecar work proves otherwise."
+    "ANGLE EGL/GLES and ICU data remain runtime sidecars unless separate static sidecar work proves otherwise.",
+    "OpenGL3 explicit GPU output remains unsupported until a caller-owned GL/ANGLE texture or FBO producer proof exists.",
+    "The monolithic renderer archive currently defines third-party symbols also commonly owned by hosts, including libpng, ICU, zlib, VMA, and Abseil-style symbols. Full Godot static linking is expected to produce duplicate definitions until Blink symbols are isolated or dependency ownership is split and ABI-validated."
   ],
-  "first_acceptance_checkpoint": "Passed: an external consumer linked from this package metadata, created a renderer, rendered deterministic HTML/CSS, verified raw output dimensions/stride/pixels/dirty rects/hit metadata, and destroyed the renderer when icudtl.dat and remaining sidecars were deployed beside the executable. Remaining: extend to GPU external-target smokes before declaring static linking supported."
+  "first_acceptance_checkpoint": "Passed: an external consumer linked from this package metadata, created a renderer, rendered deterministic HTML/CSS, verified raw output dimensions/stride/pixels/dirty rects/hit metadata, rendered to caller-owned Vulkan and D3D12 GPU external targets, read those targets back through native GPU APIs, verified deterministic pixels, and destroyed the renderer when icudtl.dat and remaining sidecars were deployed beside the executable."
 }
 ]=])
   string(CONFIGURE
@@ -1831,6 +1860,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json"
     ${_blink_standalone_dawn_d3d12_static_copy_commands}
+    ${_blink_standalone_static_vulkan_copy_commands}
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API static package: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
   )

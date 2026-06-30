@@ -23,9 +23,17 @@ It exports:
 - runtime sidecars that are still required by the current build.
 
 The manifest intentionally reports `static_link_complete_by_itself: false`.
-The external static proof now closes for raw output; static linking is not yet
-product-supported until GPU external-target smokes pass from the same package
-metadata.
+The external static proof now closes for raw output and for Vulkan/D3D12
+external GPU targets from the same package metadata. This proves isolated
+external consumption of the package metadata. It does not prove that the full
+Godot editor/export binary can link this monolithic archive.
+
+Godot static consumption is currently blocked by duplicate third-party symbols
+when linking against the full editor, even without `/WHOLEARCHIVE`. The current
+renderer archive folds Chromium/Blink/Skia object files and third-party source
+objects into one archive, including libpng, ICU, zlib, VMA, and Abseil-style
+global symbols that Godot can also own. Do not use `/FORCE:MULTIPLE` as product
+behavior; it is diagnostic only.
 
 ## Required Package Contract
 
@@ -40,6 +48,8 @@ A supported static package must enumerate:
 - Windows system libraries;
 - required `/WHOLEARCHIVE` or equivalent linker flags;
 - public include roots and required consumer defines;
+- packaged Vulkan headers and Vulkan loader expectations for static GPU
+  consumers;
 - CRT/STL/toolchain assumptions;
 - required runtime sidecars and data files.
 
@@ -72,6 +82,10 @@ expects:
   renderer static archive. The archive currently folds those objects, and adding
   them again duplicates `std::__Cr` symbols such as `bad_any_cast::what` and
   `__atomic_wait_global_table`.
+- Full Godot static linking needs symbol isolation or a validated dependency
+  ownership split before it can be considered product-supported. The isolated
+  static probe is necessary package validation, not proof that the full Godot
+  binary can safely consume the archive.
 
 ## Milestones
 
@@ -88,12 +102,18 @@ expects:
    consumes the generated static package manifest and public header, renders
    deterministic HTML/CSS, verifies raw output dimensions/stride/pixels/dirty
    rects, and verifies hit metadata.
-5. Extend validation to Vulkan and D3D12 external target smokes.
+5. Extend validation to Vulkan and D3D12 external target smokes. Done by
+   `blink_static_gpu_external_target_smoke`, which creates caller-owned native
+   Vulkan and D3D12 targets, calls the public C ABI GPU target path, reads the
+   targets back through native GPU APIs, and verifies deterministic rendered
+   pixels.
 6. Only after those pass, mark the static package as link-complete for the
    validated toolchain.
 
 ## First Acceptance Checkpoint
 
-The raw-output checkpoint is complete. The remaining first product blocker is
-GPU external-target smoke coverage from an external static executable, not CPU
-raw-output link closure.
+The raw-output and GPU external-target checkpoints are complete for the
+generated-V8 ChromiumLLVM Windows package when the static probe is run
+sequentially. The GPU proof validates Vulkan and D3D12 static linkage and native
+target writes; OpenGL3 remains unsupported because no caller-owned GL/ANGLE
+texture or FBO producer proof exists.

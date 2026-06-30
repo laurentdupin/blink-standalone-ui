@@ -53,16 +53,6 @@ foreach(_path IN LISTS _required_static_archives _required_import_libraries
   endif()
 endforeach()
 
-add_executable(blink_static_raw_output_smoke raw_output_smoke.cc)
-target_include_directories(blink_static_raw_output_smoke PRIVATE
-  "${BLINK_STANDALONE_STATIC_PACKAGE_DIR}/include")
-target_compile_definitions(blink_static_raw_output_smoke PRIVATE
-  BLINK_STANDALONE_RENDERER_C_API_STATIC=1)
-if(MSVC)
-  set_property(TARGET blink_static_raw_output_smoke PROPERTY
-    MSVC_RUNTIME_LIBRARY "MultiThreaded")
-endif()
-
 set(_normal_libraries)
 foreach(_lib IN LISTS _required_static_archives _required_import_libraries
                       _third_party_static_archives _windows_system_libraries)
@@ -73,17 +63,31 @@ foreach(_lib IN LISTS _required_static_archives _required_import_libraries
     list(APPEND _normal_libraries "${_lib}")
   endif()
 endforeach()
-target_link_libraries(blink_static_raw_output_smoke PRIVATE ${_normal_libraries})
 
-if(MSVC)
-  foreach(_lib IN LISTS _whole_archive_candidates)
-    target_link_options(blink_static_raw_output_smoke BEFORE PRIVATE
-      "/WHOLEARCHIVE:${_lib}")
+function(_blink_static_configure_probe target_name)
+  target_include_directories(${target_name} PRIVATE
+    "${BLINK_STANDALONE_STATIC_PACKAGE_DIR}/include")
+  target_compile_definitions(${target_name} PRIVATE
+    BLINK_STANDALONE_RENDERER_C_API_STATIC=1)
+  target_link_libraries(${target_name} PRIVATE ${_normal_libraries})
+  if(MSVC)
+    set_property(TARGET ${target_name} PROPERTY
+      MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    foreach(_lib IN LISTS _whole_archive_candidates)
+      target_link_options(${target_name} BEFORE PRIVATE
+        "/WHOLEARCHIVE:${_lib}")
+    endforeach()
+  endif()
+  foreach(_sidecar IN LISTS _remaining_runtime_sidecars)
+    add_custom_command(TARGET ${target_name} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${_sidecar}" "$<TARGET_FILE_DIR:${target_name}>/")
   endforeach()
-endif()
+endfunction()
 
-foreach(_sidecar IN LISTS _remaining_runtime_sidecars)
-  add_custom_command(TARGET blink_static_raw_output_smoke POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${_sidecar}" "$<TARGET_FILE_DIR:blink_static_raw_output_smoke>/")
-endforeach()
+add_executable(blink_static_raw_output_smoke raw_output_smoke.cc)
+_blink_static_configure_probe(blink_static_raw_output_smoke)
+
+add_executable(blink_static_gpu_external_target_smoke
+  gpu_external_target_smoke.cc)
+_blink_static_configure_probe(blink_static_gpu_external_target_smoke)
