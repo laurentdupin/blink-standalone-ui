@@ -4,6 +4,9 @@
 
 #include "gpu/vulkan/skia_vk_memory_allocator_impl.h"
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "standalone_renderer/src/private_vma_symbol_prefix.h"
+#endif
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan_core.h>
 

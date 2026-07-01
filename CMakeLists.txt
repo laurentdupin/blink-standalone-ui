@@ -2186,14 +2186,16 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "full_host_static_link_supported": false,
   "full_host_static_link_blocker": "monolithic_renderer_archive_exports_chromium_third_party_symbols",
   "symbol_ownership": {
-    "model": "blink_bundled_third_party_symbols_are_public_in_static_archive",
+    "model": "blink_bundled_third_party_symbols_are_public_in_static_archive_with_incremental_private_prefixing",
     "collision_risk": "known",
     "product_supported": false,
+    "private_prefixed_families": [
+      "vulkan_memory_allocator"
+    ],
     "duplicate_prone_families": [
       "libpng",
       "icu",
       "zlib",
-      "vulkan_memory_allocator",
       "abseil",
       "chromium_libcxx"
     ],

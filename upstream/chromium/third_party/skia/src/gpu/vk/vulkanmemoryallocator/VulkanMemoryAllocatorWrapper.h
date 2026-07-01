@@ -45,6 +45,9 @@
 #pragma clang diagnostic ignored "-Wc++98-compat-extra-semi"
 #endif
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+#include "standalone_renderer/src/private_vma_symbol_prefix.h"
+#endif
 #include "vk_mem_alloc.h"  // NO_G3_REWRITE
 
 #if defined(__clang__)

@@ -103,16 +103,25 @@ expects:
 
 The current monolithic archive is collision-prone by construction. It contains
 object files that define globally visible third-party symbols such as libpng
-`png_*`, ICU `u_*`/`icu_*`, VMA `vma*`, Chromium zlib `Cr_z_*`, Abseil, and
-Chromium libc++-style symbols. A full host like Godot can already define some of
-those families before Blink is linked, so normal archive member extraction is
-enough to produce `LNK2005`; removing broad `/WHOLEARCHIVE` does not solve the
+`png_*`, ICU `u_*`/`icu_*`, Chromium zlib `Cr_z_*`, Abseil, and Chromium
+libc++-style symbols. A full host like Godot can already define some of those
+families before Blink is linked, so normal archive member extraction is enough
+to produce `LNK2005`; removing broad `/WHOLEARCHIVE` does not solve the
 underlying ownership collision.
+
+Vulkan Memory Allocator is the first isolated family. In standalone builds,
+Blink includes `standalone_renderer/src/private_vma_symbol_prefix.h` before
+`vk_mem_alloc.h` in the Skia VMA implementation and Chromium VMA users. The
+MSVC object-level proof verifies that `vmaCreateAllocator` is absent and
+`blink_standalone_vmaCreateAllocator` is present in the bundled VMA
+implementation object. This removes the known VMA collision family, but it does
+not make full-host static linking product-supported until the remaining
+third-party families are isolated or otherwise proven safe.
 
 The preferred product fix is symbol isolation for Blink-owned third-party
 dependencies in the static package. Candidate work:
 
-- build Blink's bundled libpng/zlib/ICU/VMA/Abseil-facing objects with private
+- build Blink's bundled libpng/zlib/ICU/Abseil-facing objects with private
   symbol prefixes or private namespaces where the upstream dependency supports
   that;
 - keep V8, Skia, Blink, Dawn, ANGLE, and ICU data coupled to the exact
