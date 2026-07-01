@@ -219,9 +219,21 @@ cmake --build build\cmake-generated-v8-chromium-llvm --target blink_standalone_r
 ```
 
 The archive is written under the build directory's `package/` directory with a
-name containing OS, architecture, compiler, V8 toolchain, and Blink commit. The
-archive and package files remain generated artifacts and must not be committed
-to the source repository.
+name containing OS, architecture, compiler, V8 toolchain, and Blink commit.
+
+Generated package directories and archives under `build/` remain build outputs.
+For a checked-in runtime intended for seamless embedder builds, promote only the
+zip archive into a platform/toolchain directory such as:
+
+```text
+prebuilt/windows-x86_64-msvc/blink-standalone-c-api-runtime-windows-amd64-msvc-msvc-<commit>.zip
+```
+
+Do not commit the unpacked `c_api_runtime/` directory, V8 compatibility cache,
+depot_tools/CIPD payloads, object files, or copied sidecars separately. Embedders
+should extract the archive into their own generated build/cache directory, read
+the included manifest, verify the Blink commit and package metadata, and copy
+the package-relative runtime files from that extracted directory.
 
 The static archive remains available for internal/advanced use as:
 

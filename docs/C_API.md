@@ -322,7 +322,11 @@ An optional deterministic archive target packages the runtime directory:
 cmake --build <build-dir> --target blink_standalone_renderer_c_api_runtime_archive
 ```
 
-The archive is generated under `<build-dir>/package/` and is not committed.
+The archive is generated under `<build-dir>/package/` and remains a build
+artifact there. When a runtime is promoted for seamless embedder builds, copy
+that zip archive under `prebuilt/<platform-toolchain>/` and leave the unpacked
+`c_api_runtime/` directory generated. The archive contains the package manifest
+and public header needed to validate the runtime before extraction.
 
 ## Validation Smokes
 

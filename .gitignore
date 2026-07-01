@@ -35,6 +35,9 @@
 
 # Downloaded archives and generated media artifacts
 *.zip
+!prebuilt/
+!prebuilt/**/
+!prebuilt/**/*.zip
 *.7z
 *.tar
 *.tgz

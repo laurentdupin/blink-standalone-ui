@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Prebuilt runtime archives are source-controlled binary artifacts.
+prebuilt/**/*.zip binary
