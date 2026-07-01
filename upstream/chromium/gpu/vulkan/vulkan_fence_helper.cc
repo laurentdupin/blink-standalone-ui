@@ -4,6 +4,8 @@
 
 #include "gpu/vulkan/vulkan_fence_helper.h"
 
+#include <cstdint>
+
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
@@ -225,11 +227,12 @@ void VulkanFenceHelper::EnqueueBufferCleanupForSubmittedWork(
   DCHECK(allocation != VK_NULL_HANDLE);
 
   EnqueueCleanupTaskForSubmittedWork(base::BindOnce(
-      [](VkBuffer buffer, VmaAllocation allocation,
+      [](VkBuffer buffer, uintptr_t allocation_bits,
          VulkanDeviceQueue* device_queue, bool /* is_lost */) {
-        vma::DestroyBuffer(device_queue->vma_allocator(), buffer, allocation);
+        vma::DestroyBuffer(device_queue->vma_allocator(), buffer,
+                           reinterpret_cast<VmaAllocation>(allocation_bits));
       },
-      buffer, allocation));
+      buffer, reinterpret_cast<uintptr_t>(allocation)));
 }
 
 void VulkanFenceHelper::PerformImmediateCleanup() {

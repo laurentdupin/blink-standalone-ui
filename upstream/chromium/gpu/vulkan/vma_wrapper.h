@@ -10,6 +10,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "base/component_export.h"
+#include "standalone_renderer/src/private_vma_symbol_prefix.h"
 #include "ui/gfx/extension_set.h"
 
 VK_DEFINE_HANDLE(VmaAllocator)

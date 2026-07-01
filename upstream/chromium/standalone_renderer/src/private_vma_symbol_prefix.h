@@ -6,9 +6,12 @@
 #define STANDALONE_RENDERER_SRC_PRIVATE_VMA_SYMBOL_PREFIX_H_
 
 // The static C API package links Blink/Skia's bundled Vulkan Memory Allocator
-// into host binaries that may already own another VMA copy. Keep the C symbols
-// private to this renderer by remapping VMA's public API names before including
-// vk_mem_alloc.h in standalone-compiled VMA implementation/users.
+// into host binaries that may already own another VMA copy. Keep the symbols
+// private to this renderer by remapping VMA's public API and internal names
+// before including vk_mem_alloc.h in standalone-compiled VMA
+// implementation/users.
+#include "standalone_renderer/generated/private_vma_symbol_prefix_generated.h"
+
 #define vmaAllocateMemory blink_standalone_vmaAllocateMemory
 #define vmaAllocateMemoryForBuffer blink_standalone_vmaAllocateMemoryForBuffer
 #define vmaAllocateMemoryForImage blink_standalone_vmaAllocateMemoryForImage

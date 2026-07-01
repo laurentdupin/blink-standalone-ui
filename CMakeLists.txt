@@ -1074,7 +1074,7 @@ if(NOT BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
   )
 endif()
 
-set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
+set(BLINK_STANDALONE_LIBPNG_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngerror.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngget.c
@@ -1086,9 +1086,15 @@ set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngrutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngset.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngtrans.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwio.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwrite.c
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwtran.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngwutil.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/filter_sse2_intrinsics.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/intel/intel_init.c
+)
+set(BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES
+  ${BLINK_STANDALONE_LIBPNG_C_SOURCES}
   ${BLINK_STANDALONE_ZLIB_C_SOURCES}
 )
 set_source_files_properties(${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES}
@@ -1182,6 +1188,179 @@ set(BLINK_STANDALONE_C_API_SOURCES
 set(BLINK_STANDALONE_C_API_EXPORTS_DEF
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/renderer_c_api_exports.def
 )
+set(BLINK_STANDALONE_PRIVATE_SYMBOL_PREFIX_DIR
+  ${CMAKE_BINARY_DIR}/generated/standalone_renderer/generated
+)
+file(MAKE_DIRECTORY "${BLINK_STANDALONE_PRIVATE_SYMBOL_PREFIX_DIR}")
+
+set(BLINK_STANDALONE_PRIVATE_LIBPNG_SYMBOL_PREFIX_HEADER
+  ${BLINK_STANDALONE_PRIVATE_SYMBOL_PREFIX_DIR}/private_libpng_symbol_prefix.h
+)
+set(_blink_standalone_private_libpng_symbols)
+file(READ
+  "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/png.h"
+  _blink_standalone_libpng_public_header
+)
+string(REGEX REPLACE
+  "[\r\n]+[ \t]*" " "
+  _blink_standalone_libpng_public_header_flat
+  "${_blink_standalone_libpng_public_header}"
+)
+string(REGEX MATCHALL
+  "PNG_([A-Z_]+_)?EXPORTA?\\([^)]*,[^)]*,[ \t]*(png_[A-Za-z0-9_]+)"
+  _blink_standalone_libpng_public_matches
+  "${_blink_standalone_libpng_public_header_flat}"
+)
+foreach(match IN LISTS _blink_standalone_libpng_public_matches)
+  string(REGEX REPLACE
+    "^.*,[ \t]*(png_[A-Za-z0-9_]+).*$" "\\1"
+    symbol "${match}"
+  )
+  list(APPEND _blink_standalone_private_libpng_symbols "${symbol}")
+endforeach()
+file(READ
+  "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/pngpriv.h"
+  _blink_standalone_libpng_private_header
+)
+string(REGEX REPLACE
+  "[\r\n]+[ \t]*" " "
+  _blink_standalone_libpng_private_header_flat
+  "${_blink_standalone_libpng_private_header}"
+)
+string(REGEX MATCHALL
+  "PNG_INTERNAL_(DATA|FUNCTION|CALLBACK)\\([^)]*,[ \t]*(png_[A-Za-z0-9_]+)"
+  _blink_standalone_libpng_private_matches
+  "${_blink_standalone_libpng_private_header_flat}"
+)
+foreach(match IN LISTS _blink_standalone_libpng_private_matches)
+  string(REGEX REPLACE
+    "^.*,[ \t]*(png_[A-Za-z0-9_]+).*$" "\\1"
+    symbol "${match}"
+  )
+  list(APPEND _blink_standalone_private_libpng_symbols "${symbol}")
+endforeach()
+file(GLOB_RECURSE _blink_standalone_libpng_symbol_sources
+  CONFIGURE_DEPENDS
+  "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/*.c"
+  "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/skia/third_party/externals/libpng/*.h"
+)
+foreach(_blink_standalone_libpng_symbol_source IN LISTS
+        _blink_standalone_libpng_symbol_sources)
+  file(READ
+    "${_blink_standalone_libpng_symbol_source}"
+    _blink_standalone_libpng_symbol_source_text
+  )
+  string(REGEX MATCHALL
+    "(^|[^A-Za-z0-9_])(png_[A-Za-z0-9_]+)[ \t\r\n]*\\("
+    _blink_standalone_libpng_source_symbol_matches
+    "${_blink_standalone_libpng_symbol_source_text}"
+  )
+  foreach(match IN LISTS _blink_standalone_libpng_source_symbol_matches)
+    string(REGEX REPLACE
+      "^.*(png_[A-Za-z0-9_]+)[ \t\r\n]*\\($"
+      "\\1"
+      symbol "${match}"
+    )
+    list(APPEND _blink_standalone_private_libpng_symbols "${symbol}")
+  endforeach()
+  string(REGEX MATCHALL
+    "(^|[^A-Za-z0-9_])(png_[A-Za-z0-9_]+),[ \t\r\n]*\\("
+    _blink_standalone_libpng_comma_symbol_matches
+    "${_blink_standalone_libpng_symbol_source_text}"
+  )
+  foreach(match IN LISTS _blink_standalone_libpng_comma_symbol_matches)
+    string(REGEX REPLACE
+      "^.*(png_[A-Za-z0-9_]+),[ \t\r\n]*\\($"
+      "\\1"
+      symbol "${match}"
+    )
+    list(APPEND _blink_standalone_private_libpng_symbols "${symbol}")
+  endforeach()
+endforeach()
+list(APPEND _blink_standalone_private_libpng_symbols
+  png_create_png_struct
+)
+list(REMOVE_DUPLICATES _blink_standalone_private_libpng_symbols)
+list(FILTER _blink_standalone_private_libpng_symbols EXCLUDE REGEX "^png_debug")
+list(SORT _blink_standalone_private_libpng_symbols)
+set(_blink_standalone_private_libpng_prefix_content "")
+string(APPEND _blink_standalone_private_libpng_prefix_content
+  "/* Generated by standalone CMake. Do not edit. */\n"
+  "#ifndef STANDALONE_RENDERER_GENERATED_PRIVATE_LIBPNG_SYMBOL_PREFIX_H_\n"
+  "#define STANDALONE_RENDERER_GENERATED_PRIVATE_LIBPNG_SYMBOL_PREFIX_H_\n\n"
+  "/* Keep Blink/Skia's bundled libpng symbols private in static packages. */\n"
+)
+foreach(symbol IN LISTS _blink_standalone_private_libpng_symbols)
+  string(APPEND _blink_standalone_private_libpng_prefix_content
+    "#define ${symbol} blink_standalone_${symbol}\n"
+  )
+endforeach()
+string(APPEND _blink_standalone_private_libpng_prefix_content
+  "\n#endif  /* STANDALONE_RENDERER_GENERATED_PRIVATE_LIBPNG_SYMBOL_PREFIX_H_ */\n"
+)
+file(GENERATE
+  OUTPUT "${BLINK_STANDALONE_PRIVATE_LIBPNG_SYMBOL_PREFIX_HEADER}"
+  CONTENT "${_blink_standalone_private_libpng_prefix_content}"
+)
+
+set(BLINK_STANDALONE_PRIVATE_VMA_SYMBOL_PREFIX_GENERATED_HEADER
+  ${BLINK_STANDALONE_PRIVATE_SYMBOL_PREFIX_DIR}/private_vma_symbol_prefix_generated.h
+)
+file(READ
+  "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan_memory_allocator/include/vk_mem_alloc.h"
+  _blink_standalone_vma_header
+)
+string(REGEX MATCHALL
+  "(^|[^A-Za-z0-9_])(Vma[A-Za-z0-9_]*)"
+  _blink_standalone_private_vma_matches
+  "${_blink_standalone_vma_header}"
+)
+set(_blink_standalone_private_vma_symbols)
+foreach(match IN LISTS _blink_standalone_private_vma_matches)
+  string(REGEX REPLACE
+    "^.*(Vma[A-Za-z0-9_]*)$" "\\1"
+    symbol "${match}"
+  )
+  list(APPEND _blink_standalone_private_vma_symbols "${symbol}")
+endforeach()
+list(REMOVE_DUPLICATES _blink_standalone_private_vma_symbols)
+list(SORT _blink_standalone_private_vma_symbols)
+set(_blink_standalone_private_vma_prefix_content "")
+string(APPEND _blink_standalone_private_vma_prefix_content
+  "/* Generated by standalone CMake. Do not edit. */\n"
+  "#ifndef STANDALONE_RENDERER_GENERATED_PRIVATE_VMA_SYMBOL_PREFIX_H_\n"
+  "#define STANDALONE_RENDERER_GENERATED_PRIVATE_VMA_SYMBOL_PREFIX_H_\n\n"
+  "/* Keep VMA's C++ internal symbol names private in static packages. */\n"
+)
+foreach(symbol IN LISTS _blink_standalone_private_vma_symbols)
+  string(APPEND _blink_standalone_private_vma_prefix_content
+    "#define ${symbol} blink_standalone_${symbol}\n"
+  )
+endforeach()
+string(APPEND _blink_standalone_private_vma_prefix_content
+  "\n#endif  /* STANDALONE_RENDERER_GENERATED_PRIVATE_VMA_SYMBOL_PREFIX_H_ */\n"
+)
+file(GENERATE
+  OUTPUT "${BLINK_STANDALONE_PRIVATE_VMA_SYMBOL_PREFIX_GENERATED_HEADER}"
+  CONTENT "${_blink_standalone_private_vma_prefix_content}"
+)
+
+function(blink_standalone_force_include_header header)
+  if(MSVC)
+    foreach(source IN LISTS ARGN)
+      set_property(SOURCE ${source} APPEND PROPERTY COMPILE_OPTIONS
+        "/FI${header}"
+      )
+    endforeach()
+  else()
+    foreach(source IN LISTS ARGN)
+      set_property(SOURCE ${source} APPEND PROPERTY COMPILE_OPTIONS
+        "-include" "${header}"
+      )
+    endforeach()
+  endif()
+endfunction()
+
 set(BLINK_STANDALONE_BOUNDARY_SOURCES)
 set(BLINK_STANDALONE_CODEC_SOURCES ${BLINK_STANDALONE_LIBPNG_ZLIB_C_SOURCES})
 set(BLINK_STANDALONE_CHROMIUM_SOURCES)
@@ -1200,6 +1379,30 @@ endforeach()
 list(REMOVE_DUPLICATES BLINK_STANDALONE_CODEC_SOURCES)
 list(REMOVE_DUPLICATES BLINK_STANDALONE_BOUNDARY_SOURCES)
 list(REMOVE_DUPLICATES BLINK_STANDALONE_CHROMIUM_SOURCES)
+
+set(BLINK_STANDALONE_LIBPNG_PREFIX_SOURCES
+  ${BLINK_STANDALONE_LIBPNG_C_SOURCES}
+)
+foreach(source IN LISTS BLINK_STANDALONE_LIVE_SOURCES)
+  if(source MATCHES "/third_party/skia/src/codec/SkPng.*\\.cpp$" OR
+     source MATCHES "/third_party/blink/renderer/platform/image-decoders/png/" OR
+     source MATCHES "/ui/gfx/codec/png_codec\\.cc$")
+    list(APPEND BLINK_STANDALONE_LIBPNG_PREFIX_SOURCES ${source})
+  endif()
+endforeach()
+foreach(source IN LISTS BLINK_STANDALONE_LIVE_SOURCES)
+  if(source MATCHES "/third_party/skia/src/encode/SkPng.*\\.cpp$")
+    list(APPEND BLINK_STANDALONE_LIBPNG_PREFIX_SOURCES ${source})
+  endif()
+endforeach()
+list(REMOVE_DUPLICATES BLINK_STANDALONE_LIBPNG_PREFIX_SOURCES)
+blink_standalone_force_include_header(
+  "${BLINK_STANDALONE_PRIVATE_LIBPNG_SYMBOL_PREFIX_HEADER}"
+  ${BLINK_STANDALONE_LIBPNG_PREFIX_SOURCES}
+)
+set_property(SOURCE ${BLINK_STANDALONE_LIBPNG_PREFIX_SOURCES}
+  APPEND PROPERTY COMPILE_DEFINITIONS PNG_NO_USE_READ_MACROS
+)
 
 if(MSVC)
   set_property(SOURCE ${BLINK_STANDALONE_BOUNDARY_SOURCES}
@@ -1458,6 +1661,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
   )
   target_include_directories(blink_standalone_render_benchmark_skia PRIVATE
+    ${CMAKE_BINARY_DIR}/generated
     ${BLINK_STANDALONE_CHROMIUM_ROOT}
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/gpu
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/angle/include
@@ -2193,10 +2397,10 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "collision_risk": "known",
     "product_supported": false,
     "private_prefixed_families": [
+      "libpng",
       "vulkan_memory_allocator"
     ],
     "duplicate_prone_families": [
-      "libpng",
       "icu",
       "zlib",
       "abseil",

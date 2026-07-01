@@ -195,6 +195,7 @@ list(REMOVE_DUPLICATES BLINK_STANDALONE_ANGLE_RUNTIME_SOURCES)
 
 function(blink_standalone_configure_angle_target target_name)
   target_include_directories(${target_name} PRIVATE
+    ${CMAKE_BINARY_DIR}/generated
     ${BLINK_STANDALONE_CHROMIUM_ROOT}
     ${BLINK_STANDALONE_ANGLE_ROOT}/include
     ${BLINK_STANDALONE_ANGLE_SRC}

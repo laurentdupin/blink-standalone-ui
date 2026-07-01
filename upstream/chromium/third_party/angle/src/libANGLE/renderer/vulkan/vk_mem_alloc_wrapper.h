@@ -11,6 +11,7 @@
 #define LIBANGLE_RENDERER_VULKAN_VK_MEM_ALLOC_WRAPPER_H_
 
 #include "common/vulkan/vk_headers.h"
+#include "standalone_renderer/src/private_vma_symbol_prefix.h"
 
 VK_DEFINE_HANDLE(VmaAllocator)
 VK_DEFINE_HANDLE(VmaAllocation)
