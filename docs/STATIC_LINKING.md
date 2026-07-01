@@ -165,8 +165,10 @@ The package remains a "static C API package with runtime sidecars", not a
 fully sidecar-free static renderer. OpenGL3 remains unsupported because no
 caller-owned GL/ANGLE texture or FBO producer proof exists.
 
-For seamless Godot builds, consume the promoted static package archive under
+For seamless Godot builds, consume an explicitly supplied static package archive
+from a release artifact, CI cache, or local artifact cache such as
 `prebuilt/windows-x86_64-msvc-static/` rather than generating V8 or the static
-package during the normal Godot build. The extracted package manifest is the
+package during the normal Godot build. `prebuilt/` is not a source-controlled
+package location in this repository. The extracted package manifest is the
 authoritative link contract; the unpacked package directory remains generated
 output.

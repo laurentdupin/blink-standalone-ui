@@ -323,10 +323,11 @@ cmake --build <build-dir> --target blink_standalone_renderer_c_api_runtime_archi
 ```
 
 The archive is generated under `<build-dir>/package/` and remains a build
-artifact there. When a runtime is promoted for seamless embedder builds, copy
-that zip archive under `prebuilt/<platform-toolchain>/` and leave the unpacked
-`c_api_runtime/` directory generated. The archive contains the package manifest
-and public header needed to validate the runtime before extraction.
+artifact there. Runtime archives can be published as release artifacts, stored
+in CI caches, or copied into a local artifact cache such as `prebuilt/`, but
+they are not normal source files and should not be committed to this repository.
+The archive contains the package manifest and public header needed to validate
+the runtime before extraction.
 
 ## Validation Smokes
 

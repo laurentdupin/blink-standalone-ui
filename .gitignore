@@ -35,9 +35,6 @@
 
 # Downloaded archives and generated media artifacts
 *.zip
-!prebuilt/
-!prebuilt/**/
-!prebuilt/**/*.zip
 *.7z
 *.tar
 *.tgz
@@ -81,3 +78,7 @@ Thumbs.db
 *.swp
 *~
 /temp
+
+# Optional local package/artifact cache. Prebuilt runtime/static packages are
+# release or CI artifacts, not normal source files.
+/prebuilt/

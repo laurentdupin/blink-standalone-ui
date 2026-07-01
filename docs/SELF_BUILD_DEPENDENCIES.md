@@ -194,10 +194,11 @@ build/cmake-generated-v8-chromium-llvm/package/c_api_runtime/
 
 The DLL is the recommended artifact for Godot and other external embedders
 because it seals Chromium/V8/libc++ implementation details behind the C ABI
-boundary. Normal Godot builds should consume a checked-in or otherwise vendored
-dynamic C API runtime package/artifact from the nested
-`thirdparty/blink-standalone-ui` checkout. They should not try to bootstrap V8,
-depot_tools, CIPD, or the renderer package as an implicit SCons step.
+boundary. Normal Godot builds should consume a generated package from the nested
+`thirdparty/blink-standalone-ui` checkout, an explicit
+`module_html_css_blink_lib_path`, or a package archive supplied by a release or
+CI artifact cache. They should not try to bootstrap V8, depot_tools, CIPD, or
+the renderer package as an implicit SCons step.
 
 First-run source package generation remains an explicit opt-in bootstrap path.
 It can require the generated V8/CppGC compatibility output, depot_tools, CIPD
@@ -222,22 +223,25 @@ The archive is written under the build directory's `package/` directory with a
 name containing OS, architecture, compiler, V8 toolchain, and Blink commit.
 
 Generated package directories and archives under `build/` remain build outputs.
-For a checked-in runtime intended for seamless embedder builds, promote only the
-zip archive into a platform/toolchain directory such as:
+For a runtime intended for seamless embedder builds, publish the zip archive as a
+release artifact or CI/local artifact-cache entry, for example:
 
 ```text
 prebuilt/windows-x86_64-msvc/blink-standalone-c-api-runtime-windows-amd64-msvc-msvc-<commit>.zip
 ```
 
-Do not commit the unpacked `c_api_runtime/` directory, V8 compatibility cache,
-depot_tools/CIPD payloads, object files, or copied sidecars separately. Embedders
-should extract the archive into their own generated build/cache directory, read
-the included manifest, verify the Blink commit and package metadata, and copy
-the package-relative runtime files from that extracted directory.
+`prebuilt/` is only a local artifact-cache name in this repository. Do not
+commit the zip archive, the unpacked `c_api_runtime/` directory, V8
+compatibility cache, depot_tools/CIPD payloads, object files, or copied sidecars
+separately. Embedders should extract the archive into their own generated
+build/cache directory, read the included manifest, verify the Blink commit and
+package metadata, and copy the package-relative runtime files from that
+extracted directory.
 
-The same promotion model applies to static C API packages. A static package
-archive intended for seamless Godot builds lives under a separate platform and
-toolchain directory, for example:
+The same artifact-cache model applies to static C API packages. A static
+package archive intended for seamless Godot builds can be published under a
+separate platform and toolchain directory in a release/CI/local cache, for
+example:
 
 ```text
 prebuilt/windows-x86_64-msvc-static/blink-standalone-c-api-static-windows-amd64-msvc-msvc-<commit>.zip
@@ -245,9 +249,10 @@ prebuilt/windows-x86_64-msvc-static/blink-standalone-c-api-static-windows-amd64-
 
 That archive contains `package/c_api_static` contents: the package-relative
 static manifest, public C API header, static/import libraries, and remaining
-runtime sidecars. Normal Godot builds should consume this archive rather than
-running `BLINK_STANDALONE_V8_COMPAT_ACTION=build`; generating V8 locally remains
-a maintainer package-production step.
+runtime sidecars. Normal Godot builds should consume an explicitly supplied
+artifact or a generated nested package rather than running
+`BLINK_STANDALONE_V8_COMPAT_ACTION=build`; generating V8 locally remains a
+maintainer package-production step.
 
 The static archive remains available for internal/advanced use as:
 
