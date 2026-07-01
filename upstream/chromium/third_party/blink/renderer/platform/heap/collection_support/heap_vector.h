@@ -22,8 +22,47 @@ namespace blink {
 template <internal::HeapCollectionType CollectionType,
           typename T,
           wtf_size_t inlineCapacity = 0>
-class BasicHeapVector final
-    : public std::conditional_t<
+class BasicHeapVector;
+
+namespace internal {
+
+template <HeapCollectionType CollectionType,
+          typename T,
+          wtf_size_t inlineCapacity>
+struct BasicHeapVectorTypeConstraints {
+  constexpr BasicHeapVectorTypeConstraints() {
+    static_assert(
+        std::is_trivially_destructible_v<
+            blink::BasicHeapVector<CollectionType, T, inlineCapacity>> ||
+            inlineCapacity,
+        "BasicHeapVector must be trivially destructible.");
+    static_assert(!IsWeakV<T>,
+                  "Weak types are not allowed in BasicHeapVector.");
+    static_assert(!IsGarbageCollectedTypeV<T>,
+                  "GCed types should not be inlined in a BasicHeapVector.");
+    static_assert(!IsPointerToGarbageCollectedType<T>,
+                  "Don't use raw pointers or reference to garbage collected "
+                  "types in BasicHeapVector. Use Member<> instead.");
+    static_assert(!IsPointerToTraceableType<T>,
+                  "Don't use raw pointers or reference to traceable "
+                  "types in BasicHeapVector. Use Member<> instead.");
+
+    // HeapVector may hold non-traceable types. This is useful for vectors
+    // held by garbage collected objects such that the vectors' backing stores
+    // are accounted as memory held by the GC. HeapVectors of non-traceable
+    // types should only be used as fields of traceable types.
+  }
+};
+
+}  // namespace internal
+
+template <internal::HeapCollectionType CollectionType,
+          typename T,
+          wtf_size_t inlineCapacity>
+class EMPTY_BASES BasicHeapVector final
+    : private internal::
+          BasicHeapVectorTypeConstraints<CollectionType, T, inlineCapacity>,
+      public std::conditional_t<
           CollectionType == internal::HeapCollectionType::kGCed,
           GarbageCollected<BasicHeapVector<CollectionType, T, inlineCapacity>>,
           internal::DisallowNewBaseForHeapCollections>,
@@ -31,6 +70,13 @@ class BasicHeapVector final
   using BaseVector = Vector<T, inlineCapacity, HeapAllocator>;
 
  public:
+  void operator delete(void* p)
+    requires(CollectionType == internal::HeapCollectionType::kGCed)
+  {
+    GarbageCollected<
+        BasicHeapVector<CollectionType, T, inlineCapacity>>::operator delete(p);
+  }
+
   BasicHeapVector() = default;
 
   explicit BasicHeapVector(wtf_size_t size) : BaseVector(size) {}
@@ -133,33 +179,13 @@ class BasicHeapVector final
   }
 
   void Trace(Visitor* visitor) const { BaseVector::Trace(visitor); }
-
- private:
-  struct TypeConstraints {
-    constexpr TypeConstraints() {
-      static_assert(
-          std::is_trivially_destructible_v<BasicHeapVector> || inlineCapacity,
-          "BasicHeapVector must be trivially destructible.");
-      static_assert(!IsWeakV<T>,
-                    "Weak types are not allowed in BasicHeapVector.");
-      static_assert(!IsGarbageCollectedTypeV<T>,
-                    "GCed types should not be inlined in a BasicHeapVector.");
-      static_assert(!IsPointerToGarbageCollectedType<T>,
-                    "Don't use raw pointers or reference to garbage collected "
-                    "types in BasicHeapVector. Use Member<> instead.");
-      static_assert(!IsPointerToTraceableType<T>,
-                    "Don't use raw pointers or reference to traceable "
-                    "types in BasicHeapVector. Use Member<> instead.");
-
-      // HeapVector may hold non-traceable types. This is useful for vectors
-      // held by garbage collected objects such that the vectors' backing stores
-      // are accounted as memory held by the GC. HeapVectors of non-traceable
-      // types should only be used as fields of traceable types.
-    }
-  };
-  static_assert(std::is_empty_v<TypeConstraints>);
-  NO_UNIQUE_ADDRESS TypeConstraints type_constraints_;
 };
+
+template <typename T, wtf_size_t inlineCapacity>
+struct IsDisallowNewTrait<BasicHeapVector<
+    internal::HeapCollectionType::kDisallowNew,
+    T,
+    inlineCapacity>> : std::true_type {};
 
 // On-stack for in-field version of Vector for referring to
 // GarbageCollected objects.

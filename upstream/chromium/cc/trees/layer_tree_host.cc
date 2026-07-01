@@ -14,6 +14,7 @@
 #include "base/atomic_sequence_num.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/adapters.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -82,6 +83,10 @@
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/latency/latency_info.h"
+
+#ifdef SendMessage
+#undef SendMessage
+#endif
 
 namespace {
 static base::AtomicSequenceNumber s_layer_tree_host_sequence_number;
@@ -860,7 +865,7 @@ LayerTreeHost::RequestHighFramerate() {
 }
 
 void LayerTreeHost::SetRequestHighFramerate(bool flag) {
-  TRACE_EVENT("cc", __PRETTY_FUNCTION__);
+  TRACE_EVENT("cc", PRETTY_FUNCTION);
   proxy_->SetRequestHighFramerate(flag);
 }
 

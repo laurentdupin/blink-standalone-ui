@@ -53,9 +53,9 @@ public:
             AllFieldsSet = (RectSet | TypeSet | 0)};
 
 
-        ScrollRectBuilder<STATE | RectSet>& setRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        ScrollRectBuilder<(STATE | ScrollRectBuilder<STATE>::RectSet)>& setRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
-        ScrollRectBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        ScrollRectBuilder<(STATE | ScrollRectBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         std::unique_ptr<ScrollRect> build()
         {
@@ -67,9 +67,9 @@ public:
         friend class ScrollRect;
         ScrollRectBuilder() : m_result(new ScrollRect()) { }
 
-        template<int STEP> ScrollRectBuilder<STATE | STEP>& castState()
+        template<int STEP> ScrollRectBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ScrollRectBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ScrollRectBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::LayerTree::ScrollRect> m_result;
@@ -128,9 +128,9 @@ public:
             AllFieldsSet = (StickyBoxRectSet | ContainingBlockRectSet | 0)};
 
 
-        StickyPositionConstraintBuilder<STATE | StickyBoxRectSet>& setStickyBoxRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        StickyPositionConstraintBuilder<(STATE | StickyPositionConstraintBuilder<STATE>::StickyBoxRectSet)>& setStickyBoxRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
-        StickyPositionConstraintBuilder<STATE | ContainingBlockRectSet>& setContainingBlockRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        StickyPositionConstraintBuilder<(STATE | StickyPositionConstraintBuilder<STATE>::ContainingBlockRectSet)>& setContainingBlockRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
         StickyPositionConstraintBuilder<STATE>& setNearestLayerShiftingStickyBox(const String& value);  // Defined below
 
@@ -146,9 +146,9 @@ public:
         friend class StickyPositionConstraint;
         StickyPositionConstraintBuilder() : m_result(new StickyPositionConstraint()) { }
 
-        template<int STEP> StickyPositionConstraintBuilder<STATE | STEP>& castState()
+        template<int STEP> StickyPositionConstraintBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<StickyPositionConstraintBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<StickyPositionConstraintBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::LayerTree::StickyPositionConstraint> m_result;
@@ -195,11 +195,11 @@ public:
             AllFieldsSet = (XSet | YSet | PictureSet | 0)};
 
 
-        PictureTileBuilder<STATE | XSet>& setX(double value);  // Defined below
+        PictureTileBuilder<(STATE | PictureTileBuilder<STATE>::XSet)>& setX(double value);  // Defined below
 
-        PictureTileBuilder<STATE | YSet>& setY(double value);  // Defined below
+        PictureTileBuilder<(STATE | PictureTileBuilder<STATE>::YSet)>& setY(double value);  // Defined below
 
-        PictureTileBuilder<STATE | PictureSet>& setPicture(const Binary& value);  // Defined below
+        PictureTileBuilder<(STATE | PictureTileBuilder<STATE>::PictureSet)>& setPicture(const Binary& value);  // Defined below
 
         std::unique_ptr<PictureTile> build()
         {
@@ -211,9 +211,9 @@ public:
         friend class PictureTile;
         PictureTileBuilder() : m_result(new PictureTile()) { }
 
-        template<int STEP> PictureTileBuilder<STATE | STEP>& castState()
+        template<int STEP> PictureTileBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PictureTileBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PictureTileBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::LayerTree::PictureTile> m_result;
@@ -356,19 +356,19 @@ public:
             AllFieldsSet = (LayerIdSet | OffsetXSet | OffsetYSet | WidthSet | HeightSet | PaintCountSet | DrawsContentSet | 0)};
 
 
-        LayerBuilder<STATE | LayerIdSet>& setLayerId(const String& value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::LayerIdSet)>& setLayerId(const String& value);  // Defined below
 
         LayerBuilder<STATE>& setParentLayerId(const String& value);  // Defined below
 
         LayerBuilder<STATE>& setBackendNodeId(int value);  // Defined below
 
-        LayerBuilder<STATE | OffsetXSet>& setOffsetX(double value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::OffsetXSet)>& setOffsetX(double value);  // Defined below
 
-        LayerBuilder<STATE | OffsetYSet>& setOffsetY(double value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::OffsetYSet)>& setOffsetY(double value);  // Defined below
 
-        LayerBuilder<STATE | WidthSet>& setWidth(double value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::WidthSet)>& setWidth(double value);  // Defined below
 
-        LayerBuilder<STATE | HeightSet>& setHeight(double value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::HeightSet)>& setHeight(double value);  // Defined below
 
         LayerBuilder<STATE>& setTransform(std::unique_ptr<protocol::Array<double>> value);  // Defined below
 
@@ -378,9 +378,9 @@ public:
 
         LayerBuilder<STATE>& setAnchorZ(double value);  // Defined below
 
-        LayerBuilder<STATE | PaintCountSet>& setPaintCount(int value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::PaintCountSet)>& setPaintCount(int value);  // Defined below
 
-        LayerBuilder<STATE | DrawsContentSet>& setDrawsContent(bool value);  // Defined below
+        LayerBuilder<(STATE | LayerBuilder<STATE>::DrawsContentSet)>& setDrawsContent(bool value);  // Defined below
 
         LayerBuilder<STATE>& setInvisible(bool value);  // Defined below
 
@@ -398,9 +398,9 @@ public:
         friend class Layer;
         LayerBuilder() : m_result(new Layer()) { }
 
-        template<int STEP> LayerBuilder<STATE | STEP>& castState()
+        template<int STEP> LayerBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LayerBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LayerBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::LayerTree::Layer> m_result;
@@ -445,14 +445,14 @@ inline void ScrollRect::setRect(std::unique_ptr<protocol::DOM::Rect> value) { m_
 inline void ScrollRect::setType(const String& value) { m_type = value; }
 
 template<int STATE>
-inline ScrollRect::ScrollRectBuilder<STATE | ScrollRect::ScrollRectBuilder<STATE>::RectSet>&
+inline ScrollRect::ScrollRectBuilder<(STATE | ScrollRect::ScrollRectBuilder<STATE>::RectSet)>&
 ScrollRect::ScrollRectBuilder<STATE>::setRect(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & RectSet), "property rect should not be set yet");
   m_result->setRect(std::move(value));
   return castState<RectSet>();
 }
 template<int STATE>
-inline ScrollRect::ScrollRectBuilder<STATE | ScrollRect::ScrollRectBuilder<STATE>::TypeSet>&
+inline ScrollRect::ScrollRectBuilder<(STATE | ScrollRect::ScrollRectBuilder<STATE>::TypeSet)>&
 ScrollRect::ScrollRectBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -468,14 +468,14 @@ inline void StickyPositionConstraint::setNearestLayerShiftingStickyBox(const Str
 inline void StickyPositionConstraint::setNearestLayerShiftingContainingBlock(const String& value) { m_nearestLayerShiftingContainingBlock = value; }
 
 template<int STATE>
-inline StickyPositionConstraint::StickyPositionConstraintBuilder<STATE | StickyPositionConstraint::StickyPositionConstraintBuilder<STATE>::StickyBoxRectSet>&
+inline StickyPositionConstraint::StickyPositionConstraintBuilder<(STATE | StickyPositionConstraint::StickyPositionConstraintBuilder<STATE>::StickyBoxRectSet)>&
 StickyPositionConstraint::StickyPositionConstraintBuilder<STATE>::setStickyBoxRect(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & StickyBoxRectSet), "property stickyBoxRect should not be set yet");
   m_result->setStickyBoxRect(std::move(value));
   return castState<StickyBoxRectSet>();
 }
 template<int STATE>
-inline StickyPositionConstraint::StickyPositionConstraintBuilder<STATE | StickyPositionConstraint::StickyPositionConstraintBuilder<STATE>::ContainingBlockRectSet>&
+inline StickyPositionConstraint::StickyPositionConstraintBuilder<(STATE | StickyPositionConstraint::StickyPositionConstraintBuilder<STATE>::ContainingBlockRectSet)>&
 StickyPositionConstraint::StickyPositionConstraintBuilder<STATE>::setContainingBlockRect(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & ContainingBlockRectSet), "property containingBlockRect should not be set yet");
   m_result->setContainingBlockRect(std::move(value));
@@ -500,21 +500,21 @@ inline void PictureTile::setY(double value) { m_y = value; }
 inline void PictureTile::setPicture(const Binary& value) { m_picture = value; }
 
 template<int STATE>
-inline PictureTile::PictureTileBuilder<STATE | PictureTile::PictureTileBuilder<STATE>::XSet>&
+inline PictureTile::PictureTileBuilder<(STATE | PictureTile::PictureTileBuilder<STATE>::XSet)>&
 PictureTile::PictureTileBuilder<STATE>::setX(double value) {
   static_assert(!(STATE & XSet), "property x should not be set yet");
   m_result->setX(value);
   return castState<XSet>();
 }
 template<int STATE>
-inline PictureTile::PictureTileBuilder<STATE | PictureTile::PictureTileBuilder<STATE>::YSet>&
+inline PictureTile::PictureTileBuilder<(STATE | PictureTile::PictureTileBuilder<STATE>::YSet)>&
 PictureTile::PictureTileBuilder<STATE>::setY(double value) {
   static_assert(!(STATE & YSet), "property y should not be set yet");
   m_result->setY(value);
   return castState<YSet>();
 }
 template<int STATE>
-inline PictureTile::PictureTileBuilder<STATE | PictureTile::PictureTileBuilder<STATE>::PictureSet>&
+inline PictureTile::PictureTileBuilder<(STATE | PictureTile::PictureTileBuilder<STATE>::PictureSet)>&
 PictureTile::PictureTileBuilder<STATE>::setPicture(const Binary& value) {
   static_assert(!(STATE & PictureSet), "property picture should not be set yet");
   m_result->setPicture(value);
@@ -544,7 +544,7 @@ inline void Layer::setScrollRects(std::unique_ptr<protocol::Array<protocol::Laye
 inline void Layer::setStickyPositionConstraint(std::unique_ptr<protocol::LayerTree::StickyPositionConstraint> value) { m_stickyPositionConstraint = std::move(value); }
 
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::LayerIdSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::LayerIdSet)>&
 Layer::LayerBuilder<STATE>::setLayerId(const String& value) {
   static_assert(!(STATE & LayerIdSet), "property layerId should not be set yet");
   m_result->setLayerId(value);
@@ -561,28 +561,28 @@ inline Layer::LayerBuilder<STATE>& Layer::LayerBuilder<STATE>::setBackendNodeId(
   return *this;
 }
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::OffsetXSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::OffsetXSet)>&
 Layer::LayerBuilder<STATE>::setOffsetX(double value) {
   static_assert(!(STATE & OffsetXSet), "property offsetX should not be set yet");
   m_result->setOffsetX(value);
   return castState<OffsetXSet>();
 }
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::OffsetYSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::OffsetYSet)>&
 Layer::LayerBuilder<STATE>::setOffsetY(double value) {
   static_assert(!(STATE & OffsetYSet), "property offsetY should not be set yet");
   m_result->setOffsetY(value);
   return castState<OffsetYSet>();
 }
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::WidthSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::WidthSet)>&
 Layer::LayerBuilder<STATE>::setWidth(double value) {
   static_assert(!(STATE & WidthSet), "property width should not be set yet");
   m_result->setWidth(value);
   return castState<WidthSet>();
 }
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::HeightSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::HeightSet)>&
 Layer::LayerBuilder<STATE>::setHeight(double value) {
   static_assert(!(STATE & HeightSet), "property height should not be set yet");
   m_result->setHeight(value);
@@ -609,14 +609,14 @@ inline Layer::LayerBuilder<STATE>& Layer::LayerBuilder<STATE>::setAnchorZ(double
   return *this;
 }
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::PaintCountSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::PaintCountSet)>&
 Layer::LayerBuilder<STATE>::setPaintCount(int value) {
   static_assert(!(STATE & PaintCountSet), "property paintCount should not be set yet");
   m_result->setPaintCount(value);
   return castState<PaintCountSet>();
 }
 template<int STATE>
-inline Layer::LayerBuilder<STATE | Layer::LayerBuilder<STATE>::DrawsContentSet>&
+inline Layer::LayerBuilder<(STATE | Layer::LayerBuilder<STATE>::DrawsContentSet)>&
 Layer::LayerBuilder<STATE>::setDrawsContent(bool value) {
   static_assert(!(STATE & DrawsContentSet), "property drawsContent should not be set yet");
   m_result->setDrawsContent(value);

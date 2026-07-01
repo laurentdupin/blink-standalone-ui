@@ -16,6 +16,8 @@
 #include "third_party/blink/public/mojom/drag/drag.mojom.h"
 #include "third_party/blink/public/mojom/blob/serialized_blob.mojom-shared-internal.h"
 
+#include "mojo/public/cpp/bindings/message.h"
+
 #include <memory>
 #include <optional>
 #include <utility>

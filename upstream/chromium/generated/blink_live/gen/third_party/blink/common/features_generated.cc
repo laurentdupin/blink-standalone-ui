@@ -85,27 +85,7 @@ BASE_FEATURE(kAdjustEndOfNextParagraphIfMovedParagraphIsUpdated,
 
 BASE_FEATURE(kAIClassifierAPI,
     "AIClassifierAPI",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kAIEmbeddingsAPI,
@@ -178,54 +158,58 @@ BASE_FEATURE(kAIPageContentVisualViewportClamp,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kAIPromptAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kAIPromptAPI,
     "AIPromptAPI",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kAIPromptAPIDefault
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kAIPromptAPIForExtensionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kAIPromptAPIForExtension,
     "AIPromptAPIForExtension",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kAIPromptAPIForExtensionDefault
 );
 
 BASE_FEATURE(kAIPromptAPIForWorkers,
@@ -243,54 +227,36 @@ BASE_FEATURE(kAIPromptAPILegacyParams,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kAIPromptAPIMultimodalInputDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kAIPromptAPIMultimodalInput,
     "AIPromptAPIMultimodalInput",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kAIPromptAPIMultimodalInputDefault
 );
 
 BASE_FEATURE(kAIPromptAPIParams,
     "AIPromptAPIParams",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kAIPromptAPIStructuredOutput,
@@ -300,27 +266,7 @@ BASE_FEATURE(kAIPromptAPIStructuredOutput,
 
 BASE_FEATURE(kAIPromptAPIToolUse,
     "AIPromptAPIToolUse",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kAIProofreadingAPI,
@@ -338,29 +284,31 @@ BASE_FEATURE(kAIRewriterAPIForWorkers,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kAISummarizationAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kAISummarizationAPI,
     "AISummarizationAPI",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kAISummarizationAPIDefault
 );
 
 BASE_FEATURE(kAISummarizationAPIForWorkers,
@@ -483,54 +431,36 @@ BASE_FEATURE(kAriaActions,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kAriaNotifyDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kAriaNotify,
     "AriaNotify",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kAriaNotifyDefault
 );
 
 BASE_FEATURE(kAriaNotifyV2,
     "AriaNotifyV2",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kAriaRowColIndexText,
@@ -613,29 +543,31 @@ BASE_FEATURE(kBackgroundClipTextDecoration,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kBarcodeDetectorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kBarcodeDetector,
     "BarcodeDetector",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kBarcodeDetectorDefault
 );
 
 BASE_FEATURE(kBaseAppearanceInlineSizing,
@@ -660,27 +592,7 @@ BASE_FEATURE(kBlinkExtensionChromeOS,
 
 BASE_FEATURE(kBlinkExtensionChromeOSIsolatedWebAppSetShape,
     "BlinkExtensionChromeOSIsolatedWebAppSetShape",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kBlinkExtensionChromeOSKiosk,
@@ -843,129 +755,117 @@ BASE_FEATURE(kCapabilityDelegationDisplayCaptureRequest,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCaptureControllerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCaptureController,
     "CaptureController",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kCaptureControllerDefault
 );
 
 BASE_FEATURE(kCapturedMouseEvents,
     "CapturedMouseEvents",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCapturedSurfaceControlDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCapturedSurfaceControl,
     "CapturedSurfaceControl",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kCapturedSurfaceControlDefault
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCapturedSurfaceResolutionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCapturedSurfaceResolution,
     "CapturedSurfaceResolution",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kCapturedSurfaceResolutionDefault
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCaptureHandleDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCaptureHandle,
     "CaptureHandle",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kCaptureHandleDefault
 );
 
 BASE_FEATURE(kCaretWithTextAffinityUpstream,
@@ -1108,29 +1008,31 @@ BASE_FEATURE(kCompositingDecisionAtAnimationPhaseBoundaries,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCompositionForegroundMarkersDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCompositionForegroundMarkers,
     "CompositionForegroundMarkers",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kCompositionForegroundMarkersDefault
 );
 
 BASE_FEATURE(kCompositorEventTrigger,
@@ -1153,29 +1055,31 @@ BASE_FEATURE(kComputeInlineContentsSafeRetarget,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kComputePressureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kComputePressure,
     "ComputePressure",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kComputePressureDefault
 );
 
 BASE_FEATURE(kConcurrentNativePaintWorklets,
@@ -1193,54 +1097,58 @@ BASE_FEATURE(kConsiderSubOrSuperScriptAncestorAlignForCaretSelection,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kContactsManagerDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kContactsManager,
     "ContactsManager",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kContactsManagerDefault
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kContactsManagerExtraPropertiesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kContactsManagerExtraProperties,
     "ContactsManagerExtraProperties",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kContactsManagerExtraPropertiesDefault
 );
 
 BASE_FEATURE(kContainerNameOnly,
@@ -1253,29 +1161,31 @@ BASE_FEATURE(kContainerTiming,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kContentIndexDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kContentIndex,
     "ContentIndex",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kContentIndexDefault
 );
 
 BASE_FEATURE(kContextMenu,
@@ -1333,29 +1243,31 @@ BASE_FEATURE(kCSPReportHash,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCSSAccentColorKeywordDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCSSAccentColorKeyword,
     "CSSAccentColorKeyword",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kCSSAccentColorKeywordDefault
 );
 
 BASE_FEATURE(kCSSActiveCaptionMapsToCanvas,
@@ -1818,29 +1730,31 @@ BASE_FEATURE(kCSSSupportsNamedFeatureFunction,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kCSSSystemAccentColorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kCSSSystemAccentColor,
     "CSSSystemAccentColor",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kCSSSystemAccentColorDefault
 );
 
 BASE_FEATURE(kCSSTextAlignMatchParent,
@@ -2028,29 +1942,31 @@ BASE_FEATURE(kDesktopPWAsAdditionalWindowingControlsOnMove,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kDeviceAttributesDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kDeviceAttributes,
     "DeviceAttributes",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kDeviceAttributesDefault
 );
 
 BASE_FEATURE(kDeviceOrientationRequestPermission,
@@ -2073,29 +1989,31 @@ BASE_FEATURE(kDialogNewFocusBehavior,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kDigitalGoodsV2_1Default =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kDigitalGoodsV2_1,
     "DigitalGoodsV2_1",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kDigitalGoodsV2_1Default
 );
 
 BASE_FEATURE(kDirectSockets,
@@ -2193,79 +2111,85 @@ BASE_FEATURE(kDocumentPatching,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kDocumentPictureInPictureAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kDocumentPictureInPictureAPI,
     "DocumentPictureInPictureAPI",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kDocumentPictureInPictureAPIDefault
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kDocumentPictureInPicturePreferInitialPlacementDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kDocumentPictureInPicturePreferInitialPlacement,
     "DocumentPictureInPicturePreferInitialPlacement",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kDocumentPictureInPicturePreferInitialPlacementDefault
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kDocumentPictureInPictureUserActivationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kDocumentPictureInPictureUserActivation,
     "DocumentPictureInPictureUserActivation",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kDocumentPictureInPictureUserActivationDefault
 );
 
 BASE_FEATURE(kDocumentPolicyDocumentDomain,
@@ -2343,29 +2267,31 @@ BASE_FEATURE(kElasticOverscrollUseEventDeltaForAxisSelection,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kElementCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kElementCapture,
     "ElementCapture",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kElementCaptureDefault
 );
 
 BASE_FEATURE(kElementInnerTextHandleFirstLineStyle,
@@ -2513,29 +2439,31 @@ BASE_FEATURE(kFileColorPickerConsumeActivation,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kFileHandlingAPIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kFileHandlingAPI,
     "FileHandlingAPI",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kFileHandlingAPIDefault
 );
 
 BASE_FEATURE(kFilePickerEventsFix,
@@ -2555,52 +2483,12 @@ BASE_FEATURE(kFileSystemAccessAPIExperimental,
 
 BASE_FEATURE(kFileSystemAccessGetCloudIdentifiers,
     "FileSystemAccessGetCloudIdentifiers",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kFileSystemAccessLocal,
     "FileSystemAccessLocal",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kFileSystemAccessLockingScheme,
@@ -2623,29 +2511,31 @@ BASE_FEATURE(kFileSystemAccessWriteMode,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kFileSystemObserverDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kFileSystemObserver,
     "FileSystemObserver",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kFileSystemObserverDefault
 );
 
 BASE_FEATURE(kFileSystemObserverUnobserve,
@@ -2823,29 +2713,31 @@ BASE_FEATURE(kFocusgroupGrid,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kFontAccessDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kFontAccess,
     "FontAccess",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kFontAccessDefault
 );
 
 BASE_FEATURE(kFontFallbackForTabSize,
@@ -2948,29 +2840,31 @@ BASE_FEATURE(kGeometryUtilsForCSSPseudoElement,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kGetAllScreensMediaDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kGetAllScreensMedia,
     "GetAllScreensMedia",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kGetAllScreensMediaDefault
 );
 
 BASE_FEATURE(kGetComputedStyleOutsideFlatTree,
@@ -3028,29 +2922,31 @@ BASE_FEATURE(kHandleShadowDOMInSubstringUtil,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kHandwritingRecognitionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kHandwritingRecognition,
     "HandwritingRecognition",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kHandwritingRecognitionDefault
 );
 
 BASE_FEATURE(kHarfRustShaping,
@@ -3228,29 +3124,31 @@ BASE_FEATURE(kInputInSelect,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kInputMultipleFieldsUIDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kInputMultipleFieldsUI,
     "InputMultipleFieldsUI",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kInputMultipleFieldsUIDefault
 );
 
 BASE_FEATURE(kInsertBlockquoteBeforeOuterBlock,
@@ -3358,29 +3256,31 @@ BASE_FEATURE(kLazyLoadVideoAndAudio,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kLeftClickToHandleSuggestionDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kLeftClickToHandleSuggestion,
     "LeftClickToHandleSuggestion",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kLeftClickToHandleSuggestionDefault
 );
 
 BASE_FEATURE(kLightDismissFromClick,
@@ -3443,29 +3343,31 @@ BASE_FEATURE(kMacDisableCtrlHomeEnd,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kMacSystemClipboardPermissionCheckDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kMacSystemClipboardPermissionCheck,
     "MacSystemClipboardPermissionCheck",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kMacSystemClipboardPermissionCheckDefault
 );
 
 BASE_FEATURE(kManagedConfiguration,
@@ -3513,29 +3415,31 @@ BASE_FEATURE(kMediaCapabilitiesSpatialAudio,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kMediaCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kMediaCapture,
     "MediaCapture",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kMediaCaptureDefault
 );
 
 BASE_FEATURE(kMediaCaptureCameraControls,
@@ -3588,29 +3492,31 @@ BASE_FEATURE(kMediaStreamTrackProcessorStats,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kMediaStreamTrackWebSpeechDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kMediaStreamTrackWebSpeech,
     "MediaStreamTrackWebSpeech",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kMediaStreamTrackWebSpeechDefault
 );
 
 BASE_FEATURE(kMemoryConsumerForNGShapeCache,
@@ -3708,29 +3614,31 @@ BASE_FEATURE(kNavigationId,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kNavigatorContentUtilsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kNavigatorContentUtils,
     "NavigatorContentUtils",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kNavigatorContentUtilsDefault
 );
 
 BASE_FEATURE(kNetInfoConstantType,
@@ -3788,29 +3696,31 @@ BASE_FEATURE(kNormalizeNbspRichTextOnly,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kNotificationConstructorDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kNotificationConstructor,
     "NotificationConstructor",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kNotificationConstructorDefault
 );
 
 BASE_FEATURE(kNumberInputFullWidthChars,
@@ -3868,29 +3778,31 @@ BASE_FEATURE(kOptionDisablednessCheckAncestors,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kOrientationEventDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kOrientationEvent,
     "OrientationEvent",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kOrientationEventDefault
 );
 
 BASE_FEATURE(kOriginAPI,
@@ -3923,29 +3835,31 @@ BASE_FEATURE(kOverscrollGestures,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kPagePopupDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kPagePopup,
     "PagePopup",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kPagePopupDefault
 );
 
 BASE_FEATURE(kPagePopupCopyPaste,
@@ -3998,29 +3912,31 @@ BASE_FEATURE(kPartialCompletionNotAllowedInMoveParagraphs,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kPartitionVisitedLinkDatabaseWithSelfLinksDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kPartitionVisitedLinkDatabaseWithSelfLinks,
     "PartitionVisitedLinkDatabaseWithSelfLinks",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kPartitionVisitedLinkDatabaseWithSelfLinksDefault
 );
 
 BASE_FEATURE(kPasswordReveal,
@@ -4218,29 +4134,31 @@ BASE_FEATURE(kQuoteFirstLineStyle,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kRasterInducingScrollDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kRasterInducingScroll,
     "RasterInducingScroll",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kRasterInducingScrollDefault
 );
 
 BASE_FEATURE(kReadableStreamBYOBReaderReadMinOption,
@@ -4273,29 +4191,31 @@ BASE_FEATURE(kReduceUserAgentMinorVersion,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kRegionCaptureDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kRegionCapture,
     "RegionCapture",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kRegionCaptureDefault
 );
 
 BASE_FEATURE(kRelOpenerBcgDependencyHint,
@@ -4303,29 +4223,31 @@ BASE_FEATURE(kRelOpenerBcgDependencyHint,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kRemotePlaybackBackendDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kRemotePlaybackBackend,
     "RemotePlaybackBackend",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kRemotePlaybackBackendDefault
 );
 
 BASE_FEATURE(kRemoveCharsetAutoDetectionForISO2022JP,
@@ -4460,27 +4382,7 @@ BASE_FEATURE(kRestrictOwnAudio,
 
 BASE_FEATURE(kRootScrollbarFollowsBrowserTheme,
     "RootScrollbarFollowsBrowserTheme",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kRouteMatching,
@@ -4690,27 +4592,7 @@ BASE_FEATURE(kSelectAnchorInViewport,
 
 BASE_FEATURE(kSelectAudioOutput,
     "SelectAudioOutput",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kSelectedcontentelementAttribute,
@@ -4958,29 +4840,31 @@ BASE_FEATURE(kSmallerViewportUnits,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kSmartCardDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kSmartCard,
     "SmartCard",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kSmartCardDefault
 );
 
 BASE_FEATURE(kSnapshotScrollTimelinesPostLayout,
@@ -5030,27 +4914,7 @@ BASE_FEATURE(kSpeculationMeasurement,
 
 BASE_FEATURE(kSpellCheckChunking,
     "SpellCheckChunking",
-#if BUILDFLAG(IS_ANDROID)
     base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 BASE_FEATURE(kSpellCheckCustomDictionaryAPI,
@@ -5353,29 +5217,31 @@ BASE_FEATURE(kTextFragmentAnchor,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kTextFragmentTapOpensContextMenuDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kTextFragmentTapOpensContextMenu,
     "TextFragmentTapOpensContextMenu",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kTextFragmentTapOpensContextMenuDefault
 );
 
 BASE_FEATURE(kTextMetricsBaselines,
@@ -5438,29 +5304,31 @@ BASE_FEATURE(kTimeZoneChangeEvent,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kTouchDragOnShortPressDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kTouchDragOnShortPress,
     "TouchDragOnShortPress",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kTouchDragOnShortPressDefault
 );
 
 BASE_FEATURE(kTransferableRTCDataChannel,
@@ -5553,29 +5421,31 @@ BASE_FEATURE(kUnrestrictedUsb,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kUpdateComplexSafaAreaConstraintsDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kUpdateComplexSafaAreaConstraints,
     "UpdateComplexSafaAreaConstraints",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kUpdateComplexSafaAreaConstraintsDefault
 );
 
 BASE_FEATURE(kUpdateSelectionOnNodeInsertion,
@@ -5603,29 +5473,31 @@ BASE_FEATURE(kURLSearchParamsHasAndDeleteMultipleArgs,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kUseBeginFramePresentationFeedbackDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kUseBeginFramePresentationFeedback,
     "UseBeginFramePresentationFeedback",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kUseBeginFramePresentationFeedbackDefault
 );
 
 BASE_FEATURE(kUseBoundedSelectionOffsetsInEditContextDeleteOperations,
@@ -5638,29 +5510,31 @@ BASE_FEATURE(kUseLargestPaintedImageForLCPCandidate,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kUseLowQualityInterpolationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kUseLowQualityInterpolation,
     "UseLowQualityInterpolation",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kUseLowQualityInterpolationDefault
 );
 
 BASE_FEATURE(kUseOriginalDomOffsetsForOffsetMap,
@@ -5838,29 +5712,31 @@ BASE_FEATURE(kWebAppEnableTranslations,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kWebAudioBypassOutputBufferingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kWebAudioBypassOutputBuffering,
     "WebAudioBypassOutputBuffering",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kWebAudioBypassOutputBufferingDefault
 );
 
 BASE_FEATURE(kWebAudioBypassOutputBufferingOptOut,
@@ -5958,29 +5834,31 @@ BASE_FEATURE(kWebGPUTransientAttachment,
     base::FEATURE_ENABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kWebHIDDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kWebHID,
     "WebHID",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
+    kWebHIDDefault
 );
 
 BASE_FEATURE(kWebIDLBigIntUsesToBigInt,
@@ -6013,29 +5891,31 @@ BASE_FEATURE(kWebPreferences,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kWebPrintingDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kWebPrinting,
     "WebPrinting",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kWebPrintingDefault
 );
 
 BASE_FEATURE(kWebRtcSctpSnap,
@@ -6058,29 +5938,31 @@ BASE_FEATURE(kWebSocketStreamStandardBinaryChunkType,
     base::FEATURE_DISABLED_BY_DEFAULT
 );
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_WIN)
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_CHROMEOS)
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_MAC)
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_LINUX)
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#elif BUILDFLAG(IS_IOS)
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#else
+constexpr base::FeatureState kWebSpeechRecognitionContextDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif
 BASE_FEATURE(kWebSpeechRecognitionContext,
     "WebSpeechRecognitionContext",
-#if BUILDFLAG(IS_ANDROID)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_WIN)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_CHROMEOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_MAC)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_LINUX)
-    base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-#if BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_WIN) && !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_IOS)
-    base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+    kWebSpeechRecognitionContextDefault
 );
 
 BASE_FEATURE(kWebSpeechUnspokenPunctuation,

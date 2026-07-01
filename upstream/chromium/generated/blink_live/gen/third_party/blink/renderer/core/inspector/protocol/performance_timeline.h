@@ -77,11 +77,11 @@ public:
             AllFieldsSet = (RenderTimeSet | LoadTimeSet | SizeSet | 0)};
 
 
-        LargestContentfulPaintBuilder<STATE | RenderTimeSet>& setRenderTime(double value);  // Defined below
+        LargestContentfulPaintBuilder<(STATE | LargestContentfulPaintBuilder<STATE>::RenderTimeSet)>& setRenderTime(double value);  // Defined below
 
-        LargestContentfulPaintBuilder<STATE | LoadTimeSet>& setLoadTime(double value);  // Defined below
+        LargestContentfulPaintBuilder<(STATE | LargestContentfulPaintBuilder<STATE>::LoadTimeSet)>& setLoadTime(double value);  // Defined below
 
-        LargestContentfulPaintBuilder<STATE | SizeSet>& setSize(double value);  // Defined below
+        LargestContentfulPaintBuilder<(STATE | LargestContentfulPaintBuilder<STATE>::SizeSet)>& setSize(double value);  // Defined below
 
         LargestContentfulPaintBuilder<STATE>& setElementId(const String& value);  // Defined below
 
@@ -99,9 +99,9 @@ public:
         friend class LargestContentfulPaint;
         LargestContentfulPaintBuilder() : m_result(new LargestContentfulPaint()) { }
 
-        template<int STEP> LargestContentfulPaintBuilder<STATE | STEP>& castState()
+        template<int STEP> LargestContentfulPaintBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LargestContentfulPaintBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LargestContentfulPaintBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::PerformanceTimeline::LargestContentfulPaint> m_result;
@@ -155,9 +155,9 @@ public:
             AllFieldsSet = (PreviousRectSet | CurrentRectSet | 0)};
 
 
-        LayoutShiftAttributionBuilder<STATE | PreviousRectSet>& setPreviousRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        LayoutShiftAttributionBuilder<(STATE | LayoutShiftAttributionBuilder<STATE>::PreviousRectSet)>& setPreviousRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
-        LayoutShiftAttributionBuilder<STATE | CurrentRectSet>& setCurrentRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        LayoutShiftAttributionBuilder<(STATE | LayoutShiftAttributionBuilder<STATE>::CurrentRectSet)>& setCurrentRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
         LayoutShiftAttributionBuilder<STATE>& setNodeId(int value);  // Defined below
 
@@ -171,9 +171,9 @@ public:
         friend class LayoutShiftAttribution;
         LayoutShiftAttributionBuilder() : m_result(new LayoutShiftAttribution()) { }
 
-        template<int STEP> LayoutShiftAttributionBuilder<STATE | STEP>& castState()
+        template<int STEP> LayoutShiftAttributionBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LayoutShiftAttributionBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LayoutShiftAttributionBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::PerformanceTimeline::LayoutShiftAttribution> m_result;
@@ -223,13 +223,13 @@ public:
             AllFieldsSet = (ValueSet | HadRecentInputSet | LastInputTimeSet | SourcesSet | 0)};
 
 
-        LayoutShiftBuilder<STATE | ValueSet>& setValue(double value);  // Defined below
+        LayoutShiftBuilder<(STATE | LayoutShiftBuilder<STATE>::ValueSet)>& setValue(double value);  // Defined below
 
-        LayoutShiftBuilder<STATE | HadRecentInputSet>& setHadRecentInput(bool value);  // Defined below
+        LayoutShiftBuilder<(STATE | LayoutShiftBuilder<STATE>::HadRecentInputSet)>& setHadRecentInput(bool value);  // Defined below
 
-        LayoutShiftBuilder<STATE | LastInputTimeSet>& setLastInputTime(double value);  // Defined below
+        LayoutShiftBuilder<(STATE | LayoutShiftBuilder<STATE>::LastInputTimeSet)>& setLastInputTime(double value);  // Defined below
 
-        LayoutShiftBuilder<STATE | SourcesSet>& setSources(std::unique_ptr<protocol::Array<protocol::PerformanceTimeline::LayoutShiftAttribution>> value);  // Defined below
+        LayoutShiftBuilder<(STATE | LayoutShiftBuilder<STATE>::SourcesSet)>& setSources(std::unique_ptr<protocol::Array<protocol::PerformanceTimeline::LayoutShiftAttribution>> value);  // Defined below
 
         std::unique_ptr<LayoutShift> build()
         {
@@ -241,9 +241,9 @@ public:
         friend class LayoutShift;
         LayoutShiftBuilder() : m_result(new LayoutShift()) { }
 
-        template<int STEP> LayoutShiftBuilder<STATE | STEP>& castState()
+        template<int STEP> LayoutShiftBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LayoutShiftBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LayoutShiftBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::PerformanceTimeline::LayoutShift> m_result;
@@ -321,13 +321,13 @@ public:
             AllFieldsSet = (FrameIdSet | TypeSet | NameSet | TimeSet | 0)};
 
 
-        TimelineEventBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        TimelineEventBuilder<(STATE | TimelineEventBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
-        TimelineEventBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        TimelineEventBuilder<(STATE | TimelineEventBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
-        TimelineEventBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        TimelineEventBuilder<(STATE | TimelineEventBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        TimelineEventBuilder<STATE | TimeSet>& setTime(double value);  // Defined below
+        TimelineEventBuilder<(STATE | TimelineEventBuilder<STATE>::TimeSet)>& setTime(double value);  // Defined below
 
         TimelineEventBuilder<STATE>& setDuration(double value);  // Defined below
 
@@ -345,9 +345,9 @@ public:
         friend class TimelineEvent;
         TimelineEventBuilder() : m_result(new TimelineEvent()) { }
 
-        template<int STEP> TimelineEventBuilder<STATE | STEP>& castState()
+        template<int STEP> TimelineEventBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<TimelineEventBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<TimelineEventBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::PerformanceTimeline::TimelineEvent> m_result;
@@ -387,21 +387,21 @@ inline void LargestContentfulPaint::setUrl(const String& value) { m_url = value;
 inline void LargestContentfulPaint::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline LargestContentfulPaint::LargestContentfulPaintBuilder<STATE | LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::RenderTimeSet>&
+inline LargestContentfulPaint::LargestContentfulPaintBuilder<(STATE | LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::RenderTimeSet)>&
 LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::setRenderTime(double value) {
   static_assert(!(STATE & RenderTimeSet), "property renderTime should not be set yet");
   m_result->setRenderTime(value);
   return castState<RenderTimeSet>();
 }
 template<int STATE>
-inline LargestContentfulPaint::LargestContentfulPaintBuilder<STATE | LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::LoadTimeSet>&
+inline LargestContentfulPaint::LargestContentfulPaintBuilder<(STATE | LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::LoadTimeSet)>&
 LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::setLoadTime(double value) {
   static_assert(!(STATE & LoadTimeSet), "property loadTime should not be set yet");
   m_result->setLoadTime(value);
   return castState<LoadTimeSet>();
 }
 template<int STATE>
-inline LargestContentfulPaint::LargestContentfulPaintBuilder<STATE | LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::SizeSet>&
+inline LargestContentfulPaint::LargestContentfulPaintBuilder<(STATE | LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::SizeSet)>&
 LargestContentfulPaint::LargestContentfulPaintBuilder<STATE>::setSize(double value) {
   static_assert(!(STATE & SizeSet), "property size should not be set yet");
   m_result->setSize(value);
@@ -434,14 +434,14 @@ inline void LayoutShiftAttribution::setCurrentRect(std::unique_ptr<protocol::DOM
 inline void LayoutShiftAttribution::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE | LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE>::PreviousRectSet>&
+inline LayoutShiftAttribution::LayoutShiftAttributionBuilder<(STATE | LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE>::PreviousRectSet)>&
 LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE>::setPreviousRect(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & PreviousRectSet), "property previousRect should not be set yet");
   m_result->setPreviousRect(std::move(value));
   return castState<PreviousRectSet>();
 }
 template<int STATE>
-inline LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE | LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE>::CurrentRectSet>&
+inline LayoutShiftAttribution::LayoutShiftAttributionBuilder<(STATE | LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE>::CurrentRectSet)>&
 LayoutShiftAttribution::LayoutShiftAttributionBuilder<STATE>::setCurrentRect(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & CurrentRectSet), "property currentRect should not be set yet");
   m_result->setCurrentRect(std::move(value));
@@ -462,28 +462,28 @@ inline void LayoutShift::setLastInputTime(double value) { m_lastInputTime = valu
 inline void LayoutShift::setSources(std::unique_ptr<protocol::Array<protocol::PerformanceTimeline::LayoutShiftAttribution>> value) { m_sources = std::move(value); }
 
 template<int STATE>
-inline LayoutShift::LayoutShiftBuilder<STATE | LayoutShift::LayoutShiftBuilder<STATE>::ValueSet>&
+inline LayoutShift::LayoutShiftBuilder<(STATE | LayoutShift::LayoutShiftBuilder<STATE>::ValueSet)>&
 LayoutShift::LayoutShiftBuilder<STATE>::setValue(double value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
   return castState<ValueSet>();
 }
 template<int STATE>
-inline LayoutShift::LayoutShiftBuilder<STATE | LayoutShift::LayoutShiftBuilder<STATE>::HadRecentInputSet>&
+inline LayoutShift::LayoutShiftBuilder<(STATE | LayoutShift::LayoutShiftBuilder<STATE>::HadRecentInputSet)>&
 LayoutShift::LayoutShiftBuilder<STATE>::setHadRecentInput(bool value) {
   static_assert(!(STATE & HadRecentInputSet), "property hadRecentInput should not be set yet");
   m_result->setHadRecentInput(value);
   return castState<HadRecentInputSet>();
 }
 template<int STATE>
-inline LayoutShift::LayoutShiftBuilder<STATE | LayoutShift::LayoutShiftBuilder<STATE>::LastInputTimeSet>&
+inline LayoutShift::LayoutShiftBuilder<(STATE | LayoutShift::LayoutShiftBuilder<STATE>::LastInputTimeSet)>&
 LayoutShift::LayoutShiftBuilder<STATE>::setLastInputTime(double value) {
   static_assert(!(STATE & LastInputTimeSet), "property lastInputTime should not be set yet");
   m_result->setLastInputTime(value);
   return castState<LastInputTimeSet>();
 }
 template<int STATE>
-inline LayoutShift::LayoutShiftBuilder<STATE | LayoutShift::LayoutShiftBuilder<STATE>::SourcesSet>&
+inline LayoutShift::LayoutShiftBuilder<(STATE | LayoutShift::LayoutShiftBuilder<STATE>::SourcesSet)>&
 LayoutShift::LayoutShiftBuilder<STATE>::setSources(std::unique_ptr<protocol::Array<protocol::PerformanceTimeline::LayoutShiftAttribution>> value) {
   static_assert(!(STATE & SourcesSet), "property sources should not be set yet");
   m_result->setSources(std::move(value));
@@ -505,28 +505,28 @@ inline void TimelineEvent::setLcpDetails(std::unique_ptr<protocol::PerformanceTi
 inline void TimelineEvent::setLayoutShiftDetails(std::unique_ptr<protocol::PerformanceTimeline::LayoutShift> value) { m_layoutShiftDetails = std::move(value); }
 
 template<int STATE>
-inline TimelineEvent::TimelineEventBuilder<STATE | TimelineEvent::TimelineEventBuilder<STATE>::FrameIdSet>&
+inline TimelineEvent::TimelineEventBuilder<(STATE | TimelineEvent::TimelineEventBuilder<STATE>::FrameIdSet)>&
 TimelineEvent::TimelineEventBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
   return castState<FrameIdSet>();
 }
 template<int STATE>
-inline TimelineEvent::TimelineEventBuilder<STATE | TimelineEvent::TimelineEventBuilder<STATE>::TypeSet>&
+inline TimelineEvent::TimelineEventBuilder<(STATE | TimelineEvent::TimelineEventBuilder<STATE>::TypeSet)>&
 TimelineEvent::TimelineEventBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
   return castState<TypeSet>();
 }
 template<int STATE>
-inline TimelineEvent::TimelineEventBuilder<STATE | TimelineEvent::TimelineEventBuilder<STATE>::NameSet>&
+inline TimelineEvent::TimelineEventBuilder<(STATE | TimelineEvent::TimelineEventBuilder<STATE>::NameSet)>&
 TimelineEvent::TimelineEventBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline TimelineEvent::TimelineEventBuilder<STATE | TimelineEvent::TimelineEventBuilder<STATE>::TimeSet>&
+inline TimelineEvent::TimelineEventBuilder<(STATE | TimelineEvent::TimelineEventBuilder<STATE>::TimeSet)>&
 TimelineEvent::TimelineEventBuilder<STATE>::setTime(double value) {
   static_assert(!(STATE & TimeSet), "property time should not be set yet");
   m_result->setTime(value);

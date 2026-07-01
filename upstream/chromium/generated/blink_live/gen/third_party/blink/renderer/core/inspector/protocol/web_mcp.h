@@ -88,9 +88,9 @@ public:
         friend class Annotation;
         AnnotationBuilder() : m_result(new Annotation()) { }
 
-        template<int STEP> AnnotationBuilder<STATE | STEP>& castState()
+        template<int STEP> AnnotationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AnnotationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AnnotationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebMCP::Annotation> m_result;
@@ -172,15 +172,15 @@ public:
             AllFieldsSet = (NameSet | DescriptionSet | FrameIdSet | 0)};
 
 
-        ToolBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        ToolBuilder<(STATE | ToolBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        ToolBuilder<STATE | DescriptionSet>& setDescription(const String& value);  // Defined below
+        ToolBuilder<(STATE | ToolBuilder<STATE>::DescriptionSet)>& setDescription(const String& value);  // Defined below
 
         ToolBuilder<STATE>& setInputSchema(std::unique_ptr<protocol::DictionaryValue> value);  // Defined below
 
         ToolBuilder<STATE>& setAnnotations(std::unique_ptr<protocol::WebMCP::Annotation> value);  // Defined below
 
-        ToolBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        ToolBuilder<(STATE | ToolBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
         ToolBuilder<STATE>& setBackendNodeId(int value);  // Defined below
 
@@ -196,9 +196,9 @@ public:
         friend class Tool;
         ToolBuilder() : m_result(new Tool()) { }
 
-        template<int STEP> ToolBuilder<STATE | STEP>& castState()
+        template<int STEP> ToolBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ToolBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ToolBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebMCP::Tool> m_result;
@@ -244,9 +244,9 @@ public:
             AllFieldsSet = (NameSet | FrameIdSet | 0)};
 
 
-        RemovedToolBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        RemovedToolBuilder<(STATE | RemovedToolBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        RemovedToolBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        RemovedToolBuilder<(STATE | RemovedToolBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
         std::unique_ptr<RemovedTool> build()
         {
@@ -258,9 +258,9 @@ public:
         friend class RemovedTool;
         RemovedToolBuilder() : m_result(new RemovedTool()) { }
 
-        template<int STEP> RemovedToolBuilder<STATE | STEP>& castState()
+        template<int STEP> RemovedToolBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RemovedToolBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RemovedToolBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebMCP::RemovedTool> m_result;
@@ -319,14 +319,14 @@ inline void Tool::setBackendNodeId(int value) { m_backendNodeId = value; }
 inline void Tool::setStackTrace(std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace> value) { m_stackTrace = std::move(value); }
 
 template<int STATE>
-inline Tool::ToolBuilder<STATE | Tool::ToolBuilder<STATE>::NameSet>&
+inline Tool::ToolBuilder<(STATE | Tool::ToolBuilder<STATE>::NameSet)>&
 Tool::ToolBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Tool::ToolBuilder<STATE | Tool::ToolBuilder<STATE>::DescriptionSet>&
+inline Tool::ToolBuilder<(STATE | Tool::ToolBuilder<STATE>::DescriptionSet)>&
 Tool::ToolBuilder<STATE>::setDescription(const String& value) {
   static_assert(!(STATE & DescriptionSet), "property description should not be set yet");
   m_result->setDescription(value);
@@ -343,7 +343,7 @@ inline Tool::ToolBuilder<STATE>& Tool::ToolBuilder<STATE>::setAnnotations(std::u
   return *this;
 }
 template<int STATE>
-inline Tool::ToolBuilder<STATE | Tool::ToolBuilder<STATE>::FrameIdSet>&
+inline Tool::ToolBuilder<(STATE | Tool::ToolBuilder<STATE>::FrameIdSet)>&
 Tool::ToolBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
@@ -367,14 +367,14 @@ inline void RemovedTool::setName(const String& value) { m_name = value; }
 inline void RemovedTool::setFrameId(const String& value) { m_frameId = value; }
 
 template<int STATE>
-inline RemovedTool::RemovedToolBuilder<STATE | RemovedTool::RemovedToolBuilder<STATE>::NameSet>&
+inline RemovedTool::RemovedToolBuilder<(STATE | RemovedTool::RemovedToolBuilder<STATE>::NameSet)>&
 RemovedTool::RemovedToolBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline RemovedTool::RemovedToolBuilder<STATE | RemovedTool::RemovedToolBuilder<STATE>::FrameIdSet>&
+inline RemovedTool::RemovedToolBuilder<(STATE | RemovedTool::RemovedToolBuilder<STATE>::FrameIdSet)>&
 RemovedTool::RemovedToolBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);

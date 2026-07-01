@@ -210,12 +210,12 @@ bool DetectLowEndDevice() {
   if (FeatureList::GetInstance() == nullptr) {
     ByteSize threshold = MiBU(checked_cast<unsigned>(
         base::android::GetCachedLowMemoryDeviceThresholdMb()));
-    if (threshold > ByteSize(0)) {
-      return ram_size > ByteSize(0) && ram_size <= threshold;
+    if (threshold.is_positive()) {
+      return ram_size.is_positive() && ram_size <= threshold;
     }
   }
 #endif  // BUILDFLAG(IS_ANDROID)
-  return ram_size > ByteSize(0) &&
+  return ram_size.is_positive() &&
          ram_size <= MiBU(checked_cast<unsigned>(
                          features::kLowMemoryDeviceThresholdMB.Get()));
   // LINT.ThenChange(//base/android/java/src/org/chromium/base/SysUtils.java)

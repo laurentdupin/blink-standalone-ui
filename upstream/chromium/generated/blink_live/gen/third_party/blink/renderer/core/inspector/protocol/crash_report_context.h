@@ -46,11 +46,11 @@ public:
             AllFieldsSet = (KeySet | ValueSet | FrameIdSet | 0)};
 
 
-        CrashReportContextEntryBuilder<STATE | KeySet>& setKey(const String& value);  // Defined below
+        CrashReportContextEntryBuilder<(STATE | CrashReportContextEntryBuilder<STATE>::KeySet)>& setKey(const String& value);  // Defined below
 
-        CrashReportContextEntryBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        CrashReportContextEntryBuilder<(STATE | CrashReportContextEntryBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
-        CrashReportContextEntryBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        CrashReportContextEntryBuilder<(STATE | CrashReportContextEntryBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
         std::unique_ptr<CrashReportContextEntry> build()
         {
@@ -62,9 +62,9 @@ public:
         friend class CrashReportContextEntry;
         CrashReportContextEntryBuilder() : m_result(new CrashReportContextEntry()) { }
 
-        template<int STEP> CrashReportContextEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> CrashReportContextEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CrashReportContextEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CrashReportContextEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CrashReportContext::CrashReportContextEntry> m_result;
@@ -97,21 +97,21 @@ inline void CrashReportContextEntry::setValue(const String& value) { m_value = v
 inline void CrashReportContextEntry::setFrameId(const String& value) { m_frameId = value; }
 
 template<int STATE>
-inline CrashReportContextEntry::CrashReportContextEntryBuilder<STATE | CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::KeySet>&
+inline CrashReportContextEntry::CrashReportContextEntryBuilder<(STATE | CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::KeySet)>&
 CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::setKey(const String& value) {
   static_assert(!(STATE & KeySet), "property key should not be set yet");
   m_result->setKey(value);
   return castState<KeySet>();
 }
 template<int STATE>
-inline CrashReportContextEntry::CrashReportContextEntryBuilder<STATE | CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::ValueSet>&
+inline CrashReportContextEntry::CrashReportContextEntryBuilder<(STATE | CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::ValueSet)>&
 CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
   return castState<ValueSet>();
 }
 template<int STATE>
-inline CrashReportContextEntry::CrashReportContextEntryBuilder<STATE | CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::FrameIdSet>&
+inline CrashReportContextEntry::CrashReportContextEntryBuilder<(STATE | CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::FrameIdSet)>&
 CrashReportContextEntry::CrashReportContextEntryBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);

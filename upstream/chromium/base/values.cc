@@ -1094,35 +1094,45 @@ Value& ListValue::operator[](size_t index) {
 }
 
 bool ListValue::contains(bool val) const {
-  return contains(val, &Value::is_bool, &Value::GetBool);
+  return ContainsValue(val, &Value::is_bool, &Value::GetBool);
 }
 
 bool ListValue::contains(int val) const {
-  return contains(val, &Value::is_int, &Value::GetInt);
+  return ContainsValue(val, &Value::is_int, &Value::GetInt);
 }
 
 bool ListValue::contains(double val) const {
-  return contains(val, &Value::is_double, &Value::GetDouble);
+  return ContainsValue(val, &Value::is_double, &Value::GetDouble);
 }
 
 bool ListValue::contains(std::string_view val) const {
-  return contains(val, &Value::is_string, &Value::GetString);
+  return ContainsValue(
+      val, &Value::is_string,
+      static_cast<const std::string& (Value::*)() const>(&Value::GetString));
 }
 
 bool ListValue::contains(const char* val) const {
-  return contains(std::string_view(val), &Value::is_string, &Value::GetString);
+  return ContainsValue(std::string_view(val), &Value::is_string,
+                       static_cast<const std::string& (Value::*)() const>(
+                           &Value::GetString));
 }
 
 bool ListValue::contains(const BlobStorage& val) const {
-  return contains(val, &Value::is_blob, &Value::GetBlob);
+  return ContainsValue(val, &Value::is_blob,
+                       static_cast<const BlobStorage& (Value::*)() const>(
+                           &Value::GetBlob));
 }
 
 bool ListValue::contains(const DictValue& val) const {
-  return contains(val, &Value::is_dict, &Value::GetDict);
+  return ContainsValue(val, &Value::is_dict,
+                       static_cast<const DictValue& (Value::*)() const>(
+                           &Value::GetDict));
 }
 
 bool ListValue::contains(const ListValue& val) const {
-  return contains(val, &Value::is_list, &Value::GetList);
+  return ContainsValue(val, &Value::is_list,
+                       static_cast<const ListValue& (Value::*)() const>(
+                           &Value::GetList));
 }
 
 void ListValue::clear() {
@@ -1314,7 +1324,9 @@ ListValue::ListValue(const std::vector<Value>& storage) {
 // This can't be declared in the header because of a circular dependency between
 // ListValue::operator<=> and Value::operator<=>.
 std::partial_ordering operator<=>(const ListValue& lhs,
-                                  const ListValue& rhs) = default;
+                                  const ListValue& rhs) {
+  return lhs.storage_ <=> rhs.storage_;
+}
 
 bool Value::operator==(bool rhs) const {
   return is_bool() && GetBool() == rhs;

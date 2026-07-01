@@ -86,14 +86,16 @@ base::TimeDelta GetIntensiveWakeUpThrottlingGracePeriod(bool loading) {
 
 // When enabled, renderer main will busy loop in user space when no further work
 // is scheduled before waiting in the kernel.
+constexpr base::FeatureState kBusyLoopOnRendererMainDefault =
+#if BUILDFLAG(IS_ANDROID)
+    base::FEATURE_ENABLED_BY_DEFAULT;
+#else   // BUILDFLAG(IS_ANDROID)
+    base::FEATURE_DISABLED_BY_DEFAULT;
+#endif  // BUILDFLAG(IS_ANDROID)
+
 BASE_FEATURE(kBusyLoopOnRendererMain,
              "BusyLoopOnMainThread",
-#if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else   // BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_ANDROID)
-);
+             kBusyLoopOnRendererMainDefault);
 
 // The maximum amount of time to busy loop when BusyLoopOnMainThread is enabled.
 BASE_FEATURE_PARAM(base::TimeDelta,

@@ -53,11 +53,11 @@ public:
             AllFieldsSet = (NameSet | VersionSet | ObjectStoresSet | 0)};
 
 
-        DatabaseWithObjectStoresBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        DatabaseWithObjectStoresBuilder<(STATE | DatabaseWithObjectStoresBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        DatabaseWithObjectStoresBuilder<STATE | VersionSet>& setVersion(double value);  // Defined below
+        DatabaseWithObjectStoresBuilder<(STATE | DatabaseWithObjectStoresBuilder<STATE>::VersionSet)>& setVersion(double value);  // Defined below
 
-        DatabaseWithObjectStoresBuilder<STATE | ObjectStoresSet>& setObjectStores(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStore>> value);  // Defined below
+        DatabaseWithObjectStoresBuilder<(STATE | DatabaseWithObjectStoresBuilder<STATE>::ObjectStoresSet)>& setObjectStores(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStore>> value);  // Defined below
 
         std::unique_ptr<DatabaseWithObjectStores> build()
         {
@@ -69,9 +69,9 @@ public:
         friend class DatabaseWithObjectStores;
         DatabaseWithObjectStoresBuilder() : m_result(new DatabaseWithObjectStores()) { }
 
-        template<int STEP> DatabaseWithObjectStoresBuilder<STATE | STEP>& castState()
+        template<int STEP> DatabaseWithObjectStoresBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DatabaseWithObjectStoresBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DatabaseWithObjectStoresBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::DatabaseWithObjectStores> m_result;
@@ -121,13 +121,13 @@ public:
             AllFieldsSet = (NameSet | KeyPathSet | AutoIncrementSet | IndexesSet | 0)};
 
 
-        ObjectStoreBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        ObjectStoreBuilder<(STATE | ObjectStoreBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        ObjectStoreBuilder<STATE | KeyPathSet>& setKeyPath(std::unique_ptr<protocol::IndexedDB::KeyPath> value);  // Defined below
+        ObjectStoreBuilder<(STATE | ObjectStoreBuilder<STATE>::KeyPathSet)>& setKeyPath(std::unique_ptr<protocol::IndexedDB::KeyPath> value);  // Defined below
 
-        ObjectStoreBuilder<STATE | AutoIncrementSet>& setAutoIncrement(bool value);  // Defined below
+        ObjectStoreBuilder<(STATE | ObjectStoreBuilder<STATE>::AutoIncrementSet)>& setAutoIncrement(bool value);  // Defined below
 
-        ObjectStoreBuilder<STATE | IndexesSet>& setIndexes(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStoreIndex>> value);  // Defined below
+        ObjectStoreBuilder<(STATE | ObjectStoreBuilder<STATE>::IndexesSet)>& setIndexes(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStoreIndex>> value);  // Defined below
 
         std::unique_ptr<ObjectStore> build()
         {
@@ -139,9 +139,9 @@ public:
         friend class ObjectStore;
         ObjectStoreBuilder() : m_result(new ObjectStore()) { }
 
-        template<int STEP> ObjectStoreBuilder<STATE | STEP>& castState()
+        template<int STEP> ObjectStoreBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ObjectStoreBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ObjectStoreBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::ObjectStore> m_result;
@@ -192,13 +192,13 @@ public:
             AllFieldsSet = (NameSet | KeyPathSet | UniqueSet | MultiEntrySet | 0)};
 
 
-        ObjectStoreIndexBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        ObjectStoreIndexBuilder<(STATE | ObjectStoreIndexBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        ObjectStoreIndexBuilder<STATE | KeyPathSet>& setKeyPath(std::unique_ptr<protocol::IndexedDB::KeyPath> value);  // Defined below
+        ObjectStoreIndexBuilder<(STATE | ObjectStoreIndexBuilder<STATE>::KeyPathSet)>& setKeyPath(std::unique_ptr<protocol::IndexedDB::KeyPath> value);  // Defined below
 
-        ObjectStoreIndexBuilder<STATE | UniqueSet>& setUnique(bool value);  // Defined below
+        ObjectStoreIndexBuilder<(STATE | ObjectStoreIndexBuilder<STATE>::UniqueSet)>& setUnique(bool value);  // Defined below
 
-        ObjectStoreIndexBuilder<STATE | MultiEntrySet>& setMultiEntry(bool value);  // Defined below
+        ObjectStoreIndexBuilder<(STATE | ObjectStoreIndexBuilder<STATE>::MultiEntrySet)>& setMultiEntry(bool value);  // Defined below
 
         std::unique_ptr<ObjectStoreIndex> build()
         {
@@ -210,9 +210,9 @@ public:
         friend class ObjectStoreIndex;
         ObjectStoreIndexBuilder() : m_result(new ObjectStoreIndex()) { }
 
-        template<int STEP> ObjectStoreIndexBuilder<STATE | STEP>& castState()
+        template<int STEP> ObjectStoreIndexBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ObjectStoreIndexBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ObjectStoreIndexBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::ObjectStoreIndex> m_result;
@@ -294,7 +294,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        KeyBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        KeyBuilder<(STATE | KeyBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         KeyBuilder<STATE>& setNumber(double value);  // Defined below
 
@@ -314,9 +314,9 @@ public:
         friend class Key;
         KeyBuilder() : m_result(new Key()) { }
 
-        template<int STEP> KeyBuilder<STATE | STEP>& castState()
+        template<int STEP> KeyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<KeyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<KeyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::Key> m_result;
@@ -382,9 +382,9 @@ public:
 
         KeyRangeBuilder<STATE>& setUpper(std::unique_ptr<protocol::IndexedDB::Key> value);  // Defined below
 
-        KeyRangeBuilder<STATE | LowerOpenSet>& setLowerOpen(bool value);  // Defined below
+        KeyRangeBuilder<(STATE | KeyRangeBuilder<STATE>::LowerOpenSet)>& setLowerOpen(bool value);  // Defined below
 
-        KeyRangeBuilder<STATE | UpperOpenSet>& setUpperOpen(bool value);  // Defined below
+        KeyRangeBuilder<(STATE | KeyRangeBuilder<STATE>::UpperOpenSet)>& setUpperOpen(bool value);  // Defined below
 
         std::unique_ptr<KeyRange> build()
         {
@@ -396,9 +396,9 @@ public:
         friend class KeyRange;
         KeyRangeBuilder() : m_result(new KeyRange()) { }
 
-        template<int STEP> KeyRangeBuilder<STATE | STEP>& castState()
+        template<int STEP> KeyRangeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<KeyRangeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<KeyRangeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::KeyRange> m_result;
@@ -445,11 +445,11 @@ public:
             AllFieldsSet = (KeySet | PrimaryKeySet | ValueSet | 0)};
 
 
-        DataEntryBuilder<STATE | KeySet>& setKey(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::KeySet)>& setKey(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
 
-        DataEntryBuilder<STATE | PrimaryKeySet>& setPrimaryKey(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::PrimaryKeySet)>& setPrimaryKey(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
 
-        DataEntryBuilder<STATE | ValueSet>& setValue(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::ValueSet)>& setValue(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
 
         std::unique_ptr<DataEntry> build()
         {
@@ -461,9 +461,9 @@ public:
         friend class DataEntry;
         DataEntryBuilder() : m_result(new DataEntry()) { }
 
-        template<int STEP> DataEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> DataEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DataEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DataEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::DataEntry> m_result;
@@ -525,7 +525,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        KeyPathBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        KeyPathBuilder<(STATE | KeyPathBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         KeyPathBuilder<STATE>& setString(const String& value);  // Defined below
 
@@ -541,9 +541,9 @@ public:
         friend class KeyPath;
         KeyPathBuilder() : m_result(new KeyPath()) { }
 
-        template<int STEP> KeyPathBuilder<STATE | STEP>& castState()
+        template<int STEP> KeyPathBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<KeyPathBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<KeyPathBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::IndexedDB::KeyPath> m_result;
@@ -576,21 +576,21 @@ inline void DatabaseWithObjectStores::setVersion(double value) { m_version = val
 inline void DatabaseWithObjectStores::setObjectStores(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStore>> value) { m_objectStores = std::move(value); }
 
 template<int STATE>
-inline DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE | DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::NameSet>&
+inline DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<(STATE | DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::NameSet)>&
 DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE | DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::VersionSet>&
+inline DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<(STATE | DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::VersionSet)>&
 DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::setVersion(double value) {
   static_assert(!(STATE & VersionSet), "property version should not be set yet");
   m_result->setVersion(value);
   return castState<VersionSet>();
 }
 template<int STATE>
-inline DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE | DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::ObjectStoresSet>&
+inline DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<(STATE | DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::ObjectStoresSet)>&
 DatabaseWithObjectStores::DatabaseWithObjectStoresBuilder<STATE>::setObjectStores(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStore>> value) {
   static_assert(!(STATE & ObjectStoresSet), "property objectStores should not be set yet");
   m_result->setObjectStores(std::move(value));
@@ -607,28 +607,28 @@ inline void ObjectStore::setAutoIncrement(bool value) { m_autoIncrement = value;
 inline void ObjectStore::setIndexes(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStoreIndex>> value) { m_indexes = std::move(value); }
 
 template<int STATE>
-inline ObjectStore::ObjectStoreBuilder<STATE | ObjectStore::ObjectStoreBuilder<STATE>::NameSet>&
+inline ObjectStore::ObjectStoreBuilder<(STATE | ObjectStore::ObjectStoreBuilder<STATE>::NameSet)>&
 ObjectStore::ObjectStoreBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline ObjectStore::ObjectStoreBuilder<STATE | ObjectStore::ObjectStoreBuilder<STATE>::KeyPathSet>&
+inline ObjectStore::ObjectStoreBuilder<(STATE | ObjectStore::ObjectStoreBuilder<STATE>::KeyPathSet)>&
 ObjectStore::ObjectStoreBuilder<STATE>::setKeyPath(std::unique_ptr<protocol::IndexedDB::KeyPath> value) {
   static_assert(!(STATE & KeyPathSet), "property keyPath should not be set yet");
   m_result->setKeyPath(std::move(value));
   return castState<KeyPathSet>();
 }
 template<int STATE>
-inline ObjectStore::ObjectStoreBuilder<STATE | ObjectStore::ObjectStoreBuilder<STATE>::AutoIncrementSet>&
+inline ObjectStore::ObjectStoreBuilder<(STATE | ObjectStore::ObjectStoreBuilder<STATE>::AutoIncrementSet)>&
 ObjectStore::ObjectStoreBuilder<STATE>::setAutoIncrement(bool value) {
   static_assert(!(STATE & AutoIncrementSet), "property autoIncrement should not be set yet");
   m_result->setAutoIncrement(value);
   return castState<AutoIncrementSet>();
 }
 template<int STATE>
-inline ObjectStore::ObjectStoreBuilder<STATE | ObjectStore::ObjectStoreBuilder<STATE>::IndexesSet>&
+inline ObjectStore::ObjectStoreBuilder<(STATE | ObjectStore::ObjectStoreBuilder<STATE>::IndexesSet)>&
 ObjectStore::ObjectStoreBuilder<STATE>::setIndexes(std::unique_ptr<protocol::Array<protocol::IndexedDB::ObjectStoreIndex>> value) {
   static_assert(!(STATE & IndexesSet), "property indexes should not be set yet");
   m_result->setIndexes(std::move(value));
@@ -645,28 +645,28 @@ inline void ObjectStoreIndex::setUnique(bool value) { m_unique = value; }
 inline void ObjectStoreIndex::setMultiEntry(bool value) { m_multiEntry = value; }
 
 template<int STATE>
-inline ObjectStoreIndex::ObjectStoreIndexBuilder<STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::NameSet>&
+inline ObjectStoreIndex::ObjectStoreIndexBuilder<(STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::NameSet)>&
 ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline ObjectStoreIndex::ObjectStoreIndexBuilder<STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::KeyPathSet>&
+inline ObjectStoreIndex::ObjectStoreIndexBuilder<(STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::KeyPathSet)>&
 ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::setKeyPath(std::unique_ptr<protocol::IndexedDB::KeyPath> value) {
   static_assert(!(STATE & KeyPathSet), "property keyPath should not be set yet");
   m_result->setKeyPath(std::move(value));
   return castState<KeyPathSet>();
 }
 template<int STATE>
-inline ObjectStoreIndex::ObjectStoreIndexBuilder<STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::UniqueSet>&
+inline ObjectStoreIndex::ObjectStoreIndexBuilder<(STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::UniqueSet)>&
 ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::setUnique(bool value) {
   static_assert(!(STATE & UniqueSet), "property unique should not be set yet");
   m_result->setUnique(value);
   return castState<UniqueSet>();
 }
 template<int STATE>
-inline ObjectStoreIndex::ObjectStoreIndexBuilder<STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::MultiEntrySet>&
+inline ObjectStoreIndex::ObjectStoreIndexBuilder<(STATE | ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::MultiEntrySet)>&
 ObjectStoreIndex::ObjectStoreIndexBuilder<STATE>::setMultiEntry(bool value) {
   static_assert(!(STATE & MultiEntrySet), "property multiEntry should not be set yet");
   m_result->setMultiEntry(value);
@@ -685,7 +685,7 @@ inline void Key::setDate(double value) { m_date = value; }
 inline void Key::setArray(std::unique_ptr<protocol::Array<protocol::IndexedDB::Key>> value) { m_array = std::move(value); }
 
 template<int STATE>
-inline Key::KeyBuilder<STATE | Key::KeyBuilder<STATE>::TypeSet>&
+inline Key::KeyBuilder<(STATE | Key::KeyBuilder<STATE>::TypeSet)>&
 Key::KeyBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -731,14 +731,14 @@ inline KeyRange::KeyRangeBuilder<STATE>& KeyRange::KeyRangeBuilder<STATE>::setUp
   return *this;
 }
 template<int STATE>
-inline KeyRange::KeyRangeBuilder<STATE | KeyRange::KeyRangeBuilder<STATE>::LowerOpenSet>&
+inline KeyRange::KeyRangeBuilder<(STATE | KeyRange::KeyRangeBuilder<STATE>::LowerOpenSet)>&
 KeyRange::KeyRangeBuilder<STATE>::setLowerOpen(bool value) {
   static_assert(!(STATE & LowerOpenSet), "property lowerOpen should not be set yet");
   m_result->setLowerOpen(value);
   return castState<LowerOpenSet>();
 }
 template<int STATE>
-inline KeyRange::KeyRangeBuilder<STATE | KeyRange::KeyRangeBuilder<STATE>::UpperOpenSet>&
+inline KeyRange::KeyRangeBuilder<(STATE | KeyRange::KeyRangeBuilder<STATE>::UpperOpenSet)>&
 KeyRange::KeyRangeBuilder<STATE>::setUpperOpen(bool value) {
   static_assert(!(STATE & UpperOpenSet), "property upperOpen should not be set yet");
   m_result->setUpperOpen(value);
@@ -755,21 +755,21 @@ inline void DataEntry::setPrimaryKey(std::unique_ptr<v8_inspector::protocol::Run
 inline void DataEntry::setValue(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value) { m_value = std::move(value); }
 
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::KeySet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::KeySet)>&
 DataEntry::DataEntryBuilder<STATE>::setKey(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value) {
   static_assert(!(STATE & KeySet), "property key should not be set yet");
   m_result->setKey(std::move(value));
   return castState<KeySet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::PrimaryKeySet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::PrimaryKeySet)>&
 DataEntry::DataEntryBuilder<STATE>::setPrimaryKey(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value) {
   static_assert(!(STATE & PrimaryKeySet), "property primaryKey should not be set yet");
   m_result->setPrimaryKey(std::move(value));
   return castState<PrimaryKeySet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::ValueSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::ValueSet)>&
 DataEntry::DataEntryBuilder<STATE>::setValue(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(std::move(value));
@@ -784,7 +784,7 @@ inline void KeyPath::setString(const String& value) { m_string = value; }
 inline void KeyPath::setArray(std::unique_ptr<protocol::Array<String>> value) { m_array = std::move(value); }
 
 template<int STATE>
-inline KeyPath::KeyPathBuilder<STATE | KeyPath::KeyPathBuilder<STATE>::TypeSet>&
+inline KeyPath::KeyPathBuilder<(STATE | KeyPath::KeyPathBuilder<STATE>::TypeSet)>&
 KeyPath::KeyPathBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);

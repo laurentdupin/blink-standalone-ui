@@ -84,9 +84,9 @@ public:
             AllFieldsSet = (ParentOutlineColorSet | ChildOutlineColorSet | 0)};
 
 
-        SourceOrderConfigBuilder<STATE | ParentOutlineColorSet>& setParentOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value);  // Defined below
+        SourceOrderConfigBuilder<(STATE | SourceOrderConfigBuilder<STATE>::ParentOutlineColorSet)>& setParentOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value);  // Defined below
 
-        SourceOrderConfigBuilder<STATE | ChildOutlineColorSet>& setChildOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value);  // Defined below
+        SourceOrderConfigBuilder<(STATE | SourceOrderConfigBuilder<STATE>::ChildOutlineColorSet)>& setChildOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value);  // Defined below
 
         std::unique_ptr<SourceOrderConfig> build()
         {
@@ -98,9 +98,9 @@ public:
         friend class SourceOrderConfig;
         SourceOrderConfigBuilder() : m_result(new SourceOrderConfig()) { }
 
-        template<int STEP> SourceOrderConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> SourceOrderConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SourceOrderConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SourceOrderConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::SourceOrderConfig> m_result;
@@ -363,9 +363,9 @@ public:
         friend class GridHighlightConfig;
         GridHighlightConfigBuilder() : m_result(new GridHighlightConfig()) { }
 
-        template<int STEP> GridHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> GridHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<GridHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<GridHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::GridHighlightConfig> m_result;
@@ -514,9 +514,9 @@ public:
         friend class FlexContainerHighlightConfig;
         FlexContainerHighlightConfigBuilder() : m_result(new FlexContainerHighlightConfig()) { }
 
-        template<int STEP> FlexContainerHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> FlexContainerHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FlexContainerHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FlexContainerHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::FlexContainerHighlightConfig> m_result;
@@ -598,9 +598,9 @@ public:
         friend class FlexItemHighlightConfig;
         FlexItemHighlightConfigBuilder() : m_result(new FlexItemHighlightConfig()) { }
 
-        template<int STEP> FlexItemHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> FlexItemHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FlexItemHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FlexItemHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::FlexItemHighlightConfig> m_result;
@@ -671,9 +671,9 @@ public:
         friend class LineStyle;
         LineStyleBuilder() : m_result(new LineStyle()) { }
 
-        template<int STEP> LineStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> LineStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LineStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LineStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::LineStyle> m_result;
@@ -738,9 +738,9 @@ public:
         friend class BoxStyle;
         BoxStyleBuilder() : m_result(new BoxStyle()) { }
 
-        template<int STEP> BoxStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> BoxStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BoxStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BoxStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::BoxStyle> m_result;
@@ -992,9 +992,9 @@ public:
         friend class HighlightConfig;
         HighlightConfigBuilder() : m_result(new HighlightConfig()) { }
 
-        template<int STEP> HighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> HighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<HighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<HighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::HighlightConfig> m_result;
@@ -1052,9 +1052,9 @@ public:
             AllFieldsSet = (GridHighlightConfigSet | NodeIdSet | 0)};
 
 
-        GridNodeHighlightConfigBuilder<STATE | GridHighlightConfigSet>& setGridHighlightConfig(std::unique_ptr<protocol::Overlay::GridHighlightConfig> value);  // Defined below
+        GridNodeHighlightConfigBuilder<(STATE | GridNodeHighlightConfigBuilder<STATE>::GridHighlightConfigSet)>& setGridHighlightConfig(std::unique_ptr<protocol::Overlay::GridHighlightConfig> value);  // Defined below
 
-        GridNodeHighlightConfigBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        GridNodeHighlightConfigBuilder<(STATE | GridNodeHighlightConfigBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
         std::unique_ptr<GridNodeHighlightConfig> build()
         {
@@ -1066,9 +1066,9 @@ public:
         friend class GridNodeHighlightConfig;
         GridNodeHighlightConfigBuilder() : m_result(new GridNodeHighlightConfig()) { }
 
-        template<int STEP> GridNodeHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> GridNodeHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<GridNodeHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<GridNodeHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::GridNodeHighlightConfig> m_result;
@@ -1109,9 +1109,9 @@ public:
             AllFieldsSet = (FlexContainerHighlightConfigSet | NodeIdSet | 0)};
 
 
-        FlexNodeHighlightConfigBuilder<STATE | FlexContainerHighlightConfigSet>& setFlexContainerHighlightConfig(std::unique_ptr<protocol::Overlay::FlexContainerHighlightConfig> value);  // Defined below
+        FlexNodeHighlightConfigBuilder<(STATE | FlexNodeHighlightConfigBuilder<STATE>::FlexContainerHighlightConfigSet)>& setFlexContainerHighlightConfig(std::unique_ptr<protocol::Overlay::FlexContainerHighlightConfig> value);  // Defined below
 
-        FlexNodeHighlightConfigBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        FlexNodeHighlightConfigBuilder<(STATE | FlexNodeHighlightConfigBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
         std::unique_ptr<FlexNodeHighlightConfig> build()
         {
@@ -1123,9 +1123,9 @@ public:
         friend class FlexNodeHighlightConfig;
         FlexNodeHighlightConfigBuilder() : m_result(new FlexNodeHighlightConfig()) { }
 
-        template<int STEP> FlexNodeHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> FlexNodeHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FlexNodeHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FlexNodeHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::FlexNodeHighlightConfig> m_result;
@@ -1212,9 +1212,9 @@ public:
         friend class ScrollSnapContainerHighlightConfig;
         ScrollSnapContainerHighlightConfigBuilder() : m_result(new ScrollSnapContainerHighlightConfig()) { }
 
-        template<int STEP> ScrollSnapContainerHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> ScrollSnapContainerHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ScrollSnapContainerHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ScrollSnapContainerHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::ScrollSnapContainerHighlightConfig> m_result;
@@ -1257,9 +1257,9 @@ public:
             AllFieldsSet = (ScrollSnapContainerHighlightConfigSet | NodeIdSet | 0)};
 
 
-        ScrollSnapHighlightConfigBuilder<STATE | ScrollSnapContainerHighlightConfigSet>& setScrollSnapContainerHighlightConfig(std::unique_ptr<protocol::Overlay::ScrollSnapContainerHighlightConfig> value);  // Defined below
+        ScrollSnapHighlightConfigBuilder<(STATE | ScrollSnapHighlightConfigBuilder<STATE>::ScrollSnapContainerHighlightConfigSet)>& setScrollSnapContainerHighlightConfig(std::unique_ptr<protocol::Overlay::ScrollSnapContainerHighlightConfig> value);  // Defined below
 
-        ScrollSnapHighlightConfigBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        ScrollSnapHighlightConfigBuilder<(STATE | ScrollSnapHighlightConfigBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
         std::unique_ptr<ScrollSnapHighlightConfig> build()
         {
@@ -1271,9 +1271,9 @@ public:
         friend class ScrollSnapHighlightConfig;
         ScrollSnapHighlightConfigBuilder() : m_result(new ScrollSnapHighlightConfig()) { }
 
-        template<int STEP> ScrollSnapHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> ScrollSnapHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ScrollSnapHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ScrollSnapHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::ScrollSnapHighlightConfig> m_result;
@@ -1328,7 +1328,7 @@ public:
             AllFieldsSet = (RectSet | 0)};
 
 
-        HingeConfigBuilder<STATE | RectSet>& setRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        HingeConfigBuilder<(STATE | HingeConfigBuilder<STATE>::RectSet)>& setRect(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
         HingeConfigBuilder<STATE>& setContentColor(std::unique_ptr<protocol::DOM::RGBA> value);  // Defined below
 
@@ -1344,9 +1344,9 @@ public:
         friend class HingeConfig;
         HingeConfigBuilder() : m_result(new HingeConfig()) { }
 
-        template<int STEP> HingeConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> HingeConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<HingeConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<HingeConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::HingeConfig> m_result;
@@ -1392,11 +1392,11 @@ public:
             AllFieldsSet = (ShowCSSSet | SelectedPlatformSet | ThemeColorSet | 0)};
 
 
-        WindowControlsOverlayConfigBuilder<STATE | ShowCSSSet>& setShowCSS(bool value);  // Defined below
+        WindowControlsOverlayConfigBuilder<(STATE | WindowControlsOverlayConfigBuilder<STATE>::ShowCSSSet)>& setShowCSS(bool value);  // Defined below
 
-        WindowControlsOverlayConfigBuilder<STATE | SelectedPlatformSet>& setSelectedPlatform(const String& value);  // Defined below
+        WindowControlsOverlayConfigBuilder<(STATE | WindowControlsOverlayConfigBuilder<STATE>::SelectedPlatformSet)>& setSelectedPlatform(const String& value);  // Defined below
 
-        WindowControlsOverlayConfigBuilder<STATE | ThemeColorSet>& setThemeColor(const String& value);  // Defined below
+        WindowControlsOverlayConfigBuilder<(STATE | WindowControlsOverlayConfigBuilder<STATE>::ThemeColorSet)>& setThemeColor(const String& value);  // Defined below
 
         std::unique_ptr<WindowControlsOverlayConfig> build()
         {
@@ -1408,9 +1408,9 @@ public:
         friend class WindowControlsOverlayConfig;
         WindowControlsOverlayConfigBuilder() : m_result(new WindowControlsOverlayConfig()) { }
 
-        template<int STEP> WindowControlsOverlayConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> WindowControlsOverlayConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<WindowControlsOverlayConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<WindowControlsOverlayConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::WindowControlsOverlayConfig> m_result;
@@ -1452,9 +1452,9 @@ public:
             AllFieldsSet = (ContainerQueryContainerHighlightConfigSet | NodeIdSet | 0)};
 
 
-        ContainerQueryHighlightConfigBuilder<STATE | ContainerQueryContainerHighlightConfigSet>& setContainerQueryContainerHighlightConfig(std::unique_ptr<protocol::Overlay::ContainerQueryContainerHighlightConfig> value);  // Defined below
+        ContainerQueryHighlightConfigBuilder<(STATE | ContainerQueryHighlightConfigBuilder<STATE>::ContainerQueryContainerHighlightConfigSet)>& setContainerQueryContainerHighlightConfig(std::unique_ptr<protocol::Overlay::ContainerQueryContainerHighlightConfig> value);  // Defined below
 
-        ContainerQueryHighlightConfigBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        ContainerQueryHighlightConfigBuilder<(STATE | ContainerQueryHighlightConfigBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
         std::unique_ptr<ContainerQueryHighlightConfig> build()
         {
@@ -1466,9 +1466,9 @@ public:
         friend class ContainerQueryHighlightConfig;
         ContainerQueryHighlightConfigBuilder() : m_result(new ContainerQueryHighlightConfig()) { }
 
-        template<int STEP> ContainerQueryHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> ContainerQueryHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ContainerQueryHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ContainerQueryHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::ContainerQueryHighlightConfig> m_result;
@@ -1533,9 +1533,9 @@ public:
         friend class ContainerQueryContainerHighlightConfig;
         ContainerQueryContainerHighlightConfigBuilder() : m_result(new ContainerQueryContainerHighlightConfig()) { }
 
-        template<int STEP> ContainerQueryContainerHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> ContainerQueryContainerHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ContainerQueryContainerHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ContainerQueryContainerHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::ContainerQueryContainerHighlightConfig> m_result;
@@ -1576,9 +1576,9 @@ public:
             AllFieldsSet = (IsolationModeHighlightConfigSet | NodeIdSet | 0)};
 
 
-        IsolatedElementHighlightConfigBuilder<STATE | IsolationModeHighlightConfigSet>& setIsolationModeHighlightConfig(std::unique_ptr<protocol::Overlay::IsolationModeHighlightConfig> value);  // Defined below
+        IsolatedElementHighlightConfigBuilder<(STATE | IsolatedElementHighlightConfigBuilder<STATE>::IsolationModeHighlightConfigSet)>& setIsolationModeHighlightConfig(std::unique_ptr<protocol::Overlay::IsolationModeHighlightConfig> value);  // Defined below
 
-        IsolatedElementHighlightConfigBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        IsolatedElementHighlightConfigBuilder<(STATE | IsolatedElementHighlightConfigBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
         std::unique_ptr<IsolatedElementHighlightConfig> build()
         {
@@ -1590,9 +1590,9 @@ public:
         friend class IsolatedElementHighlightConfig;
         IsolatedElementHighlightConfigBuilder() : m_result(new IsolatedElementHighlightConfig()) { }
 
-        template<int STEP> IsolatedElementHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> IsolatedElementHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<IsolatedElementHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<IsolatedElementHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::IsolatedElementHighlightConfig> m_result;
@@ -1668,9 +1668,9 @@ public:
         friend class IsolationModeHighlightConfig;
         IsolationModeHighlightConfigBuilder() : m_result(new IsolationModeHighlightConfig()) { }
 
-        template<int STEP> IsolationModeHighlightConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> IsolationModeHighlightConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<IsolationModeHighlightConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<IsolationModeHighlightConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::IsolationModeHighlightConfig> m_result;
@@ -1736,9 +1736,9 @@ public:
         friend class InspectedElementAnchorConfig;
         InspectedElementAnchorConfigBuilder() : m_result(new InspectedElementAnchorConfig()) { }
 
-        template<int STEP> InspectedElementAnchorConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> InspectedElementAnchorConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InspectedElementAnchorConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InspectedElementAnchorConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Overlay::InspectedElementAnchorConfig> m_result;
@@ -1769,14 +1769,14 @@ inline void SourceOrderConfig::setParentOutlineColor(std::unique_ptr<protocol::D
 inline void SourceOrderConfig::setChildOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value) { m_childOutlineColor = std::move(value); }
 
 template<int STATE>
-inline SourceOrderConfig::SourceOrderConfigBuilder<STATE | SourceOrderConfig::SourceOrderConfigBuilder<STATE>::ParentOutlineColorSet>&
+inline SourceOrderConfig::SourceOrderConfigBuilder<(STATE | SourceOrderConfig::SourceOrderConfigBuilder<STATE>::ParentOutlineColorSet)>&
 SourceOrderConfig::SourceOrderConfigBuilder<STATE>::setParentOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value) {
   static_assert(!(STATE & ParentOutlineColorSet), "property parentOutlineColor should not be set yet");
   m_result->setParentOutlineColor(std::move(value));
   return castState<ParentOutlineColorSet>();
 }
 template<int STATE>
-inline SourceOrderConfig::SourceOrderConfigBuilder<STATE | SourceOrderConfig::SourceOrderConfigBuilder<STATE>::ChildOutlineColorSet>&
+inline SourceOrderConfig::SourceOrderConfigBuilder<(STATE | SourceOrderConfig::SourceOrderConfigBuilder<STATE>::ChildOutlineColorSet)>&
 SourceOrderConfig::SourceOrderConfigBuilder<STATE>::setChildOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value) {
   static_assert(!(STATE & ChildOutlineColorSet), "property childOutlineColor should not be set yet");
   m_result->setChildOutlineColor(std::move(value));
@@ -2144,14 +2144,14 @@ inline void GridNodeHighlightConfig::setGridHighlightConfig(std::unique_ptr<prot
 inline void GridNodeHighlightConfig::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE | GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE>::GridHighlightConfigSet>&
+inline GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<(STATE | GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE>::GridHighlightConfigSet)>&
 GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE>::setGridHighlightConfig(std::unique_ptr<protocol::Overlay::GridHighlightConfig> value) {
   static_assert(!(STATE & GridHighlightConfigSet), "property gridHighlightConfig should not be set yet");
   m_result->setGridHighlightConfig(std::move(value));
   return castState<GridHighlightConfigSet>();
 }
 template<int STATE>
-inline GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE | GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE>::NodeIdSet>&
+inline GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<(STATE | GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE>::NodeIdSet)>&
 GridNodeHighlightConfig::GridNodeHighlightConfigBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
@@ -2166,14 +2166,14 @@ inline void FlexNodeHighlightConfig::setFlexContainerHighlightConfig(std::unique
 inline void FlexNodeHighlightConfig::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE | FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE>::FlexContainerHighlightConfigSet>&
+inline FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<(STATE | FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE>::FlexContainerHighlightConfigSet)>&
 FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE>::setFlexContainerHighlightConfig(std::unique_ptr<protocol::Overlay::FlexContainerHighlightConfig> value) {
   static_assert(!(STATE & FlexContainerHighlightConfigSet), "property flexContainerHighlightConfig should not be set yet");
   m_result->setFlexContainerHighlightConfig(std::move(value));
   return castState<FlexContainerHighlightConfigSet>();
 }
 template<int STATE>
-inline FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE | FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE>::NodeIdSet>&
+inline FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<(STATE | FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE>::NodeIdSet)>&
 FlexNodeHighlightConfig::FlexNodeHighlightConfigBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
@@ -2217,14 +2217,14 @@ inline void ScrollSnapHighlightConfig::setScrollSnapContainerHighlightConfig(std
 inline void ScrollSnapHighlightConfig::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE | ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE>::ScrollSnapContainerHighlightConfigSet>&
+inline ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<(STATE | ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE>::ScrollSnapContainerHighlightConfigSet)>&
 ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE>::setScrollSnapContainerHighlightConfig(std::unique_ptr<protocol::Overlay::ScrollSnapContainerHighlightConfig> value) {
   static_assert(!(STATE & ScrollSnapContainerHighlightConfigSet), "property scrollSnapContainerHighlightConfig should not be set yet");
   m_result->setScrollSnapContainerHighlightConfig(std::move(value));
   return castState<ScrollSnapContainerHighlightConfigSet>();
 }
 template<int STATE>
-inline ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE | ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE>::NodeIdSet>&
+inline ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<(STATE | ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE>::NodeIdSet)>&
 ScrollSnapHighlightConfig::ScrollSnapHighlightConfigBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
@@ -2240,7 +2240,7 @@ inline void HingeConfig::setContentColor(std::unique_ptr<protocol::DOM::RGBA> va
 inline void HingeConfig::setOutlineColor(std::unique_ptr<protocol::DOM::RGBA> value) { m_outlineColor = std::move(value); }
 
 template<int STATE>
-inline HingeConfig::HingeConfigBuilder<STATE | HingeConfig::HingeConfigBuilder<STATE>::RectSet>&
+inline HingeConfig::HingeConfigBuilder<(STATE | HingeConfig::HingeConfigBuilder<STATE>::RectSet)>&
 HingeConfig::HingeConfigBuilder<STATE>::setRect(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & RectSet), "property rect should not be set yet");
   m_result->setRect(std::move(value));
@@ -2265,21 +2265,21 @@ inline void WindowControlsOverlayConfig::setSelectedPlatform(const String& value
 inline void WindowControlsOverlayConfig::setThemeColor(const String& value) { m_themeColor = value; }
 
 template<int STATE>
-inline WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE | WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::ShowCSSSet>&
+inline WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<(STATE | WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::ShowCSSSet)>&
 WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::setShowCSS(bool value) {
   static_assert(!(STATE & ShowCSSSet), "property showCSS should not be set yet");
   m_result->setShowCSS(value);
   return castState<ShowCSSSet>();
 }
 template<int STATE>
-inline WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE | WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::SelectedPlatformSet>&
+inline WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<(STATE | WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::SelectedPlatformSet)>&
 WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::setSelectedPlatform(const String& value) {
   static_assert(!(STATE & SelectedPlatformSet), "property selectedPlatform should not be set yet");
   m_result->setSelectedPlatform(value);
   return castState<SelectedPlatformSet>();
 }
 template<int STATE>
-inline WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE | WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::ThemeColorSet>&
+inline WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<(STATE | WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::ThemeColorSet)>&
 WindowControlsOverlayConfig::WindowControlsOverlayConfigBuilder<STATE>::setThemeColor(const String& value) {
   static_assert(!(STATE & ThemeColorSet), "property themeColor should not be set yet");
   m_result->setThemeColor(value);
@@ -2294,14 +2294,14 @@ inline void ContainerQueryHighlightConfig::setContainerQueryContainerHighlightCo
 inline void ContainerQueryHighlightConfig::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE | ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE>::ContainerQueryContainerHighlightConfigSet>&
+inline ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<(STATE | ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE>::ContainerQueryContainerHighlightConfigSet)>&
 ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE>::setContainerQueryContainerHighlightConfig(std::unique_ptr<protocol::Overlay::ContainerQueryContainerHighlightConfig> value) {
   static_assert(!(STATE & ContainerQueryContainerHighlightConfigSet), "property containerQueryContainerHighlightConfig should not be set yet");
   m_result->setContainerQueryContainerHighlightConfig(std::move(value));
   return castState<ContainerQueryContainerHighlightConfigSet>();
 }
 template<int STATE>
-inline ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE | ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE>::NodeIdSet>&
+inline ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<(STATE | ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE>::NodeIdSet)>&
 ContainerQueryHighlightConfig::ContainerQueryHighlightConfigBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
@@ -2333,14 +2333,14 @@ inline void IsolatedElementHighlightConfig::setIsolationModeHighlightConfig(std:
 inline void IsolatedElementHighlightConfig::setNodeId(int value) { m_nodeId = value; }
 
 template<int STATE>
-inline IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE | IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE>::IsolationModeHighlightConfigSet>&
+inline IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<(STATE | IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE>::IsolationModeHighlightConfigSet)>&
 IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE>::setIsolationModeHighlightConfig(std::unique_ptr<protocol::Overlay::IsolationModeHighlightConfig> value) {
   static_assert(!(STATE & IsolationModeHighlightConfigSet), "property isolationModeHighlightConfig should not be set yet");
   m_result->setIsolationModeHighlightConfig(std::move(value));
   return castState<IsolationModeHighlightConfigSet>();
 }
 template<int STATE>
-inline IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE | IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE>::NodeIdSet>&
+inline IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<(STATE | IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE>::NodeIdSet)>&
 IsolatedElementHighlightConfig::IsolatedElementHighlightConfigBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);

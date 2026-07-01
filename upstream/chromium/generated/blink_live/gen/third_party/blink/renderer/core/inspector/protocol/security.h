@@ -148,41 +148,41 @@ public:
             AllFieldsSet = (ProtocolSet | KeyExchangeSet | CipherSet | CertificateSet | SubjectNameSet | IssuerSet | ValidFromSet | ValidToSet | CertificateHasWeakSignatureSet | CertificateHasSha1SignatureSet | ModernSSLSet | ObsoleteSslProtocolSet | ObsoleteSslKeyExchangeSet | ObsoleteSslCipherSet | ObsoleteSslSignatureSet | 0)};
 
 
-        CertificateSecurityStateBuilder<STATE | ProtocolSet>& setProtocol(const String& value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ProtocolSet)>& setProtocol(const String& value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | KeyExchangeSet>& setKeyExchange(const String& value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::KeyExchangeSet)>& setKeyExchange(const String& value);  // Defined below
 
         CertificateSecurityStateBuilder<STATE>& setKeyExchangeGroup(const String& value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | CipherSet>& setCipher(const String& value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::CipherSet)>& setCipher(const String& value);  // Defined below
 
         CertificateSecurityStateBuilder<STATE>& setMac(const String& value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | CertificateSet>& setCertificate(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::CertificateSet)>& setCertificate(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | SubjectNameSet>& setSubjectName(const String& value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::SubjectNameSet)>& setSubjectName(const String& value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | IssuerSet>& setIssuer(const String& value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::IssuerSet)>& setIssuer(const String& value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ValidFromSet>& setValidFrom(double value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ValidFromSet)>& setValidFrom(double value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ValidToSet>& setValidTo(double value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ValidToSet)>& setValidTo(double value);  // Defined below
 
         CertificateSecurityStateBuilder<STATE>& setCertificateNetworkError(const String& value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | CertificateHasWeakSignatureSet>& setCertificateHasWeakSignature(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::CertificateHasWeakSignatureSet)>& setCertificateHasWeakSignature(bool value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | CertificateHasSha1SignatureSet>& setCertificateHasSha1Signature(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::CertificateHasSha1SignatureSet)>& setCertificateHasSha1Signature(bool value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ModernSSLSet>& setModernSSL(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ModernSSLSet)>& setModernSSL(bool value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ObsoleteSslProtocolSet>& setObsoleteSslProtocol(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ObsoleteSslProtocolSet)>& setObsoleteSslProtocol(bool value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ObsoleteSslKeyExchangeSet>& setObsoleteSslKeyExchange(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ObsoleteSslKeyExchangeSet)>& setObsoleteSslKeyExchange(bool value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ObsoleteSslCipherSet>& setObsoleteSslCipher(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ObsoleteSslCipherSet)>& setObsoleteSslCipher(bool value);  // Defined below
 
-        CertificateSecurityStateBuilder<STATE | ObsoleteSslSignatureSet>& setObsoleteSslSignature(bool value);  // Defined below
+        CertificateSecurityStateBuilder<(STATE | CertificateSecurityStateBuilder<STATE>::ObsoleteSslSignatureSet)>& setObsoleteSslSignature(bool value);  // Defined below
 
         std::unique_ptr<CertificateSecurityState> build()
         {
@@ -194,9 +194,9 @@ public:
         friend class CertificateSecurityState;
         CertificateSecurityStateBuilder() : m_result(new CertificateSecurityState()) { }
 
-        template<int STEP> CertificateSecurityStateBuilder<STATE | STEP>& castState()
+        template<int STEP> CertificateSecurityStateBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CertificateSecurityStateBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CertificateSecurityStateBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Security::CertificateSecurityState> m_result;
@@ -258,7 +258,7 @@ public:
             AllFieldsSet = (SafetyTipStatusSet | 0)};
 
 
-        SafetyTipInfoBuilder<STATE | SafetyTipStatusSet>& setSafetyTipStatus(const String& value);  // Defined below
+        SafetyTipInfoBuilder<(STATE | SafetyTipInfoBuilder<STATE>::SafetyTipStatusSet)>& setSafetyTipStatus(const String& value);  // Defined below
 
         SafetyTipInfoBuilder<STATE>& setSafeUrl(const String& value);  // Defined below
 
@@ -272,9 +272,9 @@ public:
         friend class SafetyTipInfo;
         SafetyTipInfoBuilder() : m_result(new SafetyTipInfo()) { }
 
-        template<int STEP> SafetyTipInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> SafetyTipInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SafetyTipInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SafetyTipInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Security::SafetyTipInfo> m_result;
@@ -333,13 +333,13 @@ public:
             AllFieldsSet = (SecurityStateSet | SecurityStateIssueIdsSet | 0)};
 
 
-        VisibleSecurityStateBuilder<STATE | SecurityStateSet>& setSecurityState(const String& value);  // Defined below
+        VisibleSecurityStateBuilder<(STATE | VisibleSecurityStateBuilder<STATE>::SecurityStateSet)>& setSecurityState(const String& value);  // Defined below
 
         VisibleSecurityStateBuilder<STATE>& setCertificateSecurityState(std::unique_ptr<protocol::Security::CertificateSecurityState> value);  // Defined below
 
         VisibleSecurityStateBuilder<STATE>& setSafetyTipInfo(std::unique_ptr<protocol::Security::SafetyTipInfo> value);  // Defined below
 
-        VisibleSecurityStateBuilder<STATE | SecurityStateIssueIdsSet>& setSecurityStateIssueIds(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        VisibleSecurityStateBuilder<(STATE | VisibleSecurityStateBuilder<STATE>::SecurityStateIssueIdsSet)>& setSecurityStateIssueIds(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<VisibleSecurityState> build()
         {
@@ -351,9 +351,9 @@ public:
         friend class VisibleSecurityState;
         VisibleSecurityStateBuilder() : m_result(new VisibleSecurityState()) { }
 
-        template<int STEP> VisibleSecurityStateBuilder<STATE | STEP>& castState()
+        template<int STEP> VisibleSecurityStateBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<VisibleSecurityStateBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<VisibleSecurityStateBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Security::VisibleSecurityState> m_result;
@@ -421,17 +421,17 @@ public:
             AllFieldsSet = (SecurityStateSet | TitleSet | SummarySet | DescriptionSet | MixedContentTypeSet | CertificateSet | 0)};
 
 
-        SecurityStateExplanationBuilder<STATE | SecurityStateSet>& setSecurityState(const String& value);  // Defined below
+        SecurityStateExplanationBuilder<(STATE | SecurityStateExplanationBuilder<STATE>::SecurityStateSet)>& setSecurityState(const String& value);  // Defined below
 
-        SecurityStateExplanationBuilder<STATE | TitleSet>& setTitle(const String& value);  // Defined below
+        SecurityStateExplanationBuilder<(STATE | SecurityStateExplanationBuilder<STATE>::TitleSet)>& setTitle(const String& value);  // Defined below
 
-        SecurityStateExplanationBuilder<STATE | SummarySet>& setSummary(const String& value);  // Defined below
+        SecurityStateExplanationBuilder<(STATE | SecurityStateExplanationBuilder<STATE>::SummarySet)>& setSummary(const String& value);  // Defined below
 
-        SecurityStateExplanationBuilder<STATE | DescriptionSet>& setDescription(const String& value);  // Defined below
+        SecurityStateExplanationBuilder<(STATE | SecurityStateExplanationBuilder<STATE>::DescriptionSet)>& setDescription(const String& value);  // Defined below
 
-        SecurityStateExplanationBuilder<STATE | MixedContentTypeSet>& setMixedContentType(const String& value);  // Defined below
+        SecurityStateExplanationBuilder<(STATE | SecurityStateExplanationBuilder<STATE>::MixedContentTypeSet)>& setMixedContentType(const String& value);  // Defined below
 
-        SecurityStateExplanationBuilder<STATE | CertificateSet>& setCertificate(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        SecurityStateExplanationBuilder<(STATE | SecurityStateExplanationBuilder<STATE>::CertificateSet)>& setCertificate(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         SecurityStateExplanationBuilder<STATE>& setRecommendations(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
@@ -445,9 +445,9 @@ public:
         friend class SecurityStateExplanation;
         SecurityStateExplanationBuilder() : m_result(new SecurityStateExplanation()) { }
 
-        template<int STEP> SecurityStateExplanationBuilder<STATE | STEP>& castState()
+        template<int STEP> SecurityStateExplanationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SecurityStateExplanationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SecurityStateExplanationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Security::SecurityStateExplanation> m_result;
@@ -513,19 +513,19 @@ public:
             AllFieldsSet = (RanMixedContentSet | DisplayedMixedContentSet | ContainedMixedFormSet | RanContentWithCertErrorsSet | DisplayedContentWithCertErrorsSet | RanInsecureContentStyleSet | DisplayedInsecureContentStyleSet | 0)};
 
 
-        InsecureContentStatusBuilder<STATE | RanMixedContentSet>& setRanMixedContent(bool value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::RanMixedContentSet)>& setRanMixedContent(bool value);  // Defined below
 
-        InsecureContentStatusBuilder<STATE | DisplayedMixedContentSet>& setDisplayedMixedContent(bool value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::DisplayedMixedContentSet)>& setDisplayedMixedContent(bool value);  // Defined below
 
-        InsecureContentStatusBuilder<STATE | ContainedMixedFormSet>& setContainedMixedForm(bool value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::ContainedMixedFormSet)>& setContainedMixedForm(bool value);  // Defined below
 
-        InsecureContentStatusBuilder<STATE | RanContentWithCertErrorsSet>& setRanContentWithCertErrors(bool value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::RanContentWithCertErrorsSet)>& setRanContentWithCertErrors(bool value);  // Defined below
 
-        InsecureContentStatusBuilder<STATE | DisplayedContentWithCertErrorsSet>& setDisplayedContentWithCertErrors(bool value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::DisplayedContentWithCertErrorsSet)>& setDisplayedContentWithCertErrors(bool value);  // Defined below
 
-        InsecureContentStatusBuilder<STATE | RanInsecureContentStyleSet>& setRanInsecureContentStyle(const String& value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::RanInsecureContentStyleSet)>& setRanInsecureContentStyle(const String& value);  // Defined below
 
-        InsecureContentStatusBuilder<STATE | DisplayedInsecureContentStyleSet>& setDisplayedInsecureContentStyle(const String& value);  // Defined below
+        InsecureContentStatusBuilder<(STATE | InsecureContentStatusBuilder<STATE>::DisplayedInsecureContentStyleSet)>& setDisplayedInsecureContentStyle(const String& value);  // Defined below
 
         std::unique_ptr<InsecureContentStatus> build()
         {
@@ -537,9 +537,9 @@ public:
         friend class InsecureContentStatus;
         InsecureContentStatusBuilder() : m_result(new InsecureContentStatus()) { }
 
-        template<int STEP> InsecureContentStatusBuilder<STATE | STEP>& castState()
+        template<int STEP> InsecureContentStatusBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InsecureContentStatusBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InsecureContentStatusBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Security::InsecureContentStatus> m_result;
@@ -591,14 +591,14 @@ inline void CertificateSecurityState::setObsoleteSslCipher(bool value) { m_obsol
 inline void CertificateSecurityState::setObsoleteSslSignature(bool value) { m_obsoleteSslSignature = value; }
 
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ProtocolSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ProtocolSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setProtocol(const String& value) {
   static_assert(!(STATE & ProtocolSet), "property protocol should not be set yet");
   m_result->setProtocol(value);
   return castState<ProtocolSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::KeyExchangeSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::KeyExchangeSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setKeyExchange(const String& value) {
   static_assert(!(STATE & KeyExchangeSet), "property keyExchange should not be set yet");
   m_result->setKeyExchange(value);
@@ -610,7 +610,7 @@ inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE>& Certifi
   return *this;
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CipherSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CipherSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setCipher(const String& value) {
   static_assert(!(STATE & CipherSet), "property cipher should not be set yet");
   m_result->setCipher(value);
@@ -622,35 +622,35 @@ inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE>& Certifi
   return *this;
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CertificateSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CertificateSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setCertificate(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & CertificateSet), "property certificate should not be set yet");
   m_result->setCertificate(std::move(value));
   return castState<CertificateSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::SubjectNameSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::SubjectNameSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setSubjectName(const String& value) {
   static_assert(!(STATE & SubjectNameSet), "property subjectName should not be set yet");
   m_result->setSubjectName(value);
   return castState<SubjectNameSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::IssuerSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::IssuerSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setIssuer(const String& value) {
   static_assert(!(STATE & IssuerSet), "property issuer should not be set yet");
   m_result->setIssuer(value);
   return castState<IssuerSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ValidFromSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ValidFromSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setValidFrom(double value) {
   static_assert(!(STATE & ValidFromSet), "property validFrom should not be set yet");
   m_result->setValidFrom(value);
   return castState<ValidFromSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ValidToSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ValidToSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setValidTo(double value) {
   static_assert(!(STATE & ValidToSet), "property validTo should not be set yet");
   m_result->setValidTo(value);
@@ -662,49 +662,49 @@ inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE>& Certifi
   return *this;
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CertificateHasWeakSignatureSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CertificateHasWeakSignatureSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setCertificateHasWeakSignature(bool value) {
   static_assert(!(STATE & CertificateHasWeakSignatureSet), "property certificateHasWeakSignature should not be set yet");
   m_result->setCertificateHasWeakSignature(value);
   return castState<CertificateHasWeakSignatureSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CertificateHasSha1SignatureSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::CertificateHasSha1SignatureSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setCertificateHasSha1Signature(bool value) {
   static_assert(!(STATE & CertificateHasSha1SignatureSet), "property certificateHasSha1Signature should not be set yet");
   m_result->setCertificateHasSha1Signature(value);
   return castState<CertificateHasSha1SignatureSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ModernSSLSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ModernSSLSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setModernSSL(bool value) {
   static_assert(!(STATE & ModernSSLSet), "property modernSSL should not be set yet");
   m_result->setModernSSL(value);
   return castState<ModernSSLSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslProtocolSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslProtocolSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setObsoleteSslProtocol(bool value) {
   static_assert(!(STATE & ObsoleteSslProtocolSet), "property obsoleteSslProtocol should not be set yet");
   m_result->setObsoleteSslProtocol(value);
   return castState<ObsoleteSslProtocolSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslKeyExchangeSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslKeyExchangeSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setObsoleteSslKeyExchange(bool value) {
   static_assert(!(STATE & ObsoleteSslKeyExchangeSet), "property obsoleteSslKeyExchange should not be set yet");
   m_result->setObsoleteSslKeyExchange(value);
   return castState<ObsoleteSslKeyExchangeSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslCipherSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslCipherSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setObsoleteSslCipher(bool value) {
   static_assert(!(STATE & ObsoleteSslCipherSet), "property obsoleteSslCipher should not be set yet");
   m_result->setObsoleteSslCipher(value);
   return castState<ObsoleteSslCipherSet>();
 }
 template<int STATE>
-inline CertificateSecurityState::CertificateSecurityStateBuilder<STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslSignatureSet>&
+inline CertificateSecurityState::CertificateSecurityStateBuilder<(STATE | CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::ObsoleteSslSignatureSet)>&
 CertificateSecurityState::CertificateSecurityStateBuilder<STATE>::setObsoleteSslSignature(bool value) {
   static_assert(!(STATE & ObsoleteSslSignatureSet), "property obsoleteSslSignature should not be set yet");
   m_result->setObsoleteSslSignature(value);
@@ -727,7 +727,7 @@ inline void SafetyTipInfo::setSafetyTipStatus(const String& value) { m_safetyTip
 inline void SafetyTipInfo::setSafeUrl(const String& value) { m_safeUrl = value; }
 
 template<int STATE>
-inline SafetyTipInfo::SafetyTipInfoBuilder<STATE | SafetyTipInfo::SafetyTipInfoBuilder<STATE>::SafetyTipStatusSet>&
+inline SafetyTipInfo::SafetyTipInfoBuilder<(STATE | SafetyTipInfo::SafetyTipInfoBuilder<STATE>::SafetyTipStatusSet)>&
 SafetyTipInfo::SafetyTipInfoBuilder<STATE>::setSafetyTipStatus(const String& value) {
   static_assert(!(STATE & SafetyTipStatusSet), "property safetyTipStatus should not be set yet");
   m_result->setSafetyTipStatus(value);
@@ -748,7 +748,7 @@ inline void VisibleSecurityState::setSafetyTipInfo(std::unique_ptr<protocol::Sec
 inline void VisibleSecurityState::setSecurityStateIssueIds(std::unique_ptr<protocol::Array<String>> value) { m_securityStateIssueIds = std::move(value); }
 
 template<int STATE>
-inline VisibleSecurityState::VisibleSecurityStateBuilder<STATE | VisibleSecurityState::VisibleSecurityStateBuilder<STATE>::SecurityStateSet>&
+inline VisibleSecurityState::VisibleSecurityStateBuilder<(STATE | VisibleSecurityState::VisibleSecurityStateBuilder<STATE>::SecurityStateSet)>&
 VisibleSecurityState::VisibleSecurityStateBuilder<STATE>::setSecurityState(const String& value) {
   static_assert(!(STATE & SecurityStateSet), "property securityState should not be set yet");
   m_result->setSecurityState(value);
@@ -765,7 +765,7 @@ inline VisibleSecurityState::VisibleSecurityStateBuilder<STATE>& VisibleSecurity
   return *this;
 }
 template<int STATE>
-inline VisibleSecurityState::VisibleSecurityStateBuilder<STATE | VisibleSecurityState::VisibleSecurityStateBuilder<STATE>::SecurityStateIssueIdsSet>&
+inline VisibleSecurityState::VisibleSecurityStateBuilder<(STATE | VisibleSecurityState::VisibleSecurityStateBuilder<STATE>::SecurityStateIssueIdsSet)>&
 VisibleSecurityState::VisibleSecurityStateBuilder<STATE>::setSecurityStateIssueIds(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & SecurityStateIssueIdsSet), "property securityStateIssueIds should not be set yet");
   m_result->setSecurityStateIssueIds(std::move(value));
@@ -784,42 +784,42 @@ inline void SecurityStateExplanation::setCertificate(std::unique_ptr<protocol::A
 inline void SecurityStateExplanation::setRecommendations(std::unique_ptr<protocol::Array<String>> value) { m_recommendations = std::move(value); }
 
 template<int STATE>
-inline SecurityStateExplanation::SecurityStateExplanationBuilder<STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::SecurityStateSet>&
+inline SecurityStateExplanation::SecurityStateExplanationBuilder<(STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::SecurityStateSet)>&
 SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::setSecurityState(const String& value) {
   static_assert(!(STATE & SecurityStateSet), "property securityState should not be set yet");
   m_result->setSecurityState(value);
   return castState<SecurityStateSet>();
 }
 template<int STATE>
-inline SecurityStateExplanation::SecurityStateExplanationBuilder<STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::TitleSet>&
+inline SecurityStateExplanation::SecurityStateExplanationBuilder<(STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::TitleSet)>&
 SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::setTitle(const String& value) {
   static_assert(!(STATE & TitleSet), "property title should not be set yet");
   m_result->setTitle(value);
   return castState<TitleSet>();
 }
 template<int STATE>
-inline SecurityStateExplanation::SecurityStateExplanationBuilder<STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::SummarySet>&
+inline SecurityStateExplanation::SecurityStateExplanationBuilder<(STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::SummarySet)>&
 SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::setSummary(const String& value) {
   static_assert(!(STATE & SummarySet), "property summary should not be set yet");
   m_result->setSummary(value);
   return castState<SummarySet>();
 }
 template<int STATE>
-inline SecurityStateExplanation::SecurityStateExplanationBuilder<STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::DescriptionSet>&
+inline SecurityStateExplanation::SecurityStateExplanationBuilder<(STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::DescriptionSet)>&
 SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::setDescription(const String& value) {
   static_assert(!(STATE & DescriptionSet), "property description should not be set yet");
   m_result->setDescription(value);
   return castState<DescriptionSet>();
 }
 template<int STATE>
-inline SecurityStateExplanation::SecurityStateExplanationBuilder<STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::MixedContentTypeSet>&
+inline SecurityStateExplanation::SecurityStateExplanationBuilder<(STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::MixedContentTypeSet)>&
 SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::setMixedContentType(const String& value) {
   static_assert(!(STATE & MixedContentTypeSet), "property mixedContentType should not be set yet");
   m_result->setMixedContentType(value);
   return castState<MixedContentTypeSet>();
 }
 template<int STATE>
-inline SecurityStateExplanation::SecurityStateExplanationBuilder<STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::CertificateSet>&
+inline SecurityStateExplanation::SecurityStateExplanationBuilder<(STATE | SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::CertificateSet)>&
 SecurityStateExplanation::SecurityStateExplanationBuilder<STATE>::setCertificate(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & CertificateSet), "property certificate should not be set yet");
   m_result->setCertificate(std::move(value));
@@ -843,49 +843,49 @@ inline void InsecureContentStatus::setRanInsecureContentStyle(const String& valu
 inline void InsecureContentStatus::setDisplayedInsecureContentStyle(const String& value) { m_displayedInsecureContentStyle = value; }
 
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::RanMixedContentSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::RanMixedContentSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setRanMixedContent(bool value) {
   static_assert(!(STATE & RanMixedContentSet), "property ranMixedContent should not be set yet");
   m_result->setRanMixedContent(value);
   return castState<RanMixedContentSet>();
 }
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::DisplayedMixedContentSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::DisplayedMixedContentSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setDisplayedMixedContent(bool value) {
   static_assert(!(STATE & DisplayedMixedContentSet), "property displayedMixedContent should not be set yet");
   m_result->setDisplayedMixedContent(value);
   return castState<DisplayedMixedContentSet>();
 }
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::ContainedMixedFormSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::ContainedMixedFormSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setContainedMixedForm(bool value) {
   static_assert(!(STATE & ContainedMixedFormSet), "property containedMixedForm should not be set yet");
   m_result->setContainedMixedForm(value);
   return castState<ContainedMixedFormSet>();
 }
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::RanContentWithCertErrorsSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::RanContentWithCertErrorsSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setRanContentWithCertErrors(bool value) {
   static_assert(!(STATE & RanContentWithCertErrorsSet), "property ranContentWithCertErrors should not be set yet");
   m_result->setRanContentWithCertErrors(value);
   return castState<RanContentWithCertErrorsSet>();
 }
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::DisplayedContentWithCertErrorsSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::DisplayedContentWithCertErrorsSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setDisplayedContentWithCertErrors(bool value) {
   static_assert(!(STATE & DisplayedContentWithCertErrorsSet), "property displayedContentWithCertErrors should not be set yet");
   m_result->setDisplayedContentWithCertErrors(value);
   return castState<DisplayedContentWithCertErrorsSet>();
 }
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::RanInsecureContentStyleSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::RanInsecureContentStyleSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setRanInsecureContentStyle(const String& value) {
   static_assert(!(STATE & RanInsecureContentStyleSet), "property ranInsecureContentStyle should not be set yet");
   m_result->setRanInsecureContentStyle(value);
   return castState<RanInsecureContentStyleSet>();
 }
 template<int STATE>
-inline InsecureContentStatus::InsecureContentStatusBuilder<STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::DisplayedInsecureContentStyleSet>&
+inline InsecureContentStatus::InsecureContentStatusBuilder<(STATE | InsecureContentStatus::InsecureContentStatusBuilder<STATE>::DisplayedInsecureContentStyleSet)>&
 InsecureContentStatus::InsecureContentStatusBuilder<STATE>::setDisplayedInsecureContentStyle(const String& value) {
   static_assert(!(STATE & DisplayedInsecureContentStyleSet), "property displayedInsecureContentStyle should not be set yet");
   m_result->setDisplayedInsecureContentStyle(value);

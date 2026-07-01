@@ -194,6 +194,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC)
   // front of the pools so that the isolated one starts on a page boundary.
   // We also skip the Lock at the beginning of the pool since it needs to be
   // used in contexts where we didn't enable write access to the pool memory.
+#if PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-length-array"
@@ -205,6 +206,7 @@ class PA_COMPONENT_EXPORT(PARTITION_ALLOC)
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
+#endif  // PA_BUILDFLAG(ENABLE_THREAD_ISOLATION)
   std::array<Pool, kNumPools> pools_;
 
 #endif  // PA_BUILDFLAG(HAS_64_BIT_POINTERS)

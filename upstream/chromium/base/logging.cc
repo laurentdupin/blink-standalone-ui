@@ -454,13 +454,12 @@ std::string BuildCrashString(const char* file,
                              std::string_view message_without_prefix) {
   // Only log last path component.
   if (file) {
-    const char* slash = UNSAFE_TODO(strrchr(file,
 #if BUILDFLAG(IS_WIN)
-                                            '\\'
+    constexpr char kPathSeparator = '\\';
 #else
-                                            '/'
+    constexpr char kPathSeparator = '/';
 #endif  // BUILDFLAG(IS_WIN)
-                                            ));
+    const char* slash = UNSAFE_TODO(strrchr(file, kPathSeparator));
     if (slash) {
       file = UNSAFE_TODO(slash + 1);
     }
@@ -1231,12 +1230,13 @@ ScopedLoggingSettings::ScopedLoggingSettings()
 ScopedLoggingSettings::~ScopedLoggingSettings() {
   // Re-initialize logging via the normal path. This will clean up old file
   // name and handle state, including re-initializing the VLOG internal state.
-  CHECK(InitLogging({.logging_dest = logging_destination_,
-                     .log_file_path = log_file_name_,
+  LoggingSettings settings{.logging_dest = logging_destination_,
+                           .log_file_path = log_file_name_};
 #if BUILDFLAG(IS_CHROMEOS)
-                     .log_format = log_format_
+  settings.log_format = log_format_;
 #endif
-  })) << "~ScopedLoggingSettings() failed to restore settings.";
+  CHECK(InitLogging(settings))
+      << "~ScopedLoggingSettings() failed to restore settings.";
 
   // Restore plain data settings.
   SetMinLogLevel(min_log_level_);

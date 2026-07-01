@@ -6,6 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_CUSTOM_LAYOUT_WORKLET_H_
 
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/layout/custom/document_layout_definition.h"
 #include "third_party/blink/renderer/core/layout/custom/pending_layout_registry.h"
 #include "third_party/blink/renderer/core/workers/worklet.h"

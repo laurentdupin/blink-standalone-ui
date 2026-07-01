@@ -59,26 +59,31 @@ BASE_FEATURE(kBufferQueuePerRenderPass, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kVizBufferQueueDiscardOnVisibilityChange,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kUseDrmBlackFullscreenOptimization,
 #if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kUseDrmBlackFullscreenOptimizationDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kUseDrmBlackFullscreenOptimizationDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+
+BASE_FEATURE(kUseDrmBlackFullscreenOptimization,
+             kUseDrmBlackFullscreenOptimizationDefault);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kUseFrameIntervalDeciderAdaptiveFrameRate,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-BASE_FEATURE(kUseMultipleOverlays,
 #if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kUseMultipleOverlaysDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kUseMultipleOverlaysDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+
+BASE_FEATURE(kUseMultipleOverlays, kUseMultipleOverlaysDefault);
 const char kMaxOverlaysParam[] = "max_overlays";
 
 BASE_FEATURE(kDelegatedCompositing, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -199,12 +204,16 @@ BASE_FEATURE(kVSyncAlignedPresentation, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kThrottleFrameSinksOnInteraction,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
 #if BUILDFLAG(IS_MAC)
-             base::FEATURE_ENABLED_BY_DEFAULT);
+constexpr base::FeatureState kAllowUndamagedNonrootRenderPassToSkipDefault =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT);
+constexpr base::FeatureState kAllowUndamagedNonrootRenderPassToSkipDefault =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
+
+BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
+             kAllowUndamagedNonrootRenderPassToSkipDefault);
 
 // if enabled, Any CompositorFrameSink of type video that defines a preferred
 // framerate that is below the display framerate will throttle OnBeginFrame
@@ -326,13 +335,18 @@ BASE_FEATURE(kVizDirectCompositorThreadIpcNonRoot,
 // Enables IPCs to directly target Viz's compositor thread for FrameSinkManager
 // messages and, in turn, all interfaces associated with it e.g. root compositor
 // frame sink, display private - skipping the IO thread hop.
-BASE_FEATURE(kVizDirectCompositorThreadIpcFrameSinkManager,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kVizDirectCompositorThreadIpcFrameSinkManagerDefault =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kVizDirectCompositorThreadIpcFrameSinkManagerDefault =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+
+BASE_FEATURE(kVizDirectCompositorThreadIpcFrameSinkManager,
+             kVizDirectCompositorThreadIpcFrameSinkManagerDefault);
 
 // Switches the message pump to base::MessagePumpType::IO on the Viz thread.
 BASE_FEATURE(kVizWithIoMessagePump, base::FEATURE_DISABLED_BY_DEFAULT);

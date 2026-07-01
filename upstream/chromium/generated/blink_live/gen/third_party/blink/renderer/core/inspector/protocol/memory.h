@@ -47,11 +47,11 @@ public:
             AllFieldsSet = (SizeSet | TotalSet | StackSet | 0)};
 
 
-        SamplingProfileNodeBuilder<STATE | SizeSet>& setSize(double value);  // Defined below
+        SamplingProfileNodeBuilder<(STATE | SamplingProfileNodeBuilder<STATE>::SizeSet)>& setSize(double value);  // Defined below
 
-        SamplingProfileNodeBuilder<STATE | TotalSet>& setTotal(double value);  // Defined below
+        SamplingProfileNodeBuilder<(STATE | SamplingProfileNodeBuilder<STATE>::TotalSet)>& setTotal(double value);  // Defined below
 
-        SamplingProfileNodeBuilder<STATE | StackSet>& setStack(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        SamplingProfileNodeBuilder<(STATE | SamplingProfileNodeBuilder<STATE>::StackSet)>& setStack(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<SamplingProfileNode> build()
         {
@@ -63,9 +63,9 @@ public:
         friend class SamplingProfileNode;
         SamplingProfileNodeBuilder() : m_result(new SamplingProfileNode()) { }
 
-        template<int STEP> SamplingProfileNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> SamplingProfileNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SamplingProfileNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SamplingProfileNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Memory::SamplingProfileNode> m_result;
@@ -107,9 +107,9 @@ public:
             AllFieldsSet = (SamplesSet | ModulesSet | 0)};
 
 
-        SamplingProfileBuilder<STATE | SamplesSet>& setSamples(std::unique_ptr<protocol::Array<protocol::Memory::SamplingProfileNode>> value);  // Defined below
+        SamplingProfileBuilder<(STATE | SamplingProfileBuilder<STATE>::SamplesSet)>& setSamples(std::unique_ptr<protocol::Array<protocol::Memory::SamplingProfileNode>> value);  // Defined below
 
-        SamplingProfileBuilder<STATE | ModulesSet>& setModules(std::unique_ptr<protocol::Array<protocol::Memory::Module>> value);  // Defined below
+        SamplingProfileBuilder<(STATE | SamplingProfileBuilder<STATE>::ModulesSet)>& setModules(std::unique_ptr<protocol::Array<protocol::Memory::Module>> value);  // Defined below
 
         std::unique_ptr<SamplingProfile> build()
         {
@@ -121,9 +121,9 @@ public:
         friend class SamplingProfile;
         SamplingProfileBuilder() : m_result(new SamplingProfile()) { }
 
-        template<int STEP> SamplingProfileBuilder<STATE | STEP>& castState()
+        template<int STEP> SamplingProfileBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SamplingProfileBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SamplingProfileBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Memory::SamplingProfile> m_result;
@@ -172,13 +172,13 @@ public:
             AllFieldsSet = (NameSet | UuidSet | BaseAddressSet | SizeSet | 0)};
 
 
-        ModuleBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        ModuleBuilder<(STATE | ModuleBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        ModuleBuilder<STATE | UuidSet>& setUuid(const String& value);  // Defined below
+        ModuleBuilder<(STATE | ModuleBuilder<STATE>::UuidSet)>& setUuid(const String& value);  // Defined below
 
-        ModuleBuilder<STATE | BaseAddressSet>& setBaseAddress(const String& value);  // Defined below
+        ModuleBuilder<(STATE | ModuleBuilder<STATE>::BaseAddressSet)>& setBaseAddress(const String& value);  // Defined below
 
-        ModuleBuilder<STATE | SizeSet>& setSize(double value);  // Defined below
+        ModuleBuilder<(STATE | ModuleBuilder<STATE>::SizeSet)>& setSize(double value);  // Defined below
 
         std::unique_ptr<Module> build()
         {
@@ -190,9 +190,9 @@ public:
         friend class Module;
         ModuleBuilder() : m_result(new Module()) { }
 
-        template<int STEP> ModuleBuilder<STATE | STEP>& castState()
+        template<int STEP> ModuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ModuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ModuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Memory::Module> m_result;
@@ -226,21 +226,21 @@ inline void SamplingProfileNode::setTotal(double value) { m_total = value; }
 inline void SamplingProfileNode::setStack(std::unique_ptr<protocol::Array<String>> value) { m_stack = std::move(value); }
 
 template<int STATE>
-inline SamplingProfileNode::SamplingProfileNodeBuilder<STATE | SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::SizeSet>&
+inline SamplingProfileNode::SamplingProfileNodeBuilder<(STATE | SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::SizeSet)>&
 SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::setSize(double value) {
   static_assert(!(STATE & SizeSet), "property size should not be set yet");
   m_result->setSize(value);
   return castState<SizeSet>();
 }
 template<int STATE>
-inline SamplingProfileNode::SamplingProfileNodeBuilder<STATE | SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::TotalSet>&
+inline SamplingProfileNode::SamplingProfileNodeBuilder<(STATE | SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::TotalSet)>&
 SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::setTotal(double value) {
   static_assert(!(STATE & TotalSet), "property total should not be set yet");
   m_result->setTotal(value);
   return castState<TotalSet>();
 }
 template<int STATE>
-inline SamplingProfileNode::SamplingProfileNodeBuilder<STATE | SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::StackSet>&
+inline SamplingProfileNode::SamplingProfileNodeBuilder<(STATE | SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::StackSet)>&
 SamplingProfileNode::SamplingProfileNodeBuilder<STATE>::setStack(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & StackSet), "property stack should not be set yet");
   m_result->setStack(std::move(value));
@@ -256,14 +256,14 @@ inline void SamplingProfile::setSamples(std::unique_ptr<protocol::Array<protocol
 inline void SamplingProfile::setModules(std::unique_ptr<protocol::Array<protocol::Memory::Module>> value) { m_modules = std::move(value); }
 
 template<int STATE>
-inline SamplingProfile::SamplingProfileBuilder<STATE | SamplingProfile::SamplingProfileBuilder<STATE>::SamplesSet>&
+inline SamplingProfile::SamplingProfileBuilder<(STATE | SamplingProfile::SamplingProfileBuilder<STATE>::SamplesSet)>&
 SamplingProfile::SamplingProfileBuilder<STATE>::setSamples(std::unique_ptr<protocol::Array<protocol::Memory::SamplingProfileNode>> value) {
   static_assert(!(STATE & SamplesSet), "property samples should not be set yet");
   m_result->setSamples(std::move(value));
   return castState<SamplesSet>();
 }
 template<int STATE>
-inline SamplingProfile::SamplingProfileBuilder<STATE | SamplingProfile::SamplingProfileBuilder<STATE>::ModulesSet>&
+inline SamplingProfile::SamplingProfileBuilder<(STATE | SamplingProfile::SamplingProfileBuilder<STATE>::ModulesSet)>&
 SamplingProfile::SamplingProfileBuilder<STATE>::setModules(std::unique_ptr<protocol::Array<protocol::Memory::Module>> value) {
   static_assert(!(STATE & ModulesSet), "property modules should not be set yet");
   m_result->setModules(std::move(value));
@@ -279,28 +279,28 @@ inline void Module::setBaseAddress(const String& value) { m_baseAddress = value;
 inline void Module::setSize(double value) { m_size = value; }
 
 template<int STATE>
-inline Module::ModuleBuilder<STATE | Module::ModuleBuilder<STATE>::NameSet>&
+inline Module::ModuleBuilder<(STATE | Module::ModuleBuilder<STATE>::NameSet)>&
 Module::ModuleBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Module::ModuleBuilder<STATE | Module::ModuleBuilder<STATE>::UuidSet>&
+inline Module::ModuleBuilder<(STATE | Module::ModuleBuilder<STATE>::UuidSet)>&
 Module::ModuleBuilder<STATE>::setUuid(const String& value) {
   static_assert(!(STATE & UuidSet), "property uuid should not be set yet");
   m_result->setUuid(value);
   return castState<UuidSet>();
 }
 template<int STATE>
-inline Module::ModuleBuilder<STATE | Module::ModuleBuilder<STATE>::BaseAddressSet>&
+inline Module::ModuleBuilder<(STATE | Module::ModuleBuilder<STATE>::BaseAddressSet)>&
 Module::ModuleBuilder<STATE>::setBaseAddress(const String& value) {
   static_assert(!(STATE & BaseAddressSet), "property baseAddress should not be set yet");
   m_result->setBaseAddress(value);
   return castState<BaseAddressSet>();
 }
 template<int STATE>
-inline Module::ModuleBuilder<STATE | Module::ModuleBuilder<STATE>::SizeSet>&
+inline Module::ModuleBuilder<(STATE | Module::ModuleBuilder<STATE>::SizeSet)>&
 Module::ModuleBuilder<STATE>::setSize(double value) {
   static_assert(!(STATE & SizeSet), "property size should not be set yet");
   m_result->setSize(value);

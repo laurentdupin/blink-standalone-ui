@@ -55,12 +55,17 @@ namespace blink {
 const char* const Partitions::kAllocatedObjectPoolName =
     "partition_alloc/allocated_objects";
 
-BASE_FEATURE(kBlinkUseLargeEmptySlotSpanRingForBufferRoot,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-             base::FEATURE_ENABLED_BY_DEFAULT);
+constexpr base::FeatureState
+    kBlinkUseLargeEmptySlotSpanRingForBufferRootDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT);
+constexpr base::FeatureState
+    kBlinkUseLargeEmptySlotSpanRingForBufferRootDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
+BASE_FEATURE(kBlinkUseLargeEmptySlotSpanRingForBufferRoot,
+             kBlinkUseLargeEmptySlotSpanRingForBufferRootDefaultState);
 
 bool Partitions::initialized_ = false;
 

@@ -457,7 +457,11 @@ NotReachedNoreturnError::~NotReachedNoreturnError() {
 
 void RawCheckFailure(const char* message) {
   RawLog(LOGGING_FATAL, message);
+#if defined(__clang__) || defined(COMPILER_GCC)
   __builtin_unreachable();
+#elif defined(COMPILER_MSVC)
+  __assume(0);
+#endif
 }
 
 }  // namespace logging

@@ -1068,15 +1068,21 @@ void FragmentPaintPropertyTreeBuilder::UpdateAnchorPositionScrollTranslation() {
       // TODO(crbug.com/1309178): We should disable composited scrolling if the
       // snapshot's scrollers do not match the current scrollers.
 
-      DCHECK(object_.GetDocument().Printing() ||
+      bool has_anchor_position_compositing_reason =
+          object_.GetDocument().Printing();
 #if !defined(HTML_CSS_RENDERER_STANDALONE)
-             (RuntimeEnabledFeatures::CanvasDrawElementEnabled(
-                  object_.GetDocument().GetExecutionContext()) &&
-              IsA<Element>(object_.GetNode()) &&
-              To<Element>(object_.GetNode())->IsInCanvasSubtree()) ||
+      has_anchor_position_compositing_reason =
+          has_anchor_position_compositing_reason ||
+          (RuntimeEnabledFeatures::CanvasDrawElementEnabled(
+               object_.GetDocument().GetExecutionContext()) &&
+           IsA<Element>(object_.GetNode()) &&
+           To<Element>(object_.GetNode())->IsInCanvasSubtree());
 #endif
-             (full_context_.direct_compositing_reasons &
-              CompositingReason::kAnchorPosition));
+      has_anchor_position_compositing_reason =
+          has_anchor_position_compositing_reason ||
+          (full_context_.direct_compositing_reasons &
+           CompositingReason::kAnchorPosition);
+      DCHECK(has_anchor_position_compositing_reason);
       state.direct_compositing_reasons =
           full_context_.direct_compositing_reasons &
           CompositingReason::kAnchorPosition;

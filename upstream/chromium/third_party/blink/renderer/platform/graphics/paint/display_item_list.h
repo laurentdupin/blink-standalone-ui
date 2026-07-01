@@ -250,9 +250,17 @@ class PLATFORM_EXPORT DisplayItemList {
 #endif
 
  private:
+#if defined(COMPILER_MSVC)
+  // MSVC does not consider DisplayItem trivially copyable because its copy and
+  // move operations are explicitly deleted. The list still owns raw storage and
+  // relocates the active display item bytes exactly as the non-MSVC path does.
+  static_assert(std::is_trivially_copyable<ItemSlot>::value,
+                "DisplayItemList item storage must be trivially copyable");
+#else
   static_assert(std::is_trivially_copyable<value_type>::value,
                 "DisplayItemList uses `memcpy` in several member functions; "
                 "the `value_type` used by it must be trivially copyable");
+#endif
 
   ItemSlot* AllocateItemSlot() { return &items_.emplace_back(); }
 

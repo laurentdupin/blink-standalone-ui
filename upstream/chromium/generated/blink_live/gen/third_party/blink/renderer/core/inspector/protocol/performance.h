@@ -55,9 +55,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        MetricBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        MetricBuilder<(STATE | MetricBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        MetricBuilder<STATE | ValueSet>& setValue(double value);  // Defined below
+        MetricBuilder<(STATE | MetricBuilder<STATE>::ValueSet)>& setValue(double value);  // Defined below
 
         std::unique_ptr<Metric> build()
         {
@@ -69,9 +69,9 @@ public:
         friend class Metric;
         MetricBuilder() : m_result(new Metric()) { }
 
-        template<int STEP> MetricBuilder<STATE | STEP>& castState()
+        template<int STEP> MetricBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<MetricBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<MetricBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Performance::Metric> m_result;
@@ -102,14 +102,14 @@ inline void Metric::setName(const String& value) { m_name = value; }
 inline void Metric::setValue(double value) { m_value = value; }
 
 template<int STATE>
-inline Metric::MetricBuilder<STATE | Metric::MetricBuilder<STATE>::NameSet>&
+inline Metric::MetricBuilder<(STATE | Metric::MetricBuilder<STATE>::NameSet)>&
 Metric::MetricBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Metric::MetricBuilder<STATE | Metric::MetricBuilder<STATE>::ValueSet>&
+inline Metric::MetricBuilder<(STATE | Metric::MetricBuilder<STATE>::ValueSet)>&
 Metric::MetricBuilder<STATE>::setValue(double value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);

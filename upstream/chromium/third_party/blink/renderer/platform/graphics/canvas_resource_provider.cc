@@ -287,13 +287,15 @@ BASE_FEATURE(kCanvas2DReclaimUnusedResources,
 // image backed CanvasResources so that they can be imported into WebGPU without
 // an intermediate copy. This could cause a different shared image backing type
 // to be used in the GPU process based on the OS platform.
-BASE_FEATURE(kCanvasResourceIsWebGPUCompatible,
 #if BUILDFLAG(IS_APPLE)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kCanvasResourceIsWebGPUCompatibleDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kCanvasResourceIsWebGPUCompatibleDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kCanvasResourceIsWebGPUCompatible,
+             kCanvasResourceIsWebGPUCompatibleDefaultState);
 
 
 base::WeakPtr<Canvas2DResourceProviderSharedImage>

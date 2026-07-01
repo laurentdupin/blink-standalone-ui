@@ -104,21 +104,21 @@ public:
             AllFieldsSet = (IdSet | NameSet | PausedStateSet | PlayStateSet | PlaybackRateSet | StartTimeSet | CurrentTimeSet | TypeSet | 0)};
 
 
-        AnimationBuilder<STATE | IdSet>& setId(const String& value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::IdSet)>& setId(const String& value);  // Defined below
 
-        AnimationBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        AnimationBuilder<STATE | PausedStateSet>& setPausedState(bool value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::PausedStateSet)>& setPausedState(bool value);  // Defined below
 
-        AnimationBuilder<STATE | PlayStateSet>& setPlayState(const String& value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::PlayStateSet)>& setPlayState(const String& value);  // Defined below
 
-        AnimationBuilder<STATE | PlaybackRateSet>& setPlaybackRate(double value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::PlaybackRateSet)>& setPlaybackRate(double value);  // Defined below
 
-        AnimationBuilder<STATE | StartTimeSet>& setStartTime(double value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::StartTimeSet)>& setStartTime(double value);  // Defined below
 
-        AnimationBuilder<STATE | CurrentTimeSet>& setCurrentTime(double value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::CurrentTimeSet)>& setCurrentTime(double value);  // Defined below
 
-        AnimationBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        AnimationBuilder<(STATE | AnimationBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         AnimationBuilder<STATE>& setSource(std::unique_ptr<protocol::Animation::AnimationEffect> value);  // Defined below
 
@@ -136,9 +136,9 @@ public:
         friend class Animation;
         AnimationBuilder() : m_result(new Animation()) { }
 
-        template<int STEP> AnimationBuilder<STATE | STEP>& castState()
+        template<int STEP> AnimationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AnimationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AnimationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Animation::Animation> m_result;
@@ -228,7 +228,7 @@ public:
 
         ViewOrScrollTimelineBuilder<STATE>& setSubjectNodeId(int value);  // Defined below
 
-        ViewOrScrollTimelineBuilder<STATE | AxisSet>& setAxis(const String& value);  // Defined below
+        ViewOrScrollTimelineBuilder<(STATE | ViewOrScrollTimelineBuilder<STATE>::AxisSet)>& setAxis(const String& value);  // Defined below
 
         std::unique_ptr<ViewOrScrollTimeline> build()
         {
@@ -240,9 +240,9 @@ public:
         friend class ViewOrScrollTimeline;
         ViewOrScrollTimelineBuilder() : m_result(new ViewOrScrollTimeline()) { }
 
-        template<int STEP> ViewOrScrollTimelineBuilder<STATE | STEP>& castState()
+        template<int STEP> ViewOrScrollTimelineBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ViewOrScrollTimelineBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ViewOrScrollTimelineBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Animation::ViewOrScrollTimeline> m_result;
@@ -333,25 +333,25 @@ public:
             AllFieldsSet = (DelaySet | EndDelaySet | IterationStartSet | DurationSet | DirectionSet | FillSet | EasingSet | 0)};
 
 
-        AnimationEffectBuilder<STATE | DelaySet>& setDelay(double value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::DelaySet)>& setDelay(double value);  // Defined below
 
-        AnimationEffectBuilder<STATE | EndDelaySet>& setEndDelay(double value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::EndDelaySet)>& setEndDelay(double value);  // Defined below
 
-        AnimationEffectBuilder<STATE | IterationStartSet>& setIterationStart(double value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::IterationStartSet)>& setIterationStart(double value);  // Defined below
 
         AnimationEffectBuilder<STATE>& setIterations(double value);  // Defined below
 
-        AnimationEffectBuilder<STATE | DurationSet>& setDuration(double value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::DurationSet)>& setDuration(double value);  // Defined below
 
-        AnimationEffectBuilder<STATE | DirectionSet>& setDirection(const String& value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::DirectionSet)>& setDirection(const String& value);  // Defined below
 
-        AnimationEffectBuilder<STATE | FillSet>& setFill(const String& value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::FillSet)>& setFill(const String& value);  // Defined below
 
         AnimationEffectBuilder<STATE>& setBackendNodeId(int value);  // Defined below
 
         AnimationEffectBuilder<STATE>& setKeyframesRule(std::unique_ptr<protocol::Animation::KeyframesRule> value);  // Defined below
 
-        AnimationEffectBuilder<STATE | EasingSet>& setEasing(const String& value);  // Defined below
+        AnimationEffectBuilder<(STATE | AnimationEffectBuilder<STATE>::EasingSet)>& setEasing(const String& value);  // Defined below
 
         std::unique_ptr<AnimationEffect> build()
         {
@@ -363,9 +363,9 @@ public:
         friend class AnimationEffect;
         AnimationEffectBuilder() : m_result(new AnimationEffect()) { }
 
-        template<int STEP> AnimationEffectBuilder<STATE | STEP>& castState()
+        template<int STEP> AnimationEffectBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AnimationEffectBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AnimationEffectBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Animation::AnimationEffect> m_result;
@@ -421,7 +421,7 @@ public:
 
         KeyframesRuleBuilder<STATE>& setName(const String& value);  // Defined below
 
-        KeyframesRuleBuilder<STATE | KeyframesSet>& setKeyframes(std::unique_ptr<protocol::Array<protocol::Animation::KeyframeStyle>> value);  // Defined below
+        KeyframesRuleBuilder<(STATE | KeyframesRuleBuilder<STATE>::KeyframesSet)>& setKeyframes(std::unique_ptr<protocol::Array<protocol::Animation::KeyframeStyle>> value);  // Defined below
 
         std::unique_ptr<KeyframesRule> build()
         {
@@ -433,9 +433,9 @@ public:
         friend class KeyframesRule;
         KeyframesRuleBuilder() : m_result(new KeyframesRule()) { }
 
-        template<int STEP> KeyframesRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> KeyframesRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<KeyframesRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<KeyframesRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Animation::KeyframesRule> m_result;
@@ -476,9 +476,9 @@ public:
             AllFieldsSet = (OffsetSet | EasingSet | 0)};
 
 
-        KeyframeStyleBuilder<STATE | OffsetSet>& setOffset(const String& value);  // Defined below
+        KeyframeStyleBuilder<(STATE | KeyframeStyleBuilder<STATE>::OffsetSet)>& setOffset(const String& value);  // Defined below
 
-        KeyframeStyleBuilder<STATE | EasingSet>& setEasing(const String& value);  // Defined below
+        KeyframeStyleBuilder<(STATE | KeyframeStyleBuilder<STATE>::EasingSet)>& setEasing(const String& value);  // Defined below
 
         std::unique_ptr<KeyframeStyle> build()
         {
@@ -490,9 +490,9 @@ public:
         friend class KeyframeStyle;
         KeyframeStyleBuilder() : m_result(new KeyframeStyle()) { }
 
-        template<int STEP> KeyframeStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> KeyframeStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<KeyframeStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<KeyframeStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Animation::KeyframeStyle> m_result;
@@ -532,56 +532,56 @@ inline void Animation::setCssId(const String& value) { m_cssId = value; }
 inline void Animation::setViewOrScrollTimeline(std::unique_ptr<protocol::Animation::ViewOrScrollTimeline> value) { m_viewOrScrollTimeline = std::move(value); }
 
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::IdSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::IdSet)>&
 Animation::AnimationBuilder<STATE>::setId(const String& value) {
   static_assert(!(STATE & IdSet), "property id should not be set yet");
   m_result->setId(value);
   return castState<IdSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::NameSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::NameSet)>&
 Animation::AnimationBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::PausedStateSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::PausedStateSet)>&
 Animation::AnimationBuilder<STATE>::setPausedState(bool value) {
   static_assert(!(STATE & PausedStateSet), "property pausedState should not be set yet");
   m_result->setPausedState(value);
   return castState<PausedStateSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::PlayStateSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::PlayStateSet)>&
 Animation::AnimationBuilder<STATE>::setPlayState(const String& value) {
   static_assert(!(STATE & PlayStateSet), "property playState should not be set yet");
   m_result->setPlayState(value);
   return castState<PlayStateSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::PlaybackRateSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::PlaybackRateSet)>&
 Animation::AnimationBuilder<STATE>::setPlaybackRate(double value) {
   static_assert(!(STATE & PlaybackRateSet), "property playbackRate should not be set yet");
   m_result->setPlaybackRate(value);
   return castState<PlaybackRateSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::StartTimeSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::StartTimeSet)>&
 Animation::AnimationBuilder<STATE>::setStartTime(double value) {
   static_assert(!(STATE & StartTimeSet), "property startTime should not be set yet");
   m_result->setStartTime(value);
   return castState<StartTimeSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::CurrentTimeSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::CurrentTimeSet)>&
 Animation::AnimationBuilder<STATE>::setCurrentTime(double value) {
   static_assert(!(STATE & CurrentTimeSet), "property currentTime should not be set yet");
   m_result->setCurrentTime(value);
   return castState<CurrentTimeSet>();
 }
 template<int STATE>
-inline Animation::AnimationBuilder<STATE | Animation::AnimationBuilder<STATE>::TypeSet>&
+inline Animation::AnimationBuilder<(STATE | Animation::AnimationBuilder<STATE>::TypeSet)>&
 Animation::AnimationBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -637,7 +637,7 @@ inline ViewOrScrollTimeline::ViewOrScrollTimelineBuilder<STATE>& ViewOrScrollTim
   return *this;
 }
 template<int STATE>
-inline ViewOrScrollTimeline::ViewOrScrollTimelineBuilder<STATE | ViewOrScrollTimeline::ViewOrScrollTimelineBuilder<STATE>::AxisSet>&
+inline ViewOrScrollTimeline::ViewOrScrollTimelineBuilder<(STATE | ViewOrScrollTimeline::ViewOrScrollTimelineBuilder<STATE>::AxisSet)>&
 ViewOrScrollTimeline::ViewOrScrollTimelineBuilder<STATE>::setAxis(const String& value) {
   static_assert(!(STATE & AxisSet), "property axis should not be set yet");
   m_result->setAxis(value);
@@ -659,21 +659,21 @@ inline void AnimationEffect::setKeyframesRule(std::unique_ptr<protocol::Animatio
 inline void AnimationEffect::setEasing(const String& value) { m_easing = value; }
 
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::DelaySet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::DelaySet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setDelay(double value) {
   static_assert(!(STATE & DelaySet), "property delay should not be set yet");
   m_result->setDelay(value);
   return castState<DelaySet>();
 }
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::EndDelaySet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::EndDelaySet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setEndDelay(double value) {
   static_assert(!(STATE & EndDelaySet), "property endDelay should not be set yet");
   m_result->setEndDelay(value);
   return castState<EndDelaySet>();
 }
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::IterationStartSet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::IterationStartSet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setIterationStart(double value) {
   static_assert(!(STATE & IterationStartSet), "property iterationStart should not be set yet");
   m_result->setIterationStart(value);
@@ -685,21 +685,21 @@ inline AnimationEffect::AnimationEffectBuilder<STATE>& AnimationEffect::Animatio
   return *this;
 }
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::DurationSet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::DurationSet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setDuration(double value) {
   static_assert(!(STATE & DurationSet), "property duration should not be set yet");
   m_result->setDuration(value);
   return castState<DurationSet>();
 }
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::DirectionSet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::DirectionSet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setDirection(const String& value) {
   static_assert(!(STATE & DirectionSet), "property direction should not be set yet");
   m_result->setDirection(value);
   return castState<DirectionSet>();
 }
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::FillSet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::FillSet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setFill(const String& value) {
   static_assert(!(STATE & FillSet), "property fill should not be set yet");
   m_result->setFill(value);
@@ -716,7 +716,7 @@ inline AnimationEffect::AnimationEffectBuilder<STATE>& AnimationEffect::Animatio
   return *this;
 }
 template<int STATE>
-inline AnimationEffect::AnimationEffectBuilder<STATE | AnimationEffect::AnimationEffectBuilder<STATE>::EasingSet>&
+inline AnimationEffect::AnimationEffectBuilder<(STATE | AnimationEffect::AnimationEffectBuilder<STATE>::EasingSet)>&
 AnimationEffect::AnimationEffectBuilder<STATE>::setEasing(const String& value) {
   static_assert(!(STATE & EasingSet), "property easing should not be set yet");
   m_result->setEasing(value);
@@ -739,7 +739,7 @@ inline KeyframesRule::KeyframesRuleBuilder<STATE>& KeyframesRule::KeyframesRuleB
   return *this;
 }
 template<int STATE>
-inline KeyframesRule::KeyframesRuleBuilder<STATE | KeyframesRule::KeyframesRuleBuilder<STATE>::KeyframesSet>&
+inline KeyframesRule::KeyframesRuleBuilder<(STATE | KeyframesRule::KeyframesRuleBuilder<STATE>::KeyframesSet)>&
 KeyframesRule::KeyframesRuleBuilder<STATE>::setKeyframes(std::unique_ptr<protocol::Array<protocol::Animation::KeyframeStyle>> value) {
   static_assert(!(STATE & KeyframesSet), "property keyframes should not be set yet");
   m_result->setKeyframes(std::move(value));
@@ -753,14 +753,14 @@ inline void KeyframeStyle::setOffset(const String& value) { m_offset = value; }
 inline void KeyframeStyle::setEasing(const String& value) { m_easing = value; }
 
 template<int STATE>
-inline KeyframeStyle::KeyframeStyleBuilder<STATE | KeyframeStyle::KeyframeStyleBuilder<STATE>::OffsetSet>&
+inline KeyframeStyle::KeyframeStyleBuilder<(STATE | KeyframeStyle::KeyframeStyleBuilder<STATE>::OffsetSet)>&
 KeyframeStyle::KeyframeStyleBuilder<STATE>::setOffset(const String& value) {
   static_assert(!(STATE & OffsetSet), "property offset should not be set yet");
   m_result->setOffset(value);
   return castState<OffsetSet>();
 }
 template<int STATE>
-inline KeyframeStyle::KeyframeStyleBuilder<STATE | KeyframeStyle::KeyframeStyleBuilder<STATE>::EasingSet>&
+inline KeyframeStyle::KeyframeStyleBuilder<(STATE | KeyframeStyle::KeyframeStyleBuilder<STATE>::EasingSet)>&
 KeyframeStyle::KeyframeStyleBuilder<STATE>::setEasing(const String& value) {
   static_assert(!(STATE & EasingSet), "property easing should not be set yet");
   m_result->setEasing(value);

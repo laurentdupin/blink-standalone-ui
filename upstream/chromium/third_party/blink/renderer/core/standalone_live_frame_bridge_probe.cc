@@ -157,8 +157,8 @@
 
 #if defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
 #include "gpu/command_buffer/service/dawn_context_provider.h"
-#include "gpu/command_buffer/service/shared_image/d3d_image_utils.h"
 #include "gpu/command_buffer/service/shared_image/skia_graphite_dawn_image_representation.h"
+#include "gpu/command_buffer/service/shared_image/d3d_image_utils.h"
 #endif
 #endif
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -4561,7 +4561,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     TraceLiveFrameProbeStage(
         "direct frame sink drain offscreen Display for external target resize");
-    ReleaseExternalGpuTargetState();
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    if (offscreen_skia_dependency_) {
+      offscreen_skia_dependency_
+          ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+      offscreen_skia_dependency_
+          ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+    }
   }
 
   void DrawVizDisplayNow() {

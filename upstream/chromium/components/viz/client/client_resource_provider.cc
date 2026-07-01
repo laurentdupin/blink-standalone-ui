@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/debug/stack_trace.h"
+#include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
@@ -274,7 +275,7 @@ void ClientResourceProvider::PrepareSendToParent(
 
 void ClientResourceProvider::ReceiveReturnsFromParent(
     std::vector<ReturnedResource> resources) {
-  TRACE_EVENT0("viz", __PRETTY_FUNCTION__);
+  TRACE_EVENT0("viz", PRETTY_FUNCTION);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   std::vector<base::OnceClosure> impl_release_callbacks;

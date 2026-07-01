@@ -561,7 +561,7 @@ public:
             AllFieldsSet = (AdFrameTypeSet | 0)};
 
 
-        AdFrameStatusBuilder<STATE | AdFrameTypeSet>& setAdFrameType(const String& value);  // Defined below
+        AdFrameStatusBuilder<(STATE | AdFrameStatusBuilder<STATE>::AdFrameTypeSet)>& setAdFrameType(const String& value);  // Defined below
 
         AdFrameStatusBuilder<STATE>& setExplanations(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
@@ -575,9 +575,9 @@ public:
         friend class AdFrameStatus;
         AdFrameStatusBuilder() : m_result(new AdFrameStatus()) { }
 
-        template<int STEP> AdFrameStatusBuilder<STATE | STEP>& castState()
+        template<int STEP> AdFrameStatusBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AdFrameStatusBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AdFrameStatusBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::AdFrameStatus> m_result;
@@ -618,9 +618,9 @@ public:
             AllFieldsSet = (FrameIdSet | BlockReasonSet | 0)};
 
 
-        PermissionsPolicyBlockLocatorBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        PermissionsPolicyBlockLocatorBuilder<(STATE | PermissionsPolicyBlockLocatorBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
-        PermissionsPolicyBlockLocatorBuilder<STATE | BlockReasonSet>& setBlockReason(const String& value);  // Defined below
+        PermissionsPolicyBlockLocatorBuilder<(STATE | PermissionsPolicyBlockLocatorBuilder<STATE>::BlockReasonSet)>& setBlockReason(const String& value);  // Defined below
 
         std::unique_ptr<PermissionsPolicyBlockLocator> build()
         {
@@ -632,9 +632,9 @@ public:
         friend class PermissionsPolicyBlockLocator;
         PermissionsPolicyBlockLocatorBuilder() : m_result(new PermissionsPolicyBlockLocator()) { }
 
-        template<int STEP> PermissionsPolicyBlockLocatorBuilder<STATE | STEP>& castState()
+        template<int STEP> PermissionsPolicyBlockLocatorBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PermissionsPolicyBlockLocatorBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PermissionsPolicyBlockLocatorBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::PermissionsPolicyBlockLocator> m_result;
@@ -684,9 +684,9 @@ public:
             AllFieldsSet = (FeatureSet | AllowedSet | 0)};
 
 
-        PermissionsPolicyFeatureStateBuilder<STATE | FeatureSet>& setFeature(const String& value);  // Defined below
+        PermissionsPolicyFeatureStateBuilder<(STATE | PermissionsPolicyFeatureStateBuilder<STATE>::FeatureSet)>& setFeature(const String& value);  // Defined below
 
-        PermissionsPolicyFeatureStateBuilder<STATE | AllowedSet>& setAllowed(bool value);  // Defined below
+        PermissionsPolicyFeatureStateBuilder<(STATE | PermissionsPolicyFeatureStateBuilder<STATE>::AllowedSet)>& setAllowed(bool value);  // Defined below
 
         PermissionsPolicyFeatureStateBuilder<STATE>& setLocator(std::unique_ptr<protocol::Page::PermissionsPolicyBlockLocator> value);  // Defined below
 
@@ -700,9 +700,9 @@ public:
         friend class PermissionsPolicyFeatureState;
         PermissionsPolicyFeatureStateBuilder() : m_result(new PermissionsPolicyFeatureState()) { }
 
-        template<int STEP> PermissionsPolicyFeatureStateBuilder<STATE | STEP>& castState()
+        template<int STEP> PermissionsPolicyFeatureStateBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PermissionsPolicyFeatureStateBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PermissionsPolicyFeatureStateBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::PermissionsPolicyFeatureState> m_result;
@@ -760,17 +760,17 @@ public:
             AllFieldsSet = (OriginSet | MatchSubDomainsSet | TrialNameSet | ExpiryTimeSet | IsThirdPartySet | UsageRestrictionSet | 0)};
 
 
-        OriginTrialTokenBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        OriginTrialTokenBuilder<(STATE | OriginTrialTokenBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        OriginTrialTokenBuilder<STATE | MatchSubDomainsSet>& setMatchSubDomains(bool value);  // Defined below
+        OriginTrialTokenBuilder<(STATE | OriginTrialTokenBuilder<STATE>::MatchSubDomainsSet)>& setMatchSubDomains(bool value);  // Defined below
 
-        OriginTrialTokenBuilder<STATE | TrialNameSet>& setTrialName(const String& value);  // Defined below
+        OriginTrialTokenBuilder<(STATE | OriginTrialTokenBuilder<STATE>::TrialNameSet)>& setTrialName(const String& value);  // Defined below
 
-        OriginTrialTokenBuilder<STATE | ExpiryTimeSet>& setExpiryTime(double value);  // Defined below
+        OriginTrialTokenBuilder<(STATE | OriginTrialTokenBuilder<STATE>::ExpiryTimeSet)>& setExpiryTime(double value);  // Defined below
 
-        OriginTrialTokenBuilder<STATE | IsThirdPartySet>& setIsThirdParty(bool value);  // Defined below
+        OriginTrialTokenBuilder<(STATE | OriginTrialTokenBuilder<STATE>::IsThirdPartySet)>& setIsThirdParty(bool value);  // Defined below
 
-        OriginTrialTokenBuilder<STATE | UsageRestrictionSet>& setUsageRestriction(const String& value);  // Defined below
+        OriginTrialTokenBuilder<(STATE | OriginTrialTokenBuilder<STATE>::UsageRestrictionSet)>& setUsageRestriction(const String& value);  // Defined below
 
         std::unique_ptr<OriginTrialToken> build()
         {
@@ -782,9 +782,9 @@ public:
         friend class OriginTrialToken;
         OriginTrialTokenBuilder() : m_result(new OriginTrialToken()) { }
 
-        template<int STEP> OriginTrialTokenBuilder<STATE | STEP>& castState()
+        template<int STEP> OriginTrialTokenBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<OriginTrialTokenBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<OriginTrialTokenBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::OriginTrialToken> m_result;
@@ -838,11 +838,11 @@ public:
             AllFieldsSet = (RawTokenTextSet | StatusSet | 0)};
 
 
-        OriginTrialTokenWithStatusBuilder<STATE | RawTokenTextSet>& setRawTokenText(const String& value);  // Defined below
+        OriginTrialTokenWithStatusBuilder<(STATE | OriginTrialTokenWithStatusBuilder<STATE>::RawTokenTextSet)>& setRawTokenText(const String& value);  // Defined below
 
         OriginTrialTokenWithStatusBuilder<STATE>& setParsedToken(std::unique_ptr<protocol::Page::OriginTrialToken> value);  // Defined below
 
-        OriginTrialTokenWithStatusBuilder<STATE | StatusSet>& setStatus(const String& value);  // Defined below
+        OriginTrialTokenWithStatusBuilder<(STATE | OriginTrialTokenWithStatusBuilder<STATE>::StatusSet)>& setStatus(const String& value);  // Defined below
 
         std::unique_ptr<OriginTrialTokenWithStatus> build()
         {
@@ -854,9 +854,9 @@ public:
         friend class OriginTrialTokenWithStatus;
         OriginTrialTokenWithStatusBuilder() : m_result(new OriginTrialTokenWithStatus()) { }
 
-        template<int STEP> OriginTrialTokenWithStatusBuilder<STATE | STEP>& castState()
+        template<int STEP> OriginTrialTokenWithStatusBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<OriginTrialTokenWithStatusBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<OriginTrialTokenWithStatusBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::OriginTrialTokenWithStatus> m_result;
@@ -902,11 +902,11 @@ public:
             AllFieldsSet = (TrialNameSet | StatusSet | TokensWithStatusSet | 0)};
 
 
-        OriginTrialBuilder<STATE | TrialNameSet>& setTrialName(const String& value);  // Defined below
+        OriginTrialBuilder<(STATE | OriginTrialBuilder<STATE>::TrialNameSet)>& setTrialName(const String& value);  // Defined below
 
-        OriginTrialBuilder<STATE | StatusSet>& setStatus(const String& value);  // Defined below
+        OriginTrialBuilder<(STATE | OriginTrialBuilder<STATE>::StatusSet)>& setStatus(const String& value);  // Defined below
 
-        OriginTrialBuilder<STATE | TokensWithStatusSet>& setTokensWithStatus(std::unique_ptr<protocol::Array<protocol::Page::OriginTrialTokenWithStatus>> value);  // Defined below
+        OriginTrialBuilder<(STATE | OriginTrialBuilder<STATE>::TokensWithStatusSet)>& setTokensWithStatus(std::unique_ptr<protocol::Array<protocol::Page::OriginTrialTokenWithStatus>> value);  // Defined below
 
         std::unique_ptr<OriginTrial> build()
         {
@@ -918,9 +918,9 @@ public:
         friend class OriginTrial;
         OriginTrialBuilder() : m_result(new OriginTrial()) { }
 
-        template<int STEP> OriginTrialBuilder<STATE | STEP>& castState()
+        template<int STEP> OriginTrialBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<OriginTrialBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<OriginTrialBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::OriginTrial> m_result;
@@ -958,7 +958,7 @@ public:
             AllFieldsSet = (IsLocalhostSet | 0)};
 
 
-        SecurityOriginDetailsBuilder<STATE | IsLocalhostSet>& setIsLocalhost(bool value);  // Defined below
+        SecurityOriginDetailsBuilder<(STATE | SecurityOriginDetailsBuilder<STATE>::IsLocalhostSet)>& setIsLocalhost(bool value);  // Defined below
 
         std::unique_ptr<SecurityOriginDetails> build()
         {
@@ -970,9 +970,9 @@ public:
         friend class SecurityOriginDetails;
         SecurityOriginDetailsBuilder() : m_result(new SecurityOriginDetails()) { }
 
-        template<int STEP> SecurityOriginDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> SecurityOriginDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SecurityOriginDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SecurityOriginDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::SecurityOriginDetails> m_result;
@@ -1094,35 +1094,35 @@ public:
             AllFieldsSet = (IdSet | LoaderIdSet | UrlSet | DomainAndRegistrySet | SecurityOriginSet | MimeTypeSet | SecureContextTypeSet | CrossOriginIsolatedContextTypeSet | GatedAPIFeaturesSet | 0)};
 
 
-        FrameBuilder<STATE | IdSet>& setId(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::IdSet)>& setId(const String& value);  // Defined below
 
         FrameBuilder<STATE>& setParentId(const String& value);  // Defined below
 
-        FrameBuilder<STATE | LoaderIdSet>& setLoaderId(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::LoaderIdSet)>& setLoaderId(const String& value);  // Defined below
 
         FrameBuilder<STATE>& setName(const String& value);  // Defined below
 
-        FrameBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
         FrameBuilder<STATE>& setUrlFragment(const String& value);  // Defined below
 
-        FrameBuilder<STATE | DomainAndRegistrySet>& setDomainAndRegistry(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::DomainAndRegistrySet)>& setDomainAndRegistry(const String& value);  // Defined below
 
-        FrameBuilder<STATE | SecurityOriginSet>& setSecurityOrigin(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::SecurityOriginSet)>& setSecurityOrigin(const String& value);  // Defined below
 
         FrameBuilder<STATE>& setSecurityOriginDetails(std::unique_ptr<protocol::Page::SecurityOriginDetails> value);  // Defined below
 
-        FrameBuilder<STATE | MimeTypeSet>& setMimeType(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::MimeTypeSet)>& setMimeType(const String& value);  // Defined below
 
         FrameBuilder<STATE>& setUnreachableUrl(const String& value);  // Defined below
 
         FrameBuilder<STATE>& setAdFrameStatus(std::unique_ptr<protocol::Page::AdFrameStatus> value);  // Defined below
 
-        FrameBuilder<STATE | SecureContextTypeSet>& setSecureContextType(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::SecureContextTypeSet)>& setSecureContextType(const String& value);  // Defined below
 
-        FrameBuilder<STATE | CrossOriginIsolatedContextTypeSet>& setCrossOriginIsolatedContextType(const String& value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::CrossOriginIsolatedContextTypeSet)>& setCrossOriginIsolatedContextType(const String& value);  // Defined below
 
-        FrameBuilder<STATE | GatedAPIFeaturesSet>& setGatedAPIFeatures(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        FrameBuilder<(STATE | FrameBuilder<STATE>::GatedAPIFeaturesSet)>& setGatedAPIFeatures(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<Frame> build()
         {
@@ -1134,9 +1134,9 @@ public:
         friend class Frame;
         FrameBuilder() : m_result(new Frame()) { }
 
-        template<int STEP> FrameBuilder<STATE | STEP>& castState()
+        template<int STEP> FrameBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FrameBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FrameBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::Frame> m_result;
@@ -1230,11 +1230,11 @@ public:
             AllFieldsSet = (UrlSet | TypeSet | MimeTypeSet | 0)};
 
 
-        FrameResourceBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        FrameResourceBuilder<(STATE | FrameResourceBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        FrameResourceBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        FrameResourceBuilder<(STATE | FrameResourceBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
-        FrameResourceBuilder<STATE | MimeTypeSet>& setMimeType(const String& value);  // Defined below
+        FrameResourceBuilder<(STATE | FrameResourceBuilder<STATE>::MimeTypeSet)>& setMimeType(const String& value);  // Defined below
 
         FrameResourceBuilder<STATE>& setLastModified(double value);  // Defined below
 
@@ -1254,9 +1254,9 @@ public:
         friend class FrameResource;
         FrameResourceBuilder() : m_result(new FrameResource()) { }
 
-        template<int STEP> FrameResourceBuilder<STATE | STEP>& castState()
+        template<int STEP> FrameResourceBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FrameResourceBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FrameResourceBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::FrameResource> m_result;
@@ -1311,11 +1311,11 @@ public:
             AllFieldsSet = (FrameSet | ResourcesSet | 0)};
 
 
-        FrameResourceTreeBuilder<STATE | FrameSet>& setFrame(std::unique_ptr<protocol::Page::Frame> value);  // Defined below
+        FrameResourceTreeBuilder<(STATE | FrameResourceTreeBuilder<STATE>::FrameSet)>& setFrame(std::unique_ptr<protocol::Page::Frame> value);  // Defined below
 
         FrameResourceTreeBuilder<STATE>& setChildFrames(std::unique_ptr<protocol::Array<protocol::Page::FrameResourceTree>> value);  // Defined below
 
-        FrameResourceTreeBuilder<STATE | ResourcesSet>& setResources(std::unique_ptr<protocol::Array<protocol::Page::FrameResource>> value);  // Defined below
+        FrameResourceTreeBuilder<(STATE | FrameResourceTreeBuilder<STATE>::ResourcesSet)>& setResources(std::unique_ptr<protocol::Array<protocol::Page::FrameResource>> value);  // Defined below
 
         std::unique_ptr<FrameResourceTree> build()
         {
@@ -1327,9 +1327,9 @@ public:
         friend class FrameResourceTree;
         FrameResourceTreeBuilder() : m_result(new FrameResourceTree()) { }
 
-        template<int STEP> FrameResourceTreeBuilder<STATE | STEP>& castState()
+        template<int STEP> FrameResourceTreeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FrameResourceTreeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FrameResourceTreeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::FrameResourceTree> m_result;
@@ -1376,7 +1376,7 @@ public:
             AllFieldsSet = (FrameSet | 0)};
 
 
-        FrameTreeBuilder<STATE | FrameSet>& setFrame(std::unique_ptr<protocol::Page::Frame> value);  // Defined below
+        FrameTreeBuilder<(STATE | FrameTreeBuilder<STATE>::FrameSet)>& setFrame(std::unique_ptr<protocol::Page::Frame> value);  // Defined below
 
         FrameTreeBuilder<STATE>& setChildFrames(std::unique_ptr<protocol::Array<protocol::Page::FrameTree>> value);  // Defined below
 
@@ -1390,9 +1390,9 @@ public:
         friend class FrameTree;
         FrameTreeBuilder() : m_result(new FrameTree()) { }
 
-        template<int STEP> FrameTreeBuilder<STATE | STEP>& castState()
+        template<int STEP> FrameTreeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FrameTreeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FrameTreeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::FrameTree> m_result;
@@ -1441,13 +1441,13 @@ public:
             AllFieldsSet = (PageXSet | PageYSet | ClientWidthSet | ClientHeightSet | 0)};
 
 
-        LayoutViewportBuilder<STATE | PageXSet>& setPageX(int value);  // Defined below
+        LayoutViewportBuilder<(STATE | LayoutViewportBuilder<STATE>::PageXSet)>& setPageX(int value);  // Defined below
 
-        LayoutViewportBuilder<STATE | PageYSet>& setPageY(int value);  // Defined below
+        LayoutViewportBuilder<(STATE | LayoutViewportBuilder<STATE>::PageYSet)>& setPageY(int value);  // Defined below
 
-        LayoutViewportBuilder<STATE | ClientWidthSet>& setClientWidth(int value);  // Defined below
+        LayoutViewportBuilder<(STATE | LayoutViewportBuilder<STATE>::ClientWidthSet)>& setClientWidth(int value);  // Defined below
 
-        LayoutViewportBuilder<STATE | ClientHeightSet>& setClientHeight(int value);  // Defined below
+        LayoutViewportBuilder<(STATE | LayoutViewportBuilder<STATE>::ClientHeightSet)>& setClientHeight(int value);  // Defined below
 
         std::unique_ptr<LayoutViewport> build()
         {
@@ -1459,9 +1459,9 @@ public:
         friend class LayoutViewport;
         LayoutViewportBuilder() : m_result(new LayoutViewport()) { }
 
-        template<int STEP> LayoutViewportBuilder<STATE | STEP>& castState()
+        template<int STEP> LayoutViewportBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LayoutViewportBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LayoutViewportBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::LayoutViewport> m_result;
@@ -1533,19 +1533,19 @@ public:
             AllFieldsSet = (OffsetXSet | OffsetYSet | PageXSet | PageYSet | ClientWidthSet | ClientHeightSet | ScaleSet | 0)};
 
 
-        VisualViewportBuilder<STATE | OffsetXSet>& setOffsetX(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::OffsetXSet)>& setOffsetX(double value);  // Defined below
 
-        VisualViewportBuilder<STATE | OffsetYSet>& setOffsetY(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::OffsetYSet)>& setOffsetY(double value);  // Defined below
 
-        VisualViewportBuilder<STATE | PageXSet>& setPageX(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::PageXSet)>& setPageX(double value);  // Defined below
 
-        VisualViewportBuilder<STATE | PageYSet>& setPageY(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::PageYSet)>& setPageY(double value);  // Defined below
 
-        VisualViewportBuilder<STATE | ClientWidthSet>& setClientWidth(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::ClientWidthSet)>& setClientWidth(double value);  // Defined below
 
-        VisualViewportBuilder<STATE | ClientHeightSet>& setClientHeight(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::ClientHeightSet)>& setClientHeight(double value);  // Defined below
 
-        VisualViewportBuilder<STATE | ScaleSet>& setScale(double value);  // Defined below
+        VisualViewportBuilder<(STATE | VisualViewportBuilder<STATE>::ScaleSet)>& setScale(double value);  // Defined below
 
         VisualViewportBuilder<STATE>& setZoom(double value);  // Defined below
 
@@ -1559,9 +1559,9 @@ public:
         friend class VisualViewport;
         VisualViewportBuilder() : m_result(new VisualViewport()) { }
 
-        template<int STEP> VisualViewportBuilder<STATE | STEP>& castState()
+        template<int STEP> VisualViewportBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<VisualViewportBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<VisualViewportBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::VisualViewport> m_result;
@@ -1620,15 +1620,15 @@ public:
             AllFieldsSet = (XSet | YSet | WidthSet | HeightSet | ScaleSet | 0)};
 
 
-        ViewportBuilder<STATE | XSet>& setX(double value);  // Defined below
+        ViewportBuilder<(STATE | ViewportBuilder<STATE>::XSet)>& setX(double value);  // Defined below
 
-        ViewportBuilder<STATE | YSet>& setY(double value);  // Defined below
+        ViewportBuilder<(STATE | ViewportBuilder<STATE>::YSet)>& setY(double value);  // Defined below
 
-        ViewportBuilder<STATE | WidthSet>& setWidth(double value);  // Defined below
+        ViewportBuilder<(STATE | ViewportBuilder<STATE>::WidthSet)>& setWidth(double value);  // Defined below
 
-        ViewportBuilder<STATE | HeightSet>& setHeight(double value);  // Defined below
+        ViewportBuilder<(STATE | ViewportBuilder<STATE>::HeightSet)>& setHeight(double value);  // Defined below
 
-        ViewportBuilder<STATE | ScaleSet>& setScale(double value);  // Defined below
+        ViewportBuilder<(STATE | ViewportBuilder<STATE>::ScaleSet)>& setScale(double value);  // Defined below
 
         std::unique_ptr<Viewport> build()
         {
@@ -1640,9 +1640,9 @@ public:
         friend class Viewport;
         ViewportBuilder() : m_result(new Viewport()) { }
 
-        template<int STEP> ViewportBuilder<STATE | STEP>& castState()
+        template<int STEP> ViewportBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ViewportBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ViewportBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::Viewport> m_result;
@@ -1765,9 +1765,9 @@ public:
         friend class FontFamilies;
         FontFamiliesBuilder() : m_result(new FontFamilies()) { }
 
-        template<int STEP> FontFamiliesBuilder<STATE | STEP>& castState()
+        template<int STEP> FontFamiliesBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FontFamiliesBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FontFamiliesBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::FontFamilies> m_result;
@@ -1813,9 +1813,9 @@ public:
             AllFieldsSet = (ScriptSet | FontFamiliesSet | 0)};
 
 
-        ScriptFontFamiliesBuilder<STATE | ScriptSet>& setScript(const String& value);  // Defined below
+        ScriptFontFamiliesBuilder<(STATE | ScriptFontFamiliesBuilder<STATE>::ScriptSet)>& setScript(const String& value);  // Defined below
 
-        ScriptFontFamiliesBuilder<STATE | FontFamiliesSet>& setFontFamilies(std::unique_ptr<protocol::Page::FontFamilies> value);  // Defined below
+        ScriptFontFamiliesBuilder<(STATE | ScriptFontFamiliesBuilder<STATE>::FontFamiliesSet)>& setFontFamilies(std::unique_ptr<protocol::Page::FontFamilies> value);  // Defined below
 
         std::unique_ptr<ScriptFontFamilies> build()
         {
@@ -1827,9 +1827,9 @@ public:
         friend class ScriptFontFamilies;
         ScriptFontFamiliesBuilder() : m_result(new ScriptFontFamilies()) { }
 
-        template<int STEP> ScriptFontFamiliesBuilder<STATE | STEP>& castState()
+        template<int STEP> ScriptFontFamiliesBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ScriptFontFamiliesBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ScriptFontFamiliesBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::ScriptFontFamilies> m_result;
@@ -1894,9 +1894,9 @@ public:
         friend class FontSizes;
         FontSizesBuilder() : m_result(new FontSizes()) { }
 
-        template<int STEP> FontSizesBuilder<STATE | STEP>& castState()
+        template<int STEP> FontSizesBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FontSizesBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FontSizesBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::FontSizes> m_result;
@@ -1942,7 +1942,7 @@ public:
             AllFieldsSet = (UrlSet | 0)};
 
 
-        CompilationCacheParamsBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        CompilationCacheParamsBuilder<(STATE | CompilationCacheParamsBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
         CompilationCacheParamsBuilder<STATE>& setEager(bool value);  // Defined below
 
@@ -1956,9 +1956,9 @@ public:
         friend class CompilationCacheParams;
         CompilationCacheParamsBuilder() : m_result(new CompilationCacheParams()) { }
 
-        template<int STEP> CompilationCacheParamsBuilder<STATE | STEP>& castState()
+        template<int STEP> CompilationCacheParamsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CompilationCacheParamsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CompilationCacheParamsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::CompilationCacheParams> m_result;
@@ -2021,9 +2021,9 @@ public:
 
         BackForwardCacheBlockingDetailsBuilder<STATE>& setFunction(const String& value);  // Defined below
 
-        BackForwardCacheBlockingDetailsBuilder<STATE | LineNumberSet>& setLineNumber(int value);  // Defined below
+        BackForwardCacheBlockingDetailsBuilder<(STATE | BackForwardCacheBlockingDetailsBuilder<STATE>::LineNumberSet)>& setLineNumber(int value);  // Defined below
 
-        BackForwardCacheBlockingDetailsBuilder<STATE | ColumnNumberSet>& setColumnNumber(int value);  // Defined below
+        BackForwardCacheBlockingDetailsBuilder<(STATE | BackForwardCacheBlockingDetailsBuilder<STATE>::ColumnNumberSet)>& setColumnNumber(int value);  // Defined below
 
         std::unique_ptr<BackForwardCacheBlockingDetails> build()
         {
@@ -2035,9 +2035,9 @@ public:
         friend class BackForwardCacheBlockingDetails;
         BackForwardCacheBlockingDetailsBuilder() : m_result(new BackForwardCacheBlockingDetails()) { }
 
-        template<int STEP> BackForwardCacheBlockingDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> BackForwardCacheBlockingDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BackForwardCacheBlockingDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BackForwardCacheBlockingDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::BackForwardCacheBlockingDetails> m_result;
@@ -2098,9 +2098,9 @@ public:
             AllFieldsSet = (TypeSet | ReasonSet | 0)};
 
 
-        BackForwardCacheNotRestoredExplanationBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        BackForwardCacheNotRestoredExplanationBuilder<(STATE | BackForwardCacheNotRestoredExplanationBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
-        BackForwardCacheNotRestoredExplanationBuilder<STATE | ReasonSet>& setReason(const String& value);  // Defined below
+        BackForwardCacheNotRestoredExplanationBuilder<(STATE | BackForwardCacheNotRestoredExplanationBuilder<STATE>::ReasonSet)>& setReason(const String& value);  // Defined below
 
         BackForwardCacheNotRestoredExplanationBuilder<STATE>& setContext(const String& value);  // Defined below
 
@@ -2116,9 +2116,9 @@ public:
         friend class BackForwardCacheNotRestoredExplanation;
         BackForwardCacheNotRestoredExplanationBuilder() : m_result(new BackForwardCacheNotRestoredExplanation()) { }
 
-        template<int STEP> BackForwardCacheNotRestoredExplanationBuilder<STATE | STEP>& castState()
+        template<int STEP> BackForwardCacheNotRestoredExplanationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BackForwardCacheNotRestoredExplanationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BackForwardCacheNotRestoredExplanationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::BackForwardCacheNotRestoredExplanation> m_result;
@@ -2165,11 +2165,11 @@ public:
             AllFieldsSet = (UrlSet | ExplanationsSet | ChildrenSet | 0)};
 
 
-        BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | ExplanationsSet>& setExplanations(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanation>> value);  // Defined below
+        BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::ExplanationsSet)>& setExplanations(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanation>> value);  // Defined below
 
-        BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | ChildrenSet>& setChildren(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanationTree>> value);  // Defined below
+        BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::ChildrenSet)>& setChildren(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanationTree>> value);  // Defined below
 
         std::unique_ptr<BackForwardCacheNotRestoredExplanationTree> build()
         {
@@ -2181,9 +2181,9 @@ public:
         friend class BackForwardCacheNotRestoredExplanationTree;
         BackForwardCacheNotRestoredExplanationTreeBuilder() : m_result(new BackForwardCacheNotRestoredExplanationTree()) { }
 
-        template<int STEP> BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | STEP>& castState()
+        template<int STEP> BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Page::BackForwardCacheNotRestoredExplanationTree> m_result;
@@ -2215,7 +2215,7 @@ inline void AdFrameStatus::setAdFrameType(const String& value) { m_adFrameType =
 inline void AdFrameStatus::setExplanations(std::unique_ptr<protocol::Array<String>> value) { m_explanations = std::move(value); }
 
 template<int STATE>
-inline AdFrameStatus::AdFrameStatusBuilder<STATE | AdFrameStatus::AdFrameStatusBuilder<STATE>::AdFrameTypeSet>&
+inline AdFrameStatus::AdFrameStatusBuilder<(STATE | AdFrameStatus::AdFrameStatusBuilder<STATE>::AdFrameTypeSet)>&
 AdFrameStatus::AdFrameStatusBuilder<STATE>::setAdFrameType(const String& value) {
   static_assert(!(STATE & AdFrameTypeSet), "property adFrameType should not be set yet");
   m_result->setAdFrameType(value);
@@ -2234,14 +2234,14 @@ inline void PermissionsPolicyBlockLocator::setFrameId(const String& value) { m_f
 inline void PermissionsPolicyBlockLocator::setBlockReason(const String& value) { m_blockReason = value; }
 
 template<int STATE>
-inline PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE | PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE>::FrameIdSet>&
+inline PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<(STATE | PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE>::FrameIdSet)>&
 PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
   return castState<FrameIdSet>();
 }
 template<int STATE>
-inline PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE | PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE>::BlockReasonSet>&
+inline PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<(STATE | PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE>::BlockReasonSet)>&
 PermissionsPolicyBlockLocator::PermissionsPolicyBlockLocatorBuilder<STATE>::setBlockReason(const String& value) {
   static_assert(!(STATE & BlockReasonSet), "property blockReason should not be set yet");
   m_result->setBlockReason(value);
@@ -2256,14 +2256,14 @@ inline void PermissionsPolicyFeatureState::setAllowed(bool value) { m_allowed = 
 inline void PermissionsPolicyFeatureState::setLocator(std::unique_ptr<protocol::Page::PermissionsPolicyBlockLocator> value) { m_locator = std::move(value); }
 
 template<int STATE>
-inline PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE | PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE>::FeatureSet>&
+inline PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<(STATE | PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE>::FeatureSet)>&
 PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE>::setFeature(const String& value) {
   static_assert(!(STATE & FeatureSet), "property feature should not be set yet");
   m_result->setFeature(value);
   return castState<FeatureSet>();
 }
 template<int STATE>
-inline PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE | PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE>::AllowedSet>&
+inline PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<(STATE | PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE>::AllowedSet)>&
 PermissionsPolicyFeatureState::PermissionsPolicyFeatureStateBuilder<STATE>::setAllowed(bool value) {
   static_assert(!(STATE & AllowedSet), "property allowed should not be set yet");
   m_result->setAllowed(value);
@@ -2287,42 +2287,42 @@ inline void OriginTrialToken::setIsThirdParty(bool value) { m_isThirdParty = val
 inline void OriginTrialToken::setUsageRestriction(const String& value) { m_usageRestriction = value; }
 
 template<int STATE>
-inline OriginTrialToken::OriginTrialTokenBuilder<STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::OriginSet>&
+inline OriginTrialToken::OriginTrialTokenBuilder<(STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::OriginSet)>&
 OriginTrialToken::OriginTrialTokenBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline OriginTrialToken::OriginTrialTokenBuilder<STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::MatchSubDomainsSet>&
+inline OriginTrialToken::OriginTrialTokenBuilder<(STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::MatchSubDomainsSet)>&
 OriginTrialToken::OriginTrialTokenBuilder<STATE>::setMatchSubDomains(bool value) {
   static_assert(!(STATE & MatchSubDomainsSet), "property matchSubDomains should not be set yet");
   m_result->setMatchSubDomains(value);
   return castState<MatchSubDomainsSet>();
 }
 template<int STATE>
-inline OriginTrialToken::OriginTrialTokenBuilder<STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::TrialNameSet>&
+inline OriginTrialToken::OriginTrialTokenBuilder<(STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::TrialNameSet)>&
 OriginTrialToken::OriginTrialTokenBuilder<STATE>::setTrialName(const String& value) {
   static_assert(!(STATE & TrialNameSet), "property trialName should not be set yet");
   m_result->setTrialName(value);
   return castState<TrialNameSet>();
 }
 template<int STATE>
-inline OriginTrialToken::OriginTrialTokenBuilder<STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::ExpiryTimeSet>&
+inline OriginTrialToken::OriginTrialTokenBuilder<(STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::ExpiryTimeSet)>&
 OriginTrialToken::OriginTrialTokenBuilder<STATE>::setExpiryTime(double value) {
   static_assert(!(STATE & ExpiryTimeSet), "property expiryTime should not be set yet");
   m_result->setExpiryTime(value);
   return castState<ExpiryTimeSet>();
 }
 template<int STATE>
-inline OriginTrialToken::OriginTrialTokenBuilder<STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::IsThirdPartySet>&
+inline OriginTrialToken::OriginTrialTokenBuilder<(STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::IsThirdPartySet)>&
 OriginTrialToken::OriginTrialTokenBuilder<STATE>::setIsThirdParty(bool value) {
   static_assert(!(STATE & IsThirdPartySet), "property isThirdParty should not be set yet");
   m_result->setIsThirdParty(value);
   return castState<IsThirdPartySet>();
 }
 template<int STATE>
-inline OriginTrialToken::OriginTrialTokenBuilder<STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::UsageRestrictionSet>&
+inline OriginTrialToken::OriginTrialTokenBuilder<(STATE | OriginTrialToken::OriginTrialTokenBuilder<STATE>::UsageRestrictionSet)>&
 OriginTrialToken::OriginTrialTokenBuilder<STATE>::setUsageRestriction(const String& value) {
   static_assert(!(STATE & UsageRestrictionSet), "property usageRestriction should not be set yet");
   m_result->setUsageRestriction(value);
@@ -2340,7 +2340,7 @@ inline void OriginTrialTokenWithStatus::setParsedToken(std::unique_ptr<protocol:
 inline void OriginTrialTokenWithStatus::setStatus(const String& value) { m_status = value; }
 
 template<int STATE>
-inline OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE | OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>::RawTokenTextSet>&
+inline OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<(STATE | OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>::RawTokenTextSet)>&
 OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>::setRawTokenText(const String& value) {
   static_assert(!(STATE & RawTokenTextSet), "property rawTokenText should not be set yet");
   m_result->setRawTokenText(value);
@@ -2352,7 +2352,7 @@ inline OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>& Ori
   return *this;
 }
 template<int STATE>
-inline OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE | OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>::StatusSet>&
+inline OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<(STATE | OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>::StatusSet)>&
 OriginTrialTokenWithStatus::OriginTrialTokenWithStatusBuilder<STATE>::setStatus(const String& value) {
   static_assert(!(STATE & StatusSet), "property status should not be set yet");
   m_result->setStatus(value);
@@ -2367,21 +2367,21 @@ inline void OriginTrial::setStatus(const String& value) { m_status = value; }
 inline void OriginTrial::setTokensWithStatus(std::unique_ptr<protocol::Array<protocol::Page::OriginTrialTokenWithStatus>> value) { m_tokensWithStatus = std::move(value); }
 
 template<int STATE>
-inline OriginTrial::OriginTrialBuilder<STATE | OriginTrial::OriginTrialBuilder<STATE>::TrialNameSet>&
+inline OriginTrial::OriginTrialBuilder<(STATE | OriginTrial::OriginTrialBuilder<STATE>::TrialNameSet)>&
 OriginTrial::OriginTrialBuilder<STATE>::setTrialName(const String& value) {
   static_assert(!(STATE & TrialNameSet), "property trialName should not be set yet");
   m_result->setTrialName(value);
   return castState<TrialNameSet>();
 }
 template<int STATE>
-inline OriginTrial::OriginTrialBuilder<STATE | OriginTrial::OriginTrialBuilder<STATE>::StatusSet>&
+inline OriginTrial::OriginTrialBuilder<(STATE | OriginTrial::OriginTrialBuilder<STATE>::StatusSet)>&
 OriginTrial::OriginTrialBuilder<STATE>::setStatus(const String& value) {
   static_assert(!(STATE & StatusSet), "property status should not be set yet");
   m_result->setStatus(value);
   return castState<StatusSet>();
 }
 template<int STATE>
-inline OriginTrial::OriginTrialBuilder<STATE | OriginTrial::OriginTrialBuilder<STATE>::TokensWithStatusSet>&
+inline OriginTrial::OriginTrialBuilder<(STATE | OriginTrial::OriginTrialBuilder<STATE>::TokensWithStatusSet)>&
 OriginTrial::OriginTrialBuilder<STATE>::setTokensWithStatus(std::unique_ptr<protocol::Array<protocol::Page::OriginTrialTokenWithStatus>> value) {
   static_assert(!(STATE & TokensWithStatusSet), "property tokensWithStatus should not be set yet");
   m_result->setTokensWithStatus(std::move(value));
@@ -2394,7 +2394,7 @@ inline SecurityOriginDetails::~SecurityOriginDetails() = default;
 inline void SecurityOriginDetails::setIsLocalhost(bool value) { m_isLocalhost = value; }
 
 template<int STATE>
-inline SecurityOriginDetails::SecurityOriginDetailsBuilder<STATE | SecurityOriginDetails::SecurityOriginDetailsBuilder<STATE>::IsLocalhostSet>&
+inline SecurityOriginDetails::SecurityOriginDetailsBuilder<(STATE | SecurityOriginDetails::SecurityOriginDetailsBuilder<STATE>::IsLocalhostSet)>&
 SecurityOriginDetails::SecurityOriginDetailsBuilder<STATE>::setIsLocalhost(bool value) {
   static_assert(!(STATE & IsLocalhostSet), "property isLocalhost should not be set yet");
   m_result->setIsLocalhost(value);
@@ -2422,7 +2422,7 @@ inline void Frame::setCrossOriginIsolatedContextType(const String& value) { m_cr
 inline void Frame::setGatedAPIFeatures(std::unique_ptr<protocol::Array<String>> value) { m_gatedAPIFeatures = std::move(value); }
 
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::IdSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::IdSet)>&
 Frame::FrameBuilder<STATE>::setId(const String& value) {
   static_assert(!(STATE & IdSet), "property id should not be set yet");
   m_result->setId(value);
@@ -2434,7 +2434,7 @@ inline Frame::FrameBuilder<STATE>& Frame::FrameBuilder<STATE>::setParentId(const
   return *this;
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::LoaderIdSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::LoaderIdSet)>&
 Frame::FrameBuilder<STATE>::setLoaderId(const String& value) {
   static_assert(!(STATE & LoaderIdSet), "property loaderId should not be set yet");
   m_result->setLoaderId(value);
@@ -2446,7 +2446,7 @@ inline Frame::FrameBuilder<STATE>& Frame::FrameBuilder<STATE>::setName(const Str
   return *this;
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::UrlSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::UrlSet)>&
 Frame::FrameBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
@@ -2458,14 +2458,14 @@ inline Frame::FrameBuilder<STATE>& Frame::FrameBuilder<STATE>::setUrlFragment(co
   return *this;
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::DomainAndRegistrySet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::DomainAndRegistrySet)>&
 Frame::FrameBuilder<STATE>::setDomainAndRegistry(const String& value) {
   static_assert(!(STATE & DomainAndRegistrySet), "property domainAndRegistry should not be set yet");
   m_result->setDomainAndRegistry(value);
   return castState<DomainAndRegistrySet>();
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::SecurityOriginSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::SecurityOriginSet)>&
 Frame::FrameBuilder<STATE>::setSecurityOrigin(const String& value) {
   static_assert(!(STATE & SecurityOriginSet), "property securityOrigin should not be set yet");
   m_result->setSecurityOrigin(value);
@@ -2477,7 +2477,7 @@ inline Frame::FrameBuilder<STATE>& Frame::FrameBuilder<STATE>::setSecurityOrigin
   return *this;
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::MimeTypeSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::MimeTypeSet)>&
 Frame::FrameBuilder<STATE>::setMimeType(const String& value) {
   static_assert(!(STATE & MimeTypeSet), "property mimeType should not be set yet");
   m_result->setMimeType(value);
@@ -2494,21 +2494,21 @@ inline Frame::FrameBuilder<STATE>& Frame::FrameBuilder<STATE>::setAdFrameStatus(
   return *this;
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::SecureContextTypeSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::SecureContextTypeSet)>&
 Frame::FrameBuilder<STATE>::setSecureContextType(const String& value) {
   static_assert(!(STATE & SecureContextTypeSet), "property secureContextType should not be set yet");
   m_result->setSecureContextType(value);
   return castState<SecureContextTypeSet>();
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::CrossOriginIsolatedContextTypeSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::CrossOriginIsolatedContextTypeSet)>&
 Frame::FrameBuilder<STATE>::setCrossOriginIsolatedContextType(const String& value) {
   static_assert(!(STATE & CrossOriginIsolatedContextTypeSet), "property crossOriginIsolatedContextType should not be set yet");
   m_result->setCrossOriginIsolatedContextType(value);
   return castState<CrossOriginIsolatedContextTypeSet>();
 }
 template<int STATE>
-inline Frame::FrameBuilder<STATE | Frame::FrameBuilder<STATE>::GatedAPIFeaturesSet>&
+inline Frame::FrameBuilder<(STATE | Frame::FrameBuilder<STATE>::GatedAPIFeaturesSet)>&
 Frame::FrameBuilder<STATE>::setGatedAPIFeatures(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & GatedAPIFeaturesSet), "property gatedAPIFeatures should not be set yet");
   m_result->setGatedAPIFeatures(std::move(value));
@@ -2527,21 +2527,21 @@ inline void FrameResource::setFailed(bool value) { m_failed = value; }
 inline void FrameResource::setCanceled(bool value) { m_canceled = value; }
 
 template<int STATE>
-inline FrameResource::FrameResourceBuilder<STATE | FrameResource::FrameResourceBuilder<STATE>::UrlSet>&
+inline FrameResource::FrameResourceBuilder<(STATE | FrameResource::FrameResourceBuilder<STATE>::UrlSet)>&
 FrameResource::FrameResourceBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline FrameResource::FrameResourceBuilder<STATE | FrameResource::FrameResourceBuilder<STATE>::TypeSet>&
+inline FrameResource::FrameResourceBuilder<(STATE | FrameResource::FrameResourceBuilder<STATE>::TypeSet)>&
 FrameResource::FrameResourceBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
   return castState<TypeSet>();
 }
 template<int STATE>
-inline FrameResource::FrameResourceBuilder<STATE | FrameResource::FrameResourceBuilder<STATE>::MimeTypeSet>&
+inline FrameResource::FrameResourceBuilder<(STATE | FrameResource::FrameResourceBuilder<STATE>::MimeTypeSet)>&
 FrameResource::FrameResourceBuilder<STATE>::setMimeType(const String& value) {
   static_assert(!(STATE & MimeTypeSet), "property mimeType should not be set yet");
   m_result->setMimeType(value);
@@ -2576,7 +2576,7 @@ inline void FrameResourceTree::setChildFrames(std::unique_ptr<protocol::Array<pr
 inline void FrameResourceTree::setResources(std::unique_ptr<protocol::Array<protocol::Page::FrameResource>> value) { m_resources = std::move(value); }
 
 template<int STATE>
-inline FrameResourceTree::FrameResourceTreeBuilder<STATE | FrameResourceTree::FrameResourceTreeBuilder<STATE>::FrameSet>&
+inline FrameResourceTree::FrameResourceTreeBuilder<(STATE | FrameResourceTree::FrameResourceTreeBuilder<STATE>::FrameSet)>&
 FrameResourceTree::FrameResourceTreeBuilder<STATE>::setFrame(std::unique_ptr<protocol::Page::Frame> value) {
   static_assert(!(STATE & FrameSet), "property frame should not be set yet");
   m_result->setFrame(std::move(value));
@@ -2588,7 +2588,7 @@ inline FrameResourceTree::FrameResourceTreeBuilder<STATE>& FrameResourceTree::Fr
   return *this;
 }
 template<int STATE>
-inline FrameResourceTree::FrameResourceTreeBuilder<STATE | FrameResourceTree::FrameResourceTreeBuilder<STATE>::ResourcesSet>&
+inline FrameResourceTree::FrameResourceTreeBuilder<(STATE | FrameResourceTree::FrameResourceTreeBuilder<STATE>::ResourcesSet)>&
 FrameResourceTree::FrameResourceTreeBuilder<STATE>::setResources(std::unique_ptr<protocol::Array<protocol::Page::FrameResource>> value) {
   static_assert(!(STATE & ResourcesSet), "property resources should not be set yet");
   m_result->setResources(std::move(value));
@@ -2602,7 +2602,7 @@ inline void FrameTree::setFrame(std::unique_ptr<protocol::Page::Frame> value) { 
 inline void FrameTree::setChildFrames(std::unique_ptr<protocol::Array<protocol::Page::FrameTree>> value) { m_childFrames = std::move(value); }
 
 template<int STATE>
-inline FrameTree::FrameTreeBuilder<STATE | FrameTree::FrameTreeBuilder<STATE>::FrameSet>&
+inline FrameTree::FrameTreeBuilder<(STATE | FrameTree::FrameTreeBuilder<STATE>::FrameSet)>&
 FrameTree::FrameTreeBuilder<STATE>::setFrame(std::unique_ptr<protocol::Page::Frame> value) {
   static_assert(!(STATE & FrameSet), "property frame should not be set yet");
   m_result->setFrame(std::move(value));
@@ -2623,28 +2623,28 @@ inline void LayoutViewport::setClientWidth(int value) { m_clientWidth = value; }
 inline void LayoutViewport::setClientHeight(int value) { m_clientHeight = value; }
 
 template<int STATE>
-inline LayoutViewport::LayoutViewportBuilder<STATE | LayoutViewport::LayoutViewportBuilder<STATE>::PageXSet>&
+inline LayoutViewport::LayoutViewportBuilder<(STATE | LayoutViewport::LayoutViewportBuilder<STATE>::PageXSet)>&
 LayoutViewport::LayoutViewportBuilder<STATE>::setPageX(int value) {
   static_assert(!(STATE & PageXSet), "property pageX should not be set yet");
   m_result->setPageX(value);
   return castState<PageXSet>();
 }
 template<int STATE>
-inline LayoutViewport::LayoutViewportBuilder<STATE | LayoutViewport::LayoutViewportBuilder<STATE>::PageYSet>&
+inline LayoutViewport::LayoutViewportBuilder<(STATE | LayoutViewport::LayoutViewportBuilder<STATE>::PageYSet)>&
 LayoutViewport::LayoutViewportBuilder<STATE>::setPageY(int value) {
   static_assert(!(STATE & PageYSet), "property pageY should not be set yet");
   m_result->setPageY(value);
   return castState<PageYSet>();
 }
 template<int STATE>
-inline LayoutViewport::LayoutViewportBuilder<STATE | LayoutViewport::LayoutViewportBuilder<STATE>::ClientWidthSet>&
+inline LayoutViewport::LayoutViewportBuilder<(STATE | LayoutViewport::LayoutViewportBuilder<STATE>::ClientWidthSet)>&
 LayoutViewport::LayoutViewportBuilder<STATE>::setClientWidth(int value) {
   static_assert(!(STATE & ClientWidthSet), "property clientWidth should not be set yet");
   m_result->setClientWidth(value);
   return castState<ClientWidthSet>();
 }
 template<int STATE>
-inline LayoutViewport::LayoutViewportBuilder<STATE | LayoutViewport::LayoutViewportBuilder<STATE>::ClientHeightSet>&
+inline LayoutViewport::LayoutViewportBuilder<(STATE | LayoutViewport::LayoutViewportBuilder<STATE>::ClientHeightSet)>&
 LayoutViewport::LayoutViewportBuilder<STATE>::setClientHeight(int value) {
   static_assert(!(STATE & ClientHeightSet), "property clientHeight should not be set yet");
   m_result->setClientHeight(value);
@@ -2668,49 +2668,49 @@ inline void VisualViewport::setScale(double value) { m_scale = value; }
 inline void VisualViewport::setZoom(double value) { m_zoom = value; }
 
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::OffsetXSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::OffsetXSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setOffsetX(double value) {
   static_assert(!(STATE & OffsetXSet), "property offsetX should not be set yet");
   m_result->setOffsetX(value);
   return castState<OffsetXSet>();
 }
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::OffsetYSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::OffsetYSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setOffsetY(double value) {
   static_assert(!(STATE & OffsetYSet), "property offsetY should not be set yet");
   m_result->setOffsetY(value);
   return castState<OffsetYSet>();
 }
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::PageXSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::PageXSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setPageX(double value) {
   static_assert(!(STATE & PageXSet), "property pageX should not be set yet");
   m_result->setPageX(value);
   return castState<PageXSet>();
 }
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::PageYSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::PageYSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setPageY(double value) {
   static_assert(!(STATE & PageYSet), "property pageY should not be set yet");
   m_result->setPageY(value);
   return castState<PageYSet>();
 }
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::ClientWidthSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::ClientWidthSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setClientWidth(double value) {
   static_assert(!(STATE & ClientWidthSet), "property clientWidth should not be set yet");
   m_result->setClientWidth(value);
   return castState<ClientWidthSet>();
 }
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::ClientHeightSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::ClientHeightSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setClientHeight(double value) {
   static_assert(!(STATE & ClientHeightSet), "property clientHeight should not be set yet");
   m_result->setClientHeight(value);
   return castState<ClientHeightSet>();
 }
 template<int STATE>
-inline VisualViewport::VisualViewportBuilder<STATE | VisualViewport::VisualViewportBuilder<STATE>::ScaleSet>&
+inline VisualViewport::VisualViewportBuilder<(STATE | VisualViewport::VisualViewportBuilder<STATE>::ScaleSet)>&
 VisualViewport::VisualViewportBuilder<STATE>::setScale(double value) {
   static_assert(!(STATE & ScaleSet), "property scale should not be set yet");
   m_result->setScale(value);
@@ -2739,35 +2739,35 @@ inline void Viewport::setHeight(double value) { m_height = value; }
 inline void Viewport::setScale(double value) { m_scale = value; }
 
 template<int STATE>
-inline Viewport::ViewportBuilder<STATE | Viewport::ViewportBuilder<STATE>::XSet>&
+inline Viewport::ViewportBuilder<(STATE | Viewport::ViewportBuilder<STATE>::XSet)>&
 Viewport::ViewportBuilder<STATE>::setX(double value) {
   static_assert(!(STATE & XSet), "property x should not be set yet");
   m_result->setX(value);
   return castState<XSet>();
 }
 template<int STATE>
-inline Viewport::ViewportBuilder<STATE | Viewport::ViewportBuilder<STATE>::YSet>&
+inline Viewport::ViewportBuilder<(STATE | Viewport::ViewportBuilder<STATE>::YSet)>&
 Viewport::ViewportBuilder<STATE>::setY(double value) {
   static_assert(!(STATE & YSet), "property y should not be set yet");
   m_result->setY(value);
   return castState<YSet>();
 }
 template<int STATE>
-inline Viewport::ViewportBuilder<STATE | Viewport::ViewportBuilder<STATE>::WidthSet>&
+inline Viewport::ViewportBuilder<(STATE | Viewport::ViewportBuilder<STATE>::WidthSet)>&
 Viewport::ViewportBuilder<STATE>::setWidth(double value) {
   static_assert(!(STATE & WidthSet), "property width should not be set yet");
   m_result->setWidth(value);
   return castState<WidthSet>();
 }
 template<int STATE>
-inline Viewport::ViewportBuilder<STATE | Viewport::ViewportBuilder<STATE>::HeightSet>&
+inline Viewport::ViewportBuilder<(STATE | Viewport::ViewportBuilder<STATE>::HeightSet)>&
 Viewport::ViewportBuilder<STATE>::setHeight(double value) {
   static_assert(!(STATE & HeightSet), "property height should not be set yet");
   m_result->setHeight(value);
   return castState<HeightSet>();
 }
 template<int STATE>
-inline Viewport::ViewportBuilder<STATE | Viewport::ViewportBuilder<STATE>::ScaleSet>&
+inline Viewport::ViewportBuilder<(STATE | Viewport::ViewportBuilder<STATE>::ScaleSet)>&
 Viewport::ViewportBuilder<STATE>::setScale(double value) {
   static_assert(!(STATE & ScaleSet), "property scale should not be set yet");
   m_result->setScale(value);
@@ -2833,14 +2833,14 @@ inline void ScriptFontFamilies::setScript(const String& value) { m_script = valu
 inline void ScriptFontFamilies::setFontFamilies(std::unique_ptr<protocol::Page::FontFamilies> value) { m_fontFamilies = std::move(value); }
 
 template<int STATE>
-inline ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE | ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE>::ScriptSet>&
+inline ScriptFontFamilies::ScriptFontFamiliesBuilder<(STATE | ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE>::ScriptSet)>&
 ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE>::setScript(const String& value) {
   static_assert(!(STATE & ScriptSet), "property script should not be set yet");
   m_result->setScript(value);
   return castState<ScriptSet>();
 }
 template<int STATE>
-inline ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE | ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE>::FontFamiliesSet>&
+inline ScriptFontFamilies::ScriptFontFamiliesBuilder<(STATE | ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE>::FontFamiliesSet)>&
 ScriptFontFamilies::ScriptFontFamiliesBuilder<STATE>::setFontFamilies(std::unique_ptr<protocol::Page::FontFamilies> value) {
   static_assert(!(STATE & FontFamiliesSet), "property fontFamilies should not be set yet");
   m_result->setFontFamilies(std::move(value));
@@ -2871,7 +2871,7 @@ inline void CompilationCacheParams::setUrl(const String& value) { m_url = value;
 inline void CompilationCacheParams::setEager(bool value) { m_eager = value; }
 
 template<int STATE>
-inline CompilationCacheParams::CompilationCacheParamsBuilder<STATE | CompilationCacheParams::CompilationCacheParamsBuilder<STATE>::UrlSet>&
+inline CompilationCacheParams::CompilationCacheParamsBuilder<(STATE | CompilationCacheParams::CompilationCacheParamsBuilder<STATE>::UrlSet)>&
 CompilationCacheParams::CompilationCacheParamsBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
@@ -2902,14 +2902,14 @@ inline BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<S
   return *this;
 }
 template<int STATE>
-inline BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE | BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE>::LineNumberSet>&
+inline BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<(STATE | BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE>::LineNumberSet)>&
 BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE>::setLineNumber(int value) {
   static_assert(!(STATE & LineNumberSet), "property lineNumber should not be set yet");
   m_result->setLineNumber(value);
   return castState<LineNumberSet>();
 }
 template<int STATE>
-inline BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE | BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE>::ColumnNumberSet>&
+inline BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<(STATE | BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE>::ColumnNumberSet)>&
 BackForwardCacheBlockingDetails::BackForwardCacheBlockingDetailsBuilder<STATE>::setColumnNumber(int value) {
   static_assert(!(STATE & ColumnNumberSet), "property columnNumber should not be set yet");
   m_result->setColumnNumber(value);
@@ -2927,14 +2927,14 @@ inline void BackForwardCacheNotRestoredExplanation::setContext(const String& val
 inline void BackForwardCacheNotRestoredExplanation::setDetails(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheBlockingDetails>> value) { m_details = std::move(value); }
 
 template<int STATE>
-inline BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE | BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE>::TypeSet>&
+inline BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<(STATE | BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE>::TypeSet)>&
 BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
   return castState<TypeSet>();
 }
 template<int STATE>
-inline BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE | BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE>::ReasonSet>&
+inline BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<(STATE | BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE>::ReasonSet)>&
 BackForwardCacheNotRestoredExplanation::BackForwardCacheNotRestoredExplanationBuilder<STATE>::setReason(const String& value) {
   static_assert(!(STATE & ReasonSet), "property reason should not be set yet");
   m_result->setReason(value);
@@ -2959,21 +2959,21 @@ inline void BackForwardCacheNotRestoredExplanationTree::setExplanations(std::uni
 inline void BackForwardCacheNotRestoredExplanationTree::setChildren(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanationTree>> value) { m_children = std::move(value); }
 
 template<int STATE>
-inline BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::UrlSet>&
+inline BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::UrlSet)>&
 BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::ExplanationsSet>&
+inline BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::ExplanationsSet)>&
 BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::setExplanations(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanation>> value) {
   static_assert(!(STATE & ExplanationsSet), "property explanations should not be set yet");
   m_result->setExplanations(std::move(value));
   return castState<ExplanationsSet>();
 }
 template<int STATE>
-inline BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE | BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::ChildrenSet>&
+inline BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<(STATE | BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::ChildrenSet)>&
 BackForwardCacheNotRestoredExplanationTree::BackForwardCacheNotRestoredExplanationTreeBuilder<STATE>::setChildren(std::unique_ptr<protocol::Array<protocol::Page::BackForwardCacheNotRestoredExplanationTree>> value) {
   static_assert(!(STATE & ChildrenSet), "property children should not be set yet");
   m_result->setChildren(std::move(value));

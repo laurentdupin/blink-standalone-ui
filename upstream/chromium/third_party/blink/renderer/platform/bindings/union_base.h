@@ -48,7 +48,7 @@ class OptimizedReturnProxy {
  public:
   OptimizedReturnProxy() = default;
   OptimizedReturnProxy(const OptimizedReturnProxy& r) = default;
-  OptimizedReturnProxy(const OptimizedReturnProxy&& r) = default;
+  OptimizedReturnProxy(OptimizedReturnProxy&& r) = default;
   OptimizedReturnProxy& operator=(const OptimizedReturnProxy& r) = default;
 
   template <typename MemberType>

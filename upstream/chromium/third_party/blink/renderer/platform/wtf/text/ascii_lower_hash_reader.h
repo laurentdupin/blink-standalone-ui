@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_ASCII_LOWER_HASH_READER_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_ASCII_LOWER_HASH_READER_H_
 
+#include "build/build_config.h"
 #include "third_party/blink/renderer/platform/wtf/text/ascii_ctype.h"
 
 namespace blink {
@@ -26,7 +27,7 @@ struct AsciiLowerHashReader {
   // SAFETY: rapidhash callback.
   UNSAFE_BUFFER_USAGE ALWAYS_INLINE static uint64_t Read64(const uint8_t* ptr) {
     const CharType* p = reinterpret_cast<const CharType*>(ptr);
-#if defined(__SSE2__) || defined(__ARM_NEON__)
+#if (defined(__SSE2__) || defined(__ARM_NEON__)) && !defined(COMPILER_MSVC)
     CharType b __attribute__((vector_size(8)));
     memcpy(&b, p, sizeof(b));
     b |= (b >= 'A' & b <= 'Z') & 0x20;
@@ -49,7 +50,7 @@ struct AsciiLowerHashReader {
   // SAFETY: rapidhash callback.
   UNSAFE_BUFFER_USAGE ALWAYS_INLINE static uint64_t Read32(const uint8_t* ptr) {
     const CharType* p = reinterpret_cast<const CharType*>(ptr);
-#if defined(__SSE2__) || defined(__ARM_NEON__)
+#if (defined(__SSE2__) || defined(__ARM_NEON__)) && !defined(COMPILER_MSVC)
     CharType b __attribute__((vector_size(4)));
     memcpy(&b, p, sizeof(b));
     b |= (b >= 'A' & b <= 'Z') & 0x20;

@@ -6,6 +6,8 @@
 
 #include <GLES2/gl2.h>
 
+#include "gpu/command_buffer/client/client_shared_image.h"
+
 namespace gpu {
 namespace gles2 {
 

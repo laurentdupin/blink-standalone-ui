@@ -572,11 +572,11 @@ public:
             AllFieldsSet = (NameSet | PathSet | DomainSet | 0)};
 
 
-        AffectedCookieBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        AffectedCookieBuilder<(STATE | AffectedCookieBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        AffectedCookieBuilder<STATE | PathSet>& setPath(const String& value);  // Defined below
+        AffectedCookieBuilder<(STATE | AffectedCookieBuilder<STATE>::PathSet)>& setPath(const String& value);  // Defined below
 
-        AffectedCookieBuilder<STATE | DomainSet>& setDomain(const String& value);  // Defined below
+        AffectedCookieBuilder<(STATE | AffectedCookieBuilder<STATE>::DomainSet)>& setDomain(const String& value);  // Defined below
 
         std::unique_ptr<AffectedCookie> build()
         {
@@ -588,9 +588,9 @@ public:
         friend class AffectedCookie;
         AffectedCookieBuilder() : m_result(new AffectedCookie()) { }
 
-        template<int STEP> AffectedCookieBuilder<STATE | STEP>& castState()
+        template<int STEP> AffectedCookieBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AffectedCookieBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AffectedCookieBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::AffectedCookie> m_result;
@@ -639,7 +639,7 @@ public:
 
         AffectedRequestBuilder<STATE>& setRequestId(const String& value);  // Defined below
 
-        AffectedRequestBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        AffectedRequestBuilder<(STATE | AffectedRequestBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
         std::unique_ptr<AffectedRequest> build()
         {
@@ -651,9 +651,9 @@ public:
         friend class AffectedRequest;
         AffectedRequestBuilder() : m_result(new AffectedRequest()) { }
 
-        template<int STEP> AffectedRequestBuilder<STATE | STEP>& castState()
+        template<int STEP> AffectedRequestBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AffectedRequestBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AffectedRequestBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::AffectedRequest> m_result;
@@ -690,7 +690,7 @@ public:
             AllFieldsSet = (FrameIdSet | 0)};
 
 
-        AffectedFrameBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        AffectedFrameBuilder<(STATE | AffectedFrameBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
         std::unique_ptr<AffectedFrame> build()
         {
@@ -702,9 +702,9 @@ public:
         friend class AffectedFrame;
         AffectedFrameBuilder() : m_result(new AffectedFrame()) { }
 
-        template<int STEP> AffectedFrameBuilder<STATE | STEP>& castState()
+        template<int STEP> AffectedFrameBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AffectedFrameBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AffectedFrameBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::AffectedFrame> m_result;
@@ -749,7 +749,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        CookieIssueInsightBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        CookieIssueInsightBuilder<(STATE | CookieIssueInsightBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         CookieIssueInsightBuilder<STATE>& setTableEntryUrl(const String& value);  // Defined below
 
@@ -763,9 +763,9 @@ public:
         friend class CookieIssueInsight;
         CookieIssueInsightBuilder() : m_result(new CookieIssueInsight()) { }
 
-        template<int STEP> CookieIssueInsightBuilder<STATE | STEP>& castState()
+        template<int STEP> CookieIssueInsightBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CookieIssueInsightBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CookieIssueInsightBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::CookieIssueInsight> m_result;
@@ -868,11 +868,11 @@ public:
 
         CookieIssueDetailsBuilder<STATE>& setRawCookieLine(const String& value);  // Defined below
 
-        CookieIssueDetailsBuilder<STATE | CookieWarningReasonsSet>& setCookieWarningReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        CookieIssueDetailsBuilder<(STATE | CookieIssueDetailsBuilder<STATE>::CookieWarningReasonsSet)>& setCookieWarningReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        CookieIssueDetailsBuilder<STATE | CookieExclusionReasonsSet>& setCookieExclusionReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        CookieIssueDetailsBuilder<(STATE | CookieIssueDetailsBuilder<STATE>::CookieExclusionReasonsSet)>& setCookieExclusionReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        CookieIssueDetailsBuilder<STATE | OperationSet>& setOperation(const String& value);  // Defined below
+        CookieIssueDetailsBuilder<(STATE | CookieIssueDetailsBuilder<STATE>::OperationSet)>& setOperation(const String& value);  // Defined below
 
         CookieIssueDetailsBuilder<STATE>& setSiteForCookies(const String& value);  // Defined below
 
@@ -892,9 +892,9 @@ public:
         friend class CookieIssueDetails;
         CookieIssueDetailsBuilder() : m_result(new CookieIssueDetails()) { }
 
-        template<int STEP> CookieIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> CookieIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CookieIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CookieIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::CookieIssueDetails> m_result;
@@ -947,7 +947,7 @@ public:
             AllFieldsSet = (PerformanceIssueTypeSet | 0)};
 
 
-        PerformanceIssueDetailsBuilder<STATE | PerformanceIssueTypeSet>& setPerformanceIssueType(const String& value);  // Defined below
+        PerformanceIssueDetailsBuilder<(STATE | PerformanceIssueDetailsBuilder<STATE>::PerformanceIssueTypeSet)>& setPerformanceIssueType(const String& value);  // Defined below
 
         PerformanceIssueDetailsBuilder<STATE>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
@@ -961,9 +961,9 @@ public:
         friend class PerformanceIssueDetails;
         PerformanceIssueDetailsBuilder() : m_result(new PerformanceIssueDetails()) { }
 
-        template<int STEP> PerformanceIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> PerformanceIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PerformanceIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PerformanceIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::PerformanceIssueDetails> m_result;
@@ -1037,11 +1037,11 @@ public:
 
         MixedContentIssueDetailsBuilder<STATE>& setResourceType(const String& value);  // Defined below
 
-        MixedContentIssueDetailsBuilder<STATE | ResolutionStatusSet>& setResolutionStatus(const String& value);  // Defined below
+        MixedContentIssueDetailsBuilder<(STATE | MixedContentIssueDetailsBuilder<STATE>::ResolutionStatusSet)>& setResolutionStatus(const String& value);  // Defined below
 
-        MixedContentIssueDetailsBuilder<STATE | InsecureURLSet>& setInsecureURL(const String& value);  // Defined below
+        MixedContentIssueDetailsBuilder<(STATE | MixedContentIssueDetailsBuilder<STATE>::InsecureURLSet)>& setInsecureURL(const String& value);  // Defined below
 
-        MixedContentIssueDetailsBuilder<STATE | MainResourceURLSet>& setMainResourceURL(const String& value);  // Defined below
+        MixedContentIssueDetailsBuilder<(STATE | MixedContentIssueDetailsBuilder<STATE>::MainResourceURLSet)>& setMainResourceURL(const String& value);  // Defined below
 
         MixedContentIssueDetailsBuilder<STATE>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
@@ -1057,9 +1057,9 @@ public:
         friend class MixedContentIssueDetails;
         MixedContentIssueDetailsBuilder() : m_result(new MixedContentIssueDetails()) { }
 
-        template<int STEP> MixedContentIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> MixedContentIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<MixedContentIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<MixedContentIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::MixedContentIssueDetails> m_result;
@@ -1122,13 +1122,13 @@ public:
             AllFieldsSet = (RequestSet | ReasonSet | 0)};
 
 
-        BlockedByResponseIssueDetailsBuilder<STATE | RequestSet>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
+        BlockedByResponseIssueDetailsBuilder<(STATE | BlockedByResponseIssueDetailsBuilder<STATE>::RequestSet)>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
         BlockedByResponseIssueDetailsBuilder<STATE>& setParentFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value);  // Defined below
 
         BlockedByResponseIssueDetailsBuilder<STATE>& setBlockedFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value);  // Defined below
 
-        BlockedByResponseIssueDetailsBuilder<STATE | ReasonSet>& setReason(const String& value);  // Defined below
+        BlockedByResponseIssueDetailsBuilder<(STATE | BlockedByResponseIssueDetailsBuilder<STATE>::ReasonSet)>& setReason(const String& value);  // Defined below
 
         std::unique_ptr<BlockedByResponseIssueDetails> build()
         {
@@ -1140,9 +1140,9 @@ public:
         friend class BlockedByResponseIssueDetails;
         BlockedByResponseIssueDetailsBuilder() : m_result(new BlockedByResponseIssueDetails()) { }
 
-        template<int STEP> BlockedByResponseIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> BlockedByResponseIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BlockedByResponseIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BlockedByResponseIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::BlockedByResponseIssueDetails> m_result;
@@ -1189,11 +1189,11 @@ public:
             AllFieldsSet = (ResolutionSet | ReasonSet | FrameSet | 0)};
 
 
-        HeavyAdIssueDetailsBuilder<STATE | ResolutionSet>& setResolution(const String& value);  // Defined below
+        HeavyAdIssueDetailsBuilder<(STATE | HeavyAdIssueDetailsBuilder<STATE>::ResolutionSet)>& setResolution(const String& value);  // Defined below
 
-        HeavyAdIssueDetailsBuilder<STATE | ReasonSet>& setReason(const String& value);  // Defined below
+        HeavyAdIssueDetailsBuilder<(STATE | HeavyAdIssueDetailsBuilder<STATE>::ReasonSet)>& setReason(const String& value);  // Defined below
 
-        HeavyAdIssueDetailsBuilder<STATE | FrameSet>& setFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value);  // Defined below
+        HeavyAdIssueDetailsBuilder<(STATE | HeavyAdIssueDetailsBuilder<STATE>::FrameSet)>& setFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value);  // Defined below
 
         std::unique_ptr<HeavyAdIssueDetails> build()
         {
@@ -1205,9 +1205,9 @@ public:
         friend class HeavyAdIssueDetails;
         HeavyAdIssueDetailsBuilder() : m_result(new HeavyAdIssueDetails()) { }
 
-        template<int STEP> HeavyAdIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> HeavyAdIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<HeavyAdIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<HeavyAdIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::HeavyAdIssueDetails> m_result;
@@ -1264,11 +1264,11 @@ public:
 
         SourceCodeLocationBuilder<STATE>& setScriptId(const String& value);  // Defined below
 
-        SourceCodeLocationBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        SourceCodeLocationBuilder<(STATE | SourceCodeLocationBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        SourceCodeLocationBuilder<STATE | LineNumberSet>& setLineNumber(int value);  // Defined below
+        SourceCodeLocationBuilder<(STATE | SourceCodeLocationBuilder<STATE>::LineNumberSet)>& setLineNumber(int value);  // Defined below
 
-        SourceCodeLocationBuilder<STATE | ColumnNumberSet>& setColumnNumber(int value);  // Defined below
+        SourceCodeLocationBuilder<(STATE | SourceCodeLocationBuilder<STATE>::ColumnNumberSet)>& setColumnNumber(int value);  // Defined below
 
         std::unique_ptr<SourceCodeLocation> build()
         {
@@ -1280,9 +1280,9 @@ public:
         friend class SourceCodeLocation;
         SourceCodeLocationBuilder() : m_result(new SourceCodeLocation()) { }
 
-        template<int STEP> SourceCodeLocationBuilder<STATE | STEP>& castState()
+        template<int STEP> SourceCodeLocationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SourceCodeLocationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SourceCodeLocationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::SourceCodeLocation> m_result;
@@ -1367,11 +1367,11 @@ public:
 
         ContentSecurityPolicyIssueDetailsBuilder<STATE>& setBlockedURL(const String& value);  // Defined below
 
-        ContentSecurityPolicyIssueDetailsBuilder<STATE | ViolatedDirectiveSet>& setViolatedDirective(const String& value);  // Defined below
+        ContentSecurityPolicyIssueDetailsBuilder<(STATE | ContentSecurityPolicyIssueDetailsBuilder<STATE>::ViolatedDirectiveSet)>& setViolatedDirective(const String& value);  // Defined below
 
-        ContentSecurityPolicyIssueDetailsBuilder<STATE | IsReportOnlySet>& setIsReportOnly(bool value);  // Defined below
+        ContentSecurityPolicyIssueDetailsBuilder<(STATE | ContentSecurityPolicyIssueDetailsBuilder<STATE>::IsReportOnlySet)>& setIsReportOnly(bool value);  // Defined below
 
-        ContentSecurityPolicyIssueDetailsBuilder<STATE | ContentSecurityPolicyViolationTypeSet>& setContentSecurityPolicyViolationType(const String& value);  // Defined below
+        ContentSecurityPolicyIssueDetailsBuilder<(STATE | ContentSecurityPolicyIssueDetailsBuilder<STATE>::ContentSecurityPolicyViolationTypeSet)>& setContentSecurityPolicyViolationType(const String& value);  // Defined below
 
         ContentSecurityPolicyIssueDetailsBuilder<STATE>& setFrameAncestor(std::unique_ptr<protocol::Audits::AffectedFrame> value);  // Defined below
 
@@ -1389,9 +1389,9 @@ public:
         friend class ContentSecurityPolicyIssueDetails;
         ContentSecurityPolicyIssueDetailsBuilder() : m_result(new ContentSecurityPolicyIssueDetails()) { }
 
-        template<int STEP> ContentSecurityPolicyIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> ContentSecurityPolicyIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ContentSecurityPolicyIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ContentSecurityPolicyIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::ContentSecurityPolicyIssueDetails> m_result;
@@ -1441,11 +1441,11 @@ public:
             AllFieldsSet = (SourceCodeLocationSet | IsWarningSet | TypeSet | 0)};
 
 
-        SharedArrayBufferIssueDetailsBuilder<STATE | SourceCodeLocationSet>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
+        SharedArrayBufferIssueDetailsBuilder<(STATE | SharedArrayBufferIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
-        SharedArrayBufferIssueDetailsBuilder<STATE | IsWarningSet>& setIsWarning(bool value);  // Defined below
+        SharedArrayBufferIssueDetailsBuilder<(STATE | SharedArrayBufferIssueDetailsBuilder<STATE>::IsWarningSet)>& setIsWarning(bool value);  // Defined below
 
-        SharedArrayBufferIssueDetailsBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        SharedArrayBufferIssueDetailsBuilder<(STATE | SharedArrayBufferIssueDetailsBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         std::unique_ptr<SharedArrayBufferIssueDetails> build()
         {
@@ -1457,9 +1457,9 @@ public:
         friend class SharedArrayBufferIssueDetails;
         SharedArrayBufferIssueDetailsBuilder() : m_result(new SharedArrayBufferIssueDetails()) { }
 
-        template<int STEP> SharedArrayBufferIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedArrayBufferIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedArrayBufferIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedArrayBufferIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::SharedArrayBufferIssueDetails> m_result;
@@ -1541,11 +1541,11 @@ public:
             AllFieldsSet = (CorsErrorStatusSet | IsWarningSet | RequestSet | 0)};
 
 
-        CorsIssueDetailsBuilder<STATE | CorsErrorStatusSet>& setCorsErrorStatus(std::unique_ptr<protocol::Network::CorsErrorStatus> value);  // Defined below
+        CorsIssueDetailsBuilder<(STATE | CorsIssueDetailsBuilder<STATE>::CorsErrorStatusSet)>& setCorsErrorStatus(std::unique_ptr<protocol::Network::CorsErrorStatus> value);  // Defined below
 
-        CorsIssueDetailsBuilder<STATE | IsWarningSet>& setIsWarning(bool value);  // Defined below
+        CorsIssueDetailsBuilder<(STATE | CorsIssueDetailsBuilder<STATE>::IsWarningSet)>& setIsWarning(bool value);  // Defined below
 
-        CorsIssueDetailsBuilder<STATE | RequestSet>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
+        CorsIssueDetailsBuilder<(STATE | CorsIssueDetailsBuilder<STATE>::RequestSet)>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
         CorsIssueDetailsBuilder<STATE>& setLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
@@ -1565,9 +1565,9 @@ public:
         friend class CorsIssueDetails;
         CorsIssueDetailsBuilder() : m_result(new CorsIssueDetails()) { }
 
-        template<int STEP> CorsIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> CorsIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CorsIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CorsIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::CorsIssueDetails> m_result;
@@ -1636,7 +1636,7 @@ public:
             AllFieldsSet = (ViolationTypeSet | 0)};
 
 
-        AttributionReportingIssueDetailsBuilder<STATE | ViolationTypeSet>& setViolationType(const String& value);  // Defined below
+        AttributionReportingIssueDetailsBuilder<(STATE | AttributionReportingIssueDetailsBuilder<STATE>::ViolationTypeSet)>& setViolationType(const String& value);  // Defined below
 
         AttributionReportingIssueDetailsBuilder<STATE>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
@@ -1654,9 +1654,9 @@ public:
         friend class AttributionReportingIssueDetails;
         AttributionReportingIssueDetailsBuilder() : m_result(new AttributionReportingIssueDetails()) { }
 
-        template<int STEP> AttributionReportingIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> AttributionReportingIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AttributionReportingIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AttributionReportingIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::AttributionReportingIssueDetails> m_result;
@@ -1711,15 +1711,15 @@ public:
             AllFieldsSet = (IsLimitedQuirksModeSet | DocumentNodeIdSet | UrlSet | FrameIdSet | LoaderIdSet | 0)};
 
 
-        QuirksModeIssueDetailsBuilder<STATE | IsLimitedQuirksModeSet>& setIsLimitedQuirksMode(bool value);  // Defined below
+        QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetailsBuilder<STATE>::IsLimitedQuirksModeSet)>& setIsLimitedQuirksMode(bool value);  // Defined below
 
-        QuirksModeIssueDetailsBuilder<STATE | DocumentNodeIdSet>& setDocumentNodeId(int value);  // Defined below
+        QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetailsBuilder<STATE>::DocumentNodeIdSet)>& setDocumentNodeId(int value);  // Defined below
 
-        QuirksModeIssueDetailsBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetailsBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        QuirksModeIssueDetailsBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetailsBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
-        QuirksModeIssueDetailsBuilder<STATE | LoaderIdSet>& setLoaderId(const String& value);  // Defined below
+        QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetailsBuilder<STATE>::LoaderIdSet)>& setLoaderId(const String& value);  // Defined below
 
         std::unique_ptr<QuirksModeIssueDetails> build()
         {
@@ -1731,9 +1731,9 @@ public:
         friend class QuirksModeIssueDetails;
         QuirksModeIssueDetailsBuilder() : m_result(new QuirksModeIssueDetails()) { }
 
-        template<int STEP> QuirksModeIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> QuirksModeIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<QuirksModeIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<QuirksModeIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::QuirksModeIssueDetails> m_result;
@@ -1782,7 +1782,7 @@ public:
             AllFieldsSet = (UrlSet | 0)};
 
 
-        NavigatorUserAgentIssueDetailsBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        NavigatorUserAgentIssueDetailsBuilder<(STATE | NavigatorUserAgentIssueDetailsBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
         NavigatorUserAgentIssueDetailsBuilder<STATE>& setLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
@@ -1796,9 +1796,9 @@ public:
         friend class NavigatorUserAgentIssueDetails;
         NavigatorUserAgentIssueDetailsBuilder() : m_result(new NavigatorUserAgentIssueDetails()) { }
 
-        template<int STEP> NavigatorUserAgentIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> NavigatorUserAgentIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<NavigatorUserAgentIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<NavigatorUserAgentIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::NavigatorUserAgentIssueDetails> m_result;
@@ -1839,9 +1839,9 @@ public:
             AllFieldsSet = (SharedDictionaryErrorSet | RequestSet | 0)};
 
 
-        SharedDictionaryIssueDetailsBuilder<STATE | SharedDictionaryErrorSet>& setSharedDictionaryError(const String& value);  // Defined below
+        SharedDictionaryIssueDetailsBuilder<(STATE | SharedDictionaryIssueDetailsBuilder<STATE>::SharedDictionaryErrorSet)>& setSharedDictionaryError(const String& value);  // Defined below
 
-        SharedDictionaryIssueDetailsBuilder<STATE | RequestSet>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
+        SharedDictionaryIssueDetailsBuilder<(STATE | SharedDictionaryIssueDetailsBuilder<STATE>::RequestSet)>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
         std::unique_ptr<SharedDictionaryIssueDetails> build()
         {
@@ -1853,9 +1853,9 @@ public:
         friend class SharedDictionaryIssueDetails;
         SharedDictionaryIssueDetailsBuilder() : m_result(new SharedDictionaryIssueDetails()) { }
 
-        template<int STEP> SharedDictionaryIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedDictionaryIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedDictionaryIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedDictionaryIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::SharedDictionaryIssueDetails> m_result;
@@ -1904,13 +1904,13 @@ public:
             AllFieldsSet = (ErrorSet | SignatureBaseSet | IntegrityAssertionsSet | RequestSet | 0)};
 
 
-        SRIMessageSignatureIssueDetailsBuilder<STATE | ErrorSet>& setError(const String& value);  // Defined below
+        SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetailsBuilder<STATE>::ErrorSet)>& setError(const String& value);  // Defined below
 
-        SRIMessageSignatureIssueDetailsBuilder<STATE | SignatureBaseSet>& setSignatureBase(const String& value);  // Defined below
+        SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetailsBuilder<STATE>::SignatureBaseSet)>& setSignatureBase(const String& value);  // Defined below
 
-        SRIMessageSignatureIssueDetailsBuilder<STATE | IntegrityAssertionsSet>& setIntegrityAssertions(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetailsBuilder<STATE>::IntegrityAssertionsSet)>& setIntegrityAssertions(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        SRIMessageSignatureIssueDetailsBuilder<STATE | RequestSet>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
+        SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetailsBuilder<STATE>::RequestSet)>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
         std::unique_ptr<SRIMessageSignatureIssueDetails> build()
         {
@@ -1922,9 +1922,9 @@ public:
         friend class SRIMessageSignatureIssueDetails;
         SRIMessageSignatureIssueDetailsBuilder() : m_result(new SRIMessageSignatureIssueDetails()) { }
 
-        template<int STEP> SRIMessageSignatureIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> SRIMessageSignatureIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SRIMessageSignatureIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SRIMessageSignatureIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::SRIMessageSignatureIssueDetails> m_result;
@@ -1967,9 +1967,9 @@ public:
             AllFieldsSet = (ErrorSet | RequestSet | 0)};
 
 
-        UnencodedDigestIssueDetailsBuilder<STATE | ErrorSet>& setError(const String& value);  // Defined below
+        UnencodedDigestIssueDetailsBuilder<(STATE | UnencodedDigestIssueDetailsBuilder<STATE>::ErrorSet)>& setError(const String& value);  // Defined below
 
-        UnencodedDigestIssueDetailsBuilder<STATE | RequestSet>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
+        UnencodedDigestIssueDetailsBuilder<(STATE | UnencodedDigestIssueDetailsBuilder<STATE>::RequestSet)>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
         std::unique_ptr<UnencodedDigestIssueDetails> build()
         {
@@ -1981,9 +1981,9 @@ public:
         friend class UnencodedDigestIssueDetails;
         UnencodedDigestIssueDetailsBuilder() : m_result(new UnencodedDigestIssueDetails()) { }
 
-        template<int STEP> UnencodedDigestIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> UnencodedDigestIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<UnencodedDigestIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<UnencodedDigestIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::UnencodedDigestIssueDetails> m_result;
@@ -2024,9 +2024,9 @@ public:
             AllFieldsSet = (ErrorSet | RequestSet | 0)};
 
 
-        ConnectionAllowlistIssueDetailsBuilder<STATE | ErrorSet>& setError(const String& value);  // Defined below
+        ConnectionAllowlistIssueDetailsBuilder<(STATE | ConnectionAllowlistIssueDetailsBuilder<STATE>::ErrorSet)>& setError(const String& value);  // Defined below
 
-        ConnectionAllowlistIssueDetailsBuilder<STATE | RequestSet>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
+        ConnectionAllowlistIssueDetailsBuilder<(STATE | ConnectionAllowlistIssueDetailsBuilder<STATE>::RequestSet)>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
         std::unique_ptr<ConnectionAllowlistIssueDetails> build()
         {
@@ -2038,9 +2038,9 @@ public:
         friend class ConnectionAllowlistIssueDetails;
         ConnectionAllowlistIssueDetailsBuilder() : m_result(new ConnectionAllowlistIssueDetails()) { }
 
-        template<int STEP> ConnectionAllowlistIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> ConnectionAllowlistIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ConnectionAllowlistIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ConnectionAllowlistIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::ConnectionAllowlistIssueDetails> m_result;
@@ -2113,7 +2113,7 @@ public:
             AllFieldsSet = (ErrorTypeSet | 0)};
 
 
-        GenericIssueDetailsBuilder<STATE | ErrorTypeSet>& setErrorType(const String& value);  // Defined below
+        GenericIssueDetailsBuilder<(STATE | GenericIssueDetailsBuilder<STATE>::ErrorTypeSet)>& setErrorType(const String& value);  // Defined below
 
         GenericIssueDetailsBuilder<STATE>& setFrameId(const String& value);  // Defined below
 
@@ -2133,9 +2133,9 @@ public:
         friend class GenericIssueDetails;
         GenericIssueDetailsBuilder() : m_result(new GenericIssueDetails()) { }
 
-        template<int STEP> GenericIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> GenericIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<GenericIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<GenericIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::GenericIssueDetails> m_result;
@@ -2190,9 +2190,9 @@ public:
 
         DeprecationIssueDetailsBuilder<STATE>& setAffectedFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value);  // Defined below
 
-        DeprecationIssueDetailsBuilder<STATE | SourceCodeLocationSet>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
+        DeprecationIssueDetailsBuilder<(STATE | DeprecationIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
-        DeprecationIssueDetailsBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        DeprecationIssueDetailsBuilder<(STATE | DeprecationIssueDetailsBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         std::unique_ptr<DeprecationIssueDetails> build()
         {
@@ -2204,9 +2204,9 @@ public:
         friend class DeprecationIssueDetails;
         DeprecationIssueDetailsBuilder() : m_result(new DeprecationIssueDetails()) { }
 
-        template<int STEP> DeprecationIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> DeprecationIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeprecationIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeprecationIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::DeprecationIssueDetails> m_result;
@@ -2244,7 +2244,7 @@ public:
             AllFieldsSet = (TrackingSitesSet | 0)};
 
 
-        BounceTrackingIssueDetailsBuilder<STATE | TrackingSitesSet>& setTrackingSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        BounceTrackingIssueDetailsBuilder<(STATE | BounceTrackingIssueDetailsBuilder<STATE>::TrackingSitesSet)>& setTrackingSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<BounceTrackingIssueDetails> build()
         {
@@ -2256,9 +2256,9 @@ public:
         friend class BounceTrackingIssueDetails;
         BounceTrackingIssueDetailsBuilder() : m_result(new BounceTrackingIssueDetails()) { }
 
-        template<int STEP> BounceTrackingIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> BounceTrackingIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BounceTrackingIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BounceTrackingIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::BounceTrackingIssueDetails> m_result;
@@ -2306,13 +2306,13 @@ public:
             AllFieldsSet = (AllowedSitesSet | OptOutPercentageSet | IsOptOutTopLevelSet | OperationSet | 0)};
 
 
-        CookieDeprecationMetadataIssueDetailsBuilder<STATE | AllowedSitesSet>& setAllowedSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetailsBuilder<STATE>::AllowedSitesSet)>& setAllowedSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        CookieDeprecationMetadataIssueDetailsBuilder<STATE | OptOutPercentageSet>& setOptOutPercentage(double value);  // Defined below
+        CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetailsBuilder<STATE>::OptOutPercentageSet)>& setOptOutPercentage(double value);  // Defined below
 
-        CookieDeprecationMetadataIssueDetailsBuilder<STATE | IsOptOutTopLevelSet>& setIsOptOutTopLevel(bool value);  // Defined below
+        CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetailsBuilder<STATE>::IsOptOutTopLevelSet)>& setIsOptOutTopLevel(bool value);  // Defined below
 
-        CookieDeprecationMetadataIssueDetailsBuilder<STATE | OperationSet>& setOperation(const String& value);  // Defined below
+        CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetailsBuilder<STATE>::OperationSet)>& setOperation(const String& value);  // Defined below
 
         std::unique_ptr<CookieDeprecationMetadataIssueDetails> build()
         {
@@ -2324,9 +2324,9 @@ public:
         friend class CookieDeprecationMetadataIssueDetails;
         CookieDeprecationMetadataIssueDetailsBuilder() : m_result(new CookieDeprecationMetadataIssueDetails()) { }
 
-        template<int STEP> CookieDeprecationMetadataIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> CookieDeprecationMetadataIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CookieDeprecationMetadataIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CookieDeprecationMetadataIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::CookieDeprecationMetadataIssueDetails> m_result;
@@ -2365,7 +2365,7 @@ public:
             AllFieldsSet = (FederatedAuthRequestIssueReasonSet | 0)};
 
 
-        FederatedAuthRequestIssueDetailsBuilder<STATE | FederatedAuthRequestIssueReasonSet>& setFederatedAuthRequestIssueReason(const String& value);  // Defined below
+        FederatedAuthRequestIssueDetailsBuilder<(STATE | FederatedAuthRequestIssueDetailsBuilder<STATE>::FederatedAuthRequestIssueReasonSet)>& setFederatedAuthRequestIssueReason(const String& value);  // Defined below
 
         std::unique_ptr<FederatedAuthRequestIssueDetails> build()
         {
@@ -2377,9 +2377,9 @@ public:
         friend class FederatedAuthRequestIssueDetails;
         FederatedAuthRequestIssueDetailsBuilder() : m_result(new FederatedAuthRequestIssueDetails()) { }
 
-        template<int STEP> FederatedAuthRequestIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> FederatedAuthRequestIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FederatedAuthRequestIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FederatedAuthRequestIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::FederatedAuthRequestIssueDetails> m_result;
@@ -2415,7 +2415,7 @@ public:
             AllFieldsSet = (FederatedAuthUserInfoRequestIssueReasonSet | 0)};
 
 
-        FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE | FederatedAuthUserInfoRequestIssueReasonSet>& setFederatedAuthUserInfoRequestIssueReason(const String& value);  // Defined below
+        FederatedAuthUserInfoRequestIssueDetailsBuilder<(STATE | FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE>::FederatedAuthUserInfoRequestIssueReasonSet)>& setFederatedAuthUserInfoRequestIssueReason(const String& value);  // Defined below
 
         std::unique_ptr<FederatedAuthUserInfoRequestIssueDetails> build()
         {
@@ -2427,9 +2427,9 @@ public:
         friend class FederatedAuthUserInfoRequestIssueDetails;
         FederatedAuthUserInfoRequestIssueDetailsBuilder() : m_result(new FederatedAuthUserInfoRequestIssueDetails()) { }
 
-        template<int STEP> FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> FederatedAuthUserInfoRequestIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FederatedAuthUserInfoRequestIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::FederatedAuthUserInfoRequestIssueDetails> m_result;
@@ -2465,7 +2465,7 @@ public:
             AllFieldsSet = (EmailVerificationRequestIssueReasonSet | 0)};
 
 
-        EmailVerificationRequestIssueDetailsBuilder<STATE | EmailVerificationRequestIssueReasonSet>& setEmailVerificationRequestIssueReason(const String& value);  // Defined below
+        EmailVerificationRequestIssueDetailsBuilder<(STATE | EmailVerificationRequestIssueDetailsBuilder<STATE>::EmailVerificationRequestIssueReasonSet)>& setEmailVerificationRequestIssueReason(const String& value);  // Defined below
 
         std::unique_ptr<EmailVerificationRequestIssueDetails> build()
         {
@@ -2477,9 +2477,9 @@ public:
         friend class EmailVerificationRequestIssueDetails;
         EmailVerificationRequestIssueDetailsBuilder() : m_result(new EmailVerificationRequestIssueDetails()) { }
 
-        template<int STEP> EmailVerificationRequestIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> EmailVerificationRequestIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<EmailVerificationRequestIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<EmailVerificationRequestIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::EmailVerificationRequestIssueDetails> m_result;
@@ -2519,9 +2519,9 @@ public:
             AllFieldsSet = (SourceCodeLocationSet | ClientHintIssueReasonSet | 0)};
 
 
-        ClientHintIssueDetailsBuilder<STATE | SourceCodeLocationSet>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
+        ClientHintIssueDetailsBuilder<(STATE | ClientHintIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
-        ClientHintIssueDetailsBuilder<STATE | ClientHintIssueReasonSet>& setClientHintIssueReason(const String& value);  // Defined below
+        ClientHintIssueDetailsBuilder<(STATE | ClientHintIssueDetailsBuilder<STATE>::ClientHintIssueReasonSet)>& setClientHintIssueReason(const String& value);  // Defined below
 
         std::unique_ptr<ClientHintIssueDetails> build()
         {
@@ -2533,9 +2533,9 @@ public:
         friend class ClientHintIssueDetails;
         ClientHintIssueDetailsBuilder() : m_result(new ClientHintIssueDetails()) { }
 
-        template<int STEP> ClientHintIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> ClientHintIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ClientHintIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ClientHintIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::ClientHintIssueDetails> m_result;
@@ -2585,9 +2585,9 @@ public:
             AllFieldsSet = (UrlSet | FailureMessageSet | 0)};
 
 
-        FailedRequestInfoBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        FailedRequestInfoBuilder<(STATE | FailedRequestInfoBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        FailedRequestInfoBuilder<STATE | FailureMessageSet>& setFailureMessage(const String& value);  // Defined below
+        FailedRequestInfoBuilder<(STATE | FailedRequestInfoBuilder<STATE>::FailureMessageSet)>& setFailureMessage(const String& value);  // Defined below
 
         FailedRequestInfoBuilder<STATE>& setRequestId(const String& value);  // Defined below
 
@@ -2601,9 +2601,9 @@ public:
         friend class FailedRequestInfo;
         FailedRequestInfoBuilder() : m_result(new FailedRequestInfo()) { }
 
-        template<int STEP> FailedRequestInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> FailedRequestInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FailedRequestInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FailedRequestInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::FailedRequestInfo> m_result;
@@ -2645,9 +2645,9 @@ public:
             AllFieldsSet = (UrlSet | PartitioningBlobURLInfoSet | 0)};
 
 
-        PartitioningBlobURLIssueDetailsBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        PartitioningBlobURLIssueDetailsBuilder<(STATE | PartitioningBlobURLIssueDetailsBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        PartitioningBlobURLIssueDetailsBuilder<STATE | PartitioningBlobURLInfoSet>& setPartitioningBlobURLInfo(const String& value);  // Defined below
+        PartitioningBlobURLIssueDetailsBuilder<(STATE | PartitioningBlobURLIssueDetailsBuilder<STATE>::PartitioningBlobURLInfoSet)>& setPartitioningBlobURLInfo(const String& value);  // Defined below
 
         std::unique_ptr<PartitioningBlobURLIssueDetails> build()
         {
@@ -2659,9 +2659,9 @@ public:
         friend class PartitioningBlobURLIssueDetails;
         PartitioningBlobURLIssueDetailsBuilder() : m_result(new PartitioningBlobURLIssueDetails()) { }
 
-        template<int STEP> PartitioningBlobURLIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> PartitioningBlobURLIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PartitioningBlobURLIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PartitioningBlobURLIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::PartitioningBlobURLIssueDetails> m_result;
@@ -2706,11 +2706,11 @@ public:
             AllFieldsSet = (NodeIdSet | ElementAccessibilityIssueReasonSet | HasDisallowedAttributesSet | 0)};
 
 
-        ElementAccessibilityIssueDetailsBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        ElementAccessibilityIssueDetailsBuilder<(STATE | ElementAccessibilityIssueDetailsBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
-        ElementAccessibilityIssueDetailsBuilder<STATE | ElementAccessibilityIssueReasonSet>& setElementAccessibilityIssueReason(const String& value);  // Defined below
+        ElementAccessibilityIssueDetailsBuilder<(STATE | ElementAccessibilityIssueDetailsBuilder<STATE>::ElementAccessibilityIssueReasonSet)>& setElementAccessibilityIssueReason(const String& value);  // Defined below
 
-        ElementAccessibilityIssueDetailsBuilder<STATE | HasDisallowedAttributesSet>& setHasDisallowedAttributes(bool value);  // Defined below
+        ElementAccessibilityIssueDetailsBuilder<(STATE | ElementAccessibilityIssueDetailsBuilder<STATE>::HasDisallowedAttributesSet)>& setHasDisallowedAttributes(bool value);  // Defined below
 
         std::unique_ptr<ElementAccessibilityIssueDetails> build()
         {
@@ -2722,9 +2722,9 @@ public:
         friend class ElementAccessibilityIssueDetails;
         ElementAccessibilityIssueDetailsBuilder() : m_result(new ElementAccessibilityIssueDetails()) { }
 
-        template<int STEP> ElementAccessibilityIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> ElementAccessibilityIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ElementAccessibilityIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ElementAccessibilityIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::ElementAccessibilityIssueDetails> m_result;
@@ -2775,9 +2775,9 @@ public:
             AllFieldsSet = (SourceCodeLocationSet | StyleSheetLoadingIssueReasonSet | 0)};
 
 
-        StylesheetLoadingIssueDetailsBuilder<STATE | SourceCodeLocationSet>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
+        StylesheetLoadingIssueDetailsBuilder<(STATE | StylesheetLoadingIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
-        StylesheetLoadingIssueDetailsBuilder<STATE | StyleSheetLoadingIssueReasonSet>& setStyleSheetLoadingIssueReason(const String& value);  // Defined below
+        StylesheetLoadingIssueDetailsBuilder<(STATE | StylesheetLoadingIssueDetailsBuilder<STATE>::StyleSheetLoadingIssueReasonSet)>& setStyleSheetLoadingIssueReason(const String& value);  // Defined below
 
         StylesheetLoadingIssueDetailsBuilder<STATE>& setFailedRequestInfo(std::unique_ptr<protocol::Audits::FailedRequestInfo> value);  // Defined below
 
@@ -2791,9 +2791,9 @@ public:
         friend class StylesheetLoadingIssueDetails;
         StylesheetLoadingIssueDetailsBuilder() : m_result(new StylesheetLoadingIssueDetails()) { }
 
-        template<int STEP> StylesheetLoadingIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> StylesheetLoadingIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<StylesheetLoadingIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<StylesheetLoadingIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::StylesheetLoadingIssueDetails> m_result;
@@ -2844,9 +2844,9 @@ public:
             AllFieldsSet = (SourceCodeLocationSet | PropertyRuleIssueReasonSet | 0)};
 
 
-        PropertyRuleIssueDetailsBuilder<STATE | SourceCodeLocationSet>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
+        PropertyRuleIssueDetailsBuilder<(STATE | PropertyRuleIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>& setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value);  // Defined below
 
-        PropertyRuleIssueDetailsBuilder<STATE | PropertyRuleIssueReasonSet>& setPropertyRuleIssueReason(const String& value);  // Defined below
+        PropertyRuleIssueDetailsBuilder<(STATE | PropertyRuleIssueDetailsBuilder<STATE>::PropertyRuleIssueReasonSet)>& setPropertyRuleIssueReason(const String& value);  // Defined below
 
         PropertyRuleIssueDetailsBuilder<STATE>& setPropertyValue(const String& value);  // Defined below
 
@@ -2860,9 +2860,9 @@ public:
         friend class PropertyRuleIssueDetails;
         PropertyRuleIssueDetailsBuilder() : m_result(new PropertyRuleIssueDetails()) { }
 
-        template<int STEP> PropertyRuleIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> PropertyRuleIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PropertyRuleIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PropertyRuleIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::PropertyRuleIssueDetails> m_result;
@@ -2918,7 +2918,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        UserReidentificationIssueDetailsBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        UserReidentificationIssueDetailsBuilder<(STATE | UserReidentificationIssueDetailsBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         UserReidentificationIssueDetailsBuilder<STATE>& setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value);  // Defined below
 
@@ -2934,9 +2934,9 @@ public:
         friend class UserReidentificationIssueDetails;
         UserReidentificationIssueDetailsBuilder() : m_result(new UserReidentificationIssueDetails()) { }
 
-        template<int STEP> UserReidentificationIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> UserReidentificationIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<UserReidentificationIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<UserReidentificationIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::UserReidentificationIssueDetails> m_result;
@@ -3037,7 +3037,7 @@ public:
             AllFieldsSet = (IssueTypeSet | 0)};
 
 
-        PermissionElementIssueDetailsBuilder<STATE | IssueTypeSet>& setIssueType(const String& value);  // Defined below
+        PermissionElementIssueDetailsBuilder<(STATE | PermissionElementIssueDetailsBuilder<STATE>::IssueTypeSet)>& setIssueType(const String& value);  // Defined below
 
         PermissionElementIssueDetailsBuilder<STATE>& setType(const String& value);  // Defined below
 
@@ -3063,9 +3063,9 @@ public:
         friend class PermissionElementIssueDetails;
         PermissionElementIssueDetailsBuilder() : m_result(new PermissionElementIssueDetails()) { }
 
-        template<int STEP> PermissionElementIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> PermissionElementIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PermissionElementIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PermissionElementIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::PermissionElementIssueDetails> m_result;
@@ -3121,9 +3121,9 @@ public:
             AllFieldsSet = (ApiNameSet | AdAncestrySet | 0)};
 
 
-        SelectivePermissionsInterventionIssueDetailsBuilder<STATE | ApiNameSet>& setApiName(const String& value);  // Defined below
+        SelectivePermissionsInterventionIssueDetailsBuilder<(STATE | SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::ApiNameSet)>& setApiName(const String& value);  // Defined below
 
-        SelectivePermissionsInterventionIssueDetailsBuilder<STATE | AdAncestrySet>& setAdAncestry(std::unique_ptr<protocol::Network::AdAncestry> value);  // Defined below
+        SelectivePermissionsInterventionIssueDetailsBuilder<(STATE | SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::AdAncestrySet)>& setAdAncestry(std::unique_ptr<protocol::Network::AdAncestry> value);  // Defined below
 
         SelectivePermissionsInterventionIssueDetailsBuilder<STATE>& setStackTrace(std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace> value);  // Defined below
 
@@ -3137,9 +3137,9 @@ public:
         friend class SelectivePermissionsInterventionIssueDetails;
         SelectivePermissionsInterventionIssueDetailsBuilder() : m_result(new SelectivePermissionsInterventionIssueDetails()) { }
 
-        template<int STEP> SelectivePermissionsInterventionIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> SelectivePermissionsInterventionIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SelectivePermissionsInterventionIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SelectivePermissionsInterventionIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::SelectivePermissionsInterventionIssueDetails> m_result;
@@ -3513,9 +3513,9 @@ public:
         friend class InspectorIssueDetails;
         InspectorIssueDetailsBuilder() : m_result(new InspectorIssueDetails()) { }
 
-        template<int STEP> InspectorIssueDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> InspectorIssueDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InspectorIssueDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InspectorIssueDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::InspectorIssueDetails> m_result;
@@ -3593,9 +3593,9 @@ public:
             AllFieldsSet = (CodeSet | DetailsSet | 0)};
 
 
-        InspectorIssueBuilder<STATE | CodeSet>& setCode(const String& value);  // Defined below
+        InspectorIssueBuilder<(STATE | InspectorIssueBuilder<STATE>::CodeSet)>& setCode(const String& value);  // Defined below
 
-        InspectorIssueBuilder<STATE | DetailsSet>& setDetails(std::unique_ptr<protocol::Audits::InspectorIssueDetails> value);  // Defined below
+        InspectorIssueBuilder<(STATE | InspectorIssueBuilder<STATE>::DetailsSet)>& setDetails(std::unique_ptr<protocol::Audits::InspectorIssueDetails> value);  // Defined below
 
         InspectorIssueBuilder<STATE>& setIssueId(const String& value);  // Defined below
 
@@ -3609,9 +3609,9 @@ public:
         friend class InspectorIssue;
         InspectorIssueBuilder() : m_result(new InspectorIssue()) { }
 
-        template<int STEP> InspectorIssueBuilder<STATE | STEP>& castState()
+        template<int STEP> InspectorIssueBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InspectorIssueBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InspectorIssueBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Audits::InspectorIssue> m_result;
@@ -3644,21 +3644,21 @@ inline void AffectedCookie::setPath(const String& value) { m_path = value; }
 inline void AffectedCookie::setDomain(const String& value) { m_domain = value; }
 
 template<int STATE>
-inline AffectedCookie::AffectedCookieBuilder<STATE | AffectedCookie::AffectedCookieBuilder<STATE>::NameSet>&
+inline AffectedCookie::AffectedCookieBuilder<(STATE | AffectedCookie::AffectedCookieBuilder<STATE>::NameSet)>&
 AffectedCookie::AffectedCookieBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline AffectedCookie::AffectedCookieBuilder<STATE | AffectedCookie::AffectedCookieBuilder<STATE>::PathSet>&
+inline AffectedCookie::AffectedCookieBuilder<(STATE | AffectedCookie::AffectedCookieBuilder<STATE>::PathSet)>&
 AffectedCookie::AffectedCookieBuilder<STATE>::setPath(const String& value) {
   static_assert(!(STATE & PathSet), "property path should not be set yet");
   m_result->setPath(value);
   return castState<PathSet>();
 }
 template<int STATE>
-inline AffectedCookie::AffectedCookieBuilder<STATE | AffectedCookie::AffectedCookieBuilder<STATE>::DomainSet>&
+inline AffectedCookie::AffectedCookieBuilder<(STATE | AffectedCookie::AffectedCookieBuilder<STATE>::DomainSet)>&
 AffectedCookie::AffectedCookieBuilder<STATE>::setDomain(const String& value) {
   static_assert(!(STATE & DomainSet), "property domain should not be set yet");
   m_result->setDomain(value);
@@ -3677,7 +3677,7 @@ inline AffectedRequest::AffectedRequestBuilder<STATE>& AffectedRequest::Affected
   return *this;
 }
 template<int STATE>
-inline AffectedRequest::AffectedRequestBuilder<STATE | AffectedRequest::AffectedRequestBuilder<STATE>::UrlSet>&
+inline AffectedRequest::AffectedRequestBuilder<(STATE | AffectedRequest::AffectedRequestBuilder<STATE>::UrlSet)>&
 AffectedRequest::AffectedRequestBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
@@ -3690,7 +3690,7 @@ inline AffectedFrame::~AffectedFrame() = default;
 inline void AffectedFrame::setFrameId(const String& value) { m_frameId = value; }
 
 template<int STATE>
-inline AffectedFrame::AffectedFrameBuilder<STATE | AffectedFrame::AffectedFrameBuilder<STATE>::FrameIdSet>&
+inline AffectedFrame::AffectedFrameBuilder<(STATE | AffectedFrame::AffectedFrameBuilder<STATE>::FrameIdSet)>&
 AffectedFrame::AffectedFrameBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
@@ -3704,7 +3704,7 @@ inline void CookieIssueInsight::setType(const String& value) { m_type = value; }
 inline void CookieIssueInsight::setTableEntryUrl(const String& value) { m_tableEntryUrl = value; }
 
 template<int STATE>
-inline CookieIssueInsight::CookieIssueInsightBuilder<STATE | CookieIssueInsight::CookieIssueInsightBuilder<STATE>::TypeSet>&
+inline CookieIssueInsight::CookieIssueInsightBuilder<(STATE | CookieIssueInsight::CookieIssueInsightBuilder<STATE>::TypeSet)>&
 CookieIssueInsight::CookieIssueInsightBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -3740,21 +3740,21 @@ inline CookieIssueDetails::CookieIssueDetailsBuilder<STATE>& CookieIssueDetails:
   return *this;
 }
 template<int STATE>
-inline CookieIssueDetails::CookieIssueDetailsBuilder<STATE | CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::CookieWarningReasonsSet>&
+inline CookieIssueDetails::CookieIssueDetailsBuilder<(STATE | CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::CookieWarningReasonsSet)>&
 CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::setCookieWarningReasons(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & CookieWarningReasonsSet), "property cookieWarningReasons should not be set yet");
   m_result->setCookieWarningReasons(std::move(value));
   return castState<CookieWarningReasonsSet>();
 }
 template<int STATE>
-inline CookieIssueDetails::CookieIssueDetailsBuilder<STATE | CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::CookieExclusionReasonsSet>&
+inline CookieIssueDetails::CookieIssueDetailsBuilder<(STATE | CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::CookieExclusionReasonsSet)>&
 CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::setCookieExclusionReasons(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & CookieExclusionReasonsSet), "property cookieExclusionReasons should not be set yet");
   m_result->setCookieExclusionReasons(std::move(value));
   return castState<CookieExclusionReasonsSet>();
 }
 template<int STATE>
-inline CookieIssueDetails::CookieIssueDetailsBuilder<STATE | CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::OperationSet>&
+inline CookieIssueDetails::CookieIssueDetailsBuilder<(STATE | CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::OperationSet)>&
 CookieIssueDetails::CookieIssueDetailsBuilder<STATE>::setOperation(const String& value) {
   static_assert(!(STATE & OperationSet), "property operation should not be set yet");
   m_result->setOperation(value);
@@ -3788,7 +3788,7 @@ inline void PerformanceIssueDetails::setPerformanceIssueType(const String& value
 inline void PerformanceIssueDetails::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) { m_sourceCodeLocation = std::move(value); }
 
 template<int STATE>
-inline PerformanceIssueDetails::PerformanceIssueDetailsBuilder<STATE | PerformanceIssueDetails::PerformanceIssueDetailsBuilder<STATE>::PerformanceIssueTypeSet>&
+inline PerformanceIssueDetails::PerformanceIssueDetailsBuilder<(STATE | PerformanceIssueDetails::PerformanceIssueDetailsBuilder<STATE>::PerformanceIssueTypeSet)>&
 PerformanceIssueDetails::PerformanceIssueDetailsBuilder<STATE>::setPerformanceIssueType(const String& value) {
   static_assert(!(STATE & PerformanceIssueTypeSet), "property performanceIssueType should not be set yet");
   m_result->setPerformanceIssueType(value);
@@ -3816,21 +3816,21 @@ inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>& MixedCo
   return *this;
 }
 template<int STATE>
-inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE | MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::ResolutionStatusSet>&
+inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<(STATE | MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::ResolutionStatusSet)>&
 MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::setResolutionStatus(const String& value) {
   static_assert(!(STATE & ResolutionStatusSet), "property resolutionStatus should not be set yet");
   m_result->setResolutionStatus(value);
   return castState<ResolutionStatusSet>();
 }
 template<int STATE>
-inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE | MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::InsecureURLSet>&
+inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<(STATE | MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::InsecureURLSet)>&
 MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::setInsecureURL(const String& value) {
   static_assert(!(STATE & InsecureURLSet), "property insecureURL should not be set yet");
   m_result->setInsecureURL(value);
   return castState<InsecureURLSet>();
 }
 template<int STATE>
-inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE | MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::MainResourceURLSet>&
+inline MixedContentIssueDetails::MixedContentIssueDetailsBuilder<(STATE | MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::MainResourceURLSet)>&
 MixedContentIssueDetails::MixedContentIssueDetailsBuilder<STATE>::setMainResourceURL(const String& value) {
   static_assert(!(STATE & MainResourceURLSet), "property mainResourceURL should not be set yet");
   m_result->setMainResourceURL(value);
@@ -3856,7 +3856,7 @@ inline void BlockedByResponseIssueDetails::setBlockedFrame(std::unique_ptr<proto
 inline void BlockedByResponseIssueDetails::setReason(const String& value) { m_reason = value; }
 
 template<int STATE>
-inline BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE | BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE>::RequestSet>&
+inline BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<(STATE | BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE>::RequestSet)>&
 BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE>::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) {
   static_assert(!(STATE & RequestSet), "property request should not be set yet");
   m_result->setRequest(std::move(value));
@@ -3873,7 +3873,7 @@ inline BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE
   return *this;
 }
 template<int STATE>
-inline BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE | BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE>::ReasonSet>&
+inline BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<(STATE | BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE>::ReasonSet)>&
 BlockedByResponseIssueDetails::BlockedByResponseIssueDetailsBuilder<STATE>::setReason(const String& value) {
   static_assert(!(STATE & ReasonSet), "property reason should not be set yet");
   m_result->setReason(value);
@@ -3888,21 +3888,21 @@ inline void HeavyAdIssueDetails::setReason(const String& value) { m_reason = val
 inline void HeavyAdIssueDetails::setFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value) { m_frame = std::move(value); }
 
 template<int STATE>
-inline HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE | HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::ResolutionSet>&
+inline HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<(STATE | HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::ResolutionSet)>&
 HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::setResolution(const String& value) {
   static_assert(!(STATE & ResolutionSet), "property resolution should not be set yet");
   m_result->setResolution(value);
   return castState<ResolutionSet>();
 }
 template<int STATE>
-inline HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE | HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::ReasonSet>&
+inline HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<(STATE | HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::ReasonSet)>&
 HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::setReason(const String& value) {
   static_assert(!(STATE & ReasonSet), "property reason should not be set yet");
   m_result->setReason(value);
   return castState<ReasonSet>();
 }
 template<int STATE>
-inline HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE | HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::FrameSet>&
+inline HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<(STATE | HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::FrameSet)>&
 HeavyAdIssueDetails::HeavyAdIssueDetailsBuilder<STATE>::setFrame(std::unique_ptr<protocol::Audits::AffectedFrame> value) {
   static_assert(!(STATE & FrameSet), "property frame should not be set yet");
   m_result->setFrame(std::move(value));
@@ -3923,21 +3923,21 @@ inline SourceCodeLocation::SourceCodeLocationBuilder<STATE>& SourceCodeLocation:
   return *this;
 }
 template<int STATE>
-inline SourceCodeLocation::SourceCodeLocationBuilder<STATE | SourceCodeLocation::SourceCodeLocationBuilder<STATE>::UrlSet>&
+inline SourceCodeLocation::SourceCodeLocationBuilder<(STATE | SourceCodeLocation::SourceCodeLocationBuilder<STATE>::UrlSet)>&
 SourceCodeLocation::SourceCodeLocationBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline SourceCodeLocation::SourceCodeLocationBuilder<STATE | SourceCodeLocation::SourceCodeLocationBuilder<STATE>::LineNumberSet>&
+inline SourceCodeLocation::SourceCodeLocationBuilder<(STATE | SourceCodeLocation::SourceCodeLocationBuilder<STATE>::LineNumberSet)>&
 SourceCodeLocation::SourceCodeLocationBuilder<STATE>::setLineNumber(int value) {
   static_assert(!(STATE & LineNumberSet), "property lineNumber should not be set yet");
   m_result->setLineNumber(value);
   return castState<LineNumberSet>();
 }
 template<int STATE>
-inline SourceCodeLocation::SourceCodeLocationBuilder<STATE | SourceCodeLocation::SourceCodeLocationBuilder<STATE>::ColumnNumberSet>&
+inline SourceCodeLocation::SourceCodeLocationBuilder<(STATE | SourceCodeLocation::SourceCodeLocationBuilder<STATE>::ColumnNumberSet)>&
 SourceCodeLocation::SourceCodeLocationBuilder<STATE>::setColumnNumber(int value) {
   static_assert(!(STATE & ColumnNumberSet), "property columnNumber should not be set yet");
   m_result->setColumnNumber(value);
@@ -3963,21 +3963,21 @@ inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuild
   return *this;
 }
 template<int STATE>
-inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE | ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::ViolatedDirectiveSet>&
+inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<(STATE | ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::ViolatedDirectiveSet)>&
 ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::setViolatedDirective(const String& value) {
   static_assert(!(STATE & ViolatedDirectiveSet), "property violatedDirective should not be set yet");
   m_result->setViolatedDirective(value);
   return castState<ViolatedDirectiveSet>();
 }
 template<int STATE>
-inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE | ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::IsReportOnlySet>&
+inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<(STATE | ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::IsReportOnlySet)>&
 ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::setIsReportOnly(bool value) {
   static_assert(!(STATE & IsReportOnlySet), "property isReportOnly should not be set yet");
   m_result->setIsReportOnly(value);
   return castState<IsReportOnlySet>();
 }
 template<int STATE>
-inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE | ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::ContentSecurityPolicyViolationTypeSet>&
+inline ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<(STATE | ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::ContentSecurityPolicyViolationTypeSet)>&
 ContentSecurityPolicyIssueDetails::ContentSecurityPolicyIssueDetailsBuilder<STATE>::setContentSecurityPolicyViolationType(const String& value) {
   static_assert(!(STATE & ContentSecurityPolicyViolationTypeSet), "property contentSecurityPolicyViolationType should not be set yet");
   m_result->setContentSecurityPolicyViolationType(value);
@@ -4008,21 +4008,21 @@ inline void SharedArrayBufferIssueDetails::setIsWarning(bool value) { m_isWarnin
 inline void SharedArrayBufferIssueDetails::setType(const String& value) { m_type = value; }
 
 template<int STATE>
-inline SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE | SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::SourceCodeLocationSet>&
+inline SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<(STATE | SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>&
 SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) {
   static_assert(!(STATE & SourceCodeLocationSet), "property sourceCodeLocation should not be set yet");
   m_result->setSourceCodeLocation(std::move(value));
   return castState<SourceCodeLocationSet>();
 }
 template<int STATE>
-inline SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE | SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::IsWarningSet>&
+inline SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<(STATE | SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::IsWarningSet)>&
 SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::setIsWarning(bool value) {
   static_assert(!(STATE & IsWarningSet), "property isWarning should not be set yet");
   m_result->setIsWarning(value);
   return castState<IsWarningSet>();
 }
 template<int STATE>
-inline SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE | SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::TypeSet>&
+inline SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<(STATE | SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::TypeSet)>&
 SharedArrayBufferIssueDetails::SharedArrayBufferIssueDetailsBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -4042,21 +4042,21 @@ inline void CorsIssueDetails::setResourceIPAddressSpace(const String& value) { m
 inline void CorsIssueDetails::setClientSecurityState(std::unique_ptr<protocol::Network::ClientSecurityState> value) { m_clientSecurityState = std::move(value); }
 
 template<int STATE>
-inline CorsIssueDetails::CorsIssueDetailsBuilder<STATE | CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::CorsErrorStatusSet>&
+inline CorsIssueDetails::CorsIssueDetailsBuilder<(STATE | CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::CorsErrorStatusSet)>&
 CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::setCorsErrorStatus(std::unique_ptr<protocol::Network::CorsErrorStatus> value) {
   static_assert(!(STATE & CorsErrorStatusSet), "property corsErrorStatus should not be set yet");
   m_result->setCorsErrorStatus(std::move(value));
   return castState<CorsErrorStatusSet>();
 }
 template<int STATE>
-inline CorsIssueDetails::CorsIssueDetailsBuilder<STATE | CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::IsWarningSet>&
+inline CorsIssueDetails::CorsIssueDetailsBuilder<(STATE | CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::IsWarningSet)>&
 CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::setIsWarning(bool value) {
   static_assert(!(STATE & IsWarningSet), "property isWarning should not be set yet");
   m_result->setIsWarning(value);
   return castState<IsWarningSet>();
 }
 template<int STATE>
-inline CorsIssueDetails::CorsIssueDetailsBuilder<STATE | CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::RequestSet>&
+inline CorsIssueDetails::CorsIssueDetailsBuilder<(STATE | CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::RequestSet)>&
 CorsIssueDetails::CorsIssueDetailsBuilder<STATE>::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) {
   static_assert(!(STATE & RequestSet), "property request should not be set yet");
   m_result->setRequest(std::move(value));
@@ -4093,7 +4093,7 @@ inline void AttributionReportingIssueDetails::setViolatingNodeId(int value) { m_
 inline void AttributionReportingIssueDetails::setInvalidParameter(const String& value) { m_invalidParameter = value; }
 
 template<int STATE>
-inline AttributionReportingIssueDetails::AttributionReportingIssueDetailsBuilder<STATE | AttributionReportingIssueDetails::AttributionReportingIssueDetailsBuilder<STATE>::ViolationTypeSet>&
+inline AttributionReportingIssueDetails::AttributionReportingIssueDetailsBuilder<(STATE | AttributionReportingIssueDetails::AttributionReportingIssueDetailsBuilder<STATE>::ViolationTypeSet)>&
 AttributionReportingIssueDetails::AttributionReportingIssueDetailsBuilder<STATE>::setViolationType(const String& value) {
   static_assert(!(STATE & ViolationTypeSet), "property violationType should not be set yet");
   m_result->setViolationType(value);
@@ -4125,35 +4125,35 @@ inline void QuirksModeIssueDetails::setFrameId(const String& value) { m_frameId 
 inline void QuirksModeIssueDetails::setLoaderId(const String& value) { m_loaderId = value; }
 
 template<int STATE>
-inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::IsLimitedQuirksModeSet>&
+inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::IsLimitedQuirksModeSet)>&
 QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::setIsLimitedQuirksMode(bool value) {
   static_assert(!(STATE & IsLimitedQuirksModeSet), "property isLimitedQuirksMode should not be set yet");
   m_result->setIsLimitedQuirksMode(value);
   return castState<IsLimitedQuirksModeSet>();
 }
 template<int STATE>
-inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::DocumentNodeIdSet>&
+inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::DocumentNodeIdSet)>&
 QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::setDocumentNodeId(int value) {
   static_assert(!(STATE & DocumentNodeIdSet), "property documentNodeId should not be set yet");
   m_result->setDocumentNodeId(value);
   return castState<DocumentNodeIdSet>();
 }
 template<int STATE>
-inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::UrlSet>&
+inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::UrlSet)>&
 QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::FrameIdSet>&
+inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::FrameIdSet)>&
 QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
   return castState<FrameIdSet>();
 }
 template<int STATE>
-inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::LoaderIdSet>&
+inline QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<(STATE | QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::LoaderIdSet)>&
 QuirksModeIssueDetails::QuirksModeIssueDetailsBuilder<STATE>::setLoaderId(const String& value) {
   static_assert(!(STATE & LoaderIdSet), "property loaderId should not be set yet");
   m_result->setLoaderId(value);
@@ -4169,7 +4169,7 @@ inline void NavigatorUserAgentIssueDetails::setUrl(const String& value) { m_url 
 inline void NavigatorUserAgentIssueDetails::setLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) { m_location = std::move(value); }
 
 template<int STATE>
-inline NavigatorUserAgentIssueDetails::NavigatorUserAgentIssueDetailsBuilder<STATE | NavigatorUserAgentIssueDetails::NavigatorUserAgentIssueDetailsBuilder<STATE>::UrlSet>&
+inline NavigatorUserAgentIssueDetails::NavigatorUserAgentIssueDetailsBuilder<(STATE | NavigatorUserAgentIssueDetails::NavigatorUserAgentIssueDetailsBuilder<STATE>::UrlSet)>&
 NavigatorUserAgentIssueDetails::NavigatorUserAgentIssueDetailsBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
@@ -4188,14 +4188,14 @@ inline void SharedDictionaryIssueDetails::setSharedDictionaryError(const String&
 inline void SharedDictionaryIssueDetails::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) { m_request = std::move(value); }
 
 template<int STATE>
-inline SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE | SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE>::SharedDictionaryErrorSet>&
+inline SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<(STATE | SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE>::SharedDictionaryErrorSet)>&
 SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE>::setSharedDictionaryError(const String& value) {
   static_assert(!(STATE & SharedDictionaryErrorSet), "property sharedDictionaryError should not be set yet");
   m_result->setSharedDictionaryError(value);
   return castState<SharedDictionaryErrorSet>();
 }
 template<int STATE>
-inline SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE | SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE>::RequestSet>&
+inline SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<(STATE | SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE>::RequestSet)>&
 SharedDictionaryIssueDetails::SharedDictionaryIssueDetailsBuilder<STATE>::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) {
   static_assert(!(STATE & RequestSet), "property request should not be set yet");
   m_result->setRequest(std::move(value));
@@ -4211,28 +4211,28 @@ inline void SRIMessageSignatureIssueDetails::setIntegrityAssertions(std::unique_
 inline void SRIMessageSignatureIssueDetails::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) { m_request = std::move(value); }
 
 template<int STATE>
-inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::ErrorSet>&
+inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::ErrorSet)>&
 SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::setError(const String& value) {
   static_assert(!(STATE & ErrorSet), "property error should not be set yet");
   m_result->setError(value);
   return castState<ErrorSet>();
 }
 template<int STATE>
-inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::SignatureBaseSet>&
+inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::SignatureBaseSet)>&
 SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::setSignatureBase(const String& value) {
   static_assert(!(STATE & SignatureBaseSet), "property signatureBase should not be set yet");
   m_result->setSignatureBase(value);
   return castState<SignatureBaseSet>();
 }
 template<int STATE>
-inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::IntegrityAssertionsSet>&
+inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::IntegrityAssertionsSet)>&
 SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::setIntegrityAssertions(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & IntegrityAssertionsSet), "property integrityAssertions should not be set yet");
   m_result->setIntegrityAssertions(std::move(value));
   return castState<IntegrityAssertionsSet>();
 }
 template<int STATE>
-inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::RequestSet>&
+inline SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<(STATE | SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::RequestSet)>&
 SRIMessageSignatureIssueDetails::SRIMessageSignatureIssueDetailsBuilder<STATE>::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) {
   static_assert(!(STATE & RequestSet), "property request should not be set yet");
   m_result->setRequest(std::move(value));
@@ -4246,14 +4246,14 @@ inline void UnencodedDigestIssueDetails::setError(const String& value) { m_error
 inline void UnencodedDigestIssueDetails::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) { m_request = std::move(value); }
 
 template<int STATE>
-inline UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE | UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE>::ErrorSet>&
+inline UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<(STATE | UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE>::ErrorSet)>&
 UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE>::setError(const String& value) {
   static_assert(!(STATE & ErrorSet), "property error should not be set yet");
   m_result->setError(value);
   return castState<ErrorSet>();
 }
 template<int STATE>
-inline UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE | UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE>::RequestSet>&
+inline UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<(STATE | UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE>::RequestSet)>&
 UnencodedDigestIssueDetails::UnencodedDigestIssueDetailsBuilder<STATE>::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) {
   static_assert(!(STATE & RequestSet), "property request should not be set yet");
   m_result->setRequest(std::move(value));
@@ -4267,14 +4267,14 @@ inline void ConnectionAllowlistIssueDetails::setError(const String& value) { m_e
 inline void ConnectionAllowlistIssueDetails::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) { m_request = std::move(value); }
 
 template<int STATE>
-inline ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE | ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE>::ErrorSet>&
+inline ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<(STATE | ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE>::ErrorSet)>&
 ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE>::setError(const String& value) {
   static_assert(!(STATE & ErrorSet), "property error should not be set yet");
   m_result->setError(value);
   return castState<ErrorSet>();
 }
 template<int STATE>
-inline ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE | ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE>::RequestSet>&
+inline ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<(STATE | ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE>::RequestSet)>&
 ConnectionAllowlistIssueDetails::ConnectionAllowlistIssueDetailsBuilder<STATE>::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) {
   static_assert(!(STATE & RequestSet), "property request should not be set yet");
   m_result->setRequest(std::move(value));
@@ -4291,7 +4291,7 @@ inline void GenericIssueDetails::setViolatingNodeAttribute(const String& value) 
 inline void GenericIssueDetails::setRequest(std::unique_ptr<protocol::Audits::AffectedRequest> value) { m_request = std::move(value); }
 
 template<int STATE>
-inline GenericIssueDetails::GenericIssueDetailsBuilder<STATE | GenericIssueDetails::GenericIssueDetailsBuilder<STATE>::ErrorTypeSet>&
+inline GenericIssueDetails::GenericIssueDetailsBuilder<(STATE | GenericIssueDetails::GenericIssueDetailsBuilder<STATE>::ErrorTypeSet)>&
 GenericIssueDetails::GenericIssueDetailsBuilder<STATE>::setErrorType(const String& value) {
   static_assert(!(STATE & ErrorTypeSet), "property errorType should not be set yet");
   m_result->setErrorType(value);
@@ -4331,14 +4331,14 @@ inline DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>& Deprecati
   return *this;
 }
 template<int STATE>
-inline DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE | DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>::SourceCodeLocationSet>&
+inline DeprecationIssueDetails::DeprecationIssueDetailsBuilder<(STATE | DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>&
 DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) {
   static_assert(!(STATE & SourceCodeLocationSet), "property sourceCodeLocation should not be set yet");
   m_result->setSourceCodeLocation(std::move(value));
   return castState<SourceCodeLocationSet>();
 }
 template<int STATE>
-inline DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE | DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>::TypeSet>&
+inline DeprecationIssueDetails::DeprecationIssueDetailsBuilder<(STATE | DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>::TypeSet)>&
 DeprecationIssueDetails::DeprecationIssueDetailsBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -4351,7 +4351,7 @@ inline BounceTrackingIssueDetails::~BounceTrackingIssueDetails() = default;
 inline void BounceTrackingIssueDetails::setTrackingSites(std::unique_ptr<protocol::Array<String>> value) { m_trackingSites = std::move(value); }
 
 template<int STATE>
-inline BounceTrackingIssueDetails::BounceTrackingIssueDetailsBuilder<STATE | BounceTrackingIssueDetails::BounceTrackingIssueDetailsBuilder<STATE>::TrackingSitesSet>&
+inline BounceTrackingIssueDetails::BounceTrackingIssueDetailsBuilder<(STATE | BounceTrackingIssueDetails::BounceTrackingIssueDetailsBuilder<STATE>::TrackingSitesSet)>&
 BounceTrackingIssueDetails::BounceTrackingIssueDetailsBuilder<STATE>::setTrackingSites(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & TrackingSitesSet), "property trackingSites should not be set yet");
   m_result->setTrackingSites(std::move(value));
@@ -4367,28 +4367,28 @@ inline void CookieDeprecationMetadataIssueDetails::setIsOptOutTopLevel(bool valu
 inline void CookieDeprecationMetadataIssueDetails::setOperation(const String& value) { m_operation = value; }
 
 template<int STATE>
-inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::AllowedSitesSet>&
+inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::AllowedSitesSet)>&
 CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::setAllowedSites(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & AllowedSitesSet), "property allowedSites should not be set yet");
   m_result->setAllowedSites(std::move(value));
   return castState<AllowedSitesSet>();
 }
 template<int STATE>
-inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::OptOutPercentageSet>&
+inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::OptOutPercentageSet)>&
 CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::setOptOutPercentage(double value) {
   static_assert(!(STATE & OptOutPercentageSet), "property optOutPercentage should not be set yet");
   m_result->setOptOutPercentage(value);
   return castState<OptOutPercentageSet>();
 }
 template<int STATE>
-inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::IsOptOutTopLevelSet>&
+inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::IsOptOutTopLevelSet)>&
 CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::setIsOptOutTopLevel(bool value) {
   static_assert(!(STATE & IsOptOutTopLevelSet), "property isOptOutTopLevel should not be set yet");
   m_result->setIsOptOutTopLevel(value);
   return castState<IsOptOutTopLevelSet>();
 }
 template<int STATE>
-inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::OperationSet>&
+inline CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<(STATE | CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::OperationSet)>&
 CookieDeprecationMetadataIssueDetails::CookieDeprecationMetadataIssueDetailsBuilder<STATE>::setOperation(const String& value) {
   static_assert(!(STATE & OperationSet), "property operation should not be set yet");
   m_result->setOperation(value);
@@ -4403,7 +4403,7 @@ inline FederatedAuthRequestIssueDetails::~FederatedAuthRequestIssueDetails() = d
 inline void FederatedAuthRequestIssueDetails::setFederatedAuthRequestIssueReason(const String& value) { m_federatedAuthRequestIssueReason = value; }
 
 template<int STATE>
-inline FederatedAuthRequestIssueDetails::FederatedAuthRequestIssueDetailsBuilder<STATE | FederatedAuthRequestIssueDetails::FederatedAuthRequestIssueDetailsBuilder<STATE>::FederatedAuthRequestIssueReasonSet>&
+inline FederatedAuthRequestIssueDetails::FederatedAuthRequestIssueDetailsBuilder<(STATE | FederatedAuthRequestIssueDetails::FederatedAuthRequestIssueDetailsBuilder<STATE>::FederatedAuthRequestIssueReasonSet)>&
 FederatedAuthRequestIssueDetails::FederatedAuthRequestIssueDetailsBuilder<STATE>::setFederatedAuthRequestIssueReason(const String& value) {
   static_assert(!(STATE & FederatedAuthRequestIssueReasonSet), "property federatedAuthRequestIssueReason should not be set yet");
   m_result->setFederatedAuthRequestIssueReason(value);
@@ -4416,7 +4416,7 @@ inline FederatedAuthUserInfoRequestIssueDetails::~FederatedAuthUserInfoRequestIs
 inline void FederatedAuthUserInfoRequestIssueDetails::setFederatedAuthUserInfoRequestIssueReason(const String& value) { m_federatedAuthUserInfoRequestIssueReason = value; }
 
 template<int STATE>
-inline FederatedAuthUserInfoRequestIssueDetails::FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE | FederatedAuthUserInfoRequestIssueDetails::FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE>::FederatedAuthUserInfoRequestIssueReasonSet>&
+inline FederatedAuthUserInfoRequestIssueDetails::FederatedAuthUserInfoRequestIssueDetailsBuilder<(STATE | FederatedAuthUserInfoRequestIssueDetails::FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE>::FederatedAuthUserInfoRequestIssueReasonSet)>&
 FederatedAuthUserInfoRequestIssueDetails::FederatedAuthUserInfoRequestIssueDetailsBuilder<STATE>::setFederatedAuthUserInfoRequestIssueReason(const String& value) {
   static_assert(!(STATE & FederatedAuthUserInfoRequestIssueReasonSet), "property federatedAuthUserInfoRequestIssueReason should not be set yet");
   m_result->setFederatedAuthUserInfoRequestIssueReason(value);
@@ -4429,7 +4429,7 @@ inline EmailVerificationRequestIssueDetails::~EmailVerificationRequestIssueDetai
 inline void EmailVerificationRequestIssueDetails::setEmailVerificationRequestIssueReason(const String& value) { m_emailVerificationRequestIssueReason = value; }
 
 template<int STATE>
-inline EmailVerificationRequestIssueDetails::EmailVerificationRequestIssueDetailsBuilder<STATE | EmailVerificationRequestIssueDetails::EmailVerificationRequestIssueDetailsBuilder<STATE>::EmailVerificationRequestIssueReasonSet>&
+inline EmailVerificationRequestIssueDetails::EmailVerificationRequestIssueDetailsBuilder<(STATE | EmailVerificationRequestIssueDetails::EmailVerificationRequestIssueDetailsBuilder<STATE>::EmailVerificationRequestIssueReasonSet)>&
 EmailVerificationRequestIssueDetails::EmailVerificationRequestIssueDetailsBuilder<STATE>::setEmailVerificationRequestIssueReason(const String& value) {
   static_assert(!(STATE & EmailVerificationRequestIssueReasonSet), "property emailVerificationRequestIssueReason should not be set yet");
   m_result->setEmailVerificationRequestIssueReason(value);
@@ -4443,14 +4443,14 @@ inline void ClientHintIssueDetails::setSourceCodeLocation(std::unique_ptr<protoc
 inline void ClientHintIssueDetails::setClientHintIssueReason(const String& value) { m_clientHintIssueReason = value; }
 
 template<int STATE>
-inline ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE | ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE>::SourceCodeLocationSet>&
+inline ClientHintIssueDetails::ClientHintIssueDetailsBuilder<(STATE | ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>&
 ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE>::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) {
   static_assert(!(STATE & SourceCodeLocationSet), "property sourceCodeLocation should not be set yet");
   m_result->setSourceCodeLocation(std::move(value));
   return castState<SourceCodeLocationSet>();
 }
 template<int STATE>
-inline ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE | ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE>::ClientHintIssueReasonSet>&
+inline ClientHintIssueDetails::ClientHintIssueDetailsBuilder<(STATE | ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE>::ClientHintIssueReasonSet)>&
 ClientHintIssueDetails::ClientHintIssueDetailsBuilder<STATE>::setClientHintIssueReason(const String& value) {
   static_assert(!(STATE & ClientHintIssueReasonSet), "property clientHintIssueReason should not be set yet");
   m_result->setClientHintIssueReason(value);
@@ -4465,14 +4465,14 @@ inline void FailedRequestInfo::setFailureMessage(const String& value) { m_failur
 inline void FailedRequestInfo::setRequestId(const String& value) { m_requestId = value; }
 
 template<int STATE>
-inline FailedRequestInfo::FailedRequestInfoBuilder<STATE | FailedRequestInfo::FailedRequestInfoBuilder<STATE>::UrlSet>&
+inline FailedRequestInfo::FailedRequestInfoBuilder<(STATE | FailedRequestInfo::FailedRequestInfoBuilder<STATE>::UrlSet)>&
 FailedRequestInfo::FailedRequestInfoBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline FailedRequestInfo::FailedRequestInfoBuilder<STATE | FailedRequestInfo::FailedRequestInfoBuilder<STATE>::FailureMessageSet>&
+inline FailedRequestInfo::FailedRequestInfoBuilder<(STATE | FailedRequestInfo::FailedRequestInfoBuilder<STATE>::FailureMessageSet)>&
 FailedRequestInfo::FailedRequestInfoBuilder<STATE>::setFailureMessage(const String& value) {
   static_assert(!(STATE & FailureMessageSet), "property failureMessage should not be set yet");
   m_result->setFailureMessage(value);
@@ -4491,14 +4491,14 @@ inline void PartitioningBlobURLIssueDetails::setUrl(const String& value) { m_url
 inline void PartitioningBlobURLIssueDetails::setPartitioningBlobURLInfo(const String& value) { m_partitioningBlobURLInfo = value; }
 
 template<int STATE>
-inline PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE | PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE>::UrlSet>&
+inline PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<(STATE | PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE>::UrlSet)>&
 PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE | PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE>::PartitioningBlobURLInfoSet>&
+inline PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<(STATE | PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE>::PartitioningBlobURLInfoSet)>&
 PartitioningBlobURLIssueDetails::PartitioningBlobURLIssueDetailsBuilder<STATE>::setPartitioningBlobURLInfo(const String& value) {
   static_assert(!(STATE & PartitioningBlobURLInfoSet), "property partitioningBlobURLInfo should not be set yet");
   m_result->setPartitioningBlobURLInfo(value);
@@ -4513,21 +4513,21 @@ inline void ElementAccessibilityIssueDetails::setElementAccessibilityIssueReason
 inline void ElementAccessibilityIssueDetails::setHasDisallowedAttributes(bool value) { m_hasDisallowedAttributes = value; }
 
 template<int STATE>
-inline ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE | ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::NodeIdSet>&
+inline ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<(STATE | ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::NodeIdSet)>&
 ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
   return castState<NodeIdSet>();
 }
 template<int STATE>
-inline ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE | ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::ElementAccessibilityIssueReasonSet>&
+inline ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<(STATE | ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::ElementAccessibilityIssueReasonSet)>&
 ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::setElementAccessibilityIssueReason(const String& value) {
   static_assert(!(STATE & ElementAccessibilityIssueReasonSet), "property elementAccessibilityIssueReason should not be set yet");
   m_result->setElementAccessibilityIssueReason(value);
   return castState<ElementAccessibilityIssueReasonSet>();
 }
 template<int STATE>
-inline ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE | ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::HasDisallowedAttributesSet>&
+inline ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<(STATE | ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::HasDisallowedAttributesSet)>&
 ElementAccessibilityIssueDetails::ElementAccessibilityIssueDetailsBuilder<STATE>::setHasDisallowedAttributes(bool value) {
   static_assert(!(STATE & HasDisallowedAttributesSet), "property hasDisallowedAttributes should not be set yet");
   m_result->setHasDisallowedAttributes(value);
@@ -4544,14 +4544,14 @@ inline void StylesheetLoadingIssueDetails::setStyleSheetLoadingIssueReason(const
 inline void StylesheetLoadingIssueDetails::setFailedRequestInfo(std::unique_ptr<protocol::Audits::FailedRequestInfo> value) { m_failedRequestInfo = std::move(value); }
 
 template<int STATE>
-inline StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE | StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE>::SourceCodeLocationSet>&
+inline StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<(STATE | StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>&
 StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE>::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) {
   static_assert(!(STATE & SourceCodeLocationSet), "property sourceCodeLocation should not be set yet");
   m_result->setSourceCodeLocation(std::move(value));
   return castState<SourceCodeLocationSet>();
 }
 template<int STATE>
-inline StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE | StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE>::StyleSheetLoadingIssueReasonSet>&
+inline StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<(STATE | StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE>::StyleSheetLoadingIssueReasonSet)>&
 StylesheetLoadingIssueDetails::StylesheetLoadingIssueDetailsBuilder<STATE>::setStyleSheetLoadingIssueReason(const String& value) {
   static_assert(!(STATE & StyleSheetLoadingIssueReasonSet), "property styleSheetLoadingIssueReason should not be set yet");
   m_result->setStyleSheetLoadingIssueReason(value);
@@ -4571,14 +4571,14 @@ inline void PropertyRuleIssueDetails::setPropertyRuleIssueReason(const String& v
 inline void PropertyRuleIssueDetails::setPropertyValue(const String& value) { m_propertyValue = value; }
 
 template<int STATE>
-inline PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE | PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE>::SourceCodeLocationSet>&
+inline PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<(STATE | PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE>::SourceCodeLocationSet)>&
 PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE>::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) {
   static_assert(!(STATE & SourceCodeLocationSet), "property sourceCodeLocation should not be set yet");
   m_result->setSourceCodeLocation(std::move(value));
   return castState<SourceCodeLocationSet>();
 }
 template<int STATE>
-inline PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE | PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE>::PropertyRuleIssueReasonSet>&
+inline PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<(STATE | PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE>::PropertyRuleIssueReasonSet)>&
 PropertyRuleIssueDetails::PropertyRuleIssueDetailsBuilder<STATE>::setPropertyRuleIssueReason(const String& value) {
   static_assert(!(STATE & PropertyRuleIssueReasonSet), "property propertyRuleIssueReason should not be set yet");
   m_result->setPropertyRuleIssueReason(value);
@@ -4598,7 +4598,7 @@ inline void UserReidentificationIssueDetails::setRequest(std::unique_ptr<protoco
 inline void UserReidentificationIssueDetails::setSourceCodeLocation(std::unique_ptr<protocol::Audits::SourceCodeLocation> value) { m_sourceCodeLocation = std::move(value); }
 
 template<int STATE>
-inline UserReidentificationIssueDetails::UserReidentificationIssueDetailsBuilder<STATE | UserReidentificationIssueDetails::UserReidentificationIssueDetailsBuilder<STATE>::TypeSet>&
+inline UserReidentificationIssueDetails::UserReidentificationIssueDetailsBuilder<(STATE | UserReidentificationIssueDetails::UserReidentificationIssueDetailsBuilder<STATE>::TypeSet)>&
 UserReidentificationIssueDetails::UserReidentificationIssueDetailsBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -4628,7 +4628,7 @@ inline void PermissionElementIssueDetails::setOccluderParentNodeInfo(const Strin
 inline void PermissionElementIssueDetails::setDisableReason(const String& value) { m_disableReason = value; }
 
 template<int STATE>
-inline PermissionElementIssueDetails::PermissionElementIssueDetailsBuilder<STATE | PermissionElementIssueDetails::PermissionElementIssueDetailsBuilder<STATE>::IssueTypeSet>&
+inline PermissionElementIssueDetails::PermissionElementIssueDetailsBuilder<(STATE | PermissionElementIssueDetails::PermissionElementIssueDetailsBuilder<STATE>::IssueTypeSet)>&
 PermissionElementIssueDetails::PermissionElementIssueDetailsBuilder<STATE>::setIssueType(const String& value) {
   static_assert(!(STATE & IssueTypeSet), "property issueType should not be set yet");
   m_result->setIssueType(value);
@@ -4678,14 +4678,14 @@ inline void SelectivePermissionsInterventionIssueDetails::setAdAncestry(std::uni
 inline void SelectivePermissionsInterventionIssueDetails::setStackTrace(std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace> value) { m_stackTrace = std::move(value); }
 
 template<int STATE>
-inline SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE | SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::ApiNameSet>&
+inline SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<(STATE | SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::ApiNameSet)>&
 SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::setApiName(const String& value) {
   static_assert(!(STATE & ApiNameSet), "property apiName should not be set yet");
   m_result->setApiName(value);
   return castState<ApiNameSet>();
 }
 template<int STATE>
-inline SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE | SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::AdAncestrySet>&
+inline SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<(STATE | SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::AdAncestrySet)>&
 SelectivePermissionsInterventionIssueDetails::SelectivePermissionsInterventionIssueDetailsBuilder<STATE>::setAdAncestry(std::unique_ptr<protocol::Network::AdAncestry> value) {
   static_assert(!(STATE & AdAncestrySet), "property adAncestry should not be set yet");
   m_result->setAdAncestry(std::move(value));
@@ -4890,14 +4890,14 @@ inline void InspectorIssue::setDetails(std::unique_ptr<protocol::Audits::Inspect
 inline void InspectorIssue::setIssueId(const String& value) { m_issueId = value; }
 
 template<int STATE>
-inline InspectorIssue::InspectorIssueBuilder<STATE | InspectorIssue::InspectorIssueBuilder<STATE>::CodeSet>&
+inline InspectorIssue::InspectorIssueBuilder<(STATE | InspectorIssue::InspectorIssueBuilder<STATE>::CodeSet)>&
 InspectorIssue::InspectorIssueBuilder<STATE>::setCode(const String& value) {
   static_assert(!(STATE & CodeSet), "property code should not be set yet");
   m_result->setCode(value);
   return castState<CodeSet>();
 }
 template<int STATE>
-inline InspectorIssue::InspectorIssueBuilder<STATE | InspectorIssue::InspectorIssueBuilder<STATE>::DetailsSet>&
+inline InspectorIssue::InspectorIssueBuilder<(STATE | InspectorIssue::InspectorIssueBuilder<STATE>::DetailsSet)>&
 InspectorIssue::InspectorIssueBuilder<STATE>::setDetails(std::unique_ptr<protocol::Audits::InspectorIssueDetails> value) {
   static_assert(!(STATE & DetailsSet), "property details should not be set yet");
   m_result->setDetails(std::move(value));

@@ -19,7 +19,7 @@ namespace base {
 
 namespace {
 
-#if defined(__clang__) && defined(_MSC_VER)
+#if defined(_MSC_VER)
 constexpr std::string_view kThisFilePath = "base\\location.cc";
 #else
 constexpr std::string_view kThisFilePath = "base/location.cc";

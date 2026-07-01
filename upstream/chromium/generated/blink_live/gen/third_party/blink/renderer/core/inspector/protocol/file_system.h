@@ -53,13 +53,13 @@ public:
             AllFieldsSet = (NameSet | LastModifiedSet | SizeSet | TypeSet | 0)};
 
 
-        FileBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        FileBuilder<(STATE | FileBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        FileBuilder<STATE | LastModifiedSet>& setLastModified(double value);  // Defined below
+        FileBuilder<(STATE | FileBuilder<STATE>::LastModifiedSet)>& setLastModified(double value);  // Defined below
 
-        FileBuilder<STATE | SizeSet>& setSize(double value);  // Defined below
+        FileBuilder<(STATE | FileBuilder<STATE>::SizeSet)>& setSize(double value);  // Defined below
 
-        FileBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        FileBuilder<(STATE | FileBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         std::unique_ptr<File> build()
         {
@@ -71,9 +71,9 @@ public:
         friend class File;
         FileBuilder() : m_result(new File()) { }
 
-        template<int STEP> FileBuilder<STATE | STEP>& castState()
+        template<int STEP> FileBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FileBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FileBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::FileSystem::File> m_result;
@@ -120,11 +120,11 @@ public:
             AllFieldsSet = (NameSet | NestedDirectoriesSet | NestedFilesSet | 0)};
 
 
-        DirectoryBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        DirectoryBuilder<(STATE | DirectoryBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        DirectoryBuilder<STATE | NestedDirectoriesSet>& setNestedDirectories(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        DirectoryBuilder<(STATE | DirectoryBuilder<STATE>::NestedDirectoriesSet)>& setNestedDirectories(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        DirectoryBuilder<STATE | NestedFilesSet>& setNestedFiles(std::unique_ptr<protocol::Array<protocol::FileSystem::File>> value);  // Defined below
+        DirectoryBuilder<(STATE | DirectoryBuilder<STATE>::NestedFilesSet)>& setNestedFiles(std::unique_ptr<protocol::Array<protocol::FileSystem::File>> value);  // Defined below
 
         std::unique_ptr<Directory> build()
         {
@@ -136,9 +136,9 @@ public:
         friend class Directory;
         DirectoryBuilder() : m_result(new Directory()) { }
 
-        template<int STEP> DirectoryBuilder<STATE | STEP>& castState()
+        template<int STEP> DirectoryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DirectoryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DirectoryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::FileSystem::Directory> m_result;
@@ -189,11 +189,11 @@ public:
             AllFieldsSet = (StorageKeySet | PathComponentsSet | 0)};
 
 
-        BucketFileSystemLocatorBuilder<STATE | StorageKeySet>& setStorageKey(const String& value);  // Defined below
+        BucketFileSystemLocatorBuilder<(STATE | BucketFileSystemLocatorBuilder<STATE>::StorageKeySet)>& setStorageKey(const String& value);  // Defined below
 
         BucketFileSystemLocatorBuilder<STATE>& setBucketName(const String& value);  // Defined below
 
-        BucketFileSystemLocatorBuilder<STATE | PathComponentsSet>& setPathComponents(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        BucketFileSystemLocatorBuilder<(STATE | BucketFileSystemLocatorBuilder<STATE>::PathComponentsSet)>& setPathComponents(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<BucketFileSystemLocator> build()
         {
@@ -205,9 +205,9 @@ public:
         friend class BucketFileSystemLocator;
         BucketFileSystemLocatorBuilder() : m_result(new BucketFileSystemLocator()) { }
 
-        template<int STEP> BucketFileSystemLocatorBuilder<STATE | STEP>& castState()
+        template<int STEP> BucketFileSystemLocatorBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BucketFileSystemLocatorBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BucketFileSystemLocatorBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::FileSystem::BucketFileSystemLocator> m_result;
@@ -241,28 +241,28 @@ inline void File::setSize(double value) { m_size = value; }
 inline void File::setType(const String& value) { m_type = value; }
 
 template<int STATE>
-inline File::FileBuilder<STATE | File::FileBuilder<STATE>::NameSet>&
+inline File::FileBuilder<(STATE | File::FileBuilder<STATE>::NameSet)>&
 File::FileBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline File::FileBuilder<STATE | File::FileBuilder<STATE>::LastModifiedSet>&
+inline File::FileBuilder<(STATE | File::FileBuilder<STATE>::LastModifiedSet)>&
 File::FileBuilder<STATE>::setLastModified(double value) {
   static_assert(!(STATE & LastModifiedSet), "property lastModified should not be set yet");
   m_result->setLastModified(value);
   return castState<LastModifiedSet>();
 }
 template<int STATE>
-inline File::FileBuilder<STATE | File::FileBuilder<STATE>::SizeSet>&
+inline File::FileBuilder<(STATE | File::FileBuilder<STATE>::SizeSet)>&
 File::FileBuilder<STATE>::setSize(double value) {
   static_assert(!(STATE & SizeSet), "property size should not be set yet");
   m_result->setSize(value);
   return castState<SizeSet>();
 }
 template<int STATE>
-inline File::FileBuilder<STATE | File::FileBuilder<STATE>::TypeSet>&
+inline File::FileBuilder<(STATE | File::FileBuilder<STATE>::TypeSet)>&
 File::FileBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -279,21 +279,21 @@ inline void Directory::setNestedDirectories(std::unique_ptr<protocol::Array<Stri
 inline void Directory::setNestedFiles(std::unique_ptr<protocol::Array<protocol::FileSystem::File>> value) { m_nestedFiles = std::move(value); }
 
 template<int STATE>
-inline Directory::DirectoryBuilder<STATE | Directory::DirectoryBuilder<STATE>::NameSet>&
+inline Directory::DirectoryBuilder<(STATE | Directory::DirectoryBuilder<STATE>::NameSet)>&
 Directory::DirectoryBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Directory::DirectoryBuilder<STATE | Directory::DirectoryBuilder<STATE>::NestedDirectoriesSet>&
+inline Directory::DirectoryBuilder<(STATE | Directory::DirectoryBuilder<STATE>::NestedDirectoriesSet)>&
 Directory::DirectoryBuilder<STATE>::setNestedDirectories(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & NestedDirectoriesSet), "property nestedDirectories should not be set yet");
   m_result->setNestedDirectories(std::move(value));
   return castState<NestedDirectoriesSet>();
 }
 template<int STATE>
-inline Directory::DirectoryBuilder<STATE | Directory::DirectoryBuilder<STATE>::NestedFilesSet>&
+inline Directory::DirectoryBuilder<(STATE | Directory::DirectoryBuilder<STATE>::NestedFilesSet)>&
 Directory::DirectoryBuilder<STATE>::setNestedFiles(std::unique_ptr<protocol::Array<protocol::FileSystem::File>> value) {
   static_assert(!(STATE & NestedFilesSet), "property nestedFiles should not be set yet");
   m_result->setNestedFiles(std::move(value));
@@ -308,7 +308,7 @@ inline void BucketFileSystemLocator::setBucketName(const String& value) { m_buck
 inline void BucketFileSystemLocator::setPathComponents(std::unique_ptr<protocol::Array<String>> value) { m_pathComponents = std::move(value); }
 
 template<int STATE>
-inline BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE | BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>::StorageKeySet>&
+inline BucketFileSystemLocator::BucketFileSystemLocatorBuilder<(STATE | BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>::StorageKeySet)>&
 BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>::setStorageKey(const String& value) {
   static_assert(!(STATE & StorageKeySet), "property storageKey should not be set yet");
   m_result->setStorageKey(value);
@@ -320,7 +320,7 @@ inline BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>& BucketFil
   return *this;
 }
 template<int STATE>
-inline BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE | BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>::PathComponentsSet>&
+inline BucketFileSystemLocator::BucketFileSystemLocatorBuilder<(STATE | BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>::PathComponentsSet)>&
 BucketFileSystemLocator::BucketFileSystemLocatorBuilder<STATE>::setPathComponents(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & PathComponentsSet), "property pathComponents should not be set yet");
   m_result->setPathComponents(std::move(value));

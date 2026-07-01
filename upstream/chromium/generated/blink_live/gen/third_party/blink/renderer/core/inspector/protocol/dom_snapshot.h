@@ -281,11 +281,11 @@ public:
             AllFieldsSet = (NodeTypeSet | NodeNameSet | NodeValueSet | BackendNodeIdSet | 0)};
 
 
-        DOMNodeBuilder<STATE | NodeTypeSet>& setNodeType(int value);  // Defined below
+        DOMNodeBuilder<(STATE | DOMNodeBuilder<STATE>::NodeTypeSet)>& setNodeType(int value);  // Defined below
 
-        DOMNodeBuilder<STATE | NodeNameSet>& setNodeName(const String& value);  // Defined below
+        DOMNodeBuilder<(STATE | DOMNodeBuilder<STATE>::NodeNameSet)>& setNodeName(const String& value);  // Defined below
 
-        DOMNodeBuilder<STATE | NodeValueSet>& setNodeValue(const String& value);  // Defined below
+        DOMNodeBuilder<(STATE | DOMNodeBuilder<STATE>::NodeValueSet)>& setNodeValue(const String& value);  // Defined below
 
         DOMNodeBuilder<STATE>& setTextValue(const String& value);  // Defined below
 
@@ -295,7 +295,7 @@ public:
 
         DOMNodeBuilder<STATE>& setOptionSelected(bool value);  // Defined below
 
-        DOMNodeBuilder<STATE | BackendNodeIdSet>& setBackendNodeId(int value);  // Defined below
+        DOMNodeBuilder<(STATE | DOMNodeBuilder<STATE>::BackendNodeIdSet)>& setBackendNodeId(int value);  // Defined below
 
         DOMNodeBuilder<STATE>& setChildNodeIndexes(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
@@ -347,9 +347,9 @@ public:
         friend class DOMNode;
         DOMNodeBuilder() : m_result(new DOMNode()) { }
 
-        template<int STEP> DOMNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> DOMNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DOMNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DOMNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::DOMNode> m_result;
@@ -420,11 +420,11 @@ public:
             AllFieldsSet = (BoundingBoxSet | StartCharacterIndexSet | NumCharactersSet | 0)};
 
 
-        InlineTextBoxBuilder<STATE | BoundingBoxSet>& setBoundingBox(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        InlineTextBoxBuilder<(STATE | InlineTextBoxBuilder<STATE>::BoundingBoxSet)>& setBoundingBox(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
-        InlineTextBoxBuilder<STATE | StartCharacterIndexSet>& setStartCharacterIndex(int value);  // Defined below
+        InlineTextBoxBuilder<(STATE | InlineTextBoxBuilder<STATE>::StartCharacterIndexSet)>& setStartCharacterIndex(int value);  // Defined below
 
-        InlineTextBoxBuilder<STATE | NumCharactersSet>& setNumCharacters(int value);  // Defined below
+        InlineTextBoxBuilder<(STATE | InlineTextBoxBuilder<STATE>::NumCharactersSet)>& setNumCharacters(int value);  // Defined below
 
         std::unique_ptr<InlineTextBox> build()
         {
@@ -436,9 +436,9 @@ public:
         friend class InlineTextBox;
         InlineTextBoxBuilder() : m_result(new InlineTextBox()) { }
 
-        template<int STEP> InlineTextBoxBuilder<STATE | STEP>& castState()
+        template<int STEP> InlineTextBoxBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InlineTextBoxBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InlineTextBoxBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::InlineTextBox> m_result;
@@ -525,9 +525,9 @@ public:
             AllFieldsSet = (DomNodeIndexSet | BoundingBoxSet | 0)};
 
 
-        LayoutTreeNodeBuilder<STATE | DomNodeIndexSet>& setDomNodeIndex(int value);  // Defined below
+        LayoutTreeNodeBuilder<(STATE | LayoutTreeNodeBuilder<STATE>::DomNodeIndexSet)>& setDomNodeIndex(int value);  // Defined below
 
-        LayoutTreeNodeBuilder<STATE | BoundingBoxSet>& setBoundingBox(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
+        LayoutTreeNodeBuilder<(STATE | LayoutTreeNodeBuilder<STATE>::BoundingBoxSet)>& setBoundingBox(std::unique_ptr<protocol::DOM::Rect> value);  // Defined below
 
         LayoutTreeNodeBuilder<STATE>& setLayoutText(const String& value);  // Defined below
 
@@ -549,9 +549,9 @@ public:
         friend class LayoutTreeNode;
         LayoutTreeNodeBuilder() : m_result(new LayoutTreeNode()) { }
 
-        template<int STEP> LayoutTreeNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> LayoutTreeNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LayoutTreeNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LayoutTreeNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::LayoutTreeNode> m_result;
@@ -593,7 +593,7 @@ public:
             AllFieldsSet = (PropertiesSet | 0)};
 
 
-        ComputedStyleBuilder<STATE | PropertiesSet>& setProperties(std::unique_ptr<protocol::Array<protocol::DOMSnapshot::NameValue>> value);  // Defined below
+        ComputedStyleBuilder<(STATE | ComputedStyleBuilder<STATE>::PropertiesSet)>& setProperties(std::unique_ptr<protocol::Array<protocol::DOMSnapshot::NameValue>> value);  // Defined below
 
         std::unique_ptr<ComputedStyle> build()
         {
@@ -605,9 +605,9 @@ public:
         friend class ComputedStyle;
         ComputedStyleBuilder() : m_result(new ComputedStyle()) { }
 
-        template<int STEP> ComputedStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> ComputedStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ComputedStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ComputedStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::ComputedStyle> m_result;
@@ -647,9 +647,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        NameValueBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        NameValueBuilder<(STATE | NameValueBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        NameValueBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        NameValueBuilder<(STATE | NameValueBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<NameValue> build()
         {
@@ -661,9 +661,9 @@ public:
         friend class NameValue;
         NameValueBuilder() : m_result(new NameValue()) { }
 
-        template<int STEP> NameValueBuilder<STATE | STEP>& castState()
+        template<int STEP> NameValueBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<NameValueBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<NameValueBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::NameValue> m_result;
@@ -704,9 +704,9 @@ public:
             AllFieldsSet = (IndexSet | ValueSet | 0)};
 
 
-        RareStringDataBuilder<STATE | IndexSet>& setIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        RareStringDataBuilder<(STATE | RareStringDataBuilder<STATE>::IndexSet)>& setIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
-        RareStringDataBuilder<STATE | ValueSet>& setValue(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        RareStringDataBuilder<(STATE | RareStringDataBuilder<STATE>::ValueSet)>& setValue(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<RareStringData> build()
         {
@@ -718,9 +718,9 @@ public:
         friend class RareStringData;
         RareStringDataBuilder() : m_result(new RareStringData()) { }
 
-        template<int STEP> RareStringDataBuilder<STATE | STEP>& castState()
+        template<int STEP> RareStringDataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RareStringDataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RareStringDataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::RareStringData> m_result;
@@ -757,7 +757,7 @@ public:
             AllFieldsSet = (IndexSet | 0)};
 
 
-        RareBooleanDataBuilder<STATE | IndexSet>& setIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        RareBooleanDataBuilder<(STATE | RareBooleanDataBuilder<STATE>::IndexSet)>& setIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<RareBooleanData> build()
         {
@@ -769,9 +769,9 @@ public:
         friend class RareBooleanData;
         RareBooleanDataBuilder() : m_result(new RareBooleanData()) { }
 
-        template<int STEP> RareBooleanDataBuilder<STATE | STEP>& castState()
+        template<int STEP> RareBooleanDataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RareBooleanDataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RareBooleanDataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::RareBooleanData> m_result;
@@ -811,9 +811,9 @@ public:
             AllFieldsSet = (IndexSet | ValueSet | 0)};
 
 
-        RareIntegerDataBuilder<STATE | IndexSet>& setIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        RareIntegerDataBuilder<(STATE | RareIntegerDataBuilder<STATE>::IndexSet)>& setIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
-        RareIntegerDataBuilder<STATE | ValueSet>& setValue(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        RareIntegerDataBuilder<(STATE | RareIntegerDataBuilder<STATE>::ValueSet)>& setValue(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<RareIntegerData> build()
         {
@@ -825,9 +825,9 @@ public:
         friend class RareIntegerData;
         RareIntegerDataBuilder() : m_result(new RareIntegerData()) { }
 
-        template<int STEP> RareIntegerDataBuilder<STATE | STEP>& castState()
+        template<int STEP> RareIntegerDataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RareIntegerDataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RareIntegerDataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::RareIntegerData> m_result;
@@ -940,27 +940,27 @@ public:
             AllFieldsSet = (DocumentURLSet | TitleSet | BaseURLSet | ContentLanguageSet | EncodingNameSet | PublicIdSet | SystemIdSet | FrameIdSet | NodesSet | LayoutSet | TextBoxesSet | 0)};
 
 
-        DocumentSnapshotBuilder<STATE | DocumentURLSet>& setDocumentURL(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::DocumentURLSet)>& setDocumentURL(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | TitleSet>& setTitle(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::TitleSet)>& setTitle(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | BaseURLSet>& setBaseURL(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::BaseURLSet)>& setBaseURL(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | ContentLanguageSet>& setContentLanguage(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::ContentLanguageSet)>& setContentLanguage(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | EncodingNameSet>& setEncodingName(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::EncodingNameSet)>& setEncodingName(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | PublicIdSet>& setPublicId(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::PublicIdSet)>& setPublicId(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | SystemIdSet>& setSystemId(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::SystemIdSet)>& setSystemId(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | FrameIdSet>& setFrameId(int value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::FrameIdSet)>& setFrameId(int value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | NodesSet>& setNodes(std::unique_ptr<protocol::DOMSnapshot::NodeTreeSnapshot> value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::NodesSet)>& setNodes(std::unique_ptr<protocol::DOMSnapshot::NodeTreeSnapshot> value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | LayoutSet>& setLayout(std::unique_ptr<protocol::DOMSnapshot::LayoutTreeSnapshot> value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::LayoutSet)>& setLayout(std::unique_ptr<protocol::DOMSnapshot::LayoutTreeSnapshot> value);  // Defined below
 
-        DocumentSnapshotBuilder<STATE | TextBoxesSet>& setTextBoxes(std::unique_ptr<protocol::DOMSnapshot::TextBoxSnapshot> value);  // Defined below
+        DocumentSnapshotBuilder<(STATE | DocumentSnapshotBuilder<STATE>::TextBoxesSet)>& setTextBoxes(std::unique_ptr<protocol::DOMSnapshot::TextBoxSnapshot> value);  // Defined below
 
         DocumentSnapshotBuilder<STATE>& setScrollOffsetX(double value);  // Defined below
 
@@ -980,9 +980,9 @@ public:
         friend class DocumentSnapshot;
         DocumentSnapshotBuilder() : m_result(new DocumentSnapshot()) { }
 
-        template<int STEP> DocumentSnapshotBuilder<STATE | STEP>& castState()
+        template<int STEP> DocumentSnapshotBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DocumentSnapshotBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DocumentSnapshotBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::DocumentSnapshot> m_result;
@@ -1225,9 +1225,9 @@ public:
         friend class NodeTreeSnapshot;
         NodeTreeSnapshotBuilder() : m_result(new NodeTreeSnapshot()) { }
 
-        template<int STEP> NodeTreeSnapshotBuilder<STATE | STEP>& castState()
+        template<int STEP> NodeTreeSnapshotBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<NodeTreeSnapshotBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<NodeTreeSnapshotBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::NodeTreeSnapshot> m_result;
@@ -1349,15 +1349,15 @@ public:
             AllFieldsSet = (NodeIndexSet | StylesSet | BoundsSet | TextSet | StackingContextsSet | 0)};
 
 
-        LayoutTreeSnapshotBuilder<STATE | NodeIndexSet>& setNodeIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshotBuilder<STATE>::NodeIndexSet)>& setNodeIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
-        LayoutTreeSnapshotBuilder<STATE | StylesSet>& setStyles(std::unique_ptr<protocol::Array<protocol::Array<int>>> value);  // Defined below
+        LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshotBuilder<STATE>::StylesSet)>& setStyles(std::unique_ptr<protocol::Array<protocol::Array<int>>> value);  // Defined below
 
-        LayoutTreeSnapshotBuilder<STATE | BoundsSet>& setBounds(std::unique_ptr<protocol::Array<protocol::Array<double>>> value);  // Defined below
+        LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshotBuilder<STATE>::BoundsSet)>& setBounds(std::unique_ptr<protocol::Array<protocol::Array<double>>> value);  // Defined below
 
-        LayoutTreeSnapshotBuilder<STATE | TextSet>& setText(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshotBuilder<STATE>::TextSet)>& setText(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
-        LayoutTreeSnapshotBuilder<STATE | StackingContextsSet>& setStackingContexts(std::unique_ptr<protocol::DOMSnapshot::RareBooleanData> value);  // Defined below
+        LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshotBuilder<STATE>::StackingContextsSet)>& setStackingContexts(std::unique_ptr<protocol::DOMSnapshot::RareBooleanData> value);  // Defined below
 
         LayoutTreeSnapshotBuilder<STATE>& setPaintOrders(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
@@ -1381,9 +1381,9 @@ public:
         friend class LayoutTreeSnapshot;
         LayoutTreeSnapshotBuilder() : m_result(new LayoutTreeSnapshot()) { }
 
-        template<int STEP> LayoutTreeSnapshotBuilder<STATE | STEP>& castState()
+        template<int STEP> LayoutTreeSnapshotBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LayoutTreeSnapshotBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LayoutTreeSnapshotBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::LayoutTreeSnapshot> m_result;
@@ -1441,13 +1441,13 @@ public:
             AllFieldsSet = (LayoutIndexSet | BoundsSet | StartSet | LengthSet | 0)};
 
 
-        TextBoxSnapshotBuilder<STATE | LayoutIndexSet>& setLayoutIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        TextBoxSnapshotBuilder<(STATE | TextBoxSnapshotBuilder<STATE>::LayoutIndexSet)>& setLayoutIndex(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
-        TextBoxSnapshotBuilder<STATE | BoundsSet>& setBounds(std::unique_ptr<protocol::Array<protocol::Array<double>>> value);  // Defined below
+        TextBoxSnapshotBuilder<(STATE | TextBoxSnapshotBuilder<STATE>::BoundsSet)>& setBounds(std::unique_ptr<protocol::Array<protocol::Array<double>>> value);  // Defined below
 
-        TextBoxSnapshotBuilder<STATE | StartSet>& setStart(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        TextBoxSnapshotBuilder<(STATE | TextBoxSnapshotBuilder<STATE>::StartSet)>& setStart(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
-        TextBoxSnapshotBuilder<STATE | LengthSet>& setLength(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        TextBoxSnapshotBuilder<(STATE | TextBoxSnapshotBuilder<STATE>::LengthSet)>& setLength(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<TextBoxSnapshot> build()
         {
@@ -1459,9 +1459,9 @@ public:
         friend class TextBoxSnapshot;
         TextBoxSnapshotBuilder() : m_result(new TextBoxSnapshot()) { }
 
-        template<int STEP> TextBoxSnapshotBuilder<STATE | STEP>& castState()
+        template<int STEP> TextBoxSnapshotBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<TextBoxSnapshotBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<TextBoxSnapshotBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMSnapshot::TextBoxSnapshot> m_result;
@@ -1520,21 +1520,21 @@ inline void DOMNode::setScrollOffsetX(double value) { m_scrollOffsetX = value; }
 inline void DOMNode::setScrollOffsetY(double value) { m_scrollOffsetY = value; }
 
 template<int STATE>
-inline DOMNode::DOMNodeBuilder<STATE | DOMNode::DOMNodeBuilder<STATE>::NodeTypeSet>&
+inline DOMNode::DOMNodeBuilder<(STATE | DOMNode::DOMNodeBuilder<STATE>::NodeTypeSet)>&
 DOMNode::DOMNodeBuilder<STATE>::setNodeType(int value) {
   static_assert(!(STATE & NodeTypeSet), "property nodeType should not be set yet");
   m_result->setNodeType(value);
   return castState<NodeTypeSet>();
 }
 template<int STATE>
-inline DOMNode::DOMNodeBuilder<STATE | DOMNode::DOMNodeBuilder<STATE>::NodeNameSet>&
+inline DOMNode::DOMNodeBuilder<(STATE | DOMNode::DOMNodeBuilder<STATE>::NodeNameSet)>&
 DOMNode::DOMNodeBuilder<STATE>::setNodeName(const String& value) {
   static_assert(!(STATE & NodeNameSet), "property nodeName should not be set yet");
   m_result->setNodeName(value);
   return castState<NodeNameSet>();
 }
 template<int STATE>
-inline DOMNode::DOMNodeBuilder<STATE | DOMNode::DOMNodeBuilder<STATE>::NodeValueSet>&
+inline DOMNode::DOMNodeBuilder<(STATE | DOMNode::DOMNodeBuilder<STATE>::NodeValueSet)>&
 DOMNode::DOMNodeBuilder<STATE>::setNodeValue(const String& value) {
   static_assert(!(STATE & NodeValueSet), "property nodeValue should not be set yet");
   m_result->setNodeValue(value);
@@ -1561,7 +1561,7 @@ inline DOMNode::DOMNodeBuilder<STATE>& DOMNode::DOMNodeBuilder<STATE>::setOption
   return *this;
 }
 template<int STATE>
-inline DOMNode::DOMNodeBuilder<STATE | DOMNode::DOMNodeBuilder<STATE>::BackendNodeIdSet>&
+inline DOMNode::DOMNodeBuilder<(STATE | DOMNode::DOMNodeBuilder<STATE>::BackendNodeIdSet)>&
 DOMNode::DOMNodeBuilder<STATE>::setBackendNodeId(int value) {
   static_assert(!(STATE & BackendNodeIdSet), "property backendNodeId should not be set yet");
   m_result->setBackendNodeId(value);
@@ -1678,21 +1678,21 @@ inline void InlineTextBox::setStartCharacterIndex(int value) { m_startCharacterI
 inline void InlineTextBox::setNumCharacters(int value) { m_numCharacters = value; }
 
 template<int STATE>
-inline InlineTextBox::InlineTextBoxBuilder<STATE | InlineTextBox::InlineTextBoxBuilder<STATE>::BoundingBoxSet>&
+inline InlineTextBox::InlineTextBoxBuilder<(STATE | InlineTextBox::InlineTextBoxBuilder<STATE>::BoundingBoxSet)>&
 InlineTextBox::InlineTextBoxBuilder<STATE>::setBoundingBox(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & BoundingBoxSet), "property boundingBox should not be set yet");
   m_result->setBoundingBox(std::move(value));
   return castState<BoundingBoxSet>();
 }
 template<int STATE>
-inline InlineTextBox::InlineTextBoxBuilder<STATE | InlineTextBox::InlineTextBoxBuilder<STATE>::StartCharacterIndexSet>&
+inline InlineTextBox::InlineTextBoxBuilder<(STATE | InlineTextBox::InlineTextBoxBuilder<STATE>::StartCharacterIndexSet)>&
 InlineTextBox::InlineTextBoxBuilder<STATE>::setStartCharacterIndex(int value) {
   static_assert(!(STATE & StartCharacterIndexSet), "property startCharacterIndex should not be set yet");
   m_result->setStartCharacterIndex(value);
   return castState<StartCharacterIndexSet>();
 }
 template<int STATE>
-inline InlineTextBox::InlineTextBoxBuilder<STATE | InlineTextBox::InlineTextBoxBuilder<STATE>::NumCharactersSet>&
+inline InlineTextBox::InlineTextBoxBuilder<(STATE | InlineTextBox::InlineTextBoxBuilder<STATE>::NumCharactersSet)>&
 InlineTextBox::InlineTextBoxBuilder<STATE>::setNumCharacters(int value) {
   static_assert(!(STATE & NumCharactersSet), "property numCharacters should not be set yet");
   m_result->setNumCharacters(value);
@@ -1713,14 +1713,14 @@ inline void LayoutTreeNode::setPaintOrder(int value) { m_paintOrder = value; }
 inline void LayoutTreeNode::setIsStackingContext(bool value) { m_isStackingContext = value; }
 
 template<int STATE>
-inline LayoutTreeNode::LayoutTreeNodeBuilder<STATE | LayoutTreeNode::LayoutTreeNodeBuilder<STATE>::DomNodeIndexSet>&
+inline LayoutTreeNode::LayoutTreeNodeBuilder<(STATE | LayoutTreeNode::LayoutTreeNodeBuilder<STATE>::DomNodeIndexSet)>&
 LayoutTreeNode::LayoutTreeNodeBuilder<STATE>::setDomNodeIndex(int value) {
   static_assert(!(STATE & DomNodeIndexSet), "property domNodeIndex should not be set yet");
   m_result->setDomNodeIndex(value);
   return castState<DomNodeIndexSet>();
 }
 template<int STATE>
-inline LayoutTreeNode::LayoutTreeNodeBuilder<STATE | LayoutTreeNode::LayoutTreeNodeBuilder<STATE>::BoundingBoxSet>&
+inline LayoutTreeNode::LayoutTreeNodeBuilder<(STATE | LayoutTreeNode::LayoutTreeNodeBuilder<STATE>::BoundingBoxSet)>&
 LayoutTreeNode::LayoutTreeNodeBuilder<STATE>::setBoundingBox(std::unique_ptr<protocol::DOM::Rect> value) {
   static_assert(!(STATE & BoundingBoxSet), "property boundingBox should not be set yet");
   m_result->setBoundingBox(std::move(value));
@@ -1759,7 +1759,7 @@ inline ComputedStyle::~ComputedStyle() = default;
 inline void ComputedStyle::setProperties(std::unique_ptr<protocol::Array<protocol::DOMSnapshot::NameValue>> value) { m_properties = std::move(value); }
 
 template<int STATE>
-inline ComputedStyle::ComputedStyleBuilder<STATE | ComputedStyle::ComputedStyleBuilder<STATE>::PropertiesSet>&
+inline ComputedStyle::ComputedStyleBuilder<(STATE | ComputedStyle::ComputedStyleBuilder<STATE>::PropertiesSet)>&
 ComputedStyle::ComputedStyleBuilder<STATE>::setProperties(std::unique_ptr<protocol::Array<protocol::DOMSnapshot::NameValue>> value) {
   static_assert(!(STATE & PropertiesSet), "property properties should not be set yet");
   m_result->setProperties(std::move(value));
@@ -1773,14 +1773,14 @@ inline void NameValue::setName(const String& value) { m_name = value; }
 inline void NameValue::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline NameValue::NameValueBuilder<STATE | NameValue::NameValueBuilder<STATE>::NameSet>&
+inline NameValue::NameValueBuilder<(STATE | NameValue::NameValueBuilder<STATE>::NameSet)>&
 NameValue::NameValueBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline NameValue::NameValueBuilder<STATE | NameValue::NameValueBuilder<STATE>::ValueSet>&
+inline NameValue::NameValueBuilder<(STATE | NameValue::NameValueBuilder<STATE>::ValueSet)>&
 NameValue::NameValueBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -1794,14 +1794,14 @@ inline void RareStringData::setIndex(std::unique_ptr<protocol::Array<int>> value
 inline void RareStringData::setValue(std::unique_ptr<protocol::Array<int>> value) { m_value = std::move(value); }
 
 template<int STATE>
-inline RareStringData::RareStringDataBuilder<STATE | RareStringData::RareStringDataBuilder<STATE>::IndexSet>&
+inline RareStringData::RareStringDataBuilder<(STATE | RareStringData::RareStringDataBuilder<STATE>::IndexSet)>&
 RareStringData::RareStringDataBuilder<STATE>::setIndex(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & IndexSet), "property index should not be set yet");
   m_result->setIndex(std::move(value));
   return castState<IndexSet>();
 }
 template<int STATE>
-inline RareStringData::RareStringDataBuilder<STATE | RareStringData::RareStringDataBuilder<STATE>::ValueSet>&
+inline RareStringData::RareStringDataBuilder<(STATE | RareStringData::RareStringDataBuilder<STATE>::ValueSet)>&
 RareStringData::RareStringDataBuilder<STATE>::setValue(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(std::move(value));
@@ -1814,7 +1814,7 @@ inline RareBooleanData::~RareBooleanData() = default;
 inline void RareBooleanData::setIndex(std::unique_ptr<protocol::Array<int>> value) { m_index = std::move(value); }
 
 template<int STATE>
-inline RareBooleanData::RareBooleanDataBuilder<STATE | RareBooleanData::RareBooleanDataBuilder<STATE>::IndexSet>&
+inline RareBooleanData::RareBooleanDataBuilder<(STATE | RareBooleanData::RareBooleanDataBuilder<STATE>::IndexSet)>&
 RareBooleanData::RareBooleanDataBuilder<STATE>::setIndex(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & IndexSet), "property index should not be set yet");
   m_result->setIndex(std::move(value));
@@ -1828,14 +1828,14 @@ inline void RareIntegerData::setIndex(std::unique_ptr<protocol::Array<int>> valu
 inline void RareIntegerData::setValue(std::unique_ptr<protocol::Array<int>> value) { m_value = std::move(value); }
 
 template<int STATE>
-inline RareIntegerData::RareIntegerDataBuilder<STATE | RareIntegerData::RareIntegerDataBuilder<STATE>::IndexSet>&
+inline RareIntegerData::RareIntegerDataBuilder<(STATE | RareIntegerData::RareIntegerDataBuilder<STATE>::IndexSet)>&
 RareIntegerData::RareIntegerDataBuilder<STATE>::setIndex(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & IndexSet), "property index should not be set yet");
   m_result->setIndex(std::move(value));
   return castState<IndexSet>();
 }
 template<int STATE>
-inline RareIntegerData::RareIntegerDataBuilder<STATE | RareIntegerData::RareIntegerDataBuilder<STATE>::ValueSet>&
+inline RareIntegerData::RareIntegerDataBuilder<(STATE | RareIntegerData::RareIntegerDataBuilder<STATE>::ValueSet)>&
 RareIntegerData::RareIntegerDataBuilder<STATE>::setValue(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(std::move(value));
@@ -1862,77 +1862,77 @@ inline void DocumentSnapshot::setContentWidth(double value) { m_contentWidth = v
 inline void DocumentSnapshot::setContentHeight(double value) { m_contentHeight = value; }
 
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::DocumentURLSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::DocumentURLSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setDocumentURL(int value) {
   static_assert(!(STATE & DocumentURLSet), "property documentURL should not be set yet");
   m_result->setDocumentURL(value);
   return castState<DocumentURLSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::TitleSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::TitleSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setTitle(int value) {
   static_assert(!(STATE & TitleSet), "property title should not be set yet");
   m_result->setTitle(value);
   return castState<TitleSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::BaseURLSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::BaseURLSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setBaseURL(int value) {
   static_assert(!(STATE & BaseURLSet), "property baseURL should not be set yet");
   m_result->setBaseURL(value);
   return castState<BaseURLSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::ContentLanguageSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::ContentLanguageSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setContentLanguage(int value) {
   static_assert(!(STATE & ContentLanguageSet), "property contentLanguage should not be set yet");
   m_result->setContentLanguage(value);
   return castState<ContentLanguageSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::EncodingNameSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::EncodingNameSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setEncodingName(int value) {
   static_assert(!(STATE & EncodingNameSet), "property encodingName should not be set yet");
   m_result->setEncodingName(value);
   return castState<EncodingNameSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::PublicIdSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::PublicIdSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setPublicId(int value) {
   static_assert(!(STATE & PublicIdSet), "property publicId should not be set yet");
   m_result->setPublicId(value);
   return castState<PublicIdSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::SystemIdSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::SystemIdSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setSystemId(int value) {
   static_assert(!(STATE & SystemIdSet), "property systemId should not be set yet");
   m_result->setSystemId(value);
   return castState<SystemIdSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::FrameIdSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::FrameIdSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setFrameId(int value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
   return castState<FrameIdSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::NodesSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::NodesSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setNodes(std::unique_ptr<protocol::DOMSnapshot::NodeTreeSnapshot> value) {
   static_assert(!(STATE & NodesSet), "property nodes should not be set yet");
   m_result->setNodes(std::move(value));
   return castState<NodesSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::LayoutSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::LayoutSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setLayout(std::unique_ptr<protocol::DOMSnapshot::LayoutTreeSnapshot> value) {
   static_assert(!(STATE & LayoutSet), "property layout should not be set yet");
   m_result->setLayout(std::move(value));
   return castState<LayoutSet>();
 }
 template<int STATE>
-inline DocumentSnapshot::DocumentSnapshotBuilder<STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::TextBoxesSet>&
+inline DocumentSnapshot::DocumentSnapshotBuilder<(STATE | DocumentSnapshot::DocumentSnapshotBuilder<STATE>::TextBoxesSet)>&
 DocumentSnapshot::DocumentSnapshotBuilder<STATE>::setTextBoxes(std::unique_ptr<protocol::DOMSnapshot::TextBoxSnapshot> value) {
   static_assert(!(STATE & TextBoxesSet), "property textBoxes should not be set yet");
   m_result->setTextBoxes(std::move(value));
@@ -2090,35 +2090,35 @@ inline void LayoutTreeSnapshot::setBlendedBackgroundColors(std::unique_ptr<proto
 inline void LayoutTreeSnapshot::setTextColorOpacities(std::unique_ptr<protocol::Array<double>> value) { m_textColorOpacities = std::move(value); }
 
 template<int STATE>
-inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::NodeIndexSet>&
+inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::NodeIndexSet)>&
 LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::setNodeIndex(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & NodeIndexSet), "property nodeIndex should not be set yet");
   m_result->setNodeIndex(std::move(value));
   return castState<NodeIndexSet>();
 }
 template<int STATE>
-inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::StylesSet>&
+inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::StylesSet)>&
 LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::setStyles(std::unique_ptr<protocol::Array<protocol::Array<int>>> value) {
   static_assert(!(STATE & StylesSet), "property styles should not be set yet");
   m_result->setStyles(std::move(value));
   return castState<StylesSet>();
 }
 template<int STATE>
-inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::BoundsSet>&
+inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::BoundsSet)>&
 LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::setBounds(std::unique_ptr<protocol::Array<protocol::Array<double>>> value) {
   static_assert(!(STATE & BoundsSet), "property bounds should not be set yet");
   m_result->setBounds(std::move(value));
   return castState<BoundsSet>();
 }
 template<int STATE>
-inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::TextSet>&
+inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::TextSet)>&
 LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::setText(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(std::move(value));
   return castState<TextSet>();
 }
 template<int STATE>
-inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::StackingContextsSet>&
+inline LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<(STATE | LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::StackingContextsSet)>&
 LayoutTreeSnapshot::LayoutTreeSnapshotBuilder<STATE>::setStackingContexts(std::unique_ptr<protocol::DOMSnapshot::RareBooleanData> value) {
   static_assert(!(STATE & StackingContextsSet), "property stackingContexts should not be set yet");
   m_result->setStackingContexts(std::move(value));
@@ -2164,28 +2164,28 @@ inline void TextBoxSnapshot::setStart(std::unique_ptr<protocol::Array<int>> valu
 inline void TextBoxSnapshot::setLength(std::unique_ptr<protocol::Array<int>> value) { m_length = std::move(value); }
 
 template<int STATE>
-inline TextBoxSnapshot::TextBoxSnapshotBuilder<STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::LayoutIndexSet>&
+inline TextBoxSnapshot::TextBoxSnapshotBuilder<(STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::LayoutIndexSet)>&
 TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::setLayoutIndex(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & LayoutIndexSet), "property layoutIndex should not be set yet");
   m_result->setLayoutIndex(std::move(value));
   return castState<LayoutIndexSet>();
 }
 template<int STATE>
-inline TextBoxSnapshot::TextBoxSnapshotBuilder<STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::BoundsSet>&
+inline TextBoxSnapshot::TextBoxSnapshotBuilder<(STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::BoundsSet)>&
 TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::setBounds(std::unique_ptr<protocol::Array<protocol::Array<double>>> value) {
   static_assert(!(STATE & BoundsSet), "property bounds should not be set yet");
   m_result->setBounds(std::move(value));
   return castState<BoundsSet>();
 }
 template<int STATE>
-inline TextBoxSnapshot::TextBoxSnapshotBuilder<STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::StartSet>&
+inline TextBoxSnapshot::TextBoxSnapshotBuilder<(STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::StartSet)>&
 TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::setStart(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & StartSet), "property start should not be set yet");
   m_result->setStart(std::move(value));
   return castState<StartSet>();
 }
 template<int STATE>
-inline TextBoxSnapshot::TextBoxSnapshotBuilder<STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::LengthSet>&
+inline TextBoxSnapshot::TextBoxSnapshotBuilder<(STATE | TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::LengthSet)>&
 TextBoxSnapshot::TextBoxSnapshotBuilder<STATE>::setLength(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & LengthSet), "property length should not be set yet");
   m_result->setLength(std::move(value));

@@ -74,8 +74,8 @@ class LineInfoList {
 
  protected:
   LineInfoList(LineInfo* line_infos_instance, wtf_size_t max_lines)
-      : max_lines_(max_lines) {
-    CHECK_EQ(line_infos_instance, line_infos_);
+      : max_lines_(max_lines), line_infos_(line_infos_instance) {
+    CHECK(line_infos_);
   }
 
  private:
@@ -87,7 +87,7 @@ class LineInfoList {
   wtf_size_t size_ = 0;
   wtf_size_t start_index_ = 0;
   const wtf_size_t max_lines_;
-  LineInfo line_infos_[0];
+  LineInfo* const line_infos_;
 };
 
 inline LineInfo& LineInfoList::Get(const InlineBreakToken* break_token,

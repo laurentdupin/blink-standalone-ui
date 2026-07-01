@@ -173,7 +173,15 @@ inline constexpr WeakHandlingFlag kWeakHandlingTrait =
 // This is used to check that DISALLOW_NEW objects are not
 // stored in off-heap Vectors, HashTables etc.
 template <typename T>
-concept IsDisallowNew = requires { typename T::IsDisallowNewMarker; };
+struct IsDisallowNewTrait : std::false_type {};
+
+template <typename T>
+  requires(requires { typename T::IsDisallowNewMarker; } &&
+           !IsGarbageCollectedType<T>::value)
+struct IsDisallowNewTrait<T> : std::true_type {};
+
+template <typename T>
+concept IsDisallowNew = IsDisallowNewTrait<T>::value;
 
 template <>
 class IsGarbageCollectedType<void> {

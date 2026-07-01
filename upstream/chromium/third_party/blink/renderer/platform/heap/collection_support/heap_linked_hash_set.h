@@ -20,8 +20,39 @@ namespace blink {
 template <internal::HeapCollectionType CollectionType,
           typename ValueArg,
           typename TraitsArg = HashTraits<ValueArg>>
-class BasicHeapLinkedHashSet final
-    : public std::conditional_t<
+class BasicHeapLinkedHashSet;
+
+namespace internal {
+
+template <HeapCollectionType CollectionType,
+          typename ValueArg,
+          typename TraitsArg>
+struct BasicHeapLinkedHashSetTypeConstraints {
+  constexpr BasicHeapLinkedHashSetTypeConstraints() {
+    static_assert(
+        IsMemberOrWeakMemberType<ValueArg>::value,
+        "BasicHeapLinkedHashSet supports only Member and WeakMember.");
+    static_assert(std::is_trivially_destructible_v<
+                      blink::BasicHeapLinkedHashSet<CollectionType,
+                                                    ValueArg,
+                                                    TraitsArg>>,
+                  "BasicHeapLinkedHashSet must be trivially destructible.");
+    static_assert(IsTraceableV<ValueArg>,
+                  "For sets without traceable elements, use LinkedHashSet<> "
+                  "instead of BasicHeapLinkedHashSet<>.");
+  }
+};
+
+}  // namespace internal
+
+template <internal::HeapCollectionType CollectionType,
+          typename ValueArg,
+          typename TraitsArg>
+class EMPTY_BASES BasicHeapLinkedHashSet final
+    : private internal::BasicHeapLinkedHashSetTypeConstraints<CollectionType,
+                                                              ValueArg,
+                                                              TraitsArg>,
+      public std::conditional_t<
           CollectionType == internal::HeapCollectionType::kGCed,
           GarbageCollected<
               BasicHeapLinkedHashSet<CollectionType, ValueArg, TraitsArg>>,
@@ -34,21 +65,13 @@ class BasicHeapLinkedHashSet final
     LinkedHashSet<ValueArg, TraitsArg, HeapAllocator>::Trace(v);
   }
 
- private:
-  struct TypeConstraints {
-    constexpr TypeConstraints() {
-      static_assert(
-          IsMemberOrWeakMemberType<ValueArg>::value,
-          "BasicHeapLinkedHashSet supports only Member and WeakMember.");
-      static_assert(std::is_trivially_destructible_v<BasicHeapLinkedHashSet>,
-                    "BasicHeapLinkedHashSet must be trivially destructible.");
-      static_assert(IsTraceableV<ValueArg>,
-                    "For sets without traceable elements, use LinkedHashSet<> "
-                    "instead of BasicHeapLinkedHashSet<>.");
-    }
-  };
-  NO_UNIQUE_ADDRESS TypeConstraints type_constraints_;
 };
+
+template <typename T, typename Traits>
+struct IsDisallowNewTrait<BasicHeapLinkedHashSet<
+    internal::HeapCollectionType::kDisallowNew,
+    T,
+    Traits>> : std::true_type {};
 
 // On-stack for in-field version of LinkedHashSet for referring to
 // GarbageCollected objects.

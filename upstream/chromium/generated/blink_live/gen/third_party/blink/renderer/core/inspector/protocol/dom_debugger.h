@@ -103,19 +103,19 @@ public:
             AllFieldsSet = (TypeSet | UseCaptureSet | PassiveSet | OnceSet | ScriptIdSet | LineNumberSet | ColumnNumberSet | 0)};
 
 
-        EventListenerBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
-        EventListenerBuilder<STATE | UseCaptureSet>& setUseCapture(bool value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::UseCaptureSet)>& setUseCapture(bool value);  // Defined below
 
-        EventListenerBuilder<STATE | PassiveSet>& setPassive(bool value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::PassiveSet)>& setPassive(bool value);  // Defined below
 
-        EventListenerBuilder<STATE | OnceSet>& setOnce(bool value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::OnceSet)>& setOnce(bool value);  // Defined below
 
-        EventListenerBuilder<STATE | ScriptIdSet>& setScriptId(const String& value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::ScriptIdSet)>& setScriptId(const String& value);  // Defined below
 
-        EventListenerBuilder<STATE | LineNumberSet>& setLineNumber(int value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::LineNumberSet)>& setLineNumber(int value);  // Defined below
 
-        EventListenerBuilder<STATE | ColumnNumberSet>& setColumnNumber(int value);  // Defined below
+        EventListenerBuilder<(STATE | EventListenerBuilder<STATE>::ColumnNumberSet)>& setColumnNumber(int value);  // Defined below
 
         EventListenerBuilder<STATE>& setHandler(std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject> value);  // Defined below
 
@@ -133,9 +133,9 @@ public:
         friend class EventListener;
         EventListenerBuilder() : m_result(new EventListener()) { }
 
-        template<int STEP> EventListenerBuilder<STATE | STEP>& castState()
+        template<int STEP> EventListenerBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<EventListenerBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<EventListenerBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMDebugger::EventListener> m_result;
@@ -182,49 +182,49 @@ inline void EventListener::setOriginalHandler(std::unique_ptr<v8_inspector::prot
 inline void EventListener::setBackendNodeId(int value) { m_backendNodeId = value; }
 
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::TypeSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::TypeSet)>&
 EventListener::EventListenerBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
   return castState<TypeSet>();
 }
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::UseCaptureSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::UseCaptureSet)>&
 EventListener::EventListenerBuilder<STATE>::setUseCapture(bool value) {
   static_assert(!(STATE & UseCaptureSet), "property useCapture should not be set yet");
   m_result->setUseCapture(value);
   return castState<UseCaptureSet>();
 }
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::PassiveSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::PassiveSet)>&
 EventListener::EventListenerBuilder<STATE>::setPassive(bool value) {
   static_assert(!(STATE & PassiveSet), "property passive should not be set yet");
   m_result->setPassive(value);
   return castState<PassiveSet>();
 }
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::OnceSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::OnceSet)>&
 EventListener::EventListenerBuilder<STATE>::setOnce(bool value) {
   static_assert(!(STATE & OnceSet), "property once should not be set yet");
   m_result->setOnce(value);
   return castState<OnceSet>();
 }
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::ScriptIdSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::ScriptIdSet)>&
 EventListener::EventListenerBuilder<STATE>::setScriptId(const String& value) {
   static_assert(!(STATE & ScriptIdSet), "property scriptId should not be set yet");
   m_result->setScriptId(value);
   return castState<ScriptIdSet>();
 }
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::LineNumberSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::LineNumberSet)>&
 EventListener::EventListenerBuilder<STATE>::setLineNumber(int value) {
   static_assert(!(STATE & LineNumberSet), "property lineNumber should not be set yet");
   m_result->setLineNumber(value);
   return castState<LineNumberSet>();
 }
 template<int STATE>
-inline EventListener::EventListenerBuilder<STATE | EventListener::EventListenerBuilder<STATE>::ColumnNumberSet>&
+inline EventListener::EventListenerBuilder<(STATE | EventListener::EventListenerBuilder<STATE>::ColumnNumberSet)>&
 EventListener::EventListenerBuilder<STATE>::setColumnNumber(int value) {
   static_assert(!(STATE & ColumnNumberSet), "property columnNumber should not be set yet");
   m_result->setColumnNumber(value);

@@ -222,7 +222,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        AXValueSourceBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        AXValueSourceBuilder<(STATE | AXValueSourceBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         AXValueSourceBuilder<STATE>& setValue(std::unique_ptr<protocol::Accessibility::AXValue> value);  // Defined below
 
@@ -250,9 +250,9 @@ public:
         friend class AXValueSource;
         AXValueSourceBuilder() : m_result(new AXValueSource()) { }
 
-        template<int STEP> AXValueSourceBuilder<STATE | STEP>& castState()
+        template<int STEP> AXValueSourceBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AXValueSourceBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AXValueSourceBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Accessibility::AXValueSource> m_result;
@@ -314,7 +314,7 @@ public:
             AllFieldsSet = (BackendDOMNodeIdSet | 0)};
 
 
-        AXRelatedNodeBuilder<STATE | BackendDOMNodeIdSet>& setBackendDOMNodeId(int value);  // Defined below
+        AXRelatedNodeBuilder<(STATE | AXRelatedNodeBuilder<STATE>::BackendDOMNodeIdSet)>& setBackendDOMNodeId(int value);  // Defined below
 
         AXRelatedNodeBuilder<STATE>& setIdref(const String& value);  // Defined below
 
@@ -330,9 +330,9 @@ public:
         friend class AXRelatedNode;
         AXRelatedNodeBuilder() : m_result(new AXRelatedNode()) { }
 
-        template<int STEP> AXRelatedNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> AXRelatedNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AXRelatedNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AXRelatedNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Accessibility::AXRelatedNode> m_result;
@@ -374,9 +374,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        AXPropertyBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        AXPropertyBuilder<(STATE | AXPropertyBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        AXPropertyBuilder<STATE | ValueSet>& setValue(std::unique_ptr<protocol::Accessibility::AXValue> value);  // Defined below
+        AXPropertyBuilder<(STATE | AXPropertyBuilder<STATE>::ValueSet)>& setValue(std::unique_ptr<protocol::Accessibility::AXValue> value);  // Defined below
 
         std::unique_ptr<AXProperty> build()
         {
@@ -388,9 +388,9 @@ public:
         friend class AXProperty;
         AXPropertyBuilder() : m_result(new AXProperty()) { }
 
-        template<int STEP> AXPropertyBuilder<STATE | STEP>& castState()
+        template<int STEP> AXPropertyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AXPropertyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AXPropertyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Accessibility::AXProperty> m_result;
@@ -454,7 +454,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        AXValueBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        AXValueBuilder<(STATE | AXValueBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         AXValueBuilder<STATE>& setValue(std::unique_ptr<protocol::Value> value);  // Defined below
 
@@ -472,9 +472,9 @@ public:
         friend class AXValue;
         AXValueBuilder() : m_result(new AXValue()) { }
 
-        template<int STEP> AXValueBuilder<STATE | STEP>& castState()
+        template<int STEP> AXValueBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AXValueBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AXValueBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Accessibility::AXValue> m_result;
@@ -616,9 +616,9 @@ public:
             AllFieldsSet = (NodeIdSet | IgnoredSet | 0)};
 
 
-        AXNodeBuilder<STATE | NodeIdSet>& setNodeId(const String& value);  // Defined below
+        AXNodeBuilder<(STATE | AXNodeBuilder<STATE>::NodeIdSet)>& setNodeId(const String& value);  // Defined below
 
-        AXNodeBuilder<STATE | IgnoredSet>& setIgnored(bool value);  // Defined below
+        AXNodeBuilder<(STATE | AXNodeBuilder<STATE>::IgnoredSet)>& setIgnored(bool value);  // Defined below
 
         AXNodeBuilder<STATE>& setIgnoredReasons(std::unique_ptr<protocol::Array<protocol::Accessibility::AXProperty>> value);  // Defined below
 
@@ -652,9 +652,9 @@ public:
         friend class AXNode;
         AXNodeBuilder() : m_result(new AXNode()) { }
 
-        template<int STEP> AXNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> AXNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AXNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AXNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Accessibility::AXNode> m_result;
@@ -703,7 +703,7 @@ inline void AXValueSource::setInvalid(bool value) { m_invalid = value; }
 inline void AXValueSource::setInvalidReason(const String& value) { m_invalidReason = value; }
 
 template<int STATE>
-inline AXValueSource::AXValueSourceBuilder<STATE | AXValueSource::AXValueSourceBuilder<STATE>::TypeSet>&
+inline AXValueSource::AXValueSourceBuilder<(STATE | AXValueSource::AXValueSourceBuilder<STATE>::TypeSet)>&
 AXValueSource::AXValueSourceBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -758,7 +758,7 @@ inline void AXRelatedNode::setIdref(const String& value) { m_idref = value; }
 inline void AXRelatedNode::setText(const String& value) { m_text = value; }
 
 template<int STATE>
-inline AXRelatedNode::AXRelatedNodeBuilder<STATE | AXRelatedNode::AXRelatedNodeBuilder<STATE>::BackendDOMNodeIdSet>&
+inline AXRelatedNode::AXRelatedNodeBuilder<(STATE | AXRelatedNode::AXRelatedNodeBuilder<STATE>::BackendDOMNodeIdSet)>&
 AXRelatedNode::AXRelatedNodeBuilder<STATE>::setBackendDOMNodeId(int value) {
   static_assert(!(STATE & BackendDOMNodeIdSet), "property backendDOMNodeId should not be set yet");
   m_result->setBackendDOMNodeId(value);
@@ -783,14 +783,14 @@ inline void AXProperty::setName(const String& value) { m_name = value; }
 inline void AXProperty::setValue(std::unique_ptr<protocol::Accessibility::AXValue> value) { m_value = std::move(value); }
 
 template<int STATE>
-inline AXProperty::AXPropertyBuilder<STATE | AXProperty::AXPropertyBuilder<STATE>::NameSet>&
+inline AXProperty::AXPropertyBuilder<(STATE | AXProperty::AXPropertyBuilder<STATE>::NameSet)>&
 AXProperty::AXPropertyBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline AXProperty::AXPropertyBuilder<STATE | AXProperty::AXPropertyBuilder<STATE>::ValueSet>&
+inline AXProperty::AXPropertyBuilder<(STATE | AXProperty::AXPropertyBuilder<STATE>::ValueSet)>&
 AXProperty::AXPropertyBuilder<STATE>::setValue(std::unique_ptr<protocol::Accessibility::AXValue> value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(std::move(value));
@@ -806,7 +806,7 @@ inline void AXValue::setRelatedNodes(std::unique_ptr<protocol::Array<protocol::A
 inline void AXValue::setSources(std::unique_ptr<protocol::Array<protocol::Accessibility::AXValueSource>> value) { m_sources = std::move(value); }
 
 template<int STATE>
-inline AXValue::AXValueBuilder<STATE | AXValue::AXValueBuilder<STATE>::TypeSet>&
+inline AXValue::AXValueBuilder<(STATE | AXValue::AXValueBuilder<STATE>::TypeSet)>&
 AXValue::AXValueBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -846,14 +846,14 @@ inline void AXNode::setBackendDOMNodeId(int value) { m_backendDOMNodeId = value;
 inline void AXNode::setFrameId(const String& value) { m_frameId = value; }
 
 template<int STATE>
-inline AXNode::AXNodeBuilder<STATE | AXNode::AXNodeBuilder<STATE>::NodeIdSet>&
+inline AXNode::AXNodeBuilder<(STATE | AXNode::AXNodeBuilder<STATE>::NodeIdSet)>&
 AXNode::AXNodeBuilder<STATE>::setNodeId(const String& value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
   return castState<NodeIdSet>();
 }
 template<int STATE>
-inline AXNode::AXNodeBuilder<STATE | AXNode::AXNodeBuilder<STATE>::IgnoredSet>&
+inline AXNode::AXNodeBuilder<(STATE | AXNode::AXNodeBuilder<STATE>::IgnoredSet)>&
 AXNode::AXNodeBuilder<STATE>::setIgnored(bool value) {
   static_assert(!(STATE & IgnoredSet), "property ignored should not be set yet");
   m_result->setIgnored(value);

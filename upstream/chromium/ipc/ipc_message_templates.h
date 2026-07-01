@@ -79,6 +79,16 @@ DispatchToMethod(ObjT* obj,
                        std::make_index_sequence<size>());
 }
 
+inline void ConnectMessageAndReply(const Message* msg, Message* reply) {
+#if BUILDFLAG(IPC_MESSAGE_LOG_ENABLED)
+  reply->set_sync_log_data(msg->sync_log_data());
+  msg->set_dont_log();
+#else
+  (void)msg;
+  (void)reply;
+#endif
+}
+
 enum class MessageKind {
   CONTROL,
   ROUTED,

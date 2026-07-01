@@ -397,13 +397,31 @@ set(BLINK_STANDALONE_ICU_SOURCE_ROOT
   CACHE PATH
   "ICU source root used by the standalone renderer. Generated V8 ICU is preferred when present so compiled ICU and icudtl.dat versions match."
 )
+set(_blink_standalone_v8_icu_data_file
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu/common/icudtl.dat
+)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/icu" _blink_standalone_chromium_icu_source_root_normalized)
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_ICU_SOURCE_ROOT}" _blink_standalone_icu_source_root_normalized)
+if(EXISTS "${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu/source/common/unicode/uvernum.h" AND
+   _blink_standalone_icu_source_root_normalized STREQUAL _blink_standalone_chromium_icu_source_root_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_ICU_SOURCE_ROOT and BLINK_STANDALONE_ICU_DATA_FILE to match the generated V8 ICU checkout.")
+  set(BLINK_STANDALONE_ICU_SOURCE_ROOT
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu
+    CACHE PATH
+    "ICU source root used by the standalone renderer. Generated V8 ICU is preferred when present so compiled ICU and icudtl.dat versions match."
+    FORCE
+  )
+  set(BLINK_STANDALONE_ICU_DATA_FILE
+    ${_blink_standalone_v8_icu_data_file}
+    CACHE FILEPATH
+    "ICU data sidecar matching BLINK_STANDALONE_ICU_SOURCE_ROOT."
+    FORCE
+  )
+endif()
 set(BLINK_STANDALONE_ICU_DATA_FILE
   ${BLINK_STANDALONE_ICU_SOURCE_ROOT}/common/icudtl.dat
   CACHE FILEPATH
   "ICU data sidecar matching BLINK_STANDALONE_ICU_SOURCE_ROOT."
-)
-set(_blink_standalone_v8_icu_data_file
-  ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/icu/common/icudtl.dat
 )
 if(NOT EXISTS "${BLINK_STANDALONE_ICU_DATA_FILE}")
   if(EXISTS "${_blink_standalone_v8_icu_data_file}")
@@ -1183,7 +1201,9 @@ blink_standalone_apply_optimization_group(
   app BLINK_STANDALONE_OPTIMIZE_APP ${BLINK_STANDALONE_APP_SOURCES} ${BLINK_STANDALONE_SDL_APP_SOURCES})
 
 if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
+  set_property(GLOBAL APPEND PROPERTY JOB_POOLS blink_standalone_msvc_heap_sensitive=1)
   set(BLINK_STANDALONE_MSVC_HEAP_SENSITIVE_SOURCES
+    ${BLINK_STANDALONE_PARTITION_ALLOC_CORE_SOURCES}
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/bounds_checks.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/gwp_asan_support.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/in_slot_metadata.cc
@@ -1192,16 +1212,32 @@ if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_alloc.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/base/allocator/partition_allocator/src/partition_alloc/partition_bucket.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/editing_utilities.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/iterators/text_iterator_text_state.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/ng_flat_tree_shorthands.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/editing_commands_utilities.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/indent_outdent_command.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_into_text_node_command.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/insert_line_break_command.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/layout/layout_object.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_resource_provider.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/frame/visual_viewport.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_element.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_fallback_helper.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/html/html_image_loader.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/loader/image_loader.cc
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/paint/html_canvas_painter.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/editing/commands/style_commands.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/core/scroll/scrollbar_layer_delegate.cc
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/blink/renderer/platform/graphics/skia/skia_utils.cc
   )
+  list(REMOVE_DUPLICATES BLINK_STANDALONE_MSVC_HEAP_SENSITIVE_SOURCES)
   foreach(source IN LISTS BLINK_STANDALONE_MSVC_HEAP_SENSITIVE_SOURCES)
     set_property(SOURCE ${source} APPEND PROPERTY COMPILE_OPTIONS
       /Od
       /Ob0
       /Oy-
     )
+    set_property(SOURCE ${source} PROPERTY JOB_POOL_COMPILE blink_standalone_msvc_heap_sensitive)
   endforeach()
 endif()
 
@@ -1761,51 +1797,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     CACHE PATH
     "Output directory for the embeddable C API DLL/import-library runtime package."
   )
-  set(BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR
-    ${CMAKE_BINARY_DIR}/package/c_api_static
-    CACHE PATH
-    "Output directory for the embeddable C API static-link evaluation package."
-  )
   set(_blink_standalone_dawn_d3d12_runtime_sidecars)
   set(_blink_standalone_dawn_d3d12_runtime_copy_commands)
-  set(_blink_standalone_dawn_d3d12_static_copy_commands)
   set(_blink_standalone_dawn_d3d12_runtime_sidecars_json)
-  set(_blink_standalone_dawn_d3d12_libs_json)
-  set(_blink_standalone_static_vulkan_header_root)
-  if(EXISTS "${CMAKE_BINARY_DIR}/_deps/sdl3-src/src/video/khronos/vulkan/vulkan.h")
-    set(_blink_standalone_static_vulkan_header_root
-      "${CMAKE_BINARY_DIR}/_deps/sdl3-src/src/video/khronos")
-  endif()
-  set(_blink_standalone_static_vulkan_package_note
-    "No packaged Vulkan headers were found. Static external consumers must provide Vulkan headers themselves before they can compile a Vulkan external-target verifier.")
-  set(_blink_standalone_static_vulkan_copy_commands)
-  if(_blink_standalone_static_vulkan_header_root)
-    set(_blink_standalone_static_vulkan_package_note
-      "Packaged Khronos Vulkan headers are copied under include/vulkan with adjacent include/vk_video headers. The static GPU probe dynamically loads vulkan-1.dll at runtime, so no Vulkan loader import library is required by the manifest.")
-    list(APPEND _blink_standalone_static_vulkan_copy_commands
-      COMMAND ${CMAKE_COMMAND} -E make_directory
-        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vulkan"
-      COMMAND ${CMAKE_COMMAND} -E make_directory
-        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vk_video"
-      COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${_blink_standalone_static_vulkan_header_root}/vulkan"
-        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vulkan"
-      COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${_blink_standalone_static_vulkan_header_root}/vk_video"
-        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vk_video"
-    )
-  endif()
-  foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
-    file(TO_CMAKE_PATH "${_blink_standalone_dawn_lib}"
-      _blink_standalone_dawn_lib_manifest_path)
-    string(APPEND _blink_standalone_dawn_d3d12_libs_json
-      ",\n    \"${_blink_standalone_dawn_lib_manifest_path}\""
-    )
-  endforeach()
-  set(_blink_standalone_vcpkg_static_lib_dir
-    "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib")
-  file(TO_CMAKE_PATH "${_blink_standalone_vcpkg_static_lib_dir}"
-    _blink_standalone_vcpkg_static_lib_dir_json)
   if(BLINK_STANDALONE_DAWN_D3D12 AND BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR)
     set(_blink_standalone_dawn_d3d12_sidecar_search_dirs)
     get_filename_component(
@@ -1872,11 +1866,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
           "${_blink_standalone_dawn_sidecar_path}"
           "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/${_blink_standalone_dawn_sidecar}"
       )
-      list(APPEND _blink_standalone_dawn_d3d12_static_copy_commands
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${_blink_standalone_dawn_sidecar_path}"
-          "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/${_blink_standalone_dawn_sidecar}"
-      )
       file(TO_CMAKE_PATH "${_blink_standalone_dawn_sidecar_path}"
         _blink_standalone_dawn_sidecar_manifest_path)
       string(APPEND _blink_standalone_dawn_d3d12_runtime_sidecars_json
@@ -1908,48 +1897,31 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "harfbuzz",
     "LibXml2::LibXml2"
   ],
-  "third_party_static_archives": [
-    "$<TARGET_FILE:freetype>",
-    "$<TARGET_FILE:harfbuzz>",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/libxml2.lib",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/zs.lib",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/iconv.lib",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/charset.lib"@_blink_standalone_dawn_d3d12_libs_json@
-  ],
   "windows_system_libraries": [
-    "d3d11.lib",
-    "d3d12.lib",
-    "dcomp.lib",
-    "dwmapi.lib",
-    "dxcore.lib",
-    "dxguid.lib",
-    "dxgi.lib",
-    "onecore.lib",
-    "kernel32.lib",
-    "user32.lib",
-    "gdi32.lib",
-    "imm32.lib",
-    "mincore.lib",
-    "ole32.lib",
-    "oleaut32.lib",
-    "propsys.lib",
-    "runtimeobject.lib",
-    "shell32.lib",
-    "shcore.lib",
-    "winmm.lib",
-    "windowscodecs.lib",
-    "wbemuuid.lib",
-    "advapi32.lib",
-    "dbghelp.lib",
-    "ntdll.lib",
-    "psapi.lib",
-    "setupapi.lib",
-    "shlwapi.lib",
-    "synchronization.lib",
-    "uuid.lib",
-    "version.lib",
-    "ws2_32.lib",
-    "delayimp.lib"
+    "d3d11",
+    "dcomp",
+    "dwmapi",
+    "dxcore",
+    "dxgi",
+    "kernel32",
+    "mincore",
+    "ole32",
+    "oleaut32",
+    "propsys",
+    "runtimeobject",
+    "shell32",
+    "shcore",
+    "winmm",
+    "windowscodecs",
+    "wbemuuid",
+    "advapi32",
+    "dbghelp",
+    "ntdll",
+    "psapi",
+    "setupapi",
+    "shlwapi",
+    "ws2_32",
+    "delayimp"
   ],
   "runtime_package_target": "blink_standalone_renderer_c_api_runtime_package",
   "runtime_package_dir": "@BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR@"
@@ -1966,128 +1938,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     DEPENDS blink_standalone_renderer_c_api_dll
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API link manifest: ${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
-  )
-
-  set(BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST
-    ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json
-  )
-  set(_blink_standalone_renderer_c_api_static_link_manifest_content [=[
-{
-  "schema_version": 1,
-  "package_kind": "static_library_evaluation",
-  "supported_embedder_api": "blink_standalone_renderer_* C ABI",
-  "static_target": "blink_standalone_renderer_c_api",
-  "static_archive": "$<TARGET_FILE:blink_standalone_renderer_c_api>",
-  "static_package_target": "blink_standalone_renderer_c_api_static_package",
-  "static_package_dir": "@BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR@",
-  "static_link_complete_by_itself": false,
-  "status": "gpu_external_target_link_proof_passed",
-  "contract": "This package is for first-class static-link evaluation. Consumers must still use the public C ABI header and define BLINK_STANDALONE_RENDERER_C_API_STATIC. The package has isolated external static proofs that create a renderer, render deterministic HTML/CSS, verify raw CPU output, verify hit metadata, and write deterministic rendered pixels into caller-owned Vulkan and D3D12 external GPU targets through blink_standalone_renderer_render_to_gpu_target(). This isolated proof does not make full Godot editor static consumption product-ready: the current monolithic archive carries Chromium/Skia/ICU/libpng/zlib/VMA/Abseil-style global symbols that can conflict with host-owned third-party libraries. Full Godot static linking is blocked until symbol isolation or a validated dependency split is implemented.",
-  "consumer_compile_definitions": [
-    "BLINK_STANDALONE_RENDERER_C_API_STATIC=1"
-  ],
-  "public_headers": [
-    "include/html_css_renderer/renderer_c_api.h"
-  ],
-  "vulkan_static_probe_contract": "@_blink_standalone_static_vulkan_package_note@",
-  "vulkan_header_package_dir": "include/vulkan",
-  "vulkan_loader_rule": "The external static Vulkan probe loads vulkan-1.dll dynamically with LoadLibrary/GetProcAddress. Consumers do not need a manifest-listed vulkan-1.lib, but the platform Vulkan runtime/driver must be installed.",
-  "required_static_archives": [
-    "$<TARGET_FILE:blink_standalone_renderer_c_api>",
-    "@BLINK_STANDALONE_V8_MONOLITH_LIB@"
-  ],
-  "required_import_libraries": [
-    "$<TARGET_LINKER_FILE:blink_angle_libEGL>",
-    "$<TARGET_LINKER_FILE:blink_angle_libGLESv2>"
-  ],
-  "third_party_static_archives": [
-    "$<TARGET_FILE:freetype>",
-    "$<TARGET_FILE:harfbuzz>",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/libxml2.lib",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/zs.lib",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/iconv.lib",
-    "@_blink_standalone_vcpkg_static_lib_dir_json@/charset.lib"@_blink_standalone_dawn_d3d12_libs_json@
-  ],
-  "chromium_libcxx_object_dir": "@BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR@",
-  "chromium_libcxx_object_list": "@_blink_standalone_libcxx_object_list@",
-  "chromium_libcxx_link_rule": "The renderer static archive currently folds these Chromium libc++ objects. Do not add the object list again when linking blink_standalone_renderer_c_api_static.lib; doing so duplicates std::__Cr symbols such as bad_any_cast::what and __atomic_wait_global_table.",
-  "v8_monolith_link_rule": "Link v8_monolith.lib normally. Do not whole-archive it with this package; whole-archiving V8 duplicates Chromium zlib symbols such as Cr_z_inflateReset.",
-  "whole_archive_candidates_msvc": [
-    "$<TARGET_FILE:blink_standalone_renderer_c_api>"
-  ],
-  "remaining_runtime_sidecars": [
-    "$<TARGET_FILE:blink_angle_libEGL>",
-    "$<TARGET_FILE:blink_angle_libGLESv2>",
-    "@BLINK_STANDALONE_ICU_DATA_FILE@"@_blink_standalone_dawn_d3d12_runtime_sidecars_json@
-  ],
-  "third_party_targets": [
-    "freetype",
-    "harfbuzz",
-    "LibXml2::LibXml2"
-  ],
-  "windows_system_libraries": [
-    "d3d11.lib",
-    "d3d12.lib",
-    "dcomp.lib",
-    "dwmapi.lib",
-    "dxcore.lib",
-    "dxguid.lib",
-    "dxgi.lib",
-    "onecore.lib",
-    "kernel32.lib",
-    "user32.lib",
-    "gdi32.lib",
-    "imm32.lib",
-    "mincore.lib",
-    "ole32.lib",
-    "oleaut32.lib",
-    "propsys.lib",
-    "runtimeobject.lib",
-    "shell32.lib",
-    "shcore.lib",
-    "winmm.lib",
-    "windowscodecs.lib",
-    "wbemuuid.lib",
-    "advapi32.lib",
-    "dbghelp.lib",
-    "ntdll.lib",
-    "psapi.lib",
-    "setupapi.lib",
-    "shlwapi.lib",
-    "synchronization.lib",
-    "uuid.lib",
-    "version.lib",
-    "ws2_32.lib",
-    "delayimp.lib"
-  ],
-  "crt_toolchain_assumptions": [
-    "Windows package builds currently set MSVC_RUNTIME_LIBRARY to MultiThreaded for the renderer archive.",
-    "Godot/SCons static integration must use a compatible CRT/STL boundary and must not free renderer-owned allocations directly."
-  ],
-  "known_hazards": [
-    "The static archive does not fold all transitive dependencies.",
-    "Registration-heavy Chromium/Viz/GPU objects may require whole-archive linking.",
-    "Whole-archiving v8_monolith.lib duplicates Chromium zlib symbols.",
-    "Adding the Chromium libc++ object list separately duplicates std::__Cr symbols because the renderer static archive already contains those objects.",
-    "Process-global Chromium, Skia, ICU, ANGLE, Dawn, and V8-adjacent state remains process global.",
-    "ANGLE EGL/GLES and ICU data remain runtime sidecars unless separate static sidecar work proves otherwise.",
-    "OpenGL3 explicit GPU output remains unsupported until a caller-owned GL/ANGLE texture or FBO producer proof exists.",
-    "The monolithic renderer archive currently defines third-party symbols also commonly owned by hosts, including libpng, ICU, zlib, VMA, and Abseil-style symbols. Full Godot static linking is expected to produce duplicate definitions until Blink symbols are isolated or dependency ownership is split and ABI-validated."
-  ],
-  "first_acceptance_checkpoint": "Passed: an external consumer linked from this package metadata, created a renderer, rendered deterministic HTML/CSS, verified raw output dimensions/stride/pixels/dirty rects/hit metadata, rendered to caller-owned Vulkan and D3D12 GPU external targets, read those targets back through native GPU APIs, verified deterministic pixels, and destroyed the renderer when icudtl.dat and remaining sidecars were deployed beside the executable."
-}
-]=])
-  string(CONFIGURE
-    "${_blink_standalone_renderer_c_api_static_link_manifest_content}"
-    _blink_standalone_renderer_c_api_static_link_manifest_content
-    @ONLY
-  )
-  file(GENERATE OUTPUT "${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
-    CONTENT "${_blink_standalone_renderer_c_api_static_link_manifest_content}")
-  add_custom_target(blink_standalone_renderer_c_api_static_link_manifest
-    DEPENDS blink_standalone_renderer_c_api
-    COMMAND ${CMAKE_COMMAND} -E echo
-      "C API static link manifest: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
   )
 
   add_custom_target(blink_standalone_renderer_c_api_runtime_package
@@ -2119,46 +1969,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${_blink_standalone_dawn_d3d12_runtime_copy_commands}
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API runtime package: ${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
-  )
-
-  add_custom_target(blink_standalone_renderer_c_api_static_package
-    DEPENDS
-      blink_standalone_renderer_c_api
-      blink_standalone_renderer_c_api_static_link_manifest
-      blink_angle_libEGL
-      blink_angle_libGLESv2
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/html_css_renderer"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_FILE:blink_standalone_renderer_c_api>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/include/html_css_renderer/renderer_c_api.h"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/html_css_renderer/renderer_c_api.h"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_FILE:blink_angle_libEGL>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_angle_libEGL>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_LINKER_FILE:blink_angle_libEGL>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_FILE:blink_angle_libGLESv2>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_angle_libGLESv2>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_LINKER_FILE:blink_angle_libGLESv2>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${BLINK_STANDALONE_ICU_DATA_FILE}"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/icudtl.dat"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json"
-    ${_blink_standalone_dawn_d3d12_static_copy_commands}
-    ${_blink_standalone_static_vulkan_copy_commands}
-    COMMAND ${CMAKE_COMMAND} -E echo
-      "C API static package: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
   )
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia

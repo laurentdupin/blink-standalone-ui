@@ -17,8 +17,36 @@ namespace blink {
 template <internal::HeapCollectionType CollectionType,
           typename Value,
           typename Traits = HashTraits<Value>>
-class BasicHeapHashCountedSet final
-    : public std::conditional_t<
+class BasicHeapHashCountedSet;
+
+namespace internal {
+
+template <HeapCollectionType CollectionType, typename Value, typename Traits>
+struct BasicHeapHashCountedSetTypeConstraints {
+  constexpr BasicHeapHashCountedSetTypeConstraints() {
+    static_assert(IsMemberOrWeakMemberType<Value>::value,
+                  "HeapHashCountedSet supports only Member and WeakMember.");
+    static_assert(std::is_trivially_destructible<
+                      blink::BasicHeapHashCountedSet<CollectionType,
+                                                     Value,
+                                                     Traits>>::value,
+                  "HeapHashCountedSet must be trivially destructible.");
+    static_assert(IsTraceableV<Value>,
+                  "For counted sets without traceable elements, use "
+                  "HashCountedSet<> instead of HeapHashCountedSet<>.");
+  }
+};
+
+}  // namespace internal
+
+template <internal::HeapCollectionType CollectionType,
+          typename Value,
+          typename Traits>
+class EMPTY_BASES BasicHeapHashCountedSet final
+    : private internal::BasicHeapHashCountedSetTypeConstraints<CollectionType,
+                                                               Value,
+                                                               Traits>,
+      public std::conditional_t<
           CollectionType == internal::HeapCollectionType::kGCed,
           GarbageCollected<
               BasicHeapHashCountedSet<CollectionType, Value, Traits>>,
@@ -31,21 +59,13 @@ class BasicHeapHashCountedSet final
     HashCountedSet<Value, Traits, HeapAllocator>::Trace(visitor);
   }
 
- private:
-  struct TypeConstraints {
-    constexpr TypeConstraints() {
-      static_assert(IsMemberOrWeakMemberType<Value>::value,
-                    "HeapHashCountedSet supports only Member and WeakMember.");
-      static_assert(
-          std::is_trivially_destructible<BasicHeapHashCountedSet>::value,
-          "HeapHashCountedSet must be trivially destructible.");
-      static_assert(IsTraceableV<Value>,
-                    "For counted sets without traceable elements, use "
-                    "HashCountedSet<> instead of HeapHashCountedSet<>.");
-    }
-  };
-  NO_UNIQUE_ADDRESS TypeConstraints type_constraints_;
 };
+
+template <typename T, typename Traits>
+struct IsDisallowNewTrait<BasicHeapHashCountedSet<
+    internal::HeapCollectionType::kDisallowNew,
+    T,
+    Traits>> : std::true_type {};
 
 // On-stack for in-field version of HashCountedSet for referring to
 // GarbageCollected or DISALLOW_NEW() objects with Trace() methods.

@@ -26,6 +26,21 @@ struct VersionState {
   std::atomic<CountType> committed_writes_count;
 };
 
+}  // namespace mojo
+
+namespace base::subtle {
+
+template <>
+struct SharedMemorySafetyChecker<mojo::VersionState> {
+  static constexpr bool kIsAllowed =
+      SharedMemorySafetyChecker<std::atomic<mojo::VersionType>>::kIsAllowed &&
+      SharedMemorySafetyChecker<std::atomic<mojo::CountType>>::kIsAllowed;
+};
+
+}  // namespace base::subtle
+
+namespace mojo {
+
 // This file contains classes to share a version between processes through
 // shared memory. A version is a nonzero monotonically increasing integer. A
 // controller has read and write access to the version and one or many clients

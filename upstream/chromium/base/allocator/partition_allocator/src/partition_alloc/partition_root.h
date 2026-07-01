@@ -1,4 +1,4 @@
-// Copyright 2020 The Chromium Authors
+﻿// Copyright 2020 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -88,6 +88,7 @@
 
 namespace partition_alloc::internal {
 
+#if PA_BUILDFLAG(RECORD_ALLOC_INFO)
 // We want this size to be big enough that we have time to start up other
 // scripts _before_ we wrap around.
 static constexpr size_t kAllocInfoSize = 1 << 24;
@@ -99,6 +100,7 @@ struct AllocInfo {
     size_t size;
   } allocs[kAllocInfoSize] = {};
 };
+#endif  // PA_BUILDFLAG(RECORD_ALLOC_INFO)
 
 // Represents the detailed size information for a given requested allocation
 // size.

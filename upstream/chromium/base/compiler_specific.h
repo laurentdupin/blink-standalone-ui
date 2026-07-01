@@ -7,10 +7,6 @@
 
 #include "build/build_config.h"
 
-#if defined(COMPILER_MSVC) && !defined(__clang__)
-#error "Only clang-cl is supported on Windows, see https://crbug.com/988071"
-#endif
-
 // A wrapper around `__has_attribute()`, which is similar to the C++20-standard
 // `__has_cpp_attribute()`, but tests for support for `__attribute__(())`s.
 // Compilers that do not support this (e.g. MSVC) are also assumed not to
@@ -232,6 +228,14 @@
 #define NO_UNIQUE_ADDRESS [[no_unique_address]]
 #else
 #define NO_UNIQUE_ADDRESS
+#endif
+
+// Enables empty base optimization across multiple empty base classes with MSVC.
+// This is the default behavior for other supported compilers.
+#if defined(COMPILER_MSVC)
+#define EMPTY_BASES __declspec(empty_bases)
+#else
+#define EMPTY_BASES
 #endif
 
 // Annotates a function indicating it takes a `printf()`-style format string.
@@ -958,11 +962,17 @@ inline constexpr bool AnalyzerAssumeTrue(bool arg) {
 //   // from earlier calls, assuming the args match.
 //   CONST_FUNCTION int Func(int);
 // ```
-#if __has_cpp_attribute(gnu::const)
+#if !defined(__clang__) && defined(COMPILER_MSVC)
+#define BASE_HAS_GNU_CONST_ATTRIBUTE 0
+#else
+#define BASE_HAS_GNU_CONST_ATTRIBUTE __has_cpp_attribute(gnu::const)
+#endif
+#if BASE_HAS_GNU_CONST_ATTRIBUTE
 #define CONST_FUNCTION [[gnu::const]]
 #else
 #define CONST_FUNCTION
 #endif
+#undef BASE_HAS_GNU_CONST_ATTRIBUTE
 
 // Annotates a function indicating it is pure, meaning that it has no observable
 // side effects. Unlike functions annotated `CONST_FUNCTION`, pure functions may

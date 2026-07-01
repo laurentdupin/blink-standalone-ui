@@ -436,7 +436,7 @@ class BASE_EXPORT ByteSizeDelta : public internal::ByteSizeBase {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSize KiBU(T kib) {
-  return ByteSize(kib) * 1024;
+  return ByteSize(checked_cast<uint64_t>(kib)) * 1024;
 }
 
 template <typename T>
@@ -448,7 +448,7 @@ constexpr ByteSize KiBU(T kib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSizeDelta KiBS(T kib) {
-  return ByteSizeDelta(kib) * 1024;
+  return ByteSizeDelta(checked_cast<int64_t>(kib)) * 1024;
 }
 
 template <typename T>
@@ -460,7 +460,7 @@ constexpr ByteSizeDelta KiBS(T kib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSize MiBU(T mib) {
-  return ByteSize(mib) * 1024 * 1024;
+  return ByteSize(checked_cast<uint64_t>(mib)) * 1024 * 1024;
 }
 
 template <typename T>
@@ -472,7 +472,7 @@ constexpr ByteSize MiBU(T mib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSizeDelta MiBS(T mib) {
-  return ByteSizeDelta(mib) * 1024 * 1024;
+  return ByteSizeDelta(checked_cast<int64_t>(mib)) * 1024 * 1024;
 }
 
 template <typename T>
@@ -484,7 +484,7 @@ constexpr ByteSizeDelta MiBS(T mib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSize GiBU(T gib) {
-  return ByteSize(gib) * 1024 * 1024 * 1024;
+  return ByteSize(checked_cast<uint64_t>(gib)) * 1024 * 1024 * 1024;
 }
 
 template <typename T>
@@ -496,7 +496,7 @@ constexpr ByteSize GiBU(T gib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSizeDelta GiBS(T gib) {
-  return ByteSizeDelta(gib) * 1024 * 1024 * 1024;
+  return ByteSizeDelta(checked_cast<int64_t>(gib)) * 1024 * 1024 * 1024;
 }
 
 template <typename T>
@@ -508,7 +508,7 @@ constexpr ByteSizeDelta GiBS(T gib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSize TiBU(T tib) {
-  return ByteSize(tib) * 1024 * 1024 * 1024 * 1024;
+  return ByteSize(checked_cast<uint64_t>(tib)) * 1024 * 1024 * 1024 * 1024;
 }
 
 template <typename T>
@@ -521,7 +521,7 @@ constexpr ByteSize TiBU(T tib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSizeDelta TiBS(T tib) {
-  return ByteSizeDelta(tib) * 1024 * 1024 * 1024 * 1024;
+  return ByteSizeDelta(checked_cast<int64_t>(tib)) * 1024 * 1024 * 1024 * 1024;
 }
 
 template <typename T>
@@ -534,7 +534,8 @@ constexpr ByteSizeDelta TiBS(T tib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSize PiBU(T pib) {
-  return ByteSize(pib) * 1024 * 1024 * 1024 * 1024 * 1024;
+  return ByteSize(checked_cast<uint64_t>(pib)) * 1024 * 1024 * 1024 *
+         1024 * 1024;
 }
 
 template <typename T>
@@ -547,7 +548,8 @@ constexpr ByteSize PiBU(T pib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSizeDelta PiBS(T pib) {
-  return ByteSizeDelta(pib) * 1024 * 1024 * 1024 * 1024 * 1024;
+  return ByteSizeDelta(checked_cast<int64_t>(pib)) * 1024 * 1024 * 1024 *
+         1024 * 1024;
 }
 
 template <typename T>
@@ -560,7 +562,8 @@ constexpr ByteSizeDelta PiBS(T pib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSize EiBU(T eib) {
-  return ByteSize(eib) * 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
+  return ByteSize(checked_cast<uint64_t>(eib)) * 1024 * 1024 * 1024 *
+         1024 * 1024 * 1024;
 }
 
 template <typename T>
@@ -573,7 +576,8 @@ constexpr ByteSize EiBU(T eib) {
 template <typename T>
   requires std::integral<T>
 constexpr ByteSizeDelta EiBS(T eib) {
-  return ByteSizeDelta(eib) * 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
+  return ByteSizeDelta(checked_cast<int64_t>(eib)) * 1024 * 1024 * 1024 *
+         1024 * 1024 * 1024;
 }
 
 template <typename T>

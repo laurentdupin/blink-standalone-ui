@@ -45,12 +45,14 @@ BASE_FEATURE(kTimerSlackMac, FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUIPumpImprovementsWin, FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kRunTasksByBatches,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-             FEATURE_ENABLED_BY_DEFAULT);
+constexpr FeatureState kRunTasksByBatchesDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #else
-             FEATURE_DISABLED_BY_DEFAULT);
+constexpr FeatureState kRunTasksByBatchesDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #endif
+BASE_FEATURE(kRunTasksByBatches, kRunTasksByBatchesDefaultState);
 
 BASE_FEATURE(kThreadPoolForegroundBlockingTimeouts,
              FEATURE_DISABLED_BY_DEFAULT);

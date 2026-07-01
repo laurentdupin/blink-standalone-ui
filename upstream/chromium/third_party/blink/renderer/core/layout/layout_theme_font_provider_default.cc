@@ -45,7 +45,7 @@ float LayoutThemeFontProvider::SystemFontSize(CSSValueID system_font_id,
   switch (system_font_id) {
     case CSSValueID::kWebkitMiniControl:
     case CSSValueID::kWebkitSmallControl:
-    case CSSValueID::kWebkitControl:
+    case CSSValueID::kWebkitControl: {
       // Why 2 points smaller? Because that's what Gecko does. Note that we
       // are assuming a 96dpi screen, which is the default that we use on
       // Windows.
@@ -53,6 +53,7 @@ float LayoutThemeFontProvider::SystemFontSize(CSSValueID system_font_id,
       static const float kPixelsPerInch = 96.0f;
       return DefaultFontSize(document) -
              (2.0f / kPointsPerInch) * kPixelsPerInch;
+    }
     default:
       return DefaultFontSize(document);
   }

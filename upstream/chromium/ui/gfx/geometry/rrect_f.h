@@ -6,6 +6,7 @@
 #define UI_GFX_GEOMETRY_RRECT_F_H_
 
 #include <memory>
+#include <ostream>
 #include <string>
 
 #include "base/component_export.h"

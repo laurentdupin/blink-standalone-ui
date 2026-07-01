@@ -6,6 +6,8 @@
 
 #include "ui/gl/gl_utils.h"
 
+#include <atomic>
+
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/logging.h"
@@ -67,7 +69,7 @@ void Hang() {
     base::debug::Alias(&do_not_delete_me);
     ++do_not_delete_me;
 
-    __asm__ volatile("");
+    std::atomic_signal_fence(std::memory_order_seq_cst);
   }
 }
 

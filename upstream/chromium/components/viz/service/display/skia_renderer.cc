@@ -14,6 +14,7 @@
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -3750,7 +3751,7 @@ void SkiaRenderer::AllocateRenderPassResourceIfNeeded(
 }
 
 void SkiaRenderer::FlushOutputSurface() {
-  TRACE_EVENT("viz", __PRETTY_FUNCTION__);
+  TRACE_EVENT("viz", PRETTY_FUNCTION);
   auto sync_token = skia_output_surface_->Flush();
   lock_set_for_external_use_.UnlockResources(sync_token);
 }

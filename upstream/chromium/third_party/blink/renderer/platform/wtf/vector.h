@@ -2621,12 +2621,12 @@ template <typename Allocator, typename VisitorDispatcher, typename T>
 void TraceInlinedBuffer(VisitorDispatcher visitor,
                         const T* buffer_begin,
                         size_t capacity) {
-  UNSAFE_TODO({
-    const T* buffer_end = buffer_begin + capacity;
+  const T* buffer_end = buffer_begin + capacity;
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
-    // Vector can trace unused slots (which are already zeroed out).
-    ANNOTATE_CHANGE_SIZE(buffer_begin, capacity, 0, capacity);
+  // Vector can trace unused slots (which are already zeroed out).
+  ANNOTATE_CHANGE_SIZE(buffer_begin, capacity, 0, capacity);
 #endif  // ANNOTATE_CONTIGUOUS_CONTAINER
+  UNSAFE_TODO({
     for (const T* buffer_entry = buffer_begin; buffer_entry != buffer_end;
          buffer_entry++) {
       Allocator::template Trace<T, VectorTraits<T>>(visitor, *buffer_entry);

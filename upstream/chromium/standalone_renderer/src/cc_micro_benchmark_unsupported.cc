@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifdef SendMessage
+#undef SendMessage
+#endif
+
 #include "cc/benchmarks/micro_benchmark_controller.h"
 
 #include <memory>

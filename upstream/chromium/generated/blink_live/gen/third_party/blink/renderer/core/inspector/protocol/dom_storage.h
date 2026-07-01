@@ -60,7 +60,7 @@ public:
 
         StorageIdBuilder<STATE>& setStorageKey(const String& value);  // Defined below
 
-        StorageIdBuilder<STATE | IsLocalStorageSet>& setIsLocalStorage(bool value);  // Defined below
+        StorageIdBuilder<(STATE | StorageIdBuilder<STATE>::IsLocalStorageSet)>& setIsLocalStorage(bool value);  // Defined below
 
         std::unique_ptr<StorageId> build()
         {
@@ -72,9 +72,9 @@ public:
         friend class StorageId;
         StorageIdBuilder() : m_result(new StorageId()) { }
 
-        template<int STEP> StorageIdBuilder<STATE | STEP>& castState()
+        template<int STEP> StorageIdBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<StorageIdBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<StorageIdBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOMStorage::StorageId> m_result;
@@ -117,7 +117,7 @@ inline StorageId::StorageIdBuilder<STATE>& StorageId::StorageIdBuilder<STATE>::s
   return *this;
 }
 template<int STATE>
-inline StorageId::StorageIdBuilder<STATE | StorageId::StorageIdBuilder<STATE>::IsLocalStorageSet>&
+inline StorageId::StorageIdBuilder<(STATE | StorageId::StorageIdBuilder<STATE>::IsLocalStorageSet)>&
 StorageId::StorageIdBuilder<STATE>::setIsLocalStorage(bool value) {
   static_assert(!(STATE & IsLocalStorageSet), "property isLocalStorage should not be set yet");
   m_result->setIsLocalStorage(value);

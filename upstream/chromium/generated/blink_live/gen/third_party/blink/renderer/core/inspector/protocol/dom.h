@@ -152,11 +152,11 @@ public:
             AllFieldsSet = (NodeTypeSet | NodeNameSet | BackendNodeIdSet | 0)};
 
 
-        BackendNodeBuilder<STATE | NodeTypeSet>& setNodeType(int value);  // Defined below
+        BackendNodeBuilder<(STATE | BackendNodeBuilder<STATE>::NodeTypeSet)>& setNodeType(int value);  // Defined below
 
-        BackendNodeBuilder<STATE | NodeNameSet>& setNodeName(const String& value);  // Defined below
+        BackendNodeBuilder<(STATE | BackendNodeBuilder<STATE>::NodeNameSet)>& setNodeName(const String& value);  // Defined below
 
-        BackendNodeBuilder<STATE | BackendNodeIdSet>& setBackendNodeId(int value);  // Defined below
+        BackendNodeBuilder<(STATE | BackendNodeBuilder<STATE>::BackendNodeIdSet)>& setBackendNodeId(int value);  // Defined below
 
         std::unique_ptr<BackendNode> build()
         {
@@ -168,9 +168,9 @@ public:
         friend class BackendNode;
         BackendNodeBuilder() : m_result(new BackendNode()) { }
 
-        template<int STEP> BackendNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> BackendNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BackendNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BackendNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::BackendNode> m_result;
@@ -489,19 +489,19 @@ public:
             AllFieldsSet = (NodeIdSet | BackendNodeIdSet | NodeTypeSet | NodeNameSet | LocalNameSet | NodeValueSet | 0)};
 
 
-        NodeBuilder<STATE | NodeIdSet>& setNodeId(int value);  // Defined below
+        NodeBuilder<(STATE | NodeBuilder<STATE>::NodeIdSet)>& setNodeId(int value);  // Defined below
 
         NodeBuilder<STATE>& setParentId(int value);  // Defined below
 
-        NodeBuilder<STATE | BackendNodeIdSet>& setBackendNodeId(int value);  // Defined below
+        NodeBuilder<(STATE | NodeBuilder<STATE>::BackendNodeIdSet)>& setBackendNodeId(int value);  // Defined below
 
-        NodeBuilder<STATE | NodeTypeSet>& setNodeType(int value);  // Defined below
+        NodeBuilder<(STATE | NodeBuilder<STATE>::NodeTypeSet)>& setNodeType(int value);  // Defined below
 
-        NodeBuilder<STATE | NodeNameSet>& setNodeName(const String& value);  // Defined below
+        NodeBuilder<(STATE | NodeBuilder<STATE>::NodeNameSet)>& setNodeName(const String& value);  // Defined below
 
-        NodeBuilder<STATE | LocalNameSet>& setLocalName(const String& value);  // Defined below
+        NodeBuilder<(STATE | NodeBuilder<STATE>::LocalNameSet)>& setLocalName(const String& value);  // Defined below
 
-        NodeBuilder<STATE | NodeValueSet>& setNodeValue(const String& value);  // Defined below
+        NodeBuilder<(STATE | NodeBuilder<STATE>::NodeValueSet)>& setNodeValue(const String& value);  // Defined below
 
         NodeBuilder<STATE>& setChildNodeCount(int value);  // Defined below
 
@@ -569,9 +569,9 @@ public:
         friend class Node;
         NodeBuilder() : m_result(new Node()) { }
 
-        template<int STEP> NodeBuilder<STATE | STEP>& castState()
+        template<int STEP> NodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<NodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<NodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::Node> m_result;
@@ -645,9 +645,9 @@ public:
             AllFieldsSet = (TreeNodeSet | RetainedNodeIdsSet | 0)};
 
 
-        DetachedElementInfoBuilder<STATE | TreeNodeSet>& setTreeNode(std::unique_ptr<protocol::DOM::Node> value);  // Defined below
+        DetachedElementInfoBuilder<(STATE | DetachedElementInfoBuilder<STATE>::TreeNodeSet)>& setTreeNode(std::unique_ptr<protocol::DOM::Node> value);  // Defined below
 
-        DetachedElementInfoBuilder<STATE | RetainedNodeIdsSet>& setRetainedNodeIds(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        DetachedElementInfoBuilder<(STATE | DetachedElementInfoBuilder<STATE>::RetainedNodeIdsSet)>& setRetainedNodeIds(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<DetachedElementInfo> build()
         {
@@ -659,9 +659,9 @@ public:
         friend class DetachedElementInfo;
         DetachedElementInfoBuilder() : m_result(new DetachedElementInfo()) { }
 
-        template<int STEP> DetachedElementInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> DetachedElementInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DetachedElementInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DetachedElementInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::DetachedElementInfo> m_result;
@@ -715,11 +715,11 @@ public:
             AllFieldsSet = (RSet | GSet | BSet | 0)};
 
 
-        RGBABuilder<STATE | RSet>& setR(int value);  // Defined below
+        RGBABuilder<(STATE | RGBABuilder<STATE>::RSet)>& setR(int value);  // Defined below
 
-        RGBABuilder<STATE | GSet>& setG(int value);  // Defined below
+        RGBABuilder<(STATE | RGBABuilder<STATE>::GSet)>& setG(int value);  // Defined below
 
-        RGBABuilder<STATE | BSet>& setB(int value);  // Defined below
+        RGBABuilder<(STATE | RGBABuilder<STATE>::BSet)>& setB(int value);  // Defined below
 
         RGBABuilder<STATE>& setA(double value);  // Defined below
 
@@ -733,9 +733,9 @@ public:
         friend class RGBA;
         RGBABuilder() : m_result(new RGBA()) { }
 
-        template<int STEP> RGBABuilder<STATE | STEP>& castState()
+        template<int STEP> RGBABuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RGBABuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RGBABuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::RGBA> m_result;
@@ -803,17 +803,17 @@ public:
             AllFieldsSet = (ContentSet | PaddingSet | BorderSet | MarginSet | WidthSet | HeightSet | 0)};
 
 
-        BoxModelBuilder<STATE | ContentSet>& setContent(std::unique_ptr<protocol::Array<double>> value);  // Defined below
+        BoxModelBuilder<(STATE | BoxModelBuilder<STATE>::ContentSet)>& setContent(std::unique_ptr<protocol::Array<double>> value);  // Defined below
 
-        BoxModelBuilder<STATE | PaddingSet>& setPadding(std::unique_ptr<protocol::Array<double>> value);  // Defined below
+        BoxModelBuilder<(STATE | BoxModelBuilder<STATE>::PaddingSet)>& setPadding(std::unique_ptr<protocol::Array<double>> value);  // Defined below
 
-        BoxModelBuilder<STATE | BorderSet>& setBorder(std::unique_ptr<protocol::Array<double>> value);  // Defined below
+        BoxModelBuilder<(STATE | BoxModelBuilder<STATE>::BorderSet)>& setBorder(std::unique_ptr<protocol::Array<double>> value);  // Defined below
 
-        BoxModelBuilder<STATE | MarginSet>& setMargin(std::unique_ptr<protocol::Array<double>> value);  // Defined below
+        BoxModelBuilder<(STATE | BoxModelBuilder<STATE>::MarginSet)>& setMargin(std::unique_ptr<protocol::Array<double>> value);  // Defined below
 
-        BoxModelBuilder<STATE | WidthSet>& setWidth(int value);  // Defined below
+        BoxModelBuilder<(STATE | BoxModelBuilder<STATE>::WidthSet)>& setWidth(int value);  // Defined below
 
-        BoxModelBuilder<STATE | HeightSet>& setHeight(int value);  // Defined below
+        BoxModelBuilder<(STATE | BoxModelBuilder<STATE>::HeightSet)>& setHeight(int value);  // Defined below
 
         BoxModelBuilder<STATE>& setShapeOutside(std::unique_ptr<protocol::DOM::ShapeOutsideInfo> value);  // Defined below
 
@@ -827,9 +827,9 @@ public:
         friend class BoxModel;
         BoxModelBuilder() : m_result(new BoxModel()) { }
 
-        template<int STEP> BoxModelBuilder<STATE | STEP>& castState()
+        template<int STEP> BoxModelBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BoxModelBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BoxModelBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::BoxModel> m_result;
@@ -879,11 +879,11 @@ public:
             AllFieldsSet = (BoundsSet | ShapeSet | MarginShapeSet | 0)};
 
 
-        ShapeOutsideInfoBuilder<STATE | BoundsSet>& setBounds(std::unique_ptr<protocol::Array<double>> value);  // Defined below
+        ShapeOutsideInfoBuilder<(STATE | ShapeOutsideInfoBuilder<STATE>::BoundsSet)>& setBounds(std::unique_ptr<protocol::Array<double>> value);  // Defined below
 
-        ShapeOutsideInfoBuilder<STATE | ShapeSet>& setShape(std::unique_ptr<protocol::Array<protocol::Value>> value);  // Defined below
+        ShapeOutsideInfoBuilder<(STATE | ShapeOutsideInfoBuilder<STATE>::ShapeSet)>& setShape(std::unique_ptr<protocol::Array<protocol::Value>> value);  // Defined below
 
-        ShapeOutsideInfoBuilder<STATE | MarginShapeSet>& setMarginShape(std::unique_ptr<protocol::Array<protocol::Value>> value);  // Defined below
+        ShapeOutsideInfoBuilder<(STATE | ShapeOutsideInfoBuilder<STATE>::MarginShapeSet)>& setMarginShape(std::unique_ptr<protocol::Array<protocol::Value>> value);  // Defined below
 
         std::unique_ptr<ShapeOutsideInfo> build()
         {
@@ -895,9 +895,9 @@ public:
         friend class ShapeOutsideInfo;
         ShapeOutsideInfoBuilder() : m_result(new ShapeOutsideInfo()) { }
 
-        template<int STEP> ShapeOutsideInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> ShapeOutsideInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ShapeOutsideInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ShapeOutsideInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::ShapeOutsideInfo> m_result;
@@ -947,13 +947,13 @@ public:
             AllFieldsSet = (XSet | YSet | WidthSet | HeightSet | 0)};
 
 
-        RectBuilder<STATE | XSet>& setX(double value);  // Defined below
+        RectBuilder<(STATE | RectBuilder<STATE>::XSet)>& setX(double value);  // Defined below
 
-        RectBuilder<STATE | YSet>& setY(double value);  // Defined below
+        RectBuilder<(STATE | RectBuilder<STATE>::YSet)>& setY(double value);  // Defined below
 
-        RectBuilder<STATE | WidthSet>& setWidth(double value);  // Defined below
+        RectBuilder<(STATE | RectBuilder<STATE>::WidthSet)>& setWidth(double value);  // Defined below
 
-        RectBuilder<STATE | HeightSet>& setHeight(double value);  // Defined below
+        RectBuilder<(STATE | RectBuilder<STATE>::HeightSet)>& setHeight(double value);  // Defined below
 
         std::unique_ptr<Rect> build()
         {
@@ -965,9 +965,9 @@ public:
         friend class Rect;
         RectBuilder() : m_result(new Rect()) { }
 
-        template<int STEP> RectBuilder<STATE | STEP>& castState()
+        template<int STEP> RectBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RectBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RectBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::Rect> m_result;
@@ -1010,9 +1010,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        CSSComputedStylePropertyBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CSSComputedStylePropertyBuilder<(STATE | CSSComputedStylePropertyBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        CSSComputedStylePropertyBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        CSSComputedStylePropertyBuilder<(STATE | CSSComputedStylePropertyBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<CSSComputedStyleProperty> build()
         {
@@ -1024,9 +1024,9 @@ public:
         friend class CSSComputedStyleProperty;
         CSSComputedStylePropertyBuilder() : m_result(new CSSComputedStyleProperty()) { }
 
-        template<int STEP> CSSComputedStylePropertyBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSComputedStylePropertyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSComputedStylePropertyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSComputedStylePropertyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::DOM::CSSComputedStyleProperty> m_result;
@@ -1058,21 +1058,21 @@ inline void BackendNode::setNodeName(const String& value) { m_nodeName = value; 
 inline void BackendNode::setBackendNodeId(int value) { m_backendNodeId = value; }
 
 template<int STATE>
-inline BackendNode::BackendNodeBuilder<STATE | BackendNode::BackendNodeBuilder<STATE>::NodeTypeSet>&
+inline BackendNode::BackendNodeBuilder<(STATE | BackendNode::BackendNodeBuilder<STATE>::NodeTypeSet)>&
 BackendNode::BackendNodeBuilder<STATE>::setNodeType(int value) {
   static_assert(!(STATE & NodeTypeSet), "property nodeType should not be set yet");
   m_result->setNodeType(value);
   return castState<NodeTypeSet>();
 }
 template<int STATE>
-inline BackendNode::BackendNodeBuilder<STATE | BackendNode::BackendNodeBuilder<STATE>::NodeNameSet>&
+inline BackendNode::BackendNodeBuilder<(STATE | BackendNode::BackendNodeBuilder<STATE>::NodeNameSet)>&
 BackendNode::BackendNodeBuilder<STATE>::setNodeName(const String& value) {
   static_assert(!(STATE & NodeNameSet), "property nodeName should not be set yet");
   m_result->setNodeName(value);
   return castState<NodeNameSet>();
 }
 template<int STATE>
-inline BackendNode::BackendNodeBuilder<STATE | BackendNode::BackendNodeBuilder<STATE>::BackendNodeIdSet>&
+inline BackendNode::BackendNodeBuilder<(STATE | BackendNode::BackendNodeBuilder<STATE>::BackendNodeIdSet)>&
 BackendNode::BackendNodeBuilder<STATE>::setBackendNodeId(int value) {
   static_assert(!(STATE & BackendNodeIdSet), "property backendNodeId should not be set yet");
   m_result->setBackendNodeId(value);
@@ -1121,7 +1121,7 @@ inline void Node::setAdoptedStyleSheets(std::unique_ptr<protocol::Array<String>>
 inline void Node::setAdProvenance(std::unique_ptr<protocol::Network::AdProvenance> value) { m_adProvenance = std::move(value); }
 
 template<int STATE>
-inline Node::NodeBuilder<STATE | Node::NodeBuilder<STATE>::NodeIdSet>&
+inline Node::NodeBuilder<(STATE | Node::NodeBuilder<STATE>::NodeIdSet)>&
 Node::NodeBuilder<STATE>::setNodeId(int value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
@@ -1133,35 +1133,35 @@ inline Node::NodeBuilder<STATE>& Node::NodeBuilder<STATE>::setParentId(int value
   return *this;
 }
 template<int STATE>
-inline Node::NodeBuilder<STATE | Node::NodeBuilder<STATE>::BackendNodeIdSet>&
+inline Node::NodeBuilder<(STATE | Node::NodeBuilder<STATE>::BackendNodeIdSet)>&
 Node::NodeBuilder<STATE>::setBackendNodeId(int value) {
   static_assert(!(STATE & BackendNodeIdSet), "property backendNodeId should not be set yet");
   m_result->setBackendNodeId(value);
   return castState<BackendNodeIdSet>();
 }
 template<int STATE>
-inline Node::NodeBuilder<STATE | Node::NodeBuilder<STATE>::NodeTypeSet>&
+inline Node::NodeBuilder<(STATE | Node::NodeBuilder<STATE>::NodeTypeSet)>&
 Node::NodeBuilder<STATE>::setNodeType(int value) {
   static_assert(!(STATE & NodeTypeSet), "property nodeType should not be set yet");
   m_result->setNodeType(value);
   return castState<NodeTypeSet>();
 }
 template<int STATE>
-inline Node::NodeBuilder<STATE | Node::NodeBuilder<STATE>::NodeNameSet>&
+inline Node::NodeBuilder<(STATE | Node::NodeBuilder<STATE>::NodeNameSet)>&
 Node::NodeBuilder<STATE>::setNodeName(const String& value) {
   static_assert(!(STATE & NodeNameSet), "property nodeName should not be set yet");
   m_result->setNodeName(value);
   return castState<NodeNameSet>();
 }
 template<int STATE>
-inline Node::NodeBuilder<STATE | Node::NodeBuilder<STATE>::LocalNameSet>&
+inline Node::NodeBuilder<(STATE | Node::NodeBuilder<STATE>::LocalNameSet)>&
 Node::NodeBuilder<STATE>::setLocalName(const String& value) {
   static_assert(!(STATE & LocalNameSet), "property localName should not be set yet");
   m_result->setLocalName(value);
   return castState<LocalNameSet>();
 }
 template<int STATE>
-inline Node::NodeBuilder<STATE | Node::NodeBuilder<STATE>::NodeValueSet>&
+inline Node::NodeBuilder<(STATE | Node::NodeBuilder<STATE>::NodeValueSet)>&
 Node::NodeBuilder<STATE>::setNodeValue(const String& value) {
   static_assert(!(STATE & NodeValueSet), "property nodeValue should not be set yet");
   m_result->setNodeValue(value);
@@ -1318,14 +1318,14 @@ inline void DetachedElementInfo::setTreeNode(std::unique_ptr<protocol::DOM::Node
 inline void DetachedElementInfo::setRetainedNodeIds(std::unique_ptr<protocol::Array<int>> value) { m_retainedNodeIds = std::move(value); }
 
 template<int STATE>
-inline DetachedElementInfo::DetachedElementInfoBuilder<STATE | DetachedElementInfo::DetachedElementInfoBuilder<STATE>::TreeNodeSet>&
+inline DetachedElementInfo::DetachedElementInfoBuilder<(STATE | DetachedElementInfo::DetachedElementInfoBuilder<STATE>::TreeNodeSet)>&
 DetachedElementInfo::DetachedElementInfoBuilder<STATE>::setTreeNode(std::unique_ptr<protocol::DOM::Node> value) {
   static_assert(!(STATE & TreeNodeSet), "property treeNode should not be set yet");
   m_result->setTreeNode(std::move(value));
   return castState<TreeNodeSet>();
 }
 template<int STATE>
-inline DetachedElementInfo::DetachedElementInfoBuilder<STATE | DetachedElementInfo::DetachedElementInfoBuilder<STATE>::RetainedNodeIdsSet>&
+inline DetachedElementInfo::DetachedElementInfoBuilder<(STATE | DetachedElementInfo::DetachedElementInfoBuilder<STATE>::RetainedNodeIdsSet)>&
 DetachedElementInfo::DetachedElementInfoBuilder<STATE>::setRetainedNodeIds(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & RetainedNodeIdsSet), "property retainedNodeIds should not be set yet");
   m_result->setRetainedNodeIds(std::move(value));
@@ -1341,21 +1341,21 @@ inline void RGBA::setB(int value) { m_b = value; }
 inline void RGBA::setA(double value) { m_a = value; }
 
 template<int STATE>
-inline RGBA::RGBABuilder<STATE | RGBA::RGBABuilder<STATE>::RSet>&
+inline RGBA::RGBABuilder<(STATE | RGBA::RGBABuilder<STATE>::RSet)>&
 RGBA::RGBABuilder<STATE>::setR(int value) {
   static_assert(!(STATE & RSet), "property r should not be set yet");
   m_result->setR(value);
   return castState<RSet>();
 }
 template<int STATE>
-inline RGBA::RGBABuilder<STATE | RGBA::RGBABuilder<STATE>::GSet>&
+inline RGBA::RGBABuilder<(STATE | RGBA::RGBABuilder<STATE>::GSet)>&
 RGBA::RGBABuilder<STATE>::setG(int value) {
   static_assert(!(STATE & GSet), "property g should not be set yet");
   m_result->setG(value);
   return castState<GSet>();
 }
 template<int STATE>
-inline RGBA::RGBABuilder<STATE | RGBA::RGBABuilder<STATE>::BSet>&
+inline RGBA::RGBABuilder<(STATE | RGBA::RGBABuilder<STATE>::BSet)>&
 RGBA::RGBABuilder<STATE>::setB(int value) {
   static_assert(!(STATE & BSet), "property b should not be set yet");
   m_result->setB(value);
@@ -1382,42 +1382,42 @@ inline void BoxModel::setHeight(int value) { m_height = value; }
 inline void BoxModel::setShapeOutside(std::unique_ptr<protocol::DOM::ShapeOutsideInfo> value) { m_shapeOutside = std::move(value); }
 
 template<int STATE>
-inline BoxModel::BoxModelBuilder<STATE | BoxModel::BoxModelBuilder<STATE>::ContentSet>&
+inline BoxModel::BoxModelBuilder<(STATE | BoxModel::BoxModelBuilder<STATE>::ContentSet)>&
 BoxModel::BoxModelBuilder<STATE>::setContent(std::unique_ptr<protocol::Array<double>> value) {
   static_assert(!(STATE & ContentSet), "property content should not be set yet");
   m_result->setContent(std::move(value));
   return castState<ContentSet>();
 }
 template<int STATE>
-inline BoxModel::BoxModelBuilder<STATE | BoxModel::BoxModelBuilder<STATE>::PaddingSet>&
+inline BoxModel::BoxModelBuilder<(STATE | BoxModel::BoxModelBuilder<STATE>::PaddingSet)>&
 BoxModel::BoxModelBuilder<STATE>::setPadding(std::unique_ptr<protocol::Array<double>> value) {
   static_assert(!(STATE & PaddingSet), "property padding should not be set yet");
   m_result->setPadding(std::move(value));
   return castState<PaddingSet>();
 }
 template<int STATE>
-inline BoxModel::BoxModelBuilder<STATE | BoxModel::BoxModelBuilder<STATE>::BorderSet>&
+inline BoxModel::BoxModelBuilder<(STATE | BoxModel::BoxModelBuilder<STATE>::BorderSet)>&
 BoxModel::BoxModelBuilder<STATE>::setBorder(std::unique_ptr<protocol::Array<double>> value) {
   static_assert(!(STATE & BorderSet), "property border should not be set yet");
   m_result->setBorder(std::move(value));
   return castState<BorderSet>();
 }
 template<int STATE>
-inline BoxModel::BoxModelBuilder<STATE | BoxModel::BoxModelBuilder<STATE>::MarginSet>&
+inline BoxModel::BoxModelBuilder<(STATE | BoxModel::BoxModelBuilder<STATE>::MarginSet)>&
 BoxModel::BoxModelBuilder<STATE>::setMargin(std::unique_ptr<protocol::Array<double>> value) {
   static_assert(!(STATE & MarginSet), "property margin should not be set yet");
   m_result->setMargin(std::move(value));
   return castState<MarginSet>();
 }
 template<int STATE>
-inline BoxModel::BoxModelBuilder<STATE | BoxModel::BoxModelBuilder<STATE>::WidthSet>&
+inline BoxModel::BoxModelBuilder<(STATE | BoxModel::BoxModelBuilder<STATE>::WidthSet)>&
 BoxModel::BoxModelBuilder<STATE>::setWidth(int value) {
   static_assert(!(STATE & WidthSet), "property width should not be set yet");
   m_result->setWidth(value);
   return castState<WidthSet>();
 }
 template<int STATE>
-inline BoxModel::BoxModelBuilder<STATE | BoxModel::BoxModelBuilder<STATE>::HeightSet>&
+inline BoxModel::BoxModelBuilder<(STATE | BoxModel::BoxModelBuilder<STATE>::HeightSet)>&
 BoxModel::BoxModelBuilder<STATE>::setHeight(int value) {
   static_assert(!(STATE & HeightSet), "property height should not be set yet");
   m_result->setHeight(value);
@@ -1439,21 +1439,21 @@ inline void ShapeOutsideInfo::setShape(std::unique_ptr<protocol::Array<protocol:
 inline void ShapeOutsideInfo::setMarginShape(std::unique_ptr<protocol::Array<protocol::Value>> value) { m_marginShape = std::move(value); }
 
 template<int STATE>
-inline ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE | ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::BoundsSet>&
+inline ShapeOutsideInfo::ShapeOutsideInfoBuilder<(STATE | ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::BoundsSet)>&
 ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::setBounds(std::unique_ptr<protocol::Array<double>> value) {
   static_assert(!(STATE & BoundsSet), "property bounds should not be set yet");
   m_result->setBounds(std::move(value));
   return castState<BoundsSet>();
 }
 template<int STATE>
-inline ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE | ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::ShapeSet>&
+inline ShapeOutsideInfo::ShapeOutsideInfoBuilder<(STATE | ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::ShapeSet)>&
 ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::setShape(std::unique_ptr<protocol::Array<protocol::Value>> value) {
   static_assert(!(STATE & ShapeSet), "property shape should not be set yet");
   m_result->setShape(std::move(value));
   return castState<ShapeSet>();
 }
 template<int STATE>
-inline ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE | ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::MarginShapeSet>&
+inline ShapeOutsideInfo::ShapeOutsideInfoBuilder<(STATE | ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::MarginShapeSet)>&
 ShapeOutsideInfo::ShapeOutsideInfoBuilder<STATE>::setMarginShape(std::unique_ptr<protocol::Array<protocol::Value>> value) {
   static_assert(!(STATE & MarginShapeSet), "property marginShape should not be set yet");
   m_result->setMarginShape(std::move(value));
@@ -1469,28 +1469,28 @@ inline void Rect::setWidth(double value) { m_width = value; }
 inline void Rect::setHeight(double value) { m_height = value; }
 
 template<int STATE>
-inline Rect::RectBuilder<STATE | Rect::RectBuilder<STATE>::XSet>&
+inline Rect::RectBuilder<(STATE | Rect::RectBuilder<STATE>::XSet)>&
 Rect::RectBuilder<STATE>::setX(double value) {
   static_assert(!(STATE & XSet), "property x should not be set yet");
   m_result->setX(value);
   return castState<XSet>();
 }
 template<int STATE>
-inline Rect::RectBuilder<STATE | Rect::RectBuilder<STATE>::YSet>&
+inline Rect::RectBuilder<(STATE | Rect::RectBuilder<STATE>::YSet)>&
 Rect::RectBuilder<STATE>::setY(double value) {
   static_assert(!(STATE & YSet), "property y should not be set yet");
   m_result->setY(value);
   return castState<YSet>();
 }
 template<int STATE>
-inline Rect::RectBuilder<STATE | Rect::RectBuilder<STATE>::WidthSet>&
+inline Rect::RectBuilder<(STATE | Rect::RectBuilder<STATE>::WidthSet)>&
 Rect::RectBuilder<STATE>::setWidth(double value) {
   static_assert(!(STATE & WidthSet), "property width should not be set yet");
   m_result->setWidth(value);
   return castState<WidthSet>();
 }
 template<int STATE>
-inline Rect::RectBuilder<STATE | Rect::RectBuilder<STATE>::HeightSet>&
+inline Rect::RectBuilder<(STATE | Rect::RectBuilder<STATE>::HeightSet)>&
 Rect::RectBuilder<STATE>::setHeight(double value) {
   static_assert(!(STATE & HeightSet), "property height should not be set yet");
   m_result->setHeight(value);
@@ -1508,14 +1508,14 @@ inline void CSSComputedStyleProperty::setName(const String& value) { m_name = va
 inline void CSSComputedStyleProperty::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::NameSet>&
+inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<(STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::NameSet)>&
 CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::ValueSet>&
+inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<(STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::ValueSet)>&
 CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);

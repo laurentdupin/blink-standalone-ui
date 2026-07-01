@@ -501,6 +501,26 @@ CookiePartitionKey::AncestorChainBit CookiePartitionKey::BoolToAncestorChainBit(
   return val ? AncestorChainBit::kCrossSite : AncestorChainBit::kSameSite;
 }
 
+#if !BUILDFLAG(CRONET_BUILD)
+CookiePartitionKey::CookiePartitionKey(mojo::DefaultConstruct::Tag) {}
+#endif
+
+CookiePartitionKey::CookiePartitionKey(const CookiePartitionKey&) = default;
+CookiePartitionKey::CookiePartitionKey(CookiePartitionKey&&) = default;
+CookiePartitionKey& CookiePartitionKey::operator=(const CookiePartitionKey&) =
+    default;
+CookiePartitionKey& CookiePartitionKey::operator=(CookiePartitionKey&&) =
+    default;
+CookiePartitionKey::~CookiePartitionKey() = default;
+
+CookiePartitionKey::CookiePartitionKey(
+    const SchemefulSite& site,
+    std::optional<base::UnguessableToken> nonce,
+    AncestorChainBit ancestor_chain_bit)
+    : site_(site),
+      nonce_(std::move(nonce)),
+      ancestor_chain_bit_(ancestor_chain_bit) {}
+
 std::optional<CookiePartitionKey> CookiePartitionKey::FromStorageKeyComponents(
     const SchemefulSite&,
     AncestorChainBit,

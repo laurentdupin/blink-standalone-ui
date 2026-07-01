@@ -52,13 +52,15 @@ constinit const FeatureParam<UnretainedDanglingPtrMode>
 // `base::allocator::MakeFreeNoOp()`). No-op `free()` stands down in the
 // presence of DPD, but hypothetically fully launching DPD should prompt
 // a rethink of no-op `free()`.
-BASE_FEATURE(kPartitionAllocDanglingPtr,
 #if PA_BUILDFLAG(ENABLE_DANGLING_RAW_PTR_FEATURE_FLAG)
-             FEATURE_ENABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocDanglingPtrDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #else
-             FEATURE_DISABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocDanglingPtrDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPartitionAllocDanglingPtr,
+             kPartitionAllocDanglingPtrDefaultState);
 
 constexpr FeatureParam<DanglingPtrMode>::Option kDanglingPtrModeOption[] = {
     {DanglingPtrMode::kCrash, "crash"},
@@ -87,12 +89,15 @@ constinit const FeatureParam<DanglingPtrType> kDanglingPtrTypeParam{
 // Use a larger maximum thread cache cacheable bucket size.
 BASE_FEATURE(kPartitionAllocLargeThreadCacheSize, FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kPartitionAllocLargeEmptySlotSpanRing,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-             FEATURE_ENABLED_BY_DEFAULT);
+constexpr FeatureState kPartitionAllocLargeEmptySlotSpanRingDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #else
-             FEATURE_DISABLED_BY_DEFAULT);
+constexpr FeatureState kPartitionAllocLargeEmptySlotSpanRingDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #endif
+BASE_FEATURE(kPartitionAllocLargeEmptySlotSpanRing,
+             kPartitionAllocLargeEmptySlotSpanRingDefaultState);
 BASE_FEATURE_PARAM(int,
                    kPartitionAllocLargeEmptySlotSpanRingSize,
                    &kPartitionAllocLargeEmptySlotSpanRing,
@@ -169,13 +174,15 @@ BASE_FEATURE(kPartitionAllocEventuallyZeroFreedMemory,
 
 #endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
-BASE_FEATURE(kPartitionAllocBackupRefPtr,
 #if PA_BUILDFLAG(ENABLE_BACKUP_REF_PTR_FEATURE_FLAG)
-             FEATURE_ENABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocBackupRefPtrDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #else
-             FEATURE_DISABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocBackupRefPtrDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPartitionAllocBackupRefPtr,
+             kPartitionAllocBackupRefPtrDefaultState);
 
 constexpr FeatureParam<BackupRefPtrEnabledProcesses>::Option
     kBackupRefPtrEnabledProcessesOptions[] = {
@@ -185,16 +192,21 @@ constexpr FeatureParam<BackupRefPtrEnabledProcesses>::Option
         {BackupRefPtrEnabledProcesses::kNonRenderer, kNonRendererStr},
         {BackupRefPtrEnabledProcesses::kAllProcesses, kAllProcessesStr}};
 
+// Exception for IS_DESKTOP_ANDROID approved in crbug.com/482155132.
+#if BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_DESKTOP_ANDROID)
+constexpr BackupRefPtrEnabledProcesses
+    kBackupRefPtrEnabledProcessesDefaultValue =
+        BackupRefPtrEnabledProcesses::kNonRenderer;
+#else
+constexpr BackupRefPtrEnabledProcesses
+    kBackupRefPtrEnabledProcessesDefaultValue =
+        BackupRefPtrEnabledProcesses::kAllProcesses;
+#endif
 BASE_FEATURE_ENUM_PARAM(BackupRefPtrEnabledProcesses,
                         kBackupRefPtrEnabledProcessesParam,
                         &kPartitionAllocBackupRefPtr,
                         kPAFeatureEnabledProcessesStr,
-// Exception for IS_DESKTOP_ANDROID approved in crbug.com/482155132.
-#if BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_DESKTOP_ANDROID)
-                        BackupRefPtrEnabledProcesses::kNonRenderer,
-#else
-                        BackupRefPtrEnabledProcesses::kAllProcesses,
-#endif
+                        kBackupRefPtrEnabledProcessesDefaultValue,
                         &kBackupRefPtrEnabledProcessesOptions);
 
 constexpr FeatureParam<BackupRefPtrMode>::Option kBackupRefPtrModeOptions[] = {
@@ -224,13 +236,15 @@ constinit const FeatureParam<bool> kBackupRefPtrSuppressCorruptionDetectedCrash{
     false};
 #endif
 
-BASE_FEATURE(kPartitionAllocMemoryTagging,
 #if PA_BUILDFLAG(USE_FULL_MTE) || BUILDFLAG(IS_ANDROID)
-             FEATURE_ENABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocMemoryTaggingDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #else
-             FEATURE_DISABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocMemoryTaggingDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPartitionAllocMemoryTagging,
+             kPartitionAllocMemoryTaggingDefaultState);
 
 constexpr FeatureParam<MemtagMode>::Option kMemtagModeOptions[] = {
     {MemtagMode::kSync, "sync"},
@@ -276,14 +290,16 @@ constinit const FeatureParam<MemoryTaggingEnabledProcesses>
 BASE_FEATURE(kKillPartitionAllocMemoryTagging, FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_EXPORT BASE_DECLARE_FEATURE(kPartitionAllocPermissiveMte);
-BASE_FEATURE(kPartitionAllocPermissiveMte,
 #if PA_BUILDFLAG(USE_FULL_MTE)
-             // We want to actually crash if USE_FULL_MTE is enabled.
-             FEATURE_DISABLED_BY_DEFAULT
+// We want to actually crash if USE_FULL_MTE is enabled.
+constexpr FeatureState kPartitionAllocPermissiveMteDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #else
-             FEATURE_ENABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocPermissiveMteDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPartitionAllocPermissiveMte,
+             kPartitionAllocPermissiveMteDefaultState);
 
 BASE_FEATURE(kAsanBrpDereferenceCheck, FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kAsanBrpExtractionCheck,       // Not much noise at the moment to
@@ -294,13 +310,15 @@ BASE_FEATURE(kAsanBrpInstantiationCheck, FEATURE_ENABLED_BY_DEFAULT);
 //
 // We enable this by default everywhere except for 32-bit Android, since we saw
 // regressions there.
-BASE_FEATURE(kPartitionAllocUseDenserDistribution,
 #if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_32_BITS)
-             FEATURE_DISABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocUseDenserDistributionDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #else
-             FEATURE_ENABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocUseDenserDistributionDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #endif  // BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_32_BITS)
-);
+BASE_FEATURE(kPartitionAllocUseDenserDistribution,
+             kPartitionAllocUseDenserDistributionDefaultState);
 const FeatureParam<BucketDistributionMode>::Option
     kPartitionAllocBucketDistributionOption[] = {
         {BucketDistributionMode::kDefault, "default"},
@@ -390,12 +408,17 @@ constexpr TimeDelta FromPartitionAllocTimeDelta(
   return Microseconds(time_delta.InMicroseconds());
 }
 
-BASE_FEATURE(kPartitionAllocAdjustSizeWhenInForeground,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-             FEATURE_ENABLED_BY_DEFAULT);
+constexpr FeatureState
+    kPartitionAllocAdjustSizeWhenInForegroundDefaultState =
+        FEATURE_ENABLED_BY_DEFAULT;
 #else
-             FEATURE_DISABLED_BY_DEFAULT);
+constexpr FeatureState
+    kPartitionAllocAdjustSizeWhenInForegroundDefaultState =
+        FEATURE_DISABLED_BY_DEFAULT;
 #endif
+BASE_FEATURE(kPartitionAllocAdjustSizeWhenInForeground,
+             kPartitionAllocAdjustSizeWhenInForegroundDefaultState);
 BASE_FEATURE_PARAM(
     int,
     kPartitionAllocForegroundEmptySlotSpanRingSize,
@@ -414,13 +437,15 @@ BASE_FEATURE(kPartitionAllocUsePriorityInheritanceLocks,
 #endif  // PA_BUILDFLAG(ENABLE_PARTITION_LOCK_PRIORITY_INHERITANCE)
 
 // This feature is disabled on ChromeOS because of https://crbug.com/495493036.
-BASE_FEATURE(kPartitionAllocFreeWithSize,
 #if BUILDFLAG(IS_CHROMEOS)
-             FEATURE_DISABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocFreeWithSizeDefaultState =
+    FEATURE_DISABLED_BY_DEFAULT;
 #else
-             FEATURE_ENABLED_BY_DEFAULT
+constexpr FeatureState kPartitionAllocFreeWithSizeDefaultState =
+    FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPartitionAllocFreeWithSize,
+             kPartitionAllocFreeWithSizeDefaultState);
 BASE_FEATURE_PARAM(bool,
                    kPartitionAllocStrictFreeSizeCheck,
                    &kPartitionAllocFreeWithSize,

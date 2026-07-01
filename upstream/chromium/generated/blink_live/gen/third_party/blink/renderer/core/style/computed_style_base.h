@@ -269,6 +269,9 @@ namespace css_longhand { class ZIndex; }
 // 'external' field has an extra setter that takes an rvalue reference. A list
 // of the available templates can be found in css_properties.json5.
 class ComputedStyleBase : public GarbageCollected<ComputedStyleBase> {
+  template <typename, typename>
+  friend struct ThreadingTrait;
+
   // Properties with protected accessors must be friends because
   // Longhand::Apply* functions typically need the "raw" computed value:
   friend class css_longhand::Position;

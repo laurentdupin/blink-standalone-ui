@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/service/display/skia_output_surface.h"
@@ -153,7 +154,7 @@ void BufferQueue::RecreateBuffers() {
 }
 
 void BufferQueue::FreeAllBuffers() {
-  TRACE_EVENT("viz", __PRETTY_FUNCTION__);
+  TRACE_EVENT("viz", PRETTY_FUNCTION);
   FreeBuffer(std::move(displayed_buffer_));
   FreeBuffer(std::move(current_buffer_));
 

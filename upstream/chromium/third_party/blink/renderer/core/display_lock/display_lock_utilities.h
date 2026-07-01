@@ -74,6 +74,8 @@ class CORE_EXPORT DisplayLockUtilities {
     // Test friends.
     friend class DisplayLockContextRenderingTest;
     friend class DisplayLockContextTest;
+    template <typename, typename>
+    friend struct ThreadingTrait;
 
     // This method will emit console warnings for content-visibility:hidden
     // subtrees when |emit_warnings| is true and |only_cv_auto| is false.

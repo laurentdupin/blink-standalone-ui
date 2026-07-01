@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/core/style/style_crossfade_image.h"
 
+#include <limits>
+
 #include "third_party/blink/renderer/core/css/css_crossfade_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -307,7 +309,7 @@ HeapVector<float> StyleCrossfadeImage::ComputeWeights(
       continue;
     }
     if (percentage == nullptr) {
-      result.push_back(0.0 / 0.0);  // NaN.
+      result.push_back(std::numeric_limits<float>::quiet_NaN());
       ++num_missing;
     } else {
       result.push_back(percentage->ComputeNumber(length_resolver));

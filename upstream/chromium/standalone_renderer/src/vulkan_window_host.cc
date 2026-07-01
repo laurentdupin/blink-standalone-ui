@@ -6,6 +6,12 @@
 #include <string>
 #include <utility>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 
 #include "base/functional/callback_helpers.h"

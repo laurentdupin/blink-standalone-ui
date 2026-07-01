@@ -254,11 +254,11 @@ public:
             AllFieldsSet = (IdSet | LoaderIdSet | SourceTextSet | 0)};
 
 
-        RuleSetBuilder<STATE | IdSet>& setId(const String& value);  // Defined below
+        RuleSetBuilder<(STATE | RuleSetBuilder<STATE>::IdSet)>& setId(const String& value);  // Defined below
 
-        RuleSetBuilder<STATE | LoaderIdSet>& setLoaderId(const String& value);  // Defined below
+        RuleSetBuilder<(STATE | RuleSetBuilder<STATE>::LoaderIdSet)>& setLoaderId(const String& value);  // Defined below
 
-        RuleSetBuilder<STATE | SourceTextSet>& setSourceText(const String& value);  // Defined below
+        RuleSetBuilder<(STATE | RuleSetBuilder<STATE>::SourceTextSet)>& setSourceText(const String& value);  // Defined below
 
         RuleSetBuilder<STATE>& setBackendNodeId(int value);  // Defined below
 
@@ -282,9 +282,9 @@ public:
         friend class RuleSet;
         RuleSetBuilder() : m_result(new RuleSet()) { }
 
-        template<int STEP> RuleSetBuilder<STATE | STEP>& castState()
+        template<int STEP> RuleSetBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RuleSetBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RuleSetBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Preload::RuleSet> m_result;
@@ -354,11 +354,11 @@ public:
             AllFieldsSet = (LoaderIdSet | ActionSet | UrlSet | 0)};
 
 
-        PreloadingAttemptKeyBuilder<STATE | LoaderIdSet>& setLoaderId(const String& value);  // Defined below
+        PreloadingAttemptKeyBuilder<(STATE | PreloadingAttemptKeyBuilder<STATE>::LoaderIdSet)>& setLoaderId(const String& value);  // Defined below
 
-        PreloadingAttemptKeyBuilder<STATE | ActionSet>& setAction(const String& value);  // Defined below
+        PreloadingAttemptKeyBuilder<(STATE | PreloadingAttemptKeyBuilder<STATE>::ActionSet)>& setAction(const String& value);  // Defined below
 
-        PreloadingAttemptKeyBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        PreloadingAttemptKeyBuilder<(STATE | PreloadingAttemptKeyBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
         PreloadingAttemptKeyBuilder<STATE>& setFormSubmission(bool value);  // Defined below
 
@@ -374,9 +374,9 @@ public:
         friend class PreloadingAttemptKey;
         PreloadingAttemptKeyBuilder() : m_result(new PreloadingAttemptKey()) { }
 
-        template<int STEP> PreloadingAttemptKeyBuilder<STATE | STEP>& castState()
+        template<int STEP> PreloadingAttemptKeyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PreloadingAttemptKeyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PreloadingAttemptKeyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Preload::PreloadingAttemptKey> m_result;
@@ -424,11 +424,11 @@ public:
             AllFieldsSet = (KeySet | RuleSetIdsSet | NodeIdsSet | 0)};
 
 
-        PreloadingAttemptSourceBuilder<STATE | KeySet>& setKey(std::unique_ptr<protocol::Preload::PreloadingAttemptKey> value);  // Defined below
+        PreloadingAttemptSourceBuilder<(STATE | PreloadingAttemptSourceBuilder<STATE>::KeySet)>& setKey(std::unique_ptr<protocol::Preload::PreloadingAttemptKey> value);  // Defined below
 
-        PreloadingAttemptSourceBuilder<STATE | RuleSetIdsSet>& setRuleSetIds(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        PreloadingAttemptSourceBuilder<(STATE | PreloadingAttemptSourceBuilder<STATE>::RuleSetIdsSet)>& setRuleSetIds(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        PreloadingAttemptSourceBuilder<STATE | NodeIdsSet>& setNodeIds(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        PreloadingAttemptSourceBuilder<(STATE | PreloadingAttemptSourceBuilder<STATE>::NodeIdsSet)>& setNodeIds(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<PreloadingAttemptSource> build()
         {
@@ -440,9 +440,9 @@ public:
         friend class PreloadingAttemptSource;
         PreloadingAttemptSourceBuilder() : m_result(new PreloadingAttemptSource()) { }
 
-        template<int STEP> PreloadingAttemptSourceBuilder<STATE | STEP>& castState()
+        template<int STEP> PreloadingAttemptSourceBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PreloadingAttemptSourceBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PreloadingAttemptSourceBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Preload::PreloadingAttemptSource> m_result;
@@ -498,7 +498,7 @@ public:
             AllFieldsSet = (HeaderNameSet | 0)};
 
 
-        PrerenderMismatchedHeadersBuilder<STATE | HeaderNameSet>& setHeaderName(const String& value);  // Defined below
+        PrerenderMismatchedHeadersBuilder<(STATE | PrerenderMismatchedHeadersBuilder<STATE>::HeaderNameSet)>& setHeaderName(const String& value);  // Defined below
 
         PrerenderMismatchedHeadersBuilder<STATE>& setInitialValue(const String& value);  // Defined below
 
@@ -514,9 +514,9 @@ public:
         friend class PrerenderMismatchedHeaders;
         PrerenderMismatchedHeadersBuilder() : m_result(new PrerenderMismatchedHeaders()) { }
 
-        template<int STEP> PrerenderMismatchedHeadersBuilder<STATE | STEP>& castState()
+        template<int STEP> PrerenderMismatchedHeadersBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PrerenderMismatchedHeadersBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PrerenderMismatchedHeadersBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Preload::PrerenderMismatchedHeaders> m_result;
@@ -555,21 +555,21 @@ inline void RuleSet::setErrorMessage(const String& value) { m_errorMessage = val
 inline void RuleSet::setTag(const String& value) { m_tag = value; }
 
 template<int STATE>
-inline RuleSet::RuleSetBuilder<STATE | RuleSet::RuleSetBuilder<STATE>::IdSet>&
+inline RuleSet::RuleSetBuilder<(STATE | RuleSet::RuleSetBuilder<STATE>::IdSet)>&
 RuleSet::RuleSetBuilder<STATE>::setId(const String& value) {
   static_assert(!(STATE & IdSet), "property id should not be set yet");
   m_result->setId(value);
   return castState<IdSet>();
 }
 template<int STATE>
-inline RuleSet::RuleSetBuilder<STATE | RuleSet::RuleSetBuilder<STATE>::LoaderIdSet>&
+inline RuleSet::RuleSetBuilder<(STATE | RuleSet::RuleSetBuilder<STATE>::LoaderIdSet)>&
 RuleSet::RuleSetBuilder<STATE>::setLoaderId(const String& value) {
   static_assert(!(STATE & LoaderIdSet), "property loaderId should not be set yet");
   m_result->setLoaderId(value);
   return castState<LoaderIdSet>();
 }
 template<int STATE>
-inline RuleSet::RuleSetBuilder<STATE | RuleSet::RuleSetBuilder<STATE>::SourceTextSet>&
+inline RuleSet::RuleSetBuilder<(STATE | RuleSet::RuleSetBuilder<STATE>::SourceTextSet)>&
 RuleSet::RuleSetBuilder<STATE>::setSourceText(const String& value) {
   static_assert(!(STATE & SourceTextSet), "property sourceText should not be set yet");
   m_result->setSourceText(value);
@@ -616,21 +616,21 @@ inline void PreloadingAttemptKey::setFormSubmission(bool value) { m_formSubmissi
 inline void PreloadingAttemptKey::setTargetHint(const String& value) { m_targetHint = value; }
 
 template<int STATE>
-inline PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE | PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::LoaderIdSet>&
+inline PreloadingAttemptKey::PreloadingAttemptKeyBuilder<(STATE | PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::LoaderIdSet)>&
 PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::setLoaderId(const String& value) {
   static_assert(!(STATE & LoaderIdSet), "property loaderId should not be set yet");
   m_result->setLoaderId(value);
   return castState<LoaderIdSet>();
 }
 template<int STATE>
-inline PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE | PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::ActionSet>&
+inline PreloadingAttemptKey::PreloadingAttemptKeyBuilder<(STATE | PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::ActionSet)>&
 PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::setAction(const String& value) {
   static_assert(!(STATE & ActionSet), "property action should not be set yet");
   m_result->setAction(value);
   return castState<ActionSet>();
 }
 template<int STATE>
-inline PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE | PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::UrlSet>&
+inline PreloadingAttemptKey::PreloadingAttemptKeyBuilder<(STATE | PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::UrlSet)>&
 PreloadingAttemptKey::PreloadingAttemptKeyBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
@@ -655,21 +655,21 @@ inline void PreloadingAttemptSource::setRuleSetIds(std::unique_ptr<protocol::Arr
 inline void PreloadingAttemptSource::setNodeIds(std::unique_ptr<protocol::Array<int>> value) { m_nodeIds = std::move(value); }
 
 template<int STATE>
-inline PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE | PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::KeySet>&
+inline PreloadingAttemptSource::PreloadingAttemptSourceBuilder<(STATE | PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::KeySet)>&
 PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::setKey(std::unique_ptr<protocol::Preload::PreloadingAttemptKey> value) {
   static_assert(!(STATE & KeySet), "property key should not be set yet");
   m_result->setKey(std::move(value));
   return castState<KeySet>();
 }
 template<int STATE>
-inline PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE | PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::RuleSetIdsSet>&
+inline PreloadingAttemptSource::PreloadingAttemptSourceBuilder<(STATE | PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::RuleSetIdsSet)>&
 PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::setRuleSetIds(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & RuleSetIdsSet), "property ruleSetIds should not be set yet");
   m_result->setRuleSetIds(std::move(value));
   return castState<RuleSetIdsSet>();
 }
 template<int STATE>
-inline PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE | PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::NodeIdsSet>&
+inline PreloadingAttemptSource::PreloadingAttemptSourceBuilder<(STATE | PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::NodeIdsSet)>&
 PreloadingAttemptSource::PreloadingAttemptSourceBuilder<STATE>::setNodeIds(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & NodeIdsSet), "property nodeIds should not be set yet");
   m_result->setNodeIds(std::move(value));
@@ -684,7 +684,7 @@ inline void PrerenderMismatchedHeaders::setInitialValue(const String& value) { m
 inline void PrerenderMismatchedHeaders::setActivationValue(const String& value) { m_activationValue = value; }
 
 template<int STATE>
-inline PrerenderMismatchedHeaders::PrerenderMismatchedHeadersBuilder<STATE | PrerenderMismatchedHeaders::PrerenderMismatchedHeadersBuilder<STATE>::HeaderNameSet>&
+inline PrerenderMismatchedHeaders::PrerenderMismatchedHeadersBuilder<(STATE | PrerenderMismatchedHeaders::PrerenderMismatchedHeadersBuilder<STATE>::HeaderNameSet)>&
 PrerenderMismatchedHeaders::PrerenderMismatchedHeadersBuilder<STATE>::setHeaderName(const String& value) {
   static_assert(!(STATE & HeaderNameSet), "property headerName should not be set yet");
   m_result->setHeaderName(value);

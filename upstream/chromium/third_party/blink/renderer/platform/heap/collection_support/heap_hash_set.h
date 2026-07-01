@@ -17,8 +17,37 @@ namespace blink {
 template <internal::HeapCollectionType CollectionType,
           typename ValueArg,
           typename TraitsArg = HashTraits<ValueArg>>
-class BasicHeapHashSet final
-    : public std::conditional_t<
+class BasicHeapHashSet;
+
+namespace internal {
+
+template <HeapCollectionType CollectionType,
+          typename ValueArg,
+          typename TraitsArg>
+struct BasicHeapHashSetTypeConstraints {
+  constexpr BasicHeapHashSetTypeConstraints() {
+    static_assert(IsMemberOrWeakMemberType<ValueArg>::value,
+                  "BasicHeapHashSet supports only Member and WeakMember.");
+    static_assert(std::is_trivially_destructible_v<
+                      blink::BasicHeapHashSet<CollectionType,
+                                              ValueArg,
+                                              TraitsArg>>,
+                  "BasicHeapHashSet must be trivially destructible.");
+    static_assert(IsTraceableV<ValueArg>,
+                  "For hash sets without traceable elements, use HashSet<> "
+                  "instead of BasicHeapHashSet<>.");
+  }
+};
+
+}  // namespace internal
+
+template <internal::HeapCollectionType CollectionType,
+          typename ValueArg,
+          typename TraitsArg>
+class EMPTY_BASES BasicHeapHashSet final
+    : private internal::
+          BasicHeapHashSetTypeConstraints<CollectionType, ValueArg, TraitsArg>,
+      public std::conditional_t<
           CollectionType == internal::HeapCollectionType::kGCed,
           GarbageCollected<
               BasicHeapHashSet<CollectionType, ValueArg, TraitsArg>>,
@@ -57,20 +86,13 @@ class BasicHeapHashSet final
     HashSet<ValueArg, TraitsArg, HeapAllocator>::Trace(visitor);
   }
 
- private:
-  struct TypeConstraints {
-    constexpr TypeConstraints() {
-      static_assert(IsMemberOrWeakMemberType<ValueArg>::value,
-                    "BasicHeapHashSet supports only Member and WeakMember.");
-      static_assert(std::is_trivially_destructible_v<BasicHeapHashSet>,
-                    "BasicHeapHashSet must be trivially destructible.");
-      static_assert(IsTraceableV<ValueArg>,
-                    "For hash sets without traceable elements, use HashSet<> "
-                    "instead of BasicHeapHashSet<>.");
-    }
-  };
-  NO_UNIQUE_ADDRESS TypeConstraints type_constraints_;
 };
+
+template <typename T, typename Traits>
+struct IsDisallowNewTrait<BasicHeapHashSet<
+    internal::HeapCollectionType::kDisallowNew,
+    T,
+    Traits>> : std::true_type {};
 
 // On-stack for in-field version of HashSet for referring to
 // GarbageCollected objects.

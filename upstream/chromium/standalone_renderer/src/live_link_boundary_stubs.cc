@@ -1,4 +1,4 @@
-// Copyright 2026 The Chromium Authors
+﻿// Copyright 2026 The Chromium Authors
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -13,6 +13,7 @@
 
 #include "base/trace_event/trace_arguments.h"
 #include "base/cpu.h"
+#include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/features.h"
 #include "base/metrics/field_trial_params.h"
@@ -41,12 +42,17 @@
 #include "base/allocator/partition_allocator/src/partition_alloc/allocation_guard.h"
 #include "base/allocator/partition_allocator/src/partition_alloc/oom.h"
 #include "cc/animation/animation_id_provider.h"
+#include "gpu/ipc/client/gpu_channel_host.h"
+#include "media/base/media_log.h"
 #include "skia/ext/font_utils.h"
 #include "include/codec/SkCodec.h"
 #include "include/codec/SkPngRustDecoder.h"
 #include "src/codec/SkPngCodec.h"
 #ifdef DrawText
 #undef DrawText
+#endif
+#ifdef CopyCursor
+#undef CopyCursor
 #endif
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "services/network/public/cpp/single_request_url_loader_factory.h"
@@ -58,8 +64,12 @@
 #include "third_party/blink/public/resources/grit/blink_resources.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/web_audio_bus.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
+#include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
+#include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
+#include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_task_queue.h"
 #include "third_party/blink/renderer/core/accessibility/blink_ax_event_intent.h"
 #include "third_party/blink/renderer/core/accessibility/scoped_blink_ax_event_intent.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_impl.h"
@@ -251,11 +261,11 @@ extern "C" const char icudt78_dat[] = {0};
 
 #if BUILDFLAG(IS_WIN)
 extern "C" {
-__declspec(dllimport) void* __stdcall GetModuleHandleW(const wchar_t*);
-__declspec(dllimport) void* __stdcall LoadLibraryW(const wchar_t*);
-__declspec(dllimport) void* __stdcall GetProcAddress(void*, const char*);
+__declspec(dllimport) HMODULE __stdcall GetModuleHandleW(const wchar_t*);
+__declspec(dllimport) HMODULE __stdcall LoadLibraryW(const wchar_t*);
+__declspec(dllimport) FARPROC __stdcall GetProcAddress(HMODULE, const char*);
 __declspec(dllimport) unsigned long __stdcall GetCurrentThreadId();
-__declspec(dllimport) void __stdcall AcquireSRWLockExclusive(void*);
+__declspec(dllimport) void __stdcall AcquireSRWLockExclusive(PSRWLOCK);
 __declspec(dllimport) void* __stdcall VirtualAlloc(void*,
                                                    size_t,
                                                    unsigned long,
@@ -270,7 +280,7 @@ __declspec(dllimport) int __stdcall VirtualProtect(void*,
 extern "C" int RAND_bytes(uint8_t* buffer, size_t length) {
   using ProcessPrngFn = int(__stdcall*)(unsigned char*, size_t);
   static ProcessPrngFn process_prng = []() -> ProcessPrngFn {
-    void* module = ::GetModuleHandleW(L"bcryptprimitives.dll");
+    HMODULE module = ::GetModuleHandleW(L"bcryptprimitives.dll");
     if (!module) {
       module = ::LoadLibraryW(L"bcryptprimitives.dll");
     }
@@ -1456,6 +1466,10 @@ std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
 }  // namespace SkPngRustDecoder
 
 namespace blink {
+void WebAudioBus::Reset() {
+  private_ = nullptr;
+}
+
 CEReactionsScope* CEReactionsScope::top_of_stack_ = nullptr;
 CEReactionsScope* CEReactionsScope::Current() {
   return top_of_stack_;
@@ -1470,6 +1484,11 @@ void CEReactionsScope::EnqueueToCurrentQueue(CustomElementReactionStack&,
                                              Element&,
                                              CustomElementReaction&) {}
 void MutationObserver::CancelInspectorAsyncTasks() {}
+
+namespace inspector_layout_event {
+void BeginData(perfetto::TracedValue, LocalFrameView*) {}
+void EndData(perfetto::TracedValue, const HeapVector<LayoutObjectWithDepth>&) {}
+}  // namespace inspector_layout_event
 }  // namespace blink
 
 namespace ui {
@@ -2234,6 +2253,11 @@ Agent::~Agent() = default;
 void Agent::Trace(Visitor*) const {}
 void Agent::AttachContext(ExecutionContext*) {}
 void Agent::DetachContext(ExecutionContext*) {}
+
+scheduler::EventLoop& ToEventLoop(ExecutionContext* execution_context) {
+  DCHECK(execution_context);
+  return *execution_context->GetAgent()->event_loop().get();
+}
 bool Agent::IsCrossOriginIsolated() const {
   return false;
 }
@@ -4841,7 +4865,7 @@ const LayoutLocale* LayoutLocale::Get(const AtomicString&) {
 #endif
 ThreadStateStorage ThreadStateStorage::main_thread_state_storage_;
 constinit thread_local ThreadStateStorage* g_thread_specific_
-    __attribute__((tls_model(BLINK_HEAP_THREAD_LOCAL_MODEL))) = nullptr;
+    BLINK_HEAP_THREAD_LOCAL_ATTRIBUTE = nullptr;
 
 namespace {
 constexpr unsigned long kStandaloneMemCommit = 0x1000;
@@ -10625,6 +10649,10 @@ void LinkHighlight::ResetForPageNavigation() {}
 void LinkHighlight::AnimationHostInitialized(cc::AnimationHost&) {}
 void LinkHighlight::WillCloseAnimationHost() {}
 LinkHighlightImpl::~LinkHighlightImpl() = default;
+void LinkHighlightImpl::NotifyAnimationFinished(base::TimeDelta, int) {}
+CompositorAnimation* LinkHighlightImpl::GetCompositorAnimation() const {
+  return nullptr;
+}
 ValidationMessageClientImpl::~ValidationMessageClientImpl() = default;
 ValidationMessageClientImpl::ValidationMessageClientImpl(Page& page)
     : page_(&page) {}
@@ -10950,6 +10978,13 @@ mojom::blink::FaviconIconType HTMLLinkElement::GetIconType() const {
 bool MediaQueryList::matches() {
   return false;
 }
+void MediaQueryList::Trace(Visitor* visitor) const {
+  visitor->Trace(matcher_);
+  visitor->Trace(media_);
+  visitor->Trace(listeners_);
+  EventTarget::Trace(visitor);
+  ExecutionContextLifecycleObserver::Trace(visitor);
+}
 const Vector<gfx::Size>& HTMLLinkElement::IconSizes() const {
   static const Vector<gfx::Size> sizes;
   return sizes;
@@ -11076,6 +11111,8 @@ void ResizeObserver::Trace(Visitor*) const {}
 void PendingLinkPreload::UnblockRendering() {}
 void PendingLinkPreload::Dispose() {}
 void PendingLinkPreload::AddResource(Resource*) {}
+void PendingLinkPreload::NotifyModuleLoadFinished(ModuleScript*,
+                                                  v8::ModuleImportPhase) {}
 PendingLinkPreload::~PendingLinkPreload() = default;
 void MenuSafeTriangle::Trace(Visitor*) const {}
 bool DocumentLayoutUpgrade::ShouldUpgrade() {
@@ -12809,10 +12846,6 @@ Fence::Fence(LocalDOMWindow& window) : ExecutionContextClient(&window) {}
 CrashReportContext::CrashReportContext(LocalDOMWindow& window)
     : ExecutionContextClient(&window) {}
 void ViewTransitionSupplement::SendOptInStatusToHost() {}
-std::unique_ptr<mojom::blink::PolicyContainerPolicies>
-FromWebPolicyContainerPolicies(const WebPolicyContainerPolicies&) {
-  return nullptr;
-}
 LocationReportBody::ReportLocation LocationReportBody::CreateReportLocation(
     const String& file,
     std::optional<uint32_t> line_number,
@@ -13989,7 +14022,7 @@ namespace internal {
 LockImpl::LockImpl() : native_handle_({0}) {}
 LockImpl::~LockImpl() = default;
 void LockImpl::LockInternal() {
-  ::AcquireSRWLockExclusive(&native_handle_);
+  ::AcquireSRWLockExclusive(reinterpret_cast<PSRWLOCK>(&native_handle_));
 }
 }  // namespace internal
 CPU::CPU() = default;

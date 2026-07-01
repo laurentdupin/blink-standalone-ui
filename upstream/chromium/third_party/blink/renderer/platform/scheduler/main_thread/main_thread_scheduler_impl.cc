@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/compiler_specific.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -101,13 +102,15 @@ constexpr base::TimeDelta kBusyLoopAggressiveTime = base::Milliseconds(500);
 //
 // Android only, as it's been evaluated in the field only on this platform.
 // TODO(crbug.com/503682317): Evaluate on desktop as well.
-BASE_FEATURE(kLowerPriorityForCompositorGestures,
+constexpr base::FeatureState kLowerPriorityForCompositorGesturesDefault =
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+
+BASE_FEATURE(kLowerPriorityForCompositorGestures,
+             kLowerPriorityForCompositorGesturesDefault);
 
 #if BUILDFLAG(IS_ANDROID)
 // On devices with at least 3 CPU clusters, only selectively allow the renderer
@@ -317,7 +320,7 @@ base::RepeatingCallback<void(base::PlatformThreadId, bool)>*
 
 ThreadAffinityBoost::ThreadAffinityBoost()
     : thread_id_(base::PlatformThread::CurrentId()) {
-  TRACE_EVENT("blink", __PRETTY_FUNCTION__);
+  TRACE_EVENT("blink", PRETTY_FUNCTION);
   base::AutoLock guard(lock());
   TRACE_EVENT_BEGIN("blink", "ThreadAffinityBoost",
                     perfetto::Track(reinterpret_cast<uintptr_t>(this)), "depth",
@@ -335,7 +338,7 @@ ThreadAffinityBoost::~ThreadAffinityBoost() {
   // A lock is needed, with atomics we could race with the main thread raising
   // its priority again.
   base::AutoLock guard(lock());
-  TRACE_EVENT("blink", __PRETTY_FUNCTION__, "depth", depth_);
+  TRACE_EVENT("blink", PRETTY_FUNCTION, "depth", depth_);
   TRACE_EVENT_END("blink", perfetto::Track(reinterpret_cast<uintptr_t>(this)));
 
   if (--depth_ == 0) {
@@ -351,7 +354,7 @@ ThreadAffinityBoost::~ThreadAffinityBoost() {
 void ThreadAffinityBoost::StopDelayed(
     std::unique_ptr<ThreadAffinityBoost> boost,
     base::TimeDelta delay) {
-  TRACE_EVENT("blink", __PRETTY_FUNCTION__);
+  TRACE_EVENT("blink", PRETTY_FUNCTION);
   DCHECK(boost);
   if (!delay.is_zero()) {
     base::OnceClosure task = base::DoNothingWithBoundArgs(std::move(boost));

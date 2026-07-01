@@ -231,9 +231,9 @@ class BASE_EXPORT GSL_OWNER ListValue {
   // Shared implementation of public `contains()` methods.
   template <typename T, typename R>
     requires std::equality_comparable_with<T, R>
-  bool contains(const T& val,
-                bool (Value::*test)() const,
-                R (Value::*get)() const) const;
+  bool ContainsValue(const T& val,
+                     bool (Value::*test)() const,
+                     R (Value::*get)() const) const;
 
   std::vector<Value> storage_;
 };
@@ -1074,9 +1074,9 @@ BASE_EXPORT std::ostream& operator<<(std::ostream& out,
 
 template <typename T, typename R>
   requires std::equality_comparable_with<T, R>
-bool ListValue::contains(const T& val,
-                         bool (Value::*test)() const,
-                         R (Value::*get)() const) const {
+bool ListValue::ContainsValue(const T& val,
+                              bool (Value::*test)() const,
+                              R (Value::*get)() const) const {
   return std::ranges::any_of(storage_, [&](const Value& value) {
     return (value.*test)() && (value.*get)() == val;
   });

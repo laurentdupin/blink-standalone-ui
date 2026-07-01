@@ -80,21 +80,21 @@ public:
             AllFieldsSet = (RequestURLSet | RequestMethodSet | RequestHeadersSet | ResponseTimeSet | ResponseStatusSet | ResponseStatusTextSet | ResponseTypeSet | ResponseHeadersSet | 0)};
 
 
-        DataEntryBuilder<STATE | RequestURLSet>& setRequestURL(const String& value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::RequestURLSet)>& setRequestURL(const String& value);  // Defined below
 
-        DataEntryBuilder<STATE | RequestMethodSet>& setRequestMethod(const String& value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::RequestMethodSet)>& setRequestMethod(const String& value);  // Defined below
 
-        DataEntryBuilder<STATE | RequestHeadersSet>& setRequestHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::RequestHeadersSet)>& setRequestHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value);  // Defined below
 
-        DataEntryBuilder<STATE | ResponseTimeSet>& setResponseTime(double value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::ResponseTimeSet)>& setResponseTime(double value);  // Defined below
 
-        DataEntryBuilder<STATE | ResponseStatusSet>& setResponseStatus(int value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::ResponseStatusSet)>& setResponseStatus(int value);  // Defined below
 
-        DataEntryBuilder<STATE | ResponseStatusTextSet>& setResponseStatusText(const String& value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::ResponseStatusTextSet)>& setResponseStatusText(const String& value);  // Defined below
 
-        DataEntryBuilder<STATE | ResponseTypeSet>& setResponseType(const String& value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::ResponseTypeSet)>& setResponseType(const String& value);  // Defined below
 
-        DataEntryBuilder<STATE | ResponseHeadersSet>& setResponseHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value);  // Defined below
+        DataEntryBuilder<(STATE | DataEntryBuilder<STATE>::ResponseHeadersSet)>& setResponseHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value);  // Defined below
 
         std::unique_ptr<DataEntry> build()
         {
@@ -106,9 +106,9 @@ public:
         friend class DataEntry;
         DataEntryBuilder() : m_result(new DataEntry()) { }
 
-        template<int STEP> DataEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> DataEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DataEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DataEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CacheStorage::DataEntry> m_result;
@@ -172,15 +172,15 @@ public:
             AllFieldsSet = (CacheIdSet | SecurityOriginSet | StorageKeySet | CacheNameSet | 0)};
 
 
-        CacheBuilder<STATE | CacheIdSet>& setCacheId(const String& value);  // Defined below
+        CacheBuilder<(STATE | CacheBuilder<STATE>::CacheIdSet)>& setCacheId(const String& value);  // Defined below
 
-        CacheBuilder<STATE | SecurityOriginSet>& setSecurityOrigin(const String& value);  // Defined below
+        CacheBuilder<(STATE | CacheBuilder<STATE>::SecurityOriginSet)>& setSecurityOrigin(const String& value);  // Defined below
 
-        CacheBuilder<STATE | StorageKeySet>& setStorageKey(const String& value);  // Defined below
+        CacheBuilder<(STATE | CacheBuilder<STATE>::StorageKeySet)>& setStorageKey(const String& value);  // Defined below
 
         CacheBuilder<STATE>& setStorageBucket(std::unique_ptr<protocol::Storage::StorageBucket> value);  // Defined below
 
-        CacheBuilder<STATE | CacheNameSet>& setCacheName(const String& value);  // Defined below
+        CacheBuilder<(STATE | CacheBuilder<STATE>::CacheNameSet)>& setCacheName(const String& value);  // Defined below
 
         std::unique_ptr<Cache> build()
         {
@@ -192,9 +192,9 @@ public:
         friend class Cache;
         CacheBuilder() : m_result(new Cache()) { }
 
-        template<int STEP> CacheBuilder<STATE | STEP>& castState()
+        template<int STEP> CacheBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CacheBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CacheBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CacheStorage::Cache> m_result;
@@ -238,9 +238,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        HeaderBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        HeaderBuilder<(STATE | HeaderBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        HeaderBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        HeaderBuilder<(STATE | HeaderBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<Header> build()
         {
@@ -252,9 +252,9 @@ public:
         friend class Header;
         HeaderBuilder() : m_result(new Header()) { }
 
-        template<int STEP> HeaderBuilder<STATE | STEP>& castState()
+        template<int STEP> HeaderBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<HeaderBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<HeaderBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CacheStorage::Header> m_result;
@@ -291,7 +291,7 @@ public:
             AllFieldsSet = (BodySet | 0)};
 
 
-        CachedResponseBuilder<STATE | BodySet>& setBody(const Binary& value);  // Defined below
+        CachedResponseBuilder<(STATE | CachedResponseBuilder<STATE>::BodySet)>& setBody(const Binary& value);  // Defined below
 
         std::unique_ptr<CachedResponse> build()
         {
@@ -303,9 +303,9 @@ public:
         friend class CachedResponse;
         CachedResponseBuilder() : m_result(new CachedResponse()) { }
 
-        template<int STEP> CachedResponseBuilder<STATE | STEP>& castState()
+        template<int STEP> CachedResponseBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CachedResponseBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CachedResponseBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CacheStorage::CachedResponse> m_result;
@@ -341,56 +341,56 @@ inline void DataEntry::setResponseType(const String& value) { m_responseType = v
 inline void DataEntry::setResponseHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value) { m_responseHeaders = std::move(value); }
 
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::RequestURLSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::RequestURLSet)>&
 DataEntry::DataEntryBuilder<STATE>::setRequestURL(const String& value) {
   static_assert(!(STATE & RequestURLSet), "property requestURL should not be set yet");
   m_result->setRequestURL(value);
   return castState<RequestURLSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::RequestMethodSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::RequestMethodSet)>&
 DataEntry::DataEntryBuilder<STATE>::setRequestMethod(const String& value) {
   static_assert(!(STATE & RequestMethodSet), "property requestMethod should not be set yet");
   m_result->setRequestMethod(value);
   return castState<RequestMethodSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::RequestHeadersSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::RequestHeadersSet)>&
 DataEntry::DataEntryBuilder<STATE>::setRequestHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value) {
   static_assert(!(STATE & RequestHeadersSet), "property requestHeaders should not be set yet");
   m_result->setRequestHeaders(std::move(value));
   return castState<RequestHeadersSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::ResponseTimeSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::ResponseTimeSet)>&
 DataEntry::DataEntryBuilder<STATE>::setResponseTime(double value) {
   static_assert(!(STATE & ResponseTimeSet), "property responseTime should not be set yet");
   m_result->setResponseTime(value);
   return castState<ResponseTimeSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::ResponseStatusSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::ResponseStatusSet)>&
 DataEntry::DataEntryBuilder<STATE>::setResponseStatus(int value) {
   static_assert(!(STATE & ResponseStatusSet), "property responseStatus should not be set yet");
   m_result->setResponseStatus(value);
   return castState<ResponseStatusSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::ResponseStatusTextSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::ResponseStatusTextSet)>&
 DataEntry::DataEntryBuilder<STATE>::setResponseStatusText(const String& value) {
   static_assert(!(STATE & ResponseStatusTextSet), "property responseStatusText should not be set yet");
   m_result->setResponseStatusText(value);
   return castState<ResponseStatusTextSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::ResponseTypeSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::ResponseTypeSet)>&
 DataEntry::DataEntryBuilder<STATE>::setResponseType(const String& value) {
   static_assert(!(STATE & ResponseTypeSet), "property responseType should not be set yet");
   m_result->setResponseType(value);
   return castState<ResponseTypeSet>();
 }
 template<int STATE>
-inline DataEntry::DataEntryBuilder<STATE | DataEntry::DataEntryBuilder<STATE>::ResponseHeadersSet>&
+inline DataEntry::DataEntryBuilder<(STATE | DataEntry::DataEntryBuilder<STATE>::ResponseHeadersSet)>&
 DataEntry::DataEntryBuilder<STATE>::setResponseHeaders(std::unique_ptr<protocol::Array<protocol::CacheStorage::Header>> value) {
   static_assert(!(STATE & ResponseHeadersSet), "property responseHeaders should not be set yet");
   m_result->setResponseHeaders(std::move(value));
@@ -409,21 +409,21 @@ inline void Cache::setStorageBucket(std::unique_ptr<protocol::Storage::StorageBu
 inline void Cache::setCacheName(const String& value) { m_cacheName = value; }
 
 template<int STATE>
-inline Cache::CacheBuilder<STATE | Cache::CacheBuilder<STATE>::CacheIdSet>&
+inline Cache::CacheBuilder<(STATE | Cache::CacheBuilder<STATE>::CacheIdSet)>&
 Cache::CacheBuilder<STATE>::setCacheId(const String& value) {
   static_assert(!(STATE & CacheIdSet), "property cacheId should not be set yet");
   m_result->setCacheId(value);
   return castState<CacheIdSet>();
 }
 template<int STATE>
-inline Cache::CacheBuilder<STATE | Cache::CacheBuilder<STATE>::SecurityOriginSet>&
+inline Cache::CacheBuilder<(STATE | Cache::CacheBuilder<STATE>::SecurityOriginSet)>&
 Cache::CacheBuilder<STATE>::setSecurityOrigin(const String& value) {
   static_assert(!(STATE & SecurityOriginSet), "property securityOrigin should not be set yet");
   m_result->setSecurityOrigin(value);
   return castState<SecurityOriginSet>();
 }
 template<int STATE>
-inline Cache::CacheBuilder<STATE | Cache::CacheBuilder<STATE>::StorageKeySet>&
+inline Cache::CacheBuilder<(STATE | Cache::CacheBuilder<STATE>::StorageKeySet)>&
 Cache::CacheBuilder<STATE>::setStorageKey(const String& value) {
   static_assert(!(STATE & StorageKeySet), "property storageKey should not be set yet");
   m_result->setStorageKey(value);
@@ -435,7 +435,7 @@ inline Cache::CacheBuilder<STATE>& Cache::CacheBuilder<STATE>::setStorageBucket(
   return *this;
 }
 template<int STATE>
-inline Cache::CacheBuilder<STATE | Cache::CacheBuilder<STATE>::CacheNameSet>&
+inline Cache::CacheBuilder<(STATE | Cache::CacheBuilder<STATE>::CacheNameSet)>&
 Cache::CacheBuilder<STATE>::setCacheName(const String& value) {
   static_assert(!(STATE & CacheNameSet), "property cacheName should not be set yet");
   m_result->setCacheName(value);
@@ -449,14 +449,14 @@ inline void Header::setName(const String& value) { m_name = value; }
 inline void Header::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline Header::HeaderBuilder<STATE | Header::HeaderBuilder<STATE>::NameSet>&
+inline Header::HeaderBuilder<(STATE | Header::HeaderBuilder<STATE>::NameSet)>&
 Header::HeaderBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Header::HeaderBuilder<STATE | Header::HeaderBuilder<STATE>::ValueSet>&
+inline Header::HeaderBuilder<(STATE | Header::HeaderBuilder<STATE>::ValueSet)>&
 Header::HeaderBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -469,7 +469,7 @@ inline CachedResponse::~CachedResponse() = default;
 inline void CachedResponse::setBody(const Binary& value) { m_body = value; }
 
 template<int STATE>
-inline CachedResponse::CachedResponseBuilder<STATE | CachedResponse::CachedResponseBuilder<STATE>::BodySet>&
+inline CachedResponse::CachedResponseBuilder<(STATE | CachedResponse::CachedResponseBuilder<STATE>::BodySet)>&
 CachedResponse::CachedResponseBuilder<STATE>::setBody(const Binary& value) {
   static_assert(!(STATE & BodySet), "property body should not be set yet");
   m_result->setBody(value);

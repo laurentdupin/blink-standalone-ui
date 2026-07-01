@@ -20,8 +20,61 @@ template <internal::HeapCollectionType CollectionType,
           typename MappedArg,
           typename KeyTraitsArg = HashTraits<KeyArg>,
           typename MappedTraitsArg = HashTraits<MappedArg>>
-class BasicHeapHashMap final
-    : public std::conditional_t<
+class BasicHeapHashMap;
+
+namespace internal {
+
+template <typename T>
+static constexpr bool IsValidNonTraceableHeapHashMapType() {
+  return !IsTraceableV<T> && !IsPointerToGarbageCollectedType<T>;
+}
+
+template <HeapCollectionType CollectionType,
+          typename KeyArg,
+          typename MappedArg,
+          typename KeyTraitsArg,
+          typename MappedTraitsArg>
+struct BasicHeapHashMapTypeConstraints {
+  constexpr BasicHeapHashMapTypeConstraints() {
+    static_assert(std::is_trivially_destructible_v<
+                      blink::BasicHeapHashMap<CollectionType,
+                                              KeyArg,
+                                              MappedArg,
+                                              KeyTraitsArg,
+                                              MappedTraitsArg>>,
+                  "BasicHeapHashMap must be trivially destructible.");
+    static_assert(IsTraceableV<KeyArg> || IsTraceableV<MappedArg>,
+                  "For hash maps without traceable elements, use HashMap<> "
+                  "instead of BasicHeapHashMap<>.");
+    static_assert(IsMemberOrWeakMemberType<KeyArg>::value ||
+                      IsValidNonTraceableHeapHashMapType<KeyArg>(),
+                  "BasicHeapHashMap supports only Member, WeakMember and "
+                  "non-traceable types as keys.");
+    static_assert(
+        IsMemberOrWeakMemberType<MappedArg>::value ||
+            IsTraceableV<MappedArg> ||
+            IsValidNonTraceableHeapHashMapType<MappedArg>() ||
+            IsSubclassOfTemplate<MappedArg, v8::TracedReference>::value,
+        "BasicHeapHashMap supports only Member, WeakMember, "
+        "TraceWrapperV8Reference, objects with Trace(), and "
+        "non-traceable types as values.");
+  }
+};
+
+}  // namespace internal
+
+template <internal::HeapCollectionType CollectionType,
+          typename KeyArg,
+          typename MappedArg,
+          typename KeyTraitsArg,
+          typename MappedTraitsArg>
+class EMPTY_BASES BasicHeapHashMap final
+    : private internal::BasicHeapHashMapTypeConstraints<CollectionType,
+                                                        KeyArg,
+                                                        MappedArg,
+                                                        KeyTraitsArg,
+                                                        MappedTraitsArg>,
+      public std::conditional_t<
           CollectionType == internal::HeapCollectionType::kGCed,
           GarbageCollected<BasicHeapHashMap<CollectionType,
                                             KeyArg,
@@ -42,34 +95,18 @@ class BasicHeapHashMap final
             HeapAllocator>::Trace(visitor);
   }
 
- private:
-  template <typename T>
-  static constexpr bool IsValidNonTraceableType() {
-    return !IsTraceableV<T> && !IsPointerToGarbageCollectedType<T>;
-  }
-
-  struct TypeConstraints {
-    constexpr TypeConstraints() {
-      static_assert(std::is_trivially_destructible_v<BasicHeapHashMap>,
-                    "BasicHeapHashMap must be trivially destructible.");
-      static_assert(IsTraceableV<KeyArg> || IsTraceableV<MappedArg>,
-                    "For hash maps without traceable elements, use HashMap<> "
-                    "instead of BasicHeapHashMap<>.");
-      static_assert(IsMemberOrWeakMemberType<KeyArg>::value ||
-                        IsValidNonTraceableType<KeyArg>(),
-                    "BasicHeapHashMap supports only Member, WeakMember and "
-                    "non-traceable types as keys.");
-      static_assert(
-          IsMemberOrWeakMemberType<MappedArg>::value ||
-              IsTraceableV<MappedArg> || IsValidNonTraceableType<MappedArg>() ||
-              IsSubclassOfTemplate<MappedArg, v8::TracedReference>::value,
-          "BasicHeapHashMap supports only Member, WeakMember, "
-          "TraceWrapperV8Reference, objects with Trace(), and "
-          "non-traceable types as values.");
-    }
-  };
-  NO_UNIQUE_ADDRESS TypeConstraints type_constraints_;
 };
+
+template <typename KeyArg,
+          typename MappedArg,
+          typename KeyTraitsArg,
+          typename MappedTraitsArg>
+struct IsDisallowNewTrait<BasicHeapHashMap<
+    internal::HeapCollectionType::kDisallowNew,
+    KeyArg,
+    MappedArg,
+    KeyTraitsArg,
+    MappedTraitsArg>> : std::true_type {};
 
 // On-stack for in-field version of HashSet for referring to
 // GarbageCollected objects.

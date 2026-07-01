@@ -10,6 +10,7 @@
 #include <variant>
 
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
@@ -813,7 +814,7 @@ void GpuChannelManager::OnApplicationForegounded() {
 }
 
 void GpuChannelManager::PerformImmediateCleanup() {
-  TRACE_EVENT0("viz", __PRETTY_FUNCTION__);
+  TRACE_EVENT0("viz", PRETTY_FUNCTION);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!shared_context_state_) {
     return;

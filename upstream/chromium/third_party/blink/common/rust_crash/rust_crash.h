@@ -9,11 +9,13 @@
 #ifndef THIRD_PARTY_BLINK_COMMON_RUST_CRASH_RUST_CRASH_H_
 #define THIRD_PARTY_BLINK_COMMON_RUST_CRASH_RUST_CRASH_H_
 
+#include "base/compiler_specific.h"
+
 namespace blink {
 
 // Called from Rust, calls back into Rust then crashes. See src/lib.rs for the
 // sequence.
-__attribute__((noinline)) void EnterCppForRustCrash();
+NOINLINE void EnterCppForRustCrash();
 
 }  // namespace blink
 

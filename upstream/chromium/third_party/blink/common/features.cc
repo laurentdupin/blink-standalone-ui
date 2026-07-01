@@ -432,13 +432,14 @@ BASE_FEATURE_PARAM(bool,
 // Disabling this will cause parkable strings to never be compressed.
 // This is useful for headless mode + virtual time. Since virtual time advances
 // quickly, strings may be parked too eagerly in that mode.
-BASE_FEATURE(kCompressParkableStrings,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kCompressParkableStringsDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kCompressParkableStringsDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kCompressParkableStrings, kCompressParkableStringsDefaultState);
 
 // Enables more conservative settings for ParkableString: suspend parking in
 // foreground, and increase aging tick intervals.
@@ -462,13 +463,14 @@ BASE_FEATURE(kContentCaptureConstantStreaming,
 
 // If enabled, content:// URLs are considered local, and won't be allowed
 // to be downloaded.
-BASE_FEATURE(kContentSchemeIsLocal,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kContentSchemeIsLocalDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kContentSchemeIsLocalDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kContentSchemeIsLocal, kContentSchemeIsLocalDefaultState);
 
 // When enabled, add a new option, {imageOrientation: 'none'}, to
 // createImageBitmap, which ignores the image orientation metadata of the source
@@ -669,14 +671,16 @@ BASE_FEATURE(kDevToolsImprovedNetworkError, base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDevToolsWebMCPSupport, base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kDirectCompositorThreadIpc,
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || \
     BUILDFLAG(IS_WIN)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kDirectCompositorThreadIpcDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kDirectCompositorThreadIpcDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kDirectCompositorThreadIpc,
+             kDirectCompositorThreadIpcDefaultState);
 
 BASE_FEATURE(kDisableArrayBufferSizeLimitsForTesting,
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -721,16 +725,16 @@ BASE_FEATURE(kEventTimingIgnorePresentationTimeFromUnexpectedFrameSource,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExpandCompositedCullRect, base::FEATURE_ENABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
+constexpr int kCullRectPixelDistanceToExpandDefaultValue = 2000;
+#else
+constexpr int kCullRectPixelDistanceToExpandDefaultValue = 4000;
+#endif
 BASE_FEATURE_PARAM(int,
                    kCullRectPixelDistanceToExpand,
                    &kExpandCompositedCullRect,
                    "pixels",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA)
-                   2000
-#else
-                   4000
-#endif
-);
+                   kCullRectPixelDistanceToExpandDefaultValue);
 BASE_FEATURE_PARAM(double,
                    kCullRectExpansionDPRCoef,
                    &kExpandCompositedCullRect,
@@ -747,14 +751,19 @@ BASE_FEATURE_PARAM(int,
                    "changed_enough",
                    512);
 
-BASE_FEATURE(kFadeInScrollbarWhenMouseWheelMayBegin,
 // Do not forward may-begin/began/cancelled wheel event to main thread
 // to avoid unnecessary performance impact on android. See crbug.com/479549167.
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT);
+constexpr base::FeatureState
+    kFadeInScrollbarWhenMouseWheelMayBeginDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT);
+constexpr base::FeatureState
+    kFadeInScrollbarWhenMouseWheelMayBeginDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
+BASE_FEATURE(kFadeInScrollbarWhenMouseWheelMayBegin,
+             kFadeInScrollbarWhenMouseWheelMayBeginDefaultState);
 
 // Enable the <fencedframe> element; see crbug.com/1123606. Note that enabling
 // this feature does not automatically expose this element to the web, it only
@@ -806,15 +815,16 @@ BASE_FEATURE(kFileSystemUrlNavigation, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kFileSystemUrlNavigationForChromeAppsOnly,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kFilteringScrollPrediction,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kFilteringScrollPredictionDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             // TODO(b/284271126): Run the experiment on desktop and enable if
-             // positive.
-             base::FEATURE_DISABLED_BY_DEFAULT
+// TODO(b/284271126): Run the experiment on desktop and enable if positive.
+constexpr base::FeatureState kFilteringScrollPredictionDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kFilteringScrollPrediction,
+             kFilteringScrollPredictionDefaultState);
 BASE_FEATURE_PARAM(std::string,
                    kFilteringScrollPredictionFilterParam,
                    &kFilteringScrollPrediction,
@@ -1589,13 +1599,15 @@ BASE_FEATURE(kLegacyParsingOfXContentTypeOptions,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // A feature to reduce the set of resources fetched by No-State Prefetch.
-BASE_FEATURE(kLightweightNoStatePrefetch,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kLightweightNoStatePrefetchDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kLightweightNoStatePrefetchDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kLightweightNoStatePrefetch,
+             kLightweightNoStatePrefetchDefaultState);
 
 
 // Makes network loading tasks unfreezable so that they can be processed while
@@ -1613,14 +1625,16 @@ BASE_FEATURE(kLowLatencyUsageSupportedForCanvas,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
-BASE_FEATURE(kLowPriorityAsyncScriptExecution,
 // TODO(crbug/429069717): Fix the high power consumption on ChromeOS.
 #if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kLowPriorityAsyncScriptExecutionDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kLowPriorityAsyncScriptExecutionDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kLowPriorityAsyncScriptExecution,
+             kLowPriorityAsyncScriptExecutionDefaultState);
 
 BASE_FEATURE_PARAM(double,
                    kMinimumPhysicalMemoryForLowPriorityAsyncScriptExecution,
@@ -1847,44 +1861,51 @@ BASE_FEATURE_PARAM(bool,
                    "dictionary",
                    false);
 
-BASE_FEATURE(kMemoryCacheStrongReference,
 // Finch study showed no improvement on Android for strong memory cache.
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kMemoryCacheStrongReferenceDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kMemoryCacheStrongReferenceDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kMemoryCacheStrongReference,
+             kMemoryCacheStrongReferenceDefaultState);
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+constexpr int kMemoryCacheStrongReferenceTotalSizeThresholdDefaultValue =
+    200 * 1024 * 1024;
+#else
+constexpr int kMemoryCacheStrongReferenceTotalSizeThresholdDefaultValue =
+    15 * 1024 * 1024;
+#endif
 BASE_FEATURE_PARAM(int,
                    kMemoryCacheStrongReferenceTotalSizeThresholdParam,
                    &kMemoryCacheStrongReference,
                    "memory_cache_strong_ref_total_size_threshold",
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-                   200 * 1024 * 1024
-#else
-                   15 * 1024 * 1024
-#endif
-);
+                   kMemoryCacheStrongReferenceTotalSizeThresholdDefaultValue);
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+constexpr int kMemoryCacheStrongReferenceResourceSizeThresholdDefaultValue =
+    100 * 1024 * 1024;
+#else
+constexpr int kMemoryCacheStrongReferenceResourceSizeThresholdDefaultValue =
+    3 * 1024 * 1024;
+#endif
 BASE_FEATURE_PARAM(int,
                    kMemoryCacheStrongReferenceResourceSizeThresholdParam,
                    &kMemoryCacheStrongReference,
                    "memory_cache_strong_ref_resource_size_threshold",
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-                   100 * 1024 * 1024
-#else
-                   3 * 1024 * 1024
-#endif
-);
+                   kMemoryCacheStrongReferenceResourceSizeThresholdDefaultValue);
 
-BASE_FEATURE(kMemoryPurgeOnFreeze,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kMemoryPurgeOnFreezeDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kMemoryPurgeOnFreezeDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kMemoryPurgeOnFreeze, kMemoryPurgeOnFreezeDefaultState);
 
 BASE_FEATURE(kMemoryPurgeOnFreezeLimit, base::FEATURE_DISABLED_BY_DEFAULT);
 
@@ -1911,27 +1932,31 @@ BASE_FEATURE(kMHTML_Improvements, base::FEATURE_DISABLED_BY_DEFAULT);
 // Note that the desktop roll out is being done separately from android. See
 // https://crbug.com/40258405
 BASE_FEATURE(kNavigationPredictor, base::FEATURE_ENABLED_BY_DEFAULT);
+#if BUILDFLAG(IS_ANDROID)
+constexpr int kPredictorTrafficClientEnabledPercentDefaultValue = 100;
+#else
+constexpr int kPredictorTrafficClientEnabledPercentDefaultValue = 5;
+#endif
 BASE_FEATURE_PARAM(int,
                    kPredictorTrafficClientEnabledPercent,
                    &kNavigationPredictor,
                    "traffic_client_enabled_percent",
-#if BUILDFLAG(IS_ANDROID)
-                   100
-#else
-                   5
-#endif
-);
+                   kPredictorTrafficClientEnabledPercentDefaultValue);
 
 // Used to control the collection of new viewport related anchor element
 // metrics. Metrics will not be recorded if either this or kNavigationPredictor
 // is disabled.
-BASE_FEATURE(kNavigationPredictorNewViewportFeatures,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kNavigationPredictorNewViewportFeaturesDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kNavigationPredictorNewViewportFeaturesDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kNavigationPredictorNewViewportFeatures,
+             kNavigationPredictorNewViewportFeaturesDefaultState);
 
 BASE_FEATURE(kNoForcedFrameUpdatesForWebTests,
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2000,48 +2025,56 @@ BASE_FEATURE(kPrecompileInlineScripts, base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Whether we should composite a PLSA (paint layer scrollable area) even if it
 // means losing lcd text.
-BASE_FEATURE(kPreferCompositingToLCDText,
 // On Android we never have LCD text. On Chrome OS we prefer composited
 // scrolling for better scrolling performance.
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kPreferCompositingToLCDTextDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kPreferCompositingToLCDTextDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPreferCompositingToLCDText,
+             kPreferCompositingToLCDTextDefaultState);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kPrefetchFontLookupTables,
 #if BUILDFLAG(IS_WIN)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kPrefetchFontLookupTablesDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kPrefetchFontLookupTablesDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPrefetchFontLookupTables,
+             kPrefetchFontLookupTablesDefaultState);
 #endif
 
 // Launch mouse hover feature only on Desktop. Note that Android Desktop mode is
 // currently out of scope.
-BASE_FEATURE(kPreloadingEagerHoverHeuristics,
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kPreloadingEagerHoverHeuristicsDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kPreloadingEagerHoverHeuristicsDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPreloadingEagerHoverHeuristics,
+             kPreloadingEagerHoverHeuristicsDefaultState);
 BASE_FEATURE_PARAM(base::TimeDelta,
                    kPreloadingEagerHoverHeuristicsDwellTime,
                    &kPreloadingEagerHoverHeuristics,
                    "hover_dwell_time",
                    base::Milliseconds(10));
-BASE_FEATURE(kPreloadingEagerViewportHeuristics,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kPreloadingEagerViewportHeuristicsDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kPreloadingEagerViewportHeuristicsDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPreloadingEagerViewportHeuristics,
+             kPreloadingEagerViewportHeuristicsDefaultState);
 BASE_FEATURE_PARAM(base::TimeDelta,
                    kPreloadingEagerViewportHeuristicsPresentTime,
                    &kPreloadingEagerViewportHeuristics,
@@ -2082,13 +2115,17 @@ BASE_FEATURE_PARAM(int,
                    "prerender_moderate_threshold",
                    50);
 
-BASE_FEATURE(kPreloadingModerateViewportHeuristics,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kPreloadingModerateViewportHeuristicsDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kPreloadingModerateViewportHeuristicsDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kPreloadingModerateViewportHeuristics,
+             kPreloadingModerateViewportHeuristicsDefaultState);
 
 const char kPrerender2MaxNumOfRunningSpeculationRules[] =
     "max_num_of_running_speculation_rules";
@@ -2172,22 +2209,30 @@ BASE_FEATURE(kReducedReferrerGranularity, base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether `blink::MemoryCache` and `blink::ResourceFetcher` release their
 // strong references to resources on memory pressure.
-BASE_FEATURE(kReleaseResourceStrongReferencesOnMemoryPressure,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kReleaseResourceStrongReferencesOnMemoryPressureDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kReleaseResourceStrongReferencesOnMemoryPressureDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kReleaseResourceStrongReferencesOnMemoryPressure,
+             kReleaseResourceStrongReferencesOnMemoryPressureDefaultState);
 
 // Whether `blink::Resource` deletes its decoded data on memory pressure.
-BASE_FEATURE(kReleaseResourceDecodedDataOnMemoryPressure,
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kReleaseResourceDecodedDataOnMemoryPressureDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState
+    kReleaseResourceDecodedDataOnMemoryPressureDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kReleaseResourceDecodedDataOnMemoryPressure,
+             kReleaseResourceDecodedDataOnMemoryPressureDefaultState);
 
 // Flag guard for removing usage of the CommitNavigationParams.redirects
 // array of URLs in the renderer process.
@@ -2269,13 +2314,15 @@ BASE_FEATURE(kShowHudDisplayForPausedPages, base::FEATURE_ENABLED_BY_DEFAULT);
 // Controls script streaming for http and https scripts.
 BASE_FEATURE(kScriptStreaming, base::FEATURE_ENABLED_BY_DEFAULT);
 // Enables script streaming for non-http scripts.
-BASE_FEATURE(kScriptStreamingForNonHTTP,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kScriptStreamingForNonHTTPDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kScriptStreamingForNonHTTPDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kScriptStreamingForNonHTTP,
+             kScriptStreamingForNonHTTPDefaultState);
 
 BASE_FEATURE(kScrollPredictorFilteringBypassOnSynthetic,
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2428,16 +2475,17 @@ BASE_FEATURE_PARAM(bool,
 
 // If enabled, force renderer process foregrounded from CommitNavigation to
 // DOMContentLoad (crbug/351953350).
-BASE_FEATURE(
-    kBoostRenderProcessForLoading,
 #if BUILDFLAG(IS_ANDROID)
-    // TODO(crbug.com/351953350): Enable this feature on Android as well after
-    // confirming that this feature doesn't regress anything.
-    base::FEATURE_DISABLED_BY_DEFAULT
+// TODO(crbug.com/351953350): Enable this feature on Android as well after
+// confirming that this feature doesn't regress anything.
+constexpr base::FeatureState kBoostRenderProcessForLoadingDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-    base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kBoostRenderProcessForLoadingDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kBoostRenderProcessForLoading,
+             kBoostRenderProcessForLoadingDefaultState);
 
 // An empty json array means that this feature is applied unconditionally. If
 // specified, it means that the specified URLs will be the target of the new
@@ -2476,17 +2524,19 @@ BASE_FEATURE_PARAM(bool,
 
 // Freeze scheduler task queues in background after allowed grace time.
 // "stop" is a legacy name.
-BASE_FEATURE(kStopInBackground,
-             "stop-in-background",
 // b/248036988 - Disable this for Chromecast on Android builds to prevent apps
 // that play audio in the background from stopping.
 #if BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CAST_ANDROID) && \
     !BUILDFLAG(IS_DESKTOP_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kStopInBackgroundDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kStopInBackgroundDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kStopInBackground,
+             "stop-in-background",
+             kStopInBackgroundDefaultState);
 
 // Reduces the work done during renderer initialization.
 BASE_FEATURE(kStreamlineRendererInit, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2567,13 +2617,14 @@ BASE_FEATURE(kUnloadBlocklisted, base::FEATURE_DISABLED_BY_DEFAULT);
 // are marked urgent, and thus unthtrottled.
 //
 // Enabled on Android, since a field trial showed benefits.
-BASE_FEATURE(kUrgentMainFrameForInput,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kUrgentMainFrameForInputDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kUrgentMainFrameForInputDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kUrgentMainFrameForInput, kUrgentMainFrameForInputDefaultState);
 
 // If enabled, URLPattern will use standard defined dummy URL canonicalization
 // to canonicalize URL properties. See https://crbug.com/409350827
@@ -2623,7 +2674,6 @@ BASE_FEATURE(kVSyncEncoding, base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kVisualRectMappingApplyLocalVisualViewportTransform,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kWebBluetoothCancelConnect,
 // TODO(382556910): Enable on Windows when DCHECK issue is resolved.
 // TODO(40502943): Enable on Android when connect callback can be called when
 // cancelled.
@@ -2631,10 +2681,14 @@ BASE_FEATURE(kWebBluetoothCancelConnect,
 // device is unreachable, so it does not have hang issue like MacOS which
 // definitely needs cancel to get from the hang state.
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT);
+constexpr base::FeatureState kWebBluetoothCancelConnectDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT);
+constexpr base::FeatureState kWebBluetoothCancelConnectDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kWebBluetoothCancelConnect,
+             kWebBluetoothCancelConnectDefaultState);
 
 BASE_FEATURE(kWebRtcUseCaptureBeginTimestamp, base::FEATURE_ENABLED_BY_DEFAULT);
 
@@ -2645,14 +2699,18 @@ BASE_FEATURE(kWebRtcPqcForDtls, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kWebRtcUseMediaThreadTypes, base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState
+    kRendererMainIsDefaultThreadTypeForWebRTCDefaultState =
+        base::FEATURE_DISABLED_BY_DEFAULT;
+#else   // BUILDFLAG(IS_ANDROID)
+constexpr base::FeatureState
+    kRendererMainIsDefaultThreadTypeForWebRTCDefaultState =
+        base::FEATURE_ENABLED_BY_DEFAULT;
+#endif  // BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kRendererMainIsDefaultThreadTypeForWebRTC,
              "RendererMainIsNormalThreadTypeForWebRTC",
-#if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else   // BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_ANDROID)
-);
+             kRendererMainIsDefaultThreadTypeForWebRTCDefaultState);
 
 // Enable borderless mode for desktop PWAs. go/borderless-mode
 BASE_FEATURE(kWebAppBorderless, base::FEATURE_DISABLED_BY_DEFAULT);
@@ -2694,13 +2752,15 @@ BASE_FEATURE(kWebAudioDeferPullStatusUpdate, base::FEATURE_DISABLED_BY_DEFAULT);
 /// Enables cache-aware WebFonts loading. See https://crbug.com/570205.
 // The feature is disabled on Android for WebView API issue discussed at
 // https://crbug.com/942440.
-BASE_FEATURE(kWebFontsCacheAwareTimeoutAdaption,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kWebFontsCacheAwareTimeoutAdaptionDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #else
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kWebFontsCacheAwareTimeoutAdaptionDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kWebFontsCacheAwareTimeoutAdaption,
+             kWebFontsCacheAwareTimeoutAdaptionDefaultState);
 
 // Causes WebRTC to replace host ICE candidate IP addresses with generated
 // names ending in ".local" and resolve them using mDNS.
@@ -2714,14 +2774,16 @@ BASE_FEATURE(kWebRtcIgnoreUnspecifiedColorSpace,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Instructs WebRTC to honor the Min/Max Video Encode Accelerator dimensions.
-BASE_FEATURE(kWebRtcUseMinMaxVEADimensions,
 // TODO(crbug.com/1008491): enable other platforms.
 #if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kWebRtcUseMinMaxVEADimensionsDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kWebRtcUseMinMaxVEADimensionsDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kWebRtcUseMinMaxVEADimensions,
+             kWebRtcUseMinMaxVEADimensionsDefaultState);
 
 // Kill switch for crbug.com/407785197.
 BASE_FEATURE(kWebRtcAllowDataChannelRecordingInWebrtcInternals,

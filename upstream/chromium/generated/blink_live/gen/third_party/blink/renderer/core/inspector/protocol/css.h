@@ -113,11 +113,11 @@ public:
             AllFieldsSet = (PseudoTypeSet | MatchesSet | 0)};
 
 
-        PseudoElementMatchesBuilder<STATE | PseudoTypeSet>& setPseudoType(const String& value);  // Defined below
+        PseudoElementMatchesBuilder<(STATE | PseudoElementMatchesBuilder<STATE>::PseudoTypeSet)>& setPseudoType(const String& value);  // Defined below
 
         PseudoElementMatchesBuilder<STATE>& setPseudoIdentifier(const String& value);  // Defined below
 
-        PseudoElementMatchesBuilder<STATE | MatchesSet>& setMatches(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value);  // Defined below
+        PseudoElementMatchesBuilder<(STATE | PseudoElementMatchesBuilder<STATE>::MatchesSet)>& setMatches(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value);  // Defined below
 
         std::unique_ptr<PseudoElementMatches> build()
         {
@@ -129,9 +129,9 @@ public:
         friend class PseudoElementMatches;
         PseudoElementMatchesBuilder() : m_result(new PseudoElementMatches()) { }
 
-        template<int STEP> PseudoElementMatchesBuilder<STATE | STEP>& castState()
+        template<int STEP> PseudoElementMatchesBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PseudoElementMatchesBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PseudoElementMatchesBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::PseudoElementMatches> m_result;
@@ -180,7 +180,7 @@ public:
 
         CSSAnimationStyleBuilder<STATE>& setName(const String& value);  // Defined below
 
-        CSSAnimationStyleBuilder<STATE | StyleSet>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
+        CSSAnimationStyleBuilder<(STATE | CSSAnimationStyleBuilder<STATE>::StyleSet)>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
         std::unique_ptr<CSSAnimationStyle> build()
         {
@@ -192,9 +192,9 @@ public:
         friend class CSSAnimationStyle;
         CSSAnimationStyleBuilder() : m_result(new CSSAnimationStyle()) { }
 
-        template<int STEP> CSSAnimationStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSAnimationStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSAnimationStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSAnimationStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSAnimationStyle> m_result;
@@ -242,7 +242,7 @@ public:
 
         InheritedStyleEntryBuilder<STATE>& setInlineStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
-        InheritedStyleEntryBuilder<STATE | MatchedCSSRulesSet>& setMatchedCSSRules(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value);  // Defined below
+        InheritedStyleEntryBuilder<(STATE | InheritedStyleEntryBuilder<STATE>::MatchedCSSRulesSet)>& setMatchedCSSRules(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value);  // Defined below
 
         std::unique_ptr<InheritedStyleEntry> build()
         {
@@ -254,9 +254,9 @@ public:
         friend class InheritedStyleEntry;
         InheritedStyleEntryBuilder() : m_result(new InheritedStyleEntry()) { }
 
-        template<int STEP> InheritedStyleEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> InheritedStyleEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InheritedStyleEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InheritedStyleEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::InheritedStyleEntry> m_result;
@@ -321,9 +321,9 @@ public:
         friend class InheritedAnimatedStyleEntry;
         InheritedAnimatedStyleEntryBuilder() : m_result(new InheritedAnimatedStyleEntry()) { }
 
-        template<int STEP> InheritedAnimatedStyleEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> InheritedAnimatedStyleEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InheritedAnimatedStyleEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InheritedAnimatedStyleEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::InheritedAnimatedStyleEntry> m_result;
@@ -360,7 +360,7 @@ public:
             AllFieldsSet = (PseudoElementsSet | 0)};
 
 
-        InheritedPseudoElementMatchesBuilder<STATE | PseudoElementsSet>& setPseudoElements(std::unique_ptr<protocol::Array<protocol::CSS::PseudoElementMatches>> value);  // Defined below
+        InheritedPseudoElementMatchesBuilder<(STATE | InheritedPseudoElementMatchesBuilder<STATE>::PseudoElementsSet)>& setPseudoElements(std::unique_ptr<protocol::Array<protocol::CSS::PseudoElementMatches>> value);  // Defined below
 
         std::unique_ptr<InheritedPseudoElementMatches> build()
         {
@@ -372,9 +372,9 @@ public:
         friend class InheritedPseudoElementMatches;
         InheritedPseudoElementMatchesBuilder() : m_result(new InheritedPseudoElementMatches()) { }
 
-        template<int STEP> InheritedPseudoElementMatchesBuilder<STATE | STEP>& castState()
+        template<int STEP> InheritedPseudoElementMatchesBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InheritedPseudoElementMatchesBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InheritedPseudoElementMatchesBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::InheritedPseudoElementMatches> m_result;
@@ -414,9 +414,9 @@ public:
             AllFieldsSet = (RuleSet | MatchingSelectorsSet | 0)};
 
 
-        RuleMatchBuilder<STATE | RuleSet>& setRule(std::unique_ptr<protocol::CSS::CSSRule> value);  // Defined below
+        RuleMatchBuilder<(STATE | RuleMatchBuilder<STATE>::RuleSet)>& setRule(std::unique_ptr<protocol::CSS::CSSRule> value);  // Defined below
 
-        RuleMatchBuilder<STATE | MatchingSelectorsSet>& setMatchingSelectors(std::unique_ptr<protocol::Array<int>> value);  // Defined below
+        RuleMatchBuilder<(STATE | RuleMatchBuilder<STATE>::MatchingSelectorsSet)>& setMatchingSelectors(std::unique_ptr<protocol::Array<int>> value);  // Defined below
 
         std::unique_ptr<RuleMatch> build()
         {
@@ -428,9 +428,9 @@ public:
         friend class RuleMatch;
         RuleMatchBuilder() : m_result(new RuleMatch()) { }
 
-        template<int STEP> RuleMatchBuilder<STATE | STEP>& castState()
+        template<int STEP> RuleMatchBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RuleMatchBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RuleMatchBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::RuleMatch> m_result;
@@ -485,7 +485,7 @@ public:
             AllFieldsSet = (TextSet | 0)};
 
 
-        ValueBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        ValueBuilder<(STATE | ValueBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         ValueBuilder<STATE>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
@@ -501,9 +501,9 @@ public:
         friend class Value;
         ValueBuilder() : m_result(new Value()) { }
 
-        template<int STEP> ValueBuilder<STATE | STEP>& castState()
+        template<int STEP> ValueBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ValueBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ValueBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::Value> m_result;
@@ -549,11 +549,11 @@ public:
             AllFieldsSet = (ASet | BSet | CSet | 0)};
 
 
-        SpecificityBuilder<STATE | ASet>& setA(int value);  // Defined below
+        SpecificityBuilder<(STATE | SpecificityBuilder<STATE>::ASet)>& setA(int value);  // Defined below
 
-        SpecificityBuilder<STATE | BSet>& setB(int value);  // Defined below
+        SpecificityBuilder<(STATE | SpecificityBuilder<STATE>::BSet)>& setB(int value);  // Defined below
 
-        SpecificityBuilder<STATE | CSet>& setC(int value);  // Defined below
+        SpecificityBuilder<(STATE | SpecificityBuilder<STATE>::CSet)>& setC(int value);  // Defined below
 
         std::unique_ptr<Specificity> build()
         {
@@ -565,9 +565,9 @@ public:
         friend class Specificity;
         SpecificityBuilder() : m_result(new Specificity()) { }
 
-        template<int STEP> SpecificityBuilder<STATE | STEP>& castState()
+        template<int STEP> SpecificityBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SpecificityBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SpecificityBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::Specificity> m_result;
@@ -609,9 +609,9 @@ public:
             AllFieldsSet = (SelectorsSet | TextSet | 0)};
 
 
-        SelectorListBuilder<STATE | SelectorsSet>& setSelectors(std::unique_ptr<protocol::Array<protocol::CSS::Value>> value);  // Defined below
+        SelectorListBuilder<(STATE | SelectorListBuilder<STATE>::SelectorsSet)>& setSelectors(std::unique_ptr<protocol::Array<protocol::CSS::Value>> value);  // Defined below
 
-        SelectorListBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        SelectorListBuilder<(STATE | SelectorListBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         std::unique_ptr<SelectorList> build()
         {
@@ -623,9 +623,9 @@ public:
         friend class SelectorList;
         SelectorListBuilder() : m_result(new SelectorList()) { }
 
-        template<int STEP> SelectorListBuilder<STATE | STEP>& castState()
+        template<int STEP> SelectorListBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SelectorListBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SelectorListBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::SelectorList> m_result;
@@ -750,39 +750,39 @@ public:
             AllFieldsSet = (StyleSheetIdSet | FrameIdSet | SourceURLSet | OriginSet | TitleSet | DisabledSet | IsInlineSet | IsMutableSet | IsConstructedSet | StartLineSet | StartColumnSet | LengthSet | EndLineSet | EndColumnSet | 0)};
 
 
-        CSSStyleSheetHeaderBuilder<STATE | StyleSheetIdSet>& setStyleSheetId(const String& value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::StyleSheetIdSet)>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | FrameIdSet>& setFrameId(const String& value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::FrameIdSet)>& setFrameId(const String& value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | SourceURLSet>& setSourceURL(const String& value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::SourceURLSet)>& setSourceURL(const String& value);  // Defined below
 
         CSSStyleSheetHeaderBuilder<STATE>& setSourceMapURL(const String& value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | TitleSet>& setTitle(const String& value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::TitleSet)>& setTitle(const String& value);  // Defined below
 
         CSSStyleSheetHeaderBuilder<STATE>& setOwnerNode(int value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | DisabledSet>& setDisabled(bool value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::DisabledSet)>& setDisabled(bool value);  // Defined below
 
         CSSStyleSheetHeaderBuilder<STATE>& setHasSourceURL(bool value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | IsInlineSet>& setIsInline(bool value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::IsInlineSet)>& setIsInline(bool value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | IsMutableSet>& setIsMutable(bool value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::IsMutableSet)>& setIsMutable(bool value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | IsConstructedSet>& setIsConstructed(bool value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::IsConstructedSet)>& setIsConstructed(bool value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | StartLineSet>& setStartLine(double value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::StartLineSet)>& setStartLine(double value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | StartColumnSet>& setStartColumn(double value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::StartColumnSet)>& setStartColumn(double value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | LengthSet>& setLength(double value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::LengthSet)>& setLength(double value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | EndLineSet>& setEndLine(double value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::EndLineSet)>& setEndLine(double value);  // Defined below
 
-        CSSStyleSheetHeaderBuilder<STATE | EndColumnSet>& setEndColumn(double value);  // Defined below
+        CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeaderBuilder<STATE>::EndColumnSet)>& setEndColumn(double value);  // Defined below
 
         CSSStyleSheetHeaderBuilder<STATE>& setLoadingFailed(bool value);  // Defined below
 
@@ -796,9 +796,9 @@ public:
         friend class CSSStyleSheetHeader;
         CSSStyleSheetHeaderBuilder() : m_result(new CSSStyleSheetHeader()) { }
 
-        template<int STEP> CSSStyleSheetHeaderBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSStyleSheetHeaderBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSStyleSheetHeaderBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSStyleSheetHeaderBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSStyleSheetHeader> m_result;
@@ -960,13 +960,13 @@ public:
 
         CSSRuleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSRuleBuilder<STATE | SelectorListSet>& setSelectorList(std::unique_ptr<protocol::CSS::SelectorList> value);  // Defined below
+        CSSRuleBuilder<(STATE | CSSRuleBuilder<STATE>::SelectorListSet)>& setSelectorList(std::unique_ptr<protocol::CSS::SelectorList> value);  // Defined below
 
         CSSRuleBuilder<STATE>& setNestingSelectors(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        CSSRuleBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSRuleBuilder<(STATE | CSSRuleBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSRuleBuilder<STATE | StyleSet>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
+        CSSRuleBuilder<(STATE | CSSRuleBuilder<STATE>::StyleSet)>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
         CSSRuleBuilder<STATE>& setOriginTreeScopeNodeId(int value);  // Defined below
 
@@ -996,9 +996,9 @@ public:
         friend class CSSRule;
         CSSRuleBuilder() : m_result(new CSSRule()) { }
 
-        template<int STEP> CSSRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSRule> m_result;
@@ -1059,13 +1059,13 @@ public:
             AllFieldsSet = (StyleSheetIdSet | StartOffsetSet | EndOffsetSet | UsedSet | 0)};
 
 
-        RuleUsageBuilder<STATE | StyleSheetIdSet>& setStyleSheetId(const String& value);  // Defined below
+        RuleUsageBuilder<(STATE | RuleUsageBuilder<STATE>::StyleSheetIdSet)>& setStyleSheetId(const String& value);  // Defined below
 
-        RuleUsageBuilder<STATE | StartOffsetSet>& setStartOffset(double value);  // Defined below
+        RuleUsageBuilder<(STATE | RuleUsageBuilder<STATE>::StartOffsetSet)>& setStartOffset(double value);  // Defined below
 
-        RuleUsageBuilder<STATE | EndOffsetSet>& setEndOffset(double value);  // Defined below
+        RuleUsageBuilder<(STATE | RuleUsageBuilder<STATE>::EndOffsetSet)>& setEndOffset(double value);  // Defined below
 
-        RuleUsageBuilder<STATE | UsedSet>& setUsed(bool value);  // Defined below
+        RuleUsageBuilder<(STATE | RuleUsageBuilder<STATE>::UsedSet)>& setUsed(bool value);  // Defined below
 
         std::unique_ptr<RuleUsage> build()
         {
@@ -1077,9 +1077,9 @@ public:
         friend class RuleUsage;
         RuleUsageBuilder() : m_result(new RuleUsage()) { }
 
-        template<int STEP> RuleUsageBuilder<STATE | STEP>& castState()
+        template<int STEP> RuleUsageBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RuleUsageBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RuleUsageBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::RuleUsage> m_result;
@@ -1130,13 +1130,13 @@ public:
             AllFieldsSet = (StartLineSet | StartColumnSet | EndLineSet | EndColumnSet | 0)};
 
 
-        SourceRangeBuilder<STATE | StartLineSet>& setStartLine(int value);  // Defined below
+        SourceRangeBuilder<(STATE | SourceRangeBuilder<STATE>::StartLineSet)>& setStartLine(int value);  // Defined below
 
-        SourceRangeBuilder<STATE | StartColumnSet>& setStartColumn(int value);  // Defined below
+        SourceRangeBuilder<(STATE | SourceRangeBuilder<STATE>::StartColumnSet)>& setStartColumn(int value);  // Defined below
 
-        SourceRangeBuilder<STATE | EndLineSet>& setEndLine(int value);  // Defined below
+        SourceRangeBuilder<(STATE | SourceRangeBuilder<STATE>::EndLineSet)>& setEndLine(int value);  // Defined below
 
-        SourceRangeBuilder<STATE | EndColumnSet>& setEndColumn(int value);  // Defined below
+        SourceRangeBuilder<(STATE | SourceRangeBuilder<STATE>::EndColumnSet)>& setEndColumn(int value);  // Defined below
 
         std::unique_ptr<SourceRange> build()
         {
@@ -1148,9 +1148,9 @@ public:
         friend class SourceRange;
         SourceRangeBuilder() : m_result(new SourceRange()) { }
 
-        template<int STEP> SourceRangeBuilder<STATE | STEP>& castState()
+        template<int STEP> SourceRangeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SourceRangeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SourceRangeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::SourceRange> m_result;
@@ -1202,9 +1202,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        ShorthandEntryBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        ShorthandEntryBuilder<(STATE | ShorthandEntryBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        ShorthandEntryBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        ShorthandEntryBuilder<(STATE | ShorthandEntryBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         ShorthandEntryBuilder<STATE>& setImportant(bool value);  // Defined below
 
@@ -1218,9 +1218,9 @@ public:
         friend class ShorthandEntry;
         ShorthandEntryBuilder() : m_result(new ShorthandEntry()) { }
 
-        template<int STEP> ShorthandEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> ShorthandEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ShorthandEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ShorthandEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::ShorthandEntry> m_result;
@@ -1262,9 +1262,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        CSSComputedStylePropertyBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CSSComputedStylePropertyBuilder<(STATE | CSSComputedStylePropertyBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        CSSComputedStylePropertyBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        CSSComputedStylePropertyBuilder<(STATE | CSSComputedStylePropertyBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<CSSComputedStyleProperty> build()
         {
@@ -1276,9 +1276,9 @@ public:
         friend class CSSComputedStyleProperty;
         CSSComputedStylePropertyBuilder() : m_result(new CSSComputedStyleProperty()) { }
 
-        template<int STEP> CSSComputedStylePropertyBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSComputedStylePropertyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSComputedStylePropertyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSComputedStylePropertyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSComputedStyleProperty> m_result;
@@ -1315,7 +1315,7 @@ public:
             AllFieldsSet = (IsAppearanceBaseSet | 0)};
 
 
-        ComputedStyleExtraFieldsBuilder<STATE | IsAppearanceBaseSet>& setIsAppearanceBase(bool value);  // Defined below
+        ComputedStyleExtraFieldsBuilder<(STATE | ComputedStyleExtraFieldsBuilder<STATE>::IsAppearanceBaseSet)>& setIsAppearanceBase(bool value);  // Defined below
 
         std::unique_ptr<ComputedStyleExtraFields> build()
         {
@@ -1327,9 +1327,9 @@ public:
         friend class ComputedStyleExtraFields;
         ComputedStyleExtraFieldsBuilder() : m_result(new ComputedStyleExtraFields()) { }
 
-        template<int STEP> ComputedStyleExtraFieldsBuilder<STATE | STEP>& castState()
+        template<int STEP> ComputedStyleExtraFieldsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ComputedStyleExtraFieldsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ComputedStyleExtraFieldsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::ComputedStyleExtraFields> m_result;
@@ -1398,9 +1398,9 @@ public:
 
         CSSStyleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSStyleBuilder<STATE | CssPropertiesSet>& setCssProperties(std::unique_ptr<protocol::Array<protocol::CSS::CSSProperty>> value);  // Defined below
+        CSSStyleBuilder<(STATE | CSSStyleBuilder<STATE>::CssPropertiesSet)>& setCssProperties(std::unique_ptr<protocol::Array<protocol::CSS::CSSProperty>> value);  // Defined below
 
-        CSSStyleBuilder<STATE | ShorthandEntriesSet>& setShorthandEntries(std::unique_ptr<protocol::Array<protocol::CSS::ShorthandEntry>> value);  // Defined below
+        CSSStyleBuilder<(STATE | CSSStyleBuilder<STATE>::ShorthandEntriesSet)>& setShorthandEntries(std::unique_ptr<protocol::Array<protocol::CSS::ShorthandEntry>> value);  // Defined below
 
         CSSStyleBuilder<STATE>& setCssText(const String& value);  // Defined below
 
@@ -1416,9 +1416,9 @@ public:
         friend class CSSStyle;
         CSSStyleBuilder() : m_result(new CSSStyle()) { }
 
-        template<int STEP> CSSStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSStyle> m_result;
@@ -1525,9 +1525,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        CSSPropertyBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CSSPropertyBuilder<(STATE | CSSPropertyBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        CSSPropertyBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        CSSPropertyBuilder<(STATE | CSSPropertyBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         CSSPropertyBuilder<STATE>& setImportant(bool value);  // Defined below
 
@@ -1553,9 +1553,9 @@ public:
         friend class CSSProperty;
         CSSPropertyBuilder() : m_result(new CSSProperty()) { }
 
-        template<int STEP> CSSPropertyBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSPropertyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSPropertyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSPropertyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSProperty> m_result;
@@ -1646,9 +1646,9 @@ public:
             AllFieldsSet = (TextSet | SourceSet | 0)};
 
 
-        CSSMediaBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        CSSMediaBuilder<(STATE | CSSMediaBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
-        CSSMediaBuilder<STATE | SourceSet>& setSource(const String& value);  // Defined below
+        CSSMediaBuilder<(STATE | CSSMediaBuilder<STATE>::SourceSet)>& setSource(const String& value);  // Defined below
 
         CSSMediaBuilder<STATE>& setSourceURL(const String& value);  // Defined below
 
@@ -1668,9 +1668,9 @@ public:
         friend class CSSMedia;
         CSSMediaBuilder() : m_result(new CSSMedia()) { }
 
-        template<int STEP> CSSMediaBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSMediaBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSMediaBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSMediaBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSMedia> m_result;
@@ -1715,9 +1715,9 @@ public:
             AllFieldsSet = (ExpressionsSet | ActiveSet | 0)};
 
 
-        MediaQueryBuilder<STATE | ExpressionsSet>& setExpressions(std::unique_ptr<protocol::Array<protocol::CSS::MediaQueryExpression>> value);  // Defined below
+        MediaQueryBuilder<(STATE | MediaQueryBuilder<STATE>::ExpressionsSet)>& setExpressions(std::unique_ptr<protocol::Array<protocol::CSS::MediaQueryExpression>> value);  // Defined below
 
-        MediaQueryBuilder<STATE | ActiveSet>& setActive(bool value);  // Defined below
+        MediaQueryBuilder<(STATE | MediaQueryBuilder<STATE>::ActiveSet)>& setActive(bool value);  // Defined below
 
         std::unique_ptr<MediaQuery> build()
         {
@@ -1729,9 +1729,9 @@ public:
         friend class MediaQuery;
         MediaQueryBuilder() : m_result(new MediaQuery()) { }
 
-        template<int STEP> MediaQueryBuilder<STATE | STEP>& castState()
+        template<int STEP> MediaQueryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<MediaQueryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<MediaQueryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::MediaQuery> m_result;
@@ -1794,11 +1794,11 @@ public:
             AllFieldsSet = (ValueSet | UnitSet | FeatureSet | 0)};
 
 
-        MediaQueryExpressionBuilder<STATE | ValueSet>& setValue(double value);  // Defined below
+        MediaQueryExpressionBuilder<(STATE | MediaQueryExpressionBuilder<STATE>::ValueSet)>& setValue(double value);  // Defined below
 
-        MediaQueryExpressionBuilder<STATE | UnitSet>& setUnit(const String& value);  // Defined below
+        MediaQueryExpressionBuilder<(STATE | MediaQueryExpressionBuilder<STATE>::UnitSet)>& setUnit(const String& value);  // Defined below
 
-        MediaQueryExpressionBuilder<STATE | FeatureSet>& setFeature(const String& value);  // Defined below
+        MediaQueryExpressionBuilder<(STATE | MediaQueryExpressionBuilder<STATE>::FeatureSet)>& setFeature(const String& value);  // Defined below
 
         MediaQueryExpressionBuilder<STATE>& setValueRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
@@ -1814,9 +1814,9 @@ public:
         friend class MediaQueryExpression;
         MediaQueryExpressionBuilder() : m_result(new MediaQueryExpression()) { }
 
-        template<int STEP> MediaQueryExpressionBuilder<STATE | STEP>& castState()
+        template<int STEP> MediaQueryExpressionBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<MediaQueryExpressionBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<MediaQueryExpressionBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::MediaQueryExpression> m_result;
@@ -1923,7 +1923,7 @@ public:
             AllFieldsSet = (TextSet | ConditionTextSet | 0)};
 
 
-        CSSContainerQueryBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        CSSContainerQueryBuilder<(STATE | CSSContainerQueryBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         CSSContainerQueryBuilder<STATE>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
@@ -1939,7 +1939,7 @@ public:
 
         CSSContainerQueryBuilder<STATE>& setQueriesAnchored(bool value);  // Defined below
 
-        CSSContainerQueryBuilder<STATE | ConditionTextSet>& setConditionText(const String& value);  // Defined below
+        CSSContainerQueryBuilder<(STATE | CSSContainerQueryBuilder<STATE>::ConditionTextSet)>& setConditionText(const String& value);  // Defined below
 
         std::unique_ptr<CSSContainerQuery> build()
         {
@@ -1951,9 +1951,9 @@ public:
         friend class CSSContainerQuery;
         CSSContainerQueryBuilder() : m_result(new CSSContainerQuery()) { }
 
-        template<int STEP> CSSContainerQueryBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSContainerQueryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSContainerQueryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSContainerQueryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSContainerQuery> m_result;
@@ -2019,9 +2019,9 @@ public:
             AllFieldsSet = (TextSet | ActiveSet | 0)};
 
 
-        CSSSupportsBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        CSSSupportsBuilder<(STATE | CSSSupportsBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
-        CSSSupportsBuilder<STATE | ActiveSet>& setActive(bool value);  // Defined below
+        CSSSupportsBuilder<(STATE | CSSSupportsBuilder<STATE>::ActiveSet)>& setActive(bool value);  // Defined below
 
         CSSSupportsBuilder<STATE>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
@@ -2037,9 +2037,9 @@ public:
         friend class CSSSupports;
         CSSSupportsBuilder() : m_result(new CSSSupports()) { }
 
-        template<int STEP> CSSSupportsBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSSupportsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSSupportsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSSupportsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSSupports> m_result;
@@ -2105,7 +2105,7 @@ public:
             AllFieldsSet = (TextSet | 0)};
 
 
-        CSSNavigationBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        CSSNavigationBuilder<(STATE | CSSNavigationBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         CSSNavigationBuilder<STATE>& setActive(bool value);  // Defined below
 
@@ -2123,9 +2123,9 @@ public:
         friend class CSSNavigation;
         CSSNavigationBuilder() : m_result(new CSSNavigation()) { }
 
-        template<int STEP> CSSNavigationBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSNavigationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSNavigationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSNavigationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSNavigation> m_result;
@@ -2182,7 +2182,7 @@ public:
             AllFieldsSet = (TextSet | 0)};
 
 
-        CSSScopeBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        CSSScopeBuilder<(STATE | CSSScopeBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         CSSScopeBuilder<STATE>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
@@ -2198,9 +2198,9 @@ public:
         friend class CSSScope;
         CSSScopeBuilder() : m_result(new CSSScope()) { }
 
-        template<int STEP> CSSScopeBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSScopeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSScopeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSScopeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSScope> m_result;
@@ -2256,7 +2256,7 @@ public:
             AllFieldsSet = (TextSet | 0)};
 
 
-        CSSLayerBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        CSSLayerBuilder<(STATE | CSSLayerBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         CSSLayerBuilder<STATE>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
@@ -2272,9 +2272,9 @@ public:
         friend class CSSLayer;
         CSSLayerBuilder() : m_result(new CSSLayer()) { }
 
-        template<int STEP> CSSLayerBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSLayerBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSLayerBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSLayerBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSLayer> m_result;
@@ -2340,9 +2340,9 @@ public:
         friend class CSSStartingStyle;
         CSSStartingStyleBuilder() : m_result(new CSSStartingStyle()) { }
 
-        template<int STEP> CSSStartingStyleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSStartingStyleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSStartingStyleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSStartingStyleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSStartingStyle> m_result;
@@ -2392,11 +2392,11 @@ public:
             AllFieldsSet = (NameSet | OrderSet | 0)};
 
 
-        CSSLayerDataBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CSSLayerDataBuilder<(STATE | CSSLayerDataBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
         CSSLayerDataBuilder<STATE>& setSubLayers(std::unique_ptr<protocol::Array<protocol::CSS::CSSLayerData>> value);  // Defined below
 
-        CSSLayerDataBuilder<STATE | OrderSet>& setOrder(double value);  // Defined below
+        CSSLayerDataBuilder<(STATE | CSSLayerDataBuilder<STATE>::OrderSet)>& setOrder(double value);  // Defined below
 
         std::unique_ptr<CSSLayerData> build()
         {
@@ -2408,9 +2408,9 @@ public:
         friend class CSSLayerData;
         CSSLayerDataBuilder() : m_result(new CSSLayerData()) { }
 
-        template<int STEP> CSSLayerDataBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSLayerDataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSLayerDataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSLayerDataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSLayerData> m_result;
@@ -2460,13 +2460,13 @@ public:
             AllFieldsSet = (FamilyNameSet | PostScriptNameSet | IsCustomFontSet | GlyphCountSet | 0)};
 
 
-        PlatformFontUsageBuilder<STATE | FamilyNameSet>& setFamilyName(const String& value);  // Defined below
+        PlatformFontUsageBuilder<(STATE | PlatformFontUsageBuilder<STATE>::FamilyNameSet)>& setFamilyName(const String& value);  // Defined below
 
-        PlatformFontUsageBuilder<STATE | PostScriptNameSet>& setPostScriptName(const String& value);  // Defined below
+        PlatformFontUsageBuilder<(STATE | PlatformFontUsageBuilder<STATE>::PostScriptNameSet)>& setPostScriptName(const String& value);  // Defined below
 
-        PlatformFontUsageBuilder<STATE | IsCustomFontSet>& setIsCustomFont(bool value);  // Defined below
+        PlatformFontUsageBuilder<(STATE | PlatformFontUsageBuilder<STATE>::IsCustomFontSet)>& setIsCustomFont(bool value);  // Defined below
 
-        PlatformFontUsageBuilder<STATE | GlyphCountSet>& setGlyphCount(double value);  // Defined below
+        PlatformFontUsageBuilder<(STATE | PlatformFontUsageBuilder<STATE>::GlyphCountSet)>& setGlyphCount(double value);  // Defined below
 
         std::unique_ptr<PlatformFontUsage> build()
         {
@@ -2478,9 +2478,9 @@ public:
         friend class PlatformFontUsage;
         PlatformFontUsageBuilder() : m_result(new PlatformFontUsage()) { }
 
-        template<int STEP> PlatformFontUsageBuilder<STATE | STEP>& castState()
+        template<int STEP> PlatformFontUsageBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlatformFontUsageBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlatformFontUsageBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::PlatformFontUsage> m_result;
@@ -2535,15 +2535,15 @@ public:
             AllFieldsSet = (TagSet | NameSet | MinValueSet | MaxValueSet | DefaultValueSet | 0)};
 
 
-        FontVariationAxisBuilder<STATE | TagSet>& setTag(const String& value);  // Defined below
+        FontVariationAxisBuilder<(STATE | FontVariationAxisBuilder<STATE>::TagSet)>& setTag(const String& value);  // Defined below
 
-        FontVariationAxisBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        FontVariationAxisBuilder<(STATE | FontVariationAxisBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        FontVariationAxisBuilder<STATE | MinValueSet>& setMinValue(double value);  // Defined below
+        FontVariationAxisBuilder<(STATE | FontVariationAxisBuilder<STATE>::MinValueSet)>& setMinValue(double value);  // Defined below
 
-        FontVariationAxisBuilder<STATE | MaxValueSet>& setMaxValue(double value);  // Defined below
+        FontVariationAxisBuilder<(STATE | FontVariationAxisBuilder<STATE>::MaxValueSet)>& setMaxValue(double value);  // Defined below
 
-        FontVariationAxisBuilder<STATE | DefaultValueSet>& setDefaultValue(double value);  // Defined below
+        FontVariationAxisBuilder<(STATE | FontVariationAxisBuilder<STATE>::DefaultValueSet)>& setDefaultValue(double value);  // Defined below
 
         std::unique_ptr<FontVariationAxis> build()
         {
@@ -2555,9 +2555,9 @@ public:
         friend class FontVariationAxis;
         FontVariationAxisBuilder() : m_result(new FontVariationAxis()) { }
 
-        template<int STEP> FontVariationAxisBuilder<STATE | STEP>& castState()
+        template<int STEP> FontVariationAxisBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FontVariationAxisBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FontVariationAxisBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::FontVariationAxis> m_result;
@@ -2638,23 +2638,23 @@ public:
             AllFieldsSet = (FontFamilySet | FontStyleSet | FontVariantSet | FontWeightSet | FontStretchSet | FontDisplaySet | UnicodeRangeSet | SrcSet | PlatformFontFamilySet | 0)};
 
 
-        FontFaceBuilder<STATE | FontFamilySet>& setFontFamily(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::FontFamilySet)>& setFontFamily(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | FontStyleSet>& setFontStyle(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::FontStyleSet)>& setFontStyle(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | FontVariantSet>& setFontVariant(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::FontVariantSet)>& setFontVariant(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | FontWeightSet>& setFontWeight(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::FontWeightSet)>& setFontWeight(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | FontStretchSet>& setFontStretch(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::FontStretchSet)>& setFontStretch(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | FontDisplaySet>& setFontDisplay(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::FontDisplaySet)>& setFontDisplay(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | UnicodeRangeSet>& setUnicodeRange(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::UnicodeRangeSet)>& setUnicodeRange(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | SrcSet>& setSrc(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::SrcSet)>& setSrc(const String& value);  // Defined below
 
-        FontFaceBuilder<STATE | PlatformFontFamilySet>& setPlatformFontFamily(const String& value);  // Defined below
+        FontFaceBuilder<(STATE | FontFaceBuilder<STATE>::PlatformFontFamilySet)>& setPlatformFontFamily(const String& value);  // Defined below
 
         FontFaceBuilder<STATE>& setFontVariationAxes(std::unique_ptr<protocol::Array<protocol::CSS::FontVariationAxis>> value);  // Defined below
 
@@ -2668,9 +2668,9 @@ public:
         friend class FontFace;
         FontFaceBuilder() : m_result(new FontFace()) { }
 
-        template<int STEP> FontFaceBuilder<STATE | STEP>& castState()
+        template<int STEP> FontFaceBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<FontFaceBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<FontFaceBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::FontFace> m_result;
@@ -2736,15 +2736,15 @@ public:
             AllFieldsSet = (NameSet | OriginSet | StyleSet | ActiveSet | 0)};
 
 
-        CSSPositionTryRuleBuilder<STATE | NameSet>& setName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
+        CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRuleBuilder<STATE>::NameSet)>& setName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
 
         CSSPositionTryRuleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSPositionTryRuleBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRuleBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSPositionTryRuleBuilder<STATE | StyleSet>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
+        CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRuleBuilder<STATE>::StyleSet)>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
-        CSSPositionTryRuleBuilder<STATE | ActiveSet>& setActive(bool value);  // Defined below
+        CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRuleBuilder<STATE>::ActiveSet)>& setActive(bool value);  // Defined below
 
         std::unique_ptr<CSSPositionTryRule> build()
         {
@@ -2756,9 +2756,9 @@ public:
         friend class CSSPositionTryRule;
         CSSPositionTryRuleBuilder() : m_result(new CSSPositionTryRule()) { }
 
-        template<int STEP> CSSPositionTryRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSPositionTryRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSPositionTryRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSPositionTryRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSPositionTryRule> m_result;
@@ -2802,9 +2802,9 @@ public:
             AllFieldsSet = (AnimationNameSet | KeyframesSet | 0)};
 
 
-        CSSKeyframesRuleBuilder<STATE | AnimationNameSet>& setAnimationName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
+        CSSKeyframesRuleBuilder<(STATE | CSSKeyframesRuleBuilder<STATE>::AnimationNameSet)>& setAnimationName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
 
-        CSSKeyframesRuleBuilder<STATE | KeyframesSet>& setKeyframes(std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframeRule>> value);  // Defined below
+        CSSKeyframesRuleBuilder<(STATE | CSSKeyframesRuleBuilder<STATE>::KeyframesSet)>& setKeyframes(std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframeRule>> value);  // Defined below
 
         std::unique_ptr<CSSKeyframesRule> build()
         {
@@ -2816,9 +2816,9 @@ public:
         friend class CSSKeyframesRule;
         CSSKeyframesRuleBuilder() : m_result(new CSSKeyframesRule()) { }
 
-        template<int STEP> CSSKeyframesRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSKeyframesRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSKeyframesRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSKeyframesRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSKeyframesRule> m_result;
@@ -2872,13 +2872,13 @@ public:
             AllFieldsSet = (PropertyNameSet | InheritsSet | SyntaxSet | 0)};
 
 
-        CSSPropertyRegistrationBuilder<STATE | PropertyNameSet>& setPropertyName(const String& value);  // Defined below
+        CSSPropertyRegistrationBuilder<(STATE | CSSPropertyRegistrationBuilder<STATE>::PropertyNameSet)>& setPropertyName(const String& value);  // Defined below
 
         CSSPropertyRegistrationBuilder<STATE>& setInitialValue(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
 
-        CSSPropertyRegistrationBuilder<STATE | InheritsSet>& setInherits(bool value);  // Defined below
+        CSSPropertyRegistrationBuilder<(STATE | CSSPropertyRegistrationBuilder<STATE>::InheritsSet)>& setInherits(bool value);  // Defined below
 
-        CSSPropertyRegistrationBuilder<STATE | SyntaxSet>& setSyntax(const String& value);  // Defined below
+        CSSPropertyRegistrationBuilder<(STATE | CSSPropertyRegistrationBuilder<STATE>::SyntaxSet)>& setSyntax(const String& value);  // Defined below
 
         std::unique_ptr<CSSPropertyRegistration> build()
         {
@@ -2890,9 +2890,9 @@ public:
         friend class CSSPropertyRegistration;
         CSSPropertyRegistrationBuilder() : m_result(new CSSPropertyRegistration()) { }
 
-        template<int STEP> CSSPropertyRegistrationBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSPropertyRegistrationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSPropertyRegistrationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSPropertyRegistrationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSPropertyRegistration> m_result;
@@ -2982,7 +2982,7 @@ public:
             AllFieldsSet = (TypeSet | OriginSet | StyleSet | 0)};
 
 
-        CSSAtRuleBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        CSSAtRuleBuilder<(STATE | CSSAtRuleBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         CSSAtRuleBuilder<STATE>& setSubsection(const String& value);  // Defined below
 
@@ -2990,9 +2990,9 @@ public:
 
         CSSAtRuleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSAtRuleBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSAtRuleBuilder<(STATE | CSSAtRuleBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSAtRuleBuilder<STATE | StyleSet>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
+        CSSAtRuleBuilder<(STATE | CSSAtRuleBuilder<STATE>::StyleSet)>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
         std::unique_ptr<CSSAtRule> build()
         {
@@ -3004,9 +3004,9 @@ public:
         friend class CSSAtRule;
         CSSAtRuleBuilder() : m_result(new CSSAtRule()) { }
 
-        template<int STEP> CSSAtRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSAtRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSAtRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSAtRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSAtRule> m_result;
@@ -3066,11 +3066,11 @@ public:
 
         CSSPropertyRuleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSPropertyRuleBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSPropertyRuleBuilder<(STATE | CSSPropertyRuleBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSPropertyRuleBuilder<STATE | PropertyNameSet>& setPropertyName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
+        CSSPropertyRuleBuilder<(STATE | CSSPropertyRuleBuilder<STATE>::PropertyNameSet)>& setPropertyName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
 
-        CSSPropertyRuleBuilder<STATE | StyleSet>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
+        CSSPropertyRuleBuilder<(STATE | CSSPropertyRuleBuilder<STATE>::StyleSet)>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
         std::unique_ptr<CSSPropertyRule> build()
         {
@@ -3082,9 +3082,9 @@ public:
         friend class CSSPropertyRule;
         CSSPropertyRuleBuilder() : m_result(new CSSPropertyRule()) { }
 
-        template<int STEP> CSSPropertyRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSPropertyRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSPropertyRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSPropertyRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSPropertyRule> m_result;
@@ -3127,9 +3127,9 @@ public:
             AllFieldsSet = (NameSet | TypeSet | 0)};
 
 
-        CSSFunctionParameterBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CSSFunctionParameterBuilder<(STATE | CSSFunctionParameterBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        CSSFunctionParameterBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        CSSFunctionParameterBuilder<(STATE | CSSFunctionParameterBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         std::unique_ptr<CSSFunctionParameter> build()
         {
@@ -3141,9 +3141,9 @@ public:
         friend class CSSFunctionParameter;
         CSSFunctionParameterBuilder() : m_result(new CSSFunctionParameter()) { }
 
-        template<int STEP> CSSFunctionParameterBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSFunctionParameterBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSFunctionParameterBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSFunctionParameterBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSFunctionParameter> m_result;
@@ -3228,9 +3228,9 @@ public:
 
         CSSFunctionConditionNodeBuilder<STATE>& setNavigation(std::unique_ptr<protocol::CSS::CSSNavigation> value);  // Defined below
 
-        CSSFunctionConditionNodeBuilder<STATE | ChildrenSet>& setChildren(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionNode>> value);  // Defined below
+        CSSFunctionConditionNodeBuilder<(STATE | CSSFunctionConditionNodeBuilder<STATE>::ChildrenSet)>& setChildren(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionNode>> value);  // Defined below
 
-        CSSFunctionConditionNodeBuilder<STATE | ConditionTextSet>& setConditionText(const String& value);  // Defined below
+        CSSFunctionConditionNodeBuilder<(STATE | CSSFunctionConditionNodeBuilder<STATE>::ConditionTextSet)>& setConditionText(const String& value);  // Defined below
 
         std::unique_ptr<CSSFunctionConditionNode> build()
         {
@@ -3242,9 +3242,9 @@ public:
         friend class CSSFunctionConditionNode;
         CSSFunctionConditionNodeBuilder() : m_result(new CSSFunctionConditionNode()) { }
 
-        template<int STEP> CSSFunctionConditionNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSFunctionConditionNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSFunctionConditionNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSFunctionConditionNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSFunctionConditionNode> m_result;
@@ -3313,9 +3313,9 @@ public:
         friend class CSSFunctionNode;
         CSSFunctionNodeBuilder() : m_result(new CSSFunctionNode()) { }
 
-        template<int STEP> CSSFunctionNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSFunctionNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSFunctionNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSFunctionNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSFunctionNode> m_result;
@@ -3382,15 +3382,15 @@ public:
             AllFieldsSet = (NameSet | OriginSet | ParametersSet | ChildrenSet | 0)};
 
 
-        CSSFunctionRuleBuilder<STATE | NameSet>& setName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
+        CSSFunctionRuleBuilder<(STATE | CSSFunctionRuleBuilder<STATE>::NameSet)>& setName(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
 
         CSSFunctionRuleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSFunctionRuleBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSFunctionRuleBuilder<(STATE | CSSFunctionRuleBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSFunctionRuleBuilder<STATE | ParametersSet>& setParameters(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionParameter>> value);  // Defined below
+        CSSFunctionRuleBuilder<(STATE | CSSFunctionRuleBuilder<STATE>::ParametersSet)>& setParameters(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionParameter>> value);  // Defined below
 
-        CSSFunctionRuleBuilder<STATE | ChildrenSet>& setChildren(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionNode>> value);  // Defined below
+        CSSFunctionRuleBuilder<(STATE | CSSFunctionRuleBuilder<STATE>::ChildrenSet)>& setChildren(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionNode>> value);  // Defined below
 
         CSSFunctionRuleBuilder<STATE>& setOriginTreeScopeNodeId(int value);  // Defined below
 
@@ -3404,9 +3404,9 @@ public:
         friend class CSSFunctionRule;
         CSSFunctionRuleBuilder() : m_result(new CSSFunctionRule()) { }
 
-        template<int STEP> CSSFunctionRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSFunctionRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSFunctionRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSFunctionRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSFunctionRule> m_result;
@@ -3466,11 +3466,11 @@ public:
 
         CSSKeyframeRuleBuilder<STATE>& setStyleSheetId(const String& value);  // Defined below
 
-        CSSKeyframeRuleBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        CSSKeyframeRuleBuilder<(STATE | CSSKeyframeRuleBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        CSSKeyframeRuleBuilder<STATE | KeyTextSet>& setKeyText(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
+        CSSKeyframeRuleBuilder<(STATE | CSSKeyframeRuleBuilder<STATE>::KeyTextSet)>& setKeyText(std::unique_ptr<protocol::CSS::Value> value);  // Defined below
 
-        CSSKeyframeRuleBuilder<STATE | StyleSet>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
+        CSSKeyframeRuleBuilder<(STATE | CSSKeyframeRuleBuilder<STATE>::StyleSet)>& setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value);  // Defined below
 
         std::unique_ptr<CSSKeyframeRule> build()
         {
@@ -3482,9 +3482,9 @@ public:
         friend class CSSKeyframeRule;
         CSSKeyframeRuleBuilder() : m_result(new CSSKeyframeRule()) { }
 
-        template<int STEP> CSSKeyframeRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> CSSKeyframeRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CSSKeyframeRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CSSKeyframeRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::CSSKeyframeRule> m_result;
@@ -3531,11 +3531,11 @@ public:
             AllFieldsSet = (StyleSheetIdSet | RangeSet | TextSet | 0)};
 
 
-        StyleDeclarationEditBuilder<STATE | StyleSheetIdSet>& setStyleSheetId(const String& value);  // Defined below
+        StyleDeclarationEditBuilder<(STATE | StyleDeclarationEditBuilder<STATE>::StyleSheetIdSet)>& setStyleSheetId(const String& value);  // Defined below
 
-        StyleDeclarationEditBuilder<STATE | RangeSet>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
+        StyleDeclarationEditBuilder<(STATE | StyleDeclarationEditBuilder<STATE>::RangeSet)>& setRange(std::unique_ptr<protocol::CSS::SourceRange> value);  // Defined below
 
-        StyleDeclarationEditBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        StyleDeclarationEditBuilder<(STATE | StyleDeclarationEditBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         std::unique_ptr<StyleDeclarationEdit> build()
         {
@@ -3547,9 +3547,9 @@ public:
         friend class StyleDeclarationEdit;
         StyleDeclarationEditBuilder() : m_result(new StyleDeclarationEdit()) { }
 
-        template<int STEP> StyleDeclarationEditBuilder<STATE | STEP>& castState()
+        template<int STEP> StyleDeclarationEditBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<StyleDeclarationEditBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<StyleDeclarationEditBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::CSS::StyleDeclarationEdit> m_result;
@@ -3582,7 +3582,7 @@ inline void PseudoElementMatches::setPseudoIdentifier(const String& value) { m_p
 inline void PseudoElementMatches::setMatches(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value) { m_matches = std::move(value); }
 
 template<int STATE>
-inline PseudoElementMatches::PseudoElementMatchesBuilder<STATE | PseudoElementMatches::PseudoElementMatchesBuilder<STATE>::PseudoTypeSet>&
+inline PseudoElementMatches::PseudoElementMatchesBuilder<(STATE | PseudoElementMatches::PseudoElementMatchesBuilder<STATE>::PseudoTypeSet)>&
 PseudoElementMatches::PseudoElementMatchesBuilder<STATE>::setPseudoType(const String& value) {
   static_assert(!(STATE & PseudoTypeSet), "property pseudoType should not be set yet");
   m_result->setPseudoType(value);
@@ -3594,7 +3594,7 @@ inline PseudoElementMatches::PseudoElementMatchesBuilder<STATE>& PseudoElementMa
   return *this;
 }
 template<int STATE>
-inline PseudoElementMatches::PseudoElementMatchesBuilder<STATE | PseudoElementMatches::PseudoElementMatchesBuilder<STATE>::MatchesSet>&
+inline PseudoElementMatches::PseudoElementMatchesBuilder<(STATE | PseudoElementMatches::PseudoElementMatchesBuilder<STATE>::MatchesSet)>&
 PseudoElementMatches::PseudoElementMatchesBuilder<STATE>::setMatches(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value) {
   static_assert(!(STATE & MatchesSet), "property matches should not be set yet");
   m_result->setMatches(std::move(value));
@@ -3613,7 +3613,7 @@ inline CSSAnimationStyle::CSSAnimationStyleBuilder<STATE>& CSSAnimationStyle::CS
   return *this;
 }
 template<int STATE>
-inline CSSAnimationStyle::CSSAnimationStyleBuilder<STATE | CSSAnimationStyle::CSSAnimationStyleBuilder<STATE>::StyleSet>&
+inline CSSAnimationStyle::CSSAnimationStyleBuilder<(STATE | CSSAnimationStyle::CSSAnimationStyleBuilder<STATE>::StyleSet)>&
 CSSAnimationStyle::CSSAnimationStyleBuilder<STATE>::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) {
   static_assert(!(STATE & StyleSet), "property style should not be set yet");
   m_result->setStyle(std::move(value));
@@ -3632,7 +3632,7 @@ inline InheritedStyleEntry::InheritedStyleEntryBuilder<STATE>& InheritedStyleEnt
   return *this;
 }
 template<int STATE>
-inline InheritedStyleEntry::InheritedStyleEntryBuilder<STATE | InheritedStyleEntry::InheritedStyleEntryBuilder<STATE>::MatchedCSSRulesSet>&
+inline InheritedStyleEntry::InheritedStyleEntryBuilder<(STATE | InheritedStyleEntry::InheritedStyleEntryBuilder<STATE>::MatchedCSSRulesSet)>&
 InheritedStyleEntry::InheritedStyleEntryBuilder<STATE>::setMatchedCSSRules(std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> value) {
   static_assert(!(STATE & MatchedCSSRulesSet), "property matchedCSSRules should not be set yet");
   m_result->setMatchedCSSRules(std::move(value));
@@ -3662,7 +3662,7 @@ inline InheritedPseudoElementMatches::~InheritedPseudoElementMatches() = default
 inline void InheritedPseudoElementMatches::setPseudoElements(std::unique_ptr<protocol::Array<protocol::CSS::PseudoElementMatches>> value) { m_pseudoElements = std::move(value); }
 
 template<int STATE>
-inline InheritedPseudoElementMatches::InheritedPseudoElementMatchesBuilder<STATE | InheritedPseudoElementMatches::InheritedPseudoElementMatchesBuilder<STATE>::PseudoElementsSet>&
+inline InheritedPseudoElementMatches::InheritedPseudoElementMatchesBuilder<(STATE | InheritedPseudoElementMatches::InheritedPseudoElementMatchesBuilder<STATE>::PseudoElementsSet)>&
 InheritedPseudoElementMatches::InheritedPseudoElementMatchesBuilder<STATE>::setPseudoElements(std::unique_ptr<protocol::Array<protocol::CSS::PseudoElementMatches>> value) {
   static_assert(!(STATE & PseudoElementsSet), "property pseudoElements should not be set yet");
   m_result->setPseudoElements(std::move(value));
@@ -3676,14 +3676,14 @@ inline void RuleMatch::setRule(std::unique_ptr<protocol::CSS::CSSRule> value) { 
 inline void RuleMatch::setMatchingSelectors(std::unique_ptr<protocol::Array<int>> value) { m_matchingSelectors = std::move(value); }
 
 template<int STATE>
-inline RuleMatch::RuleMatchBuilder<STATE | RuleMatch::RuleMatchBuilder<STATE>::RuleSet>&
+inline RuleMatch::RuleMatchBuilder<(STATE | RuleMatch::RuleMatchBuilder<STATE>::RuleSet)>&
 RuleMatch::RuleMatchBuilder<STATE>::setRule(std::unique_ptr<protocol::CSS::CSSRule> value) {
   static_assert(!(STATE & RuleSet), "property rule should not be set yet");
   m_result->setRule(std::move(value));
   return castState<RuleSet>();
 }
 template<int STATE>
-inline RuleMatch::RuleMatchBuilder<STATE | RuleMatch::RuleMatchBuilder<STATE>::MatchingSelectorsSet>&
+inline RuleMatch::RuleMatchBuilder<(STATE | RuleMatch::RuleMatchBuilder<STATE>::MatchingSelectorsSet)>&
 RuleMatch::RuleMatchBuilder<STATE>::setMatchingSelectors(std::unique_ptr<protocol::Array<int>> value) {
   static_assert(!(STATE & MatchingSelectorsSet), "property matchingSelectors should not be set yet");
   m_result->setMatchingSelectors(std::move(value));
@@ -3698,7 +3698,7 @@ inline void Value::setRange(std::unique_ptr<protocol::CSS::SourceRange> value) {
 inline void Value::setSpecificity(std::unique_ptr<protocol::CSS::Specificity> value) { m_specificity = std::move(value); }
 
 template<int STATE>
-inline Value::ValueBuilder<STATE | Value::ValueBuilder<STATE>::TextSet>&
+inline Value::ValueBuilder<(STATE | Value::ValueBuilder<STATE>::TextSet)>&
 Value::ValueBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -3723,21 +3723,21 @@ inline void Specificity::setB(int value) { m_b = value; }
 inline void Specificity::setC(int value) { m_c = value; }
 
 template<int STATE>
-inline Specificity::SpecificityBuilder<STATE | Specificity::SpecificityBuilder<STATE>::ASet>&
+inline Specificity::SpecificityBuilder<(STATE | Specificity::SpecificityBuilder<STATE>::ASet)>&
 Specificity::SpecificityBuilder<STATE>::setA(int value) {
   static_assert(!(STATE & ASet), "property a should not be set yet");
   m_result->setA(value);
   return castState<ASet>();
 }
 template<int STATE>
-inline Specificity::SpecificityBuilder<STATE | Specificity::SpecificityBuilder<STATE>::BSet>&
+inline Specificity::SpecificityBuilder<(STATE | Specificity::SpecificityBuilder<STATE>::BSet)>&
 Specificity::SpecificityBuilder<STATE>::setB(int value) {
   static_assert(!(STATE & BSet), "property b should not be set yet");
   m_result->setB(value);
   return castState<BSet>();
 }
 template<int STATE>
-inline Specificity::SpecificityBuilder<STATE | Specificity::SpecificityBuilder<STATE>::CSet>&
+inline Specificity::SpecificityBuilder<(STATE | Specificity::SpecificityBuilder<STATE>::CSet)>&
 Specificity::SpecificityBuilder<STATE>::setC(int value) {
   static_assert(!(STATE & CSet), "property c should not be set yet");
   m_result->setC(value);
@@ -3754,14 +3754,14 @@ inline void SelectorList::setSelectors(std::unique_ptr<protocol::Array<protocol:
 inline void SelectorList::setText(const String& value) { m_text = value; }
 
 template<int STATE>
-inline SelectorList::SelectorListBuilder<STATE | SelectorList::SelectorListBuilder<STATE>::SelectorsSet>&
+inline SelectorList::SelectorListBuilder<(STATE | SelectorList::SelectorListBuilder<STATE>::SelectorsSet)>&
 SelectorList::SelectorListBuilder<STATE>::setSelectors(std::unique_ptr<protocol::Array<protocol::CSS::Value>> value) {
   static_assert(!(STATE & SelectorsSet), "property selectors should not be set yet");
   m_result->setSelectors(std::move(value));
   return castState<SelectorsSet>();
 }
 template<int STATE>
-inline SelectorList::SelectorListBuilder<STATE | SelectorList::SelectorListBuilder<STATE>::TextSet>&
+inline SelectorList::SelectorListBuilder<(STATE | SelectorList::SelectorListBuilder<STATE>::TextSet)>&
 SelectorList::SelectorListBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -3791,21 +3791,21 @@ inline void CSSStyleSheetHeader::setEndColumn(double value) { m_endColumn = valu
 inline void CSSStyleSheetHeader::setLoadingFailed(bool value) { m_loadingFailed = value; }
 
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::StyleSheetIdSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::StyleSheetIdSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setStyleSheetId(const String& value) {
   static_assert(!(STATE & StyleSheetIdSet), "property styleSheetId should not be set yet");
   m_result->setStyleSheetId(value);
   return castState<StyleSheetIdSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::FrameIdSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::FrameIdSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setFrameId(const String& value) {
   static_assert(!(STATE & FrameIdSet), "property frameId should not be set yet");
   m_result->setFrameId(value);
   return castState<FrameIdSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::SourceURLSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::SourceURLSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setSourceURL(const String& value) {
   static_assert(!(STATE & SourceURLSet), "property sourceURL should not be set yet");
   m_result->setSourceURL(value);
@@ -3817,14 +3817,14 @@ inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>& CSSStyleSheetHead
   return *this;
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::OriginSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::OriginSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::TitleSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::TitleSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setTitle(const String& value) {
   static_assert(!(STATE & TitleSet), "property title should not be set yet");
   m_result->setTitle(value);
@@ -3836,7 +3836,7 @@ inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>& CSSStyleSheetHead
   return *this;
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::DisabledSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::DisabledSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setDisabled(bool value) {
   static_assert(!(STATE & DisabledSet), "property disabled should not be set yet");
   m_result->setDisabled(value);
@@ -3848,56 +3848,56 @@ inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>& CSSStyleSheetHead
   return *this;
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::IsInlineSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::IsInlineSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setIsInline(bool value) {
   static_assert(!(STATE & IsInlineSet), "property isInline should not be set yet");
   m_result->setIsInline(value);
   return castState<IsInlineSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::IsMutableSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::IsMutableSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setIsMutable(bool value) {
   static_assert(!(STATE & IsMutableSet), "property isMutable should not be set yet");
   m_result->setIsMutable(value);
   return castState<IsMutableSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::IsConstructedSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::IsConstructedSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setIsConstructed(bool value) {
   static_assert(!(STATE & IsConstructedSet), "property isConstructed should not be set yet");
   m_result->setIsConstructed(value);
   return castState<IsConstructedSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::StartLineSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::StartLineSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setStartLine(double value) {
   static_assert(!(STATE & StartLineSet), "property startLine should not be set yet");
   m_result->setStartLine(value);
   return castState<StartLineSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::StartColumnSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::StartColumnSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setStartColumn(double value) {
   static_assert(!(STATE & StartColumnSet), "property startColumn should not be set yet");
   m_result->setStartColumn(value);
   return castState<StartColumnSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::LengthSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::LengthSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setLength(double value) {
   static_assert(!(STATE & LengthSet), "property length should not be set yet");
   m_result->setLength(value);
   return castState<LengthSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::EndLineSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::EndLineSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setEndLine(double value) {
   static_assert(!(STATE & EndLineSet), "property endLine should not be set yet");
   m_result->setEndLine(value);
   return castState<EndLineSet>();
 }
 template<int STATE>
-inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::EndColumnSet>&
+inline CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<(STATE | CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::EndColumnSet)>&
 CSSStyleSheetHeader::CSSStyleSheetHeaderBuilder<STATE>::setEndColumn(double value) {
   static_assert(!(STATE & EndColumnSet), "property endColumn should not be set yet");
   m_result->setEndColumn(value);
@@ -3942,7 +3942,7 @@ inline CSSRule::CSSRuleBuilder<STATE>& CSSRule::CSSRuleBuilder<STATE>::setStyleS
   return *this;
 }
 template<int STATE>
-inline CSSRule::CSSRuleBuilder<STATE | CSSRule::CSSRuleBuilder<STATE>::SelectorListSet>&
+inline CSSRule::CSSRuleBuilder<(STATE | CSSRule::CSSRuleBuilder<STATE>::SelectorListSet)>&
 CSSRule::CSSRuleBuilder<STATE>::setSelectorList(std::unique_ptr<protocol::CSS::SelectorList> value) {
   static_assert(!(STATE & SelectorListSet), "property selectorList should not be set yet");
   m_result->setSelectorList(std::move(value));
@@ -3954,14 +3954,14 @@ inline CSSRule::CSSRuleBuilder<STATE>& CSSRule::CSSRuleBuilder<STATE>::setNestin
   return *this;
 }
 template<int STATE>
-inline CSSRule::CSSRuleBuilder<STATE | CSSRule::CSSRuleBuilder<STATE>::OriginSet>&
+inline CSSRule::CSSRuleBuilder<(STATE | CSSRule::CSSRuleBuilder<STATE>::OriginSet)>&
 CSSRule::CSSRuleBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSRule::CSSRuleBuilder<STATE | CSSRule::CSSRuleBuilder<STATE>::StyleSet>&
+inline CSSRule::CSSRuleBuilder<(STATE | CSSRule::CSSRuleBuilder<STATE>::StyleSet)>&
 CSSRule::CSSRuleBuilder<STATE>::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) {
   static_assert(!(STATE & StyleSet), "property style should not be set yet");
   m_result->setStyle(std::move(value));
@@ -4022,28 +4022,28 @@ inline void RuleUsage::setEndOffset(double value) { m_endOffset = value; }
 inline void RuleUsage::setUsed(bool value) { m_used = value; }
 
 template<int STATE>
-inline RuleUsage::RuleUsageBuilder<STATE | RuleUsage::RuleUsageBuilder<STATE>::StyleSheetIdSet>&
+inline RuleUsage::RuleUsageBuilder<(STATE | RuleUsage::RuleUsageBuilder<STATE>::StyleSheetIdSet)>&
 RuleUsage::RuleUsageBuilder<STATE>::setStyleSheetId(const String& value) {
   static_assert(!(STATE & StyleSheetIdSet), "property styleSheetId should not be set yet");
   m_result->setStyleSheetId(value);
   return castState<StyleSheetIdSet>();
 }
 template<int STATE>
-inline RuleUsage::RuleUsageBuilder<STATE | RuleUsage::RuleUsageBuilder<STATE>::StartOffsetSet>&
+inline RuleUsage::RuleUsageBuilder<(STATE | RuleUsage::RuleUsageBuilder<STATE>::StartOffsetSet)>&
 RuleUsage::RuleUsageBuilder<STATE>::setStartOffset(double value) {
   static_assert(!(STATE & StartOffsetSet), "property startOffset should not be set yet");
   m_result->setStartOffset(value);
   return castState<StartOffsetSet>();
 }
 template<int STATE>
-inline RuleUsage::RuleUsageBuilder<STATE | RuleUsage::RuleUsageBuilder<STATE>::EndOffsetSet>&
+inline RuleUsage::RuleUsageBuilder<(STATE | RuleUsage::RuleUsageBuilder<STATE>::EndOffsetSet)>&
 RuleUsage::RuleUsageBuilder<STATE>::setEndOffset(double value) {
   static_assert(!(STATE & EndOffsetSet), "property endOffset should not be set yet");
   m_result->setEndOffset(value);
   return castState<EndOffsetSet>();
 }
 template<int STATE>
-inline RuleUsage::RuleUsageBuilder<STATE | RuleUsage::RuleUsageBuilder<STATE>::UsedSet>&
+inline RuleUsage::RuleUsageBuilder<(STATE | RuleUsage::RuleUsageBuilder<STATE>::UsedSet)>&
 RuleUsage::RuleUsageBuilder<STATE>::setUsed(bool value) {
   static_assert(!(STATE & UsedSet), "property used should not be set yet");
   m_result->setUsed(value);
@@ -4062,28 +4062,28 @@ inline void SourceRange::setEndLine(int value) { m_endLine = value; }
 inline void SourceRange::setEndColumn(int value) { m_endColumn = value; }
 
 template<int STATE>
-inline SourceRange::SourceRangeBuilder<STATE | SourceRange::SourceRangeBuilder<STATE>::StartLineSet>&
+inline SourceRange::SourceRangeBuilder<(STATE | SourceRange::SourceRangeBuilder<STATE>::StartLineSet)>&
 SourceRange::SourceRangeBuilder<STATE>::setStartLine(int value) {
   static_assert(!(STATE & StartLineSet), "property startLine should not be set yet");
   m_result->setStartLine(value);
   return castState<StartLineSet>();
 }
 template<int STATE>
-inline SourceRange::SourceRangeBuilder<STATE | SourceRange::SourceRangeBuilder<STATE>::StartColumnSet>&
+inline SourceRange::SourceRangeBuilder<(STATE | SourceRange::SourceRangeBuilder<STATE>::StartColumnSet)>&
 SourceRange::SourceRangeBuilder<STATE>::setStartColumn(int value) {
   static_assert(!(STATE & StartColumnSet), "property startColumn should not be set yet");
   m_result->setStartColumn(value);
   return castState<StartColumnSet>();
 }
 template<int STATE>
-inline SourceRange::SourceRangeBuilder<STATE | SourceRange::SourceRangeBuilder<STATE>::EndLineSet>&
+inline SourceRange::SourceRangeBuilder<(STATE | SourceRange::SourceRangeBuilder<STATE>::EndLineSet)>&
 SourceRange::SourceRangeBuilder<STATE>::setEndLine(int value) {
   static_assert(!(STATE & EndLineSet), "property endLine should not be set yet");
   m_result->setEndLine(value);
   return castState<EndLineSet>();
 }
 template<int STATE>
-inline SourceRange::SourceRangeBuilder<STATE | SourceRange::SourceRangeBuilder<STATE>::EndColumnSet>&
+inline SourceRange::SourceRangeBuilder<(STATE | SourceRange::SourceRangeBuilder<STATE>::EndColumnSet)>&
 SourceRange::SourceRangeBuilder<STATE>::setEndColumn(int value) {
   static_assert(!(STATE & EndColumnSet), "property endColumn should not be set yet");
   m_result->setEndColumn(value);
@@ -4102,14 +4102,14 @@ inline void ShorthandEntry::setValue(const String& value) { m_value = value; }
 inline void ShorthandEntry::setImportant(bool value) { m_important = value; }
 
 template<int STATE>
-inline ShorthandEntry::ShorthandEntryBuilder<STATE | ShorthandEntry::ShorthandEntryBuilder<STATE>::NameSet>&
+inline ShorthandEntry::ShorthandEntryBuilder<(STATE | ShorthandEntry::ShorthandEntryBuilder<STATE>::NameSet)>&
 ShorthandEntry::ShorthandEntryBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline ShorthandEntry::ShorthandEntryBuilder<STATE | ShorthandEntry::ShorthandEntryBuilder<STATE>::ValueSet>&
+inline ShorthandEntry::ShorthandEntryBuilder<(STATE | ShorthandEntry::ShorthandEntryBuilder<STATE>::ValueSet)>&
 ShorthandEntry::ShorthandEntryBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -4128,14 +4128,14 @@ inline void CSSComputedStyleProperty::setName(const String& value) { m_name = va
 inline void CSSComputedStyleProperty::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::NameSet>&
+inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<(STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::NameSet)>&
 CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::ValueSet>&
+inline CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<(STATE | CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::ValueSet)>&
 CSSComputedStyleProperty::CSSComputedStylePropertyBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -4148,7 +4148,7 @@ inline ComputedStyleExtraFields::~ComputedStyleExtraFields() = default;
 inline void ComputedStyleExtraFields::setIsAppearanceBase(bool value) { m_isAppearanceBase = value; }
 
 template<int STATE>
-inline ComputedStyleExtraFields::ComputedStyleExtraFieldsBuilder<STATE | ComputedStyleExtraFields::ComputedStyleExtraFieldsBuilder<STATE>::IsAppearanceBaseSet>&
+inline ComputedStyleExtraFields::ComputedStyleExtraFieldsBuilder<(STATE | ComputedStyleExtraFields::ComputedStyleExtraFieldsBuilder<STATE>::IsAppearanceBaseSet)>&
 ComputedStyleExtraFields::ComputedStyleExtraFieldsBuilder<STATE>::setIsAppearanceBase(bool value) {
   static_assert(!(STATE & IsAppearanceBaseSet), "property isAppearanceBase should not be set yet");
   m_result->setIsAppearanceBase(value);
@@ -4171,14 +4171,14 @@ inline CSSStyle::CSSStyleBuilder<STATE>& CSSStyle::CSSStyleBuilder<STATE>::setSt
   return *this;
 }
 template<int STATE>
-inline CSSStyle::CSSStyleBuilder<STATE | CSSStyle::CSSStyleBuilder<STATE>::CssPropertiesSet>&
+inline CSSStyle::CSSStyleBuilder<(STATE | CSSStyle::CSSStyleBuilder<STATE>::CssPropertiesSet)>&
 CSSStyle::CSSStyleBuilder<STATE>::setCssProperties(std::unique_ptr<protocol::Array<protocol::CSS::CSSProperty>> value) {
   static_assert(!(STATE & CssPropertiesSet), "property cssProperties should not be set yet");
   m_result->setCssProperties(std::move(value));
   return castState<CssPropertiesSet>();
 }
 template<int STATE>
-inline CSSStyle::CSSStyleBuilder<STATE | CSSStyle::CSSStyleBuilder<STATE>::ShorthandEntriesSet>&
+inline CSSStyle::CSSStyleBuilder<(STATE | CSSStyle::CSSStyleBuilder<STATE>::ShorthandEntriesSet)>&
 CSSStyle::CSSStyleBuilder<STATE>::setShorthandEntries(std::unique_ptr<protocol::Array<protocol::CSS::ShorthandEntry>> value) {
   static_assert(!(STATE & ShorthandEntriesSet), "property shorthandEntries should not be set yet");
   m_result->setShorthandEntries(std::move(value));
@@ -4209,14 +4209,14 @@ inline void CSSProperty::setRange(std::unique_ptr<protocol::CSS::SourceRange> va
 inline void CSSProperty::setLonghandProperties(std::unique_ptr<protocol::Array<protocol::CSS::CSSProperty>> value) { m_longhandProperties = std::move(value); }
 
 template<int STATE>
-inline CSSProperty::CSSPropertyBuilder<STATE | CSSProperty::CSSPropertyBuilder<STATE>::NameSet>&
+inline CSSProperty::CSSPropertyBuilder<(STATE | CSSProperty::CSSPropertyBuilder<STATE>::NameSet)>&
 CSSProperty::CSSPropertyBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline CSSProperty::CSSPropertyBuilder<STATE | CSSProperty::CSSPropertyBuilder<STATE>::ValueSet>&
+inline CSSProperty::CSSPropertyBuilder<(STATE | CSSProperty::CSSPropertyBuilder<STATE>::ValueSet)>&
 CSSProperty::CSSPropertyBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -4269,14 +4269,14 @@ inline void CSSMedia::setStyleSheetId(const String& value) { m_styleSheetId = va
 inline void CSSMedia::setMediaList(std::unique_ptr<protocol::Array<protocol::CSS::MediaQuery>> value) { m_mediaList = std::move(value); }
 
 template<int STATE>
-inline CSSMedia::CSSMediaBuilder<STATE | CSSMedia::CSSMediaBuilder<STATE>::TextSet>&
+inline CSSMedia::CSSMediaBuilder<(STATE | CSSMedia::CSSMediaBuilder<STATE>::TextSet)>&
 CSSMedia::CSSMediaBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
   return castState<TextSet>();
 }
 template<int STATE>
-inline CSSMedia::CSSMediaBuilder<STATE | CSSMedia::CSSMediaBuilder<STATE>::SourceSet>&
+inline CSSMedia::CSSMediaBuilder<(STATE | CSSMedia::CSSMediaBuilder<STATE>::SourceSet)>&
 CSSMedia::CSSMediaBuilder<STATE>::setSource(const String& value) {
   static_assert(!(STATE & SourceSet), "property source should not be set yet");
   m_result->setSource(value);
@@ -4310,14 +4310,14 @@ inline void MediaQuery::setExpressions(std::unique_ptr<protocol::Array<protocol:
 inline void MediaQuery::setActive(bool value) { m_active = value; }
 
 template<int STATE>
-inline MediaQuery::MediaQueryBuilder<STATE | MediaQuery::MediaQueryBuilder<STATE>::ExpressionsSet>&
+inline MediaQuery::MediaQueryBuilder<(STATE | MediaQuery::MediaQueryBuilder<STATE>::ExpressionsSet)>&
 MediaQuery::MediaQueryBuilder<STATE>::setExpressions(std::unique_ptr<protocol::Array<protocol::CSS::MediaQueryExpression>> value) {
   static_assert(!(STATE & ExpressionsSet), "property expressions should not be set yet");
   m_result->setExpressions(std::move(value));
   return castState<ExpressionsSet>();
 }
 template<int STATE>
-inline MediaQuery::MediaQueryBuilder<STATE | MediaQuery::MediaQueryBuilder<STATE>::ActiveSet>&
+inline MediaQuery::MediaQueryBuilder<(STATE | MediaQuery::MediaQueryBuilder<STATE>::ActiveSet)>&
 MediaQuery::MediaQueryBuilder<STATE>::setActive(bool value) {
   static_assert(!(STATE & ActiveSet), "property active should not be set yet");
   m_result->setActive(value);
@@ -4335,21 +4335,21 @@ inline void MediaQueryExpression::setValueRange(std::unique_ptr<protocol::CSS::S
 inline void MediaQueryExpression::setComputedLength(double value) { m_computedLength = value; }
 
 template<int STATE>
-inline MediaQueryExpression::MediaQueryExpressionBuilder<STATE | MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::ValueSet>&
+inline MediaQueryExpression::MediaQueryExpressionBuilder<(STATE | MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::ValueSet)>&
 MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::setValue(double value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
   return castState<ValueSet>();
 }
 template<int STATE>
-inline MediaQueryExpression::MediaQueryExpressionBuilder<STATE | MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::UnitSet>&
+inline MediaQueryExpression::MediaQueryExpressionBuilder<(STATE | MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::UnitSet)>&
 MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::setUnit(const String& value) {
   static_assert(!(STATE & UnitSet), "property unit should not be set yet");
   m_result->setUnit(value);
   return castState<UnitSet>();
 }
 template<int STATE>
-inline MediaQueryExpression::MediaQueryExpressionBuilder<STATE | MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::FeatureSet>&
+inline MediaQueryExpression::MediaQueryExpressionBuilder<(STATE | MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::FeatureSet)>&
 MediaQueryExpression::MediaQueryExpressionBuilder<STATE>::setFeature(const String& value) {
   static_assert(!(STATE & FeatureSet), "property feature should not be set yet");
   m_result->setFeature(value);
@@ -4381,7 +4381,7 @@ inline void CSSContainerQuery::setQueriesAnchored(bool value) { m_queriesAnchore
 inline void CSSContainerQuery::setConditionText(const String& value) { m_conditionText = value; }
 
 template<int STATE>
-inline CSSContainerQuery::CSSContainerQueryBuilder<STATE | CSSContainerQuery::CSSContainerQueryBuilder<STATE>::TextSet>&
+inline CSSContainerQuery::CSSContainerQueryBuilder<(STATE | CSSContainerQuery::CSSContainerQueryBuilder<STATE>::TextSet)>&
 CSSContainerQuery::CSSContainerQueryBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -4423,7 +4423,7 @@ inline CSSContainerQuery::CSSContainerQueryBuilder<STATE>& CSSContainerQuery::CS
   return *this;
 }
 template<int STATE>
-inline CSSContainerQuery::CSSContainerQueryBuilder<STATE | CSSContainerQuery::CSSContainerQueryBuilder<STATE>::ConditionTextSet>&
+inline CSSContainerQuery::CSSContainerQueryBuilder<(STATE | CSSContainerQuery::CSSContainerQueryBuilder<STATE>::ConditionTextSet)>&
 CSSContainerQuery::CSSContainerQueryBuilder<STATE>::setConditionText(const String& value) {
   static_assert(!(STATE & ConditionTextSet), "property conditionText should not be set yet");
   m_result->setConditionText(value);
@@ -4439,14 +4439,14 @@ inline void CSSSupports::setRange(std::unique_ptr<protocol::CSS::SourceRange> va
 inline void CSSSupports::setStyleSheetId(const String& value) { m_styleSheetId = value; }
 
 template<int STATE>
-inline CSSSupports::CSSSupportsBuilder<STATE | CSSSupports::CSSSupportsBuilder<STATE>::TextSet>&
+inline CSSSupports::CSSSupportsBuilder<(STATE | CSSSupports::CSSSupportsBuilder<STATE>::TextSet)>&
 CSSSupports::CSSSupportsBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
   return castState<TextSet>();
 }
 template<int STATE>
-inline CSSSupports::CSSSupportsBuilder<STATE | CSSSupports::CSSSupportsBuilder<STATE>::ActiveSet>&
+inline CSSSupports::CSSSupportsBuilder<(STATE | CSSSupports::CSSSupportsBuilder<STATE>::ActiveSet)>&
 CSSSupports::CSSSupportsBuilder<STATE>::setActive(bool value) {
   static_assert(!(STATE & ActiveSet), "property active should not be set yet");
   m_result->setActive(value);
@@ -4473,7 +4473,7 @@ inline void CSSNavigation::setRange(std::unique_ptr<protocol::CSS::SourceRange> 
 inline void CSSNavigation::setStyleSheetId(const String& value) { m_styleSheetId = value; }
 
 template<int STATE>
-inline CSSNavigation::CSSNavigationBuilder<STATE | CSSNavigation::CSSNavigationBuilder<STATE>::TextSet>&
+inline CSSNavigation::CSSNavigationBuilder<(STATE | CSSNavigation::CSSNavigationBuilder<STATE>::TextSet)>&
 CSSNavigation::CSSNavigationBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -4503,7 +4503,7 @@ inline void CSSScope::setRange(std::unique_ptr<protocol::CSS::SourceRange> value
 inline void CSSScope::setStyleSheetId(const String& value) { m_styleSheetId = value; }
 
 template<int STATE>
-inline CSSScope::CSSScopeBuilder<STATE | CSSScope::CSSScopeBuilder<STATE>::TextSet>&
+inline CSSScope::CSSScopeBuilder<(STATE | CSSScope::CSSScopeBuilder<STATE>::TextSet)>&
 CSSScope::CSSScopeBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -4528,7 +4528,7 @@ inline void CSSLayer::setRange(std::unique_ptr<protocol::CSS::SourceRange> value
 inline void CSSLayer::setStyleSheetId(const String& value) { m_styleSheetId = value; }
 
 template<int STATE>
-inline CSSLayer::CSSLayerBuilder<STATE | CSSLayer::CSSLayerBuilder<STATE>::TextSet>&
+inline CSSLayer::CSSLayerBuilder<(STATE | CSSLayer::CSSLayerBuilder<STATE>::TextSet)>&
 CSSLayer::CSSLayerBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -4570,7 +4570,7 @@ inline void CSSLayerData::setSubLayers(std::unique_ptr<protocol::Array<protocol:
 inline void CSSLayerData::setOrder(double value) { m_order = value; }
 
 template<int STATE>
-inline CSSLayerData::CSSLayerDataBuilder<STATE | CSSLayerData::CSSLayerDataBuilder<STATE>::NameSet>&
+inline CSSLayerData::CSSLayerDataBuilder<(STATE | CSSLayerData::CSSLayerDataBuilder<STATE>::NameSet)>&
 CSSLayerData::CSSLayerDataBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
@@ -4582,7 +4582,7 @@ inline CSSLayerData::CSSLayerDataBuilder<STATE>& CSSLayerData::CSSLayerDataBuild
   return *this;
 }
 template<int STATE>
-inline CSSLayerData::CSSLayerDataBuilder<STATE | CSSLayerData::CSSLayerDataBuilder<STATE>::OrderSet>&
+inline CSSLayerData::CSSLayerDataBuilder<(STATE | CSSLayerData::CSSLayerDataBuilder<STATE>::OrderSet)>&
 CSSLayerData::CSSLayerDataBuilder<STATE>::setOrder(double value) {
   static_assert(!(STATE & OrderSet), "property order should not be set yet");
   m_result->setOrder(value);
@@ -4599,28 +4599,28 @@ inline void PlatformFontUsage::setIsCustomFont(bool value) { m_isCustomFont = va
 inline void PlatformFontUsage::setGlyphCount(double value) { m_glyphCount = value; }
 
 template<int STATE>
-inline PlatformFontUsage::PlatformFontUsageBuilder<STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::FamilyNameSet>&
+inline PlatformFontUsage::PlatformFontUsageBuilder<(STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::FamilyNameSet)>&
 PlatformFontUsage::PlatformFontUsageBuilder<STATE>::setFamilyName(const String& value) {
   static_assert(!(STATE & FamilyNameSet), "property familyName should not be set yet");
   m_result->setFamilyName(value);
   return castState<FamilyNameSet>();
 }
 template<int STATE>
-inline PlatformFontUsage::PlatformFontUsageBuilder<STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::PostScriptNameSet>&
+inline PlatformFontUsage::PlatformFontUsageBuilder<(STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::PostScriptNameSet)>&
 PlatformFontUsage::PlatformFontUsageBuilder<STATE>::setPostScriptName(const String& value) {
   static_assert(!(STATE & PostScriptNameSet), "property postScriptName should not be set yet");
   m_result->setPostScriptName(value);
   return castState<PostScriptNameSet>();
 }
 template<int STATE>
-inline PlatformFontUsage::PlatformFontUsageBuilder<STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::IsCustomFontSet>&
+inline PlatformFontUsage::PlatformFontUsageBuilder<(STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::IsCustomFontSet)>&
 PlatformFontUsage::PlatformFontUsageBuilder<STATE>::setIsCustomFont(bool value) {
   static_assert(!(STATE & IsCustomFontSet), "property isCustomFont should not be set yet");
   m_result->setIsCustomFont(value);
   return castState<IsCustomFontSet>();
 }
 template<int STATE>
-inline PlatformFontUsage::PlatformFontUsageBuilder<STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::GlyphCountSet>&
+inline PlatformFontUsage::PlatformFontUsageBuilder<(STATE | PlatformFontUsage::PlatformFontUsageBuilder<STATE>::GlyphCountSet)>&
 PlatformFontUsage::PlatformFontUsageBuilder<STATE>::setGlyphCount(double value) {
   static_assert(!(STATE & GlyphCountSet), "property glyphCount should not be set yet");
   m_result->setGlyphCount(value);
@@ -4639,35 +4639,35 @@ inline void FontVariationAxis::setMaxValue(double value) { m_maxValue = value; }
 inline void FontVariationAxis::setDefaultValue(double value) { m_defaultValue = value; }
 
 template<int STATE>
-inline FontVariationAxis::FontVariationAxisBuilder<STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::TagSet>&
+inline FontVariationAxis::FontVariationAxisBuilder<(STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::TagSet)>&
 FontVariationAxis::FontVariationAxisBuilder<STATE>::setTag(const String& value) {
   static_assert(!(STATE & TagSet), "property tag should not be set yet");
   m_result->setTag(value);
   return castState<TagSet>();
 }
 template<int STATE>
-inline FontVariationAxis::FontVariationAxisBuilder<STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::NameSet>&
+inline FontVariationAxis::FontVariationAxisBuilder<(STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::NameSet)>&
 FontVariationAxis::FontVariationAxisBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline FontVariationAxis::FontVariationAxisBuilder<STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::MinValueSet>&
+inline FontVariationAxis::FontVariationAxisBuilder<(STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::MinValueSet)>&
 FontVariationAxis::FontVariationAxisBuilder<STATE>::setMinValue(double value) {
   static_assert(!(STATE & MinValueSet), "property minValue should not be set yet");
   m_result->setMinValue(value);
   return castState<MinValueSet>();
 }
 template<int STATE>
-inline FontVariationAxis::FontVariationAxisBuilder<STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::MaxValueSet>&
+inline FontVariationAxis::FontVariationAxisBuilder<(STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::MaxValueSet)>&
 FontVariationAxis::FontVariationAxisBuilder<STATE>::setMaxValue(double value) {
   static_assert(!(STATE & MaxValueSet), "property maxValue should not be set yet");
   m_result->setMaxValue(value);
   return castState<MaxValueSet>();
 }
 template<int STATE>
-inline FontVariationAxis::FontVariationAxisBuilder<STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::DefaultValueSet>&
+inline FontVariationAxis::FontVariationAxisBuilder<(STATE | FontVariationAxis::FontVariationAxisBuilder<STATE>::DefaultValueSet)>&
 FontVariationAxis::FontVariationAxisBuilder<STATE>::setDefaultValue(double value) {
   static_assert(!(STATE & DefaultValueSet), "property defaultValue should not be set yet");
   m_result->setDefaultValue(value);
@@ -4692,63 +4692,63 @@ inline void FontFace::setPlatformFontFamily(const String& value) { m_platformFon
 inline void FontFace::setFontVariationAxes(std::unique_ptr<protocol::Array<protocol::CSS::FontVariationAxis>> value) { m_fontVariationAxes = std::move(value); }
 
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::FontFamilySet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::FontFamilySet)>&
 FontFace::FontFaceBuilder<STATE>::setFontFamily(const String& value) {
   static_assert(!(STATE & FontFamilySet), "property fontFamily should not be set yet");
   m_result->setFontFamily(value);
   return castState<FontFamilySet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::FontStyleSet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::FontStyleSet)>&
 FontFace::FontFaceBuilder<STATE>::setFontStyle(const String& value) {
   static_assert(!(STATE & FontStyleSet), "property fontStyle should not be set yet");
   m_result->setFontStyle(value);
   return castState<FontStyleSet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::FontVariantSet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::FontVariantSet)>&
 FontFace::FontFaceBuilder<STATE>::setFontVariant(const String& value) {
   static_assert(!(STATE & FontVariantSet), "property fontVariant should not be set yet");
   m_result->setFontVariant(value);
   return castState<FontVariantSet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::FontWeightSet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::FontWeightSet)>&
 FontFace::FontFaceBuilder<STATE>::setFontWeight(const String& value) {
   static_assert(!(STATE & FontWeightSet), "property fontWeight should not be set yet");
   m_result->setFontWeight(value);
   return castState<FontWeightSet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::FontStretchSet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::FontStretchSet)>&
 FontFace::FontFaceBuilder<STATE>::setFontStretch(const String& value) {
   static_assert(!(STATE & FontStretchSet), "property fontStretch should not be set yet");
   m_result->setFontStretch(value);
   return castState<FontStretchSet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::FontDisplaySet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::FontDisplaySet)>&
 FontFace::FontFaceBuilder<STATE>::setFontDisplay(const String& value) {
   static_assert(!(STATE & FontDisplaySet), "property fontDisplay should not be set yet");
   m_result->setFontDisplay(value);
   return castState<FontDisplaySet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::UnicodeRangeSet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::UnicodeRangeSet)>&
 FontFace::FontFaceBuilder<STATE>::setUnicodeRange(const String& value) {
   static_assert(!(STATE & UnicodeRangeSet), "property unicodeRange should not be set yet");
   m_result->setUnicodeRange(value);
   return castState<UnicodeRangeSet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::SrcSet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::SrcSet)>&
 FontFace::FontFaceBuilder<STATE>::setSrc(const String& value) {
   static_assert(!(STATE & SrcSet), "property src should not be set yet");
   m_result->setSrc(value);
   return castState<SrcSet>();
 }
 template<int STATE>
-inline FontFace::FontFaceBuilder<STATE | FontFace::FontFaceBuilder<STATE>::PlatformFontFamilySet>&
+inline FontFace::FontFaceBuilder<(STATE | FontFace::FontFaceBuilder<STATE>::PlatformFontFamilySet)>&
 FontFace::FontFaceBuilder<STATE>::setPlatformFontFamily(const String& value) {
   static_assert(!(STATE & PlatformFontFamilySet), "property platformFontFamily should not be set yet");
   m_result->setPlatformFontFamily(value);
@@ -4770,7 +4770,7 @@ inline void CSSPositionTryRule::setStyle(std::unique_ptr<protocol::CSS::CSSStyle
 inline void CSSPositionTryRule::setActive(bool value) { m_active = value; }
 
 template<int STATE>
-inline CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::NameSet>&
+inline CSSPositionTryRule::CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::NameSet)>&
 CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::setName(std::unique_ptr<protocol::CSS::Value> value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(std::move(value));
@@ -4782,21 +4782,21 @@ inline CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>& CSSPositionTryRule:
   return *this;
 }
 template<int STATE>
-inline CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::OriginSet>&
+inline CSSPositionTryRule::CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::OriginSet)>&
 CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::StyleSet>&
+inline CSSPositionTryRule::CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::StyleSet)>&
 CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) {
   static_assert(!(STATE & StyleSet), "property style should not be set yet");
   m_result->setStyle(std::move(value));
   return castState<StyleSet>();
 }
 template<int STATE>
-inline CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::ActiveSet>&
+inline CSSPositionTryRule::CSSPositionTryRuleBuilder<(STATE | CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::ActiveSet)>&
 CSSPositionTryRule::CSSPositionTryRuleBuilder<STATE>::setActive(bool value) {
   static_assert(!(STATE & ActiveSet), "property active should not be set yet");
   m_result->setActive(value);
@@ -4811,14 +4811,14 @@ inline void CSSKeyframesRule::setAnimationName(std::unique_ptr<protocol::CSS::Va
 inline void CSSKeyframesRule::setKeyframes(std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframeRule>> value) { m_keyframes = std::move(value); }
 
 template<int STATE>
-inline CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE | CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE>::AnimationNameSet>&
+inline CSSKeyframesRule::CSSKeyframesRuleBuilder<(STATE | CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE>::AnimationNameSet)>&
 CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE>::setAnimationName(std::unique_ptr<protocol::CSS::Value> value) {
   static_assert(!(STATE & AnimationNameSet), "property animationName should not be set yet");
   m_result->setAnimationName(std::move(value));
   return castState<AnimationNameSet>();
 }
 template<int STATE>
-inline CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE | CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE>::KeyframesSet>&
+inline CSSKeyframesRule::CSSKeyframesRuleBuilder<(STATE | CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE>::KeyframesSet)>&
 CSSKeyframesRule::CSSKeyframesRuleBuilder<STATE>::setKeyframes(std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframeRule>> value) {
   static_assert(!(STATE & KeyframesSet), "property keyframes should not be set yet");
   m_result->setKeyframes(std::move(value));
@@ -4834,7 +4834,7 @@ inline void CSSPropertyRegistration::setInherits(bool value) { m_inherits = valu
 inline void CSSPropertyRegistration::setSyntax(const String& value) { m_syntax = value; }
 
 template<int STATE>
-inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE | CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::PropertyNameSet>&
+inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<(STATE | CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::PropertyNameSet)>&
 CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::setPropertyName(const String& value) {
   static_assert(!(STATE & PropertyNameSet), "property propertyName should not be set yet");
   m_result->setPropertyName(value);
@@ -4846,14 +4846,14 @@ inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>& CSSProper
   return *this;
 }
 template<int STATE>
-inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE | CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::InheritsSet>&
+inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<(STATE | CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::InheritsSet)>&
 CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::setInherits(bool value) {
   static_assert(!(STATE & InheritsSet), "property inherits should not be set yet");
   m_result->setInherits(value);
   return castState<InheritsSet>();
 }
 template<int STATE>
-inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE | CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::SyntaxSet>&
+inline CSSPropertyRegistration::CSSPropertyRegistrationBuilder<(STATE | CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::SyntaxSet)>&
 CSSPropertyRegistration::CSSPropertyRegistrationBuilder<STATE>::setSyntax(const String& value) {
   static_assert(!(STATE & SyntaxSet), "property syntax should not be set yet");
   m_result->setSyntax(value);
@@ -4872,7 +4872,7 @@ inline void CSSAtRule::setOrigin(const String& value) { m_origin = value; }
 inline void CSSAtRule::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) { m_style = std::move(value); }
 
 template<int STATE>
-inline CSSAtRule::CSSAtRuleBuilder<STATE | CSSAtRule::CSSAtRuleBuilder<STATE>::TypeSet>&
+inline CSSAtRule::CSSAtRuleBuilder<(STATE | CSSAtRule::CSSAtRuleBuilder<STATE>::TypeSet)>&
 CSSAtRule::CSSAtRuleBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -4894,14 +4894,14 @@ inline CSSAtRule::CSSAtRuleBuilder<STATE>& CSSAtRule::CSSAtRuleBuilder<STATE>::s
   return *this;
 }
 template<int STATE>
-inline CSSAtRule::CSSAtRuleBuilder<STATE | CSSAtRule::CSSAtRuleBuilder<STATE>::OriginSet>&
+inline CSSAtRule::CSSAtRuleBuilder<(STATE | CSSAtRule::CSSAtRuleBuilder<STATE>::OriginSet)>&
 CSSAtRule::CSSAtRuleBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSAtRule::CSSAtRuleBuilder<STATE | CSSAtRule::CSSAtRuleBuilder<STATE>::StyleSet>&
+inline CSSAtRule::CSSAtRuleBuilder<(STATE | CSSAtRule::CSSAtRuleBuilder<STATE>::StyleSet)>&
 CSSAtRule::CSSAtRuleBuilder<STATE>::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) {
   static_assert(!(STATE & StyleSet), "property style should not be set yet");
   m_result->setStyle(std::move(value));
@@ -4922,21 +4922,21 @@ inline CSSPropertyRule::CSSPropertyRuleBuilder<STATE>& CSSPropertyRule::CSSPrope
   return *this;
 }
 template<int STATE>
-inline CSSPropertyRule::CSSPropertyRuleBuilder<STATE | CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::OriginSet>&
+inline CSSPropertyRule::CSSPropertyRuleBuilder<(STATE | CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::OriginSet)>&
 CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSPropertyRule::CSSPropertyRuleBuilder<STATE | CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::PropertyNameSet>&
+inline CSSPropertyRule::CSSPropertyRuleBuilder<(STATE | CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::PropertyNameSet)>&
 CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::setPropertyName(std::unique_ptr<protocol::CSS::Value> value) {
   static_assert(!(STATE & PropertyNameSet), "property propertyName should not be set yet");
   m_result->setPropertyName(std::move(value));
   return castState<PropertyNameSet>();
 }
 template<int STATE>
-inline CSSPropertyRule::CSSPropertyRuleBuilder<STATE | CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::StyleSet>&
+inline CSSPropertyRule::CSSPropertyRuleBuilder<(STATE | CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::StyleSet)>&
 CSSPropertyRule::CSSPropertyRuleBuilder<STATE>::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) {
   static_assert(!(STATE & StyleSet), "property style should not be set yet");
   m_result->setStyle(std::move(value));
@@ -4950,14 +4950,14 @@ inline void CSSFunctionParameter::setName(const String& value) { m_name = value;
 inline void CSSFunctionParameter::setType(const String& value) { m_type = value; }
 
 template<int STATE>
-inline CSSFunctionParameter::CSSFunctionParameterBuilder<STATE | CSSFunctionParameter::CSSFunctionParameterBuilder<STATE>::NameSet>&
+inline CSSFunctionParameter::CSSFunctionParameterBuilder<(STATE | CSSFunctionParameter::CSSFunctionParameterBuilder<STATE>::NameSet)>&
 CSSFunctionParameter::CSSFunctionParameterBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline CSSFunctionParameter::CSSFunctionParameterBuilder<STATE | CSSFunctionParameter::CSSFunctionParameterBuilder<STATE>::TypeSet>&
+inline CSSFunctionParameter::CSSFunctionParameterBuilder<(STATE | CSSFunctionParameter::CSSFunctionParameterBuilder<STATE>::TypeSet)>&
 CSSFunctionParameter::CSSFunctionParameterBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -4995,14 +4995,14 @@ inline CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>& CSSFunc
   return *this;
 }
 template<int STATE>
-inline CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE | CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>::ChildrenSet>&
+inline CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<(STATE | CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>::ChildrenSet)>&
 CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>::setChildren(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionNode>> value) {
   static_assert(!(STATE & ChildrenSet), "property children should not be set yet");
   m_result->setChildren(std::move(value));
   return castState<ChildrenSet>();
 }
 template<int STATE>
-inline CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE | CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>::ConditionTextSet>&
+inline CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<(STATE | CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>::ConditionTextSet)>&
 CSSFunctionConditionNode::CSSFunctionConditionNodeBuilder<STATE>::setConditionText(const String& value) {
   static_assert(!(STATE & ConditionTextSet), "property conditionText should not be set yet");
   m_result->setConditionText(value);
@@ -5037,7 +5037,7 @@ inline void CSSFunctionRule::setChildren(std::unique_ptr<protocol::Array<protoco
 inline void CSSFunctionRule::setOriginTreeScopeNodeId(int value) { m_originTreeScopeNodeId = value; }
 
 template<int STATE>
-inline CSSFunctionRule::CSSFunctionRuleBuilder<STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::NameSet>&
+inline CSSFunctionRule::CSSFunctionRuleBuilder<(STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::NameSet)>&
 CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::setName(std::unique_ptr<protocol::CSS::Value> value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(std::move(value));
@@ -5049,21 +5049,21 @@ inline CSSFunctionRule::CSSFunctionRuleBuilder<STATE>& CSSFunctionRule::CSSFunct
   return *this;
 }
 template<int STATE>
-inline CSSFunctionRule::CSSFunctionRuleBuilder<STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::OriginSet>&
+inline CSSFunctionRule::CSSFunctionRuleBuilder<(STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::OriginSet)>&
 CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSFunctionRule::CSSFunctionRuleBuilder<STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::ParametersSet>&
+inline CSSFunctionRule::CSSFunctionRuleBuilder<(STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::ParametersSet)>&
 CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::setParameters(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionParameter>> value) {
   static_assert(!(STATE & ParametersSet), "property parameters should not be set yet");
   m_result->setParameters(std::move(value));
   return castState<ParametersSet>();
 }
 template<int STATE>
-inline CSSFunctionRule::CSSFunctionRuleBuilder<STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::ChildrenSet>&
+inline CSSFunctionRule::CSSFunctionRuleBuilder<(STATE | CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::ChildrenSet)>&
 CSSFunctionRule::CSSFunctionRuleBuilder<STATE>::setChildren(std::unique_ptr<protocol::Array<protocol::CSS::CSSFunctionNode>> value) {
   static_assert(!(STATE & ChildrenSet), "property children should not be set yet");
   m_result->setChildren(std::move(value));
@@ -5089,21 +5089,21 @@ inline CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>& CSSKeyframeRule::CSSKeyfr
   return *this;
 }
 template<int STATE>
-inline CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE | CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::OriginSet>&
+inline CSSKeyframeRule::CSSKeyframeRuleBuilder<(STATE | CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::OriginSet)>&
 CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE | CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::KeyTextSet>&
+inline CSSKeyframeRule::CSSKeyframeRuleBuilder<(STATE | CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::KeyTextSet)>&
 CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::setKeyText(std::unique_ptr<protocol::CSS::Value> value) {
   static_assert(!(STATE & KeyTextSet), "property keyText should not be set yet");
   m_result->setKeyText(std::move(value));
   return castState<KeyTextSet>();
 }
 template<int STATE>
-inline CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE | CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::StyleSet>&
+inline CSSKeyframeRule::CSSKeyframeRuleBuilder<(STATE | CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::StyleSet)>&
 CSSKeyframeRule::CSSKeyframeRuleBuilder<STATE>::setStyle(std::unique_ptr<protocol::CSS::CSSStyle> value) {
   static_assert(!(STATE & StyleSet), "property style should not be set yet");
   m_result->setStyle(std::move(value));
@@ -5118,21 +5118,21 @@ inline void StyleDeclarationEdit::setRange(std::unique_ptr<protocol::CSS::Source
 inline void StyleDeclarationEdit::setText(const String& value) { m_text = value; }
 
 template<int STATE>
-inline StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE | StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::StyleSheetIdSet>&
+inline StyleDeclarationEdit::StyleDeclarationEditBuilder<(STATE | StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::StyleSheetIdSet)>&
 StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::setStyleSheetId(const String& value) {
   static_assert(!(STATE & StyleSheetIdSet), "property styleSheetId should not be set yet");
   m_result->setStyleSheetId(value);
   return castState<StyleSheetIdSet>();
 }
 template<int STATE>
-inline StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE | StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::RangeSet>&
+inline StyleDeclarationEdit::StyleDeclarationEditBuilder<(STATE | StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::RangeSet)>&
 StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::setRange(std::unique_ptr<protocol::CSS::SourceRange> value) {
   static_assert(!(STATE & RangeSet), "property range should not be set yet");
   m_result->setRange(std::move(value));
   return castState<RangeSet>();
 }
 template<int STATE>
-inline StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE | StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::TextSet>&
+inline StyleDeclarationEdit::StyleDeclarationEditBuilder<(STATE | StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::TextSet)>&
 StyleDeclarationEdit::StyleDeclarationEditBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);

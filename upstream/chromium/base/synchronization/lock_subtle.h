@@ -11,6 +11,11 @@
 #include "base/notreached.h"
 #include "build/build_config.h"
 
+#if defined(_MSC_VER) && !defined(__clang__) && \
+    (defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_X86))
+#include <intrin.h>
+#endif
+
 namespace base::subtle {
 
 #if DCHECK_IS_ON()
@@ -45,7 +50,11 @@ enum class LockTracking {
 // improve performance.
 static inline void YieldProcessor() {
 #if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_X86)
+#if defined(_MSC_VER) && !defined(__clang__)
+  _mm_pause();
+#else
   __asm__ __volatile__("pause");
+#endif
 #elif (defined(ARCH_CPU_ARMEL) && __ARM_ARCH >= 6) || defined(ARCH_CPU_ARM64)
   __asm__ __volatile__("yield");
 #elif defined(ARCH_CPU_MIPSEL)

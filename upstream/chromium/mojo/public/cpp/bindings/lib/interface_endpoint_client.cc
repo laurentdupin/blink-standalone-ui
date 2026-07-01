@@ -49,6 +49,29 @@ namespace {
 
 constinit thread_local base::HistogramBase* g_end_to_end_metric = nullptr;
 
+template <typename ChromeMojoEventInfo>
+void SetMojoInterfaceTagForTrace(perfetto::EventContext& ctx,
+                                 ChromeMojoEventInfo* info,
+                                 const char* interface_name) {
+#if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)
+  // ARM64 Android - set the interface tag unconditionally.
+  // TODO(kraskevich): Remove this special case once we're fully confident in
+  // crrev.com/c/3763052.
+  info->set_mojo_interface_tag(interface_name);
+#else
+  // Generate mojo interface tag only for local traces.
+  //
+  // This saves trace buffer space for field traces. The interface tag can be
+  // extracted from the interface method after symbolization.
+  //
+  // For local traces, this produces a raw string so that the trace doesn't
+  // require symbolization to be useful.
+  if (!ctx.ShouldFilterDebugAnnotations()) {
+    info->set_mojo_interface_tag(interface_name);
+  }
+#endif  // BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)
+}
+
 // A helper to expose a subset of an InterfaceEndpointClient's functionality
 // through a thread-safe interface. Used by SharedRemote.
 class ThreadSafeInterfaceEndpointClientProxy : public ThreadSafeProxy {
@@ -944,24 +967,7 @@ bool InterfaceEndpointClient::HandleValidatedMessage(Message* message) {
       "toplevel,mojom", perfetto::StaticString{method_name_callback_(*message)},
       [&](perfetto::EventContext& ctx) {
         auto* info = ctx.event()->set_chrome_mojo_event_info();
-#if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)
-        // ARM64 Android - set the interface tag unconditionally.
-        // TODO(kraskevich): Remove this special case once we're
-        // fully confident in crrev.com/c/3763052.
-        info->set_mojo_interface_tag(interface_name_);
-#else
-        // Generate mojo interface tag only for local traces.
-        //
-        // This saves trace buffer space for field traces. The
-        // interface tag can be extracted from the interface method
-        // after symbolization.
-        //
-        // For local traces, this produces a raw string so that the
-        // trace doesn't require symbolization to be useful.
-        if (!ctx.ShouldFilterDebugAnnotations()) {
-          info->set_mojo_interface_tag(interface_name_);
-        }
-#endif  // BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARM64)
+        SetMojoInterfaceTagForTrace(ctx, info, interface_name_);
         const auto method_info = method_info_callback_(*message);
         if (method_info) {
           info->set_ipc_hash((*method_info)());

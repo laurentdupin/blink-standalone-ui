@@ -10,6 +10,8 @@
 #include "third_party/blink/public/mojom/blob/data_element.mojom-blink.h"
 #include "third_party/blink/public/mojom/blob/serialized_blob.mojom-blink.h"
 
+#include "mojo/public/cpp/bindings/message.h"
+
 #include <memory>
 #include <utility>
 

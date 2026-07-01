@@ -89,13 +89,13 @@ public:
             AllFieldsSet = (CurrentTimeSet | RenderCapacitySet | CallbackIntervalMeanSet | CallbackIntervalVarianceSet | 0)};
 
 
-        ContextRealtimeDataBuilder<STATE | CurrentTimeSet>& setCurrentTime(double value);  // Defined below
+        ContextRealtimeDataBuilder<(STATE | ContextRealtimeDataBuilder<STATE>::CurrentTimeSet)>& setCurrentTime(double value);  // Defined below
 
-        ContextRealtimeDataBuilder<STATE | RenderCapacitySet>& setRenderCapacity(double value);  // Defined below
+        ContextRealtimeDataBuilder<(STATE | ContextRealtimeDataBuilder<STATE>::RenderCapacitySet)>& setRenderCapacity(double value);  // Defined below
 
-        ContextRealtimeDataBuilder<STATE | CallbackIntervalMeanSet>& setCallbackIntervalMean(double value);  // Defined below
+        ContextRealtimeDataBuilder<(STATE | ContextRealtimeDataBuilder<STATE>::CallbackIntervalMeanSet)>& setCallbackIntervalMean(double value);  // Defined below
 
-        ContextRealtimeDataBuilder<STATE | CallbackIntervalVarianceSet>& setCallbackIntervalVariance(double value);  // Defined below
+        ContextRealtimeDataBuilder<(STATE | ContextRealtimeDataBuilder<STATE>::CallbackIntervalVarianceSet)>& setCallbackIntervalVariance(double value);  // Defined below
 
         std::unique_ptr<ContextRealtimeData> build()
         {
@@ -107,9 +107,9 @@ public:
         friend class ContextRealtimeData;
         ContextRealtimeDataBuilder() : m_result(new ContextRealtimeData()) { }
 
-        template<int STEP> ContextRealtimeDataBuilder<STATE | STEP>& castState()
+        template<int STEP> ContextRealtimeDataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ContextRealtimeDataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ContextRealtimeDataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebAudio::ContextRealtimeData> m_result;
@@ -177,19 +177,19 @@ public:
             AllFieldsSet = (ContextIdSet | ContextTypeSet | ContextStateSet | CallbackBufferSizeSet | MaxOutputChannelCountSet | SampleRateSet | 0)};
 
 
-        BaseAudioContextBuilder<STATE | ContextIdSet>& setContextId(const String& value);  // Defined below
+        BaseAudioContextBuilder<(STATE | BaseAudioContextBuilder<STATE>::ContextIdSet)>& setContextId(const String& value);  // Defined below
 
-        BaseAudioContextBuilder<STATE | ContextTypeSet>& setContextType(const String& value);  // Defined below
+        BaseAudioContextBuilder<(STATE | BaseAudioContextBuilder<STATE>::ContextTypeSet)>& setContextType(const String& value);  // Defined below
 
-        BaseAudioContextBuilder<STATE | ContextStateSet>& setContextState(const String& value);  // Defined below
+        BaseAudioContextBuilder<(STATE | BaseAudioContextBuilder<STATE>::ContextStateSet)>& setContextState(const String& value);  // Defined below
 
         BaseAudioContextBuilder<STATE>& setRealtimeData(std::unique_ptr<protocol::WebAudio::ContextRealtimeData> value);  // Defined below
 
-        BaseAudioContextBuilder<STATE | CallbackBufferSizeSet>& setCallbackBufferSize(double value);  // Defined below
+        BaseAudioContextBuilder<(STATE | BaseAudioContextBuilder<STATE>::CallbackBufferSizeSet)>& setCallbackBufferSize(double value);  // Defined below
 
-        BaseAudioContextBuilder<STATE | MaxOutputChannelCountSet>& setMaxOutputChannelCount(double value);  // Defined below
+        BaseAudioContextBuilder<(STATE | BaseAudioContextBuilder<STATE>::MaxOutputChannelCountSet)>& setMaxOutputChannelCount(double value);  // Defined below
 
-        BaseAudioContextBuilder<STATE | SampleRateSet>& setSampleRate(double value);  // Defined below
+        BaseAudioContextBuilder<(STATE | BaseAudioContextBuilder<STATE>::SampleRateSet)>& setSampleRate(double value);  // Defined below
 
         std::unique_ptr<BaseAudioContext> build()
         {
@@ -201,9 +201,9 @@ public:
         friend class BaseAudioContext;
         BaseAudioContextBuilder() : m_result(new BaseAudioContext()) { }
 
-        template<int STEP> BaseAudioContextBuilder<STATE | STEP>& castState()
+        template<int STEP> BaseAudioContextBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BaseAudioContextBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BaseAudioContextBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebAudio::BaseAudioContext> m_result;
@@ -249,9 +249,9 @@ public:
             AllFieldsSet = (ListenerIdSet | ContextIdSet | 0)};
 
 
-        AudioListenerBuilder<STATE | ListenerIdSet>& setListenerId(const String& value);  // Defined below
+        AudioListenerBuilder<(STATE | AudioListenerBuilder<STATE>::ListenerIdSet)>& setListenerId(const String& value);  // Defined below
 
-        AudioListenerBuilder<STATE | ContextIdSet>& setContextId(const String& value);  // Defined below
+        AudioListenerBuilder<(STATE | AudioListenerBuilder<STATE>::ContextIdSet)>& setContextId(const String& value);  // Defined below
 
         std::unique_ptr<AudioListener> build()
         {
@@ -263,9 +263,9 @@ public:
         friend class AudioListener;
         AudioListenerBuilder() : m_result(new AudioListener()) { }
 
-        template<int STEP> AudioListenerBuilder<STATE | STEP>& castState()
+        template<int STEP> AudioListenerBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AudioListenerBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AudioListenerBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebAudio::AudioListener> m_result;
@@ -330,21 +330,21 @@ public:
             AllFieldsSet = (NodeIdSet | ContextIdSet | NodeTypeSet | NumberOfInputsSet | NumberOfOutputsSet | ChannelCountSet | ChannelCountModeSet | ChannelInterpretationSet | 0)};
 
 
-        AudioNodeBuilder<STATE | NodeIdSet>& setNodeId(const String& value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::NodeIdSet)>& setNodeId(const String& value);  // Defined below
 
-        AudioNodeBuilder<STATE | ContextIdSet>& setContextId(const String& value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::ContextIdSet)>& setContextId(const String& value);  // Defined below
 
-        AudioNodeBuilder<STATE | NodeTypeSet>& setNodeType(const String& value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::NodeTypeSet)>& setNodeType(const String& value);  // Defined below
 
-        AudioNodeBuilder<STATE | NumberOfInputsSet>& setNumberOfInputs(double value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::NumberOfInputsSet)>& setNumberOfInputs(double value);  // Defined below
 
-        AudioNodeBuilder<STATE | NumberOfOutputsSet>& setNumberOfOutputs(double value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::NumberOfOutputsSet)>& setNumberOfOutputs(double value);  // Defined below
 
-        AudioNodeBuilder<STATE | ChannelCountSet>& setChannelCount(double value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::ChannelCountSet)>& setChannelCount(double value);  // Defined below
 
-        AudioNodeBuilder<STATE | ChannelCountModeSet>& setChannelCountMode(const String& value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::ChannelCountModeSet)>& setChannelCountMode(const String& value);  // Defined below
 
-        AudioNodeBuilder<STATE | ChannelInterpretationSet>& setChannelInterpretation(const String& value);  // Defined below
+        AudioNodeBuilder<(STATE | AudioNodeBuilder<STATE>::ChannelInterpretationSet)>& setChannelInterpretation(const String& value);  // Defined below
 
         std::unique_ptr<AudioNode> build()
         {
@@ -356,9 +356,9 @@ public:
         friend class AudioNode;
         AudioNodeBuilder() : m_result(new AudioNode()) { }
 
-        template<int STEP> AudioNodeBuilder<STATE | STEP>& castState()
+        template<int STEP> AudioNodeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AudioNodeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AudioNodeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebAudio::AudioNode> m_result;
@@ -429,21 +429,21 @@ public:
             AllFieldsSet = (ParamIdSet | NodeIdSet | ContextIdSet | ParamTypeSet | RateSet | DefaultValueSet | MinValueSet | MaxValueSet | 0)};
 
 
-        AudioParamBuilder<STATE | ParamIdSet>& setParamId(const String& value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::ParamIdSet)>& setParamId(const String& value);  // Defined below
 
-        AudioParamBuilder<STATE | NodeIdSet>& setNodeId(const String& value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::NodeIdSet)>& setNodeId(const String& value);  // Defined below
 
-        AudioParamBuilder<STATE | ContextIdSet>& setContextId(const String& value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::ContextIdSet)>& setContextId(const String& value);  // Defined below
 
-        AudioParamBuilder<STATE | ParamTypeSet>& setParamType(const String& value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::ParamTypeSet)>& setParamType(const String& value);  // Defined below
 
-        AudioParamBuilder<STATE | RateSet>& setRate(const String& value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::RateSet)>& setRate(const String& value);  // Defined below
 
-        AudioParamBuilder<STATE | DefaultValueSet>& setDefaultValue(double value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::DefaultValueSet)>& setDefaultValue(double value);  // Defined below
 
-        AudioParamBuilder<STATE | MinValueSet>& setMinValue(double value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::MinValueSet)>& setMinValue(double value);  // Defined below
 
-        AudioParamBuilder<STATE | MaxValueSet>& setMaxValue(double value);  // Defined below
+        AudioParamBuilder<(STATE | AudioParamBuilder<STATE>::MaxValueSet)>& setMaxValue(double value);  // Defined below
 
         std::unique_ptr<AudioParam> build()
         {
@@ -455,9 +455,9 @@ public:
         friend class AudioParam;
         AudioParamBuilder() : m_result(new AudioParam()) { }
 
-        template<int STEP> AudioParamBuilder<STATE | STEP>& castState()
+        template<int STEP> AudioParamBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AudioParamBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AudioParamBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::WebAudio::AudioParam> m_result;
@@ -496,28 +496,28 @@ inline void ContextRealtimeData::setCallbackIntervalMean(double value) { m_callb
 inline void ContextRealtimeData::setCallbackIntervalVariance(double value) { m_callbackIntervalVariance = value; }
 
 template<int STATE>
-inline ContextRealtimeData::ContextRealtimeDataBuilder<STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::CurrentTimeSet>&
+inline ContextRealtimeData::ContextRealtimeDataBuilder<(STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::CurrentTimeSet)>&
 ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::setCurrentTime(double value) {
   static_assert(!(STATE & CurrentTimeSet), "property currentTime should not be set yet");
   m_result->setCurrentTime(value);
   return castState<CurrentTimeSet>();
 }
 template<int STATE>
-inline ContextRealtimeData::ContextRealtimeDataBuilder<STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::RenderCapacitySet>&
+inline ContextRealtimeData::ContextRealtimeDataBuilder<(STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::RenderCapacitySet)>&
 ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::setRenderCapacity(double value) {
   static_assert(!(STATE & RenderCapacitySet), "property renderCapacity should not be set yet");
   m_result->setRenderCapacity(value);
   return castState<RenderCapacitySet>();
 }
 template<int STATE>
-inline ContextRealtimeData::ContextRealtimeDataBuilder<STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::CallbackIntervalMeanSet>&
+inline ContextRealtimeData::ContextRealtimeDataBuilder<(STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::CallbackIntervalMeanSet)>&
 ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::setCallbackIntervalMean(double value) {
   static_assert(!(STATE & CallbackIntervalMeanSet), "property callbackIntervalMean should not be set yet");
   m_result->setCallbackIntervalMean(value);
   return castState<CallbackIntervalMeanSet>();
 }
 template<int STATE>
-inline ContextRealtimeData::ContextRealtimeDataBuilder<STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::CallbackIntervalVarianceSet>&
+inline ContextRealtimeData::ContextRealtimeDataBuilder<(STATE | ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::CallbackIntervalVarianceSet)>&
 ContextRealtimeData::ContextRealtimeDataBuilder<STATE>::setCallbackIntervalVariance(double value) {
   static_assert(!(STATE & CallbackIntervalVarianceSet), "property callbackIntervalVariance should not be set yet");
   m_result->setCallbackIntervalVariance(value);
@@ -540,21 +540,21 @@ inline void BaseAudioContext::setMaxOutputChannelCount(double value) { m_maxOutp
 inline void BaseAudioContext::setSampleRate(double value) { m_sampleRate = value; }
 
 template<int STATE>
-inline BaseAudioContext::BaseAudioContextBuilder<STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::ContextIdSet>&
+inline BaseAudioContext::BaseAudioContextBuilder<(STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::ContextIdSet)>&
 BaseAudioContext::BaseAudioContextBuilder<STATE>::setContextId(const String& value) {
   static_assert(!(STATE & ContextIdSet), "property contextId should not be set yet");
   m_result->setContextId(value);
   return castState<ContextIdSet>();
 }
 template<int STATE>
-inline BaseAudioContext::BaseAudioContextBuilder<STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::ContextTypeSet>&
+inline BaseAudioContext::BaseAudioContextBuilder<(STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::ContextTypeSet)>&
 BaseAudioContext::BaseAudioContextBuilder<STATE>::setContextType(const String& value) {
   static_assert(!(STATE & ContextTypeSet), "property contextType should not be set yet");
   m_result->setContextType(value);
   return castState<ContextTypeSet>();
 }
 template<int STATE>
-inline BaseAudioContext::BaseAudioContextBuilder<STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::ContextStateSet>&
+inline BaseAudioContext::BaseAudioContextBuilder<(STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::ContextStateSet)>&
 BaseAudioContext::BaseAudioContextBuilder<STATE>::setContextState(const String& value) {
   static_assert(!(STATE & ContextStateSet), "property contextState should not be set yet");
   m_result->setContextState(value);
@@ -566,21 +566,21 @@ inline BaseAudioContext::BaseAudioContextBuilder<STATE>& BaseAudioContext::BaseA
   return *this;
 }
 template<int STATE>
-inline BaseAudioContext::BaseAudioContextBuilder<STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::CallbackBufferSizeSet>&
+inline BaseAudioContext::BaseAudioContextBuilder<(STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::CallbackBufferSizeSet)>&
 BaseAudioContext::BaseAudioContextBuilder<STATE>::setCallbackBufferSize(double value) {
   static_assert(!(STATE & CallbackBufferSizeSet), "property callbackBufferSize should not be set yet");
   m_result->setCallbackBufferSize(value);
   return castState<CallbackBufferSizeSet>();
 }
 template<int STATE>
-inline BaseAudioContext::BaseAudioContextBuilder<STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::MaxOutputChannelCountSet>&
+inline BaseAudioContext::BaseAudioContextBuilder<(STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::MaxOutputChannelCountSet)>&
 BaseAudioContext::BaseAudioContextBuilder<STATE>::setMaxOutputChannelCount(double value) {
   static_assert(!(STATE & MaxOutputChannelCountSet), "property maxOutputChannelCount should not be set yet");
   m_result->setMaxOutputChannelCount(value);
   return castState<MaxOutputChannelCountSet>();
 }
 template<int STATE>
-inline BaseAudioContext::BaseAudioContextBuilder<STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::SampleRateSet>&
+inline BaseAudioContext::BaseAudioContextBuilder<(STATE | BaseAudioContext::BaseAudioContextBuilder<STATE>::SampleRateSet)>&
 BaseAudioContext::BaseAudioContextBuilder<STATE>::setSampleRate(double value) {
   static_assert(!(STATE & SampleRateSet), "property sampleRate should not be set yet");
   m_result->setSampleRate(value);
@@ -597,14 +597,14 @@ inline void AudioListener::setListenerId(const String& value) { m_listenerId = v
 inline void AudioListener::setContextId(const String& value) { m_contextId = value; }
 
 template<int STATE>
-inline AudioListener::AudioListenerBuilder<STATE | AudioListener::AudioListenerBuilder<STATE>::ListenerIdSet>&
+inline AudioListener::AudioListenerBuilder<(STATE | AudioListener::AudioListenerBuilder<STATE>::ListenerIdSet)>&
 AudioListener::AudioListenerBuilder<STATE>::setListenerId(const String& value) {
   static_assert(!(STATE & ListenerIdSet), "property listenerId should not be set yet");
   m_result->setListenerId(value);
   return castState<ListenerIdSet>();
 }
 template<int STATE>
-inline AudioListener::AudioListenerBuilder<STATE | AudioListener::AudioListenerBuilder<STATE>::ContextIdSet>&
+inline AudioListener::AudioListenerBuilder<(STATE | AudioListener::AudioListenerBuilder<STATE>::ContextIdSet)>&
 AudioListener::AudioListenerBuilder<STATE>::setContextId(const String& value) {
   static_assert(!(STATE & ContextIdSet), "property contextId should not be set yet");
   m_result->setContextId(value);
@@ -624,56 +624,56 @@ inline void AudioNode::setChannelCountMode(const String& value) { m_channelCount
 inline void AudioNode::setChannelInterpretation(const String& value) { m_channelInterpretation = value; }
 
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::NodeIdSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::NodeIdSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setNodeId(const String& value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
   return castState<NodeIdSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::ContextIdSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::ContextIdSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setContextId(const String& value) {
   static_assert(!(STATE & ContextIdSet), "property contextId should not be set yet");
   m_result->setContextId(value);
   return castState<ContextIdSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::NodeTypeSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::NodeTypeSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setNodeType(const String& value) {
   static_assert(!(STATE & NodeTypeSet), "property nodeType should not be set yet");
   m_result->setNodeType(value);
   return castState<NodeTypeSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::NumberOfInputsSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::NumberOfInputsSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setNumberOfInputs(double value) {
   static_assert(!(STATE & NumberOfInputsSet), "property numberOfInputs should not be set yet");
   m_result->setNumberOfInputs(value);
   return castState<NumberOfInputsSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::NumberOfOutputsSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::NumberOfOutputsSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setNumberOfOutputs(double value) {
   static_assert(!(STATE & NumberOfOutputsSet), "property numberOfOutputs should not be set yet");
   m_result->setNumberOfOutputs(value);
   return castState<NumberOfOutputsSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::ChannelCountSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::ChannelCountSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setChannelCount(double value) {
   static_assert(!(STATE & ChannelCountSet), "property channelCount should not be set yet");
   m_result->setChannelCount(value);
   return castState<ChannelCountSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::ChannelCountModeSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::ChannelCountModeSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setChannelCountMode(const String& value) {
   static_assert(!(STATE & ChannelCountModeSet), "property channelCountMode should not be set yet");
   m_result->setChannelCountMode(value);
   return castState<ChannelCountModeSet>();
 }
 template<int STATE>
-inline AudioNode::AudioNodeBuilder<STATE | AudioNode::AudioNodeBuilder<STATE>::ChannelInterpretationSet>&
+inline AudioNode::AudioNodeBuilder<(STATE | AudioNode::AudioNodeBuilder<STATE>::ChannelInterpretationSet)>&
 AudioNode::AudioNodeBuilder<STATE>::setChannelInterpretation(const String& value) {
   static_assert(!(STATE & ChannelInterpretationSet), "property channelInterpretation should not be set yet");
   m_result->setChannelInterpretation(value);
@@ -696,56 +696,56 @@ inline void AudioParam::setMinValue(double value) { m_minValue = value; }
 inline void AudioParam::setMaxValue(double value) { m_maxValue = value; }
 
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::ParamIdSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::ParamIdSet)>&
 AudioParam::AudioParamBuilder<STATE>::setParamId(const String& value) {
   static_assert(!(STATE & ParamIdSet), "property paramId should not be set yet");
   m_result->setParamId(value);
   return castState<ParamIdSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::NodeIdSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::NodeIdSet)>&
 AudioParam::AudioParamBuilder<STATE>::setNodeId(const String& value) {
   static_assert(!(STATE & NodeIdSet), "property nodeId should not be set yet");
   m_result->setNodeId(value);
   return castState<NodeIdSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::ContextIdSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::ContextIdSet)>&
 AudioParam::AudioParamBuilder<STATE>::setContextId(const String& value) {
   static_assert(!(STATE & ContextIdSet), "property contextId should not be set yet");
   m_result->setContextId(value);
   return castState<ContextIdSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::ParamTypeSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::ParamTypeSet)>&
 AudioParam::AudioParamBuilder<STATE>::setParamType(const String& value) {
   static_assert(!(STATE & ParamTypeSet), "property paramType should not be set yet");
   m_result->setParamType(value);
   return castState<ParamTypeSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::RateSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::RateSet)>&
 AudioParam::AudioParamBuilder<STATE>::setRate(const String& value) {
   static_assert(!(STATE & RateSet), "property rate should not be set yet");
   m_result->setRate(value);
   return castState<RateSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::DefaultValueSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::DefaultValueSet)>&
 AudioParam::AudioParamBuilder<STATE>::setDefaultValue(double value) {
   static_assert(!(STATE & DefaultValueSet), "property defaultValue should not be set yet");
   m_result->setDefaultValue(value);
   return castState<DefaultValueSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::MinValueSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::MinValueSet)>&
 AudioParam::AudioParamBuilder<STATE>::setMinValue(double value) {
   static_assert(!(STATE & MinValueSet), "property minValue should not be set yet");
   m_result->setMinValue(value);
   return castState<MinValueSet>();
 }
 template<int STATE>
-inline AudioParam::AudioParamBuilder<STATE | AudioParam::AudioParamBuilder<STATE>::MaxValueSet>&
+inline AudioParam::AudioParamBuilder<(STATE | AudioParam::AudioParamBuilder<STATE>::MaxValueSet)>&
 AudioParam::AudioParamBuilder<STATE>::setMaxValue(double value) {
   static_assert(!(STATE & MaxValueSet), "property maxValue should not be set yet");
   m_result->setMaxValue(value);

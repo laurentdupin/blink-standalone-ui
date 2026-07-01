@@ -55,9 +55,9 @@ public:
             AllFieldsSet = (LevelSet | MessageSet | 0)};
 
 
-        PlayerMessageBuilder<STATE | LevelSet>& setLevel(const String& value);  // Defined below
+        PlayerMessageBuilder<(STATE | PlayerMessageBuilder<STATE>::LevelSet)>& setLevel(const String& value);  // Defined below
 
-        PlayerMessageBuilder<STATE | MessageSet>& setMessage(const String& value);  // Defined below
+        PlayerMessageBuilder<(STATE | PlayerMessageBuilder<STATE>::MessageSet)>& setMessage(const String& value);  // Defined below
 
         std::unique_ptr<PlayerMessage> build()
         {
@@ -69,9 +69,9 @@ public:
         friend class PlayerMessage;
         PlayerMessageBuilder() : m_result(new PlayerMessage()) { }
 
-        template<int STEP> PlayerMessageBuilder<STATE | STEP>& castState()
+        template<int STEP> PlayerMessageBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlayerMessageBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlayerMessageBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Media::PlayerMessage> m_result;
@@ -112,9 +112,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        PlayerPropertyBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        PlayerPropertyBuilder<(STATE | PlayerPropertyBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        PlayerPropertyBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        PlayerPropertyBuilder<(STATE | PlayerPropertyBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<PlayerProperty> build()
         {
@@ -126,9 +126,9 @@ public:
         friend class PlayerProperty;
         PlayerPropertyBuilder() : m_result(new PlayerProperty()) { }
 
-        template<int STEP> PlayerPropertyBuilder<STATE | STEP>& castState()
+        template<int STEP> PlayerPropertyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlayerPropertyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlayerPropertyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Media::PlayerProperty> m_result;
@@ -169,9 +169,9 @@ public:
             AllFieldsSet = (TimestampSet | ValueSet | 0)};
 
 
-        PlayerEventBuilder<STATE | TimestampSet>& setTimestamp(double value);  // Defined below
+        PlayerEventBuilder<(STATE | PlayerEventBuilder<STATE>::TimestampSet)>& setTimestamp(double value);  // Defined below
 
-        PlayerEventBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        PlayerEventBuilder<(STATE | PlayerEventBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<PlayerEvent> build()
         {
@@ -183,9 +183,9 @@ public:
         friend class PlayerEvent;
         PlayerEventBuilder() : m_result(new PlayerEvent()) { }
 
-        template<int STEP> PlayerEventBuilder<STATE | STEP>& castState()
+        template<int STEP> PlayerEventBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlayerEventBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlayerEventBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Media::PlayerEvent> m_result;
@@ -226,9 +226,9 @@ public:
             AllFieldsSet = (FileSet | LineSet | 0)};
 
 
-        PlayerErrorSourceLocationBuilder<STATE | FileSet>& setFile(const String& value);  // Defined below
+        PlayerErrorSourceLocationBuilder<(STATE | PlayerErrorSourceLocationBuilder<STATE>::FileSet)>& setFile(const String& value);  // Defined below
 
-        PlayerErrorSourceLocationBuilder<STATE | LineSet>& setLine(int value);  // Defined below
+        PlayerErrorSourceLocationBuilder<(STATE | PlayerErrorSourceLocationBuilder<STATE>::LineSet)>& setLine(int value);  // Defined below
 
         std::unique_ptr<PlayerErrorSourceLocation> build()
         {
@@ -240,9 +240,9 @@ public:
         friend class PlayerErrorSourceLocation;
         PlayerErrorSourceLocationBuilder() : m_result(new PlayerErrorSourceLocation()) { }
 
-        template<int STEP> PlayerErrorSourceLocationBuilder<STATE | STEP>& castState()
+        template<int STEP> PlayerErrorSourceLocationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlayerErrorSourceLocationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlayerErrorSourceLocationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Media::PlayerErrorSourceLocation> m_result;
@@ -295,15 +295,15 @@ public:
             AllFieldsSet = (ErrorTypeSet | CodeSet | StackSet | CauseSet | DataSet | 0)};
 
 
-        PlayerErrorBuilder<STATE | ErrorTypeSet>& setErrorType(const String& value);  // Defined below
+        PlayerErrorBuilder<(STATE | PlayerErrorBuilder<STATE>::ErrorTypeSet)>& setErrorType(const String& value);  // Defined below
 
-        PlayerErrorBuilder<STATE | CodeSet>& setCode(int value);  // Defined below
+        PlayerErrorBuilder<(STATE | PlayerErrorBuilder<STATE>::CodeSet)>& setCode(int value);  // Defined below
 
-        PlayerErrorBuilder<STATE | StackSet>& setStack(std::unique_ptr<protocol::Array<protocol::Media::PlayerErrorSourceLocation>> value);  // Defined below
+        PlayerErrorBuilder<(STATE | PlayerErrorBuilder<STATE>::StackSet)>& setStack(std::unique_ptr<protocol::Array<protocol::Media::PlayerErrorSourceLocation>> value);  // Defined below
 
-        PlayerErrorBuilder<STATE | CauseSet>& setCause(std::unique_ptr<protocol::Array<protocol::Media::PlayerError>> value);  // Defined below
+        PlayerErrorBuilder<(STATE | PlayerErrorBuilder<STATE>::CauseSet)>& setCause(std::unique_ptr<protocol::Array<protocol::Media::PlayerError>> value);  // Defined below
 
-        PlayerErrorBuilder<STATE | DataSet>& setData(std::unique_ptr<protocol::DictionaryValue> value);  // Defined below
+        PlayerErrorBuilder<(STATE | PlayerErrorBuilder<STATE>::DataSet)>& setData(std::unique_ptr<protocol::DictionaryValue> value);  // Defined below
 
         std::unique_ptr<PlayerError> build()
         {
@@ -315,9 +315,9 @@ public:
         friend class PlayerError;
         PlayerErrorBuilder() : m_result(new PlayerError()) { }
 
-        template<int STEP> PlayerErrorBuilder<STATE | STEP>& castState()
+        template<int STEP> PlayerErrorBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlayerErrorBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlayerErrorBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Media::PlayerError> m_result;
@@ -366,7 +366,7 @@ public:
             AllFieldsSet = (PlayerIdSet | 0)};
 
 
-        PlayerBuilder<STATE | PlayerIdSet>& setPlayerId(const String& value);  // Defined below
+        PlayerBuilder<(STATE | PlayerBuilder<STATE>::PlayerIdSet)>& setPlayerId(const String& value);  // Defined below
 
         PlayerBuilder<STATE>& setDomNodeId(int value);  // Defined below
 
@@ -380,9 +380,9 @@ public:
         friend class Player;
         PlayerBuilder() : m_result(new Player()) { }
 
-        template<int STEP> PlayerBuilder<STATE | STEP>& castState()
+        template<int STEP> PlayerBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PlayerBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PlayerBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Media::Player> m_result;
@@ -413,14 +413,14 @@ inline void PlayerMessage::setLevel(const String& value) { m_level = value; }
 inline void PlayerMessage::setMessage(const String& value) { m_message = value; }
 
 template<int STATE>
-inline PlayerMessage::PlayerMessageBuilder<STATE | PlayerMessage::PlayerMessageBuilder<STATE>::LevelSet>&
+inline PlayerMessage::PlayerMessageBuilder<(STATE | PlayerMessage::PlayerMessageBuilder<STATE>::LevelSet)>&
 PlayerMessage::PlayerMessageBuilder<STATE>::setLevel(const String& value) {
   static_assert(!(STATE & LevelSet), "property level should not be set yet");
   m_result->setLevel(value);
   return castState<LevelSet>();
 }
 template<int STATE>
-inline PlayerMessage::PlayerMessageBuilder<STATE | PlayerMessage::PlayerMessageBuilder<STATE>::MessageSet>&
+inline PlayerMessage::PlayerMessageBuilder<(STATE | PlayerMessage::PlayerMessageBuilder<STATE>::MessageSet)>&
 PlayerMessage::PlayerMessageBuilder<STATE>::setMessage(const String& value) {
   static_assert(!(STATE & MessageSet), "property message should not be set yet");
   m_result->setMessage(value);
@@ -434,14 +434,14 @@ inline void PlayerProperty::setName(const String& value) { m_name = value; }
 inline void PlayerProperty::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline PlayerProperty::PlayerPropertyBuilder<STATE | PlayerProperty::PlayerPropertyBuilder<STATE>::NameSet>&
+inline PlayerProperty::PlayerPropertyBuilder<(STATE | PlayerProperty::PlayerPropertyBuilder<STATE>::NameSet)>&
 PlayerProperty::PlayerPropertyBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline PlayerProperty::PlayerPropertyBuilder<STATE | PlayerProperty::PlayerPropertyBuilder<STATE>::ValueSet>&
+inline PlayerProperty::PlayerPropertyBuilder<(STATE | PlayerProperty::PlayerPropertyBuilder<STATE>::ValueSet)>&
 PlayerProperty::PlayerPropertyBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -455,14 +455,14 @@ inline void PlayerEvent::setTimestamp(double value) { m_timestamp = value; }
 inline void PlayerEvent::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline PlayerEvent::PlayerEventBuilder<STATE | PlayerEvent::PlayerEventBuilder<STATE>::TimestampSet>&
+inline PlayerEvent::PlayerEventBuilder<(STATE | PlayerEvent::PlayerEventBuilder<STATE>::TimestampSet)>&
 PlayerEvent::PlayerEventBuilder<STATE>::setTimestamp(double value) {
   static_assert(!(STATE & TimestampSet), "property timestamp should not be set yet");
   m_result->setTimestamp(value);
   return castState<TimestampSet>();
 }
 template<int STATE>
-inline PlayerEvent::PlayerEventBuilder<STATE | PlayerEvent::PlayerEventBuilder<STATE>::ValueSet>&
+inline PlayerEvent::PlayerEventBuilder<(STATE | PlayerEvent::PlayerEventBuilder<STATE>::ValueSet)>&
 PlayerEvent::PlayerEventBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -477,14 +477,14 @@ inline void PlayerErrorSourceLocation::setFile(const String& value) { m_file = v
 inline void PlayerErrorSourceLocation::setLine(int value) { m_line = value; }
 
 template<int STATE>
-inline PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE | PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE>::FileSet>&
+inline PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<(STATE | PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE>::FileSet)>&
 PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE>::setFile(const String& value) {
   static_assert(!(STATE & FileSet), "property file should not be set yet");
   m_result->setFile(value);
   return castState<FileSet>();
 }
 template<int STATE>
-inline PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE | PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE>::LineSet>&
+inline PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<(STATE | PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE>::LineSet)>&
 PlayerErrorSourceLocation::PlayerErrorSourceLocationBuilder<STATE>::setLine(int value) {
   static_assert(!(STATE & LineSet), "property line should not be set yet");
   m_result->setLine(value);
@@ -502,35 +502,35 @@ inline void PlayerError::setCause(std::unique_ptr<protocol::Array<protocol::Medi
 inline void PlayerError::setData(std::unique_ptr<protocol::DictionaryValue> value) { m_data = std::move(value); }
 
 template<int STATE>
-inline PlayerError::PlayerErrorBuilder<STATE | PlayerError::PlayerErrorBuilder<STATE>::ErrorTypeSet>&
+inline PlayerError::PlayerErrorBuilder<(STATE | PlayerError::PlayerErrorBuilder<STATE>::ErrorTypeSet)>&
 PlayerError::PlayerErrorBuilder<STATE>::setErrorType(const String& value) {
   static_assert(!(STATE & ErrorTypeSet), "property errorType should not be set yet");
   m_result->setErrorType(value);
   return castState<ErrorTypeSet>();
 }
 template<int STATE>
-inline PlayerError::PlayerErrorBuilder<STATE | PlayerError::PlayerErrorBuilder<STATE>::CodeSet>&
+inline PlayerError::PlayerErrorBuilder<(STATE | PlayerError::PlayerErrorBuilder<STATE>::CodeSet)>&
 PlayerError::PlayerErrorBuilder<STATE>::setCode(int value) {
   static_assert(!(STATE & CodeSet), "property code should not be set yet");
   m_result->setCode(value);
   return castState<CodeSet>();
 }
 template<int STATE>
-inline PlayerError::PlayerErrorBuilder<STATE | PlayerError::PlayerErrorBuilder<STATE>::StackSet>&
+inline PlayerError::PlayerErrorBuilder<(STATE | PlayerError::PlayerErrorBuilder<STATE>::StackSet)>&
 PlayerError::PlayerErrorBuilder<STATE>::setStack(std::unique_ptr<protocol::Array<protocol::Media::PlayerErrorSourceLocation>> value) {
   static_assert(!(STATE & StackSet), "property stack should not be set yet");
   m_result->setStack(std::move(value));
   return castState<StackSet>();
 }
 template<int STATE>
-inline PlayerError::PlayerErrorBuilder<STATE | PlayerError::PlayerErrorBuilder<STATE>::CauseSet>&
+inline PlayerError::PlayerErrorBuilder<(STATE | PlayerError::PlayerErrorBuilder<STATE>::CauseSet)>&
 PlayerError::PlayerErrorBuilder<STATE>::setCause(std::unique_ptr<protocol::Array<protocol::Media::PlayerError>> value) {
   static_assert(!(STATE & CauseSet), "property cause should not be set yet");
   m_result->setCause(std::move(value));
   return castState<CauseSet>();
 }
 template<int STATE>
-inline PlayerError::PlayerErrorBuilder<STATE | PlayerError::PlayerErrorBuilder<STATE>::DataSet>&
+inline PlayerError::PlayerErrorBuilder<(STATE | PlayerError::PlayerErrorBuilder<STATE>::DataSet)>&
 PlayerError::PlayerErrorBuilder<STATE>::setData(std::unique_ptr<protocol::DictionaryValue> value) {
   static_assert(!(STATE & DataSet), "property data should not be set yet");
   m_result->setData(std::move(value));
@@ -545,7 +545,7 @@ inline void Player::setPlayerId(const String& value) { m_playerId = value; }
 inline void Player::setDomNodeId(int value) { m_domNodeId = value; }
 
 template<int STATE>
-inline Player::PlayerBuilder<STATE | Player::PlayerBuilder<STATE>::PlayerIdSet>&
+inline Player::PlayerBuilder<(STATE | Player::PlayerBuilder<STATE>::PlayerIdSet)>&
 Player::PlayerBuilder<STATE>::setPlayerId(const String& value) {
   static_assert(!(STATE & PlayerIdSet), "property playerId should not be set yet");
   m_result->setPlayerId(value);

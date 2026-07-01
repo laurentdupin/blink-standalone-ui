@@ -17,8 +17,30 @@
 namespace blink {
 
 template <internal::HeapCollectionType CollectionType, typename T>
-class BasicHeapDeque final
-    : public std::conditional_t<
+class BasicHeapDeque;
+
+namespace internal {
+
+template <HeapCollectionType CollectionType, typename T>
+struct BasicHeapDequeTypeConstraints {
+  constexpr BasicHeapDequeTypeConstraints() {
+    static_assert(IsMemberType<T>::value,
+                  "BasicHeapDeque supports only Member.");
+    static_assert(std::is_trivially_destructible_v<
+                      blink::BasicHeapDeque<CollectionType, T>>,
+                  "BasicHeapDeque must be trivially destructible.");
+    static_assert(IsTraceableV<T>,
+                  "For deques without traceable elements, use Deque<> instead "
+                  "of HeapDeque<>");
+  }
+};
+
+}  // namespace internal
+
+template <internal::HeapCollectionType CollectionType, typename T>
+class EMPTY_BASES BasicHeapDeque final
+    : private internal::BasicHeapDequeTypeConstraints<CollectionType, T>,
+      public std::conditional_t<
           CollectionType == internal::HeapCollectionType::kGCed,
           GarbageCollected<BasicHeapDeque<CollectionType, T>>,
           internal::DisallowNewBaseForHeapCollections>,
@@ -51,21 +73,12 @@ class BasicHeapDeque final
     Deque<T, 0, HeapAllocator>::Trace(visitor);
   }
 
- private:
-  struct TypeConstraints {
-    constexpr TypeConstraints() {
-      static_assert(IsMemberType<T>::value,
-                    "BasicHeapDeque supports only Member.");
-      static_assert(std::is_trivially_destructible_v<BasicHeapDeque>,
-                    "BasicHeapDeque must be trivially destructible.");
-      static_assert(
-          IsTraceableV<T>,
-          "For deques without traceable elements, use Deque<> instead "
-          "of HeapDeque<>");
-    }
-  };
-  NO_UNIQUE_ADDRESS TypeConstraints type_constraints_;
 };
+
+template <typename T>
+struct IsDisallowNewTrait<
+    BasicHeapDeque<internal::HeapCollectionType::kDisallowNew, T>>
+    : std::true_type {};
 
 // On-stack for in-field version of blink::Deque for referring to
 // GarbageCollected or DISALLOW_NEW() objects with Trace() methods.

@@ -18,6 +18,10 @@ class DictValue;
 class SingleThreadTaskRunner;
 }  // namespace base
 
+#ifdef SendMessage
+#undef SendMessage
+#endif
+
 namespace cc {
 
 class LayerTreeHost;

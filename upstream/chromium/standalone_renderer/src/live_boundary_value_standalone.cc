@@ -1732,7 +1732,7 @@ WebString WebURLResponse::MimeType() const {
 }
 WebString WebURLResponse::HttpHeaderField(const WebString& name) const {
   return resource_response_ ? WebString(resource_response_->HttpHeaderField(
-                                  AtomicString(name)))
+                                  name.operator AtomicString()))
                             : WebString();
 }
 int WebURLResponse::HttpStatusCode() const {

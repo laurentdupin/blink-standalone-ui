@@ -142,15 +142,15 @@ public:
             AllFieldsSet = (SourceSet | LevelSet | TextSet | TimestampSet | 0)};
 
 
-        LogEntryBuilder<STATE | SourceSet>& setSource(const String& value);  // Defined below
+        LogEntryBuilder<(STATE | LogEntryBuilder<STATE>::SourceSet)>& setSource(const String& value);  // Defined below
 
-        LogEntryBuilder<STATE | LevelSet>& setLevel(const String& value);  // Defined below
+        LogEntryBuilder<(STATE | LogEntryBuilder<STATE>::LevelSet)>& setLevel(const String& value);  // Defined below
 
-        LogEntryBuilder<STATE | TextSet>& setText(const String& value);  // Defined below
+        LogEntryBuilder<(STATE | LogEntryBuilder<STATE>::TextSet)>& setText(const String& value);  // Defined below
 
         LogEntryBuilder<STATE>& setCategory(const String& value);  // Defined below
 
-        LogEntryBuilder<STATE | TimestampSet>& setTimestamp(double value);  // Defined below
+        LogEntryBuilder<(STATE | LogEntryBuilder<STATE>::TimestampSet)>& setTimestamp(double value);  // Defined below
 
         LogEntryBuilder<STATE>& setUrl(const String& value);  // Defined below
 
@@ -174,9 +174,9 @@ public:
         friend class LogEntry;
         LogEntryBuilder() : m_result(new LogEntry()) { }
 
-        template<int STEP> LogEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> LogEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<LogEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<LogEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Log::LogEntry> m_result;
@@ -236,9 +236,9 @@ public:
             AllFieldsSet = (NameSet | ThresholdSet | 0)};
 
 
-        ViolationSettingBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        ViolationSettingBuilder<(STATE | ViolationSettingBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        ViolationSettingBuilder<STATE | ThresholdSet>& setThreshold(double value);  // Defined below
+        ViolationSettingBuilder<(STATE | ViolationSettingBuilder<STATE>::ThresholdSet)>& setThreshold(double value);  // Defined below
 
         std::unique_ptr<ViolationSetting> build()
         {
@@ -250,9 +250,9 @@ public:
         friend class ViolationSetting;
         ViolationSettingBuilder() : m_result(new ViolationSetting()) { }
 
-        template<int STEP> ViolationSettingBuilder<STATE | STEP>& castState()
+        template<int STEP> ViolationSettingBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ViolationSettingBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ViolationSettingBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Log::ViolationSetting> m_result;
@@ -292,21 +292,21 @@ inline void LogEntry::setWorkerId(const String& value) { m_workerId = value; }
 inline void LogEntry::setArgs(std::unique_ptr<protocol::Array<v8_inspector::protocol::Runtime::API::RemoteObject>> value) { m_args = std::move(value); }
 
 template<int STATE>
-inline LogEntry::LogEntryBuilder<STATE | LogEntry::LogEntryBuilder<STATE>::SourceSet>&
+inline LogEntry::LogEntryBuilder<(STATE | LogEntry::LogEntryBuilder<STATE>::SourceSet)>&
 LogEntry::LogEntryBuilder<STATE>::setSource(const String& value) {
   static_assert(!(STATE & SourceSet), "property source should not be set yet");
   m_result->setSource(value);
   return castState<SourceSet>();
 }
 template<int STATE>
-inline LogEntry::LogEntryBuilder<STATE | LogEntry::LogEntryBuilder<STATE>::LevelSet>&
+inline LogEntry::LogEntryBuilder<(STATE | LogEntry::LogEntryBuilder<STATE>::LevelSet)>&
 LogEntry::LogEntryBuilder<STATE>::setLevel(const String& value) {
   static_assert(!(STATE & LevelSet), "property level should not be set yet");
   m_result->setLevel(value);
   return castState<LevelSet>();
 }
 template<int STATE>
-inline LogEntry::LogEntryBuilder<STATE | LogEntry::LogEntryBuilder<STATE>::TextSet>&
+inline LogEntry::LogEntryBuilder<(STATE | LogEntry::LogEntryBuilder<STATE>::TextSet)>&
 LogEntry::LogEntryBuilder<STATE>::setText(const String& value) {
   static_assert(!(STATE & TextSet), "property text should not be set yet");
   m_result->setText(value);
@@ -318,7 +318,7 @@ inline LogEntry::LogEntryBuilder<STATE>& LogEntry::LogEntryBuilder<STATE>::setCa
   return *this;
 }
 template<int STATE>
-inline LogEntry::LogEntryBuilder<STATE | LogEntry::LogEntryBuilder<STATE>::TimestampSet>&
+inline LogEntry::LogEntryBuilder<(STATE | LogEntry::LogEntryBuilder<STATE>::TimestampSet)>&
 LogEntry::LogEntryBuilder<STATE>::setTimestamp(double value) {
   static_assert(!(STATE & TimestampSet), "property timestamp should not be set yet");
   m_result->setTimestamp(value);
@@ -363,14 +363,14 @@ inline void ViolationSetting::setName(const String& value) { m_name = value; }
 inline void ViolationSetting::setThreshold(double value) { m_threshold = value; }
 
 template<int STATE>
-inline ViolationSetting::ViolationSettingBuilder<STATE | ViolationSetting::ViolationSettingBuilder<STATE>::NameSet>&
+inline ViolationSetting::ViolationSettingBuilder<(STATE | ViolationSetting::ViolationSettingBuilder<STATE>::NameSet)>&
 ViolationSetting::ViolationSettingBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline ViolationSetting::ViolationSettingBuilder<STATE | ViolationSetting::ViolationSettingBuilder<STATE>::ThresholdSet>&
+inline ViolationSetting::ViolationSettingBuilder<(STATE | ViolationSetting::ViolationSettingBuilder<STATE>::ThresholdSet)>&
 ViolationSetting::ViolationSettingBuilder<STATE>::setThreshold(double value) {
   static_assert(!(STATE & ThresholdSet), "property threshold should not be set yet");
   m_result->setThreshold(value);

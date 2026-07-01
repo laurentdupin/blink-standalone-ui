@@ -13,7 +13,7 @@
 // NOTIMPLEMENTED_LOG_ONCE() can be used.
 #if DCHECK_IS_ON()
 #define NOTIMPLEMENTED() \
-  ::logging::CheckError::NotImplemented(__PRETTY_FUNCTION__)
+  ::logging::CheckError::NotImplemented(PRETTY_FUNCTION)
 
 // The lambda returns false the first time it is run, and true every other time.
 // Note that the `static const bool call_once` trickery is used for thread
@@ -38,7 +38,7 @@
 // The TVOS_NOT_YET_IMPLEMENTED() macro marks code paths that have not yet been
 // implemented for tvOS.
 #define TVOS_NOT_YET_IMPLEMENTED() \
-  ::logging::CheckError::NotImplemented(__PRETTY_FUNCTION__)
+  ::logging::CheckError::NotImplemented(PRETTY_FUNCTION)
 
 #else
 #define NOTIMPLEMENTED() EAT_CHECK_STREAM_PARAMS()

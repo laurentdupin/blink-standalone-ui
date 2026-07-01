@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/compiler_specific.h"
 #include "base/containers/span.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
@@ -355,7 +356,7 @@ void SkiaOutputSurfaceImplOnGpu::ReleaseAsyncReadResultHelpers() {
 }
 
 SkiaOutputSurfaceImplOnGpu::~SkiaOutputSurfaceImplOnGpu() {
-  TRACE_EVENT0("cc", __PRETTY_FUNCTION__);
+  TRACE_EVENT0("cc", PRETTY_FUNCTION);
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // We need to have context current or lost during the destruction.

@@ -32,13 +32,14 @@ const base::FeatureParam<int> kDeferImplInvalidationFrames{
 
 // Note that kUseDMSAAForTiles only controls vulkan launch on android. We will
 // be using a separate flag to control the launch on GL.
-BASE_FEATURE(kUseDMSAAForTiles,
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kUseDMSAAForTilesDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kUseDMSAAForTilesDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kUseDMSAAForTiles, kUseDMSAAForTilesDefaultState);
 
 BASE_FEATURE(kReclaimPrepaintTilesWhenIdle, base::FEATURE_DISABLED_BY_DEFAULT);
 
@@ -128,13 +129,15 @@ BASE_FEATURE(kThrottleRepeatedNoDamageFrames,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enabled on Android, after a field trial showed improvements.
-BASE_FEATURE(kThrottleMainFrameTo60Hz,
 #if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
+constexpr base::FeatureState kThrottleMainFrameTo60HzDefaultState =
+    base::FEATURE_ENABLED_BY_DEFAULT;
 #else
-             base::FEATURE_DISABLED_BY_DEFAULT
+constexpr base::FeatureState kThrottleMainFrameTo60HzDefaultState =
+    base::FEATURE_DISABLED_BY_DEFAULT;
 #endif
-);
+BASE_FEATURE(kThrottleMainFrameTo60Hz,
+             kThrottleMainFrameTo60HzDefaultState);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kThrottleMainFrameTo60HzWebView,

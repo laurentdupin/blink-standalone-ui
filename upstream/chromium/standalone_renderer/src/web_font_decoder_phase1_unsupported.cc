@@ -8,6 +8,8 @@
 
 #include "third_party/blink/renderer/platform/fonts/web_font_decoder.h"
 
+#include "third_party/skia/include/core/SkTypeface.h"
+
 namespace blink {
 
 sk_sp<SkTypeface> WebFontDecoder::Decode(SegmentedBuffer*) {

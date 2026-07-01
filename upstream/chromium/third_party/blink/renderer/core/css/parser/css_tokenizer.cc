@@ -595,7 +595,7 @@ StringView CSSTokenizer::ConsumeName() {
   StringView buffer = input_.Peek();
 
   unsigned size = 0;
-#if defined(__SSE2__) || defined(__ARM_NEON__)
+#if (defined(__SSE2__) || defined(__ARM_NEON__)) && !defined(COMPILER_MSVC)
   if (buffer.Is8Bit()) {
     const LChar* ptr = buffer.Span8().data();
     while (size + 16 <= buffer.length()) {
@@ -650,7 +650,7 @@ StringView CSSTokenizer::ConsumeName() {
     }
     // Fall back to the slow path for the last <= 15 bytes of the string.
   }
-#endif  // SIMD
+#endif  // (defined(__SSE2__) || defined(__ARM_NEON__)) && !defined(COMPILER_MSVC)
 
   // Slow path for non-UTF-8 and tokens near the end of the string.
   for (; size < buffer.length(); ++size) {

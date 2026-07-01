@@ -134,9 +134,9 @@ public:
             AllFieldsSet = (StorageTypeSet | UsageSet | 0)};
 
 
-        UsageForTypeBuilder<STATE | StorageTypeSet>& setStorageType(const String& value);  // Defined below
+        UsageForTypeBuilder<(STATE | UsageForTypeBuilder<STATE>::StorageTypeSet)>& setStorageType(const String& value);  // Defined below
 
-        UsageForTypeBuilder<STATE | UsageSet>& setUsage(double value);  // Defined below
+        UsageForTypeBuilder<(STATE | UsageForTypeBuilder<STATE>::UsageSet)>& setUsage(double value);  // Defined below
 
         std::unique_ptr<UsageForType> build()
         {
@@ -148,9 +148,9 @@ public:
         friend class UsageForType;
         UsageForTypeBuilder() : m_result(new UsageForType()) { }
 
-        template<int STEP> UsageForTypeBuilder<STATE | STEP>& castState()
+        template<int STEP> UsageForTypeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<UsageForTypeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<UsageForTypeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::UsageForType> m_result;
@@ -191,9 +191,9 @@ public:
             AllFieldsSet = (IssuerOriginSet | CountSet | 0)};
 
 
-        TrustTokensBuilder<STATE | IssuerOriginSet>& setIssuerOrigin(const String& value);  // Defined below
+        TrustTokensBuilder<(STATE | TrustTokensBuilder<STATE>::IssuerOriginSet)>& setIssuerOrigin(const String& value);  // Defined below
 
-        TrustTokensBuilder<STATE | CountSet>& setCount(double value);  // Defined below
+        TrustTokensBuilder<(STATE | TrustTokensBuilder<STATE>::CountSet)>& setCount(double value);  // Defined below
 
         std::unique_ptr<TrustTokens> build()
         {
@@ -205,9 +205,9 @@ public:
         friend class TrustTokens;
         TrustTokensBuilder() : m_result(new TrustTokens()) { }
 
-        template<int STEP> TrustTokensBuilder<STATE | STEP>& castState()
+        template<int STEP> TrustTokensBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<TrustTokensBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<TrustTokensBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::TrustTokens> m_result;
@@ -248,9 +248,9 @@ public:
             AllFieldsSet = (KeySet | ValueSet | 0)};
 
 
-        SharedStorageEntryBuilder<STATE | KeySet>& setKey(const String& value);  // Defined below
+        SharedStorageEntryBuilder<(STATE | SharedStorageEntryBuilder<STATE>::KeySet)>& setKey(const String& value);  // Defined below
 
-        SharedStorageEntryBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        SharedStorageEntryBuilder<(STATE | SharedStorageEntryBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<SharedStorageEntry> build()
         {
@@ -262,9 +262,9 @@ public:
         friend class SharedStorageEntry;
         SharedStorageEntryBuilder() : m_result(new SharedStorageEntry()) { }
 
-        template<int STEP> SharedStorageEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedStorageEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedStorageEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedStorageEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::SharedStorageEntry> m_result;
@@ -313,13 +313,13 @@ public:
             AllFieldsSet = (CreationTimeSet | LengthSet | RemainingBudgetSet | BytesUsedSet | 0)};
 
 
-        SharedStorageMetadataBuilder<STATE | CreationTimeSet>& setCreationTime(double value);  // Defined below
+        SharedStorageMetadataBuilder<(STATE | SharedStorageMetadataBuilder<STATE>::CreationTimeSet)>& setCreationTime(double value);  // Defined below
 
-        SharedStorageMetadataBuilder<STATE | LengthSet>& setLength(int value);  // Defined below
+        SharedStorageMetadataBuilder<(STATE | SharedStorageMetadataBuilder<STATE>::LengthSet)>& setLength(int value);  // Defined below
 
-        SharedStorageMetadataBuilder<STATE | RemainingBudgetSet>& setRemainingBudget(double value);  // Defined below
+        SharedStorageMetadataBuilder<(STATE | SharedStorageMetadataBuilder<STATE>::RemainingBudgetSet)>& setRemainingBudget(double value);  // Defined below
 
-        SharedStorageMetadataBuilder<STATE | BytesUsedSet>& setBytesUsed(int value);  // Defined below
+        SharedStorageMetadataBuilder<(STATE | SharedStorageMetadataBuilder<STATE>::BytesUsedSet)>& setBytesUsed(int value);  // Defined below
 
         std::unique_ptr<SharedStorageMetadata> build()
         {
@@ -331,9 +331,9 @@ public:
         friend class SharedStorageMetadata;
         SharedStorageMetadataBuilder() : m_result(new SharedStorageMetadata()) { }
 
-        template<int STEP> SharedStorageMetadataBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedStorageMetadataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedStorageMetadataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedStorageMetadataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::SharedStorageMetadata> m_result;
@@ -403,7 +403,7 @@ public:
 
         SharedStoragePrivateAggregationConfigBuilder<STATE>& setContextId(const String& value);  // Defined below
 
-        SharedStoragePrivateAggregationConfigBuilder<STATE | FilteringIdMaxBytesSet>& setFilteringIdMaxBytes(int value);  // Defined below
+        SharedStoragePrivateAggregationConfigBuilder<(STATE | SharedStoragePrivateAggregationConfigBuilder<STATE>::FilteringIdMaxBytesSet)>& setFilteringIdMaxBytes(int value);  // Defined below
 
         SharedStoragePrivateAggregationConfigBuilder<STATE>& setMaxContributions(int value);  // Defined below
 
@@ -417,9 +417,9 @@ public:
         friend class SharedStoragePrivateAggregationConfig;
         SharedStoragePrivateAggregationConfigBuilder() : m_result(new SharedStoragePrivateAggregationConfig()) { }
 
-        template<int STEP> SharedStoragePrivateAggregationConfigBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedStoragePrivateAggregationConfigBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedStoragePrivateAggregationConfigBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedStoragePrivateAggregationConfigBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::SharedStoragePrivateAggregationConfig> m_result;
@@ -462,9 +462,9 @@ public:
             AllFieldsSet = (EventTypeSet | ReportingUrlSet | 0)};
 
 
-        SharedStorageReportingMetadataBuilder<STATE | EventTypeSet>& setEventType(const String& value);  // Defined below
+        SharedStorageReportingMetadataBuilder<(STATE | SharedStorageReportingMetadataBuilder<STATE>::EventTypeSet)>& setEventType(const String& value);  // Defined below
 
-        SharedStorageReportingMetadataBuilder<STATE | ReportingUrlSet>& setReportingUrl(const String& value);  // Defined below
+        SharedStorageReportingMetadataBuilder<(STATE | SharedStorageReportingMetadataBuilder<STATE>::ReportingUrlSet)>& setReportingUrl(const String& value);  // Defined below
 
         std::unique_ptr<SharedStorageReportingMetadata> build()
         {
@@ -476,9 +476,9 @@ public:
         friend class SharedStorageReportingMetadata;
         SharedStorageReportingMetadataBuilder() : m_result(new SharedStorageReportingMetadata()) { }
 
-        template<int STEP> SharedStorageReportingMetadataBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedStorageReportingMetadataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedStorageReportingMetadataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedStorageReportingMetadataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::SharedStorageReportingMetadata> m_result;
@@ -519,9 +519,9 @@ public:
             AllFieldsSet = (UrlSet | ReportingMetadataSet | 0)};
 
 
-        SharedStorageUrlWithMetadataBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        SharedStorageUrlWithMetadataBuilder<(STATE | SharedStorageUrlWithMetadataBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        SharedStorageUrlWithMetadataBuilder<STATE | ReportingMetadataSet>& setReportingMetadata(std::unique_ptr<protocol::Array<protocol::Storage::SharedStorageReportingMetadata>> value);  // Defined below
+        SharedStorageUrlWithMetadataBuilder<(STATE | SharedStorageUrlWithMetadataBuilder<STATE>::ReportingMetadataSet)>& setReportingMetadata(std::unique_ptr<protocol::Array<protocol::Storage::SharedStorageReportingMetadata>> value);  // Defined below
 
         std::unique_ptr<SharedStorageUrlWithMetadata> build()
         {
@@ -533,9 +533,9 @@ public:
         friend class SharedStorageUrlWithMetadata;
         SharedStorageUrlWithMetadataBuilder() : m_result(new SharedStorageUrlWithMetadata()) { }
 
-        template<int STEP> SharedStorageUrlWithMetadataBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedStorageUrlWithMetadataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedStorageUrlWithMetadataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedStorageUrlWithMetadataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::SharedStorageUrlWithMetadata> m_result;
@@ -765,9 +765,9 @@ public:
         friend class SharedStorageAccessParams;
         SharedStorageAccessParamsBuilder() : m_result(new SharedStorageAccessParams()) { }
 
-        template<int STEP> SharedStorageAccessParamsBuilder<STATE | STEP>& castState()
+        template<int STEP> SharedStorageAccessParamsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SharedStorageAccessParamsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SharedStorageAccessParamsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::SharedStorageAccessParams> m_result;
@@ -828,7 +828,7 @@ public:
             AllFieldsSet = (StorageKeySet | 0)};
 
 
-        StorageBucketBuilder<STATE | StorageKeySet>& setStorageKey(const String& value);  // Defined below
+        StorageBucketBuilder<(STATE | StorageBucketBuilder<STATE>::StorageKeySet)>& setStorageKey(const String& value);  // Defined below
 
         StorageBucketBuilder<STATE>& setName(const String& value);  // Defined below
 
@@ -842,9 +842,9 @@ public:
         friend class StorageBucket;
         StorageBucketBuilder() : m_result(new StorageBucket()) { }
 
-        template<int STEP> StorageBucketBuilder<STATE | STEP>& castState()
+        template<int STEP> StorageBucketBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<StorageBucketBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<StorageBucketBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::StorageBucket> m_result;
@@ -901,17 +901,17 @@ public:
             AllFieldsSet = (BucketSet | IdSet | ExpirationSet | QuotaSet | PersistentSet | DurabilitySet | 0)};
 
 
-        StorageBucketInfoBuilder<STATE | BucketSet>& setBucket(std::unique_ptr<protocol::Storage::StorageBucket> value);  // Defined below
+        StorageBucketInfoBuilder<(STATE | StorageBucketInfoBuilder<STATE>::BucketSet)>& setBucket(std::unique_ptr<protocol::Storage::StorageBucket> value);  // Defined below
 
-        StorageBucketInfoBuilder<STATE | IdSet>& setId(const String& value);  // Defined below
+        StorageBucketInfoBuilder<(STATE | StorageBucketInfoBuilder<STATE>::IdSet)>& setId(const String& value);  // Defined below
 
-        StorageBucketInfoBuilder<STATE | ExpirationSet>& setExpiration(double value);  // Defined below
+        StorageBucketInfoBuilder<(STATE | StorageBucketInfoBuilder<STATE>::ExpirationSet)>& setExpiration(double value);  // Defined below
 
-        StorageBucketInfoBuilder<STATE | QuotaSet>& setQuota(double value);  // Defined below
+        StorageBucketInfoBuilder<(STATE | StorageBucketInfoBuilder<STATE>::QuotaSet)>& setQuota(double value);  // Defined below
 
-        StorageBucketInfoBuilder<STATE | PersistentSet>& setPersistent(bool value);  // Defined below
+        StorageBucketInfoBuilder<(STATE | StorageBucketInfoBuilder<STATE>::PersistentSet)>& setPersistent(bool value);  // Defined below
 
-        StorageBucketInfoBuilder<STATE | DurabilitySet>& setDurability(const String& value);  // Defined below
+        StorageBucketInfoBuilder<(STATE | StorageBucketInfoBuilder<STATE>::DurabilitySet)>& setDurability(const String& value);  // Defined below
 
         std::unique_ptr<StorageBucketInfo> build()
         {
@@ -923,9 +923,9 @@ public:
         friend class StorageBucketInfo;
         StorageBucketInfoBuilder() : m_result(new StorageBucketInfo()) { }
 
-        template<int STEP> StorageBucketInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> StorageBucketInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<StorageBucketInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<StorageBucketInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::StorageBucketInfo> m_result;
@@ -974,11 +974,11 @@ public:
             AllFieldsSet = (PrimarySitesSet | AssociatedSitesSet | ServiceSitesSet | 0)};
 
 
-        RelatedWebsiteSetBuilder<STATE | PrimarySitesSet>& setPrimarySites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        RelatedWebsiteSetBuilder<(STATE | RelatedWebsiteSetBuilder<STATE>::PrimarySitesSet)>& setPrimarySites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        RelatedWebsiteSetBuilder<STATE | AssociatedSitesSet>& setAssociatedSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        RelatedWebsiteSetBuilder<(STATE | RelatedWebsiteSetBuilder<STATE>::AssociatedSitesSet)>& setAssociatedSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        RelatedWebsiteSetBuilder<STATE | ServiceSitesSet>& setServiceSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        RelatedWebsiteSetBuilder<(STATE | RelatedWebsiteSetBuilder<STATE>::ServiceSitesSet)>& setServiceSites(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<RelatedWebsiteSet> build()
         {
@@ -990,9 +990,9 @@ public:
         friend class RelatedWebsiteSet;
         RelatedWebsiteSetBuilder() : m_result(new RelatedWebsiteSet()) { }
 
-        template<int STEP> RelatedWebsiteSetBuilder<STATE | STEP>& castState()
+        template<int STEP> RelatedWebsiteSetBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RelatedWebsiteSetBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RelatedWebsiteSetBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Storage::RelatedWebsiteSet> m_result;
@@ -1024,14 +1024,14 @@ inline void UsageForType::setStorageType(const String& value) { m_storageType = 
 inline void UsageForType::setUsage(double value) { m_usage = value; }
 
 template<int STATE>
-inline UsageForType::UsageForTypeBuilder<STATE | UsageForType::UsageForTypeBuilder<STATE>::StorageTypeSet>&
+inline UsageForType::UsageForTypeBuilder<(STATE | UsageForType::UsageForTypeBuilder<STATE>::StorageTypeSet)>&
 UsageForType::UsageForTypeBuilder<STATE>::setStorageType(const String& value) {
   static_assert(!(STATE & StorageTypeSet), "property storageType should not be set yet");
   m_result->setStorageType(value);
   return castState<StorageTypeSet>();
 }
 template<int STATE>
-inline UsageForType::UsageForTypeBuilder<STATE | UsageForType::UsageForTypeBuilder<STATE>::UsageSet>&
+inline UsageForType::UsageForTypeBuilder<(STATE | UsageForType::UsageForTypeBuilder<STATE>::UsageSet)>&
 UsageForType::UsageForTypeBuilder<STATE>::setUsage(double value) {
   static_assert(!(STATE & UsageSet), "property usage should not be set yet");
   m_result->setUsage(value);
@@ -1046,14 +1046,14 @@ inline void TrustTokens::setIssuerOrigin(const String& value) { m_issuerOrigin =
 inline void TrustTokens::setCount(double value) { m_count = value; }
 
 template<int STATE>
-inline TrustTokens::TrustTokensBuilder<STATE | TrustTokens::TrustTokensBuilder<STATE>::IssuerOriginSet>&
+inline TrustTokens::TrustTokensBuilder<(STATE | TrustTokens::TrustTokensBuilder<STATE>::IssuerOriginSet)>&
 TrustTokens::TrustTokensBuilder<STATE>::setIssuerOrigin(const String& value) {
   static_assert(!(STATE & IssuerOriginSet), "property issuerOrigin should not be set yet");
   m_result->setIssuerOrigin(value);
   return castState<IssuerOriginSet>();
 }
 template<int STATE>
-inline TrustTokens::TrustTokensBuilder<STATE | TrustTokens::TrustTokensBuilder<STATE>::CountSet>&
+inline TrustTokens::TrustTokensBuilder<(STATE | TrustTokens::TrustTokensBuilder<STATE>::CountSet)>&
 TrustTokens::TrustTokensBuilder<STATE>::setCount(double value) {
   static_assert(!(STATE & CountSet), "property count should not be set yet");
   m_result->setCount(value);
@@ -1068,14 +1068,14 @@ inline void SharedStorageEntry::setKey(const String& value) { m_key = value; }
 inline void SharedStorageEntry::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline SharedStorageEntry::SharedStorageEntryBuilder<STATE | SharedStorageEntry::SharedStorageEntryBuilder<STATE>::KeySet>&
+inline SharedStorageEntry::SharedStorageEntryBuilder<(STATE | SharedStorageEntry::SharedStorageEntryBuilder<STATE>::KeySet)>&
 SharedStorageEntry::SharedStorageEntryBuilder<STATE>::setKey(const String& value) {
   static_assert(!(STATE & KeySet), "property key should not be set yet");
   m_result->setKey(value);
   return castState<KeySet>();
 }
 template<int STATE>
-inline SharedStorageEntry::SharedStorageEntryBuilder<STATE | SharedStorageEntry::SharedStorageEntryBuilder<STATE>::ValueSet>&
+inline SharedStorageEntry::SharedStorageEntryBuilder<(STATE | SharedStorageEntry::SharedStorageEntryBuilder<STATE>::ValueSet)>&
 SharedStorageEntry::SharedStorageEntryBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -1091,28 +1091,28 @@ inline void SharedStorageMetadata::setRemainingBudget(double value) { m_remainin
 inline void SharedStorageMetadata::setBytesUsed(int value) { m_bytesUsed = value; }
 
 template<int STATE>
-inline SharedStorageMetadata::SharedStorageMetadataBuilder<STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::CreationTimeSet>&
+inline SharedStorageMetadata::SharedStorageMetadataBuilder<(STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::CreationTimeSet)>&
 SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::setCreationTime(double value) {
   static_assert(!(STATE & CreationTimeSet), "property creationTime should not be set yet");
   m_result->setCreationTime(value);
   return castState<CreationTimeSet>();
 }
 template<int STATE>
-inline SharedStorageMetadata::SharedStorageMetadataBuilder<STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::LengthSet>&
+inline SharedStorageMetadata::SharedStorageMetadataBuilder<(STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::LengthSet)>&
 SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::setLength(int value) {
   static_assert(!(STATE & LengthSet), "property length should not be set yet");
   m_result->setLength(value);
   return castState<LengthSet>();
 }
 template<int STATE>
-inline SharedStorageMetadata::SharedStorageMetadataBuilder<STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::RemainingBudgetSet>&
+inline SharedStorageMetadata::SharedStorageMetadataBuilder<(STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::RemainingBudgetSet)>&
 SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::setRemainingBudget(double value) {
   static_assert(!(STATE & RemainingBudgetSet), "property remainingBudget should not be set yet");
   m_result->setRemainingBudget(value);
   return castState<RemainingBudgetSet>();
 }
 template<int STATE>
-inline SharedStorageMetadata::SharedStorageMetadataBuilder<STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::BytesUsedSet>&
+inline SharedStorageMetadata::SharedStorageMetadataBuilder<(STATE | SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::BytesUsedSet)>&
 SharedStorageMetadata::SharedStorageMetadataBuilder<STATE>::setBytesUsed(int value) {
   static_assert(!(STATE & BytesUsedSet), "property bytesUsed should not be set yet");
   m_result->setBytesUsed(value);
@@ -1142,7 +1142,7 @@ inline SharedStoragePrivateAggregationConfig::SharedStoragePrivateAggregationCon
   return *this;
 }
 template<int STATE>
-inline SharedStoragePrivateAggregationConfig::SharedStoragePrivateAggregationConfigBuilder<STATE | SharedStoragePrivateAggregationConfig::SharedStoragePrivateAggregationConfigBuilder<STATE>::FilteringIdMaxBytesSet>&
+inline SharedStoragePrivateAggregationConfig::SharedStoragePrivateAggregationConfigBuilder<(STATE | SharedStoragePrivateAggregationConfig::SharedStoragePrivateAggregationConfigBuilder<STATE>::FilteringIdMaxBytesSet)>&
 SharedStoragePrivateAggregationConfig::SharedStoragePrivateAggregationConfigBuilder<STATE>::setFilteringIdMaxBytes(int value) {
   static_assert(!(STATE & FilteringIdMaxBytesSet), "property filteringIdMaxBytes should not be set yet");
   m_result->setFilteringIdMaxBytes(value);
@@ -1162,14 +1162,14 @@ inline void SharedStorageReportingMetadata::setEventType(const String& value) { 
 inline void SharedStorageReportingMetadata::setReportingUrl(const String& value) { m_reportingUrl = value; }
 
 template<int STATE>
-inline SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE | SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE>::EventTypeSet>&
+inline SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<(STATE | SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE>::EventTypeSet)>&
 SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE>::setEventType(const String& value) {
   static_assert(!(STATE & EventTypeSet), "property eventType should not be set yet");
   m_result->setEventType(value);
   return castState<EventTypeSet>();
 }
 template<int STATE>
-inline SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE | SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE>::ReportingUrlSet>&
+inline SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<(STATE | SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE>::ReportingUrlSet)>&
 SharedStorageReportingMetadata::SharedStorageReportingMetadataBuilder<STATE>::setReportingUrl(const String& value) {
   static_assert(!(STATE & ReportingUrlSet), "property reportingUrl should not be set yet");
   m_result->setReportingUrl(value);
@@ -1183,14 +1183,14 @@ inline void SharedStorageUrlWithMetadata::setUrl(const String& value) { m_url = 
 inline void SharedStorageUrlWithMetadata::setReportingMetadata(std::unique_ptr<protocol::Array<protocol::Storage::SharedStorageReportingMetadata>> value) { m_reportingMetadata = std::move(value); }
 
 template<int STATE>
-inline SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE | SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE>::UrlSet>&
+inline SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<(STATE | SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE>::UrlSet)>&
 SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE | SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE>::ReportingMetadataSet>&
+inline SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<(STATE | SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE>::ReportingMetadataSet)>&
 SharedStorageUrlWithMetadata::SharedStorageUrlWithMetadataBuilder<STATE>::setReportingMetadata(std::unique_ptr<protocol::Array<protocol::Storage::SharedStorageReportingMetadata>> value) {
   static_assert(!(STATE & ReportingMetadataSet), "property reportingMetadata should not be set yet");
   m_result->setReportingMetadata(std::move(value));
@@ -1311,7 +1311,7 @@ inline void StorageBucket::setStorageKey(const String& value) { m_storageKey = v
 inline void StorageBucket::setName(const String& value) { m_name = value; }
 
 template<int STATE>
-inline StorageBucket::StorageBucketBuilder<STATE | StorageBucket::StorageBucketBuilder<STATE>::StorageKeySet>&
+inline StorageBucket::StorageBucketBuilder<(STATE | StorageBucket::StorageBucketBuilder<STATE>::StorageKeySet)>&
 StorageBucket::StorageBucketBuilder<STATE>::setStorageKey(const String& value) {
   static_assert(!(STATE & StorageKeySet), "property storageKey should not be set yet");
   m_result->setStorageKey(value);
@@ -1334,42 +1334,42 @@ inline void StorageBucketInfo::setPersistent(bool value) { m_persistent = value;
 inline void StorageBucketInfo::setDurability(const String& value) { m_durability = value; }
 
 template<int STATE>
-inline StorageBucketInfo::StorageBucketInfoBuilder<STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::BucketSet>&
+inline StorageBucketInfo::StorageBucketInfoBuilder<(STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::BucketSet)>&
 StorageBucketInfo::StorageBucketInfoBuilder<STATE>::setBucket(std::unique_ptr<protocol::Storage::StorageBucket> value) {
   static_assert(!(STATE & BucketSet), "property bucket should not be set yet");
   m_result->setBucket(std::move(value));
   return castState<BucketSet>();
 }
 template<int STATE>
-inline StorageBucketInfo::StorageBucketInfoBuilder<STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::IdSet>&
+inline StorageBucketInfo::StorageBucketInfoBuilder<(STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::IdSet)>&
 StorageBucketInfo::StorageBucketInfoBuilder<STATE>::setId(const String& value) {
   static_assert(!(STATE & IdSet), "property id should not be set yet");
   m_result->setId(value);
   return castState<IdSet>();
 }
 template<int STATE>
-inline StorageBucketInfo::StorageBucketInfoBuilder<STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::ExpirationSet>&
+inline StorageBucketInfo::StorageBucketInfoBuilder<(STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::ExpirationSet)>&
 StorageBucketInfo::StorageBucketInfoBuilder<STATE>::setExpiration(double value) {
   static_assert(!(STATE & ExpirationSet), "property expiration should not be set yet");
   m_result->setExpiration(value);
   return castState<ExpirationSet>();
 }
 template<int STATE>
-inline StorageBucketInfo::StorageBucketInfoBuilder<STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::QuotaSet>&
+inline StorageBucketInfo::StorageBucketInfoBuilder<(STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::QuotaSet)>&
 StorageBucketInfo::StorageBucketInfoBuilder<STATE>::setQuota(double value) {
   static_assert(!(STATE & QuotaSet), "property quota should not be set yet");
   m_result->setQuota(value);
   return castState<QuotaSet>();
 }
 template<int STATE>
-inline StorageBucketInfo::StorageBucketInfoBuilder<STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::PersistentSet>&
+inline StorageBucketInfo::StorageBucketInfoBuilder<(STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::PersistentSet)>&
 StorageBucketInfo::StorageBucketInfoBuilder<STATE>::setPersistent(bool value) {
   static_assert(!(STATE & PersistentSet), "property persistent should not be set yet");
   m_result->setPersistent(value);
   return castState<PersistentSet>();
 }
 template<int STATE>
-inline StorageBucketInfo::StorageBucketInfoBuilder<STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::DurabilitySet>&
+inline StorageBucketInfo::StorageBucketInfoBuilder<(STATE | StorageBucketInfo::StorageBucketInfoBuilder<STATE>::DurabilitySet)>&
 StorageBucketInfo::StorageBucketInfoBuilder<STATE>::setDurability(const String& value) {
   static_assert(!(STATE & DurabilitySet), "property durability should not be set yet");
   m_result->setDurability(value);
@@ -1387,21 +1387,21 @@ inline void RelatedWebsiteSet::setAssociatedSites(std::unique_ptr<protocol::Arra
 inline void RelatedWebsiteSet::setServiceSites(std::unique_ptr<protocol::Array<String>> value) { m_serviceSites = std::move(value); }
 
 template<int STATE>
-inline RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE | RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::PrimarySitesSet>&
+inline RelatedWebsiteSet::RelatedWebsiteSetBuilder<(STATE | RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::PrimarySitesSet)>&
 RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::setPrimarySites(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & PrimarySitesSet), "property primarySites should not be set yet");
   m_result->setPrimarySites(std::move(value));
   return castState<PrimarySitesSet>();
 }
 template<int STATE>
-inline RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE | RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::AssociatedSitesSet>&
+inline RelatedWebsiteSet::RelatedWebsiteSetBuilder<(STATE | RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::AssociatedSitesSet)>&
 RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::setAssociatedSites(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & AssociatedSitesSet), "property associatedSites should not be set yet");
   m_result->setAssociatedSites(std::move(value));
   return castState<AssociatedSitesSet>();
 }
 template<int STATE>
-inline RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE | RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::ServiceSitesSet>&
+inline RelatedWebsiteSet::RelatedWebsiteSetBuilder<(STATE | RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::ServiceSitesSet)>&
 RelatedWebsiteSet::RelatedWebsiteSetBuilder<STATE>::setServiceSites(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & ServiceSitesSet), "property serviceSites should not be set yet");
   m_result->setServiceSites(std::move(value));

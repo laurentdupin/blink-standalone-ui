@@ -180,9 +180,9 @@ public:
         friend class SafeAreaInsets;
         SafeAreaInsetsBuilder() : m_result(new SafeAreaInsets()) { }
 
-        template<int STEP> SafeAreaInsetsBuilder<STATE | STEP>& castState()
+        template<int STEP> SafeAreaInsetsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SafeAreaInsetsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SafeAreaInsetsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::SafeAreaInsets> m_result;
@@ -236,9 +236,9 @@ public:
             AllFieldsSet = (TypeSet | AngleSet | 0)};
 
 
-        ScreenOrientationBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        ScreenOrientationBuilder<(STATE | ScreenOrientationBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
-        ScreenOrientationBuilder<STATE | AngleSet>& setAngle(int value);  // Defined below
+        ScreenOrientationBuilder<(STATE | ScreenOrientationBuilder<STATE>::AngleSet)>& setAngle(int value);  // Defined below
 
         std::unique_ptr<ScreenOrientation> build()
         {
@@ -250,9 +250,9 @@ public:
         friend class ScreenOrientation;
         ScreenOrientationBuilder() : m_result(new ScreenOrientation()) { }
 
-        template<int STEP> ScreenOrientationBuilder<STATE | STEP>& castState()
+        template<int STEP> ScreenOrientationBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ScreenOrientationBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ScreenOrientationBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::ScreenOrientation> m_result;
@@ -302,11 +302,11 @@ public:
             AllFieldsSet = (OrientationSet | OffsetSet | MaskLengthSet | 0)};
 
 
-        DisplayFeatureBuilder<STATE | OrientationSet>& setOrientation(const String& value);  // Defined below
+        DisplayFeatureBuilder<(STATE | DisplayFeatureBuilder<STATE>::OrientationSet)>& setOrientation(const String& value);  // Defined below
 
-        DisplayFeatureBuilder<STATE | OffsetSet>& setOffset(int value);  // Defined below
+        DisplayFeatureBuilder<(STATE | DisplayFeatureBuilder<STATE>::OffsetSet)>& setOffset(int value);  // Defined below
 
-        DisplayFeatureBuilder<STATE | MaskLengthSet>& setMaskLength(int value);  // Defined below
+        DisplayFeatureBuilder<(STATE | DisplayFeatureBuilder<STATE>::MaskLengthSet)>& setMaskLength(int value);  // Defined below
 
         std::unique_ptr<DisplayFeature> build()
         {
@@ -318,9 +318,9 @@ public:
         friend class DisplayFeature;
         DisplayFeatureBuilder() : m_result(new DisplayFeature()) { }
 
-        template<int STEP> DisplayFeatureBuilder<STATE | STEP>& castState()
+        template<int STEP> DisplayFeatureBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DisplayFeatureBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DisplayFeatureBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::DisplayFeature> m_result;
@@ -363,7 +363,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        DevicePostureBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        DevicePostureBuilder<(STATE | DevicePostureBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         std::unique_ptr<DevicePosture> build()
         {
@@ -375,9 +375,9 @@ public:
         friend class DevicePosture;
         DevicePostureBuilder() : m_result(new DevicePosture()) { }
 
-        template<int STEP> DevicePostureBuilder<STATE | STEP>& castState()
+        template<int STEP> DevicePostureBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DevicePostureBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DevicePostureBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::DevicePosture> m_result;
@@ -417,9 +417,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        MediaFeatureBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        MediaFeatureBuilder<(STATE | MediaFeatureBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        MediaFeatureBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        MediaFeatureBuilder<(STATE | MediaFeatureBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         std::unique_ptr<MediaFeature> build()
         {
@@ -431,9 +431,9 @@ public:
         friend class MediaFeature;
         MediaFeatureBuilder() : m_result(new MediaFeature()) { }
 
-        template<int STEP> MediaFeatureBuilder<STATE | STEP>& castState()
+        template<int STEP> MediaFeatureBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<MediaFeatureBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<MediaFeatureBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::MediaFeature> m_result;
@@ -474,9 +474,9 @@ public:
             AllFieldsSet = (BrandSet | VersionSet | 0)};
 
 
-        UserAgentBrandVersionBuilder<STATE | BrandSet>& setBrand(const String& value);  // Defined below
+        UserAgentBrandVersionBuilder<(STATE | UserAgentBrandVersionBuilder<STATE>::BrandSet)>& setBrand(const String& value);  // Defined below
 
-        UserAgentBrandVersionBuilder<STATE | VersionSet>& setVersion(const String& value);  // Defined below
+        UserAgentBrandVersionBuilder<(STATE | UserAgentBrandVersionBuilder<STATE>::VersionSet)>& setVersion(const String& value);  // Defined below
 
         std::unique_ptr<UserAgentBrandVersion> build()
         {
@@ -488,9 +488,9 @@ public:
         friend class UserAgentBrandVersion;
         UserAgentBrandVersionBuilder() : m_result(new UserAgentBrandVersion()) { }
 
-        template<int STEP> UserAgentBrandVersionBuilder<STATE | STEP>& castState()
+        template<int STEP> UserAgentBrandVersionBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<UserAgentBrandVersionBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<UserAgentBrandVersionBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::UserAgentBrandVersion> m_result;
@@ -603,15 +603,15 @@ public:
 
         UserAgentMetadataBuilder<STATE>& setFullVersion(const String& value);  // Defined below
 
-        UserAgentMetadataBuilder<STATE | PlatformSet>& setPlatform(const String& value);  // Defined below
+        UserAgentMetadataBuilder<(STATE | UserAgentMetadataBuilder<STATE>::PlatformSet)>& setPlatform(const String& value);  // Defined below
 
-        UserAgentMetadataBuilder<STATE | PlatformVersionSet>& setPlatformVersion(const String& value);  // Defined below
+        UserAgentMetadataBuilder<(STATE | UserAgentMetadataBuilder<STATE>::PlatformVersionSet)>& setPlatformVersion(const String& value);  // Defined below
 
-        UserAgentMetadataBuilder<STATE | ArchitectureSet>& setArchitecture(const String& value);  // Defined below
+        UserAgentMetadataBuilder<(STATE | UserAgentMetadataBuilder<STATE>::ArchitectureSet)>& setArchitecture(const String& value);  // Defined below
 
-        UserAgentMetadataBuilder<STATE | ModelSet>& setModel(const String& value);  // Defined below
+        UserAgentMetadataBuilder<(STATE | UserAgentMetadataBuilder<STATE>::ModelSet)>& setModel(const String& value);  // Defined below
 
-        UserAgentMetadataBuilder<STATE | MobileSet>& setMobile(bool value);  // Defined below
+        UserAgentMetadataBuilder<(STATE | UserAgentMetadataBuilder<STATE>::MobileSet)>& setMobile(bool value);  // Defined below
 
         UserAgentMetadataBuilder<STATE>& setBitness(const String& value);  // Defined below
 
@@ -629,9 +629,9 @@ public:
         friend class UserAgentMetadata;
         UserAgentMetadataBuilder() : m_result(new UserAgentMetadata()) { }
 
-        template<int STEP> UserAgentMetadataBuilder<STATE | STEP>& castState()
+        template<int STEP> UserAgentMetadataBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<UserAgentMetadataBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<UserAgentMetadataBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Emulation::UserAgentMetadata> m_result;
@@ -724,14 +724,14 @@ inline void ScreenOrientation::setType(const String& value) { m_type = value; }
 inline void ScreenOrientation::setAngle(int value) { m_angle = value; }
 
 template<int STATE>
-inline ScreenOrientation::ScreenOrientationBuilder<STATE | ScreenOrientation::ScreenOrientationBuilder<STATE>::TypeSet>&
+inline ScreenOrientation::ScreenOrientationBuilder<(STATE | ScreenOrientation::ScreenOrientationBuilder<STATE>::TypeSet)>&
 ScreenOrientation::ScreenOrientationBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
   return castState<TypeSet>();
 }
 template<int STATE>
-inline ScreenOrientation::ScreenOrientationBuilder<STATE | ScreenOrientation::ScreenOrientationBuilder<STATE>::AngleSet>&
+inline ScreenOrientation::ScreenOrientationBuilder<(STATE | ScreenOrientation::ScreenOrientationBuilder<STATE>::AngleSet)>&
 ScreenOrientation::ScreenOrientationBuilder<STATE>::setAngle(int value) {
   static_assert(!(STATE & AngleSet), "property angle should not be set yet");
   m_result->setAngle(value);
@@ -747,21 +747,21 @@ inline void DisplayFeature::setOffset(int value) { m_offset = value; }
 inline void DisplayFeature::setMaskLength(int value) { m_maskLength = value; }
 
 template<int STATE>
-inline DisplayFeature::DisplayFeatureBuilder<STATE | DisplayFeature::DisplayFeatureBuilder<STATE>::OrientationSet>&
+inline DisplayFeature::DisplayFeatureBuilder<(STATE | DisplayFeature::DisplayFeatureBuilder<STATE>::OrientationSet)>&
 DisplayFeature::DisplayFeatureBuilder<STATE>::setOrientation(const String& value) {
   static_assert(!(STATE & OrientationSet), "property orientation should not be set yet");
   m_result->setOrientation(value);
   return castState<OrientationSet>();
 }
 template<int STATE>
-inline DisplayFeature::DisplayFeatureBuilder<STATE | DisplayFeature::DisplayFeatureBuilder<STATE>::OffsetSet>&
+inline DisplayFeature::DisplayFeatureBuilder<(STATE | DisplayFeature::DisplayFeatureBuilder<STATE>::OffsetSet)>&
 DisplayFeature::DisplayFeatureBuilder<STATE>::setOffset(int value) {
   static_assert(!(STATE & OffsetSet), "property offset should not be set yet");
   m_result->setOffset(value);
   return castState<OffsetSet>();
 }
 template<int STATE>
-inline DisplayFeature::DisplayFeatureBuilder<STATE | DisplayFeature::DisplayFeatureBuilder<STATE>::MaskLengthSet>&
+inline DisplayFeature::DisplayFeatureBuilder<(STATE | DisplayFeature::DisplayFeatureBuilder<STATE>::MaskLengthSet)>&
 DisplayFeature::DisplayFeatureBuilder<STATE>::setMaskLength(int value) {
   static_assert(!(STATE & MaskLengthSet), "property maskLength should not be set yet");
   m_result->setMaskLength(value);
@@ -776,7 +776,7 @@ inline DevicePosture::~DevicePosture() = default;
 inline void DevicePosture::setType(const String& value) { m_type = value; }
 
 template<int STATE>
-inline DevicePosture::DevicePostureBuilder<STATE | DevicePosture::DevicePostureBuilder<STATE>::TypeSet>&
+inline DevicePosture::DevicePostureBuilder<(STATE | DevicePosture::DevicePostureBuilder<STATE>::TypeSet)>&
 DevicePosture::DevicePostureBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -790,14 +790,14 @@ inline void MediaFeature::setName(const String& value) { m_name = value; }
 inline void MediaFeature::setValue(const String& value) { m_value = value; }
 
 template<int STATE>
-inline MediaFeature::MediaFeatureBuilder<STATE | MediaFeature::MediaFeatureBuilder<STATE>::NameSet>&
+inline MediaFeature::MediaFeatureBuilder<(STATE | MediaFeature::MediaFeatureBuilder<STATE>::NameSet)>&
 MediaFeature::MediaFeatureBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline MediaFeature::MediaFeatureBuilder<STATE | MediaFeature::MediaFeatureBuilder<STATE>::ValueSet>&
+inline MediaFeature::MediaFeatureBuilder<(STATE | MediaFeature::MediaFeatureBuilder<STATE>::ValueSet)>&
 MediaFeature::MediaFeatureBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -811,14 +811,14 @@ inline void UserAgentBrandVersion::setBrand(const String& value) { m_brand = val
 inline void UserAgentBrandVersion::setVersion(const String& value) { m_version = value; }
 
 template<int STATE>
-inline UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE | UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE>::BrandSet>&
+inline UserAgentBrandVersion::UserAgentBrandVersionBuilder<(STATE | UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE>::BrandSet)>&
 UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE>::setBrand(const String& value) {
   static_assert(!(STATE & BrandSet), "property brand should not be set yet");
   m_result->setBrand(value);
   return castState<BrandSet>();
 }
 template<int STATE>
-inline UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE | UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE>::VersionSet>&
+inline UserAgentBrandVersion::UserAgentBrandVersionBuilder<(STATE | UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE>::VersionSet)>&
 UserAgentBrandVersion::UserAgentBrandVersionBuilder<STATE>::setVersion(const String& value) {
   static_assert(!(STATE & VersionSet), "property version should not be set yet");
   m_result->setVersion(value);
@@ -856,35 +856,35 @@ inline UserAgentMetadata::UserAgentMetadataBuilder<STATE>& UserAgentMetadata::Us
   return *this;
 }
 template<int STATE>
-inline UserAgentMetadata::UserAgentMetadataBuilder<STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::PlatformSet>&
+inline UserAgentMetadata::UserAgentMetadataBuilder<(STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::PlatformSet)>&
 UserAgentMetadata::UserAgentMetadataBuilder<STATE>::setPlatform(const String& value) {
   static_assert(!(STATE & PlatformSet), "property platform should not be set yet");
   m_result->setPlatform(value);
   return castState<PlatformSet>();
 }
 template<int STATE>
-inline UserAgentMetadata::UserAgentMetadataBuilder<STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::PlatformVersionSet>&
+inline UserAgentMetadata::UserAgentMetadataBuilder<(STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::PlatformVersionSet)>&
 UserAgentMetadata::UserAgentMetadataBuilder<STATE>::setPlatformVersion(const String& value) {
   static_assert(!(STATE & PlatformVersionSet), "property platformVersion should not be set yet");
   m_result->setPlatformVersion(value);
   return castState<PlatformVersionSet>();
 }
 template<int STATE>
-inline UserAgentMetadata::UserAgentMetadataBuilder<STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::ArchitectureSet>&
+inline UserAgentMetadata::UserAgentMetadataBuilder<(STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::ArchitectureSet)>&
 UserAgentMetadata::UserAgentMetadataBuilder<STATE>::setArchitecture(const String& value) {
   static_assert(!(STATE & ArchitectureSet), "property architecture should not be set yet");
   m_result->setArchitecture(value);
   return castState<ArchitectureSet>();
 }
 template<int STATE>
-inline UserAgentMetadata::UserAgentMetadataBuilder<STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::ModelSet>&
+inline UserAgentMetadata::UserAgentMetadataBuilder<(STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::ModelSet)>&
 UserAgentMetadata::UserAgentMetadataBuilder<STATE>::setModel(const String& value) {
   static_assert(!(STATE & ModelSet), "property model should not be set yet");
   m_result->setModel(value);
   return castState<ModelSet>();
 }
 template<int STATE>
-inline UserAgentMetadata::UserAgentMetadataBuilder<STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::MobileSet>&
+inline UserAgentMetadata::UserAgentMetadataBuilder<(STATE | UserAgentMetadata::UserAgentMetadataBuilder<STATE>::MobileSet)>&
 UserAgentMetadata::UserAgentMetadataBuilder<STATE>::setMobile(bool value) {
   static_assert(!(STATE & MobileSet), "property mobile should not be set yet");
   m_result->setMobile(value);

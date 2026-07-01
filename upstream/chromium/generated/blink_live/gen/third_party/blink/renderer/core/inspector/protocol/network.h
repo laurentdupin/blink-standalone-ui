@@ -574,47 +574,47 @@ public:
             AllFieldsSet = (RequestTimeSet | ProxyStartSet | ProxyEndSet | DnsStartSet | DnsEndSet | ConnectStartSet | ConnectEndSet | SslStartSet | SslEndSet | WorkerStartSet | WorkerReadySet | WorkerFetchStartSet | WorkerRespondWithSettledSet | SendStartSet | SendEndSet | PushStartSet | PushEndSet | ReceiveHeadersStartSet | ReceiveHeadersEndSet | 0)};
 
 
-        ResourceTimingBuilder<STATE | RequestTimeSet>& setRequestTime(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::RequestTimeSet)>& setRequestTime(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | ProxyStartSet>& setProxyStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::ProxyStartSet)>& setProxyStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | ProxyEndSet>& setProxyEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::ProxyEndSet)>& setProxyEnd(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | DnsStartSet>& setDnsStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::DnsStartSet)>& setDnsStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | DnsEndSet>& setDnsEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::DnsEndSet)>& setDnsEnd(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | ConnectStartSet>& setConnectStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::ConnectStartSet)>& setConnectStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | ConnectEndSet>& setConnectEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::ConnectEndSet)>& setConnectEnd(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | SslStartSet>& setSslStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::SslStartSet)>& setSslStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | SslEndSet>& setSslEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::SslEndSet)>& setSslEnd(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | WorkerStartSet>& setWorkerStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::WorkerStartSet)>& setWorkerStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | WorkerReadySet>& setWorkerReady(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::WorkerReadySet)>& setWorkerReady(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | WorkerFetchStartSet>& setWorkerFetchStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::WorkerFetchStartSet)>& setWorkerFetchStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | WorkerRespondWithSettledSet>& setWorkerRespondWithSettled(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::WorkerRespondWithSettledSet)>& setWorkerRespondWithSettled(double value);  // Defined below
 
         ResourceTimingBuilder<STATE>& setWorkerRouterEvaluationStart(double value);  // Defined below
 
         ResourceTimingBuilder<STATE>& setWorkerCacheLookupStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | SendStartSet>& setSendStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::SendStartSet)>& setSendStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | SendEndSet>& setSendEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::SendEndSet)>& setSendEnd(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | PushStartSet>& setPushStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::PushStartSet)>& setPushStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | PushEndSet>& setPushEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::PushEndSet)>& setPushEnd(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | ReceiveHeadersStartSet>& setReceiveHeadersStart(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::ReceiveHeadersStartSet)>& setReceiveHeadersStart(double value);  // Defined below
 
-        ResourceTimingBuilder<STATE | ReceiveHeadersEndSet>& setReceiveHeadersEnd(double value);  // Defined below
+        ResourceTimingBuilder<(STATE | ResourceTimingBuilder<STATE>::ReceiveHeadersEndSet)>& setReceiveHeadersEnd(double value);  // Defined below
 
         std::unique_ptr<ResourceTiming> build()
         {
@@ -626,9 +626,9 @@ public:
         friend class ResourceTiming;
         ResourceTimingBuilder() : m_result(new ResourceTiming()) { }
 
-        template<int STEP> ResourceTimingBuilder<STATE | STEP>& castState()
+        template<int STEP> ResourceTimingBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ResourceTimingBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ResourceTimingBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ResourceTiming> m_result;
@@ -701,9 +701,9 @@ public:
         friend class PostDataEntry;
         PostDataEntryBuilder() : m_result(new PostDataEntry()) { }
 
-        template<int STEP> PostDataEntryBuilder<STATE | STEP>& castState()
+        template<int STEP> PostDataEntryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<PostDataEntryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<PostDataEntryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::PostDataEntry> m_result;
@@ -847,13 +847,13 @@ public:
             AllFieldsSet = (UrlSet | MethodSet | HeadersSet | InitialPrioritySet | ReferrerPolicySet | 0)};
 
 
-        RequestBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        RequestBuilder<(STATE | RequestBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
         RequestBuilder<STATE>& setUrlFragment(const String& value);  // Defined below
 
-        RequestBuilder<STATE | MethodSet>& setMethod(const String& value);  // Defined below
+        RequestBuilder<(STATE | RequestBuilder<STATE>::MethodSet)>& setMethod(const String& value);  // Defined below
 
-        RequestBuilder<STATE | HeadersSet>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
+        RequestBuilder<(STATE | RequestBuilder<STATE>::HeadersSet)>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
 
         RequestBuilder<STATE>& setPostData(const String& value);  // Defined below
 
@@ -863,9 +863,9 @@ public:
 
         RequestBuilder<STATE>& setMixedContentType(const String& value);  // Defined below
 
-        RequestBuilder<STATE | InitialPrioritySet>& setInitialPriority(const String& value);  // Defined below
+        RequestBuilder<(STATE | RequestBuilder<STATE>::InitialPrioritySet)>& setInitialPriority(const String& value);  // Defined below
 
-        RequestBuilder<STATE | ReferrerPolicySet>& setReferrerPolicy(const String& value);  // Defined below
+        RequestBuilder<(STATE | RequestBuilder<STATE>::ReferrerPolicySet)>& setReferrerPolicy(const String& value);  // Defined below
 
         RequestBuilder<STATE>& setIsLinkPreload(bool value);  // Defined below
 
@@ -885,9 +885,9 @@ public:
         friend class Request;
         RequestBuilder() : m_result(new Request()) { }
 
-        template<int STEP> RequestBuilder<STATE | STEP>& castState()
+        template<int STEP> RequestBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RequestBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RequestBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::Request> m_result;
@@ -964,21 +964,21 @@ public:
             AllFieldsSet = (StatusSet | OriginSet | LogDescriptionSet | LogIdSet | TimestampSet | HashAlgorithmSet | SignatureAlgorithmSet | SignatureDataSet | 0)};
 
 
-        SignedCertificateTimestampBuilder<STATE | StatusSet>& setStatus(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::StatusSet)>& setStatus(const String& value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | LogDescriptionSet>& setLogDescription(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::LogDescriptionSet)>& setLogDescription(const String& value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | LogIdSet>& setLogId(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::LogIdSet)>& setLogId(const String& value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | TimestampSet>& setTimestamp(double value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::TimestampSet)>& setTimestamp(double value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | HashAlgorithmSet>& setHashAlgorithm(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::HashAlgorithmSet)>& setHashAlgorithm(const String& value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | SignatureAlgorithmSet>& setSignatureAlgorithm(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::SignatureAlgorithmSet)>& setSignatureAlgorithm(const String& value);  // Defined below
 
-        SignedCertificateTimestampBuilder<STATE | SignatureDataSet>& setSignatureData(const String& value);  // Defined below
+        SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestampBuilder<STATE>::SignatureDataSet)>& setSignatureData(const String& value);  // Defined below
 
         std::unique_ptr<SignedCertificateTimestamp> build()
         {
@@ -990,9 +990,9 @@ public:
         friend class SignedCertificateTimestamp;
         SignedCertificateTimestampBuilder() : m_result(new SignedCertificateTimestamp()) { }
 
-        template<int STEP> SignedCertificateTimestampBuilder<STATE | STEP>& castState()
+        template<int STEP> SignedCertificateTimestampBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SignedCertificateTimestampBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SignedCertificateTimestampBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::SignedCertificateTimestamp> m_result;
@@ -1106,35 +1106,35 @@ public:
             AllFieldsSet = (ProtocolSet | KeyExchangeSet | CipherSet | CertificateIdSet | SubjectNameSet | SanListSet | IssuerSet | ValidFromSet | ValidToSet | SignedCertificateTimestampListSet | CertificateTransparencyComplianceSet | EncryptedClientHelloSet | 0)};
 
 
-        SecurityDetailsBuilder<STATE | ProtocolSet>& setProtocol(const String& value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::ProtocolSet)>& setProtocol(const String& value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | KeyExchangeSet>& setKeyExchange(const String& value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::KeyExchangeSet)>& setKeyExchange(const String& value);  // Defined below
 
         SecurityDetailsBuilder<STATE>& setKeyExchangeGroup(const String& value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | CipherSet>& setCipher(const String& value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::CipherSet)>& setCipher(const String& value);  // Defined below
 
         SecurityDetailsBuilder<STATE>& setMac(const String& value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | CertificateIdSet>& setCertificateId(int value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::CertificateIdSet)>& setCertificateId(int value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | SubjectNameSet>& setSubjectName(const String& value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::SubjectNameSet)>& setSubjectName(const String& value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | SanListSet>& setSanList(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::SanListSet)>& setSanList(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | IssuerSet>& setIssuer(const String& value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::IssuerSet)>& setIssuer(const String& value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | ValidFromSet>& setValidFrom(double value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::ValidFromSet)>& setValidFrom(double value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | ValidToSet>& setValidTo(double value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::ValidToSet)>& setValidTo(double value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | SignedCertificateTimestampListSet>& setSignedCertificateTimestampList(std::unique_ptr<protocol::Array<protocol::Network::SignedCertificateTimestamp>> value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::SignedCertificateTimestampListSet)>& setSignedCertificateTimestampList(std::unique_ptr<protocol::Array<protocol::Network::SignedCertificateTimestamp>> value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | CertificateTransparencyComplianceSet>& setCertificateTransparencyCompliance(const String& value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::CertificateTransparencyComplianceSet)>& setCertificateTransparencyCompliance(const String& value);  // Defined below
 
         SecurityDetailsBuilder<STATE>& setServerSignatureAlgorithm(int value);  // Defined below
 
-        SecurityDetailsBuilder<STATE | EncryptedClientHelloSet>& setEncryptedClientHello(bool value);  // Defined below
+        SecurityDetailsBuilder<(STATE | SecurityDetailsBuilder<STATE>::EncryptedClientHelloSet)>& setEncryptedClientHello(bool value);  // Defined below
 
         std::unique_ptr<SecurityDetails> build()
         {
@@ -1146,9 +1146,9 @@ public:
         friend class SecurityDetails;
         SecurityDetailsBuilder() : m_result(new SecurityDetails()) { }
 
-        template<int STEP> SecurityDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> SecurityDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SecurityDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SecurityDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::SecurityDetails> m_result;
@@ -1202,9 +1202,9 @@ public:
             AllFieldsSet = (CorsErrorSet | FailedParameterSet | 0)};
 
 
-        CorsErrorStatusBuilder<STATE | CorsErrorSet>& setCorsError(const String& value);  // Defined below
+        CorsErrorStatusBuilder<(STATE | CorsErrorStatusBuilder<STATE>::CorsErrorSet)>& setCorsError(const String& value);  // Defined below
 
-        CorsErrorStatusBuilder<STATE | FailedParameterSet>& setFailedParameter(const String& value);  // Defined below
+        CorsErrorStatusBuilder<(STATE | CorsErrorStatusBuilder<STATE>::FailedParameterSet)>& setFailedParameter(const String& value);  // Defined below
 
         std::unique_ptr<CorsErrorStatus> build()
         {
@@ -1216,9 +1216,9 @@ public:
         friend class CorsErrorStatus;
         CorsErrorStatusBuilder() : m_result(new CorsErrorStatus()) { }
 
-        template<int STEP> CorsErrorStatusBuilder<STATE | STEP>& castState()
+        template<int STEP> CorsErrorStatusBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CorsErrorStatusBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CorsErrorStatusBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::CorsErrorStatus> m_result;
@@ -1273,9 +1273,9 @@ public:
             AllFieldsSet = (OperationSet | RefreshPolicySet | 0)};
 
 
-        TrustTokenParamsBuilder<STATE | OperationSet>& setOperation(const String& value);  // Defined below
+        TrustTokenParamsBuilder<(STATE | TrustTokenParamsBuilder<STATE>::OperationSet)>& setOperation(const String& value);  // Defined below
 
-        TrustTokenParamsBuilder<STATE | RefreshPolicySet>& setRefreshPolicy(const String& value);  // Defined below
+        TrustTokenParamsBuilder<(STATE | TrustTokenParamsBuilder<STATE>::RefreshPolicySet)>& setRefreshPolicy(const String& value);  // Defined below
 
         TrustTokenParamsBuilder<STATE>& setIssuers(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
@@ -1289,9 +1289,9 @@ public:
         friend class TrustTokenParams;
         TrustTokenParamsBuilder() : m_result(new TrustTokenParams()) { }
 
-        template<int STEP> TrustTokenParamsBuilder<STATE | STEP>& castState()
+        template<int STEP> TrustTokenParamsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<TrustTokenParamsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<TrustTokenParamsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::TrustTokenParams> m_result;
@@ -1368,9 +1368,9 @@ public:
         friend class ServiceWorkerRouterInfo;
         ServiceWorkerRouterInfoBuilder() : m_result(new ServiceWorkerRouterInfo()) { }
 
-        template<int STEP> ServiceWorkerRouterInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> ServiceWorkerRouterInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ServiceWorkerRouterInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ServiceWorkerRouterInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ServiceWorkerRouterInfo> m_result;
@@ -1597,27 +1597,27 @@ public:
             AllFieldsSet = (UrlSet | StatusSet | StatusTextSet | HeadersSet | MimeTypeSet | CharsetSet | ConnectionReusedSet | ConnectionIdSet | EncodedDataLengthSet | SecurityStateSet | 0)};
 
 
-        ResponseBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        ResponseBuilder<STATE | StatusSet>& setStatus(int value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::StatusSet)>& setStatus(int value);  // Defined below
 
-        ResponseBuilder<STATE | StatusTextSet>& setStatusText(const String& value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::StatusTextSet)>& setStatusText(const String& value);  // Defined below
 
-        ResponseBuilder<STATE | HeadersSet>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::HeadersSet)>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
 
         ResponseBuilder<STATE>& setHeadersText(const String& value);  // Defined below
 
-        ResponseBuilder<STATE | MimeTypeSet>& setMimeType(const String& value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::MimeTypeSet)>& setMimeType(const String& value);  // Defined below
 
-        ResponseBuilder<STATE | CharsetSet>& setCharset(const String& value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::CharsetSet)>& setCharset(const String& value);  // Defined below
 
         ResponseBuilder<STATE>& setRequestHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
 
         ResponseBuilder<STATE>& setRequestHeadersText(const String& value);  // Defined below
 
-        ResponseBuilder<STATE | ConnectionReusedSet>& setConnectionReused(bool value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::ConnectionReusedSet)>& setConnectionReused(bool value);  // Defined below
 
-        ResponseBuilder<STATE | ConnectionIdSet>& setConnectionId(double value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::ConnectionIdSet)>& setConnectionId(double value);  // Defined below
 
         ResponseBuilder<STATE>& setRemoteIPAddress(const String& value);  // Defined below
 
@@ -1633,7 +1633,7 @@ public:
 
         ResponseBuilder<STATE>& setServiceWorkerRouterInfo(std::unique_ptr<protocol::Network::ServiceWorkerRouterInfo> value);  // Defined below
 
-        ResponseBuilder<STATE | EncodedDataLengthSet>& setEncodedDataLength(double value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::EncodedDataLengthSet)>& setEncodedDataLength(double value);  // Defined below
 
         ResponseBuilder<STATE>& setTiming(std::unique_ptr<protocol::Network::ResourceTiming> value);  // Defined below
 
@@ -1647,7 +1647,7 @@ public:
 
         ResponseBuilder<STATE>& setAlternateProtocolUsage(const String& value);  // Defined below
 
-        ResponseBuilder<STATE | SecurityStateSet>& setSecurityState(const String& value);  // Defined below
+        ResponseBuilder<(STATE | ResponseBuilder<STATE>::SecurityStateSet)>& setSecurityState(const String& value);  // Defined below
 
         ResponseBuilder<STATE>& setSecurityDetails(std::unique_ptr<protocol::Network::SecurityDetails> value);  // Defined below
 
@@ -1661,9 +1661,9 @@ public:
         friend class Response;
         ResponseBuilder() : m_result(new Response()) { }
 
-        template<int STEP> ResponseBuilder<STATE | STEP>& castState()
+        template<int STEP> ResponseBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ResponseBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ResponseBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::Response> m_result;
@@ -1725,7 +1725,7 @@ public:
             AllFieldsSet = (HeadersSet | 0)};
 
 
-        WebSocketRequestBuilder<STATE | HeadersSet>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
+        WebSocketRequestBuilder<(STATE | WebSocketRequestBuilder<STATE>::HeadersSet)>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
 
         std::unique_ptr<WebSocketRequest> build()
         {
@@ -1737,9 +1737,9 @@ public:
         friend class WebSocketRequest;
         WebSocketRequestBuilder() : m_result(new WebSocketRequest()) { }
 
-        template<int STEP> WebSocketRequestBuilder<STATE | STEP>& castState()
+        template<int STEP> WebSocketRequestBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<WebSocketRequestBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<WebSocketRequestBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::WebSocketRequest> m_result;
@@ -1810,11 +1810,11 @@ public:
             AllFieldsSet = (StatusSet | StatusTextSet | HeadersSet | 0)};
 
 
-        WebSocketResponseBuilder<STATE | StatusSet>& setStatus(int value);  // Defined below
+        WebSocketResponseBuilder<(STATE | WebSocketResponseBuilder<STATE>::StatusSet)>& setStatus(int value);  // Defined below
 
-        WebSocketResponseBuilder<STATE | StatusTextSet>& setStatusText(const String& value);  // Defined below
+        WebSocketResponseBuilder<(STATE | WebSocketResponseBuilder<STATE>::StatusTextSet)>& setStatusText(const String& value);  // Defined below
 
-        WebSocketResponseBuilder<STATE | HeadersSet>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
+        WebSocketResponseBuilder<(STATE | WebSocketResponseBuilder<STATE>::HeadersSet)>& setHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
 
         WebSocketResponseBuilder<STATE>& setHeadersText(const String& value);  // Defined below
 
@@ -1832,9 +1832,9 @@ public:
         friend class WebSocketResponse;
         WebSocketResponseBuilder() : m_result(new WebSocketResponse()) { }
 
-        template<int STEP> WebSocketResponseBuilder<STATE | STEP>& castState()
+        template<int STEP> WebSocketResponseBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<WebSocketResponseBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<WebSocketResponseBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::WebSocketResponse> m_result;
@@ -1883,11 +1883,11 @@ public:
             AllFieldsSet = (OpcodeSet | MaskSet | PayloadDataSet | 0)};
 
 
-        WebSocketFrameBuilder<STATE | OpcodeSet>& setOpcode(double value);  // Defined below
+        WebSocketFrameBuilder<(STATE | WebSocketFrameBuilder<STATE>::OpcodeSet)>& setOpcode(double value);  // Defined below
 
-        WebSocketFrameBuilder<STATE | MaskSet>& setMask(bool value);  // Defined below
+        WebSocketFrameBuilder<(STATE | WebSocketFrameBuilder<STATE>::MaskSet)>& setMask(bool value);  // Defined below
 
-        WebSocketFrameBuilder<STATE | PayloadDataSet>& setPayloadData(const String& value);  // Defined below
+        WebSocketFrameBuilder<(STATE | WebSocketFrameBuilder<STATE>::PayloadDataSet)>& setPayloadData(const String& value);  // Defined below
 
         std::unique_ptr<WebSocketFrame> build()
         {
@@ -1899,9 +1899,9 @@ public:
         friend class WebSocketFrame;
         WebSocketFrameBuilder() : m_result(new WebSocketFrame()) { }
 
-        template<int STEP> WebSocketFrameBuilder<STATE | STEP>& castState()
+        template<int STEP> WebSocketFrameBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<WebSocketFrameBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<WebSocketFrameBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::WebSocketFrame> m_result;
@@ -1994,7 +1994,7 @@ public:
             AllFieldsSet = (TypeSet | 0)};
 
 
-        InitiatorBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        InitiatorBuilder<(STATE | InitiatorBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
         InitiatorBuilder<STATE>& setStack(std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace> value);  // Defined below
 
@@ -2016,9 +2016,9 @@ public:
         friend class Initiator;
         InitiatorBuilder() : m_result(new Initiator()) { }
 
-        template<int STEP> InitiatorBuilder<STATE | STEP>& castState()
+        template<int STEP> InitiatorBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<InitiatorBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<InitiatorBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::Initiator> m_result;
@@ -2063,9 +2063,9 @@ public:
             AllFieldsSet = (TopLevelSiteSet | HasCrossSiteAncestorSet | 0)};
 
 
-        CookiePartitionKeyBuilder<STATE | TopLevelSiteSet>& setTopLevelSite(const String& value);  // Defined below
+        CookiePartitionKeyBuilder<(STATE | CookiePartitionKeyBuilder<STATE>::TopLevelSiteSet)>& setTopLevelSite(const String& value);  // Defined below
 
-        CookiePartitionKeyBuilder<STATE | HasCrossSiteAncestorSet>& setHasCrossSiteAncestor(bool value);  // Defined below
+        CookiePartitionKeyBuilder<(STATE | CookiePartitionKeyBuilder<STATE>::HasCrossSiteAncestorSet)>& setHasCrossSiteAncestor(bool value);  // Defined below
 
         std::unique_ptr<CookiePartitionKey> build()
         {
@@ -2077,9 +2077,9 @@ public:
         friend class CookiePartitionKey;
         CookiePartitionKeyBuilder() : m_result(new CookiePartitionKey()) { }
 
-        template<int STEP> CookiePartitionKeyBuilder<STATE | STEP>& castState()
+        template<int STEP> CookiePartitionKeyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CookiePartitionKeyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CookiePartitionKeyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::CookiePartitionKey> m_result;
@@ -2187,31 +2187,31 @@ public:
             AllFieldsSet = (NameSet | ValueSet | DomainSet | PathSet | ExpiresSet | SizeSet | HttpOnlySet | SecureSet | SessionSet | PrioritySet | SourceSchemeSet | SourcePortSet | 0)};
 
 
-        CookieBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        CookieBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
-        CookieBuilder<STATE | DomainSet>& setDomain(const String& value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::DomainSet)>& setDomain(const String& value);  // Defined below
 
-        CookieBuilder<STATE | PathSet>& setPath(const String& value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::PathSet)>& setPath(const String& value);  // Defined below
 
-        CookieBuilder<STATE | ExpiresSet>& setExpires(double value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::ExpiresSet)>& setExpires(double value);  // Defined below
 
-        CookieBuilder<STATE | SizeSet>& setSize(int value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::SizeSet)>& setSize(int value);  // Defined below
 
-        CookieBuilder<STATE | HttpOnlySet>& setHttpOnly(bool value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::HttpOnlySet)>& setHttpOnly(bool value);  // Defined below
 
-        CookieBuilder<STATE | SecureSet>& setSecure(bool value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::SecureSet)>& setSecure(bool value);  // Defined below
 
-        CookieBuilder<STATE | SessionSet>& setSession(bool value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::SessionSet)>& setSession(bool value);  // Defined below
 
         CookieBuilder<STATE>& setSameSite(const String& value);  // Defined below
 
-        CookieBuilder<STATE | PrioritySet>& setPriority(const String& value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::PrioritySet)>& setPriority(const String& value);  // Defined below
 
-        CookieBuilder<STATE | SourceSchemeSet>& setSourceScheme(const String& value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::SourceSchemeSet)>& setSourceScheme(const String& value);  // Defined below
 
-        CookieBuilder<STATE | SourcePortSet>& setSourcePort(int value);  // Defined below
+        CookieBuilder<(STATE | CookieBuilder<STATE>::SourcePortSet)>& setSourcePort(int value);  // Defined below
 
         CookieBuilder<STATE>& setPartitionKey(std::unique_ptr<protocol::Network::CookiePartitionKey> value);  // Defined below
 
@@ -2227,9 +2227,9 @@ public:
         friend class Cookie;
         CookieBuilder() : m_result(new Cookie()) { }
 
-        template<int STEP> CookieBuilder<STATE | STEP>& castState()
+        template<int STEP> CookieBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CookieBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CookieBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::Cookie> m_result;
@@ -2292,9 +2292,9 @@ public:
             AllFieldsSet = (BlockedReasonsSet | CookieLineSet | 0)};
 
 
-        BlockedSetCookieWithReasonBuilder<STATE | BlockedReasonsSet>& setBlockedReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        BlockedSetCookieWithReasonBuilder<(STATE | BlockedSetCookieWithReasonBuilder<STATE>::BlockedReasonsSet)>& setBlockedReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
-        BlockedSetCookieWithReasonBuilder<STATE | CookieLineSet>& setCookieLine(const String& value);  // Defined below
+        BlockedSetCookieWithReasonBuilder<(STATE | BlockedSetCookieWithReasonBuilder<STATE>::CookieLineSet)>& setCookieLine(const String& value);  // Defined below
 
         BlockedSetCookieWithReasonBuilder<STATE>& setCookie(std::unique_ptr<protocol::Network::Cookie> value);  // Defined below
 
@@ -2308,9 +2308,9 @@ public:
         friend class BlockedSetCookieWithReason;
         BlockedSetCookieWithReasonBuilder() : m_result(new BlockedSetCookieWithReason()) { }
 
-        template<int STEP> BlockedSetCookieWithReasonBuilder<STATE | STEP>& castState()
+        template<int STEP> BlockedSetCookieWithReasonBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BlockedSetCookieWithReasonBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BlockedSetCookieWithReasonBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::BlockedSetCookieWithReason> m_result;
@@ -2356,11 +2356,11 @@ public:
             AllFieldsSet = (ExemptionReasonSet | CookieLineSet | CookieSet | 0)};
 
 
-        ExemptedSetCookieWithReasonBuilder<STATE | ExemptionReasonSet>& setExemptionReason(const String& value);  // Defined below
+        ExemptedSetCookieWithReasonBuilder<(STATE | ExemptedSetCookieWithReasonBuilder<STATE>::ExemptionReasonSet)>& setExemptionReason(const String& value);  // Defined below
 
-        ExemptedSetCookieWithReasonBuilder<STATE | CookieLineSet>& setCookieLine(const String& value);  // Defined below
+        ExemptedSetCookieWithReasonBuilder<(STATE | ExemptedSetCookieWithReasonBuilder<STATE>::CookieLineSet)>& setCookieLine(const String& value);  // Defined below
 
-        ExemptedSetCookieWithReasonBuilder<STATE | CookieSet>& setCookie(std::unique_ptr<protocol::Network::Cookie> value);  // Defined below
+        ExemptedSetCookieWithReasonBuilder<(STATE | ExemptedSetCookieWithReasonBuilder<STATE>::CookieSet)>& setCookie(std::unique_ptr<protocol::Network::Cookie> value);  // Defined below
 
         std::unique_ptr<ExemptedSetCookieWithReason> build()
         {
@@ -2372,9 +2372,9 @@ public:
         friend class ExemptedSetCookieWithReason;
         ExemptedSetCookieWithReasonBuilder() : m_result(new ExemptedSetCookieWithReason()) { }
 
-        template<int STEP> ExemptedSetCookieWithReasonBuilder<STATE | STEP>& castState()
+        template<int STEP> ExemptedSetCookieWithReasonBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ExemptedSetCookieWithReasonBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ExemptedSetCookieWithReasonBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ExemptedSetCookieWithReason> m_result;
@@ -2425,9 +2425,9 @@ public:
             AllFieldsSet = (CookieSet | BlockedReasonsSet | 0)};
 
 
-        AssociatedCookieBuilder<STATE | CookieSet>& setCookie(std::unique_ptr<protocol::Network::Cookie> value);  // Defined below
+        AssociatedCookieBuilder<(STATE | AssociatedCookieBuilder<STATE>::CookieSet)>& setCookie(std::unique_ptr<protocol::Network::Cookie> value);  // Defined below
 
-        AssociatedCookieBuilder<STATE | BlockedReasonsSet>& setBlockedReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        AssociatedCookieBuilder<(STATE | AssociatedCookieBuilder<STATE>::BlockedReasonsSet)>& setBlockedReasons(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         AssociatedCookieBuilder<STATE>& setExemptionReason(const String& value);  // Defined below
 
@@ -2441,9 +2441,9 @@ public:
         friend class AssociatedCookie;
         AssociatedCookieBuilder() : m_result(new AssociatedCookie()) { }
 
-        template<int STEP> AssociatedCookieBuilder<STATE | STEP>& castState()
+        template<int STEP> AssociatedCookieBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AssociatedCookieBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AssociatedCookieBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::AssociatedCookie> m_result;
@@ -2584,9 +2584,9 @@ public:
             AllFieldsSet = (NameSet | ValueSet | 0)};
 
 
-        CookieParamBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        CookieParamBuilder<(STATE | CookieParamBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        CookieParamBuilder<STATE | ValueSet>& setValue(const String& value);  // Defined below
+        CookieParamBuilder<(STATE | CookieParamBuilder<STATE>::ValueSet)>& setValue(const String& value);  // Defined below
 
         CookieParamBuilder<STATE>& setUrl(const String& value);  // Defined below
 
@@ -2620,9 +2620,9 @@ public:
         friend class CookieParam;
         CookieParamBuilder() : m_result(new CookieParam()) { }
 
-        template<int STEP> CookieParamBuilder<STATE | STEP>& castState()
+        template<int STEP> CookieParamBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CookieParamBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CookieParamBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::CookieParam> m_result;
@@ -2694,11 +2694,11 @@ public:
 
         AuthChallengeBuilder<STATE>& setSource(const String& value);  // Defined below
 
-        AuthChallengeBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        AuthChallengeBuilder<(STATE | AuthChallengeBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        AuthChallengeBuilder<STATE | SchemeSet>& setScheme(const String& value);  // Defined below
+        AuthChallengeBuilder<(STATE | AuthChallengeBuilder<STATE>::SchemeSet)>& setScheme(const String& value);  // Defined below
 
-        AuthChallengeBuilder<STATE | RealmSet>& setRealm(const String& value);  // Defined below
+        AuthChallengeBuilder<(STATE | AuthChallengeBuilder<STATE>::RealmSet)>& setRealm(const String& value);  // Defined below
 
         std::unique_ptr<AuthChallenge> build()
         {
@@ -2710,9 +2710,9 @@ public:
         friend class AuthChallenge;
         AuthChallengeBuilder() : m_result(new AuthChallenge()) { }
 
-        template<int STEP> AuthChallengeBuilder<STATE | STEP>& castState()
+        template<int STEP> AuthChallengeBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AuthChallengeBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AuthChallengeBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::AuthChallenge> m_result;
@@ -2798,21 +2798,21 @@ public:
             AllFieldsSet = (LabelSet | SignatureSet | IntegritySet | ValidityUrlSet | DateSet | ExpiresSet | 0)};
 
 
-        SignedExchangeSignatureBuilder<STATE | LabelSet>& setLabel(const String& value);  // Defined below
+        SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignatureBuilder<STATE>::LabelSet)>& setLabel(const String& value);  // Defined below
 
-        SignedExchangeSignatureBuilder<STATE | SignatureSet>& setSignature(const String& value);  // Defined below
+        SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignatureBuilder<STATE>::SignatureSet)>& setSignature(const String& value);  // Defined below
 
-        SignedExchangeSignatureBuilder<STATE | IntegritySet>& setIntegrity(const String& value);  // Defined below
+        SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignatureBuilder<STATE>::IntegritySet)>& setIntegrity(const String& value);  // Defined below
 
         SignedExchangeSignatureBuilder<STATE>& setCertUrl(const String& value);  // Defined below
 
         SignedExchangeSignatureBuilder<STATE>& setCertSha256(const String& value);  // Defined below
 
-        SignedExchangeSignatureBuilder<STATE | ValidityUrlSet>& setValidityUrl(const String& value);  // Defined below
+        SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignatureBuilder<STATE>::ValidityUrlSet)>& setValidityUrl(const String& value);  // Defined below
 
-        SignedExchangeSignatureBuilder<STATE | DateSet>& setDate(int value);  // Defined below
+        SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignatureBuilder<STATE>::DateSet)>& setDate(int value);  // Defined below
 
-        SignedExchangeSignatureBuilder<STATE | ExpiresSet>& setExpires(int value);  // Defined below
+        SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignatureBuilder<STATE>::ExpiresSet)>& setExpires(int value);  // Defined below
 
         SignedExchangeSignatureBuilder<STATE>& setCertificates(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
@@ -2826,9 +2826,9 @@ public:
         friend class SignedExchangeSignature;
         SignedExchangeSignatureBuilder() : m_result(new SignedExchangeSignature()) { }
 
-        template<int STEP> SignedExchangeSignatureBuilder<STATE | STEP>& castState()
+        template<int STEP> SignedExchangeSignatureBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SignedExchangeSignatureBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SignedExchangeSignatureBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::SignedExchangeSignature> m_result;
@@ -2888,15 +2888,15 @@ public:
             AllFieldsSet = (RequestUrlSet | ResponseCodeSet | ResponseHeadersSet | SignaturesSet | HeaderIntegritySet | 0)};
 
 
-        SignedExchangeHeaderBuilder<STATE | RequestUrlSet>& setRequestUrl(const String& value);  // Defined below
+        SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeaderBuilder<STATE>::RequestUrlSet)>& setRequestUrl(const String& value);  // Defined below
 
-        SignedExchangeHeaderBuilder<STATE | ResponseCodeSet>& setResponseCode(int value);  // Defined below
+        SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeaderBuilder<STATE>::ResponseCodeSet)>& setResponseCode(int value);  // Defined below
 
-        SignedExchangeHeaderBuilder<STATE | ResponseHeadersSet>& setResponseHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
+        SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeaderBuilder<STATE>::ResponseHeadersSet)>& setResponseHeaders(std::unique_ptr<protocol::Network::Headers> value);  // Defined below
 
-        SignedExchangeHeaderBuilder<STATE | SignaturesSet>& setSignatures(std::unique_ptr<protocol::Array<protocol::Network::SignedExchangeSignature>> value);  // Defined below
+        SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeaderBuilder<STATE>::SignaturesSet)>& setSignatures(std::unique_ptr<protocol::Array<protocol::Network::SignedExchangeSignature>> value);  // Defined below
 
-        SignedExchangeHeaderBuilder<STATE | HeaderIntegritySet>& setHeaderIntegrity(const String& value);  // Defined below
+        SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeaderBuilder<STATE>::HeaderIntegritySet)>& setHeaderIntegrity(const String& value);  // Defined below
 
         std::unique_ptr<SignedExchangeHeader> build()
         {
@@ -2908,9 +2908,9 @@ public:
         friend class SignedExchangeHeader;
         SignedExchangeHeaderBuilder() : m_result(new SignedExchangeHeader()) { }
 
-        template<int STEP> SignedExchangeHeaderBuilder<STATE | STEP>& castState()
+        template<int STEP> SignedExchangeHeaderBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SignedExchangeHeaderBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SignedExchangeHeaderBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::SignedExchangeHeader> m_result;
@@ -2968,7 +2968,7 @@ public:
             AllFieldsSet = (MessageSet | 0)};
 
 
-        SignedExchangeErrorBuilder<STATE | MessageSet>& setMessage(const String& value);  // Defined below
+        SignedExchangeErrorBuilder<(STATE | SignedExchangeErrorBuilder<STATE>::MessageSet)>& setMessage(const String& value);  // Defined below
 
         SignedExchangeErrorBuilder<STATE>& setSignatureIndex(int value);  // Defined below
 
@@ -2984,9 +2984,9 @@ public:
         friend class SignedExchangeError;
         SignedExchangeErrorBuilder() : m_result(new SignedExchangeError()) { }
 
-        template<int STEP> SignedExchangeErrorBuilder<STATE | STEP>& castState()
+        template<int STEP> SignedExchangeErrorBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SignedExchangeErrorBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SignedExchangeErrorBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::SignedExchangeError> m_result;
@@ -3055,9 +3055,9 @@ public:
             AllFieldsSet = (OuterResponseSet | HasExtraInfoSet | 0)};
 
 
-        SignedExchangeInfoBuilder<STATE | OuterResponseSet>& setOuterResponse(std::unique_ptr<protocol::Network::Response> value);  // Defined below
+        SignedExchangeInfoBuilder<(STATE | SignedExchangeInfoBuilder<STATE>::OuterResponseSet)>& setOuterResponse(std::unique_ptr<protocol::Network::Response> value);  // Defined below
 
-        SignedExchangeInfoBuilder<STATE | HasExtraInfoSet>& setHasExtraInfo(bool value);  // Defined below
+        SignedExchangeInfoBuilder<(STATE | SignedExchangeInfoBuilder<STATE>::HasExtraInfoSet)>& setHasExtraInfo(bool value);  // Defined below
 
         SignedExchangeInfoBuilder<STATE>& setHeader(std::unique_ptr<protocol::Network::SignedExchangeHeader> value);  // Defined below
 
@@ -3075,9 +3075,9 @@ public:
         friend class SignedExchangeInfo;
         SignedExchangeInfoBuilder() : m_result(new SignedExchangeInfo()) { }
 
-        template<int STEP> SignedExchangeInfoBuilder<STATE | STEP>& castState()
+        template<int STEP> SignedExchangeInfoBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<SignedExchangeInfoBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<SignedExchangeInfoBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::SignedExchangeInfo> m_result;
@@ -3174,13 +3174,13 @@ public:
             AllFieldsSet = (UrlPatternSet | LatencySet | DownloadThroughputSet | UploadThroughputSet | 0)};
 
 
-        NetworkConditionsBuilder<STATE | UrlPatternSet>& setUrlPattern(const String& value);  // Defined below
+        NetworkConditionsBuilder<(STATE | NetworkConditionsBuilder<STATE>::UrlPatternSet)>& setUrlPattern(const String& value);  // Defined below
 
-        NetworkConditionsBuilder<STATE | LatencySet>& setLatency(double value);  // Defined below
+        NetworkConditionsBuilder<(STATE | NetworkConditionsBuilder<STATE>::LatencySet)>& setLatency(double value);  // Defined below
 
-        NetworkConditionsBuilder<STATE | DownloadThroughputSet>& setDownloadThroughput(double value);  // Defined below
+        NetworkConditionsBuilder<(STATE | NetworkConditionsBuilder<STATE>::DownloadThroughputSet)>& setDownloadThroughput(double value);  // Defined below
 
-        NetworkConditionsBuilder<STATE | UploadThroughputSet>& setUploadThroughput(double value);  // Defined below
+        NetworkConditionsBuilder<(STATE | NetworkConditionsBuilder<STATE>::UploadThroughputSet)>& setUploadThroughput(double value);  // Defined below
 
         NetworkConditionsBuilder<STATE>& setConnectionType(const String& value);  // Defined below
 
@@ -3202,9 +3202,9 @@ public:
         friend class NetworkConditions;
         NetworkConditionsBuilder() : m_result(new NetworkConditions()) { }
 
-        template<int STEP> NetworkConditionsBuilder<STATE | STEP>& castState()
+        template<int STEP> NetworkConditionsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<NetworkConditionsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<NetworkConditionsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::NetworkConditions> m_result;
@@ -3252,9 +3252,9 @@ public:
             AllFieldsSet = (UrlPatternSet | BlockSet | 0)};
 
 
-        BlockPatternBuilder<STATE | UrlPatternSet>& setUrlPattern(const String& value);  // Defined below
+        BlockPatternBuilder<(STATE | BlockPatternBuilder<STATE>::UrlPatternSet)>& setUrlPattern(const String& value);  // Defined below
 
-        BlockPatternBuilder<STATE | BlockSet>& setBlock(bool value);  // Defined below
+        BlockPatternBuilder<(STATE | BlockPatternBuilder<STATE>::BlockSet)>& setBlock(bool value);  // Defined below
 
         std::unique_ptr<BlockPattern> build()
         {
@@ -3266,9 +3266,9 @@ public:
         friend class BlockPattern;
         BlockPatternBuilder() : m_result(new BlockPattern()) { }
 
-        template<int STEP> BlockPatternBuilder<STATE | STEP>& castState()
+        template<int STEP> BlockPatternBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<BlockPatternBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<BlockPatternBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::BlockPattern> m_result;
@@ -3341,7 +3341,7 @@ public:
             AllFieldsSet = (NoDelaySet | 0)};
 
 
-        DirectTCPSocketOptionsBuilder<STATE | NoDelaySet>& setNoDelay(bool value);  // Defined below
+        DirectTCPSocketOptionsBuilder<(STATE | DirectTCPSocketOptionsBuilder<STATE>::NoDelaySet)>& setNoDelay(bool value);  // Defined below
 
         DirectTCPSocketOptionsBuilder<STATE>& setKeepAliveDelay(double value);  // Defined below
 
@@ -3361,9 +3361,9 @@ public:
         friend class DirectTCPSocketOptions;
         DirectTCPSocketOptionsBuilder() : m_result(new DirectTCPSocketOptions()) { }
 
-        template<int STEP> DirectTCPSocketOptionsBuilder<STATE | STEP>& castState()
+        template<int STEP> DirectTCPSocketOptionsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DirectTCPSocketOptionsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DirectTCPSocketOptionsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DirectTCPSocketOptions> m_result;
@@ -3519,9 +3519,9 @@ public:
         friend class DirectUDPSocketOptions;
         DirectUDPSocketOptionsBuilder() : m_result(new DirectUDPSocketOptions()) { }
 
-        template<int STEP> DirectUDPSocketOptionsBuilder<STATE | STEP>& castState()
+        template<int STEP> DirectUDPSocketOptionsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DirectUDPSocketOptionsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DirectUDPSocketOptionsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DirectUDPSocketOptions> m_result;
@@ -3584,7 +3584,7 @@ public:
             AllFieldsSet = (DataSet | 0)};
 
 
-        DirectUDPMessageBuilder<STATE | DataSet>& setData(const Binary& value);  // Defined below
+        DirectUDPMessageBuilder<(STATE | DirectUDPMessageBuilder<STATE>::DataSet)>& setData(const Binary& value);  // Defined below
 
         DirectUDPMessageBuilder<STATE>& setRemoteAddr(const String& value);  // Defined below
 
@@ -3600,9 +3600,9 @@ public:
         friend class DirectUDPMessage;
         DirectUDPMessageBuilder() : m_result(new DirectUDPMessage()) { }
 
-        template<int STEP> DirectUDPMessageBuilder<STATE | STEP>& castState()
+        template<int STEP> DirectUDPMessageBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DirectUDPMessageBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DirectUDPMessageBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DirectUDPMessage> m_result;
@@ -3640,7 +3640,7 @@ public:
             AllFieldsSet = (RequestTimeSet | 0)};
 
 
-        ConnectTimingBuilder<STATE | RequestTimeSet>& setRequestTime(double value);  // Defined below
+        ConnectTimingBuilder<(STATE | ConnectTimingBuilder<STATE>::RequestTimeSet)>& setRequestTime(double value);  // Defined below
 
         std::unique_ptr<ConnectTiming> build()
         {
@@ -3652,9 +3652,9 @@ public:
         friend class ConnectTiming;
         ConnectTimingBuilder() : m_result(new ConnectTiming()) { }
 
-        template<int STEP> ConnectTimingBuilder<STATE | STEP>& castState()
+        template<int STEP> ConnectTimingBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ConnectTimingBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ConnectTimingBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ConnectTiming> m_result;
@@ -3698,11 +3698,11 @@ public:
             AllFieldsSet = (InitiatorIsSecureContextSet | InitiatorIPAddressSpaceSet | LocalNetworkAccessRequestPolicySet | 0)};
 
 
-        ClientSecurityStateBuilder<STATE | InitiatorIsSecureContextSet>& setInitiatorIsSecureContext(bool value);  // Defined below
+        ClientSecurityStateBuilder<(STATE | ClientSecurityStateBuilder<STATE>::InitiatorIsSecureContextSet)>& setInitiatorIsSecureContext(bool value);  // Defined below
 
-        ClientSecurityStateBuilder<STATE | InitiatorIPAddressSpaceSet>& setInitiatorIPAddressSpace(const String& value);  // Defined below
+        ClientSecurityStateBuilder<(STATE | ClientSecurityStateBuilder<STATE>::InitiatorIPAddressSpaceSet)>& setInitiatorIPAddressSpace(const String& value);  // Defined below
 
-        ClientSecurityStateBuilder<STATE | LocalNetworkAccessRequestPolicySet>& setLocalNetworkAccessRequestPolicy(const String& value);  // Defined below
+        ClientSecurityStateBuilder<(STATE | ClientSecurityStateBuilder<STATE>::LocalNetworkAccessRequestPolicySet)>& setLocalNetworkAccessRequestPolicy(const String& value);  // Defined below
 
         std::unique_ptr<ClientSecurityState> build()
         {
@@ -3714,9 +3714,9 @@ public:
         friend class ClientSecurityState;
         ClientSecurityStateBuilder() : m_result(new ClientSecurityState()) { }
 
-        template<int STEP> ClientSecurityStateBuilder<STATE | STEP>& castState()
+        template<int STEP> ClientSecurityStateBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ClientSecurityStateBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ClientSecurityStateBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ClientSecurityState> m_result;
@@ -3762,11 +3762,11 @@ public:
             AllFieldsSet = (ScriptIdSet | DebuggerIdSet | NameSet | 0)};
 
 
-        AdScriptIdentifierBuilder<STATE | ScriptIdSet>& setScriptId(const String& value);  // Defined below
+        AdScriptIdentifierBuilder<(STATE | AdScriptIdentifierBuilder<STATE>::ScriptIdSet)>& setScriptId(const String& value);  // Defined below
 
-        AdScriptIdentifierBuilder<STATE | DebuggerIdSet>& setDebuggerId(const String& value);  // Defined below
+        AdScriptIdentifierBuilder<(STATE | AdScriptIdentifierBuilder<STATE>::DebuggerIdSet)>& setDebuggerId(const String& value);  // Defined below
 
-        AdScriptIdentifierBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        AdScriptIdentifierBuilder<(STATE | AdScriptIdentifierBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
         std::unique_ptr<AdScriptIdentifier> build()
         {
@@ -3778,9 +3778,9 @@ public:
         friend class AdScriptIdentifier;
         AdScriptIdentifierBuilder() : m_result(new AdScriptIdentifier()) { }
 
-        template<int STEP> AdScriptIdentifierBuilder<STATE | STEP>& castState()
+        template<int STEP> AdScriptIdentifierBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AdScriptIdentifierBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AdScriptIdentifierBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::AdScriptIdentifier> m_result;
@@ -3827,7 +3827,7 @@ public:
             AllFieldsSet = (AncestryChainSet | 0)};
 
 
-        AdAncestryBuilder<STATE | AncestryChainSet>& setAncestryChain(std::unique_ptr<protocol::Array<protocol::Network::AdScriptIdentifier>> value);  // Defined below
+        AdAncestryBuilder<(STATE | AdAncestryBuilder<STATE>::AncestryChainSet)>& setAncestryChain(std::unique_ptr<protocol::Array<protocol::Network::AdScriptIdentifier>> value);  // Defined below
 
         AdAncestryBuilder<STATE>& setRootScriptFilterlistRule(const String& value);  // Defined below
 
@@ -3841,9 +3841,9 @@ public:
         friend class AdAncestry;
         AdAncestryBuilder() : m_result(new AdAncestry()) { }
 
-        template<int STEP> AdAncestryBuilder<STATE | STEP>& castState()
+        template<int STEP> AdAncestryBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AdAncestryBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AdAncestryBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::AdAncestry> m_result;
@@ -3908,9 +3908,9 @@ public:
         friend class AdProvenance;
         AdProvenanceBuilder() : m_result(new AdProvenance()) { }
 
-        template<int STEP> AdProvenanceBuilder<STATE | STEP>& castState()
+        template<int STEP> AdProvenanceBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<AdProvenanceBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<AdProvenanceBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::AdProvenance> m_result;
@@ -3979,23 +3979,23 @@ public:
             AllFieldsSet = (IdSet | InitiatorUrlSet | DestinationSet | TypeSet | TimestampSet | DepthSet | CompletedAttemptsSet | BodySet | StatusSet | 0)};
 
 
-        ReportingApiReportBuilder<STATE | IdSet>& setId(const String& value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::IdSet)>& setId(const String& value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | InitiatorUrlSet>& setInitiatorUrl(const String& value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::InitiatorUrlSet)>& setInitiatorUrl(const String& value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | DestinationSet>& setDestination(const String& value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::DestinationSet)>& setDestination(const String& value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | TypeSet>& setType(const String& value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::TypeSet)>& setType(const String& value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | TimestampSet>& setTimestamp(double value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::TimestampSet)>& setTimestamp(double value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | DepthSet>& setDepth(int value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::DepthSet)>& setDepth(int value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | CompletedAttemptsSet>& setCompletedAttempts(int value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::CompletedAttemptsSet)>& setCompletedAttempts(int value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | BodySet>& setBody(std::unique_ptr<protocol::DictionaryValue> value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::BodySet)>& setBody(std::unique_ptr<protocol::DictionaryValue> value);  // Defined below
 
-        ReportingApiReportBuilder<STATE | StatusSet>& setStatus(const String& value);  // Defined below
+        ReportingApiReportBuilder<(STATE | ReportingApiReportBuilder<STATE>::StatusSet)>& setStatus(const String& value);  // Defined below
 
         std::unique_ptr<ReportingApiReport> build()
         {
@@ -4007,9 +4007,9 @@ public:
         friend class ReportingApiReport;
         ReportingApiReportBuilder() : m_result(new ReportingApiReport()) { }
 
-        template<int STEP> ReportingApiReportBuilder<STATE | STEP>& castState()
+        template<int STEP> ReportingApiReportBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ReportingApiReportBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ReportingApiReportBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ReportingApiReport> m_result;
@@ -4057,9 +4057,9 @@ public:
             AllFieldsSet = (UrlSet | GroupNameSet | 0)};
 
 
-        ReportingApiEndpointBuilder<STATE | UrlSet>& setUrl(const String& value);  // Defined below
+        ReportingApiEndpointBuilder<(STATE | ReportingApiEndpointBuilder<STATE>::UrlSet)>& setUrl(const String& value);  // Defined below
 
-        ReportingApiEndpointBuilder<STATE | GroupNameSet>& setGroupName(const String& value);  // Defined below
+        ReportingApiEndpointBuilder<(STATE | ReportingApiEndpointBuilder<STATE>::GroupNameSet)>& setGroupName(const String& value);  // Defined below
 
         std::unique_ptr<ReportingApiEndpoint> build()
         {
@@ -4071,9 +4071,9 @@ public:
         friend class ReportingApiEndpoint;
         ReportingApiEndpointBuilder() : m_result(new ReportingApiEndpoint()) { }
 
-        template<int STEP> ReportingApiEndpointBuilder<STATE | STEP>& castState()
+        template<int STEP> ReportingApiEndpointBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ReportingApiEndpointBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ReportingApiEndpointBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ReportingApiEndpoint> m_result;
@@ -4114,9 +4114,9 @@ public:
             AllFieldsSet = (SiteSet | IdSet | 0)};
 
 
-        DeviceBoundSessionKeyBuilder<STATE | SiteSet>& setSite(const String& value);  // Defined below
+        DeviceBoundSessionKeyBuilder<(STATE | DeviceBoundSessionKeyBuilder<STATE>::SiteSet)>& setSite(const String& value);  // Defined below
 
-        DeviceBoundSessionKeyBuilder<STATE | IdSet>& setId(const String& value);  // Defined below
+        DeviceBoundSessionKeyBuilder<(STATE | DeviceBoundSessionKeyBuilder<STATE>::IdSet)>& setId(const String& value);  // Defined below
 
         std::unique_ptr<DeviceBoundSessionKey> build()
         {
@@ -4128,9 +4128,9 @@ public:
         friend class DeviceBoundSessionKey;
         DeviceBoundSessionKeyBuilder() : m_result(new DeviceBoundSessionKey()) { }
 
-        template<int STEP> DeviceBoundSessionKeyBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionKeyBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionKeyBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionKeyBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSessionKey> m_result;
@@ -4180,9 +4180,9 @@ public:
             AllFieldsSet = (SessionKeySet | UsageSet | 0)};
 
 
-        DeviceBoundSessionWithUsageBuilder<STATE | SessionKeySet>& setSessionKey(std::unique_ptr<protocol::Network::DeviceBoundSessionKey> value);  // Defined below
+        DeviceBoundSessionWithUsageBuilder<(STATE | DeviceBoundSessionWithUsageBuilder<STATE>::SessionKeySet)>& setSessionKey(std::unique_ptr<protocol::Network::DeviceBoundSessionKey> value);  // Defined below
 
-        DeviceBoundSessionWithUsageBuilder<STATE | UsageSet>& setUsage(const String& value);  // Defined below
+        DeviceBoundSessionWithUsageBuilder<(STATE | DeviceBoundSessionWithUsageBuilder<STATE>::UsageSet)>& setUsage(const String& value);  // Defined below
 
         std::unique_ptr<DeviceBoundSessionWithUsage> build()
         {
@@ -4194,9 +4194,9 @@ public:
         friend class DeviceBoundSessionWithUsage;
         DeviceBoundSessionWithUsageBuilder() : m_result(new DeviceBoundSessionWithUsage()) { }
 
-        template<int STEP> DeviceBoundSessionWithUsageBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionWithUsageBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionWithUsageBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionWithUsageBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSessionWithUsage> m_result;
@@ -4258,15 +4258,15 @@ public:
             AllFieldsSet = (NameSet | DomainSet | PathSet | SecureSet | HttpOnlySet | 0)};
 
 
-        DeviceBoundSessionCookieCravingBuilder<STATE | NameSet>& setName(const String& value);  // Defined below
+        DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCravingBuilder<STATE>::NameSet)>& setName(const String& value);  // Defined below
 
-        DeviceBoundSessionCookieCravingBuilder<STATE | DomainSet>& setDomain(const String& value);  // Defined below
+        DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCravingBuilder<STATE>::DomainSet)>& setDomain(const String& value);  // Defined below
 
-        DeviceBoundSessionCookieCravingBuilder<STATE | PathSet>& setPath(const String& value);  // Defined below
+        DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCravingBuilder<STATE>::PathSet)>& setPath(const String& value);  // Defined below
 
-        DeviceBoundSessionCookieCravingBuilder<STATE | SecureSet>& setSecure(bool value);  // Defined below
+        DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCravingBuilder<STATE>::SecureSet)>& setSecure(bool value);  // Defined below
 
-        DeviceBoundSessionCookieCravingBuilder<STATE | HttpOnlySet>& setHttpOnly(bool value);  // Defined below
+        DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCravingBuilder<STATE>::HttpOnlySet)>& setHttpOnly(bool value);  // Defined below
 
         DeviceBoundSessionCookieCravingBuilder<STATE>& setSameSite(const String& value);  // Defined below
 
@@ -4280,9 +4280,9 @@ public:
         friend class DeviceBoundSessionCookieCraving;
         DeviceBoundSessionCookieCravingBuilder() : m_result(new DeviceBoundSessionCookieCraving()) { }
 
-        template<int STEP> DeviceBoundSessionCookieCravingBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionCookieCravingBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionCookieCravingBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionCookieCravingBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSessionCookieCraving> m_result;
@@ -4336,11 +4336,11 @@ public:
             AllFieldsSet = (RuleTypeSet | HostPatternSet | PathPrefixSet | 0)};
 
 
-        DeviceBoundSessionUrlRuleBuilder<STATE | RuleTypeSet>& setRuleType(const String& value);  // Defined below
+        DeviceBoundSessionUrlRuleBuilder<(STATE | DeviceBoundSessionUrlRuleBuilder<STATE>::RuleTypeSet)>& setRuleType(const String& value);  // Defined below
 
-        DeviceBoundSessionUrlRuleBuilder<STATE | HostPatternSet>& setHostPattern(const String& value);  // Defined below
+        DeviceBoundSessionUrlRuleBuilder<(STATE | DeviceBoundSessionUrlRuleBuilder<STATE>::HostPatternSet)>& setHostPattern(const String& value);  // Defined below
 
-        DeviceBoundSessionUrlRuleBuilder<STATE | PathPrefixSet>& setPathPrefix(const String& value);  // Defined below
+        DeviceBoundSessionUrlRuleBuilder<(STATE | DeviceBoundSessionUrlRuleBuilder<STATE>::PathPrefixSet)>& setPathPrefix(const String& value);  // Defined below
 
         std::unique_ptr<DeviceBoundSessionUrlRule> build()
         {
@@ -4352,9 +4352,9 @@ public:
         friend class DeviceBoundSessionUrlRule;
         DeviceBoundSessionUrlRuleBuilder() : m_result(new DeviceBoundSessionUrlRule()) { }
 
-        template<int STEP> DeviceBoundSessionUrlRuleBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionUrlRuleBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionUrlRuleBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionUrlRuleBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSessionUrlRule> m_result;
@@ -4400,11 +4400,11 @@ public:
             AllFieldsSet = (OriginSet | IncludeSiteSet | UrlRulesSet | 0)};
 
 
-        DeviceBoundSessionInclusionRulesBuilder<STATE | OriginSet>& setOrigin(const String& value);  // Defined below
+        DeviceBoundSessionInclusionRulesBuilder<(STATE | DeviceBoundSessionInclusionRulesBuilder<STATE>::OriginSet)>& setOrigin(const String& value);  // Defined below
 
-        DeviceBoundSessionInclusionRulesBuilder<STATE | IncludeSiteSet>& setIncludeSite(bool value);  // Defined below
+        DeviceBoundSessionInclusionRulesBuilder<(STATE | DeviceBoundSessionInclusionRulesBuilder<STATE>::IncludeSiteSet)>& setIncludeSite(bool value);  // Defined below
 
-        DeviceBoundSessionInclusionRulesBuilder<STATE | UrlRulesSet>& setUrlRules(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionUrlRule>> value);  // Defined below
+        DeviceBoundSessionInclusionRulesBuilder<(STATE | DeviceBoundSessionInclusionRulesBuilder<STATE>::UrlRulesSet)>& setUrlRules(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionUrlRule>> value);  // Defined below
 
         std::unique_ptr<DeviceBoundSessionInclusionRules> build()
         {
@@ -4416,9 +4416,9 @@ public:
         friend class DeviceBoundSessionInclusionRules;
         DeviceBoundSessionInclusionRulesBuilder() : m_result(new DeviceBoundSessionInclusionRules()) { }
 
-        template<int STEP> DeviceBoundSessionInclusionRulesBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionInclusionRulesBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionInclusionRulesBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionInclusionRulesBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSessionInclusionRules> m_result;
@@ -4485,19 +4485,19 @@ public:
             AllFieldsSet = (KeySet | RefreshUrlSet | InclusionRulesSet | CookieCravingsSet | ExpiryDateSet | AllowedRefreshInitiatorsSet | 0)};
 
 
-        DeviceBoundSessionBuilder<STATE | KeySet>& setKey(std::unique_ptr<protocol::Network::DeviceBoundSessionKey> value);  // Defined below
+        DeviceBoundSessionBuilder<(STATE | DeviceBoundSessionBuilder<STATE>::KeySet)>& setKey(std::unique_ptr<protocol::Network::DeviceBoundSessionKey> value);  // Defined below
 
-        DeviceBoundSessionBuilder<STATE | RefreshUrlSet>& setRefreshUrl(const String& value);  // Defined below
+        DeviceBoundSessionBuilder<(STATE | DeviceBoundSessionBuilder<STATE>::RefreshUrlSet)>& setRefreshUrl(const String& value);  // Defined below
 
-        DeviceBoundSessionBuilder<STATE | InclusionRulesSet>& setInclusionRules(std::unique_ptr<protocol::Network::DeviceBoundSessionInclusionRules> value);  // Defined below
+        DeviceBoundSessionBuilder<(STATE | DeviceBoundSessionBuilder<STATE>::InclusionRulesSet)>& setInclusionRules(std::unique_ptr<protocol::Network::DeviceBoundSessionInclusionRules> value);  // Defined below
 
-        DeviceBoundSessionBuilder<STATE | CookieCravingsSet>& setCookieCravings(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionCookieCraving>> value);  // Defined below
+        DeviceBoundSessionBuilder<(STATE | DeviceBoundSessionBuilder<STATE>::CookieCravingsSet)>& setCookieCravings(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionCookieCraving>> value);  // Defined below
 
-        DeviceBoundSessionBuilder<STATE | ExpiryDateSet>& setExpiryDate(double value);  // Defined below
+        DeviceBoundSessionBuilder<(STATE | DeviceBoundSessionBuilder<STATE>::ExpiryDateSet)>& setExpiryDate(double value);  // Defined below
 
         DeviceBoundSessionBuilder<STATE>& setCachedChallenge(const String& value);  // Defined below
 
-        DeviceBoundSessionBuilder<STATE | AllowedRefreshInitiatorsSet>& setAllowedRefreshInitiators(std::unique_ptr<protocol::Array<String>> value);  // Defined below
+        DeviceBoundSessionBuilder<(STATE | DeviceBoundSessionBuilder<STATE>::AllowedRefreshInitiatorsSet)>& setAllowedRefreshInitiators(std::unique_ptr<protocol::Array<String>> value);  // Defined below
 
         std::unique_ptr<DeviceBoundSession> build()
         {
@@ -4509,9 +4509,9 @@ public:
         friend class DeviceBoundSession;
         DeviceBoundSessionBuilder() : m_result(new DeviceBoundSession()) { }
 
-        template<int STEP> DeviceBoundSessionBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSession> m_result;
@@ -4580,7 +4580,7 @@ public:
             AllFieldsSet = (RequestUrlSet | 0)};
 
 
-        DeviceBoundSessionFailedRequestBuilder<STATE | RequestUrlSet>& setRequestUrl(const String& value);  // Defined below
+        DeviceBoundSessionFailedRequestBuilder<(STATE | DeviceBoundSessionFailedRequestBuilder<STATE>::RequestUrlSet)>& setRequestUrl(const String& value);  // Defined below
 
         DeviceBoundSessionFailedRequestBuilder<STATE>& setNetError(const String& value);  // Defined below
 
@@ -4598,9 +4598,9 @@ public:
         friend class DeviceBoundSessionFailedRequest;
         DeviceBoundSessionFailedRequestBuilder() : m_result(new DeviceBoundSessionFailedRequest()) { }
 
-        template<int STEP> DeviceBoundSessionFailedRequestBuilder<STATE | STEP>& castState()
+        template<int STEP> DeviceBoundSessionFailedRequestBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<DeviceBoundSessionFailedRequestBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<DeviceBoundSessionFailedRequestBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::DeviceBoundSessionFailedRequest> m_result;
@@ -4657,7 +4657,7 @@ public:
             AllFieldsSet = (FetchResultSet | 0)};
 
 
-        CreationEventDetailsBuilder<STATE | FetchResultSet>& setFetchResult(const String& value);  // Defined below
+        CreationEventDetailsBuilder<(STATE | CreationEventDetailsBuilder<STATE>::FetchResultSet)>& setFetchResult(const String& value);  // Defined below
 
         CreationEventDetailsBuilder<STATE>& setNewSession(std::unique_ptr<protocol::Network::DeviceBoundSession> value);  // Defined below
 
@@ -4673,9 +4673,9 @@ public:
         friend class CreationEventDetails;
         CreationEventDetailsBuilder() : m_result(new CreationEventDetails()) { }
 
-        template<int STEP> CreationEventDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> CreationEventDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<CreationEventDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<CreationEventDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::CreationEventDetails> m_result;
@@ -4756,13 +4756,13 @@ public:
             AllFieldsSet = (RefreshResultSet | WasFullyProactiveRefreshSet | 0)};
 
 
-        RefreshEventDetailsBuilder<STATE | RefreshResultSet>& setRefreshResult(const String& value);  // Defined below
+        RefreshEventDetailsBuilder<(STATE | RefreshEventDetailsBuilder<STATE>::RefreshResultSet)>& setRefreshResult(const String& value);  // Defined below
 
         RefreshEventDetailsBuilder<STATE>& setFetchResult(const String& value);  // Defined below
 
         RefreshEventDetailsBuilder<STATE>& setNewSession(std::unique_ptr<protocol::Network::DeviceBoundSession> value);  // Defined below
 
-        RefreshEventDetailsBuilder<STATE | WasFullyProactiveRefreshSet>& setWasFullyProactiveRefresh(bool value);  // Defined below
+        RefreshEventDetailsBuilder<(STATE | RefreshEventDetailsBuilder<STATE>::WasFullyProactiveRefreshSet)>& setWasFullyProactiveRefresh(bool value);  // Defined below
 
         RefreshEventDetailsBuilder<STATE>& setFailedRequest(std::unique_ptr<protocol::Network::DeviceBoundSessionFailedRequest> value);  // Defined below
 
@@ -4776,9 +4776,9 @@ public:
         friend class RefreshEventDetails;
         RefreshEventDetailsBuilder() : m_result(new RefreshEventDetails()) { }
 
-        template<int STEP> RefreshEventDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> RefreshEventDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<RefreshEventDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<RefreshEventDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::RefreshEventDetails> m_result;
@@ -4830,7 +4830,7 @@ public:
             AllFieldsSet = (DeletionReasonSet | 0)};
 
 
-        TerminationEventDetailsBuilder<STATE | DeletionReasonSet>& setDeletionReason(const String& value);  // Defined below
+        TerminationEventDetailsBuilder<(STATE | TerminationEventDetailsBuilder<STATE>::DeletionReasonSet)>& setDeletionReason(const String& value);  // Defined below
 
         std::unique_ptr<TerminationEventDetails> build()
         {
@@ -4842,9 +4842,9 @@ public:
         friend class TerminationEventDetails;
         TerminationEventDetailsBuilder() : m_result(new TerminationEventDetails()) { }
 
-        template<int STEP> TerminationEventDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> TerminationEventDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<TerminationEventDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<TerminationEventDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::TerminationEventDetails> m_result;
@@ -4891,9 +4891,9 @@ public:
             AllFieldsSet = (ChallengeResultSet | ChallengeSet | 0)};
 
 
-        ChallengeEventDetailsBuilder<STATE | ChallengeResultSet>& setChallengeResult(const String& value);  // Defined below
+        ChallengeEventDetailsBuilder<(STATE | ChallengeEventDetailsBuilder<STATE>::ChallengeResultSet)>& setChallengeResult(const String& value);  // Defined below
 
-        ChallengeEventDetailsBuilder<STATE | ChallengeSet>& setChallenge(const String& value);  // Defined below
+        ChallengeEventDetailsBuilder<(STATE | ChallengeEventDetailsBuilder<STATE>::ChallengeSet)>& setChallenge(const String& value);  // Defined below
 
         std::unique_ptr<ChallengeEventDetails> build()
         {
@@ -4905,9 +4905,9 @@ public:
         friend class ChallengeEventDetails;
         ChallengeEventDetailsBuilder() : m_result(new ChallengeEventDetails()) { }
 
-        template<int STEP> ChallengeEventDetailsBuilder<STATE | STEP>& castState()
+        template<int STEP> ChallengeEventDetailsBuilder<(STATE | STEP)>& castState()
         {
-            return *reinterpret_cast<ChallengeEventDetailsBuilder<STATE | STEP>*>(this);
+            return *reinterpret_cast<ChallengeEventDetailsBuilder<(STATE | STEP)>*>(this);
         }
 
         std::unique_ptr<protocol::Network::ChallengeEventDetails> m_result;
@@ -4957,91 +4957,91 @@ inline void ResourceTiming::setReceiveHeadersStart(double value) { m_receiveHead
 inline void ResourceTiming::setReceiveHeadersEnd(double value) { m_receiveHeadersEnd = value; }
 
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::RequestTimeSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::RequestTimeSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setRequestTime(double value) {
   static_assert(!(STATE & RequestTimeSet), "property requestTime should not be set yet");
   m_result->setRequestTime(value);
   return castState<RequestTimeSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ProxyStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ProxyStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setProxyStart(double value) {
   static_assert(!(STATE & ProxyStartSet), "property proxyStart should not be set yet");
   m_result->setProxyStart(value);
   return castState<ProxyStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ProxyEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ProxyEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setProxyEnd(double value) {
   static_assert(!(STATE & ProxyEndSet), "property proxyEnd should not be set yet");
   m_result->setProxyEnd(value);
   return castState<ProxyEndSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::DnsStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::DnsStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setDnsStart(double value) {
   static_assert(!(STATE & DnsStartSet), "property dnsStart should not be set yet");
   m_result->setDnsStart(value);
   return castState<DnsStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::DnsEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::DnsEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setDnsEnd(double value) {
   static_assert(!(STATE & DnsEndSet), "property dnsEnd should not be set yet");
   m_result->setDnsEnd(value);
   return castState<DnsEndSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ConnectStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ConnectStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setConnectStart(double value) {
   static_assert(!(STATE & ConnectStartSet), "property connectStart should not be set yet");
   m_result->setConnectStart(value);
   return castState<ConnectStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ConnectEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ConnectEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setConnectEnd(double value) {
   static_assert(!(STATE & ConnectEndSet), "property connectEnd should not be set yet");
   m_result->setConnectEnd(value);
   return castState<ConnectEndSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SslStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SslStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setSslStart(double value) {
   static_assert(!(STATE & SslStartSet), "property sslStart should not be set yet");
   m_result->setSslStart(value);
   return castState<SslStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SslEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SslEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setSslEnd(double value) {
   static_assert(!(STATE & SslEndSet), "property sslEnd should not be set yet");
   m_result->setSslEnd(value);
   return castState<SslEndSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setWorkerStart(double value) {
   static_assert(!(STATE & WorkerStartSet), "property workerStart should not be set yet");
   m_result->setWorkerStart(value);
   return castState<WorkerStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerReadySet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerReadySet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setWorkerReady(double value) {
   static_assert(!(STATE & WorkerReadySet), "property workerReady should not be set yet");
   m_result->setWorkerReady(value);
   return castState<WorkerReadySet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerFetchStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerFetchStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setWorkerFetchStart(double value) {
   static_assert(!(STATE & WorkerFetchStartSet), "property workerFetchStart should not be set yet");
   m_result->setWorkerFetchStart(value);
   return castState<WorkerFetchStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerRespondWithSettledSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::WorkerRespondWithSettledSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setWorkerRespondWithSettled(double value) {
   static_assert(!(STATE & WorkerRespondWithSettledSet), "property workerRespondWithSettled should not be set yet");
   m_result->setWorkerRespondWithSettled(value);
@@ -5058,42 +5058,42 @@ inline ResourceTiming::ResourceTimingBuilder<STATE>& ResourceTiming::ResourceTim
   return *this;
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SendStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SendStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setSendStart(double value) {
   static_assert(!(STATE & SendStartSet), "property sendStart should not be set yet");
   m_result->setSendStart(value);
   return castState<SendStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SendEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::SendEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setSendEnd(double value) {
   static_assert(!(STATE & SendEndSet), "property sendEnd should not be set yet");
   m_result->setSendEnd(value);
   return castState<SendEndSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::PushStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::PushStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setPushStart(double value) {
   static_assert(!(STATE & PushStartSet), "property pushStart should not be set yet");
   m_result->setPushStart(value);
   return castState<PushStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::PushEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::PushEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setPushEnd(double value) {
   static_assert(!(STATE & PushEndSet), "property pushEnd should not be set yet");
   m_result->setPushEnd(value);
   return castState<PushEndSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ReceiveHeadersStartSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ReceiveHeadersStartSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setReceiveHeadersStart(double value) {
   static_assert(!(STATE & ReceiveHeadersStartSet), "property receiveHeadersStart should not be set yet");
   m_result->setReceiveHeadersStart(value);
   return castState<ReceiveHeadersStartSet>();
 }
 template<int STATE>
-inline ResourceTiming::ResourceTimingBuilder<STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ReceiveHeadersEndSet>&
+inline ResourceTiming::ResourceTimingBuilder<(STATE | ResourceTiming::ResourceTimingBuilder<STATE>::ReceiveHeadersEndSet)>&
 ResourceTiming::ResourceTimingBuilder<STATE>::setReceiveHeadersEnd(double value) {
   static_assert(!(STATE & ReceiveHeadersEndSet), "property receiveHeadersEnd should not be set yet");
   m_result->setReceiveHeadersEnd(value);
@@ -5149,7 +5149,7 @@ inline void Request::setIsSameSite(bool value) { m_isSameSite = value; }
 inline void Request::setIsAdRelated(bool value) { m_isAdRelated = value; }
 
 template<int STATE>
-inline Request::RequestBuilder<STATE | Request::RequestBuilder<STATE>::UrlSet>&
+inline Request::RequestBuilder<(STATE | Request::RequestBuilder<STATE>::UrlSet)>&
 Request::RequestBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
@@ -5161,14 +5161,14 @@ inline Request::RequestBuilder<STATE>& Request::RequestBuilder<STATE>::setUrlFra
   return *this;
 }
 template<int STATE>
-inline Request::RequestBuilder<STATE | Request::RequestBuilder<STATE>::MethodSet>&
+inline Request::RequestBuilder<(STATE | Request::RequestBuilder<STATE>::MethodSet)>&
 Request::RequestBuilder<STATE>::setMethod(const String& value) {
   static_assert(!(STATE & MethodSet), "property method should not be set yet");
   m_result->setMethod(value);
   return castState<MethodSet>();
 }
 template<int STATE>
-inline Request::RequestBuilder<STATE | Request::RequestBuilder<STATE>::HeadersSet>&
+inline Request::RequestBuilder<(STATE | Request::RequestBuilder<STATE>::HeadersSet)>&
 Request::RequestBuilder<STATE>::setHeaders(std::unique_ptr<protocol::Network::Headers> value) {
   static_assert(!(STATE & HeadersSet), "property headers should not be set yet");
   m_result->setHeaders(std::move(value));
@@ -5195,14 +5195,14 @@ inline Request::RequestBuilder<STATE>& Request::RequestBuilder<STATE>::setMixedC
   return *this;
 }
 template<int STATE>
-inline Request::RequestBuilder<STATE | Request::RequestBuilder<STATE>::InitialPrioritySet>&
+inline Request::RequestBuilder<(STATE | Request::RequestBuilder<STATE>::InitialPrioritySet)>&
 Request::RequestBuilder<STATE>::setInitialPriority(const String& value) {
   static_assert(!(STATE & InitialPrioritySet), "property initialPriority should not be set yet");
   m_result->setInitialPriority(value);
   return castState<InitialPrioritySet>();
 }
 template<int STATE>
-inline Request::RequestBuilder<STATE | Request::RequestBuilder<STATE>::ReferrerPolicySet>&
+inline Request::RequestBuilder<(STATE | Request::RequestBuilder<STATE>::ReferrerPolicySet)>&
 Request::RequestBuilder<STATE>::setReferrerPolicy(const String& value) {
   static_assert(!(STATE & ReferrerPolicySet), "property referrerPolicy should not be set yet");
   m_result->setReferrerPolicy(value);
@@ -5242,56 +5242,56 @@ inline void SignedCertificateTimestamp::setSignatureAlgorithm(const String& valu
 inline void SignedCertificateTimestamp::setSignatureData(const String& value) { m_signatureData = value; }
 
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::StatusSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::StatusSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setStatus(const String& value) {
   static_assert(!(STATE & StatusSet), "property status should not be set yet");
   m_result->setStatus(value);
   return castState<StatusSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::OriginSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::OriginSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::LogDescriptionSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::LogDescriptionSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setLogDescription(const String& value) {
   static_assert(!(STATE & LogDescriptionSet), "property logDescription should not be set yet");
   m_result->setLogDescription(value);
   return castState<LogDescriptionSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::LogIdSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::LogIdSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setLogId(const String& value) {
   static_assert(!(STATE & LogIdSet), "property logId should not be set yet");
   m_result->setLogId(value);
   return castState<LogIdSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::TimestampSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::TimestampSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setTimestamp(double value) {
   static_assert(!(STATE & TimestampSet), "property timestamp should not be set yet");
   m_result->setTimestamp(value);
   return castState<TimestampSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::HashAlgorithmSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::HashAlgorithmSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setHashAlgorithm(const String& value) {
   static_assert(!(STATE & HashAlgorithmSet), "property hashAlgorithm should not be set yet");
   m_result->setHashAlgorithm(value);
   return castState<HashAlgorithmSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::SignatureAlgorithmSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::SignatureAlgorithmSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setSignatureAlgorithm(const String& value) {
   static_assert(!(STATE & SignatureAlgorithmSet), "property signatureAlgorithm should not be set yet");
   m_result->setSignatureAlgorithm(value);
   return castState<SignatureAlgorithmSet>();
 }
 template<int STATE>
-inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::SignatureDataSet>&
+inline SignedCertificateTimestamp::SignedCertificateTimestampBuilder<(STATE | SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::SignatureDataSet)>&
 SignedCertificateTimestamp::SignedCertificateTimestampBuilder<STATE>::setSignatureData(const String& value) {
   static_assert(!(STATE & SignatureDataSet), "property signatureData should not be set yet");
   m_result->setSignatureData(value);
@@ -5319,14 +5319,14 @@ inline void SecurityDetails::setServerSignatureAlgorithm(int value) { m_serverSi
 inline void SecurityDetails::setEncryptedClientHello(bool value) { m_encryptedClientHello = value; }
 
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::ProtocolSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::ProtocolSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setProtocol(const String& value) {
   static_assert(!(STATE & ProtocolSet), "property protocol should not be set yet");
   m_result->setProtocol(value);
   return castState<ProtocolSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::KeyExchangeSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::KeyExchangeSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setKeyExchange(const String& value) {
   static_assert(!(STATE & KeyExchangeSet), "property keyExchange should not be set yet");
   m_result->setKeyExchange(value);
@@ -5338,7 +5338,7 @@ inline SecurityDetails::SecurityDetailsBuilder<STATE>& SecurityDetails::Security
   return *this;
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::CipherSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::CipherSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setCipher(const String& value) {
   static_assert(!(STATE & CipherSet), "property cipher should not be set yet");
   m_result->setCipher(value);
@@ -5350,56 +5350,56 @@ inline SecurityDetails::SecurityDetailsBuilder<STATE>& SecurityDetails::Security
   return *this;
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::CertificateIdSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::CertificateIdSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setCertificateId(int value) {
   static_assert(!(STATE & CertificateIdSet), "property certificateId should not be set yet");
   m_result->setCertificateId(value);
   return castState<CertificateIdSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::SubjectNameSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::SubjectNameSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setSubjectName(const String& value) {
   static_assert(!(STATE & SubjectNameSet), "property subjectName should not be set yet");
   m_result->setSubjectName(value);
   return castState<SubjectNameSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::SanListSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::SanListSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setSanList(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & SanListSet), "property sanList should not be set yet");
   m_result->setSanList(std::move(value));
   return castState<SanListSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::IssuerSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::IssuerSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setIssuer(const String& value) {
   static_assert(!(STATE & IssuerSet), "property issuer should not be set yet");
   m_result->setIssuer(value);
   return castState<IssuerSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::ValidFromSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::ValidFromSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setValidFrom(double value) {
   static_assert(!(STATE & ValidFromSet), "property validFrom should not be set yet");
   m_result->setValidFrom(value);
   return castState<ValidFromSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::ValidToSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::ValidToSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setValidTo(double value) {
   static_assert(!(STATE & ValidToSet), "property validTo should not be set yet");
   m_result->setValidTo(value);
   return castState<ValidToSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::SignedCertificateTimestampListSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::SignedCertificateTimestampListSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setSignedCertificateTimestampList(std::unique_ptr<protocol::Array<protocol::Network::SignedCertificateTimestamp>> value) {
   static_assert(!(STATE & SignedCertificateTimestampListSet), "property signedCertificateTimestampList should not be set yet");
   m_result->setSignedCertificateTimestampList(std::move(value));
   return castState<SignedCertificateTimestampListSet>();
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::CertificateTransparencyComplianceSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::CertificateTransparencyComplianceSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setCertificateTransparencyCompliance(const String& value) {
   static_assert(!(STATE & CertificateTransparencyComplianceSet), "property certificateTransparencyCompliance should not be set yet");
   m_result->setCertificateTransparencyCompliance(value);
@@ -5411,7 +5411,7 @@ inline SecurityDetails::SecurityDetailsBuilder<STATE>& SecurityDetails::Security
   return *this;
 }
 template<int STATE>
-inline SecurityDetails::SecurityDetailsBuilder<STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::EncryptedClientHelloSet>&
+inline SecurityDetails::SecurityDetailsBuilder<(STATE | SecurityDetails::SecurityDetailsBuilder<STATE>::EncryptedClientHelloSet)>&
 SecurityDetails::SecurityDetailsBuilder<STATE>::setEncryptedClientHello(bool value) {
   static_assert(!(STATE & EncryptedClientHelloSet), "property encryptedClientHello should not be set yet");
   m_result->setEncryptedClientHello(value);
@@ -5429,14 +5429,14 @@ inline void CorsErrorStatus::setCorsError(const String& value) { m_corsError = v
 inline void CorsErrorStatus::setFailedParameter(const String& value) { m_failedParameter = value; }
 
 template<int STATE>
-inline CorsErrorStatus::CorsErrorStatusBuilder<STATE | CorsErrorStatus::CorsErrorStatusBuilder<STATE>::CorsErrorSet>&
+inline CorsErrorStatus::CorsErrorStatusBuilder<(STATE | CorsErrorStatus::CorsErrorStatusBuilder<STATE>::CorsErrorSet)>&
 CorsErrorStatus::CorsErrorStatusBuilder<STATE>::setCorsError(const String& value) {
   static_assert(!(STATE & CorsErrorSet), "property corsError should not be set yet");
   m_result->setCorsError(value);
   return castState<CorsErrorSet>();
 }
 template<int STATE>
-inline CorsErrorStatus::CorsErrorStatusBuilder<STATE | CorsErrorStatus::CorsErrorStatusBuilder<STATE>::FailedParameterSet>&
+inline CorsErrorStatus::CorsErrorStatusBuilder<(STATE | CorsErrorStatus::CorsErrorStatusBuilder<STATE>::FailedParameterSet)>&
 CorsErrorStatus::CorsErrorStatusBuilder<STATE>::setFailedParameter(const String& value) {
   static_assert(!(STATE & FailedParameterSet), "property failedParameter should not be set yet");
   m_result->setFailedParameter(value);
@@ -5451,14 +5451,14 @@ inline void TrustTokenParams::setRefreshPolicy(const String& value) { m_refreshP
 inline void TrustTokenParams::setIssuers(std::unique_ptr<protocol::Array<String>> value) { m_issuers = std::move(value); }
 
 template<int STATE>
-inline TrustTokenParams::TrustTokenParamsBuilder<STATE | TrustTokenParams::TrustTokenParamsBuilder<STATE>::OperationSet>&
+inline TrustTokenParams::TrustTokenParamsBuilder<(STATE | TrustTokenParams::TrustTokenParamsBuilder<STATE>::OperationSet)>&
 TrustTokenParams::TrustTokenParamsBuilder<STATE>::setOperation(const String& value) {
   static_assert(!(STATE & OperationSet), "property operation should not be set yet");
   m_result->setOperation(value);
   return castState<OperationSet>();
 }
 template<int STATE>
-inline TrustTokenParams::TrustTokenParamsBuilder<STATE | TrustTokenParams::TrustTokenParamsBuilder<STATE>::RefreshPolicySet>&
+inline TrustTokenParams::TrustTokenParamsBuilder<(STATE | TrustTokenParams::TrustTokenParamsBuilder<STATE>::RefreshPolicySet)>&
 TrustTokenParams::TrustTokenParamsBuilder<STATE>::setRefreshPolicy(const String& value) {
   static_assert(!(STATE & RefreshPolicySet), "property refreshPolicy should not be set yet");
   m_result->setRefreshPolicy(value);
@@ -5525,28 +5525,28 @@ inline void Response::setSecurityState(const String& value) { m_securityState = 
 inline void Response::setSecurityDetails(std::unique_ptr<protocol::Network::SecurityDetails> value) { m_securityDetails = std::move(value); }
 
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::UrlSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::UrlSet)>&
 Response::ResponseBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::StatusSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::StatusSet)>&
 Response::ResponseBuilder<STATE>::setStatus(int value) {
   static_assert(!(STATE & StatusSet), "property status should not be set yet");
   m_result->setStatus(value);
   return castState<StatusSet>();
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::StatusTextSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::StatusTextSet)>&
 Response::ResponseBuilder<STATE>::setStatusText(const String& value) {
   static_assert(!(STATE & StatusTextSet), "property statusText should not be set yet");
   m_result->setStatusText(value);
   return castState<StatusTextSet>();
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::HeadersSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::HeadersSet)>&
 Response::ResponseBuilder<STATE>::setHeaders(std::unique_ptr<protocol::Network::Headers> value) {
   static_assert(!(STATE & HeadersSet), "property headers should not be set yet");
   m_result->setHeaders(std::move(value));
@@ -5558,14 +5558,14 @@ inline Response::ResponseBuilder<STATE>& Response::ResponseBuilder<STATE>::setHe
   return *this;
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::MimeTypeSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::MimeTypeSet)>&
 Response::ResponseBuilder<STATE>::setMimeType(const String& value) {
   static_assert(!(STATE & MimeTypeSet), "property mimeType should not be set yet");
   m_result->setMimeType(value);
   return castState<MimeTypeSet>();
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::CharsetSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::CharsetSet)>&
 Response::ResponseBuilder<STATE>::setCharset(const String& value) {
   static_assert(!(STATE & CharsetSet), "property charset should not be set yet");
   m_result->setCharset(value);
@@ -5582,14 +5582,14 @@ inline Response::ResponseBuilder<STATE>& Response::ResponseBuilder<STATE>::setRe
   return *this;
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::ConnectionReusedSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::ConnectionReusedSet)>&
 Response::ResponseBuilder<STATE>::setConnectionReused(bool value) {
   static_assert(!(STATE & ConnectionReusedSet), "property connectionReused should not be set yet");
   m_result->setConnectionReused(value);
   return castState<ConnectionReusedSet>();
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::ConnectionIdSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::ConnectionIdSet)>&
 Response::ResponseBuilder<STATE>::setConnectionId(double value) {
   static_assert(!(STATE & ConnectionIdSet), "property connectionId should not be set yet");
   m_result->setConnectionId(value);
@@ -5631,7 +5631,7 @@ inline Response::ResponseBuilder<STATE>& Response::ResponseBuilder<STATE>::setSe
   return *this;
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::EncodedDataLengthSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::EncodedDataLengthSet)>&
 Response::ResponseBuilder<STATE>::setEncodedDataLength(double value) {
   static_assert(!(STATE & EncodedDataLengthSet), "property encodedDataLength should not be set yet");
   m_result->setEncodedDataLength(value);
@@ -5668,7 +5668,7 @@ inline Response::ResponseBuilder<STATE>& Response::ResponseBuilder<STATE>::setAl
   return *this;
 }
 template<int STATE>
-inline Response::ResponseBuilder<STATE | Response::ResponseBuilder<STATE>::SecurityStateSet>&
+inline Response::ResponseBuilder<(STATE | Response::ResponseBuilder<STATE>::SecurityStateSet)>&
 Response::ResponseBuilder<STATE>::setSecurityState(const String& value) {
   static_assert(!(STATE & SecurityStateSet), "property securityState should not be set yet");
   m_result->setSecurityState(value);
@@ -5690,7 +5690,7 @@ inline WebSocketRequest::~WebSocketRequest() = default;
 inline void WebSocketRequest::setHeaders(std::unique_ptr<protocol::Network::Headers> value) { m_headers = std::move(value); }
 
 template<int STATE>
-inline WebSocketRequest::WebSocketRequestBuilder<STATE | WebSocketRequest::WebSocketRequestBuilder<STATE>::HeadersSet>&
+inline WebSocketRequest::WebSocketRequestBuilder<(STATE | WebSocketRequest::WebSocketRequestBuilder<STATE>::HeadersSet)>&
 WebSocketRequest::WebSocketRequestBuilder<STATE>::setHeaders(std::unique_ptr<protocol::Network::Headers> value) {
   static_assert(!(STATE & HeadersSet), "property headers should not be set yet");
   m_result->setHeaders(std::move(value));
@@ -5708,21 +5708,21 @@ inline void WebSocketResponse::setRequestHeaders(std::unique_ptr<protocol::Netwo
 inline void WebSocketResponse::setRequestHeadersText(const String& value) { m_requestHeadersText = value; }
 
 template<int STATE>
-inline WebSocketResponse::WebSocketResponseBuilder<STATE | WebSocketResponse::WebSocketResponseBuilder<STATE>::StatusSet>&
+inline WebSocketResponse::WebSocketResponseBuilder<(STATE | WebSocketResponse::WebSocketResponseBuilder<STATE>::StatusSet)>&
 WebSocketResponse::WebSocketResponseBuilder<STATE>::setStatus(int value) {
   static_assert(!(STATE & StatusSet), "property status should not be set yet");
   m_result->setStatus(value);
   return castState<StatusSet>();
 }
 template<int STATE>
-inline WebSocketResponse::WebSocketResponseBuilder<STATE | WebSocketResponse::WebSocketResponseBuilder<STATE>::StatusTextSet>&
+inline WebSocketResponse::WebSocketResponseBuilder<(STATE | WebSocketResponse::WebSocketResponseBuilder<STATE>::StatusTextSet)>&
 WebSocketResponse::WebSocketResponseBuilder<STATE>::setStatusText(const String& value) {
   static_assert(!(STATE & StatusTextSet), "property statusText should not be set yet");
   m_result->setStatusText(value);
   return castState<StatusTextSet>();
 }
 template<int STATE>
-inline WebSocketResponse::WebSocketResponseBuilder<STATE | WebSocketResponse::WebSocketResponseBuilder<STATE>::HeadersSet>&
+inline WebSocketResponse::WebSocketResponseBuilder<(STATE | WebSocketResponse::WebSocketResponseBuilder<STATE>::HeadersSet)>&
 WebSocketResponse::WebSocketResponseBuilder<STATE>::setHeaders(std::unique_ptr<protocol::Network::Headers> value) {
   static_assert(!(STATE & HeadersSet), "property headers should not be set yet");
   m_result->setHeaders(std::move(value));
@@ -5753,21 +5753,21 @@ inline void WebSocketFrame::setMask(bool value) { m_mask = value; }
 inline void WebSocketFrame::setPayloadData(const String& value) { m_payloadData = value; }
 
 template<int STATE>
-inline WebSocketFrame::WebSocketFrameBuilder<STATE | WebSocketFrame::WebSocketFrameBuilder<STATE>::OpcodeSet>&
+inline WebSocketFrame::WebSocketFrameBuilder<(STATE | WebSocketFrame::WebSocketFrameBuilder<STATE>::OpcodeSet)>&
 WebSocketFrame::WebSocketFrameBuilder<STATE>::setOpcode(double value) {
   static_assert(!(STATE & OpcodeSet), "property opcode should not be set yet");
   m_result->setOpcode(value);
   return castState<OpcodeSet>();
 }
 template<int STATE>
-inline WebSocketFrame::WebSocketFrameBuilder<STATE | WebSocketFrame::WebSocketFrameBuilder<STATE>::MaskSet>&
+inline WebSocketFrame::WebSocketFrameBuilder<(STATE | WebSocketFrame::WebSocketFrameBuilder<STATE>::MaskSet)>&
 WebSocketFrame::WebSocketFrameBuilder<STATE>::setMask(bool value) {
   static_assert(!(STATE & MaskSet), "property mask should not be set yet");
   m_result->setMask(value);
   return castState<MaskSet>();
 }
 template<int STATE>
-inline WebSocketFrame::WebSocketFrameBuilder<STATE | WebSocketFrame::WebSocketFrameBuilder<STATE>::PayloadDataSet>&
+inline WebSocketFrame::WebSocketFrameBuilder<(STATE | WebSocketFrame::WebSocketFrameBuilder<STATE>::PayloadDataSet)>&
 WebSocketFrame::WebSocketFrameBuilder<STATE>::setPayloadData(const String& value) {
   static_assert(!(STATE & PayloadDataSet), "property payloadData should not be set yet");
   m_result->setPayloadData(value);
@@ -5787,7 +5787,7 @@ inline void Initiator::setColumnNumber(double value) { m_columnNumber = value; }
 inline void Initiator::setRequestId(const String& value) { m_requestId = value; }
 
 template<int STATE>
-inline Initiator::InitiatorBuilder<STATE | Initiator::InitiatorBuilder<STATE>::TypeSet>&
+inline Initiator::InitiatorBuilder<(STATE | Initiator::InitiatorBuilder<STATE>::TypeSet)>&
 Initiator::InitiatorBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
@@ -5826,14 +5826,14 @@ inline void CookiePartitionKey::setTopLevelSite(const String& value) { m_topLeve
 inline void CookiePartitionKey::setHasCrossSiteAncestor(bool value) { m_hasCrossSiteAncestor = value; }
 
 template<int STATE>
-inline CookiePartitionKey::CookiePartitionKeyBuilder<STATE | CookiePartitionKey::CookiePartitionKeyBuilder<STATE>::TopLevelSiteSet>&
+inline CookiePartitionKey::CookiePartitionKeyBuilder<(STATE | CookiePartitionKey::CookiePartitionKeyBuilder<STATE>::TopLevelSiteSet)>&
 CookiePartitionKey::CookiePartitionKeyBuilder<STATE>::setTopLevelSite(const String& value) {
   static_assert(!(STATE & TopLevelSiteSet), "property topLevelSite should not be set yet");
   m_result->setTopLevelSite(value);
   return castState<TopLevelSiteSet>();
 }
 template<int STATE>
-inline CookiePartitionKey::CookiePartitionKeyBuilder<STATE | CookiePartitionKey::CookiePartitionKeyBuilder<STATE>::HasCrossSiteAncestorSet>&
+inline CookiePartitionKey::CookiePartitionKeyBuilder<(STATE | CookiePartitionKey::CookiePartitionKeyBuilder<STATE>::HasCrossSiteAncestorSet)>&
 CookiePartitionKey::CookiePartitionKeyBuilder<STATE>::setHasCrossSiteAncestor(bool value) {
   static_assert(!(STATE & HasCrossSiteAncestorSet), "property hasCrossSiteAncestor should not be set yet");
   m_result->setHasCrossSiteAncestor(value);
@@ -5861,63 +5861,63 @@ inline void Cookie::setPartitionKey(std::unique_ptr<protocol::Network::CookiePar
 inline void Cookie::setPartitionKeyOpaque(bool value) { m_partitionKeyOpaque = value; }
 
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::NameSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::NameSet)>&
 Cookie::CookieBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::ValueSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::ValueSet)>&
 Cookie::CookieBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
   return castState<ValueSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::DomainSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::DomainSet)>&
 Cookie::CookieBuilder<STATE>::setDomain(const String& value) {
   static_assert(!(STATE & DomainSet), "property domain should not be set yet");
   m_result->setDomain(value);
   return castState<DomainSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::PathSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::PathSet)>&
 Cookie::CookieBuilder<STATE>::setPath(const String& value) {
   static_assert(!(STATE & PathSet), "property path should not be set yet");
   m_result->setPath(value);
   return castState<PathSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::ExpiresSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::ExpiresSet)>&
 Cookie::CookieBuilder<STATE>::setExpires(double value) {
   static_assert(!(STATE & ExpiresSet), "property expires should not be set yet");
   m_result->setExpires(value);
   return castState<ExpiresSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::SizeSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::SizeSet)>&
 Cookie::CookieBuilder<STATE>::setSize(int value) {
   static_assert(!(STATE & SizeSet), "property size should not be set yet");
   m_result->setSize(value);
   return castState<SizeSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::HttpOnlySet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::HttpOnlySet)>&
 Cookie::CookieBuilder<STATE>::setHttpOnly(bool value) {
   static_assert(!(STATE & HttpOnlySet), "property httpOnly should not be set yet");
   m_result->setHttpOnly(value);
   return castState<HttpOnlySet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::SecureSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::SecureSet)>&
 Cookie::CookieBuilder<STATE>::setSecure(bool value) {
   static_assert(!(STATE & SecureSet), "property secure should not be set yet");
   m_result->setSecure(value);
   return castState<SecureSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::SessionSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::SessionSet)>&
 Cookie::CookieBuilder<STATE>::setSession(bool value) {
   static_assert(!(STATE & SessionSet), "property session should not be set yet");
   m_result->setSession(value);
@@ -5929,21 +5929,21 @@ inline Cookie::CookieBuilder<STATE>& Cookie::CookieBuilder<STATE>::setSameSite(c
   return *this;
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::PrioritySet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::PrioritySet)>&
 Cookie::CookieBuilder<STATE>::setPriority(const String& value) {
   static_assert(!(STATE & PrioritySet), "property priority should not be set yet");
   m_result->setPriority(value);
   return castState<PrioritySet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::SourceSchemeSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::SourceSchemeSet)>&
 Cookie::CookieBuilder<STATE>::setSourceScheme(const String& value) {
   static_assert(!(STATE & SourceSchemeSet), "property sourceScheme should not be set yet");
   m_result->setSourceScheme(value);
   return castState<SourceSchemeSet>();
 }
 template<int STATE>
-inline Cookie::CookieBuilder<STATE | Cookie::CookieBuilder<STATE>::SourcePortSet>&
+inline Cookie::CookieBuilder<(STATE | Cookie::CookieBuilder<STATE>::SourcePortSet)>&
 Cookie::CookieBuilder<STATE>::setSourcePort(int value) {
   static_assert(!(STATE & SourcePortSet), "property sourcePort should not be set yet");
   m_result->setSourcePort(value);
@@ -5974,14 +5974,14 @@ inline void BlockedSetCookieWithReason::setCookieLine(const String& value) { m_c
 inline void BlockedSetCookieWithReason::setCookie(std::unique_ptr<protocol::Network::Cookie> value) { m_cookie = std::move(value); }
 
 template<int STATE>
-inline BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE | BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE>::BlockedReasonsSet>&
+inline BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<(STATE | BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE>::BlockedReasonsSet)>&
 BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE>::setBlockedReasons(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & BlockedReasonsSet), "property blockedReasons should not be set yet");
   m_result->setBlockedReasons(std::move(value));
   return castState<BlockedReasonsSet>();
 }
 template<int STATE>
-inline BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE | BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE>::CookieLineSet>&
+inline BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<(STATE | BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE>::CookieLineSet)>&
 BlockedSetCookieWithReason::BlockedSetCookieWithReasonBuilder<STATE>::setCookieLine(const String& value) {
   static_assert(!(STATE & CookieLineSet), "property cookieLine should not be set yet");
   m_result->setCookieLine(value);
@@ -6001,21 +6001,21 @@ inline void ExemptedSetCookieWithReason::setCookieLine(const String& value) { m_
 inline void ExemptedSetCookieWithReason::setCookie(std::unique_ptr<protocol::Network::Cookie> value) { m_cookie = std::move(value); }
 
 template<int STATE>
-inline ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE | ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::ExemptionReasonSet>&
+inline ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<(STATE | ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::ExemptionReasonSet)>&
 ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::setExemptionReason(const String& value) {
   static_assert(!(STATE & ExemptionReasonSet), "property exemptionReason should not be set yet");
   m_result->setExemptionReason(value);
   return castState<ExemptionReasonSet>();
 }
 template<int STATE>
-inline ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE | ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::CookieLineSet>&
+inline ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<(STATE | ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::CookieLineSet)>&
 ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::setCookieLine(const String& value) {
   static_assert(!(STATE & CookieLineSet), "property cookieLine should not be set yet");
   m_result->setCookieLine(value);
   return castState<CookieLineSet>();
 }
 template<int STATE>
-inline ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE | ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::CookieSet>&
+inline ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<(STATE | ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::CookieSet)>&
 ExemptedSetCookieWithReason::ExemptedSetCookieWithReasonBuilder<STATE>::setCookie(std::unique_ptr<protocol::Network::Cookie> value) {
   static_assert(!(STATE & CookieSet), "property cookie should not be set yet");
   m_result->setCookie(std::move(value));
@@ -6030,14 +6030,14 @@ inline void AssociatedCookie::setBlockedReasons(std::unique_ptr<protocol::Array<
 inline void AssociatedCookie::setExemptionReason(const String& value) { m_exemptionReason = value; }
 
 template<int STATE>
-inline AssociatedCookie::AssociatedCookieBuilder<STATE | AssociatedCookie::AssociatedCookieBuilder<STATE>::CookieSet>&
+inline AssociatedCookie::AssociatedCookieBuilder<(STATE | AssociatedCookie::AssociatedCookieBuilder<STATE>::CookieSet)>&
 AssociatedCookie::AssociatedCookieBuilder<STATE>::setCookie(std::unique_ptr<protocol::Network::Cookie> value) {
   static_assert(!(STATE & CookieSet), "property cookie should not be set yet");
   m_result->setCookie(std::move(value));
   return castState<CookieSet>();
 }
 template<int STATE>
-inline AssociatedCookie::AssociatedCookieBuilder<STATE | AssociatedCookie::AssociatedCookieBuilder<STATE>::BlockedReasonsSet>&
+inline AssociatedCookie::AssociatedCookieBuilder<(STATE | AssociatedCookie::AssociatedCookieBuilder<STATE>::BlockedReasonsSet)>&
 AssociatedCookie::AssociatedCookieBuilder<STATE>::setBlockedReasons(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & BlockedReasonsSet), "property blockedReasons should not be set yet");
   m_result->setBlockedReasons(std::move(value));
@@ -6067,14 +6067,14 @@ inline void CookieParam::setSourcePort(int value) { m_sourcePort = value; }
 inline void CookieParam::setPartitionKey(std::unique_ptr<protocol::Network::CookiePartitionKey> value) { m_partitionKey = std::move(value); }
 
 template<int STATE>
-inline CookieParam::CookieParamBuilder<STATE | CookieParam::CookieParamBuilder<STATE>::NameSet>&
+inline CookieParam::CookieParamBuilder<(STATE | CookieParam::CookieParamBuilder<STATE>::NameSet)>&
 CookieParam::CookieParamBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline CookieParam::CookieParamBuilder<STATE | CookieParam::CookieParamBuilder<STATE>::ValueSet>&
+inline CookieParam::CookieParamBuilder<(STATE | CookieParam::CookieParamBuilder<STATE>::ValueSet)>&
 CookieParam::CookieParamBuilder<STATE>::setValue(const String& value) {
   static_assert(!(STATE & ValueSet), "property value should not be set yet");
   m_result->setValue(value);
@@ -6150,21 +6150,21 @@ inline AuthChallenge::AuthChallengeBuilder<STATE>& AuthChallenge::AuthChallengeB
   return *this;
 }
 template<int STATE>
-inline AuthChallenge::AuthChallengeBuilder<STATE | AuthChallenge::AuthChallengeBuilder<STATE>::OriginSet>&
+inline AuthChallenge::AuthChallengeBuilder<(STATE | AuthChallenge::AuthChallengeBuilder<STATE>::OriginSet)>&
 AuthChallenge::AuthChallengeBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline AuthChallenge::AuthChallengeBuilder<STATE | AuthChallenge::AuthChallengeBuilder<STATE>::SchemeSet>&
+inline AuthChallenge::AuthChallengeBuilder<(STATE | AuthChallenge::AuthChallengeBuilder<STATE>::SchemeSet)>&
 AuthChallenge::AuthChallengeBuilder<STATE>::setScheme(const String& value) {
   static_assert(!(STATE & SchemeSet), "property scheme should not be set yet");
   m_result->setScheme(value);
   return castState<SchemeSet>();
 }
 template<int STATE>
-inline AuthChallenge::AuthChallengeBuilder<STATE | AuthChallenge::AuthChallengeBuilder<STATE>::RealmSet>&
+inline AuthChallenge::AuthChallengeBuilder<(STATE | AuthChallenge::AuthChallengeBuilder<STATE>::RealmSet)>&
 AuthChallenge::AuthChallengeBuilder<STATE>::setRealm(const String& value) {
   static_assert(!(STATE & RealmSet), "property realm should not be set yet");
   m_result->setRealm(value);
@@ -6185,21 +6185,21 @@ inline void SignedExchangeSignature::setExpires(int value) { m_expires = value; 
 inline void SignedExchangeSignature::setCertificates(std::unique_ptr<protocol::Array<String>> value) { m_certificates = std::move(value); }
 
 template<int STATE>
-inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::LabelSet>&
+inline SignedExchangeSignature::SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::LabelSet)>&
 SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::setLabel(const String& value) {
   static_assert(!(STATE & LabelSet), "property label should not be set yet");
   m_result->setLabel(value);
   return castState<LabelSet>();
 }
 template<int STATE>
-inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::SignatureSet>&
+inline SignedExchangeSignature::SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::SignatureSet)>&
 SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::setSignature(const String& value) {
   static_assert(!(STATE & SignatureSet), "property signature should not be set yet");
   m_result->setSignature(value);
   return castState<SignatureSet>();
 }
 template<int STATE>
-inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::IntegritySet>&
+inline SignedExchangeSignature::SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::IntegritySet)>&
 SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::setIntegrity(const String& value) {
   static_assert(!(STATE & IntegritySet), "property integrity should not be set yet");
   m_result->setIntegrity(value);
@@ -6216,21 +6216,21 @@ inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>& SignedExc
   return *this;
 }
 template<int STATE>
-inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::ValidityUrlSet>&
+inline SignedExchangeSignature::SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::ValidityUrlSet)>&
 SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::setValidityUrl(const String& value) {
   static_assert(!(STATE & ValidityUrlSet), "property validityUrl should not be set yet");
   m_result->setValidityUrl(value);
   return castState<ValidityUrlSet>();
 }
 template<int STATE>
-inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::DateSet>&
+inline SignedExchangeSignature::SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::DateSet)>&
 SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::setDate(int value) {
   static_assert(!(STATE & DateSet), "property date should not be set yet");
   m_result->setDate(value);
   return castState<DateSet>();
 }
 template<int STATE>
-inline SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::ExpiresSet>&
+inline SignedExchangeSignature::SignedExchangeSignatureBuilder<(STATE | SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::ExpiresSet)>&
 SignedExchangeSignature::SignedExchangeSignatureBuilder<STATE>::setExpires(int value) {
   static_assert(!(STATE & ExpiresSet), "property expires should not be set yet");
   m_result->setExpires(value);
@@ -6254,35 +6254,35 @@ inline void SignedExchangeHeader::setSignatures(std::unique_ptr<protocol::Array<
 inline void SignedExchangeHeader::setHeaderIntegrity(const String& value) { m_headerIntegrity = value; }
 
 template<int STATE>
-inline SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::RequestUrlSet>&
+inline SignedExchangeHeader::SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::RequestUrlSet)>&
 SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::setRequestUrl(const String& value) {
   static_assert(!(STATE & RequestUrlSet), "property requestUrl should not be set yet");
   m_result->setRequestUrl(value);
   return castState<RequestUrlSet>();
 }
 template<int STATE>
-inline SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::ResponseCodeSet>&
+inline SignedExchangeHeader::SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::ResponseCodeSet)>&
 SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::setResponseCode(int value) {
   static_assert(!(STATE & ResponseCodeSet), "property responseCode should not be set yet");
   m_result->setResponseCode(value);
   return castState<ResponseCodeSet>();
 }
 template<int STATE>
-inline SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::ResponseHeadersSet>&
+inline SignedExchangeHeader::SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::ResponseHeadersSet)>&
 SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::setResponseHeaders(std::unique_ptr<protocol::Network::Headers> value) {
   static_assert(!(STATE & ResponseHeadersSet), "property responseHeaders should not be set yet");
   m_result->setResponseHeaders(std::move(value));
   return castState<ResponseHeadersSet>();
 }
 template<int STATE>
-inline SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::SignaturesSet>&
+inline SignedExchangeHeader::SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::SignaturesSet)>&
 SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::setSignatures(std::unique_ptr<protocol::Array<protocol::Network::SignedExchangeSignature>> value) {
   static_assert(!(STATE & SignaturesSet), "property signatures should not be set yet");
   m_result->setSignatures(std::move(value));
   return castState<SignaturesSet>();
 }
 template<int STATE>
-inline SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::HeaderIntegritySet>&
+inline SignedExchangeHeader::SignedExchangeHeaderBuilder<(STATE | SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::HeaderIntegritySet)>&
 SignedExchangeHeader::SignedExchangeHeaderBuilder<STATE>::setHeaderIntegrity(const String& value) {
   static_assert(!(STATE & HeaderIntegritySet), "property headerIntegrity should not be set yet");
   m_result->setHeaderIntegrity(value);
@@ -6298,7 +6298,7 @@ inline void SignedExchangeError::setSignatureIndex(int value) { m_signatureIndex
 inline void SignedExchangeError::setErrorField(const String& value) { m_errorField = value; }
 
 template<int STATE>
-inline SignedExchangeError::SignedExchangeErrorBuilder<STATE | SignedExchangeError::SignedExchangeErrorBuilder<STATE>::MessageSet>&
+inline SignedExchangeError::SignedExchangeErrorBuilder<(STATE | SignedExchangeError::SignedExchangeErrorBuilder<STATE>::MessageSet)>&
 SignedExchangeError::SignedExchangeErrorBuilder<STATE>::setMessage(const String& value) {
   static_assert(!(STATE & MessageSet), "property message should not be set yet");
   m_result->setMessage(value);
@@ -6325,14 +6325,14 @@ inline void SignedExchangeInfo::setSecurityDetails(std::unique_ptr<protocol::Net
 inline void SignedExchangeInfo::setErrors(std::unique_ptr<protocol::Array<protocol::Network::SignedExchangeError>> value) { m_errors = std::move(value); }
 
 template<int STATE>
-inline SignedExchangeInfo::SignedExchangeInfoBuilder<STATE | SignedExchangeInfo::SignedExchangeInfoBuilder<STATE>::OuterResponseSet>&
+inline SignedExchangeInfo::SignedExchangeInfoBuilder<(STATE | SignedExchangeInfo::SignedExchangeInfoBuilder<STATE>::OuterResponseSet)>&
 SignedExchangeInfo::SignedExchangeInfoBuilder<STATE>::setOuterResponse(std::unique_ptr<protocol::Network::Response> value) {
   static_assert(!(STATE & OuterResponseSet), "property outerResponse should not be set yet");
   m_result->setOuterResponse(std::move(value));
   return castState<OuterResponseSet>();
 }
 template<int STATE>
-inline SignedExchangeInfo::SignedExchangeInfoBuilder<STATE | SignedExchangeInfo::SignedExchangeInfoBuilder<STATE>::HasExtraInfoSet>&
+inline SignedExchangeInfo::SignedExchangeInfoBuilder<(STATE | SignedExchangeInfo::SignedExchangeInfoBuilder<STATE>::HasExtraInfoSet)>&
 SignedExchangeInfo::SignedExchangeInfoBuilder<STATE>::setHasExtraInfo(bool value) {
   static_assert(!(STATE & HasExtraInfoSet), "property hasExtraInfo should not be set yet");
   m_result->setHasExtraInfo(value);
@@ -6369,28 +6369,28 @@ inline void NetworkConditions::setPacketReordering(bool value) { m_packetReorder
 inline void NetworkConditions::setOffline(bool value) { m_offline = value; }
 
 template<int STATE>
-inline NetworkConditions::NetworkConditionsBuilder<STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::UrlPatternSet>&
+inline NetworkConditions::NetworkConditionsBuilder<(STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::UrlPatternSet)>&
 NetworkConditions::NetworkConditionsBuilder<STATE>::setUrlPattern(const String& value) {
   static_assert(!(STATE & UrlPatternSet), "property urlPattern should not be set yet");
   m_result->setUrlPattern(value);
   return castState<UrlPatternSet>();
 }
 template<int STATE>
-inline NetworkConditions::NetworkConditionsBuilder<STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::LatencySet>&
+inline NetworkConditions::NetworkConditionsBuilder<(STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::LatencySet)>&
 NetworkConditions::NetworkConditionsBuilder<STATE>::setLatency(double value) {
   static_assert(!(STATE & LatencySet), "property latency should not be set yet");
   m_result->setLatency(value);
   return castState<LatencySet>();
 }
 template<int STATE>
-inline NetworkConditions::NetworkConditionsBuilder<STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::DownloadThroughputSet>&
+inline NetworkConditions::NetworkConditionsBuilder<(STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::DownloadThroughputSet)>&
 NetworkConditions::NetworkConditionsBuilder<STATE>::setDownloadThroughput(double value) {
   static_assert(!(STATE & DownloadThroughputSet), "property downloadThroughput should not be set yet");
   m_result->setDownloadThroughput(value);
   return castState<DownloadThroughputSet>();
 }
 template<int STATE>
-inline NetworkConditions::NetworkConditionsBuilder<STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::UploadThroughputSet>&
+inline NetworkConditions::NetworkConditionsBuilder<(STATE | NetworkConditions::NetworkConditionsBuilder<STATE>::UploadThroughputSet)>&
 NetworkConditions::NetworkConditionsBuilder<STATE>::setUploadThroughput(double value) {
   static_assert(!(STATE & UploadThroughputSet), "property uploadThroughput should not be set yet");
   m_result->setUploadThroughput(value);
@@ -6432,14 +6432,14 @@ inline void BlockPattern::setUrlPattern(const String& value) { m_urlPattern = va
 inline void BlockPattern::setBlock(bool value) { m_block = value; }
 
 template<int STATE>
-inline BlockPattern::BlockPatternBuilder<STATE | BlockPattern::BlockPatternBuilder<STATE>::UrlPatternSet>&
+inline BlockPattern::BlockPatternBuilder<(STATE | BlockPattern::BlockPatternBuilder<STATE>::UrlPatternSet)>&
 BlockPattern::BlockPatternBuilder<STATE>::setUrlPattern(const String& value) {
   static_assert(!(STATE & UrlPatternSet), "property urlPattern should not be set yet");
   m_result->setUrlPattern(value);
   return castState<UrlPatternSet>();
 }
 template<int STATE>
-inline BlockPattern::BlockPatternBuilder<STATE | BlockPattern::BlockPatternBuilder<STATE>::BlockSet>&
+inline BlockPattern::BlockPatternBuilder<(STATE | BlockPattern::BlockPatternBuilder<STATE>::BlockSet)>&
 BlockPattern::BlockPatternBuilder<STATE>::setBlock(bool value) {
   static_assert(!(STATE & BlockSet), "property block should not be set yet");
   m_result->setBlock(value);
@@ -6457,7 +6457,7 @@ inline void DirectTCPSocketOptions::setReceiveBufferSize(double value) { m_recei
 inline void DirectTCPSocketOptions::setDnsQueryType(const String& value) { m_dnsQueryType = value; }
 
 template<int STATE>
-inline DirectTCPSocketOptions::DirectTCPSocketOptionsBuilder<STATE | DirectTCPSocketOptions::DirectTCPSocketOptionsBuilder<STATE>::NoDelaySet>&
+inline DirectTCPSocketOptions::DirectTCPSocketOptionsBuilder<(STATE | DirectTCPSocketOptions::DirectTCPSocketOptionsBuilder<STATE>::NoDelaySet)>&
 DirectTCPSocketOptions::DirectTCPSocketOptionsBuilder<STATE>::setNoDelay(bool value) {
   static_assert(!(STATE & NoDelaySet), "property noDelay should not be set yet");
   m_result->setNoDelay(value);
@@ -6558,7 +6558,7 @@ inline void DirectUDPMessage::setRemoteAddr(const String& value) { m_remoteAddr 
 inline void DirectUDPMessage::setRemotePort(int value) { m_remotePort = value; }
 
 template<int STATE>
-inline DirectUDPMessage::DirectUDPMessageBuilder<STATE | DirectUDPMessage::DirectUDPMessageBuilder<STATE>::DataSet>&
+inline DirectUDPMessage::DirectUDPMessageBuilder<(STATE | DirectUDPMessage::DirectUDPMessageBuilder<STATE>::DataSet)>&
 DirectUDPMessage::DirectUDPMessageBuilder<STATE>::setData(const Binary& value) {
   static_assert(!(STATE & DataSet), "property data should not be set yet");
   m_result->setData(value);
@@ -6581,7 +6581,7 @@ inline ConnectTiming::~ConnectTiming() = default;
 inline void ConnectTiming::setRequestTime(double value) { m_requestTime = value; }
 
 template<int STATE>
-inline ConnectTiming::ConnectTimingBuilder<STATE | ConnectTiming::ConnectTimingBuilder<STATE>::RequestTimeSet>&
+inline ConnectTiming::ConnectTimingBuilder<(STATE | ConnectTiming::ConnectTimingBuilder<STATE>::RequestTimeSet)>&
 ConnectTiming::ConnectTimingBuilder<STATE>::setRequestTime(double value) {
   static_assert(!(STATE & RequestTimeSet), "property requestTime should not be set yet");
   m_result->setRequestTime(value);
@@ -6597,21 +6597,21 @@ inline void ClientSecurityState::setInitiatorIPAddressSpace(const String& value)
 inline void ClientSecurityState::setLocalNetworkAccessRequestPolicy(const String& value) { m_localNetworkAccessRequestPolicy = value; }
 
 template<int STATE>
-inline ClientSecurityState::ClientSecurityStateBuilder<STATE | ClientSecurityState::ClientSecurityStateBuilder<STATE>::InitiatorIsSecureContextSet>&
+inline ClientSecurityState::ClientSecurityStateBuilder<(STATE | ClientSecurityState::ClientSecurityStateBuilder<STATE>::InitiatorIsSecureContextSet)>&
 ClientSecurityState::ClientSecurityStateBuilder<STATE>::setInitiatorIsSecureContext(bool value) {
   static_assert(!(STATE & InitiatorIsSecureContextSet), "property initiatorIsSecureContext should not be set yet");
   m_result->setInitiatorIsSecureContext(value);
   return castState<InitiatorIsSecureContextSet>();
 }
 template<int STATE>
-inline ClientSecurityState::ClientSecurityStateBuilder<STATE | ClientSecurityState::ClientSecurityStateBuilder<STATE>::InitiatorIPAddressSpaceSet>&
+inline ClientSecurityState::ClientSecurityStateBuilder<(STATE | ClientSecurityState::ClientSecurityStateBuilder<STATE>::InitiatorIPAddressSpaceSet)>&
 ClientSecurityState::ClientSecurityStateBuilder<STATE>::setInitiatorIPAddressSpace(const String& value) {
   static_assert(!(STATE & InitiatorIPAddressSpaceSet), "property initiatorIPAddressSpace should not be set yet");
   m_result->setInitiatorIPAddressSpace(value);
   return castState<InitiatorIPAddressSpaceSet>();
 }
 template<int STATE>
-inline ClientSecurityState::ClientSecurityStateBuilder<STATE | ClientSecurityState::ClientSecurityStateBuilder<STATE>::LocalNetworkAccessRequestPolicySet>&
+inline ClientSecurityState::ClientSecurityStateBuilder<(STATE | ClientSecurityState::ClientSecurityStateBuilder<STATE>::LocalNetworkAccessRequestPolicySet)>&
 ClientSecurityState::ClientSecurityStateBuilder<STATE>::setLocalNetworkAccessRequestPolicy(const String& value) {
   static_assert(!(STATE & LocalNetworkAccessRequestPolicySet), "property localNetworkAccessRequestPolicy should not be set yet");
   m_result->setLocalNetworkAccessRequestPolicy(value);
@@ -6627,21 +6627,21 @@ inline void AdScriptIdentifier::setDebuggerId(const String& value) { m_debuggerI
 inline void AdScriptIdentifier::setName(const String& value) { m_name = value; }
 
 template<int STATE>
-inline AdScriptIdentifier::AdScriptIdentifierBuilder<STATE | AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::ScriptIdSet>&
+inline AdScriptIdentifier::AdScriptIdentifierBuilder<(STATE | AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::ScriptIdSet)>&
 AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::setScriptId(const String& value) {
   static_assert(!(STATE & ScriptIdSet), "property scriptId should not be set yet");
   m_result->setScriptId(value);
   return castState<ScriptIdSet>();
 }
 template<int STATE>
-inline AdScriptIdentifier::AdScriptIdentifierBuilder<STATE | AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::DebuggerIdSet>&
+inline AdScriptIdentifier::AdScriptIdentifierBuilder<(STATE | AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::DebuggerIdSet)>&
 AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::setDebuggerId(const String& value) {
   static_assert(!(STATE & DebuggerIdSet), "property debuggerId should not be set yet");
   m_result->setDebuggerId(value);
   return castState<DebuggerIdSet>();
 }
 template<int STATE>
-inline AdScriptIdentifier::AdScriptIdentifierBuilder<STATE | AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::NameSet>&
+inline AdScriptIdentifier::AdScriptIdentifierBuilder<(STATE | AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::NameSet)>&
 AdScriptIdentifier::AdScriptIdentifierBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
@@ -6655,7 +6655,7 @@ inline void AdAncestry::setAncestryChain(std::unique_ptr<protocol::Array<protoco
 inline void AdAncestry::setRootScriptFilterlistRule(const String& value) { m_rootScriptFilterlistRule = value; }
 
 template<int STATE>
-inline AdAncestry::AdAncestryBuilder<STATE | AdAncestry::AdAncestryBuilder<STATE>::AncestryChainSet>&
+inline AdAncestry::AdAncestryBuilder<(STATE | AdAncestry::AdAncestryBuilder<STATE>::AncestryChainSet)>&
 AdAncestry::AdAncestryBuilder<STATE>::setAncestryChain(std::unique_ptr<protocol::Array<protocol::Network::AdScriptIdentifier>> value) {
   static_assert(!(STATE & AncestryChainSet), "property ancestryChain should not be set yet");
   m_result->setAncestryChain(std::move(value));
@@ -6698,63 +6698,63 @@ inline void ReportingApiReport::setBody(std::unique_ptr<protocol::DictionaryValu
 inline void ReportingApiReport::setStatus(const String& value) { m_status = value; }
 
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::IdSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::IdSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setId(const String& value) {
   static_assert(!(STATE & IdSet), "property id should not be set yet");
   m_result->setId(value);
   return castState<IdSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::InitiatorUrlSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::InitiatorUrlSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setInitiatorUrl(const String& value) {
   static_assert(!(STATE & InitiatorUrlSet), "property initiatorUrl should not be set yet");
   m_result->setInitiatorUrl(value);
   return castState<InitiatorUrlSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::DestinationSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::DestinationSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setDestination(const String& value) {
   static_assert(!(STATE & DestinationSet), "property destination should not be set yet");
   m_result->setDestination(value);
   return castState<DestinationSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::TypeSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::TypeSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setType(const String& value) {
   static_assert(!(STATE & TypeSet), "property type should not be set yet");
   m_result->setType(value);
   return castState<TypeSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::TimestampSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::TimestampSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setTimestamp(double value) {
   static_assert(!(STATE & TimestampSet), "property timestamp should not be set yet");
   m_result->setTimestamp(value);
   return castState<TimestampSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::DepthSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::DepthSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setDepth(int value) {
   static_assert(!(STATE & DepthSet), "property depth should not be set yet");
   m_result->setDepth(value);
   return castState<DepthSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::CompletedAttemptsSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::CompletedAttemptsSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setCompletedAttempts(int value) {
   static_assert(!(STATE & CompletedAttemptsSet), "property completedAttempts should not be set yet");
   m_result->setCompletedAttempts(value);
   return castState<CompletedAttemptsSet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::BodySet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::BodySet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setBody(std::unique_ptr<protocol::DictionaryValue> value) {
   static_assert(!(STATE & BodySet), "property body should not be set yet");
   m_result->setBody(std::move(value));
   return castState<BodySet>();
 }
 template<int STATE>
-inline ReportingApiReport::ReportingApiReportBuilder<STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::StatusSet>&
+inline ReportingApiReport::ReportingApiReportBuilder<(STATE | ReportingApiReport::ReportingApiReportBuilder<STATE>::StatusSet)>&
 ReportingApiReport::ReportingApiReportBuilder<STATE>::setStatus(const String& value) {
   static_assert(!(STATE & StatusSet), "property status should not be set yet");
   m_result->setStatus(value);
@@ -6771,14 +6771,14 @@ inline void ReportingApiEndpoint::setUrl(const String& value) { m_url = value; }
 inline void ReportingApiEndpoint::setGroupName(const String& value) { m_groupName = value; }
 
 template<int STATE>
-inline ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE | ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE>::UrlSet>&
+inline ReportingApiEndpoint::ReportingApiEndpointBuilder<(STATE | ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE>::UrlSet)>&
 ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE>::setUrl(const String& value) {
   static_assert(!(STATE & UrlSet), "property url should not be set yet");
   m_result->setUrl(value);
   return castState<UrlSet>();
 }
 template<int STATE>
-inline ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE | ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE>::GroupNameSet>&
+inline ReportingApiEndpoint::ReportingApiEndpointBuilder<(STATE | ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE>::GroupNameSet)>&
 ReportingApiEndpoint::ReportingApiEndpointBuilder<STATE>::setGroupName(const String& value) {
   static_assert(!(STATE & GroupNameSet), "property groupName should not be set yet");
   m_result->setGroupName(value);
@@ -6792,14 +6792,14 @@ inline void DeviceBoundSessionKey::setSite(const String& value) { m_site = value
 inline void DeviceBoundSessionKey::setId(const String& value) { m_id = value; }
 
 template<int STATE>
-inline DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE | DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE>::SiteSet>&
+inline DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<(STATE | DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE>::SiteSet)>&
 DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE>::setSite(const String& value) {
   static_assert(!(STATE & SiteSet), "property site should not be set yet");
   m_result->setSite(value);
   return castState<SiteSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE | DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE>::IdSet>&
+inline DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<(STATE | DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE>::IdSet)>&
 DeviceBoundSessionKey::DeviceBoundSessionKeyBuilder<STATE>::setId(const String& value) {
   static_assert(!(STATE & IdSet), "property id should not be set yet");
   m_result->setId(value);
@@ -6813,14 +6813,14 @@ inline void DeviceBoundSessionWithUsage::setSessionKey(std::unique_ptr<protocol:
 inline void DeviceBoundSessionWithUsage::setUsage(const String& value) { m_usage = value; }
 
 template<int STATE>
-inline DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE | DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE>::SessionKeySet>&
+inline DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<(STATE | DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE>::SessionKeySet)>&
 DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE>::setSessionKey(std::unique_ptr<protocol::Network::DeviceBoundSessionKey> value) {
   static_assert(!(STATE & SessionKeySet), "property sessionKey should not be set yet");
   m_result->setSessionKey(std::move(value));
   return castState<SessionKeySet>();
 }
 template<int STATE>
-inline DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE | DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE>::UsageSet>&
+inline DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<(STATE | DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE>::UsageSet)>&
 DeviceBoundSessionWithUsage::DeviceBoundSessionWithUsageBuilder<STATE>::setUsage(const String& value) {
   static_assert(!(STATE & UsageSet), "property usage should not be set yet");
   m_result->setUsage(value);
@@ -6838,35 +6838,35 @@ inline void DeviceBoundSessionCookieCraving::setHttpOnly(bool value) { m_httpOnl
 inline void DeviceBoundSessionCookieCraving::setSameSite(const String& value) { m_sameSite = value; }
 
 template<int STATE>
-inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::NameSet>&
+inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::NameSet)>&
 DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::setName(const String& value) {
   static_assert(!(STATE & NameSet), "property name should not be set yet");
   m_result->setName(value);
   return castState<NameSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::DomainSet>&
+inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::DomainSet)>&
 DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::setDomain(const String& value) {
   static_assert(!(STATE & DomainSet), "property domain should not be set yet");
   m_result->setDomain(value);
   return castState<DomainSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::PathSet>&
+inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::PathSet)>&
 DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::setPath(const String& value) {
   static_assert(!(STATE & PathSet), "property path should not be set yet");
   m_result->setPath(value);
   return castState<PathSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::SecureSet>&
+inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::SecureSet)>&
 DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::setSecure(bool value) {
   static_assert(!(STATE & SecureSet), "property secure should not be set yet");
   m_result->setSecure(value);
   return castState<SecureSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::HttpOnlySet>&
+inline DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<(STATE | DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::HttpOnlySet)>&
 DeviceBoundSessionCookieCraving::DeviceBoundSessionCookieCravingBuilder<STATE>::setHttpOnly(bool value) {
   static_assert(!(STATE & HttpOnlySet), "property httpOnly should not be set yet");
   m_result->setHttpOnly(value);
@@ -6888,21 +6888,21 @@ inline void DeviceBoundSessionUrlRule::setHostPattern(const String& value) { m_h
 inline void DeviceBoundSessionUrlRule::setPathPrefix(const String& value) { m_pathPrefix = value; }
 
 template<int STATE>
-inline DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE | DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::RuleTypeSet>&
+inline DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<(STATE | DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::RuleTypeSet)>&
 DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::setRuleType(const String& value) {
   static_assert(!(STATE & RuleTypeSet), "property ruleType should not be set yet");
   m_result->setRuleType(value);
   return castState<RuleTypeSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE | DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::HostPatternSet>&
+inline DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<(STATE | DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::HostPatternSet)>&
 DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::setHostPattern(const String& value) {
   static_assert(!(STATE & HostPatternSet), "property hostPattern should not be set yet");
   m_result->setHostPattern(value);
   return castState<HostPatternSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE | DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::PathPrefixSet>&
+inline DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<(STATE | DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::PathPrefixSet)>&
 DeviceBoundSessionUrlRule::DeviceBoundSessionUrlRuleBuilder<STATE>::setPathPrefix(const String& value) {
   static_assert(!(STATE & PathPrefixSet), "property pathPrefix should not be set yet");
   m_result->setPathPrefix(value);
@@ -6917,21 +6917,21 @@ inline void DeviceBoundSessionInclusionRules::setIncludeSite(bool value) { m_inc
 inline void DeviceBoundSessionInclusionRules::setUrlRules(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionUrlRule>> value) { m_urlRules = std::move(value); }
 
 template<int STATE>
-inline DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE | DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::OriginSet>&
+inline DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<(STATE | DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::OriginSet)>&
 DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::setOrigin(const String& value) {
   static_assert(!(STATE & OriginSet), "property origin should not be set yet");
   m_result->setOrigin(value);
   return castState<OriginSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE | DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::IncludeSiteSet>&
+inline DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<(STATE | DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::IncludeSiteSet)>&
 DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::setIncludeSite(bool value) {
   static_assert(!(STATE & IncludeSiteSet), "property includeSite should not be set yet");
   m_result->setIncludeSite(value);
   return castState<IncludeSiteSet>();
 }
 template<int STATE>
-inline DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE | DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::UrlRulesSet>&
+inline DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<(STATE | DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::UrlRulesSet)>&
 DeviceBoundSessionInclusionRules::DeviceBoundSessionInclusionRulesBuilder<STATE>::setUrlRules(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionUrlRule>> value) {
   static_assert(!(STATE & UrlRulesSet), "property urlRules should not be set yet");
   m_result->setUrlRules(std::move(value));
@@ -6951,35 +6951,35 @@ inline void DeviceBoundSession::setCachedChallenge(const String& value) { m_cach
 inline void DeviceBoundSession::setAllowedRefreshInitiators(std::unique_ptr<protocol::Array<String>> value) { m_allowedRefreshInitiators = std::move(value); }
 
 template<int STATE>
-inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::KeySet>&
+inline DeviceBoundSession::DeviceBoundSessionBuilder<(STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::KeySet)>&
 DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::setKey(std::unique_ptr<protocol::Network::DeviceBoundSessionKey> value) {
   static_assert(!(STATE & KeySet), "property key should not be set yet");
   m_result->setKey(std::move(value));
   return castState<KeySet>();
 }
 template<int STATE>
-inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::RefreshUrlSet>&
+inline DeviceBoundSession::DeviceBoundSessionBuilder<(STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::RefreshUrlSet)>&
 DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::setRefreshUrl(const String& value) {
   static_assert(!(STATE & RefreshUrlSet), "property refreshUrl should not be set yet");
   m_result->setRefreshUrl(value);
   return castState<RefreshUrlSet>();
 }
 template<int STATE>
-inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::InclusionRulesSet>&
+inline DeviceBoundSession::DeviceBoundSessionBuilder<(STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::InclusionRulesSet)>&
 DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::setInclusionRules(std::unique_ptr<protocol::Network::DeviceBoundSessionInclusionRules> value) {
   static_assert(!(STATE & InclusionRulesSet), "property inclusionRules should not be set yet");
   m_result->setInclusionRules(std::move(value));
   return castState<InclusionRulesSet>();
 }
 template<int STATE>
-inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::CookieCravingsSet>&
+inline DeviceBoundSession::DeviceBoundSessionBuilder<(STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::CookieCravingsSet)>&
 DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::setCookieCravings(std::unique_ptr<protocol::Array<protocol::Network::DeviceBoundSessionCookieCraving>> value) {
   static_assert(!(STATE & CookieCravingsSet), "property cookieCravings should not be set yet");
   m_result->setCookieCravings(std::move(value));
   return castState<CookieCravingsSet>();
 }
 template<int STATE>
-inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::ExpiryDateSet>&
+inline DeviceBoundSession::DeviceBoundSessionBuilder<(STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::ExpiryDateSet)>&
 DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::setExpiryDate(double value) {
   static_assert(!(STATE & ExpiryDateSet), "property expiryDate should not be set yet");
   m_result->setExpiryDate(value);
@@ -6991,7 +6991,7 @@ inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE>& DeviceBoundSession:
   return *this;
 }
 template<int STATE>
-inline DeviceBoundSession::DeviceBoundSessionBuilder<STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::AllowedRefreshInitiatorsSet>&
+inline DeviceBoundSession::DeviceBoundSessionBuilder<(STATE | DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::AllowedRefreshInitiatorsSet)>&
 DeviceBoundSession::DeviceBoundSessionBuilder<STATE>::setAllowedRefreshInitiators(std::unique_ptr<protocol::Array<String>> value) {
   static_assert(!(STATE & AllowedRefreshInitiatorsSet), "property allowedRefreshInitiators should not be set yet");
   m_result->setAllowedRefreshInitiators(std::move(value));
@@ -7008,7 +7008,7 @@ inline void DeviceBoundSessionFailedRequest::setResponseError(int value) { m_res
 inline void DeviceBoundSessionFailedRequest::setResponseErrorBody(const String& value) { m_responseErrorBody = value; }
 
 template<int STATE>
-inline DeviceBoundSessionFailedRequest::DeviceBoundSessionFailedRequestBuilder<STATE | DeviceBoundSessionFailedRequest::DeviceBoundSessionFailedRequestBuilder<STATE>::RequestUrlSet>&
+inline DeviceBoundSessionFailedRequest::DeviceBoundSessionFailedRequestBuilder<(STATE | DeviceBoundSessionFailedRequest::DeviceBoundSessionFailedRequestBuilder<STATE>::RequestUrlSet)>&
 DeviceBoundSessionFailedRequest::DeviceBoundSessionFailedRequestBuilder<STATE>::setRequestUrl(const String& value) {
   static_assert(!(STATE & RequestUrlSet), "property requestUrl should not be set yet");
   m_result->setRequestUrl(value);
@@ -7038,7 +7038,7 @@ inline void CreationEventDetails::setNewSession(std::unique_ptr<protocol::Networ
 inline void CreationEventDetails::setFailedRequest(std::unique_ptr<protocol::Network::DeviceBoundSessionFailedRequest> value) { m_failedRequest = std::move(value); }
 
 template<int STATE>
-inline CreationEventDetails::CreationEventDetailsBuilder<STATE | CreationEventDetails::CreationEventDetailsBuilder<STATE>::FetchResultSet>&
+inline CreationEventDetails::CreationEventDetailsBuilder<(STATE | CreationEventDetails::CreationEventDetailsBuilder<STATE>::FetchResultSet)>&
 CreationEventDetails::CreationEventDetailsBuilder<STATE>::setFetchResult(const String& value) {
   static_assert(!(STATE & FetchResultSet), "property fetchResult should not be set yet");
   m_result->setFetchResult(value);
@@ -7065,7 +7065,7 @@ inline void RefreshEventDetails::setWasFullyProactiveRefresh(bool value) { m_was
 inline void RefreshEventDetails::setFailedRequest(std::unique_ptr<protocol::Network::DeviceBoundSessionFailedRequest> value) { m_failedRequest = std::move(value); }
 
 template<int STATE>
-inline RefreshEventDetails::RefreshEventDetailsBuilder<STATE | RefreshEventDetails::RefreshEventDetailsBuilder<STATE>::RefreshResultSet>&
+inline RefreshEventDetails::RefreshEventDetailsBuilder<(STATE | RefreshEventDetails::RefreshEventDetailsBuilder<STATE>::RefreshResultSet)>&
 RefreshEventDetails::RefreshEventDetailsBuilder<STATE>::setRefreshResult(const String& value) {
   static_assert(!(STATE & RefreshResultSet), "property refreshResult should not be set yet");
   m_result->setRefreshResult(value);
@@ -7082,7 +7082,7 @@ inline RefreshEventDetails::RefreshEventDetailsBuilder<STATE>& RefreshEventDetai
   return *this;
 }
 template<int STATE>
-inline RefreshEventDetails::RefreshEventDetailsBuilder<STATE | RefreshEventDetails::RefreshEventDetailsBuilder<STATE>::WasFullyProactiveRefreshSet>&
+inline RefreshEventDetails::RefreshEventDetailsBuilder<(STATE | RefreshEventDetails::RefreshEventDetailsBuilder<STATE>::WasFullyProactiveRefreshSet)>&
 RefreshEventDetails::RefreshEventDetailsBuilder<STATE>::setWasFullyProactiveRefresh(bool value) {
   static_assert(!(STATE & WasFullyProactiveRefreshSet), "property wasFullyProactiveRefresh should not be set yet");
   m_result->setWasFullyProactiveRefresh(value);
@@ -7101,7 +7101,7 @@ inline TerminationEventDetails::~TerminationEventDetails() = default;
 inline void TerminationEventDetails::setDeletionReason(const String& value) { m_deletionReason = value; }
 
 template<int STATE>
-inline TerminationEventDetails::TerminationEventDetailsBuilder<STATE | TerminationEventDetails::TerminationEventDetailsBuilder<STATE>::DeletionReasonSet>&
+inline TerminationEventDetails::TerminationEventDetailsBuilder<(STATE | TerminationEventDetails::TerminationEventDetailsBuilder<STATE>::DeletionReasonSet)>&
 TerminationEventDetails::TerminationEventDetailsBuilder<STATE>::setDeletionReason(const String& value) {
   static_assert(!(STATE & DeletionReasonSet), "property deletionReason should not be set yet");
   m_result->setDeletionReason(value);
@@ -7115,14 +7115,14 @@ inline void ChallengeEventDetails::setChallengeResult(const String& value) { m_c
 inline void ChallengeEventDetails::setChallenge(const String& value) { m_challenge = value; }
 
 template<int STATE>
-inline ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE | ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE>::ChallengeResultSet>&
+inline ChallengeEventDetails::ChallengeEventDetailsBuilder<(STATE | ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE>::ChallengeResultSet)>&
 ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE>::setChallengeResult(const String& value) {
   static_assert(!(STATE & ChallengeResultSet), "property challengeResult should not be set yet");
   m_result->setChallengeResult(value);
   return castState<ChallengeResultSet>();
 }
 template<int STATE>
-inline ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE | ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE>::ChallengeSet>&
+inline ChallengeEventDetails::ChallengeEventDetailsBuilder<(STATE | ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE>::ChallengeSet)>&
 ChallengeEventDetails::ChallengeEventDetailsBuilder<STATE>::setChallenge(const String& value) {
   static_assert(!(STATE & ChallengeSet), "property challenge should not be set yet");
   m_result->setChallenge(value);

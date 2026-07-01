@@ -297,7 +297,7 @@ static unsigned FindLengthOfValidDouble(base::span<const LChar> chars) {
 
   bool decimal_mark_seen = false;
   size_t valid_length = 0;
-#if defined(__SSE2__) || defined(__ARM_NEON__)
+#if (defined(__SSE2__) || defined(__ARM_NEON__)) && !defined(COMPILER_MSVC)
   if (chars.size() >= 16) {
     uint8_t b __attribute__((vector_size(16)));
     UNSAFE_BUFFERS(memcpy(&b, chars.data(), sizeof(b)));
@@ -358,7 +358,7 @@ static unsigned FindLengthOfValidDouble(base::span<const LChar> chars) {
     }
 #endif
   }
-#endif  // defined(__SSE2__) || defined(__ARM_NEON__)
+#endif  // (defined(__SSE2__) || defined(__ARM_NEON__)) && !defined(COMPILER_MSVC)
 
   for (; valid_length < chars.size(); ++valid_length) {
     if (!IsAsciiDigit(chars[valid_length])) {
@@ -457,7 +457,7 @@ ALWAYS_INLINE static unsigned ParsePositiveDouble(base::span<const LChar> chars,
   int bytes_left = length - position;
   unsigned num_decimals = bytes_left > kMaxDecimals ? kMaxDecimals : bytes_left;
 
-#ifdef __SSE2__
+#if defined(__SSE2__) && !defined(COMPILER_MSVC)
   // The closest double to 1e-7, rounded _up_ instead of to nearest.
   // We specifically don't want a value _smaller_ than 1e-7, because
   // we have specific midpoints (like 0.1) that we want specific values for

@@ -158,6 +158,9 @@ class BASE_EXPORT SubstringSetMatcher {
   // A node in the trie, packed tightly together so that it occupies 12 bytes
   // (both on 32- and 64-bit platforms), but aligned to at least 4 (see the
   // comment on edges_).
+#if defined(_MSC_VER) && !defined(__clang__)
+#pragma pack(push, 1)
+#endif
   class alignas(AhoCorasickEdge) AhoCorasickNode {
    public:
     AhoCorasickNode();
@@ -306,7 +309,13 @@ class BASE_EXPORT SubstringSetMatcher {
     // If not equal to zero, will be a multiple of 4, so that we can use
     // SIMD to accelerate looking for edges.
     uint16_t edges_capacity_ = 0;
-  } __attribute__((packed));
+  }
+#if defined(_MSC_VER) && !defined(__clang__)
+  ;
+#pragma pack(pop)
+#else
+  __attribute__((packed));
+#endif
 
   using SubstringPatternVector = std::vector<const MatcherStringPattern*>;
 

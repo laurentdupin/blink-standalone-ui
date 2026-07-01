@@ -18,6 +18,7 @@
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/adapters.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -777,7 +778,7 @@ void LayerTreeHostImpl::AnimateInternal() {
 }
 
 bool LayerTreeHostImpl::PrepareTiles() {
-  TRACE_EVENT("cc", __PRETTY_FUNCTION__);
+  TRACE_EVENT("cc", PRETTY_FUNCTION);
   DCHECK(!settings_.trees_in_viz_in_viz_process);
 
 #if defined(HTML_CSS_RENDERER_STANDALONE)

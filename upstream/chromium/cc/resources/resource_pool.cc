@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
+#include "base/compiler_specific.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
@@ -448,7 +449,7 @@ void ResourcePool::UpdateTracingCounters() {
 void ResourcePool::OnResourceReleased(size_t unique_id,
                                       const gpu::SyncToken& sync_token,
                                       bool lost) {
-  TRACE_EVENT("cc", __PRETTY_FUNCTION__);
+  TRACE_EVENT("cc", PRETTY_FUNCTION);
   // If this fails we've removed a resource from the ResourceProvider somehow
   // while it was still in use by the ResourcePool client. That would prevent
   // the client from being able to use the ResourceId on the InUsePoolResource,
@@ -510,7 +511,7 @@ bool ResourcePool::PrepareForExport(
 
 void ResourcePool::NotifyOfViewportSizeChange(gfx::Size old_size,
                                               gfx::Size new_size) {
-  TRACE_EVENT("cc", __PRETTY_FUNCTION__, "old_size", old_size.ToString(),
+  TRACE_EVENT("cc", PRETTY_FUNCTION, "old_size", old_size.ToString(),
               "new_size", new_size.ToString());
   if (base::FeatureList::IsEnabled(kInvalidateResourcesOnSizeChange)) {
     // The viewport size has changed, meaning that many tilings (but not all)
@@ -524,7 +525,7 @@ void ResourcePool::NotifyOfViewportSizeChange(gfx::Size old_size,
 }
 
 void ResourcePool::InvalidateResources() {
-  TRACE_EVENT("cc", __PRETTY_FUNCTION__);
+  TRACE_EVENT("cc", PRETTY_FUNCTION);
   unused_resources_by_size_.clear();
   while (!unused_resources_.empty()) {
     DCHECK_GE(unused_memory_usage_bytes_,

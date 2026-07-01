@@ -10148,23 +10148,25 @@ void Element::SetShadowPseudoId(const AtomicString& id) {
     // is allowed here.
     CSSSelector::PseudoType type =
         CSSSelectorParser::ParsePseudoType(id, false, &GetDocument());
-    DCHECK(type == CSSSelector::kPseudoWebKitCustomElement ||
-           type == CSSSelector::kPseudoBlinkInternalElement ||
-           type == CSSSelector::kPseudoDetailsContent ||
-           type == CSSSelector::kPseudoPermissionIcon ||
-           id == shadow_element_names::kPickerSelect ||
+    bool allowed_shadow_pseudo =
+        type == CSSSelector::kPseudoWebKitCustomElement ||
+        type == CSSSelector::kPseudoBlinkInternalElement ||
+        type == CSSSelector::kPseudoDetailsContent ||
+        type == CSSSelector::kPseudoPermissionIcon ||
+        id == shadow_element_names::kPickerSelect;
 #if defined(HTML_CSS_RENDERER_STANDALONE)
-           id == shadow_element_names::kPseudoInputPlaceholder ||
-           id == shadow_element_names::kPseudoFileUploadButton ||
-           id == shadow_element_names::kIdDetailsContent ||
-           id == shadow_element_names::kIdPermissionIcon ||
-           id == shadow_element_names::kSelectInnerElement ||
-           id == shadow_element_names::kSelectButtonSlot ||
-           id == shadow_element_names::kSelectAutofillPreview ||
-           id == shadow_element_names::kSelectAutofillPreviewText ||
+    allowed_shadow_pseudo =
+        allowed_shadow_pseudo ||
+        id == shadow_element_names::kPseudoInputPlaceholder ||
+        id == shadow_element_names::kPseudoFileUploadButton ||
+        id == shadow_element_names::kIdDetailsContent ||
+        id == shadow_element_names::kIdPermissionIcon ||
+        id == shadow_element_names::kSelectInnerElement ||
+        id == shadow_element_names::kSelectButtonSlot ||
+        id == shadow_element_names::kSelectAutofillPreview ||
+        id == shadow_element_names::kSelectAutofillPreviewText;
 #endif
-           false)
-        << "type: " << type << ", id: " << id;
+    DCHECK(allowed_shadow_pseudo) << "type: " << type << ", id: " << id;
   }
 #endif
   setAttribute(html_names::kPseudoAttr, id);

@@ -46,6 +46,13 @@
 #endif
 #endif
 
+#if defined(COMPILER_MSVC) && !defined(__clang__)
+#define BLINK_HEAP_THREAD_LOCAL_ATTRIBUTE
+#else
+#define BLINK_HEAP_THREAD_LOCAL_ATTRIBUTE \
+  __attribute__((tls_model(BLINK_HEAP_THREAD_LOCAL_MODEL)))
+#endif
+
 #if defined(BLINK_HEAP_HIDE_THREAD_LOCAL_IN_LIBRARY)
 
 #define BLINK_HEAP_DECLARE_THREAD_LOCAL_GETTER(Name, Type, Member) \
