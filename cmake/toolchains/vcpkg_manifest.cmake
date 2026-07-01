@@ -43,17 +43,24 @@ set(VCPKG_INSTALL_OPTIONS
 set(VCPKG_INSTALL_OPTIONS "${VCPKG_INSTALL_OPTIONS}" CACHE STRING
   "Additional install options passed to vcpkg manifest install." FORCE)
 
-if(DEFINED ENV{VCPKG_ROOT} AND
-   EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+set(BLINK_STANDALONE_VCPKG_ROOT "" CACHE PATH
+  "vcpkg checkout used for toolchain scripts. Mutable state remains under BLINK_STANDALONE_VCPKG_STATE_ROOT.")
+if(BLINK_STANDALONE_VCPKG_ROOT AND
+   EXISTS "${BLINK_STANDALONE_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
   set(_blink_standalone_vcpkg_toolchain
-    "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+    "${BLINK_STANDALONE_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 elseif(EXISTS "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
   set(_blink_standalone_vcpkg_toolchain
     "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+elseif(DEFINED ENV{VCPKG_ROOT} AND
+   EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+  set(_blink_standalone_vcpkg_toolchain
+    "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
 else()
   message(FATAL_ERROR
-    "vcpkg is required for libxml2/Iconv/ZLIB. Set VCPKG_ROOT to a vcpkg checkout "
-    "or install vcpkg at C:/vcpkg, then reconfigure.")
+    "vcpkg is required for libxml2/Iconv/ZLIB. Set "
+    "BLINK_STANDALONE_VCPKG_ROOT or VCPKG_ROOT to a vcpkg checkout, or "
+    "install vcpkg at C:/vcpkg, then reconfigure.")
 endif()
 
 include("${_blink_standalone_vcpkg_toolchain}")
