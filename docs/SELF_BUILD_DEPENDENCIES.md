@@ -19,7 +19,7 @@ Windows renderer targets can link.
 - depot_tools submodule:
   `tools/depot_tools` at
   `ea253a3e3ae7653cafd343be001dc5cbe69b3ad0`
-- vcpkg manifest packages:
+- optional vcpkg manifest packages:
   `libiconv`, `libxml2`, and `zlib`
 - SDL3:
   fetched by CMake into the build tree when an installed SDL3 package is not
@@ -51,6 +51,28 @@ the working Blink/V8 compatibility boundary is V8 15.1.
 ## Generated V8/CppGC Compatibility Output
 
 ## vcpkg State Boundary
+
+`BLINK_STANDALONE_USE_VCPKG_DEPS` controls whether CMake uses vcpkg/system
+packages for `libxml2`, `libiconv`, and `zlib`. The current default remains
+`ON` so existing package presets keep building while the source-owned dependency
+boundary is closed. Setting it to `OFF` uses the tracked Chromium zlib headers
+and zlib implementation already compiled into the renderer object set, but
+configuration intentionally fails before build because this repository currently
+contains only libxml headers under `upstream/chromium/third_party/libxml/src`.
+Blink's XML parser and XSLT-adjacent code call real libxml parser/SAX/tree
+entry points such as `xmlCreatePushParserCtxt`, `xmlParseChunk`,
+`xmlReadMemory`, `xmlFreeDoc`, `xmlInitParser`, `xmlRegisterInputCallbacks`,
+`xmlStrdup`, `xmlGetPredefinedEntity`, and XPath/tree helpers. A local
+`LibXml2::LibXml2` alias without implementation would only move the failure to
+link time.
+
+The next no-vcpkg package step is to import or restore the Chromium libxml
+implementation subset and matching generated config headers into
+`upstream/chromium/third_party/libxml/src`, then build a static
+`LibXml2::LibXml2` target with network, lzma, zstd, and ideally iconv disabled
+for the standalone no-network profile. If the Windows libxml configuration
+still requires iconv for the code paths Blink uses, the repository also needs a
+source-owned libiconv target.
 
 The CMake presets use `cmake/toolchains/vcpkg_manifest.cmake`. A vcpkg checkout
 is still required for the vcpkg scripts and executable. Set

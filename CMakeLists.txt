@@ -24,6 +24,8 @@ option(BLINK_STANDALONE_OPTIMIZE_APP
   "Compile standalone benchmark/presenter application sources with release optimization." ON)
 option(BLINK_STANDALONE_DAWN_D3D12
   "Enable experimental standalone Dawn/D3D12 benchmark wiring." OFF)
+option(BLINK_STANDALONE_USE_VCPKG_DEPS
+  "Use vcpkg/system packages for libxml2/Iconv/ZLIB instead of only source-owned repository dependencies." ON)
 set(BLINK_STANDALONE_DAWN_D3D12_LIBS
   ""
   CACHE STRING
@@ -808,23 +810,77 @@ set(HB_BUILD_VECTOR OFF CACHE BOOL "" FORCE)
 set(HB_BUILD_GPU OFF CACHE BOOL "" FORCE)
 add_subdirectory(${BLINK_STANDALONE_HARFBUZZ_SOURCE} third_party/harfbuzz EXCLUDE_FROM_ALL)
 
-find_package(Iconv REQUIRED)
 find_package(Threads REQUIRED)
-find_package(ZLIB CONFIG QUIET)
-if(NOT ZLIB_FOUND)
-  find_package(ZLIB REQUIRED)
-endif()
-if(TARGET ZLIB::ZLIBSTATIC AND NOT TARGET ZLIB::ZLIB)
-  add_library(ZLIB::ZLIB INTERFACE IMPORTED)
-  target_link_libraries(ZLIB::ZLIB INTERFACE ZLIB::ZLIBSTATIC)
-endif()
+if(BLINK_STANDALONE_USE_VCPKG_DEPS)
+  find_package(Iconv REQUIRED)
+  find_package(ZLIB CONFIG QUIET)
+  if(NOT ZLIB_FOUND)
+    find_package(ZLIB REQUIRED)
+  endif()
+  if(TARGET ZLIB::ZLIBSTATIC AND NOT TARGET ZLIB::ZLIB)
+    add_library(ZLIB::ZLIB INTERFACE IMPORTED)
+    target_link_libraries(ZLIB::ZLIB INTERFACE ZLIB::ZLIBSTATIC)
+  endif()
 
-find_package(libxml2 CONFIG QUIET)
-if(TARGET LibXml2::LibXml2)
-  set(LibXml2_FOUND ON)
-endif()
-if(NOT LibXml2_FOUND)
-  find_package(LibXml2 REQUIRED)
+  find_package(libxml2 CONFIG QUIET)
+  if(TARGET LibXml2::LibXml2)
+    set(LibXml2_FOUND ON)
+  endif()
+  if(NOT LibXml2_FOUND)
+    find_package(LibXml2 REQUIRED)
+  endif()
+else()
+  if(NOT TARGET ZLIB::ZLIB)
+    add_library(blink_standalone_chromium_zlib_headers INTERFACE)
+    target_include_directories(blink_standalone_chromium_zlib_headers
+      INTERFACE
+        ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib
+    )
+    add_library(ZLIB::ZLIB ALIAS blink_standalone_chromium_zlib_headers)
+  endif()
+
+  set(_blink_standalone_libxml_root
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src)
+  set(_blink_standalone_required_libxml_sources
+    ${_blink_standalone_libxml_root}/parser.c
+    ${_blink_standalone_libxml_root}/parserInternals.c
+    ${_blink_standalone_libxml_root}/tree.c
+    ${_blink_standalone_libxml_root}/dict.c
+    ${_blink_standalone_libxml_root}/encoding.c
+    ${_blink_standalone_libxml_root}/xmlIO.c
+    ${_blink_standalone_libxml_root}/xmlmemory.c
+    ${_blink_standalone_libxml_root}/xmlstring.c
+    ${_blink_standalone_libxml_root}/error.c
+    ${_blink_standalone_libxml_root}/entities.c
+    ${_blink_standalone_libxml_root}/SAX2.c
+    ${_blink_standalone_libxml_root}/xpath.c
+    ${_blink_standalone_libxml_root}/uri.c
+    ${_blink_standalone_libxml_root}/hash.c
+    ${_blink_standalone_libxml_root}/valid.c
+  )
+  set(_blink_standalone_missing_libxml_sources)
+  foreach(_blink_standalone_libxml_source IN LISTS
+      _blink_standalone_required_libxml_sources)
+    if(NOT EXISTS "${_blink_standalone_libxml_source}")
+      list(APPEND _blink_standalone_missing_libxml_sources
+        "${_blink_standalone_libxml_source}")
+    endif()
+  endforeach()
+  if(_blink_standalone_missing_libxml_sources)
+    string(REPLACE ";" "\n  " _blink_standalone_missing_libxml_sources_text
+      "${_blink_standalone_missing_libxml_sources}")
+    message(FATAL_ERROR
+      "BLINK_STANDALONE_USE_VCPKG_DEPS=OFF cannot configure yet because this "
+      "checkout contains libxml headers but not the libxml implementation "
+      "sources needed by Blink XML parsing/XSLT paths.\n"
+      "Missing representative sources:\n"
+      "  ${_blink_standalone_missing_libxml_sources_text}\n"
+      "Next code task: import/restore Chromium third_party/libxml/src/*.c plus "
+      "matching generated config headers for a static no-network LibXml2::LibXml2 "
+      "target. Then validate whether it can be built with iconv/lzma/zstd "
+      "disabled on Windows, or add a source-owned libiconv target if libxml "
+      "still requires iconv.")
+  endif()
 endif()
 
 if(BLINK_STANDALONE_BUILD_SDL_VIEWER)
