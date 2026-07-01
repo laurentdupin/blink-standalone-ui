@@ -14,19 +14,23 @@ complete static package. The archive does not fold all transitive static
 dependencies, object files, whole-archive needs, sidecars, or toolchain
 assumptions.
 
-`blink_standalone_renderer_c_api_static_package` is the first evaluation target.
-It exports:
+`blink_standalone_renderer_c_api_static_package` is the first packaged static C
+API target. It exports:
 
 - the renderer static archive;
 - the public C API header;
-- a static-link manifest;
+- a package-relative static-link manifest;
+- package-local V8, Freetype, HarfBuzz, libxml2, ANGLE import libraries, and
+  selected generated Dawn libraries when enabled;
 - runtime sidecars that are still required by the current build.
 
 The manifest intentionally reports `static_link_complete_by_itself: false`.
-The external static proof now closes for raw output and for Vulkan/D3D12
-external GPU targets from the same package metadata. This proves isolated
-external consumption of the package metadata. It does not prove that the full
-Godot editor/export binary can link this monolithic archive.
+The MSVC package has an isolated external raw-output proof that consumes only
+the package manifest, package-local files, public C header, and Windows system
+libraries. It renders deterministic HTML/CSS raw pixels, verifies hit metadata,
+and checks that `blink_standalone_renderer_c_api.dll` is not loaded. This proves
+isolated external consumption of the static C API package metadata. It does not
+prove that the full Godot editor/export binary can link this monolithic archive.
 
 Godot static consumption is currently blocked by duplicate third-party symbols
 when linking against the full editor, even without `/WHOLEARCHIVE`. The current
@@ -52,6 +56,8 @@ A supported static package must enumerate:
   consumers;
 - CRT/STL/toolchain assumptions;
 - required runtime sidecars and data files.
+- CRT/STL compatibility fields. MSVC consumers must match the package CRT
+  family, architecture, configuration, and `_ITERATOR_DEBUG_LEVEL`.
 
 ## Sidecars That Remain
 
@@ -102,18 +108,17 @@ expects:
    consumes the generated static package manifest and public header, renders
    deterministic HTML/CSS, verifies raw output dimensions/stride/pixels/dirty
    rects, and verifies hit metadata.
-5. Extend validation to Vulkan and D3D12 external target smokes. Done by
-   `blink_static_gpu_external_target_smoke`, which creates caller-owned native
-   Vulkan and D3D12 targets, calls the public C ABI GPU target path, reads the
-   targets back through native GPU APIs, and verifies deterministic rendered
-   pixels.
+5. Extend validation to Vulkan and D3D12 external target smokes. This remains
+   open for the MSVC package: the isolated GPU probe links, but the package does
+   not yet ship Vulkan headers for the probe and D3D12 does not reach a ready
+   LayerTreeFrameSink in that static run.
 6. Only after those pass, mark the static package as link-complete for the
    validated toolchain.
 
 ## First Acceptance Checkpoint
 
-The raw-output and GPU external-target checkpoints are complete for the
-generated-V8 ChromiumLLVM Windows package when the static probe is run
-sequentially. The GPU proof validates Vulkan and D3D12 static linkage and native
-target writes; OpenGL3 remains unsupported because no caller-owned GL/ANGLE
-texture or FBO producer proof exists.
+The raw-output checkpoint is complete for the MSVC Windows package when the
+static probe is run from `upstream/chromium/standalone_renderer/tools/static_package_probe`.
+The package remains a "static C API package with runtime sidecars", not a
+fully sidecar-free static renderer. OpenGL3 remains unsupported because no
+caller-owned GL/ANGLE texture or FBO producer proof exists.

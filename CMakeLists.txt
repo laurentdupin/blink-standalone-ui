@@ -2124,6 +2124,236 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API runtime archive: ${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE}"
   )
+
+  set(BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR
+    ${CMAKE_BINARY_DIR}/package/c_api_static
+    CACHE PATH
+    "Output directory for the embeddable static C API package."
+  )
+  set(_blink_standalone_static_package_name_base
+    "blink-standalone-c-api-static-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_CXX_COMPILER_ID}-${BLINK_STANDALONE_V8_TOOLCHAIN}-${BLINK_STANDALONE_PACKAGE_GIT_COMMIT_SHORT}"
+  )
+  string(TOLOWER "${_blink_standalone_static_package_name_base}"
+    _blink_standalone_static_package_name_base)
+  set(BLINK_STANDALONE_RENDERER_C_API_STATIC_ARCHIVE_PACKAGE
+    ${CMAKE_BINARY_DIR}/package/${_blink_standalone_static_package_name_base}.zip
+    CACHE FILEPATH
+    "Zip archive produced from the embeddable static C API package."
+  )
+  set(BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST
+    ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json
+  )
+
+  set(_blink_standalone_static_dawn_libs_json)
+  set(_blink_standalone_static_dawn_copy_commands)
+  foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
+    get_filename_component(_blink_standalone_dawn_lib_name
+      "${_blink_standalone_dawn_lib}" NAME)
+    list(APPEND _blink_standalone_static_dawn_copy_commands
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${_blink_standalone_dawn_lib}"
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/dawn/${_blink_standalone_dawn_lib_name}"
+    )
+    string(APPEND _blink_standalone_static_dawn_libs_json
+      ",\n    \"lib/dawn/${_blink_standalone_dawn_lib_name}\""
+    )
+  endforeach()
+
+  set(_blink_standalone_static_package_manifest_content [=[
+{
+  "schema_version": 1,
+  "package_schema_version": 1,
+  "blink_commit": "@BLINK_STANDALONE_PACKAGE_GIT_COMMIT@",
+  "package_layout_version": 1,
+  "package_target": "blink_standalone_renderer_c_api_static_package",
+  "package_archive_target": "blink_standalone_renderer_c_api_static_archive",
+  "package_archive": "@BLINK_STANDALONE_RENDERER_C_API_STATIC_ARCHIVE_PACKAGE@",
+  "platform": {
+    "os": "@CMAKE_SYSTEM_NAME@",
+    "arch": "@CMAKE_SYSTEM_PROCESSOR@"
+  },
+  "build": {
+    "build_type": "@_blink_standalone_package_build_type@",
+    "compiler": "@CMAKE_CXX_COMPILER_ID@",
+    "compiler_version": "@CMAKE_CXX_COMPILER_VERSION@",
+    "toolchain": "@BLINK_STANDALONE_V8_TOOLCHAIN@",
+    "profile": "@BLINK_STANDALONE_V8_TOOLCHAIN@-@CMAKE_CXX_COMPILER_ID@-@_blink_standalone_package_build_type@"
+  },
+  "link_mode": "static",
+  "link_kind": "static_library",
+  "package_kind": "static_c_api_with_runtime_sidecars",
+  "static_link_complete_by_itself": false,
+  "status": "raw_output_link_proof_passed",
+  "crt": {
+    "msvc_runtime_library": "MultiThreaded",
+    "required_consumer_match": true,
+    "notes": "Consumers must use the same CRT family, architecture, configuration, and iterator debug level as this package. Rebuild the package if the host uses /MD instead of /MT."
+  },
+  "public_header": {
+    "package_relative": "include/html_css_renderer/renderer_c_api.h",
+    "source": "@BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER@",
+    "version": "unversioned-c-abi"
+  },
+  "artifacts": {
+    "static_archive": "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
+  },
+  "consumer_compile_definitions": [
+    "BLINK_STANDALONE_RENDERER_C_API_STATIC=1"
+  ],
+  "required_static_archives": [
+    "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>",
+    "lib/v8_monolith.lib"
+  ],
+  "required_import_libraries": [
+    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>",
+    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>"
+  ],
+  "third_party_static_archives": [
+    "lib/$<TARGET_FILE_NAME:freetype>",
+    "lib/$<TARGET_FILE_NAME:harfbuzz>",
+    "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_dawn_libs_json@
+  ],
+  "whole_archive_candidates_msvc": [
+    "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
+  ],
+  "remaining_runtime_sidecars": [
+    "bin/$<TARGET_FILE_NAME:blink_angle_libEGL>",
+    "bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>",
+    "bin/icudtl.dat"@_blink_standalone_dawn_d3d12_runtime_sidecars_package_json@
+  ],
+  "windows_system_libraries": [
+    "d3d11.lib",
+    "d3d12.lib",
+    "dcomp.lib",
+    "dwmapi.lib",
+    "dxcore.lib",
+    "dxgi.lib",
+    "kernel32.lib",
+    "mincore.lib",
+    "ole32.lib",
+    "oleaut32.lib",
+    "propsys.lib",
+    "runtimeobject.lib",
+    "shell32.lib",
+    "shcore.lib",
+    "user32.lib",
+    "winmm.lib",
+    "windowscodecs.lib",
+    "wbemuuid.lib",
+    "advapi32.lib",
+    "dbghelp.lib",
+    "ntdll.lib",
+    "psapi.lib",
+    "setupapi.lib",
+    "shlwapi.lib",
+    "ws2_32.lib",
+    "delayimp.lib"
+  ],
+  "known_hazards": [
+    "This static package is validated by isolated external probes first; full Godot editor/export static linking can still expose duplicate host/Blink third-party symbols until dependency ownership or symbol isolation is solved.",
+    "The static C API archive must be whole-archived on MSVC, but v8_monolith.lib must not be whole-archived.",
+    "ANGLE remains deployed as libEGL/libGLESv2 runtime sidecars in this package.",
+    "icudtl.dat remains a required runtime data sidecar."
+  ],
+  "package_files": [
+    "blink_standalone_renderer_c_api_static_link_manifest.json",
+    "include/html_css_renderer/renderer_c_api.h",
+    "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>",
+    "lib/v8_monolith.lib",
+    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>",
+    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>",
+    "lib/$<TARGET_FILE_NAME:freetype>",
+    "lib/$<TARGET_FILE_NAME:harfbuzz>",
+    "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_dawn_libs_json@,
+    "bin/$<TARGET_FILE_NAME:blink_angle_libEGL>",
+    "bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>",
+    "bin/icudtl.dat"@_blink_standalone_dawn_d3d12_runtime_sidecars_package_json@
+  ]
+}
+]=])
+  string(CONFIGURE
+    "${_blink_standalone_static_package_manifest_content}"
+    _blink_standalone_static_package_manifest_content
+    @ONLY
+  )
+  file(GENERATE
+    OUTPUT "${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
+    CONTENT "${_blink_standalone_static_package_manifest_content}"
+  )
+
+  add_custom_target(blink_standalone_renderer_c_api_static_link_manifest
+    DEPENDS blink_standalone_renderer_c_api
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "C API static link manifest: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
+  )
+  add_custom_target(blink_standalone_renderer_c_api_static_package
+    DEPENDS
+      blink_standalone_renderer_c_api
+      blink_standalone_renderer_c_api_static_link_manifest
+      blink_angle_libEGL
+      blink_angle_libGLESv2
+      freetype
+      harfbuzz
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/html_css_renderer"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/dawn"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER}"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/html_css_renderer/renderer_c_api.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_standalone_renderer_c_api>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/v8_monolith.lib"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_LINKER_FILE:blink_angle_libEGL>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_LINKER_FILE:blink_angle_libGLESv2>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:freetype>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:freetype>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:harfbuzz>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:harfbuzz>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:LibXml2::LibXml2>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"
+    ${_blink_standalone_static_dawn_copy_commands}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_angle_libEGL>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/$<TARGET_FILE_NAME:blink_angle_libEGL>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_angle_libGLESv2>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_ICU_DATA_FILE}"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/icudtl.dat"
+    ${_blink_standalone_dawn_d3d12_runtime_copy_commands}
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "C API static package: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
+  )
+  add_custom_target(blink_standalone_renderer_c_api_static_archive
+    DEPENDS blink_standalone_renderer_c_api_static_package
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_ARCHIVE_PACKAGE}"
+    COMMAND ${CMAKE_COMMAND} -E tar cf
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_ARCHIVE_PACKAGE}"
+      --format=zip
+      .
+    WORKING_DIRECTORY
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "C API static archive: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_ARCHIVE_PACKAGE}"
+  )
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia
       ${BLINK_STANDALONE_SDL_APP_SOURCES}

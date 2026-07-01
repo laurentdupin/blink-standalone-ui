@@ -8,6 +8,10 @@
 #include <cstdio>
 #include <cstring>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 namespace {
 
 bool Fail(const char* message) {
@@ -43,6 +47,12 @@ bool IsExpectedColor(const uint8_t* pixel,
 }  // namespace
 
 int main() {
+#if defined(_WIN32)
+  if (GetModuleHandleA("blink_standalone_renderer_c_api.dll") != nullptr) {
+    return Fail("c_api_dll_loaded") ? 0 : 1;
+  }
+#endif
+
   blink_standalone_renderer_config_t config = {};
   config.width = 160;
   config.height = 120;
@@ -184,6 +194,12 @@ int main() {
 
   blink_standalone_renderer_release_latest_output(renderer);
   blink_standalone_renderer_destroy(renderer);
+
+#if defined(_WIN32)
+  if (GetModuleHandleA("blink_standalone_renderer_c_api.dll") != nullptr) {
+    ok = Fail("c_api_dll_loaded_after_render");
+  }
+#endif
 
   if (!ok) {
     return 1;

@@ -35,7 +35,14 @@ function(_blink_static_json_array out_var field)
   set(${out_var} "${_values}" PARENT_SCOPE)
 endfunction()
 
-string(JSON _static_archive GET "${_manifest_json}" static_archive)
+function(_blink_static_resolve_path out_var value)
+  if(IS_ABSOLUTE "${value}")
+    set(${out_var} "${value}" PARENT_SCOPE)
+  else()
+    set(${out_var} "${BLINK_STANDALONE_STATIC_PACKAGE_DIR}/${value}" PARENT_SCOPE)
+  endif()
+endfunction()
+
 string(JSON _static_status GET "${_manifest_json}" status)
 message(STATUS "Blink static package status: ${_static_status}")
 
@@ -45,40 +52,58 @@ _blink_static_json_array(_third_party_static_archives third_party_static_archive
 _blink_static_json_array(_whole_archive_candidates whole_archive_candidates_msvc)
 _blink_static_json_array(_windows_system_libraries windows_system_libraries)
 _blink_static_json_array(_remaining_runtime_sidecars remaining_runtime_sidecars)
+_blink_static_json_array(_consumer_compile_definitions consumer_compile_definitions)
 
+set(_resolved_whole_archive_candidates)
+foreach(_lib IN LISTS _whole_archive_candidates)
+  _blink_static_resolve_path(_resolved_lib "${_lib}")
+  list(APPEND _resolved_whole_archive_candidates "${_resolved_lib}")
+endforeach()
+
+set(_resolved_static_paths)
 foreach(_path IN LISTS _required_static_archives _required_import_libraries
                        _third_party_static_archives _remaining_runtime_sidecars)
-  if(NOT EXISTS "${_path}")
-    message(FATAL_ERROR "Manifest path does not exist: ${_path}")
+  _blink_static_resolve_path(_resolved_path "${_path}")
+  if(NOT EXISTS "${_resolved_path}")
+    message(FATAL_ERROR "Manifest path does not exist: ${_resolved_path}")
   endif()
+  list(APPEND _resolved_static_paths "${_resolved_path}")
 endforeach()
 
 set(_normal_libraries)
 foreach(_lib IN LISTS _required_static_archives _required_import_libraries
-                      _third_party_static_archives _windows_system_libraries)
-  list(FIND _whole_archive_candidates "${_lib}" _whole_index)
+                      _third_party_static_archives)
+  _blink_static_resolve_path(_resolved_lib "${_lib}")
+  list(FIND _resolved_whole_archive_candidates "${_resolved_lib}" _whole_index)
   if(_whole_index EQUAL -1)
-    list(APPEND _normal_libraries "${_lib}")
+    list(APPEND _normal_libraries "${_resolved_lib}")
   else()
-    list(APPEND _normal_libraries "${_lib}")
+    list(APPEND _normal_libraries "${_resolved_lib}")
   endif()
+endforeach()
+list(APPEND _normal_libraries ${_windows_system_libraries})
+
+set(_resolved_runtime_sidecars)
+foreach(_sidecar IN LISTS _remaining_runtime_sidecars)
+  _blink_static_resolve_path(_resolved_sidecar "${_sidecar}")
+  list(APPEND _resolved_runtime_sidecars "${_resolved_sidecar}")
 endforeach()
 
 function(_blink_static_configure_probe target_name)
   target_include_directories(${target_name} PRIVATE
     "${BLINK_STANDALONE_STATIC_PACKAGE_DIR}/include")
   target_compile_definitions(${target_name} PRIVATE
-    BLINK_STANDALONE_RENDERER_C_API_STATIC=1)
+    ${_consumer_compile_definitions})
   target_link_libraries(${target_name} PRIVATE ${_normal_libraries})
   if(MSVC)
     set_property(TARGET ${target_name} PROPERTY
       MSVC_RUNTIME_LIBRARY "MultiThreaded")
-    foreach(_lib IN LISTS _whole_archive_candidates)
+    foreach(_lib IN LISTS _resolved_whole_archive_candidates)
       target_link_options(${target_name} BEFORE PRIVATE
         "/WHOLEARCHIVE:${_lib}")
     endforeach()
   endif()
-  foreach(_sidecar IN LISTS _remaining_runtime_sidecars)
+  foreach(_sidecar IN LISTS _resolved_runtime_sidecars)
     add_custom_command(TARGET ${target_name} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${_sidecar}" "$<TARGET_FILE_DIR:${target_name}>/")

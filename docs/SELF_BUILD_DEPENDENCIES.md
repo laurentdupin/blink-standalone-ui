@@ -249,19 +249,26 @@ support also remains blocked until there is a real caller-owned GL/ANGLE
 texture/FBO producer proof; CPU raw output is the fallback for that renderer
 family today.
 
-For static-link evaluation, build the static package target:
+For static-link evaluation, build the static package target for the selected
+configuration:
 
 ```powershell
 cmake --build build\cmake-generated-v8-chromium-llvm --target blink_standalone_renderer_c_api_static_package --parallel 8
+cmake --build build\cmake-msvc-release --target blink_standalone_renderer_c_api_static_package --parallel 8
 ```
 
 ```text
 build/cmake-generated-v8-chromium-llvm/package/c_api_static/
+build/cmake-msvc-release/package/c_api_static/
 ```
 
 That package contains the renderer static archive, public C API header, static
-link manifest, and remaining sidecars. See `docs/STATIC_LINKING.md` for the
-current static package contract and the external link-proof milestone.
+link manifest, package-local static/import libraries, and remaining sidecars.
+The manifest is package-relative and records `link_mode=static`,
+`package_kind=static_c_api_with_runtime_sidecars`, the package CRT mode, scoped
+whole-archive candidates, Windows system libraries, and known hazards. See
+`docs/STATIC_LINKING.md` for the current static package contract and the
+external link-proof milestone.
 
 The external static raw-output proof is intentionally outside the main renderer
 build graph. Configure it against the generated package:
@@ -277,6 +284,22 @@ cmake --build build\static_package_probe_raw --target blink_static_raw_output_sm
 build\static_package_probe_raw\blink_static_raw_output_smoke.exe
 build\static_package_probe_raw\blink_static_gpu_external_target_smoke.exe
 ```
+
+For the MSVC package, configure the probe from a Visual Studio developer prompt
+with the package directory:
+
+```powershell
+cmake -S upstream\chromium\standalone_renderer\tools\static_package_probe `
+  -B build\static_package_probe_msvc -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DBLINK_STANDALONE_STATIC_PACKAGE_DIR=build\cmake-msvc-release\package\c_api_static
+cmake --build build\static_package_probe_msvc --target blink_static_raw_output_smoke --parallel 8
+build\static_package_probe_msvc\blink_static_raw_output_smoke.exe
+```
+
+The MSVC raw-output probe verifies deterministic raw pixels, hit metadata, and
+that `blink_standalone_renderer_c_api.dll` is not loaded. The optional GPU probe
+is not yet a product gate for the MSVC package.
 
 The intended public ABI surface is the `blink_standalone_renderer_*` C API declared in
 `renderer_c_api.h`. The Windows DLL export table can still include two
