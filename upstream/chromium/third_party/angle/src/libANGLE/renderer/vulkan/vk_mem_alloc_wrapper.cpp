@@ -9,6 +9,7 @@
 
 #include "vk_mem_alloc_wrapper.h"
 
+#include "standalone_renderer/src/private_vma_symbol_prefix.h"
 #include <vk_mem_alloc.h>
 
 namespace vma

@@ -111,11 +111,12 @@ underlying ownership collision.
 
 Vulkan Memory Allocator is the first isolated family. In standalone builds,
 Blink includes `standalone_renderer/src/private_vma_symbol_prefix.h` before
-`vk_mem_alloc.h` in the Skia VMA implementation and Chromium VMA users. The
-MSVC object-level proof verifies that `vmaCreateAllocator` is absent and
-`blink_standalone_vmaCreateAllocator` is present in the bundled VMA
-implementation object. This removes the known VMA collision family, but it does
-not make full-host static linking product-supported until the remaining
+`vk_mem_alloc.h` in the Skia VMA implementation, Chromium VMA users, and the
+standalone ANGLE Vulkan VMA implementation/wrapper. The object/package proof
+verifies that unprefixed `vma[A-Z]...` linker members are absent from packaged
+static libraries and `blink_standalone_vmaCreateAllocator` is present in the
+bundled VMA implementation. This removes the known VMA collision family, but it
+does not make full-host static linking product-supported until the remaining
 third-party families are isolated or otherwise proven safe.
 
 The preferred product fix is symbol isolation for Blink-owned third-party

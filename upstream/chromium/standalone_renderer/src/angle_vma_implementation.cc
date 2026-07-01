@@ -6,4 +6,5 @@
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 
+#include "standalone_renderer/src/private_vma_symbol_prefix.h"
 #include "third_party/vulkan_memory_allocator/include/vk_mem_alloc.h"
