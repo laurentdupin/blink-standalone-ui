@@ -1891,8 +1891,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     _blink_standalone_package_name_base)
   set(BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE
     ${CMAKE_BINARY_DIR}/package/${_blink_standalone_package_name_base}.zip
-    CACHE FILEPATH
-    "Zip archive produced from the embeddable C API runtime package."
   )
   set(_blink_standalone_dawn_d3d12_runtime_sidecars)
   set(_blink_standalone_dawn_d3d12_runtime_copy_commands)
@@ -2144,8 +2142,6 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     _blink_standalone_static_package_name_base)
   set(BLINK_STANDALONE_RENDERER_C_API_STATIC_ARCHIVE_PACKAGE
     ${CMAKE_BINARY_DIR}/package/${_blink_standalone_static_package_name_base}.zip
-    CACHE FILEPATH
-    "Zip archive produced from the embeddable static C API package."
   )
   set(BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST
     ${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json
