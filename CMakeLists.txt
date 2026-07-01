@@ -839,48 +839,21 @@ else()
     add_library(ZLIB::ZLIB ALIAS blink_standalone_chromium_zlib_headers)
   endif()
 
-  set(_blink_standalone_libxml_root
-    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src)
-  set(_blink_standalone_required_libxml_sources
-    ${_blink_standalone_libxml_root}/parser.c
-    ${_blink_standalone_libxml_root}/parserInternals.c
-    ${_blink_standalone_libxml_root}/tree.c
-    ${_blink_standalone_libxml_root}/dict.c
-    ${_blink_standalone_libxml_root}/encoding.c
-    ${_blink_standalone_libxml_root}/xmlIO.c
-    ${_blink_standalone_libxml_root}/xmlmemory.c
-    ${_blink_standalone_libxml_root}/xmlstring.c
-    ${_blink_standalone_libxml_root}/error.c
-    ${_blink_standalone_libxml_root}/entities.c
-    ${_blink_standalone_libxml_root}/SAX2.c
-    ${_blink_standalone_libxml_root}/xpath.c
-    ${_blink_standalone_libxml_root}/uri.c
-    ${_blink_standalone_libxml_root}/hash.c
-    ${_blink_standalone_libxml_root}/valid.c
-  )
-  set(_blink_standalone_missing_libxml_sources)
-  foreach(_blink_standalone_libxml_source IN LISTS
-      _blink_standalone_required_libxml_sources)
-    if(NOT EXISTS "${_blink_standalone_libxml_source}")
-      list(APPEND _blink_standalone_missing_libxml_sources
-        "${_blink_standalone_libxml_source}")
-    endif()
-  endforeach()
-  if(_blink_standalone_missing_libxml_sources)
-    string(REPLACE ";" "\n  " _blink_standalone_missing_libxml_sources_text
-      "${_blink_standalone_missing_libxml_sources}")
-    message(FATAL_ERROR
-      "BLINK_STANDALONE_USE_VCPKG_DEPS=OFF cannot configure yet because this "
-      "checkout contains libxml headers but not the libxml implementation "
-      "sources needed by Blink XML parsing/XSLT paths.\n"
-      "Missing representative sources:\n"
-      "  ${_blink_standalone_missing_libxml_sources_text}\n"
-      "Next code task: import/restore Chromium third_party/libxml/src/*.c plus "
-      "matching generated config headers for a static no-network LibXml2::LibXml2 "
-      "target. Then validate whether it can be built with iconv/lzma/zstd "
-      "disabled on Windows, or add a source-owned libiconv target if libxml "
-      "still requires iconv.")
-  endif()
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_CATALOG OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_HTTP OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_ICONV OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_ICU OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_LZMA OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_MODULES OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_PROGRAMS OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_PYTHON OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_TESTS OFF CACHE BOOL "" FORCE)
+  set(LIBXML2_WITH_ZLIB OFF CACHE BOOL "" FORCE)
+  add_subdirectory(
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/libxml/src
+    third_party/libxml
+    EXCLUDE_FROM_ALL)
 endif()
 
 if(BLINK_STANDALONE_BUILD_SDL_VIEWER)

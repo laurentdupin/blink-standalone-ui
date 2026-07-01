@@ -1,14 +1,11 @@
 /**
- * @file
- *
- * @brief interfaces for thread handling
- * 
- * set of generic threading related routines
+ * Summary: interfaces for thread handling
+ * Description: set of generic threading related routines
  *              should work with pthreads, Windows native or TLS threads
  *
- * @copyright See Copyright for the status of this software.
+ * Copy: See Copyright for the status of this software.
  *
- * @author Daniel Veillard
+ * Author: Daniel Veillard
  */
 
 #ifndef __XML_THREADS_H__
@@ -20,57 +17,61 @@
 extern "C" {
 #endif
 
-/** Mutual exclusion object */
+/*
+ * xmlMutex are a simple mutual exception locks.
+ */
 typedef struct _xmlMutex xmlMutex;
 typedef xmlMutex *xmlMutexPtr;
 
-/** Reentrant mutual exclusion object */
+/*
+ * xmlRMutex are reentrant mutual exception locks.
+ */
 typedef struct _xmlRMutex xmlRMutex;
 typedef xmlRMutex *xmlRMutexPtr;
 
 XMLPUBFUN int
-			xmlCheckThreadLocalStorage(void);
+      xmlCheckThreadLocalStorage(void);
 
-XMLPUBFUN xmlMutex *
-			xmlNewMutex	(void);
+XMLPUBFUN xmlMutexPtr
+      xmlNewMutex	(void);
 XMLPUBFUN void
-			xmlMutexLock	(xmlMutex *tok);
+      xmlMutexLock	(xmlMutexPtr tok);
 XMLPUBFUN void
-			xmlMutexUnlock	(xmlMutex *tok);
+      xmlMutexUnlock	(xmlMutexPtr tok);
 XMLPUBFUN void
-			xmlFreeMutex	(xmlMutex *tok);
+      xmlFreeMutex	(xmlMutexPtr tok);
 
-XMLPUBFUN xmlRMutex *
-			xmlNewRMutex	(void);
+XMLPUBFUN xmlRMutexPtr
+      xmlNewRMutex	(void);
 XMLPUBFUN void
-			xmlRMutexLock	(xmlRMutex *tok);
+      xmlRMutexLock	(xmlRMutexPtr tok);
 XMLPUBFUN void
-			xmlRMutexUnlock	(xmlRMutex *tok);
+      xmlRMutexUnlock	(xmlRMutexPtr tok);
 XMLPUBFUN void
-			xmlFreeRMutex	(xmlRMutex *tok);
+      xmlFreeRMutex	(xmlRMutexPtr tok);
 
 /*
  * Library wide APIs.
  */
 XML_DEPRECATED
 XMLPUBFUN void
-			xmlInitThreads	(void);
+      xmlInitThreads	(void);
 XMLPUBFUN void
-			xmlLockLibrary	(void);
+      xmlLockLibrary	(void);
 XMLPUBFUN void
-			xmlUnlockLibrary(void);
+      xmlUnlockLibrary(void);
 XML_DEPRECATED
 XMLPUBFUN void
-			xmlCleanupThreads(void);
+      xmlCleanupThreads(void);
 
-/** @cond IGNORE */
+/** DOC_DISABLE */
 #if defined(LIBXML_THREAD_ENABLED) && defined(_WIN32) && \
     defined(LIBXML_STATIC_FOR_DLL)
 int
 xmlDllMain(void *hinstDLL, unsigned long fdwReason,
            void *lpvReserved);
 #endif
-/** @endcond */
+/** DOC_ENABLE */
 
 #ifdef __cplusplus
 }

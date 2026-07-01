@@ -4,6 +4,6 @@
 #include <libxml/xinclude.h>
 
 XML_HIDDEN int
-xmlXIncludeSetStreamingMode(xmlXIncludeCtxt *ctxt, int mode);
+xmlXIncludeSetStreamingMode(xmlXIncludeCtxtPtr ctxt, int mode);
 
 #endif /* XML_INCLUDE_H_PRIVATE__ */

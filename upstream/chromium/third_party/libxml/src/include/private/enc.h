@@ -12,8 +12,8 @@ xmlEncInputChunk(xmlCharEncodingHandler *handler, unsigned char *out,
                  int *outlen, const unsigned char *in, int *inlen,
                  int flush);
 XML_HIDDEN xmlCharEncError
-xmlCharEncInput(xmlParserInputBuffer *input, size_t *sizeOut, int flush);
+xmlCharEncInput(xmlParserInputBufferPtr input, size_t *sizeOut, int flush);
 XML_HIDDEN int
-xmlCharEncOutput(xmlOutputBuffer *output, int init);
+xmlCharEncOutput(xmlOutputBufferPtr output, int init);
 
 #endif /* XML_ENC_H_PRIVATE__ */

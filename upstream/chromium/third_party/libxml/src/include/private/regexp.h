@@ -16,10 +16,7 @@
 #define XML_REGEXP_INVALID_UTF8     (-7)
 
 XML_HIDDEN void
-xmlAutomataSetFlags(xmlAutomata *am, int flags);
-
-XML_HIDDEN void
-xmlRegExecClearErrors(xmlRegExecCtxt* exec);
+xmlAutomataSetFlags(xmlAutomataPtr am, int flags);
 
 #endif /* LIBXML_REGEXP_ENABLED */
 

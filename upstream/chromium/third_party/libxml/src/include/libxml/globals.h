@@ -1,11 +1,8 @@
-/**
- * @file
- * 
- * @brief interface for all global variables of the library
- * 
- * Deprecated, don't use
+/*
+ * Summary: interface for all global variables of the library
+ * Description: Deprecated, don't use
  *
- * @copyright See Copyright for the status of this software.
+ * Copy: See Copyright for the status of this software.
  */
 
 #ifndef __XML_GLOBALS_H

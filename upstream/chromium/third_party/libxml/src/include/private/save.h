@@ -8,17 +8,16 @@
 #ifdef LIBXML_OUTPUT_ENABLED
 
 XML_HIDDEN int
-xmlSaveNotationDecl(xmlSaveCtxt *ctxt, xmlNotation *cur);
+xmlSaveNotationDecl(xmlSaveCtxtPtr ctxt, xmlNotationPtr cur);
 XML_HIDDEN int
-xmlSaveNotationTable(xmlSaveCtxt *ctxt, xmlNotationTable *cur);
+xmlSaveNotationTable(xmlSaveCtxtPtr ctxt, xmlNotationTablePtr cur);
 
 XML_HIDDEN void
-xmlBufAttrSerializeTxtContent(xmlOutputBuffer *buf, xmlDoc *doc,
+xmlBufAttrSerializeTxtContent(xmlOutputBufferPtr buf, xmlDocPtr doc,
                               const xmlChar *string);
 XML_HIDDEN void
-xmlNsListDumpOutput(xmlOutputBuffer *buf, xmlNs *cur);
+xmlNsListDumpOutput(xmlOutputBufferPtr buf, xmlNsPtr cur);
 
 #endif /* LIBXML_OUTPUT_ENABLED */
 
 #endif /* XML_SAVE_H_PRIVATE__ */
-

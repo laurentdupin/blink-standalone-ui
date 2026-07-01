@@ -53,29 +53,29 @@ the working Blink/V8 compatibility boundary is V8 15.1.
 ## vcpkg State Boundary
 
 `BLINK_STANDALONE_USE_VCPKG_DEPS` controls whether CMake uses vcpkg/system
-packages for `libxml2`, `libiconv`, and `zlib`. The current default remains
-`ON` so existing package presets keep building while the source-owned dependency
-boundary is closed. Setting it to `OFF` uses the tracked Chromium zlib headers
-and zlib implementation already compiled into the renderer object set, but
-configuration intentionally fails before build because this repository currently
-contains only libxml headers under `upstream/chromium/third_party/libxml/src`.
-Blink's XML parser and XSLT-adjacent code call real libxml parser/SAX/tree
-entry points such as `xmlCreatePushParserCtxt`, `xmlParseChunk`,
-`xmlReadMemory`, `xmlFreeDoc`, `xmlInitParser`, `xmlRegisterInputCallbacks`,
-`xmlStrdup`, `xmlGetPredefinedEntity`, and XPath/tree helpers. A local
-`LibXml2::LibXml2` alias without implementation would only move the failure to
-link time.
+packages for `libxml2`, `libiconv`, and `zlib`. The MSVC C API package preset
+uses `BLINK_STANDALONE_USE_VCPKG_DEPS=OFF` so nested consumers such as Godot do
+not need `C:/vcpkg`, the Visual Studio bundled vcpkg, or vcpkg manifest
+downloads to configure the normal dynamic package.
 
-The next no-vcpkg package step is to import or restore the Chromium libxml
-implementation subset and matching generated config headers into
-`upstream/chromium/third_party/libxml/src`, then build a static
-`LibXml2::LibXml2` target with network, lzma, zstd, and ideally iconv disabled
-for the standalone no-network profile. If the Windows libxml configuration
-still requires iconv for the code paths Blink uses, the repository also needs a
-source-owned libiconv target.
+With the option `OFF`, CMake provides:
 
-The CMake presets use `cmake/toolchains/vcpkg_manifest.cmake`. A vcpkg checkout
-is still required for the vcpkg scripts and executable. Set
+- a local `ZLIB::ZLIB` target from the tracked Chromium zlib headers and the
+  zlib implementation already compiled into the renderer object set;
+- a local static `LibXml2::LibXml2` target from the tracked libxml2 2.14.6
+  source subset under `upstream/chromium/third_party/libxml/src`.
+
+The source-owned libxml target is configured static-only for the standalone
+no-network profile with catalog, HTTP, iconv, ICU, lzma, modules, programs,
+Python bindings, tests, and zlib disabled. The Windows/MSVC build has been
+validated in this mode without a source-owned libiconv target; the enabled Blink
+XML parser, HTML parser, SAX, tree, XPath, schema, and XInclude paths link
+against libxml's built-in UTF-8/ISO-8859 support.
+
+The optional vcpkg fallback remains available by setting
+`BLINK_STANDALONE_USE_VCPKG_DEPS=ON` and using
+`cmake/toolchains/vcpkg_manifest.cmake`. In that mode a vcpkg checkout is still
+required for the vcpkg scripts and executable. Set
 `BLINK_STANDALONE_VCPKG_ROOT` or `VCPKG_ROOT` if it is not installed at
 `C:/vcpkg`; when both the Visual Studio bundled vcpkg and `C:/vcpkg` are
 present, the standalone `C:/vcpkg` checkout is preferred. The standalone
