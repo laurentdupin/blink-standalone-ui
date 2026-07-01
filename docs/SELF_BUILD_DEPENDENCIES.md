@@ -194,7 +194,36 @@ build/cmake-generated-v8-chromium-llvm/package/c_api_runtime/
 
 The DLL is the recommended artifact for Godot and other external embedders
 because it seals Chromium/V8/libc++ implementation details behind the C ABI
-boundary. The static archive remains available for internal/advanced use as:
+boundary. Normal Godot builds should consume a checked-in or otherwise vendored
+dynamic C API runtime package/artifact from the nested
+`thirdparty/blink-standalone-ui` checkout. They should not try to bootstrap V8,
+depot_tools, CIPD, or the renderer package as an implicit SCons step.
+
+First-run source package generation remains an explicit opt-in bootstrap path.
+It can require the generated V8/CppGC compatibility output, depot_tools, CIPD
+payloads, and Chromium toolchain/runtime dependencies before the renderer DLL
+can link. That bootstrap belongs in a deliberate Blink package production flow,
+not in Godot's normal seamless build.
+
+The package manifest is
+`blink_standalone_renderer_c_api_link_manifest.json`. It records the Blink
+commit, package schema/layout, platform, architecture, compiler/toolchain/build
+profile, dynamic link mode, public C header location, DLL/import-library names,
+package-relative runtime sidecars, and optional archive target. Godot should use
+those package-relative fields to verify and copy a vendored package.
+
+To create a zip artifact from an already built runtime package, use:
+
+```powershell
+cmake --build build\cmake-generated-v8-chromium-llvm --target blink_standalone_renderer_c_api_runtime_archive --parallel 8
+```
+
+The archive is written under the build directory's `package/` directory with a
+name containing OS, architecture, compiler, V8 toolchain, and Blink commit. The
+archive and package files remain generated artifacts and must not be committed
+to the source repository.
+
+The static archive remains available for internal/advanced use as:
 
 ```text
 build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_static.lib
@@ -202,7 +231,11 @@ build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_static.li
 
 That static archive is not link-complete by itself on Windows because static
 archives do not fold all transitive static dependencies, and it can conflict
-with the host runtime/STL linkage.
+with the host runtime/STL linkage. Full Godot static linking remains blocked
+until symbol/dependency ownership is solved. OpenGL3/Compatibility explicit GPU
+support also remains blocked until there is a real caller-owned GL/ANGLE
+texture/FBO producer proof; CPU raw output is the fallback for that renderer
+family today.
 
 For static-link evaluation, build the static package target:
 

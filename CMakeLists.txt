@@ -1826,9 +1826,71 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     CACHE PATH
     "Output directory for the embeddable C API DLL/import-library runtime package."
   )
+  execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE BLINK_STANDALONE_PACKAGE_GIT_COMMIT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  if(NOT BLINK_STANDALONE_PACKAGE_GIT_COMMIT)
+    set(BLINK_STANDALONE_PACKAGE_GIT_COMMIT unknown)
+  endif()
+  execute_process(
+    COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE BLINK_STANDALONE_PACKAGE_GIT_COMMIT_SHORT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+  )
+  if(NOT BLINK_STANDALONE_PACKAGE_GIT_COMMIT_SHORT)
+    set(BLINK_STANDALONE_PACKAGE_GIT_COMMIT_SHORT unknown)
+  endif()
+  if(BLINK_STANDALONE_PACKAGE_GIT_COMMIT STREQUAL "unknown" AND
+      EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git/HEAD")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/.git/HEAD"
+      _blink_standalone_git_head)
+    string(STRIP "${_blink_standalone_git_head}"
+      _blink_standalone_git_head)
+    if(_blink_standalone_git_head MATCHES "^ref: (.+)$")
+      set(_blink_standalone_git_ref
+        "${CMAKE_CURRENT_SOURCE_DIR}/.git/${CMAKE_MATCH_1}")
+      if(EXISTS "${_blink_standalone_git_ref}")
+        file(READ "${_blink_standalone_git_ref}"
+          BLINK_STANDALONE_PACKAGE_GIT_COMMIT)
+        string(STRIP "${BLINK_STANDALONE_PACKAGE_GIT_COMMIT}"
+          BLINK_STANDALONE_PACKAGE_GIT_COMMIT)
+      endif()
+    elseif(_blink_standalone_git_head MATCHES "^[0-9a-fA-F]+$")
+      set(BLINK_STANDALONE_PACKAGE_GIT_COMMIT
+        "${_blink_standalone_git_head}")
+    endif()
+    if(NOT BLINK_STANDALONE_PACKAGE_GIT_COMMIT STREQUAL "unknown")
+      string(SUBSTRING "${BLINK_STANDALONE_PACKAGE_GIT_COMMIT}" 0 12
+        BLINK_STANDALONE_PACKAGE_GIT_COMMIT_SHORT)
+    endif()
+  endif()
+  set(BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER
+    ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium/standalone_renderer/include/html_css_renderer/renderer_c_api.h
+  )
+  set(_blink_standalone_package_build_type "${CMAKE_BUILD_TYPE}")
+  if(NOT _blink_standalone_package_build_type)
+    set(_blink_standalone_package_build_type "$<CONFIG>")
+  endif()
+  set(_blink_standalone_package_name_base
+    "blink-standalone-c-api-runtime-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_CXX_COMPILER_ID}-${BLINK_STANDALONE_V8_TOOLCHAIN}-${BLINK_STANDALONE_PACKAGE_GIT_COMMIT_SHORT}"
+  )
+  string(TOLOWER "${_blink_standalone_package_name_base}"
+    _blink_standalone_package_name_base)
+  set(BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE
+    ${CMAKE_BINARY_DIR}/package/${_blink_standalone_package_name_base}.zip
+    CACHE FILEPATH
+    "Zip archive produced from the embeddable C API runtime package."
+  )
   set(_blink_standalone_dawn_d3d12_runtime_sidecars)
   set(_blink_standalone_dawn_d3d12_runtime_copy_commands)
   set(_blink_standalone_dawn_d3d12_runtime_sidecars_json)
+  set(_blink_standalone_dawn_d3d12_runtime_sidecars_package_json)
   if(BLINK_STANDALONE_DAWN_D3D12 AND BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR)
     set(_blink_standalone_dawn_d3d12_sidecar_search_dirs)
     get_filename_component(
@@ -1900,11 +1962,42 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       string(APPEND _blink_standalone_dawn_d3d12_runtime_sidecars_json
         ",\n    \"${_blink_standalone_dawn_sidecar_manifest_path}\""
       )
+      string(APPEND _blink_standalone_dawn_d3d12_runtime_sidecars_package_json
+        ",\n    \"${_blink_standalone_dawn_sidecar}\""
+      )
     endforeach()
   endif()
   set(_blink_standalone_renderer_c_api_link_manifest_content [=[
 {
   "schema_version": 1,
+  "package_schema_version": 1,
+  "blink_commit": "@BLINK_STANDALONE_PACKAGE_GIT_COMMIT@",
+  "package_layout_version": 1,
+  "package_target": "blink_standalone_renderer_c_api_runtime_package",
+  "package_archive_target": "blink_standalone_renderer_c_api_runtime_archive",
+  "package_archive": "@BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE@",
+  "platform": {
+    "os": "@CMAKE_SYSTEM_NAME@",
+    "arch": "@CMAKE_SYSTEM_PROCESSOR@"
+  },
+  "build": {
+    "build_type": "@_blink_standalone_package_build_type@",
+    "compiler": "@CMAKE_CXX_COMPILER_ID@",
+    "compiler_version": "@CMAKE_CXX_COMPILER_VERSION@",
+    "toolchain": "@BLINK_STANDALONE_V8_TOOLCHAIN@",
+    "profile": "@BLINK_STANDALONE_V8_TOOLCHAIN@-@CMAKE_CXX_COMPILER_ID@-@_blink_standalone_package_build_type@"
+  },
+  "link_mode": "dynamic",
+  "link_kind": "shared_library",
+  "public_header": {
+    "package_relative": "include/html_css_renderer/renderer_c_api.h",
+    "source": "@BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER@",
+    "version": "unversioned-c-abi"
+  },
+  "artifacts": {
+    "dll": "$<TARGET_FILE_NAME:blink_standalone_renderer_c_api_dll>",
+    "import_library": "$<TARGET_LINKER_FILE_NAME:blink_standalone_renderer_c_api_dll>"
+  },
   "recommended_target": "blink_standalone_renderer_c_api_dll",
   "recommended_artifact": "$<TARGET_FILE:blink_standalone_renderer_c_api_dll>",
   "recommended_import_library": "$<TARGET_LINKER_FILE:blink_standalone_renderer_c_api_dll>",
@@ -1920,6 +2013,20 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "$<TARGET_FILE:blink_angle_libEGL>",
     "$<TARGET_FILE:blink_angle_libGLESv2>",
     "@BLINK_STANDALONE_ICU_DATA_FILE@"@_blink_standalone_dawn_d3d12_runtime_sidecars_json@
+  ],
+  "runtime_sidecars_package_relative": [
+    "$<TARGET_FILE_NAME:blink_angle_libEGL>",
+    "$<TARGET_FILE_NAME:blink_angle_libGLESv2>",
+    "icudtl.dat"@_blink_standalone_dawn_d3d12_runtime_sidecars_package_json@
+  ],
+  "package_files": [
+    "$<TARGET_FILE_NAME:blink_standalone_renderer_c_api_dll>",
+    "$<TARGET_LINKER_FILE_NAME:blink_standalone_renderer_c_api_dll>",
+    "$<TARGET_FILE_NAME:blink_angle_libEGL>",
+    "$<TARGET_FILE_NAME:blink_angle_libGLESv2>",
+    "icudtl.dat",
+    "blink_standalone_renderer_c_api_link_manifest.json",
+    "include/html_css_renderer/renderer_c_api.h"@_blink_standalone_dawn_d3d12_runtime_sidecars_package_json@
   ],
   "third_party_targets": [
     "freetype",
@@ -1977,6 +2084,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       blink_angle_libGLESv2
     COMMAND ${CMAKE_COMMAND} -E make_directory
       "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/include/html_css_renderer"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "$<TARGET_FILE:blink_standalone_renderer_c_api_dll>"
       "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api_dll>"
@@ -1995,9 +2104,25 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_RENDERER_C_API_LINK_MANIFEST}"
       "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/blink_standalone_renderer_c_api_link_manifest.json"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER}"
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}/include/html_css_renderer/renderer_c_api.h"
     ${_blink_standalone_dawn_d3d12_runtime_copy_commands}
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API runtime package: ${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
+  )
+  add_custom_target(blink_standalone_renderer_c_api_runtime_archive
+    DEPENDS blink_standalone_renderer_c_api_runtime_package
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE}"
+    COMMAND ${CMAKE_COMMAND} -E tar cf
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE}"
+      --format=zip
+      .
+    WORKING_DIRECTORY
+      "${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_PACKAGE_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E echo
+      "C API runtime archive: ${BLINK_STANDALONE_RENDERER_C_API_RUNTIME_ARCHIVE}"
   )
   if(BLINK_STANDALONE_BUILD_SDL_VIEWER AND BLINK_STANDALONE_SDL3_TARGET)
     add_executable(blink_standalone_sdl_viewer_skia

@@ -302,6 +302,28 @@ It contains the DLL, import library, ANGLE sidecars, ICU data, and link manifest
 needed by external hosts. See `docs/SELF_BUILD_DEPENDENCIES.md` for the full
 self-build and package details.
 
+The runtime package manifest is
+`blink_standalone_renderer_c_api_link_manifest.json`. It is JSON and includes
+the Blink commit used to build the package, package schema/layout versions,
+platform, architecture, compiler/toolchain/build profile, link mode, public
+header location, DLL/import-library names, package-relative sidecars, and the
+package/archive target names. Godot and other embedders should validate and copy
+files from the package-relative fields instead of guessing sidecars.
+
+The package target also copies the public C header to:
+
+```text
+package/c_api_runtime/include/html_css_renderer/renderer_c_api.h
+```
+
+An optional deterministic archive target packages the runtime directory:
+
+```powershell
+cmake --build <build-dir> --target blink_standalone_renderer_c_api_runtime_archive
+```
+
+The archive is generated under `<build-dir>/package/` and is not committed.
+
 ## Validation Smokes
 
 The benchmark executable exposes focused C API smokes for embedder regressions:
