@@ -217,7 +217,21 @@ def ensure_git_work_copy(source_root: Path, work_copy_root: Path, commit: str, l
             str(work_copy_root),
         ])
     elif not (work_copy_root / ".git").exists():
-        raise RuntimeError(f"{label} work copy exists but is not a git checkout: {work_copy_root}")
+        # Ninja creates parent directories for declared outputs before running
+        # this script. For V8, that can leave a generated src/v8 shell with only
+        # output/dependency subdirectories, which must not block the real clone.
+        if any(child.name not in {"out", "third_party"} for child in work_copy_root.iterdir()):
+            raise RuntimeError(f"{label} work copy exists but is not a git checkout: {work_copy_root}")
+        shutil.rmtree(work_copy_root)
+        work_copy_root.parent.mkdir(parents=True, exist_ok=True)
+        run([
+            "git",
+            "clone",
+            "--shared",
+            "--no-checkout",
+            str(source_root),
+            str(work_copy_root),
+        ])
 
     run(["git", "-C", str(work_copy_root), "remote", "set-url", "origin", str(source_root)])
     run(["git", "-C", str(work_copy_root), "fetch", "origin", commit, "--depth=1"])
