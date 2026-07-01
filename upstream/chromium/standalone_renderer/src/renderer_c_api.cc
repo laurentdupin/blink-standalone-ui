@@ -1015,6 +1015,7 @@ blink_standalone_status_code_t AdvanceGpuFrameForBackend(
     input.resource_provider_changed = true;
   }
   input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  input.request_backdrop_filter_regions = true;
   input.mouse_events = std::move(renderer->pending_mouse_events);
   input.keyboard_events = std::move(renderer->pending_keyboard_events);
   input.dom_mutations = std::move(renderer->pending_dom_mutations);
@@ -1248,6 +1249,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   input.timeline_time_seconds = timeline_time_seconds;
   input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  input.request_backdrop_filter_regions = true;
   input.mouse_events = std::move(renderer->pending_mouse_events);
   input.keyboard_events = std::move(renderer->pending_keyboard_events);
   input.dom_mutations = std::move(renderer->pending_dom_mutations);

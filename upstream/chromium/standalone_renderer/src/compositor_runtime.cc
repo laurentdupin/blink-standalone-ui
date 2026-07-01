@@ -71,6 +71,8 @@ void StandaloneBlinkLiveFrameBridgeSetFullPaintArtifactAuditForStandaloneRendere
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
     int enabled);
+void StandaloneBlinkLiveFrameBridgeSetBackdropFilterMetadataForStandaloneRenderer(
+    int enabled);
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(
     int enabled);
 void StandaloneBlinkLiveFrameBridgeSetLifecycleStopForStandaloneRenderer(
@@ -1290,8 +1292,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         input.request_gpu_frame || input.request_vulkan_gpu_frame ||
         input.request_d3d12_gpu_frame ||
         input.result_collection == FrameResultCollection::kFull;
+    const bool collect_backdrop_filter_regions =
+        collect_full_result || input.request_backdrop_filter_regions;
     probe::StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
         collect_full_result ? 1 : 0);
+    probe::StandaloneBlinkLiveFrameBridgeSetBackdropFilterMetadataForStandaloneRenderer(
+        collect_backdrop_filter_regions ? 1 : 0);
     probe::StandaloneBlinkLiveFrameBridgeSetTransparentBackgroundForStandaloneRenderer(
         transparent_background_ ? 1 : 0);
     std::vector<Stylesheet> effective_stylesheets = snapshot_.stylesheets;
@@ -1498,9 +1504,11 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
 
     ImportHitTestEntries(probe_html, result);
+    if (collect_backdrop_filter_regions) {
+      ImportBackdropFilterRegions(probe_html, result);
+    }
     if (collect_full_result) {
       ImportFormControlEntries(probe_html, result);
-      ImportBackdropFilterRegions(probe_html, result);
       ImportScrollableElementEntries(probe_html, result);
       CopyRawAudit(probe_html, result);
     }
@@ -1893,7 +1901,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (input.result_collection == FrameResultCollection::kMinimal) {
       result.raw_paint_artifact_audit_json.clear();
       result.form_control_entries.clear();
-      result.backdrop_filter_regions.clear();
+      if (!input.request_backdrop_filter_regions) {
+        result.backdrop_filter_regions.clear();
+      }
       result.scrollable_element_entries.clear();
       result.diagnostics.clear();
     }

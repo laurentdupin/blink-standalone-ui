@@ -6356,6 +6356,7 @@ struct LiveFramePaintProbeCache {
   bool timing_rebuilt_for_attributes = false;
   bool full_paint_artifact_audit = false;
   bool collect_frame_diagnostics = true;
+  bool collect_backdrop_filter_metadata = true;
   bool trace_stages = false;
   std::string lifecycle_stop;
   ImageReachabilityDiagnostics image_reachability;
@@ -17117,7 +17118,8 @@ LiveFramePaintProbeResult RunLiveFramePaintProbe(const char* body_html) {
   result.display_item_count =
       static_cast<int>(artifact.GetDisplayItemList().size());
   TraceLiveFrameProbeStage("after display item count");
-  if (cache.collect_frame_diagnostics) {
+  if (cache.collect_frame_diagnostics ||
+      cache.collect_backdrop_filter_metadata) {
     CollectBackdropFilterRegionsForStandaloneRenderer(
         artifact, cache.backdrop_filter_regions);
   } else {
@@ -18150,6 +18152,18 @@ void StandaloneBlinkLiveFrameBridgeSetFrameDiagnosticsForStandaloneRenderer(
   cache.finer_cache_units_by_chunk.clear();
   cache.artifact_audit_lines.clear();
   cache.raw_paint_artifact_audit_json.clear();
+}
+
+void StandaloneBlinkLiveFrameBridgeSetBackdropFilterMetadataForStandaloneRenderer(
+    int enabled) {
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  const bool value = enabled != 0;
+  if (cache.collect_backdrop_filter_metadata == value) {
+    return;
+  }
+  cache.collect_backdrop_filter_metadata = value;
+  cache.initialized = false;
+  cache.backdrop_filter_regions.clear();
 }
 
 void StandaloneBlinkLiveFrameBridgeSetTraceStagesForStandaloneRenderer(

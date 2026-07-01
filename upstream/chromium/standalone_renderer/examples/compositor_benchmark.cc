@@ -236,6 +236,7 @@ void PrintUsage() {
       "[--c-api-backdrop-filter-region-smoke] "
       "[--c-api-backdrop-filter-rounded-smoke] "
       "[--c-api-backdrop-filter-chain-smoke] "
+      "[--c-api-backdrop-filter-blur-compare-smoke] "
       "[--c-api-backdrop-filter-unsupported-smoke] "
       "[--c-api-separated-click-smoke] "
       "[--c-api-frame-scheduling-smoke] "
@@ -6530,6 +6531,174 @@ int RunCApiBackdropFilterChainSmoke() {
   return 0;
 }
 
+int RunCApiBackdropFilterBlurCompareSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 1280;
+  config.height = 720;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_blur_compare_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    return 1;
+  }
+
+  const char* html =
+      "<!doctype html><html><head><style>"
+      "html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;"
+      "background:transparent;color:white;font:16px Arial,sans-serif}"
+      ".panel{position:absolute;border-radius:18px;"
+      "background:rgba(255,255,255,.24);border:1px solid rgba(255,255,255,.5);"
+      "box-shadow:0 12px 32px rgba(0,0,0,.22);padding:18px}"
+      ".backdrop-panel{left:72px;top:64px;width:420px;height:180px;"
+      "backdrop-filter:blur(12px) saturate(180%) brightness(1.08) "
+      "hue-rotate(30deg);-webkit-backdrop-filter:blur(12px) saturate(180%) "
+      "brightness(1.08) hue-rotate(30deg)}"
+      ".chip{position:absolute;width:190px;height:72px;border-radius:14px;"
+      "background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.45)}"
+      ".brightness{left:92px;top:310px;backdrop-filter:brightness(1.35);"
+      "-webkit-backdrop-filter:brightness(1.35)}"
+      ".contrast{left:320px;top:310px;backdrop-filter:contrast(1.55);"
+      "-webkit-backdrop-filter:contrast(1.55)}"
+      ".saturate{left:548px;top:310px;backdrop-filter:saturate(2.0);"
+      "-webkit-backdrop-filter:saturate(2.0)}"
+      ".grayscale{left:92px;top:420px;backdrop-filter:grayscale(1);"
+      "-webkit-backdrop-filter:grayscale(1)}"
+      ".sepia{left:320px;top:420px;backdrop-filter:sepia(.85);"
+      "-webkit-backdrop-filter:sepia(.85)}"
+      ".invert{left:548px;top:420px;backdrop-filter:invert(.75);"
+      "-webkit-backdrop-filter:invert(.75)}"
+      ".huerotate{left:776px;top:420px;backdrop-filter:hue-rotate(110deg);"
+      "-webkit-backdrop-filter:hue-rotate(110deg)}"
+      "</style></head><body>"
+      "<section id='main' class='panel backdrop-panel'>Backdrop panel</section>"
+      "<div id='brightness' class='chip brightness'></div>"
+      "<div id='contrast' class='chip contrast'></div>"
+      "<div id='saturate' class='chip saturate'></div>"
+      "<div id='grayscale' class='chip grayscale'></div>"
+      "<div id='sepia' class='chip sepia'></div>"
+      "<div id='invert' class='chip invert'></div>"
+      "<div id='huerotate' class='chip huerotate'></div>"
+      "</body></html>";
+
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_blur_compare_smoke: set html failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_update_result_t update = {};
+  status = blink_standalone_renderer_update(renderer, 0.0, &update);
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_blur_compare_smoke: update failed "
+                 "status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  const size_t count =
+      blink_standalone_renderer_backdrop_filter_region_count(renderer);
+  bool saw_chain = false;
+  bool saw_brightness = false;
+  bool saw_contrast = false;
+  bool saw_saturate = false;
+  bool saw_grayscale = false;
+  bool saw_sepia = false;
+  bool saw_invert = false;
+  bool saw_huerotate = false;
+  for (size_t i = 0; i < count; ++i) {
+    blink_standalone_backdrop_filter_region_t region = {};
+    if (blink_standalone_renderer_get_backdrop_filter_region(renderer, i,
+                                                             &region) !=
+        BLINK_STANDALONE_STATUS_OK) {
+      continue;
+    }
+    if (region.bounds.width <= 0.0f || region.bounds.height <= 0.0f) {
+      continue;
+    }
+    for (uint32_t op = 0; op < region.filter_op_count; ++op) {
+      const auto& filter_op = region.filter_ops[op];
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_BRIGHTNESS &&
+          std::abs(filter_op.amount - 1.35f) < 0.05f) {
+        saw_brightness = true;
+      }
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_CONTRAST &&
+          std::abs(filter_op.amount - 1.55f) < 0.05f) {
+        saw_contrast = true;
+      }
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_SATURATE &&
+          std::abs(filter_op.amount - 2.0f) < 0.05f) {
+        saw_saturate = true;
+      }
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_GRAYSCALE &&
+          std::abs(filter_op.amount - 1.0f) < 0.05f) {
+        saw_grayscale = true;
+      }
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_SEPIA &&
+          std::abs(filter_op.amount - 0.85f) < 0.05f) {
+        saw_sepia = true;
+      }
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_INVERT &&
+          std::abs(filter_op.amount - 0.75f) < 0.05f) {
+        saw_invert = true;
+      }
+      if (filter_op.type == BLINK_STANDALONE_BACKDROP_FILTER_OP_HUE_ROTATE &&
+          std::abs(filter_op.amount - 110.0f) < 0.5f) {
+        saw_huerotate = true;
+      }
+    }
+    if (region.filter_op_count == 4 &&
+        region.filter_ops[0].type == BLINK_STANDALONE_BACKDROP_FILTER_OP_BLUR &&
+        region.filter_ops[1].type ==
+            BLINK_STANDALONE_BACKDROP_FILTER_OP_SATURATE &&
+        region.filter_ops[2].type ==
+            BLINK_STANDALONE_BACKDROP_FILTER_OP_BRIGHTNESS &&
+        region.filter_ops[3].type ==
+            BLINK_STANDALONE_BACKDROP_FILTER_OP_HUE_ROTATE &&
+        std::abs(region.filter_ops[0].amount - 12.0f) < 0.25f &&
+        std::abs(region.filter_ops[1].amount - 1.8f) < 0.05f &&
+        std::abs(region.filter_ops[2].amount - 1.08f) < 0.03f &&
+        std::abs(region.filter_ops[3].amount - 30.0f) < 0.5f) {
+      saw_chain = true;
+    }
+  }
+
+  if (count < 8 || !saw_chain || !saw_brightness || !saw_contrast ||
+      !saw_saturate || !saw_grayscale || !saw_sepia || !saw_invert ||
+      !saw_huerotate) {
+    std::fprintf(stderr,
+                 "c_api_backdrop_filter_blur_compare_smoke: invalid "
+                 "update_frame=%d update_needs_output=%d regions=%zu chain=%d "
+                 "brightness=%d contrast=%d saturate=%d grayscale=%d "
+                 "sepia=%d invert=%d huerotate=%d error=%s\n",
+                 update.frame_advanced, update.needs_output, count,
+                 saw_chain ? 1 : 0, saw_brightness ? 1 : 0,
+                 saw_contrast ? 1 : 0, saw_saturate ? 1 : 0,
+                 saw_grayscale ? 1 : 0, saw_sepia ? 1 : 0,
+                 saw_invert ? 1 : 0, saw_huerotate ? 1 : 0,
+                 blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+
+  blink_standalone_renderer_destroy(renderer);
+  std::printf(
+      "c_api_backdrop_filter_blur_compare_smoke: ok regions=%zu "
+      "update_frame=%d update_needs_output=%d\n",
+      count, update.frame_advanced, update.needs_output);
+  return 0;
+}
+
 int RunCApiBackdropFilterUnsupportedSmoke() {
   blink_standalone_renderer_config_t config = {};
   config.width = 240;
@@ -10344,6 +10513,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-backdrop-filter-region-smoke" ||
         arg == "--c-api-backdrop-filter-rounded-smoke" ||
         arg == "--c-api-backdrop-filter-chain-smoke" ||
+        arg == "--c-api-backdrop-filter-blur-compare-smoke" ||
         arg == "--c-api-backdrop-filter-unsupported-smoke" ||
         arg == "--c-api-vulkan-external-target-large-smoke" ||
         arg == "--c-api-vulkan-external-target-resize-smoke" ||
@@ -10460,6 +10630,7 @@ int main(int argc, char** argv) {
   bool c_api_backdrop_filter_region_smoke = false;
   bool c_api_backdrop_filter_rounded_smoke = false;
   bool c_api_backdrop_filter_chain_smoke = false;
+  bool c_api_backdrop_filter_blur_compare_smoke = false;
   bool c_api_backdrop_filter_unsupported_smoke = false;
   bool c_api_separated_click_smoke = false;
   bool c_api_frame_scheduling_smoke = false;
@@ -10685,6 +10856,8 @@ int main(int argc, char** argv) {
       c_api_backdrop_filter_rounded_smoke = true;
     } else if (arg == "--c-api-backdrop-filter-chain-smoke") {
       c_api_backdrop_filter_chain_smoke = true;
+    } else if (arg == "--c-api-backdrop-filter-blur-compare-smoke") {
+      c_api_backdrop_filter_blur_compare_smoke = true;
     } else if (arg == "--c-api-backdrop-filter-unsupported-smoke") {
       c_api_backdrop_filter_unsupported_smoke = true;
     } else if (arg == "--c-api-separated-click-smoke") {
@@ -11012,6 +11185,10 @@ int main(int argc, char** argv) {
 
   if (c_api_backdrop_filter_chain_smoke) {
     return RunCApiBackdropFilterChainSmoke();
+  }
+
+  if (c_api_backdrop_filter_blur_compare_smoke) {
+    return RunCApiBackdropFilterBlurCompareSmoke();
   }
 
   if (c_api_backdrop_filter_unsupported_smoke) {
