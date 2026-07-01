@@ -69,8 +69,7 @@
         "BLINK_STANDALONE_V8_COMPAT_JOBS": "8"
       },
       "environment": {
-        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0",
-        "VCPKG_ROOT": "C:/vcpkg"
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0"
       }
     },
     {
@@ -183,8 +182,7 @@
         "blink_standalone_v8_compat"
       ],
       "environment": {
-        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0",
-        "VCPKG_ROOT": "C:/vcpkg"
+        "DEPOT_TOOLS_WIN_TOOLCHAIN": "0"
       },
       "jobs": 8
     },
