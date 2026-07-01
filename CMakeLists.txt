@@ -2183,6 +2183,22 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   "link_kind": "static_library",
   "package_kind": "static_c_api_with_runtime_sidecars",
   "static_link_complete_by_itself": false,
+  "full_host_static_link_supported": false,
+  "full_host_static_link_blocker": "monolithic_renderer_archive_exports_chromium_third_party_symbols",
+  "symbol_ownership": {
+    "model": "blink_bundled_third_party_symbols_are_public_in_static_archive",
+    "collision_risk": "known",
+    "product_supported": false,
+    "duplicate_prone_families": [
+      "libpng",
+      "icu",
+      "zlib",
+      "vulkan_memory_allocator",
+      "abseil",
+      "chromium_libcxx"
+    ],
+    "required_resolution": "private/prefixed Blink third-party symbols or a validated dependency ownership split before full host/editor static linking is supported"
+  },
   "status": "raw_output_link_proof_passed",
   "crt": {
     "msvc_runtime_library": "MultiThreaded",
@@ -2251,6 +2267,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   ],
   "known_hazards": [
     "This static package is validated by isolated external probes first; full Godot editor/export static linking can still expose duplicate host/Blink third-party symbols until dependency ownership or symbol isolation is solved.",
+    "The renderer static archive currently contains globally named Chromium/Skia/V8-adjacent third-party objects. Full host binaries that already link libpng, ICU, zlib, VMA, Abseil, or Chromium libc++-style symbols can fail with LNK2005/LNK1169 even without /WHOLEARCHIVE.",
     "The static C API archive must be whole-archived on MSVC, but v8_monolith.lib must not be whole-archived.",
     "ANGLE remains deployed as libEGL/libGLESv2 runtime sidecars in this package.",
     "icudtl.dat remains a required runtime data sidecar."

@@ -258,10 +258,12 @@ build/cmake-generated-v8-chromium-llvm/blink_standalone_renderer_c_api_static.li
 That static archive is not link-complete by itself on Windows because static
 archives do not fold all transitive static dependencies, and it can conflict
 with the host runtime/STL linkage. Full Godot static linking remains blocked
-until symbol/dependency ownership is solved. OpenGL3/Compatibility explicit GPU
-support also remains blocked until there is a real caller-owned GL/ANGLE
-texture/FBO producer proof; CPU raw output is the fallback for that renderer
-family today.
+until symbol/dependency ownership is solved; the static manifest reports this as
+`full_host_static_link_supported: false` with blocker
+`monolithic_renderer_archive_exports_chromium_third_party_symbols`.
+OpenGL3/Compatibility explicit GPU support also remains blocked until there is a
+real caller-owned GL/ANGLE texture/FBO producer proof; CPU raw output is the
+fallback for that renderer family today.
 
 For static-link evaluation, build the static package target for the selected
 configuration:

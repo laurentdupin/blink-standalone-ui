@@ -39,6 +39,12 @@ objects into one archive, including libpng, ICU, zlib, VMA, and Abseil-style
 global symbols that Godot can also own. Do not use `/FORCE:MULTIPLE` as product
 behavior; it is diagnostic only.
 
+The static manifest therefore reports `full_host_static_link_supported: false`
+and `full_host_static_link_blocker:
+monolithic_renderer_archive_exports_chromium_third_party_symbols`. The isolated
+static probes validate package metadata and the C ABI, but they do not prove
+that the full Godot editor/export binary can safely link the archive.
+
 ## Required Package Contract
 
 A supported static package must enumerate:
@@ -92,6 +98,32 @@ expects:
   ownership split before it can be considered product-supported. The isolated
   static probe is necessary package validation, not proof that the full Godot
   binary can safely consume the archive.
+
+## Full Host Static Link Blocker
+
+The current monolithic archive is collision-prone by construction. It contains
+object files that define globally visible third-party symbols such as libpng
+`png_*`, ICU `u_*`/`icu_*`, VMA `vma*`, Chromium zlib `Cr_z_*`, Abseil, and
+Chromium libc++-style symbols. A full host like Godot can already define some of
+those families before Blink is linked, so normal archive member extraction is
+enough to produce `LNK2005`; removing broad `/WHOLEARCHIVE` does not solve the
+underlying ownership collision.
+
+The preferred product fix is symbol isolation for Blink-owned third-party
+dependencies in the static package. Candidate work:
+
+- build Blink's bundled libpng/zlib/ICU/VMA/Abseil-facing objects with private
+  symbol prefixes or private namespaces where the upstream dependency supports
+  that;
+- keep V8, Skia, Blink, Dawn, ANGLE, and ICU data coupled to the exact
+  dependency revisions and defines they were built with;
+- update the static manifest to report private/renamed third-party ownership
+  only after a full Godot editor/export link and the isolated static probes pass.
+
+A granular dependency split is only safe if each dependency is proven
+ABI/config-compatible with Chromium/Skia/V8 expectations. Reusing Godot-owned
+ICU, libpng, zlib, VMA, or Abseil by default is high risk and is not currently a
+supported package contract.
 
 ## Milestones
 
