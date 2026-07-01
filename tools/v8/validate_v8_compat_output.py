@@ -21,6 +21,17 @@ def read_object_names(path: Path) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--monolith-lib", required=True, type=Path)
+    parser.add_argument(
+        "--toolchain",
+        choices=("chromium-clang", "msvc"),
+        default="chromium-clang",
+        help="V8 compatibility toolchain used for the generated output.",
+    )
+    parser.add_argument(
+        "--v8-include-dir",
+        type=Path,
+        help="Generated V8 public include root used by renderer compilation.",
+    )
     parser.add_argument("--libcxx-object-dir", type=Path)
     parser.add_argument("--object-list", type=Path)
     parser.add_argument(
@@ -39,6 +50,43 @@ def main() -> int:
     missing: list[Path] = []
     if not args.monolith_lib.is_file():
         missing.append(args.monolith_lib)
+
+    if args.toolchain == "msvc":
+        if not args.v8_include_dir:
+            missing.append(Path("<missing --v8-include-dir>"))
+        else:
+            cppgc_heap_header = args.v8_include_dir / "cppgc" / "heap.h"
+            if not cppgc_heap_header.is_file():
+                missing.append(cppgc_heap_header)
+            else:
+                cppgc_heap_text = cppgc_heap_header.read_text(
+                    encoding="utf-8", errors="replace"
+                )
+                has_msvc_stack_marker = "_AddressOfReturnAddress" in cppgc_heap_text
+                has_raw_builtin_stack_marker = (
+                    "__builtin_frame_address" in cppgc_heap_text
+                    and "_AddressOfReturnAddress" not in cppgc_heap_text
+                )
+                if not has_msvc_stack_marker or has_raw_builtin_stack_marker:
+                    print(
+                        "V8/CppGC compatibility public headers are not "
+                        "MSVC-patched.",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "Expected cppgc/heap.h to use _AddressOfReturnAddress() "
+                        "for native cl.exe; found an unpatched header at:",
+                        file=sys.stderr,
+                    )
+                    print(f"  {cppgc_heap_header}", file=sys.stderr)
+                    print(
+                        "Configure with BLINK_STANDALONE_V8_COMPAT_ACTION=prepare "
+                        "or build so the V8 MSVC patch queue is applied, or point "
+                        "BLINK_STANDALONE_V8_INCLUDE_DIR at a prepared MSVC V8 "
+                        "compatibility work copy.",
+                        file=sys.stderr,
+                    )
+                    return 1
 
     object_names: list[str] = []
     if args.libcxx_object_dir or args.object_list:

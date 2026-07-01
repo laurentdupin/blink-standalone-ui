@@ -346,12 +346,22 @@ def reset_existing_msvc_v8_patch_roots(v8_work_root: Path) -> None:
             reset_patch_root(patch_root)
 
 
-def apply_msvc_v8_patches(v8_work_root: Path) -> None:
+def apply_msvc_v8_patches(v8_work_root: Path, *, allow_missing_dependency_roots: bool = False) -> None:
     # Keep all native-MSVC V8 edits outside the pinned source submodule. The
     # generated work copy is reset, then each patch is checked against an MD5
     # before/after manifest so a V8 revision drift fails before compilation.
     for relative_root, patch_name in MSVC_V8_PATCHES:
         patch_root = v8_work_root if relative_root == "." else v8_work_root / relative_root
+        if (
+            allow_missing_dependency_roots
+            and relative_root != "."
+            and not (patch_root / ".git").exists()
+        ):
+            print(
+                f"skipping {patch_name}: dependency checkout is not present in no-sync prepare mode: {patch_root}",
+                flush=True,
+            )
+            continue
         reset_patch_root(patch_root)
         apply_verified_patch(
             patch_root,
@@ -570,7 +580,10 @@ def main(argv: Iterable[str]) -> int:
         )
 
     if args.toolchain == "msvc":
-        apply_msvc_v8_patches(v8_work_root)
+        apply_msvc_v8_patches(
+            v8_work_root,
+            allow_missing_dependency_roots=args.action == "prepare" and not args.sync_deps,
+        )
 
     write_file(out_dir / "args.gn", gn_args_text(args.toolchain, args.clang_base_path))
     if args.action == "prepare":

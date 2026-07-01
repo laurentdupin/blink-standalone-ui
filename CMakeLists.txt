@@ -662,6 +662,11 @@ if(_blink_standalone_v8_compat_action STREQUAL "" OR
    _blink_standalone_v8_compat_action STREQUAL "auto")
   if(BLINK_STANDALONE_V8_COMPAT_BUILD)
     set(_blink_standalone_v8_compat_action build)
+  elseif(BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc")
+    # Native cl.exe compiles renderer objects against the generated V8 public
+    # headers, so the V8 MSVC patch queue must be applied even when reusing an
+    # existing v8_monolith.lib.
+    set(_blink_standalone_v8_compat_action prepare)
   else()
     set(_blink_standalone_v8_compat_action plan)
   endif()
@@ -726,6 +731,8 @@ if(WIN32)
     ${Python3_EXECUTABLE}
     ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/validate_v8_compat_output.py
     --monolith-lib ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+    --toolchain ${BLINK_STANDALONE_V8_TOOLCHAIN}
+    --v8-include-dir ${BLINK_STANDALONE_V8_INCLUDE_DIR}
   )
   add_library(blink_standalone_chromium_libcxx INTERFACE)
   if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
