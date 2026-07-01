@@ -122,3 +122,9 @@ static probe is run from `upstream/chromium/standalone_renderer/tools/static_pac
 The package remains a "static C API package with runtime sidecars", not a
 fully sidecar-free static renderer. OpenGL3 remains unsupported because no
 caller-owned GL/ANGLE texture or FBO producer proof exists.
+
+For seamless Godot builds, consume the promoted static package archive under
+`prebuilt/windows-x86_64-msvc-static/` rather than generating V8 or the static
+package during the normal Godot build. The extracted package manifest is the
+authoritative link contract; the unpacked package directory remains generated
+output.

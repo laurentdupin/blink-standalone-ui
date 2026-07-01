@@ -235,6 +235,20 @@ should extract the archive into their own generated build/cache directory, read
 the included manifest, verify the Blink commit and package metadata, and copy
 the package-relative runtime files from that extracted directory.
 
+The same promotion model applies to static C API packages. A static package
+archive intended for seamless Godot builds lives under a separate platform and
+toolchain directory, for example:
+
+```text
+prebuilt/windows-x86_64-msvc-static/blink-standalone-c-api-static-windows-amd64-msvc-msvc-<commit>.zip
+```
+
+That archive contains `package/c_api_static` contents: the package-relative
+static manifest, public C API header, static/import libraries, and remaining
+runtime sidecars. Normal Godot builds should consume this archive rather than
+running `BLINK_STANDALONE_V8_COMPAT_ACTION=build`; generating V8 locally remains
+a maintainer package-production step.
+
 The static archive remains available for internal/advanced use as:
 
 ```text
