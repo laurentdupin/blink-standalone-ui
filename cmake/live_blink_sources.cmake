@@ -243,6 +243,8 @@ set(BLINK_STANDALONE_LIVE_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_core_initializer_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_empty_clients_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/live_link_boundary_stubs.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_text_encoding_detector_stub.cc
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/viz_debug_capture_stub.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_native_theme.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/standalone_svg_element_resource_support.cc
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/typeface_resource_registry.cc

@@ -136,6 +136,7 @@ list(APPEND BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES
 set(BLINK_STANDALONE_ANGLE_SPIRV_SOURCES
   ${BLINK_STANDALONE_ANGLE_SRC}/common/spirv/spirv_instruction_builder_autogen.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/spirv/spirv_instruction_parser_autogen.cpp
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/angle_spirv_validate_stub.cc
   ${BLINK_STANDALONE_ANGLE_SRC}/compiler/translator/spirv/BuildSPIRV.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/compiler/translator/spirv/BuiltinsWorkaround.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/compiler/translator/spirv/OutputSPIRV.cpp
@@ -170,6 +171,7 @@ set(BLINK_STANDALONE_ANGLE_LIBGLESV2_SOURCES
 )
 
 set(BLINK_STANDALONE_ANGLE_LIBEGL_SOURCES
+  ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/angle_egl_log_stub.cc
   ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win32.cpp
