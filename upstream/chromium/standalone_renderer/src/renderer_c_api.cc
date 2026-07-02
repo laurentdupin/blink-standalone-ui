@@ -1040,6 +1040,63 @@ bool FrameResultHasPublicFrameMetadata(
          result.backdrop_filter_metadata_collected;
 }
 
+uint32_t LatestPhysicalWidth(const blink_standalone_renderer* renderer) {
+  if (renderer->latest_result.viz_display_output_size.width > 0) {
+    return static_cast<uint32_t>(
+        renderer->latest_result.viz_display_output_size.width);
+  }
+  return static_cast<uint32_t>(
+      std::max(0.0f, renderer->viewport.width * renderer->device_scale_factor));
+}
+
+uint32_t LatestPhysicalHeight(const blink_standalone_renderer* renderer) {
+  if (renderer->latest_result.viz_display_output_size.height > 0) {
+    return static_cast<uint32_t>(
+        renderer->latest_result.viz_display_output_size.height);
+  }
+  return static_cast<uint32_t>(
+      std::max(0.0f,
+               renderer->viewport.height * renderer->device_scale_factor));
+}
+
+void PopulateGpuFrameState(const blink_standalone_renderer* renderer,
+                           blink_standalone_gpu_render_result_t* result) {
+  result->needs_output = renderer->latest_result.needs_output ? 1 : 0;
+  result->frame_advanced =
+      renderer->latest_result.frame_advanced ? 1 : 0;
+  result->frame_skipped_due_to_no_demand =
+      renderer->latest_result.frame_skipped_due_to_no_demand ? 1 : 0;
+  result->full_frame_damage = result->needs_output ? 1 : 0;
+  result->dirty_rect_count = 0;
+  result->physical_width = LatestPhysicalWidth(renderer);
+  result->physical_height = LatestPhysicalHeight(renderer);
+  result->frame_generation = renderer->gpu_backdrop_frame_generation;
+}
+
+bool CanSkipCleanGpuRender(
+    const blink_standalone_renderer* renderer,
+    const blink_standalone_external_gpu_target_t* target) {
+  if ((target->common.flags & BLINK_STANDALONE_GPU_TARGET_SKIP_IF_CLEAN) == 0) {
+    return false;
+  }
+  if (HasPendingFrameInput(renderer) || renderer->gpu_prepare_required_after_update ||
+      renderer->gpu_source_frame_pending || renderer->latest_result.needs_output) {
+    return false;
+  }
+  if (renderer->latest_result.viz_display_output_size.width <= 0 ||
+      renderer->latest_result.viz_display_output_size.height <= 0) {
+    return false;
+  }
+  const uint32_t target_width =
+      target->common.physical_width ? target->common.physical_width
+                                    : LatestPhysicalWidth(renderer);
+  const uint32_t target_height =
+      target->common.physical_height ? target->common.physical_height
+                                     : LatestPhysicalHeight(renderer);
+  return LatestPhysicalWidth(renderer) == target_width &&
+         LatestPhysicalHeight(renderer) == target_height;
+}
+
 void RefreshPublicFrameMetadata(blink_standalone_renderer* renderer) {
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
@@ -1542,6 +1599,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->width = target->common.physical_width;
   result->height = target->common.physical_height;
   result->pixel_format = target->common.pixel_format;
+  PopulateGpuFrameState(renderer, result);
   const uint32_t capabilities =
       blink_standalone_renderer_gpu_backend_capabilities(renderer, backend);
   if ((capabilities & BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE) == 0) {
@@ -1577,6 +1635,15 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "render_to_gpu_target failed: external native target handles are not "
         "accepted by this experimental build; use the internal stand-in smoke "
         "or wait for embedder handle adoption");
+  }
+  if (CanSkipCleanGpuRender(renderer, target)) {
+    result->status = BLINK_STANDALONE_STATUS_OK;
+    result->target_written = 0;
+    result->needs_output = 0;
+    result->frame_advanced = 0;
+    result->frame_skipped_due_to_no_demand = 1;
+    result->full_frame_damage = 0;
+    return BLINK_STANDALONE_STATUS_OK;
   }
 
   const bool external_target = d3d12_external || vulkan_external;
@@ -1724,6 +1791,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (result->pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_NONE) {
     result->pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
   }
+  PopulateGpuFrameState(renderer, result);
   return BLINK_STANDALONE_STATUS_OK;
 }
 
@@ -1783,8 +1851,24 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->backdrop_mask_generation =
       request->backdrop_mask_target.common.generation;
   result->mask_encoding = request->mask_encoding;
+  result->needs_output = main_result.needs_output;
+  result->frame_advanced = main_result.frame_advanced;
+  result->frame_skipped_due_to_no_demand =
+      main_result.frame_skipped_due_to_no_demand;
+  result->full_frame_damage = main_result.full_frame_damage;
+  result->damage_rect_count = main_result.dirty_rect_count;
+  result->physical_width = main_result.physical_width;
+  result->physical_height = main_result.physical_height;
   if (status != BLINK_STANDALONE_STATUS_OK) {
     return status;
+  }
+  if (main_result.target_written == 0) {
+    result->status = BLINK_STANDALONE_STATUS_OK;
+    result->backdrop_mask_written = 0;
+    result->effect_count = 0;
+    result->max_effect_id = 0;
+    result->frame_generation = main_result.frame_generation;
+    return BLINK_STANDALONE_STATUS_OK;
   }
 
   const size_t effect_count =

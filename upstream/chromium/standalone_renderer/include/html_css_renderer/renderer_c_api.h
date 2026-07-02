@@ -66,6 +66,11 @@ typedef enum blink_standalone_gpu_target_flags {
   /* Test-only hook: force one recoverable PENDING result before the target
    * writer runs. Used by benchmark smokes to validate host retry lifecycle. */
   BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE = 1u << 1,
+  /* If the latest frame snapshot is clean and matches the requested target
+   * size, render_to_gpu_target/render_gpu_backdrop_frame return OK without
+   * writing or synchronizing the target. Embedders should still call update()
+   * once per host frame; this flag hardens accidental redundant render calls. */
+  BLINK_STANDALONE_GPU_TARGET_SKIP_IF_CLEAN = 1u << 2,
 } blink_standalone_gpu_target_flags_t;
 
 typedef enum blink_standalone_gpu_backdrop_flags {
@@ -376,6 +381,13 @@ typedef struct blink_standalone_gpu_render_result {
   uint32_t pixel_format;
   uint32_t dirty_rect_count;
   uint64_t generation;
+  uint32_t needs_output;
+  uint32_t frame_advanced;
+  uint32_t frame_skipped_due_to_no_demand;
+  uint32_t full_frame_damage;
+  uint32_t physical_width;
+  uint32_t physical_height;
+  uint64_t frame_generation;
 } blink_standalone_gpu_render_result_t;
 
 typedef struct blink_standalone_gpu_backdrop_render_request {
@@ -400,6 +412,13 @@ typedef struct blink_standalone_gpu_backdrop_render_result {
   uint64_t frame_generation;
   uint64_t main_target_generation;
   uint64_t backdrop_mask_generation;
+  uint32_t needs_output;
+  uint32_t frame_advanced;
+  uint32_t frame_skipped_due_to_no_demand;
+  uint32_t full_frame_damage;
+  uint32_t damage_rect_count;
+  uint32_t physical_width;
+  uint32_t physical_height;
 } blink_standalone_gpu_backdrop_render_result_t;
 
 typedef struct blink_standalone_update_result {
