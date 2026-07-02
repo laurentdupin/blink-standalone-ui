@@ -1097,6 +1097,73 @@ bool CanSkipCleanGpuRender(
          LatestPhysicalHeight(renderer) == target_height;
 }
 
+uint32_t TargetPhysicalWidth(
+    const blink_standalone_external_gpu_target_t* target) {
+  if (!target) {
+    return 0;
+  }
+  if (target->common.backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+      target->d3d12.width) {
+    return target->d3d12.width;
+  }
+  if (target->common.backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN &&
+      target->vulkan.width) {
+    return target->vulkan.width;
+  }
+  return target->common.physical_width;
+}
+
+uint32_t TargetPhysicalHeight(
+    const blink_standalone_external_gpu_target_t* target) {
+  if (!target) {
+    return 0;
+  }
+  if (target->common.backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+      target->d3d12.height) {
+    return target->d3d12.height;
+  }
+  if (target->common.backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN &&
+      target->vulkan.height) {
+    return target->vulkan.height;
+  }
+  return target->common.physical_height;
+}
+
+bool LatestGpuOutputSizeMatchesTarget(
+    const blink_standalone_renderer* renderer,
+    const blink_standalone_external_gpu_target_t* target) {
+  const uint32_t target_width = TargetPhysicalWidth(target);
+  const uint32_t target_height = TargetPhysicalHeight(target);
+  if (target_width == 0 || target_height == 0) {
+    return true;
+  }
+  const int submitted_width =
+      renderer->latest_result.compositor_output_size.width;
+  const int submitted_height =
+      renderer->latest_result.compositor_output_size.height;
+  if (submitted_width > 0 && submitted_height > 0 &&
+      (submitted_width != static_cast<int>(target_width) ||
+       submitted_height != static_cast<int>(target_height))) {
+    return false;
+  }
+  const int latest_width =
+      renderer->latest_result.viz_display_output_size.width;
+  const int latest_height =
+      renderer->latest_result.viz_display_output_size.height;
+  if (latest_width <= 0 || latest_height <= 0) {
+    return true;
+  }
+  return latest_width == static_cast<int>(target_width) &&
+         latest_height == static_cast<int>(target_height);
+}
+
+bool IsRecoverableGpuCopyOutputNotReady(const std::string& failure) {
+  return failure.find("Viz CopyOutput did not produce output") !=
+             std::string::npos ||
+         failure.find("Viz BlitRequest CopyOutput did not complete") !=
+             std::string::npos;
+}
+
 void RefreshPublicFrameMetadata(blink_standalone_renderer* renderer) {
   html_css_renderer::FrameInput input;
   input.viewport = renderer->viewport;
@@ -1266,8 +1333,26 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                         "set_viewport failed: width, height, and device scale factor must be positive");
   }
   ClearLastError(renderer);
+  const float old_width = renderer->viewport.width;
+  const float old_height = renderer->viewport.height;
+  const float old_device_scale_factor = renderer->device_scale_factor;
   renderer->viewport = {static_cast<float>(width), static_cast<float>(height)};
   renderer->device_scale_factor = device_scale_factor;
+  const bool viewport_changed =
+      old_width != renderer->viewport.width ||
+      old_height != renderer->viewport.height ||
+      old_device_scale_factor != renderer->device_scale_factor;
+  if (viewport_changed) {
+    renderer->gpu_prepare_required_after_update = true;
+    renderer->gpu_source_frame_pending = false;
+    renderer->latest_result.viz_display_output_size = {};
+    renderer->latest_result.gpu_frame = {};
+    renderer->latest_result.gpu_frame_failure.clear();
+    renderer->dirty_rects.clear();
+    if (renderer->runtime) {
+      renderer->runtime->ReleaseExternalGpuTargetState();
+    }
+  }
   return BLINK_STANDALONE_STATUS_OK;
 }
 
@@ -1664,6 +1749,18 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                                   !external_target ||
                                       request_prepared_external_source);
     if (status != BLINK_STANDALONE_STATUS_OK) {
+      if (external_target &&
+          IsRecoverableGpuCopyOutputNotReady(
+              renderer->latest_result.gpu_frame_failure)) {
+        renderer->gpu_prepare_required_after_update = true;
+        renderer->gpu_source_frame_pending = false;
+        renderer->runtime->ReleaseExternalGpuTargetState();
+        result->status = BLINK_STANDALONE_STATUS_PENDING;
+        return SetLastError(
+            renderer, BLINK_STANDALONE_STATUS_PENDING,
+            "render_to_gpu_target pending: Viz CopyOutput did not produce "
+            "output");
+      }
       result->status = status;
       return status;
     }
@@ -1675,6 +1772,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       return SetLastError(
           renderer, BLINK_STANDALONE_STATUS_PENDING,
           "render_to_gpu_target pending: GPU source frame is not ready");
+    }
+    if (external_target &&
+        !LatestGpuOutputSizeMatchesTarget(renderer, target)) {
+      renderer->gpu_prepare_required_after_update = true;
+      renderer->gpu_source_frame_pending = false;
+      renderer->runtime->ReleaseExternalGpuTargetState();
+      result->status = BLINK_STANDALONE_STATUS_PENDING;
+      return SetLastError(
+          renderer, BLINK_STANDALONE_STATUS_PENDING,
+          "render_to_gpu_target pending: GPU source frame size does not match "
+          "the external target");
     }
     renderer->gpu_source_frame_pending = false;
   }
@@ -1753,6 +1861,15 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_PENDING,
         "render_to_gpu_target pending: GPU source frame is not ready");
+  }
+  if (IsRecoverableGpuCopyOutputNotReady(target_result)) {
+    renderer->gpu_prepare_required_after_update = true;
+    renderer->gpu_source_frame_pending = false;
+    renderer->runtime->ReleaseExternalGpuTargetState();
+    result->status = BLINK_STANDALONE_STATUS_PENDING;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_PENDING,
+        "render_to_gpu_target pending: Viz CopyOutput did not produce output");
   }
   if (!expected_result_prefix ||
       target_result.find(": ok") == std::string::npos) {
