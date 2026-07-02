@@ -109,22 +109,31 @@ families before Blink is linked, so normal archive member extraction is enough
 to produce `LNK2005`; removing broad `/WHOLEARCHIVE` does not solve the
 underlying ownership collision.
 
-Vulkan Memory Allocator is the first isolated family. In standalone builds,
-Blink includes `standalone_renderer/src/private_vma_symbol_prefix.h` before
-`vk_mem_alloc.h` in the Skia VMA implementation, Chromium VMA users, and the
-standalone ANGLE Vulkan VMA implementation/wrapper. The object/package proof
-verifies that unprefixed `vma[A-Z]...` linker members are absent from packaged
-static libraries and `blink_standalone_vmaCreateAllocator` is present in the
-bundled VMA implementation. This removes the known VMA collision family, but it
-does not make full-host static linking product-supported until the remaining
-third-party families are isolated or otherwise proven safe.
+Vulkan Memory Allocator and libpng are privately prefixed in standalone static
+packages. In standalone builds, Blink includes
+`standalone_renderer/src/private_vma_symbol_prefix.h` before `vk_mem_alloc.h`
+in the Skia VMA implementation, Chromium VMA users, and the standalone ANGLE
+Vulkan VMA implementation/wrapper. CMake also generates a private libpng prefix
+header and force-includes it for Blink's bundled libpng users.
+
+ICU uses its upstream symbol-renaming support with a Blink-private library
+suffix, plus a generated prefix header for ICU internal `uprv_*` symbols not
+covered by `unicode/urename.h`. This keeps the bundled ICU namespace and C entry
+points separate from a host-owned ICU copy while preserving the packaged
+`icudtl.dat` data sidecar contract.
+
+The object/package proof verifies that unprefixed libpng and VMA linker members
+are absent from packaged static libraries and the prefixed variants are present.
+This removes those known collision families, and ICU must pass the same package
+symbol scan before Godot full-editor static retests are meaningful. Static
+linking is still not product-supported until all duplicate-prone third-party
+families are isolated or otherwise proven safe.
 
 The preferred product fix is symbol isolation for Blink-owned third-party
 dependencies in the static package. Candidate work:
 
-- build Blink's bundled libpng/zlib/ICU/Abseil-facing objects with private
-  symbol prefixes or private namespaces where the upstream dependency supports
-  that;
+- build Blink's bundled zlib/Abseil-facing objects with private symbol prefixes
+  or private namespaces where the upstream dependency supports that;
 - keep V8, Skia, Blink, Dawn, ANGLE, and ICU data coupled to the exact
   dependency revisions and defines they were built with;
 - update the static manifest to report private/renamed third-party ownership
