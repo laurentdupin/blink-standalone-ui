@@ -68,6 +68,24 @@ typedef enum blink_standalone_gpu_target_flags {
   BLINK_STANDALONE_GPU_TARGET_INTERNAL_FORCE_PENDING_ONCE = 1u << 1,
 } blink_standalone_gpu_target_flags_t;
 
+typedef enum blink_standalone_gpu_backdrop_flags {
+  /* The call fails with a non-OK status if the GPU mask target cannot be
+   * written. Explicit GPU backdrop output never falls back to CPU region
+   * metadata. */
+  BLINK_STANDALONE_GPU_BACKDROP_MASK_REQUIRED = 1u << 0,
+} blink_standalone_gpu_backdrop_flags_t;
+
+typedef enum blink_standalone_gpu_backdrop_mask_encoding {
+  BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_NONE = 0,
+  /* RGBA8 MVP encoding: R stores the 1-based effect id, G stores coverage
+   * (0..255), and id 0 means no backdrop effect. B/A are reserved. */
+  BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE = 1,
+} blink_standalone_gpu_backdrop_mask_encoding_t;
+
+typedef enum blink_standalone_backdrop_coordinate_space {
+  BLINK_STANDALONE_BACKDROP_COORDINATE_SPACE_LOGICAL_CSS = 0,
+} blink_standalone_backdrop_coordinate_space_t;
+
 typedef enum blink_standalone_alpha_mode {
   BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED = 0,
   BLINK_STANDALONE_ALPHA_MODE_STRAIGHT = 1,
@@ -360,6 +378,30 @@ typedef struct blink_standalone_gpu_render_result {
   uint64_t generation;
 } blink_standalone_gpu_render_result_t;
 
+typedef struct blink_standalone_gpu_backdrop_render_request {
+  uint32_t backend;
+  uint32_t flags;
+  uint32_t mask_encoding;
+  blink_standalone_external_gpu_target_t main_target;
+  blink_standalone_external_gpu_target_t backdrop_mask_target;
+} blink_standalone_gpu_backdrop_render_request_t;
+
+typedef struct blink_standalone_gpu_backdrop_render_result {
+  uint32_t backend;
+  uint32_t status;
+  uint32_t main_target_written;
+  uint32_t backdrop_mask_written;
+  uint32_t width;
+  uint32_t height;
+  uint32_t pixel_format;
+  uint32_t mask_encoding;
+  uint32_t effect_count;
+  uint32_t max_effect_id;
+  uint64_t frame_generation;
+  uint64_t main_target_generation;
+  uint64_t backdrop_mask_generation;
+} blink_standalone_gpu_backdrop_render_result_t;
+
 typedef struct blink_standalone_update_result {
   uint32_t status;
   uint32_t frame_advanced;
@@ -439,6 +481,27 @@ typedef struct blink_standalone_backdrop_filter_region {
   blink_standalone_backdrop_filter_op_t filter_ops[BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS];
 } blink_standalone_backdrop_filter_region_t;
 
+/* GPU backdrop effect table entries are keyed by the mask id encoded in the
+ * mask texture. Bounds/radii are logical CSS px in coordinate_space. The string
+ * pointer is renderer-owned and valid until the next renderer operation that
+ * replaces frame metadata. */
+typedef struct blink_standalone_gpu_backdrop_effect {
+  uint32_t id;
+  uint64_t generation;
+  blink_standalone_rect_t bounds;
+  float blur_radius_css_px;
+  float border_radius_top_left;
+  float border_radius_top_right;
+  float border_radius_bottom_right;
+  float border_radius_bottom_left;
+  float opacity;
+  uint32_t flags;
+  uint32_t coordinate_space;
+  const char* element_id;
+  uint32_t filter_op_count;
+  blink_standalone_backdrop_filter_op_t filter_ops[BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS];
+} blink_standalone_gpu_backdrop_effect_t;
+
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
     const blink_standalone_renderer_config_t* config,
     blink_standalone_renderer_t** renderer_out);
@@ -492,6 +555,10 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     const blink_standalone_external_gpu_target_t* target,
     blink_standalone_gpu_render_result_t* result);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_gpu_backdrop_frame(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_gpu_backdrop_render_request_t* request,
+    blink_standalone_gpu_backdrop_render_result_t* result);
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(
     blink_standalone_renderer_t* renderer,
@@ -638,6 +705,12 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const blink_standalone_renderer_t* renderer,
     size_t index,
     blink_standalone_backdrop_filter_region_t* out);
+BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_gpu_backdrop_effect_count(
+    const blink_standalone_renderer_t* renderer);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_gpu_backdrop_effect(
+    const blink_standalone_renderer_t* renderer,
+    size_t index,
+    blink_standalone_gpu_backdrop_effect_t* out);
 
 /* Renderer-local diagnostics describe the last API failure. Successful
  * renderer operations clear stale diagnostics. get_last_error_message and

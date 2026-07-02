@@ -69,6 +69,12 @@ void StandaloneBlinkLiveFrameBridgeInstallExternalD3D12AdapterLuidForTesting(
 
 namespace {
 
+#if BUILDFLAG(IS_WIN) && defined(BLINK_STANDALONE_HAVE_DAWN_D3D12)
+constexpr bool kStandaloneD3D12ExternalTargetsAvailable = true;
+#else
+constexpr bool kStandaloneD3D12ExternalTargetsAvailable = false;
+#endif
+
 #if BUILDFLAG(ENABLE_VULKAN)
 base::FilePath StandaloneVulkanLoaderPath() {
 #if BUILDFLAG(IS_WIN)
@@ -457,6 +463,34 @@ void CopyBackdropFilterRegion(
   }
 }
 
+void CopyGpuBackdropEffect(const html_css_renderer::BackdropFilterRegion& source,
+                           uint32_t id,
+                           uint64_t generation,
+                           blink_standalone_gpu_backdrop_effect_t* effect) {
+  *effect = blink_standalone_gpu_backdrop_effect_t{};
+  effect->id = id;
+  effect->generation = generation;
+  effect->bounds = ToCRect(source.bounds);
+  effect->blur_radius_css_px = source.blur_radius_css_px;
+  effect->border_radius_top_left = source.border_radius_top_left;
+  effect->border_radius_top_right = source.border_radius_top_right;
+  effect->border_radius_bottom_right = source.border_radius_bottom_right;
+  effect->border_radius_bottom_left = source.border_radius_bottom_left;
+  effect->opacity = source.opacity;
+  effect->flags = source.flags;
+  effect->coordinate_space =
+      BLINK_STANDALONE_BACKDROP_COORDINATE_SPACE_LOGICAL_CSS;
+  effect->element_id = source.element_id.c_str();
+  const size_t operation_count =
+      std::min(source.filter_operations.size(),
+               static_cast<size_t>(BLINK_STANDALONE_MAX_BACKDROP_FILTER_OPS));
+  effect->filter_op_count = static_cast<uint32_t>(operation_count);
+  for (size_t i = 0; i < operation_count; ++i) {
+    effect->filter_ops[i].type = source.filter_operations[i].type;
+    effect->filter_ops[i].amount = source.filter_operations[i].amount;
+  }
+}
+
 }  // namespace
 
 namespace {
@@ -632,6 +666,7 @@ struct blink_standalone_renderer {
   std::optional<html_css_renderer::WheelInput> pending_wheel;
   bool gpu_prepare_required_after_update = false;
   bool gpu_source_frame_pending = false;
+  uint64_t gpu_backdrop_frame_generation = 0;
   blink_standalone_status_code_t last_error_code =
       BLINK_STANDALONE_STATUS_OK;
   std::string last_error;
@@ -999,6 +1034,25 @@ bool FrameResultHasGpuPreparePending(
          result.diagnostics.end();
 }
 
+bool FrameResultHasPublicFrameMetadata(
+    const html_css_renderer::CompositorFrameResult& result) {
+  return result.hit_test_metadata_collected &&
+         result.backdrop_filter_metadata_collected;
+}
+
+void RefreshPublicFrameMetadata(blink_standalone_renderer* renderer) {
+  html_css_renderer::FrameInput input;
+  input.viewport = renderer->viewport;
+  input.device_scale_factor = renderer->device_scale_factor;
+  input.html_override = renderer->html;
+  input.resource_root = renderer->resource_root;
+  input.resource_base_path = renderer->resource_base_path;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  input.force_metadata_collection = true;
+  input.request_backdrop_filter_regions = true;
+  renderer->latest_result = renderer->runtime->AdvanceFrame(input);
+}
+
 blink_standalone_status_code_t AdvanceGpuFrameForBackend(
     blink_standalone_renderer* renderer,
     uint32_t backend,
@@ -1114,6 +1168,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   renderer->resource_root = resource_root ? resource_root : "";
   renderer->resource_base_path = resource_base_path ? resource_base_path : "";
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
+  renderer->gpu_backdrop_frame_generation = 0;
   renderer->dirty_rects.clear();
   renderer->gpu_prepare_required_after_update = false;
   renderer->gpu_source_frame_pending = false;
@@ -1309,13 +1364,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API uint32_t blink_standalone_renderer_gp
 #endif
           ;
     case BLINK_STANDALONE_GPU_BACKEND_D3D12:
-#if defined(_WIN32)
+      if (!kStandaloneD3D12ExternalTargetsAvailable) {
+        return 0;
+      }
       return BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
              BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET |
              BLINK_STANDALONE_GPU_CAPABILITY_INTERNAL_TEST_STANDIN;
-#else
-      return 0;
-#endif
     case BLINK_STANDALONE_GPU_BACKEND_NONE:
     default:
       return 0;
@@ -1435,6 +1489,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
         "configure_d3d12_external_device failed: D3D12 device must be configured before first frame/runtime initialization");
   }
+  if (!kStandaloneD3D12ExternalTargetsAvailable) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+        "configure_d3d12_external_device failed: D3D12/Dawn external targets are not enabled in this build");
+  }
 #if BUILDFLAG(IS_WIN)
   uint32_t luid_low = device->adapter_luid_low;
   int32_t luid_high = device->adapter_luid_high;
@@ -1525,6 +1584,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       external_target && renderer->latest_result.frame_advanced &&
       renderer->latest_result.needs_output &&
       !FrameResultHasGpuPreparePending(renderer->latest_result) &&
+      FrameResultHasPublicFrameMetadata(renderer->latest_result) &&
       !renderer->gpu_prepare_required_after_update &&
       !renderer->gpu_source_frame_pending &&
       !HasPendingFrameInput(renderer);
@@ -1647,6 +1707,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   result->status = BLINK_STANDALONE_STATUS_OK;
   result->target_written = 1;
+  if (external_target) {
+    RefreshPublicFrameMetadata(renderer);
+  }
   renderer->latest_result.needs_output = false;
   renderer->gpu_prepare_required_after_update = false;
   renderer->gpu_source_frame_pending = false;
@@ -1661,6 +1724,182 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (result->pixel_format == BLINK_STANDALONE_PIXEL_FORMAT_NONE) {
     result->pixel_format = BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
   }
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_render_gpu_backdrop_frame(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_gpu_backdrop_render_request_t* request,
+    blink_standalone_gpu_backdrop_render_result_t* result) {
+  if (!renderer || !renderer->runtime || !request || !result) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "render_gpu_backdrop_frame failed: renderer, request, and result are required");
+  }
+  *result = blink_standalone_gpu_backdrop_render_result_t{};
+  ClearLastError(renderer);
+
+  const bool mask_required =
+      (request->flags & BLINK_STANDALONE_GPU_BACKDROP_MASK_REQUIRED) != 0;
+  const uint32_t backend = request->backend;
+  if (backend != BLINK_STANDALONE_GPU_BACKEND_VULKAN &&
+      backend != BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+    result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+        "render_gpu_backdrop_frame failed: backend must be Vulkan or D3D12");
+  }
+  if (request->mask_encoding !=
+      BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE) {
+    result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_UNSUPPORTED,
+        "render_gpu_backdrop_frame failed: unsupported backdrop mask encoding");
+  }
+  const bool mask_target_backend_specified =
+      request->backdrop_mask_target.common.backend !=
+      BLINK_STANDALONE_GPU_BACKEND_NONE;
+  if (request->main_target.common.backend != backend ||
+      ((mask_required || mask_target_backend_specified) &&
+       request->backdrop_mask_target.common.backend != backend)) {
+    result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "render_gpu_backdrop_frame failed: main and mask targets must match the requested backend");
+  }
+
+  blink_standalone_gpu_render_result_t main_result = {};
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_render_to_gpu_target(
+          renderer, &request->main_target, &main_result);
+  result->backend = backend;
+  result->status = status;
+  result->main_target_written = main_result.target_written;
+  result->width = main_result.width;
+  result->height = main_result.height;
+  result->pixel_format = main_result.pixel_format;
+  result->frame_generation = request->main_target.common.generation;
+  result->main_target_generation = main_result.generation;
+  result->backdrop_mask_generation =
+      request->backdrop_mask_target.common.generation;
+  result->mask_encoding = request->mask_encoding;
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    return status;
+  }
+
+  const size_t effect_count =
+      std::min(renderer->latest_result.backdrop_filter_regions.size(),
+               static_cast<size_t>(255u));
+  result->effect_count = static_cast<uint32_t>(effect_count);
+  result->max_effect_id = static_cast<uint32_t>(effect_count);
+  if (mask_required && effect_count == 0) {
+    result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
+        "render_gpu_backdrop_frame failed: no backdrop effects were collected for the rendered frame");
+  }
+
+  const bool mask_internal_standin =
+      (request->backdrop_mask_target.common.flags &
+       BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN) != 0;
+  const bool mask_has_vulkan_target =
+      backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN &&
+      request->backdrop_mask_target.vulkan.vk_image != nullptr;
+  const bool mask_has_d3d12_target =
+      backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
+      (request->backdrop_mask_target.d3d12.shared_handle != nullptr ||
+       request->backdrop_mask_target.d3d12.d3d12_resource != nullptr);
+  if (!mask_internal_standin && !mask_has_vulkan_target &&
+      !mask_has_d3d12_target) {
+    result->status = mask_required ? BLINK_STANDALONE_STATUS_INVALID_ARGUMENT
+                                   : BLINK_STANDALONE_STATUS_OK;
+    if (!mask_required) {
+      return BLINK_STANDALONE_STATUS_OK;
+    }
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "render_gpu_backdrop_frame failed: a backdrop mask target is required");
+  }
+
+  std::string mask_result;
+  const char* expected_mask_prefix = "";
+  if (mask_internal_standin) {
+    mask_result =
+        backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN
+            ? renderer->runtime->RunVulkanBackdropMaskPrototypeForTesting()
+            : renderer->runtime->RunD3D12BackdropMaskPrototypeForTesting();
+    expected_mask_prefix =
+        backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN
+            ? "gpu_vulkan_backdrop_mask_prototype_smoke: ok"
+            : "gpu_d3d12_backdrop_mask_prototype_smoke: ok";
+  } else if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+    std::string validation_failure;
+    if (!ValidateVulkanExternalTarget(request->backdrop_mask_target,
+                                      &validation_failure)) {
+      result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                          "render_gpu_backdrop_frame failed: " +
+                              validation_failure);
+    }
+    html_css_renderer::ExternalVulkanImageTarget mask_target;
+    mask_target.vk_image = request->backdrop_mask_target.vulkan.vk_image;
+    mask_target.vk_device_memory =
+        request->backdrop_mask_target.vulkan.vk_device_memory;
+    mask_target.width =
+        static_cast<int>(request->backdrop_mask_target.vulkan.width);
+    mask_target.height =
+        static_cast<int>(request->backdrop_mask_target.vulkan.height);
+    mask_target.vk_format = request->backdrop_mask_target.vulkan.vk_format;
+    mask_target.image_tiling =
+        request->backdrop_mask_target.vulkan.image_tiling;
+    mask_target.allocation_size =
+        request->backdrop_mask_target.vulkan.allocation_size;
+    mask_target.memory_type_index =
+        request->backdrop_mask_target.vulkan.memory_type_index;
+    mask_target.image_usage_flags =
+        request->backdrop_mask_target.vulkan.image_usage_flags;
+    mask_target.image_create_flags = 0;
+    mask_target.queue_family_index =
+        request->backdrop_mask_target.vulkan.queue_family_index;
+    mask_result =
+        renderer->runtime->RenderBackdropMaskToExternalVkImage(mask_target);
+    expected_mask_prefix = "gpu_external_vkimage_backdrop_mask: ok";
+  } else {
+    const int mask_width =
+        request->backdrop_mask_target.d3d12.width
+            ? static_cast<int>(request->backdrop_mask_target.d3d12.width)
+            : static_cast<int>(
+                  request->backdrop_mask_target.common.physical_width);
+    const int mask_height =
+        request->backdrop_mask_target.d3d12.height
+            ? static_cast<int>(request->backdrop_mask_target.d3d12.height)
+            : static_cast<int>(
+                  request->backdrop_mask_target.common.physical_height);
+    mask_result = renderer->runtime->RenderBackdropMaskToExternalD3D12Target(
+        request->backdrop_mask_target.d3d12.d3d12_resource,
+        request->backdrop_mask_target.d3d12.shared_handle, mask_width,
+        mask_height);
+    expected_mask_prefix = "gpu_external_d3d12_backdrop_mask: ok";
+  }
+  if (!StartsWith(mask_result, expected_mask_prefix)) {
+    const blink_standalone_status_code_t failure_status =
+        mask_result.find(": blocked") != std::string::npos
+            ? BLINK_STANDALONE_STATUS_UNSUPPORTED
+            : BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    result->status = failure_status;
+    return SetLastError(
+        renderer, failure_status,
+        mask_result.empty()
+            ? "render_gpu_backdrop_frame failed: backdrop mask writer returned no result"
+            : mask_result);
+  }
+
+  result->status = BLINK_STANDALONE_STATUS_OK;
+  result->backdrop_mask_written = 1;
+  renderer->gpu_backdrop_frame_generation =
+      std::max(request->main_target.common.generation,
+               request->backdrop_mask_target.common.generation);
+  result->frame_generation = renderer->gpu_backdrop_frame_generation;
   return BLINK_STANDALONE_STATUS_OK;
 }
 
@@ -2089,6 +2328,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   ClearLastError(renderer);
   renderer->runtime.reset();
   renderer->latest_result = html_css_renderer::CompositorFrameResult();
+  renderer->gpu_backdrop_frame_generation = 0;
   renderer->dirty_rects.clear();
   ClearPendingInput(renderer);
   return InitializeRuntime(renderer);
@@ -2280,6 +2520,34 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   CopyBackdropFilterRegion(renderer->latest_result.backdrop_filter_regions[index],
                            out);
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_gpu_backdrop_effect_count(
+    const blink_standalone_renderer_t* renderer) {
+  if (!renderer) {
+    return 0;
+  }
+  return std::min(renderer->latest_result.backdrop_filter_regions.size(),
+                  static_cast<size_t>(255u));
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_gpu_backdrop_effect(
+    const blink_standalone_renderer_t* renderer,
+    size_t index,
+    blink_standalone_gpu_backdrop_effect_t* out) {
+  const size_t effect_count =
+      blink_standalone_renderer_gpu_backdrop_effect_count(renderer);
+  if (!renderer || !out || index >= effect_count) {
+    return SetLastError(
+        const_cast<blink_standalone_renderer_t*>(renderer),
+        BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "get_gpu_backdrop_effect failed: renderer, output pointer, and valid index are required");
+  }
+  CopyGpuBackdropEffect(
+      renderer->latest_result.backdrop_filter_regions[index],
+      static_cast<uint32_t>(index + 1u),
+      renderer->gpu_backdrop_frame_generation, out);
   return BLINK_STANDALONE_STATUS_OK;
 }
 

@@ -91,8 +91,10 @@ struct CompositorFrameResult {
   std::string gpu_frame_failure;
   GpuFrameOutput gpu_frame;
   std::string raw_paint_artifact_audit_json;
+  bool hit_test_metadata_collected = false;
   std::vector<HitTestEntry> hit_test_entries;
   std::vector<FormControlEntry> form_control_entries;
+  bool backdrop_filter_metadata_collected = false;
   std::vector<BackdropFilterRegion> backdrop_filter_regions;
   std::vector<ScrollableElementEntry> scrollable_element_entries;
   Point document_max_scroll_offset;
@@ -165,6 +167,8 @@ class StandaloneCompositorRuntime {
       const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RenderExternalVkImageToTarget(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
+  virtual std::string RenderBackdropMaskToExternalVkImage(
+      const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
   virtual std::string RunExternalD3D12RenderCopyForTesting(
       void* d3d12_resource,
@@ -173,8 +177,15 @@ class StandaloneCompositorRuntime {
                                                   void* shared_handle,
                                                   int width,
                                                   int height) = 0;
+  virtual std::string RenderBackdropMaskToExternalD3D12Target(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height) = 0;
   virtual void ReleaseExternalGpuTargetState() = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
+  virtual std::string RunVulkanBackdropMaskPrototypeForTesting() = 0;
+  virtual std::string RunD3D12BackdropMaskPrototypeForTesting() = 0;
 };
 
 std::unique_ptr<StandaloneCompositorRuntime> CreateStandaloneCompositorRuntime(

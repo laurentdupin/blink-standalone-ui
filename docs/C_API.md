@@ -93,6 +93,38 @@ Dawn overlay, writes deterministic rendered pixels into a caller-created
 same-device `ID3D12Resource` target. Production-grade async synchronization and
 resource-state ownership are still reserved follow-up work.
 
+### GPU Backdrop Mask Output
+
+GPU hosts that need CSS `backdrop-filter` should use the GPU backdrop frame API
+instead of CPU region metadata:
+
+- `blink_standalone_renderer_render_gpu_backdrop_frame`
+- `blink_standalone_renderer_gpu_backdrop_effect_count`
+- `blink_standalone_renderer_get_gpu_backdrop_effect`
+
+`blink_standalone_gpu_backdrop_render_request_t` contains the normal borrowed
+main external target plus a borrowed `backdrop_mask_target`. The two targets
+must use the same backend and are echoed in
+`blink_standalone_gpu_backdrop_render_result_t` through
+`main_target_generation`, `backdrop_mask_generation`, and `frame_generation`.
+Godot-style embedders should reject stale mask/effect data when these
+generations do not match the frame they are compositing.
+
+The MVP mask encoding is
+`BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE`: id `0` means no
+backdrop effect, and nonzero ids index the effect table returned by
+`blink_standalone_renderer_get_gpu_backdrop_effect`. The current smoke-proven
+encoding stores rectangular coverage for exported backdrop regions and supports
+up to 255 ids. Effect table entries include logical CSS bounds, corner radii,
+opacity, element id when available, and the ordered filter operation chain.
+
+If `BLINK_STANDALONE_GPU_BACKDROP_MASK_REQUIRED` is set, missing/invalid mask
+targets or unavailable GPU mask output return a non-OK status. Explicit GPU
+backdrop rendering never falls back to CPU region metadata. The public Vulkan
+and D3D12 smokes both use caller-owned borrowed mask targets and verify
+deterministic main pixels, nonzero mask ids, matching generations, and effect
+table entries.
+
 ## Backdrop Filter Metadata
 
 Ordinary CSS `filter` effects, such as `filter: blur(...)`, are rendered by
@@ -100,6 +132,10 @@ Blink into the raw HTML output. CSS `backdrop-filter` is different: Blink does
 not receive, sample, or blur host-scene pixels behind the HTML surface. Instead,
 the standalone C API exposes backdrop-filter regions as metadata so the embedder
 can blur its own framebuffer or backbuffer behind the raw HTML output.
+
+The functions in this section are the CPU/raw compatibility path. GPU backends
+should prefer the GPU backdrop mask output above so the embedder can sample a
+GPU-side mask/effect description alongside the rendered HTML target.
 
 Use `blink_standalone_renderer_backdrop_filter_region_count` and
 `blink_standalone_renderer_get_backdrop_filter_region` after

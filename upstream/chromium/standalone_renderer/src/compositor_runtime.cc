@@ -107,6 +107,9 @@ const char*
 StandaloneBlinkLiveFrameBridgeRenderExternalVkImageToTargetForStandaloneRenderer(
     const html_css_renderer::ExternalVulkanImageTarget* vulkan_image);
 const char*
+StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalVkImageForStandaloneRenderer(
+    const html_css_renderer::ExternalVulkanImageTarget* vulkan_image);
+const char*
 StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRenderer();
 const char*
 StandaloneBlinkLiveFrameBridgeRunExternalD3D12RenderCopyForStandaloneRenderer(
@@ -118,9 +121,19 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
     void* shared_handle,
     int width,
     int height);
+const char*
+StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalD3D12TargetForStandaloneRenderer(
+    void* d3d12_resource,
+    void* shared_handle,
+    int width,
+    int height);
 void StandaloneBlinkLiveFrameBridgeReleaseExternalGpuTargetStateForStandaloneRenderer();
 const char*
 StandaloneBlinkLiveFrameBridgeRunGpuOutputVulkanPixelSmokeForStandaloneRenderer();
+const char*
+StandaloneBlinkLiveFrameBridgeRunVulkanBackdropMaskPrototypeForStandaloneRenderer();
+const char*
+StandaloneBlinkLiveFrameBridgeRunD3D12BackdropMaskPrototypeForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer();
 int StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -1504,8 +1517,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     }
 
     ImportHitTestEntries(probe_html, result);
+    result.hit_test_metadata_collected = true;
     if (collect_backdrop_filter_regions) {
       ImportBackdropFilterRegions(probe_html, result);
+      result.backdrop_filter_metadata_collected = true;
     }
     if (collect_full_result) {
       ImportFormControlEntries(probe_html, result);
@@ -1685,6 +1700,21 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return result ? result : "";
   }
 
+  std::string RenderBackdropMaskToExternalVkImage(
+      const ExternalVulkanImageTarget& vulkan_image) override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+
+    const char* result =
+        ::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalVkImageForStandaloneRenderer(
+                &vulkan_image);
+    return result ? result : "";
+  }
+
   std::string RunBorrowedD3D12RenderCopySmokeForTesting() override {
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
@@ -1728,6 +1758,23 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return result ? result : "";
   }
 
+  std::string RenderBackdropMaskToExternalD3D12Target(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height) override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    const char* result =
+        ::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalD3D12TargetForStandaloneRenderer(
+                d3d12_resource, shared_handle, width, height);
+    return result ? result : "";
+  }
+
   void ReleaseExternalGpuTargetState() override {
     ScopedStandaloneResourceProviderContext scoped_resources(
         resource_provider_context_id_);
@@ -1750,6 +1797,30 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return result ? result : "";
   }
 
+  std::string RunVulkanBackdropMaskPrototypeForTesting() override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    const char* result =
+        ::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgeRunVulkanBackdropMaskPrototypeForStandaloneRenderer();
+    return result ? result : "";
+  }
+
+  std::string RunD3D12BackdropMaskPrototypeForTesting() override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    const char* result =
+        ::blink::standalone_renderer_probe::
+            StandaloneBlinkLiveFrameBridgeRunD3D12BackdropMaskPrototypeForStandaloneRenderer();
+    return result ? result : "";
+  }
+
  private:
   bool NeedsFrameForInput(const FrameInput& input) const {
     if (!last_frame_result_)
@@ -1758,6 +1829,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         input.request_gpu_frame || input.request_vulkan_gpu_frame ||
         input.request_d3d12_gpu_frame || input.prepare_vulkan_gpu_frame ||
         input.prepare_d3d12_gpu_frame)
+      return true;
+    if (input.force_metadata_collection)
       return true;
     if (input.force_document_reload)
       return true;
@@ -1902,6 +1975,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       result.raw_paint_artifact_audit_json.clear();
       result.form_control_entries.clear();
       if (!input.request_backdrop_filter_regions) {
+        result.backdrop_filter_metadata_collected = false;
         result.backdrop_filter_regions.clear();
       }
       result.scrollable_element_entries.clear();
@@ -1947,6 +2021,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   static void ImportHitTestEntries(const std::string& probe_html,
                                    CompositorFrameResult& result) {
     namespace probe = ::blink::standalone_renderer_probe;
+    result.hit_test_metadata_collected = false;
     const int entry_count =
         probe::StandaloneBlinkLiveFrameBridgeHitTestEntryCountForStandaloneRenderer(
             probe_html.c_str());
@@ -1984,6 +2059,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       entry.focused = focused != 0;
       result.hit_test_entries.push_back(std::move(entry));
     }
+    result.hit_test_metadata_collected = true;
   }
 
   static void ImportFormControlEntries(const std::string& probe_html,
@@ -2045,6 +2121,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
   static void ImportBackdropFilterRegions(const std::string& probe_html,
                                           CompositorFrameResult& result) {
     namespace probe = ::blink::standalone_renderer_probe;
+    result.backdrop_filter_metadata_collected = false;
     const int entry_count =
         probe::StandaloneBlinkLiveFrameBridgeBackdropFilterRegionCountForStandaloneRenderer(
             probe_html.c_str());
@@ -2097,6 +2174,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       }
       result.backdrop_filter_regions.push_back(std::move(entry));
     }
+    result.backdrop_filter_metadata_collected = true;
   }
 
   static void ImportScrollableElementEntries(const std::string& probe_html,

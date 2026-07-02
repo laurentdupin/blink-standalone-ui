@@ -198,8 +198,10 @@ void PrintUsage() {
       "[--gpu-vulkan-ganesh-context-smoke] "
       "[--gpu-borrowed-vkimage-backing-smoke] "
       "[--gpu-borrowed-vkimage-render-copy-smoke] "
+      "[--gpu-vulkan-backdrop-mask-prototype-smoke] "
       "[--gpu-external-vulkan-runtime-target-smoke] "
       "[--gpu-borrowed-d3d12-render-copy-smoke] "
+      "[--gpu-d3d12-backdrop-mask-prototype-smoke] "
       "[--c-api-vulkan-external-target-smoke] "
       "[--c-api-vulkan-external-target-large-smoke] "
       "[--c-api-vulkan-external-target-resize-smoke] "
@@ -209,7 +211,10 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-click-timing-smoke] "
       "[--c-api-vulkan-external-target-click-resize-pending-smoke] "
       "[--c-api-vulkan-external-target-full-viewport-button-hit-metadata-smoke] "
+      "[--c-api-vulkan-external-target-filter-backdrop-smoke] "
+      "[--c-api-vulkan-external-target-backdrop-mask-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
+      "[--c-api-gpu-backdrop-mask-required-invalid-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-d3d12-external-target-resize-smoke] "
       "[--c-api-d3d12-external-target-click-timing-smoke] "
@@ -222,6 +227,7 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-current-document-smoke] "
       "[--c-api-d3d12-external-target-current-document-smoke] "
       "[--c-api-d3d12-external-target-filter-backdrop-smoke] "
+      "[--c-api-d3d12-external-target-backdrop-mask-smoke] "
       "[--c-api-d3d12-external-target-transparent-filter-backdrop-smoke] "
       "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
@@ -863,6 +869,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool full_viewport_button_document = false,
                                   bool exercise_rapid_resize_sequence = false,
                                   bool force_pending_during_rapid_resize =
+                                      false,
+                                  bool expect_backdrop_filter_metadata =
+                                      false,
+                                  bool exercise_gpu_backdrop_mask =
                                       false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
@@ -930,16 +940,38 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   target.common.alpha_mode = BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
   target.common.color_space = BLINK_STANDALONE_COLOR_SPACE_SRGB;
   target.common.generation = 1;
+  blink_standalone_external_gpu_target_t mask_target = target;
+  mask_target.common.generation = 2;
 #if BUILDFLAG(IS_WIN)
   Microsoft::WRL::ComPtr<ID3D12Device> d3d12_device;
   Microsoft::WRL::ComPtr<ID3D12CommandQueue> d3d12_queue;
   Microsoft::WRL::ComPtr<ID3D12Resource> d3d12_resource;
+  Microsoft::WRL::ComPtr<ID3D12Resource> d3d12_mask_resource;
   Microsoft::WRL::ComPtr<ID3D12Resource1> d3d12_resource_alias;
   HANDLE d3d12_shared_handle = nullptr;
+  HANDLE d3d12_mask_shared_handle = nullptr;
+  auto cleanup_d3d12_targets = [&] {
+    if (d3d12_shared_handle) {
+      CloseHandle(d3d12_shared_handle);
+      d3d12_shared_handle = nullptr;
+    }
+    if (d3d12_mask_shared_handle) {
+      CloseHandle(d3d12_mask_shared_handle);
+      d3d12_mask_shared_handle = nullptr;
+    }
+    d3d12_resource.Reset();
+    d3d12_mask_resource.Reset();
+    d3d12_resource_alias.Reset();
+    target.d3d12.d3d12_resource = nullptr;
+    target.d3d12.shared_handle = nullptr;
+    mask_target.d3d12.d3d12_resource = nullptr;
+    mask_target.d3d12.shared_handle = nullptr;
+  };
 #endif
   std::unique_ptr<gpu::VulkanImplementation> vulkan_implementation;
   std::unique_ptr<gpu::VulkanDeviceQueue> vulkan_owner_queue;
   std::unique_ptr<gpu::VulkanImage> vulkan_target_image;
+  std::unique_ptr<gpu::VulkanImage> vulkan_mask_image;
   std::vector<std::string> vulkan_instance_extension_storage;
   std::vector<std::string> vulkan_device_extension_storage;
   std::vector<const char*> vulkan_instance_extensions;
@@ -951,6 +983,10 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   auto destroy_vulkan_target = [&] {
     if (vulkan_owner_queue) {
       vkDeviceWaitIdle(vulkan_owner_queue->GetVulkanDevice());
+    }
+    if (vulkan_mask_image) {
+      vulkan_mask_image->Destroy();
+      vulkan_mask_image.reset();
     }
     if (vulkan_target_image) {
       vulkan_target_image->Destroy();
@@ -1067,6 +1103,45 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       target.vulkan.image_usage_flags = vulkan_target_image->usage();
       target.vulkan.sample_count = VK_SAMPLE_COUNT_1_BIT;
       target.vulkan.level_count = 1;
+      if (exercise_gpu_backdrop_mask) {
+        vulkan_mask_image = gpu::VulkanImage::Create(
+            vulkan_owner_queue.get(),
+            gfx::Size(static_cast<int>(target_width),
+                      static_cast<int>(target_height)),
+            VK_FORMAT_R8G8B8A8_UNORM,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+        if (!vulkan_mask_image ||
+            vulkan_mask_image->image() == VK_NULL_HANDLE) {
+          return false;
+        }
+        mask_target.common.logical_width = target_width;
+        mask_target.common.logical_height = target_height;
+        mask_target.common.physical_width = target_width;
+        mask_target.common.physical_height = target_height;
+        mask_target.vulkan.vk_image = vulkan_mask_image->image();
+        mask_target.vulkan.vk_device = vulkan_owner_queue->GetVulkanDevice();
+        mask_target.vulkan.vk_physical_device =
+            vulkan_owner_queue->GetVulkanPhysicalDevice();
+        mask_target.vulkan.vk_device_memory =
+            vulkan_mask_image->device_memory();
+        mask_target.vulkan.vk_format = VK_FORMAT_R8G8B8A8_UNORM;
+        mask_target.vulkan.width = target_width;
+        mask_target.vulkan.height = target_height;
+        mask_target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        mask_target.vulkan.required_final_layout =
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        mask_target.vulkan.queue_family_index =
+            vulkan_owner_queue->GetVulkanQueueIndex();
+        mask_target.vulkan.allocation_size = vulkan_mask_image->device_size();
+        mask_target.vulkan.memory_type_index =
+            vulkan_mask_image->memory_type_index();
+        mask_target.vulkan.image_tiling = vulkan_mask_image->image_tiling();
+        mask_target.vulkan.image_usage_flags = vulkan_mask_image->usage();
+        mask_target.vulkan.sample_count = VK_SAMPLE_COUNT_1_BIT;
+        mask_target.vulkan.level_count = 1;
+      }
       return true;
     };
     if (!create_vulkan_target(active_width, active_height)) {
@@ -1096,14 +1171,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       return 1;
     }
     create_d3d12_target = [&](uint32_t target_width, uint32_t target_height) {
-      if (d3d12_shared_handle) {
-        CloseHandle(d3d12_shared_handle);
-        d3d12_shared_handle = nullptr;
-      }
-      d3d12_resource.Reset();
-      d3d12_resource_alias.Reset();
-      target.d3d12.d3d12_resource = nullptr;
-      target.d3d12.shared_handle = nullptr;
+      cleanup_d3d12_targets();
       D3D12_HEAP_PROPERTIES heap_properties = {};
       heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
       heap_properties.CreationNodeMask = 1;
@@ -1142,6 +1210,36 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
       target.d3d12.required_final_state =
           D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+      if (exercise_gpu_backdrop_mask) {
+        create_hr = d3d12_device->CreateCommittedResource(
+            &heap_properties, D3D12_HEAP_FLAG_SHARED, &resource_desc,
+            D3D12_RESOURCE_STATE_COMMON, nullptr,
+            IID_PPV_ARGS(&d3d12_mask_resource));
+        if (FAILED(create_hr) || !d3d12_mask_resource) {
+          return false;
+        }
+        create_hr = d3d12_device->CreateSharedHandle(
+            d3d12_mask_resource.Get(), nullptr, GENERIC_ALL, nullptr,
+            &d3d12_mask_shared_handle);
+        if (FAILED(create_hr) || !d3d12_mask_shared_handle) {
+          d3d12_mask_resource.Reset();
+          return false;
+        }
+        mask_target.common.logical_width = target_width;
+        mask_target.common.logical_height = target_height;
+        mask_target.common.physical_width = target_width;
+        mask_target.common.physical_height = target_height;
+        mask_target.d3d12.d3d12_device = d3d12_device.Get();
+        mask_target.d3d12.d3d12_command_queue = d3d12_queue.Get();
+        mask_target.d3d12.d3d12_resource = d3d12_mask_resource.Get();
+        mask_target.d3d12.shared_handle = d3d12_mask_shared_handle;
+        mask_target.d3d12.dxgi_format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        mask_target.d3d12.width = target_width;
+        mask_target.d3d12.height = target_height;
+        mask_target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+        mask_target.d3d12.required_final_state =
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+      }
       return true;
     };
     if (!create_d3d12_target(active_width, active_height)) {
@@ -1158,10 +1256,11 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       std::fprintf(stderr, "%s: failed configure_d3d12 status=%d error=%s\n",
                    label, status,
                    blink_standalone_renderer_last_error(renderer));
-      if (target.d3d12.shared_handle) {
-        CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
-      }
+      cleanup_d3d12_targets();
       blink_standalone_renderer_destroy(renderer);
+      if (status == BLINK_STANDALONE_STATUS_UNSUPPORTED) {
+        return 0;
+      }
       return 1;
     }
 #else
@@ -1177,9 +1276,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     std::fprintf(stderr, "%s: set document failed status=%d error=%s\n", label,
                  status, blink_standalone_renderer_last_error(renderer));
 #if BUILDFLAG(IS_WIN)
-    if (target.d3d12.shared_handle) {
-      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
-    }
+    cleanup_d3d12_targets();
 #endif
     blink_standalone_renderer_destroy(renderer);
     if (vulkan_target_image) {
@@ -1196,9 +1293,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                  "%s: blocked backend unavailable capabilities=%u\n", label,
                  capabilities);
 #if BUILDFLAG(IS_WIN)
-    if (target.d3d12.shared_handle) {
-      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
-    }
+    cleanup_d3d12_targets();
 #endif
     blink_standalone_renderer_destroy(renderer);
     cleanup_vulkan_target();
@@ -1279,9 +1374,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                  result.target_written, result.width, result.height,
                  blink_standalone_renderer_last_error(renderer));
 #if BUILDFLAG(IS_WIN)
-    if (target.d3d12.shared_handle) {
-      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
-    }
+    cleanup_d3d12_targets();
 #endif
     blink_standalone_renderer_destroy(renderer);
     cleanup_vulkan_target();
@@ -1290,9 +1383,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
 
   auto cleanup_and_fail = [&]() {
 #if BUILDFLAG(IS_WIN)
-    if (target.d3d12.shared_handle) {
-      CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
-    }
+    cleanup_d3d12_targets();
 #endif
     blink_standalone_renderer_destroy(renderer);
     cleanup_vulkan_target();
@@ -1308,6 +1399,9 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   int repeated_same_target_renders = 0;
   int post_resize_repeated_renders = 0;
   int invalid_uncached_d3d12_target_checks = 0;
+  uint32_t backdrop_mask_pixels = 0;
+  uint32_t backdrop_mask_distinct_ids = 0;
+  uint32_t backdrop_effect_count = 0;
   auto verify_target_pixels = [&](const char* stage,
                                   uint32_t stage_expected_background,
                                   uint32_t stage_expected_box,
@@ -1419,10 +1513,226 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                  backend);
     return false;
   };
+  auto verify_backdrop_mask_pixels = [&](const char* stage) {
+    std::vector<uint32_t> pixels;
+    std::string failure;
+#if BUILDFLAG(IS_WIN)
+    if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+      if (!ReadbackD3D12TextureForSmoke(d3d12_device.Get(), d3d12_queue.Get(),
+                                        d3d12_mask_resource.Get(),
+                                        active_width, active_height, &pixels,
+                                        &failure)) {
+        std::fprintf(stderr,
+                     "%s: failed %s d3d12_mask_readback=0 failure=%s\n",
+                     label, stage, failure.c_str());
+        return false;
+      }
+      backdrop_mask_pixels = 0;
+      uint32_t seen_ids[256] = {};
+      for (uint32_t pixel : pixels) {
+        const uint32_t id = (pixel >> 16) & 0xffu;
+        const uint32_t coverage = (pixel >> 8) & 0xffu;
+        if (id != 0 && coverage != 0) {
+          ++backdrop_mask_pixels;
+          seen_ids[id] = 1;
+        }
+      }
+      backdrop_mask_distinct_ids = 0;
+      for (uint32_t seen : seen_ids) {
+        backdrop_mask_distinct_ids += seen;
+      }
+      return backdrop_mask_pixels != 0 && backdrop_mask_distinct_ids != 0;
+    }
+#endif
+    if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+      if (!ReadbackVulkanImageForSmoke(vulkan_owner_queue.get(),
+                                       vulkan_mask_image.get(), active_width,
+                                       active_height, &pixels, &failure)) {
+        std::fprintf(stderr,
+                     "%s: failed %s vulkan_mask_readback=0 failure=%s\n",
+                     label, stage, failure.c_str());
+        return false;
+      }
+      backdrop_mask_pixels = 0;
+      uint32_t seen_ids[256] = {};
+      for (uint32_t rgba : pixels) {
+        const uint32_t id = rgba & 0xffu;
+        const uint32_t coverage = (rgba >> 8) & 0xffu;
+        if (id != 0 && coverage != 0) {
+          ++backdrop_mask_pixels;
+          seen_ids[id] = 1;
+        }
+      }
+      backdrop_mask_distinct_ids = 0;
+      for (uint32_t seen : seen_ids) {
+        backdrop_mask_distinct_ids += seen;
+      }
+      return backdrop_mask_pixels != 0 && backdrop_mask_distinct_ids != 0;
+    }
+    std::fprintf(stderr, "%s: failed %s unsupported backend=%u\n", label, stage,
+                 backend);
+    return false;
+  };
 
   if (!verify_target_pixels("initial", expected_background, expected_box,
                             require_full_nontransparent, /*quiet=*/false)) {
     return cleanup_and_fail();
+  }
+  if (expect_backdrop_filter_metadata) {
+    const size_t backdrop_region_count =
+        blink_standalone_renderer_backdrop_filter_region_count(renderer);
+    if (backdrop_region_count == 0) {
+      std::fprintf(stderr,
+                   "%s: expected backdrop metadata after gpu target render, "
+                   "got regions=0 hit_count=%zu\n",
+                   label,
+                   blink_standalone_renderer_hit_metadata_count(renderer));
+      return cleanup_and_fail();
+    }
+    blink_standalone_backdrop_filter_region_t region = {};
+    bool saw_blur = false;
+    bool saw_saturate = false;
+    if (blink_standalone_renderer_get_backdrop_filter_region(renderer, 0,
+                                                             &region) ==
+        BLINK_STANDALONE_STATUS_OK) {
+      for (uint32_t i = 0; i < region.filter_op_count; ++i) {
+        if (region.filter_ops[i].type ==
+                BLINK_STANDALONE_BACKDROP_FILTER_OP_BLUR &&
+            region.filter_ops[i].amount > 0.0f) {
+          saw_blur = true;
+        }
+        if (region.filter_ops[i].type ==
+                BLINK_STANDALONE_BACKDROP_FILTER_OP_SATURATE &&
+            region.filter_ops[i].amount > 1.0f) {
+          saw_saturate = true;
+        }
+      }
+    }
+    if (!saw_blur || !saw_saturate) {
+      std::fprintf(stderr,
+                   "%s: backdrop metadata missing expected operations "
+                   "regions=%zu saw_blur=%d saw_saturate=%d\n",
+                   label, backdrop_region_count, saw_blur ? 1 : 0,
+                   saw_saturate ? 1 : 0);
+      return cleanup_and_fail();
+    }
+  }
+  if (exercise_gpu_backdrop_mask) {
+    if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+      target.vulkan.current_layout = target.vulkan.required_final_layout;
+      mask_target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    }
+#if BUILDFLAG(IS_WIN)
+    if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+      target.d3d12.current_state = target.d3d12.required_final_state;
+      mask_target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+    }
+#endif
+    target.common.generation++;
+    mask_target.common.generation++;
+    blink_standalone_gpu_backdrop_render_request_t backdrop_request = {};
+    backdrop_request.backend = backend;
+    backdrop_request.flags = BLINK_STANDALONE_GPU_BACKDROP_MASK_REQUIRED;
+    backdrop_request.mask_encoding =
+        BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE;
+    backdrop_request.main_target = target;
+    backdrop_request.backdrop_mask_target = mask_target;
+    blink_standalone_gpu_backdrop_render_result_t backdrop_result = {};
+    status = blink_standalone_renderer_render_gpu_backdrop_frame(
+        renderer, &backdrop_request, &backdrop_result);
+    if (status != BLINK_STANDALONE_STATUS_OK ||
+        backdrop_result.status != BLINK_STANDALONE_STATUS_OK ||
+        backdrop_result.main_target_written == 0 ||
+        backdrop_result.backdrop_mask_written == 0 ||
+        backdrop_result.backend != backend ||
+        backdrop_result.width != active_width ||
+        backdrop_result.height != active_height ||
+        backdrop_result.mask_encoding !=
+            BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE ||
+        backdrop_result.effect_count == 0 ||
+        backdrop_result.frame_generation == 0 ||
+        backdrop_result.main_target_generation != target.common.generation ||
+        backdrop_result.backdrop_mask_generation !=
+            mask_target.common.generation) {
+      std::fprintf(stderr,
+                   "%s: gpu backdrop public render failed status=%d "
+                   "result_status=%u main=%u mask=%u backend=%u size=%ux%u "
+                   "encoding=%u effects=%u generation=%llu main_gen=%llu "
+                   "mask_gen=%llu error=%s\n",
+                   label, status, backdrop_result.status,
+                   backdrop_result.main_target_written,
+                   backdrop_result.backdrop_mask_written,
+                   backdrop_result.backend, backdrop_result.width,
+                   backdrop_result.height, backdrop_result.mask_encoding,
+                   backdrop_result.effect_count,
+                   static_cast<unsigned long long>(
+                       backdrop_result.frame_generation),
+                   static_cast<unsigned long long>(
+                       backdrop_result.main_target_generation),
+                   static_cast<unsigned long long>(
+                       backdrop_result.backdrop_mask_generation),
+                   blink_standalone_renderer_last_error(renderer));
+      return cleanup_and_fail();
+    }
+    backdrop_effect_count = backdrop_result.effect_count;
+    if (blink_standalone_renderer_gpu_backdrop_effect_count(renderer) !=
+        backdrop_effect_count) {
+      std::fprintf(stderr,
+                   "%s: gpu backdrop effect count mismatch result=%u "
+                   "accessor=%zu\n",
+                   label, backdrop_effect_count,
+                   blink_standalone_renderer_gpu_backdrop_effect_count(
+                       renderer));
+      return cleanup_and_fail();
+    }
+    bool saw_blur = false;
+    bool saw_saturate = false;
+    for (uint32_t i = 0; i < backdrop_effect_count; ++i) {
+      blink_standalone_gpu_backdrop_effect_t effect = {};
+      status = blink_standalone_renderer_get_gpu_backdrop_effect(renderer, i,
+                                                                 &effect);
+      if (status != BLINK_STANDALONE_STATUS_OK || effect.id == 0 ||
+          effect.generation != backdrop_result.frame_generation ||
+          effect.filter_op_count == 0) {
+        std::fprintf(stderr,
+                     "%s: invalid gpu backdrop effect index=%u status=%d "
+                     "id=%u generation=%llu expected_generation=%llu "
+                     "ops=%u\n",
+                     label, i, status, effect.id,
+                     static_cast<unsigned long long>(effect.generation),
+                     static_cast<unsigned long long>(
+                         backdrop_result.frame_generation),
+                     effect.filter_op_count);
+        return cleanup_and_fail();
+      }
+      for (uint32_t op = 0; op < effect.filter_op_count; ++op) {
+        if (effect.filter_ops[op].type ==
+                BLINK_STANDALONE_BACKDROP_FILTER_OP_BLUR &&
+            effect.filter_ops[op].amount > 0.0f) {
+          saw_blur = true;
+        }
+        if (effect.filter_ops[op].type ==
+                BLINK_STANDALONE_BACKDROP_FILTER_OP_SATURATE &&
+            effect.filter_ops[op].amount > 1.0f) {
+          saw_saturate = true;
+        }
+      }
+    }
+    if (!saw_blur || !saw_saturate) {
+      std::fprintf(stderr,
+                   "%s: gpu backdrop effects missing expected operations "
+                   "effects=%u saw_blur=%d saw_saturate=%d\n",
+                   label, backdrop_effect_count, saw_blur ? 1 : 0,
+                   saw_saturate ? 1 : 0);
+      return cleanup_and_fail();
+    }
+    if (!verify_backdrop_mask_pixels("gpu-backdrop-mask")) {
+      std::fprintf(stderr,
+                   "%s: gpu backdrop mask had no encoded coverage "
+                   "mask_pixels=%u distinct_ids=%u\n",
+                   label, backdrop_mask_pixels, backdrop_mask_distinct_ids);
+      return cleanup_and_fail();
+    }
   }
   if (repeated_same_target_render_iterations > 0) {
     for (int i = 0; i < repeated_same_target_render_iterations; ++i) {
@@ -2404,17 +2714,17 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       "format=%u generation=%llu observed_background=%08x observed_box=%08x "
       "background_pixels=%u box_pixels=%u nontransparent_pixels=%u "
       "pending_resize_retries=%d repeated_same_target=%d "
-      "post_resize_repeated=%d invalid_uncached_d3d12=%d\n",
+      "post_resize_repeated=%d invalid_uncached_d3d12=%d "
+      "backdrop_mask_pixels=%u backdrop_mask_ids=%u backdrop_effects=%u\n",
       label, result.backend, capabilities, result.target_written, result.width,
       result.height, result.pixel_format,
       static_cast<unsigned long long>(result.generation), observed_background,
       observed_box, background_pixels, box_pixels, nontransparent_pixels,
       pending_resize_retries, repeated_same_target_renders,
-      post_resize_repeated_renders, invalid_uncached_d3d12_target_checks);
+      post_resize_repeated_renders, invalid_uncached_d3d12_target_checks,
+      backdrop_mask_pixels, backdrop_mask_distinct_ids, backdrop_effect_count);
 #if BUILDFLAG(IS_WIN)
-  if (target.d3d12.shared_handle) {
-    CloseHandle(static_cast<HANDLE>(target.d3d12.shared_handle));
-  }
+  cleanup_d3d12_targets();
 #endif
   blink_standalone_renderer_destroy(renderer);
   cleanup_vulkan_target();
@@ -2612,6 +2922,195 @@ int RunCApiVulkanExternalTargetFullViewportButtonHitMetadataSmoke() {
       /*invalidate_d3d12_shared_handle_after_resize=*/false,
       /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
       /*full_viewport_button_document=*/true);
+}
+
+int RunCApiVulkanExternalTargetFilterBackdropSmoke() {
+  const char* extra_css =
+      "#blurred{position:absolute;left:160px;top:96px;width:480px;"
+      "height:220px;background:#d06329;filter:blur(6px) saturate(130%);}"
+      "#backdrop{position:absolute;left:640px;top:120px;width:360px;"
+      "height:220px;border-radius:28px;background:rgba(255,255,255,.22);"
+      "backdrop-filter:blur(12px) saturate(180%) brightness(1.08);"
+      "-webkit-backdrop-filter:blur(12px) saturate(180%) brightness(1.08);}"
+      "#stripe{position:absolute;left:0;top:360px;width:1280px;height:160px;"
+      "background:linear-gradient(90deg,#144a80,#237a57,#d06329);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_filter_backdrop_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff144a80u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"#144a80",
+      /*box_css=*/"#237a57",
+      /*width=*/1280,
+      /*height=*/720,
+      extra_css,
+      /*extra_body=*/
+      "<div id='blurred'></div><div id='backdrop'></div><div id='stripe'></div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/true);
+}
+
+int RunCApiVulkanExternalTargetBackdropMaskSmoke() {
+  const char* extra_css =
+      "#backdrop{position:absolute;left:80px;top:64px;width:240px;"
+      "height:140px;border-radius:24px;background:rgba(255,255,255,.20);"
+      "backdrop-filter:blur(10px) saturate(170%);"
+      "-webkit-backdrop-filter:blur(10px) saturate(170%);}"
+      "#backdrop2{position:absolute;left:360px;top:160px;width:220px;"
+      "height:120px;border-radius:12px;background:rgba(255,255,255,.18);"
+      "backdrop-filter:blur(4px) brightness(1.2);"
+      "-webkit-backdrop-filter:blur(4px) brightness(1.2);}"
+      "#stripe{position:absolute;left:0;top:260px;width:720px;height:120px;"
+      "background:linear-gradient(90deg,#144a80,#237a57,#d06329);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_backdrop_mask_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff144a80u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"#144a80",
+      /*box_css=*/"#237a57",
+      /*width=*/720,
+      /*height=*/420,
+      extra_css,
+      /*extra_body=*/
+      "<div id='backdrop'></div><div id='backdrop2'></div><div id='stripe'></div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/true,
+      /*exercise_gpu_backdrop_mask=*/true);
+}
+
+int RunCApiGpuBackdropMaskRequiredInvalidSmoke() {
+  blink_standalone_renderer_config_t config = {};
+  config.width = 320;
+  config.height = 200;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status =
+      blink_standalone_renderer_create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_gpu_backdrop_mask_required_invalid_smoke: create "
+                 "failed status=%d\n",
+                 status);
+    return 1;
+  }
+  const char* html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456}"
+      "#box{position:absolute;left:12px;top:12px;width:80px;height:32px;"
+      "background:#d06329}"
+      "#backdrop{position:absolute;left:80px;top:60px;width:160px;"
+      "height:96px;background:rgba(255,255,255,.2);"
+      "backdrop-filter:blur(8px) saturate(160%);"
+      "-webkit-backdrop-filter:blur(8px) saturate(160%);}"
+      "</style><div id='box'></div><div id='backdrop'></div>";
+  status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
+  if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr,
+                 "c_api_gpu_backdrop_mask_required_invalid_smoke: set html "
+                 "failed status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  blink_standalone_gpu_backdrop_render_request_t request = {};
+  request.backend = BLINK_STANDALONE_GPU_BACKEND_VULKAN;
+  request.flags = BLINK_STANDALONE_GPU_BACKDROP_MASK_REQUIRED;
+  request.mask_encoding =
+      BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE;
+  request.main_target.common.backend = BLINK_STANDALONE_GPU_BACKEND_VULKAN;
+  request.main_target.common.flags =
+      BLINK_STANDALONE_GPU_TARGET_INTERNAL_TEST_STANDIN;
+  request.main_target.common.logical_width = 320;
+  request.main_target.common.logical_height = 200;
+  request.main_target.common.physical_width = 320;
+  request.main_target.common.physical_height = 200;
+  request.main_target.common.device_scale_factor = 1.0f;
+  request.main_target.common.pixel_format =
+      BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
+  request.main_target.common.alpha_mode =
+      BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
+  request.main_target.common.color_space = BLINK_STANDALONE_COLOR_SPACE_SRGB;
+  request.main_target.common.generation = 1;
+  request.backdrop_mask_target.common.backend =
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN;
+  request.backdrop_mask_target.common.logical_width = 320;
+  request.backdrop_mask_target.common.logical_height = 200;
+  request.backdrop_mask_target.common.physical_width = 320;
+  request.backdrop_mask_target.common.physical_height = 200;
+  request.backdrop_mask_target.common.device_scale_factor = 1.0f;
+  request.backdrop_mask_target.common.pixel_format =
+      BLINK_STANDALONE_PIXEL_FORMAT_RGBA8;
+  request.backdrop_mask_target.common.alpha_mode =
+      BLINK_STANDALONE_ALPHA_MODE_PREMULTIPLIED;
+  request.backdrop_mask_target.common.color_space =
+      BLINK_STANDALONE_COLOR_SPACE_SRGB;
+  request.backdrop_mask_target.common.generation = 2;
+  blink_standalone_gpu_backdrop_render_result_t result = {};
+  status = blink_standalone_renderer_render_gpu_backdrop_frame(renderer,
+                                                               &request,
+                                                               &result);
+  const char* error = blink_standalone_renderer_last_error(renderer);
+  const bool rejected =
+      status == BLINK_STANDALONE_STATUS_INVALID_ARGUMENT &&
+      result.main_target_written != 0 && result.backdrop_mask_written == 0 &&
+      error && std::string(error).find("backdrop mask") != std::string::npos;
+  if (!rejected) {
+    std::fprintf(stderr,
+                 "c_api_gpu_backdrop_mask_required_invalid_smoke: expected "
+                 "invalid mask rejection status=%d result_status=%u main=%u "
+                 "mask=%u error=%s\n",
+                 status, result.status, result.main_target_written,
+                 result.backdrop_mask_written, error ? error : "");
+    blink_standalone_renderer_destroy(renderer);
+    return 1;
+  }
+  std::printf(
+      "c_api_gpu_backdrop_mask_required_invalid_smoke: ok status=%d "
+      "main_written=%u mask_written=%u error=%s\n",
+      status, result.main_target_written, result.backdrop_mask_written,
+      error ? error : "");
+  blink_standalone_renderer_destroy(renderer);
+  return 0;
 }
 
 int RunCApiVulkanInvalidTargetMetadataSmoke() {
@@ -2867,7 +3366,75 @@ int RunCApiD3D12ExternalTargetFilterBackdropSmoke() {
       /*height=*/720,
       extra_css,
       /*extra_body=*/
-      "<div id='blurred'></div><div id='backdrop'></div><div id='stripe'></div>");
+      "<div id='blurred'></div><div id='backdrop'></div><div id='stripe'></div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/true);
+}
+
+int RunCApiD3D12ExternalTargetBackdropMaskSmoke() {
+  const char* extra_css =
+      "#backdrop{position:absolute;left:80px;top:64px;width:240px;"
+      "height:140px;border-radius:24px;background:rgba(255,255,255,.20);"
+      "backdrop-filter:blur(10px) saturate(170%);"
+      "-webkit-backdrop-filter:blur(10px) saturate(170%);}"
+      "#backdrop2{position:absolute;left:360px;top:160px;width:220px;"
+      "height:120px;border-radius:12px;background:rgba(255,255,255,.18);"
+      "backdrop-filter:blur(4px) brightness(1.2);"
+      "-webkit-backdrop-filter:blur(4px) brightness(1.2);}"
+      "#stripe{position:absolute;left:0;top:260px;width:720px;height:120px;"
+      "background:linear-gradient(90deg,#144a80,#237a57,#d06329);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_external_target_backdrop_mask_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff144a80u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"#144a80",
+      /*box_css=*/"#237a57",
+      /*width=*/720,
+      /*height=*/420,
+      extra_css,
+      /*extra_body=*/
+      "<div id='backdrop'></div><div id='backdrop2'></div><div id='stripe'></div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/true,
+      /*exercise_gpu_backdrop_mask=*/true);
 }
 
 int RunCApiD3D12ExternalTargetTransparentFilterBackdropSmoke() {
@@ -2891,7 +3458,26 @@ int RunCApiD3D12ExternalTargetTransparentFilterBackdropSmoke() {
       /*height=*/720,
       extra_css,
       /*extra_body=*/"<div id='blurred'></div><div id='backdrop'></div>",
-      /*require_full_nontransparent=*/false);
+      /*require_full_nontransparent=*/false,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/true);
 }
 
 std::vector<uint8_t> MakeSolidBmp(int width,
@@ -9539,6 +10125,170 @@ int RunGpuBorrowedVkImageRenderCopySmoke() {
   return 0;
 }
 
+int RunGpuVulkanBackdropMaskPrototypeSmoke() {
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {256.0f, 160.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      ".panel{position:absolute;width:72px;height:52px;"
+      "background:rgba(255,255,255,.20);"
+      "backdrop-filter:blur(8px) saturate(160%);"
+      "-webkit-backdrop-filter:blur(8px) saturate(160%);}"
+      "#a{left:24px;top:72px;border-radius:12px;}"
+      "#b{left:132px;top:84px;backdrop-filter:brightness(1.35);"
+      "-webkit-backdrop-filter:brightness(1.35);}"
+      "</style><div id='box'></div><div id='a' class='panel'></div>"
+      "<div id='b' class='panel'></div>";
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(
+        stderr,
+        "gpu_vulkan_backdrop_mask_prototype_smoke: failed runtime "
+        "initialization\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_vulkan_gpu_frame = true;
+  input.request_backdrop_filter_regions = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult frame =
+      runtime->AdvanceFrame(input);
+  if (!frame.gpu_frame.shared_image_available ||
+      !frame.gpu_frame.vk_context_provider_available ||
+      !frame.gpu_frame.shared_context_state_is_vulkan ||
+      !frame.viz_display_created || !frame.skia_renderer_gpu_path_reached ||
+      frame.gpu_frame.is_software || frame.backdrop_filter_regions.size() < 2) {
+    std::fprintf(
+        stderr,
+        "gpu_vulkan_backdrop_mask_prototype_smoke: failed setup "
+        "shared_image=%d vk_context_provider=%d is_vulkan=%d "
+        "viz_display=%d skia_gpu=%d software=%d backdrop_regions=%zu "
+        "failure=%s\n",
+        frame.gpu_frame.shared_image_available ? 1 : 0,
+        frame.gpu_frame.vk_context_provider_available ? 1 : 0,
+        frame.gpu_frame.shared_context_state_is_vulkan ? 1 : 0,
+        frame.viz_display_created ? 1 : 0,
+        frame.skia_renderer_gpu_path_reached ? 1 : 0,
+        frame.gpu_frame.is_software ? 1 : 0,
+        frame.backdrop_filter_regions.size(), frame.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : frame.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  const std::string main_target_line =
+      runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
+  if (main_target_line.find("gpu_borrowed_vkimage_render_copy_smoke: ok") !=
+      0) {
+    std::fprintf(stderr, "%s\n", main_target_line.c_str());
+    return 1;
+  }
+  const std::string mask_line =
+      runtime->RunVulkanBackdropMaskPrototypeForTesting();
+  if (mask_line.find("gpu_vulkan_backdrop_mask_prototype_smoke: ok") != 0) {
+    std::fprintf(stderr, "%s\n", mask_line.c_str());
+    return 1;
+  }
+  std::printf("%s main_target=\"%s\"\n", mask_line.c_str(),
+              main_target_line.c_str());
+  return 0;
+}
+
+int RunGpuD3D12BackdropMaskPrototypeSmoke() {
+#if defined(_WIN32) && defined(BLINK_STANDALONE_HAVE_DAWN_D3D12)
+  html_css_renderer::CompositorRuntimeCreateInfo create_info;
+  create_info.renderer.viewport = {256.0f, 160.0f};
+  create_info.renderer.device_scale_factor = 1.0f;
+  create_info.renderer.html =
+      "<!doctype html><style>"
+      "html,body{margin:0;width:100%;height:100%;background:#123456;}"
+      "#box{position:absolute;left:16px;top:12px;width:80px;height:32px;"
+      "background:#d06329;}"
+      ".panel{position:absolute;width:72px;height:52px;"
+      "background:rgba(255,255,255,.20);"
+      "backdrop-filter:blur(8px) saturate(160%);"
+      "-webkit-backdrop-filter:blur(8px) saturate(160%);}"
+      "#a{left:24px;top:72px;border-radius:12px;}"
+      "#b{left:132px;top:84px;backdrop-filter:brightness(1.35);"
+      "-webkit-backdrop-filter:brightness(1.35);}"
+      "</style><div id='box'></div><div id='a' class='panel'></div>"
+      "<div id='b' class='panel'></div>";
+  std::unique_ptr<html_css_renderer::StandaloneCompositorRuntime> runtime =
+      html_css_renderer::CreateStandaloneCompositorRuntime(
+          std::move(create_info));
+  std::vector<std::string> diagnostics;
+  if (!runtime || !runtime->Initialize(&diagnostics)) {
+    std::fprintf(
+        stderr,
+        "gpu_d3d12_backdrop_mask_prototype_smoke: failed runtime "
+        "initialization\n");
+    for (const std::string& diagnostic : diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  html_css_renderer::FrameInput input;
+  input.viewport = runtime->Snapshot().viewport;
+  input.request_d3d12_gpu_frame = true;
+  input.request_backdrop_filter_regions = true;
+  input.result_collection = html_css_renderer::FrameResultCollection::kMinimal;
+  html_css_renderer::CompositorFrameResult frame =
+      runtime->AdvanceFrame(input);
+  if (!frame.viz_display_created || !frame.skia_renderer_gpu_path_reached ||
+      frame.gpu_frame.is_software || frame.backdrop_filter_regions.size() < 2) {
+    std::fprintf(
+        stderr,
+        "gpu_d3d12_backdrop_mask_prototype_smoke: failed setup "
+        "viz_display=%d skia_gpu=%d software=%d backdrop_regions=%zu "
+        "failure=%s\n",
+        frame.viz_display_created ? 1 : 0,
+        frame.skia_renderer_gpu_path_reached ? 1 : 0,
+        frame.gpu_frame.is_software ? 1 : 0,
+        frame.backdrop_filter_regions.size(), frame.gpu_frame_failure.c_str());
+    for (const std::string& diagnostic : frame.diagnostics) {
+      std::fprintf(stderr, "diagnostic: %s\n", diagnostic.c_str());
+    }
+    return 1;
+  }
+
+  const std::string main_target_line =
+      runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
+  if (main_target_line.find("gpu_borrowed_d3d12_render_copy_smoke: ok") !=
+      0) {
+    std::fprintf(stderr, "%s\n", main_target_line.c_str());
+    return 1;
+  }
+  const std::string mask_line =
+      runtime->RunD3D12BackdropMaskPrototypeForTesting();
+  if (mask_line.find("gpu_d3d12_backdrop_mask_prototype_smoke: ok") != 0) {
+    std::fprintf(stderr, "%s\n", mask_line.c_str());
+    return 1;
+  }
+  std::printf("%s main_target=\"%s\"\n", mask_line.c_str(),
+              main_target_line.c_str());
+  return 0;
+#else
+  std::printf(
+      "gpu_d3d12_backdrop_mask_prototype_smoke: blocked "
+      "failure=D3D12/Dawn external targets are not enabled in this build\n");
+  return 0;
+#endif
+}
+
 int RunGpuExternalVulkanRuntimeTargetSmoke() {
   std::unique_ptr<gpu::VulkanImplementation> implementation =
       gpu::CreateVulkanImplementation(false);
@@ -10523,6 +11273,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-vulkan-external-target-click-resize-pending-smoke" ||
         arg ==
             "--c-api-vulkan-external-target-full-viewport-button-hit-metadata-smoke" ||
+        arg == "--c-api-vulkan-external-target-filter-backdrop-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
         arg == "--c-api-d3d12-external-target-resize-smoke" ||
         arg == "--c-api-d3d12-external-target-click-timing-smoke" ||
@@ -10587,8 +11338,10 @@ int main(int argc, char** argv) {
   bool gpu_output_d3d12_render_pixel_smoke = false;
   bool gpu_borrowed_vkimage_backing_smoke = false;
   bool gpu_borrowed_vkimage_render_copy_smoke = false;
+  bool gpu_vulkan_backdrop_mask_prototype_smoke = false;
   bool gpu_external_vulkan_runtime_target_smoke = false;
   bool gpu_borrowed_d3d12_render_copy_smoke = false;
+  bool gpu_d3d12_backdrop_mask_prototype_smoke = false;
   bool gpu_external_vulkan_device_smoke = false;
   bool gpu_vulkan_ganesh_context_smoke = false;
   bool c_api_vulkan_external_target_smoke = false;
@@ -10601,7 +11354,10 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_click_resize_pending_smoke = false;
   bool c_api_vulkan_external_target_full_viewport_button_hit_metadata_smoke =
       false;
+  bool c_api_vulkan_external_target_filter_backdrop_smoke = false;
+  bool c_api_vulkan_external_target_backdrop_mask_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
+  bool c_api_gpu_backdrop_mask_required_invalid_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_d3d12_external_target_resize_smoke = false;
   bool c_api_d3d12_external_target_click_timing_smoke = false;
@@ -10615,6 +11371,7 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_current_document_smoke = false;
   bool c_api_d3d12_external_target_current_document_smoke = false;
   bool c_api_d3d12_external_target_filter_backdrop_smoke = false;
+  bool c_api_d3d12_external_target_backdrop_mask_smoke = false;
   bool c_api_d3d12_external_target_transparent_filter_backdrop_smoke = false;
   bool c_api_smoke = false;
   bool c_api_viewport_resize_smoke = false;
@@ -10759,10 +11516,14 @@ int main(int argc, char** argv) {
       gpu_borrowed_vkimage_backing_smoke = true;
     } else if (arg == "--gpu-borrowed-vkimage-render-copy-smoke") {
       gpu_borrowed_vkimage_render_copy_smoke = true;
+    } else if (arg == "--gpu-vulkan-backdrop-mask-prototype-smoke") {
+      gpu_vulkan_backdrop_mask_prototype_smoke = true;
     } else if (arg == "--gpu-external-vulkan-runtime-target-smoke") {
       gpu_external_vulkan_runtime_target_smoke = true;
     } else if (arg == "--gpu-borrowed-d3d12-render-copy-smoke") {
       gpu_borrowed_d3d12_render_copy_smoke = true;
+    } else if (arg == "--gpu-d3d12-backdrop-mask-prototype-smoke") {
+      gpu_d3d12_backdrop_mask_prototype_smoke = true;
     } else if (arg == "--gpu-external-vulkan-device-smoke") {
       gpu_external_vulkan_device_smoke = true;
     } else if (arg == "--gpu-vulkan-ganesh-context-smoke") {
@@ -10789,8 +11550,14 @@ int main(int argc, char** argv) {
         "--c-api-vulkan-external-target-full-viewport-button-hit-metadata-smoke") {
       c_api_vulkan_external_target_full_viewport_button_hit_metadata_smoke =
           true;
+    } else if (arg == "--c-api-vulkan-external-target-filter-backdrop-smoke") {
+      c_api_vulkan_external_target_filter_backdrop_smoke = true;
+    } else if (arg == "--c-api-vulkan-external-target-backdrop-mask-smoke") {
+      c_api_vulkan_external_target_backdrop_mask_smoke = true;
     } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
       c_api_vulkan_invalid_target_metadata_smoke = true;
+    } else if (arg == "--c-api-gpu-backdrop-mask-required-invalid-smoke") {
+      c_api_gpu_backdrop_mask_required_invalid_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
       c_api_d3d12_external_target_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-resize-smoke") {
@@ -10824,6 +11591,8 @@ int main(int argc, char** argv) {
     } else if (arg ==
                "--c-api-d3d12-external-target-filter-backdrop-smoke") {
       c_api_d3d12_external_target_filter_backdrop_smoke = true;
+    } else if (arg == "--c-api-d3d12-external-target-backdrop-mask-smoke") {
+      c_api_d3d12_external_target_backdrop_mask_smoke = true;
     } else if (
         arg ==
         "--c-api-d3d12-external-target-transparent-filter-backdrop-smoke") {
@@ -11023,12 +11792,20 @@ int main(int argc, char** argv) {
     return RunGpuBorrowedVkImageRenderCopySmoke();
   }
 
+  if (gpu_vulkan_backdrop_mask_prototype_smoke) {
+    return RunGpuVulkanBackdropMaskPrototypeSmoke();
+  }
+
   if (gpu_external_vulkan_runtime_target_smoke) {
     return RunGpuExternalVulkanRuntimeTargetSmoke();
   }
 
   if (gpu_borrowed_d3d12_render_copy_smoke) {
     return RunGpuBorrowedD3D12RenderCopySmoke();
+  }
+
+  if (gpu_d3d12_backdrop_mask_prototype_smoke) {
+    return RunGpuD3D12BackdropMaskPrototypeSmoke();
   }
 
   if (gpu_external_vulkan_device_smoke) {
@@ -11075,8 +11852,20 @@ int main(int argc, char** argv) {
     return RunCApiVulkanExternalTargetFullViewportButtonHitMetadataSmoke();
   }
 
+  if (c_api_vulkan_external_target_filter_backdrop_smoke) {
+    return RunCApiVulkanExternalTargetFilterBackdropSmoke();
+  }
+
+  if (c_api_vulkan_external_target_backdrop_mask_smoke) {
+    return RunCApiVulkanExternalTargetBackdropMaskSmoke();
+  }
+
   if (c_api_vulkan_invalid_target_metadata_smoke) {
     return RunCApiVulkanInvalidTargetMetadataSmoke();
+  }
+
+  if (c_api_gpu_backdrop_mask_required_invalid_smoke) {
+    return RunCApiGpuBackdropMaskRequiredInvalidSmoke();
   }
 
   if (c_api_d3d12_external_target_smoke) {
@@ -11125,6 +11914,10 @@ int main(int argc, char** argv) {
 
   if (c_api_d3d12_external_target_filter_backdrop_smoke) {
     return RunCApiD3D12ExternalTargetFilterBackdropSmoke();
+  }
+
+  if (c_api_d3d12_external_target_backdrop_mask_smoke) {
+    return RunCApiD3D12ExternalTargetBackdropMaskSmoke();
   }
 
   if (c_api_d3d12_external_target_transparent_filter_backdrop_smoke) {

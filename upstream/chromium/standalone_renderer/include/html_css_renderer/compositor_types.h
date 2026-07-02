@@ -170,6 +170,7 @@ struct FrameInput {
   bool request_d3d12_gpu_frame = false;
   bool prepare_vulkan_gpu_frame = false;
   bool prepare_d3d12_gpu_frame = false;
+  bool force_metadata_collection = false;
   bool request_backdrop_filter_regions = false;
   bool force_document_reload = false;
   FrameResultCollection result_collection = FrameResultCollection::kFull;

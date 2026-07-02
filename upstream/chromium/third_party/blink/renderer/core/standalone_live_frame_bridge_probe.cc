@@ -128,6 +128,7 @@
 #include "third_party/skia/include/core/SkPathBuilder.h"
 #include "third_party/skia/include/core/SkPathEffect.h"
 #include "third_party/skia/include/core/SkPixmap.h"
+#include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkSerialProcs.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "third_party/skia/include/core/SkString.h"
@@ -2027,6 +2028,76 @@ class StandaloneSkiaOutputSurfaceDependency final
     return RunBorrowedVkImageBackingSmokeOnCurrentSequence();
   }
 
+  std::string RunVulkanBackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 std::vector<LiveBackdropFilterRegion> regions,
+                 gfx::Size output_size, gfx::Size css_viewport,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result = self->RunVulkanBackdropMaskPrototypeOnCurrentSequence(
+                    regions, output_size, css_viewport);
+                completed->Signal();
+              },
+              base::Unretained(this), regions, output_size, css_viewport,
+              &result, &completed));
+      if (!posted) {
+        return "gpu_vulkan_backdrop_mask_prototype_smoke: failed "
+               "failure=failed to post mask prototype to Vulkan context "
+               "sequence";
+      }
+      completed.Wait();
+      return result;
+    }
+    return RunVulkanBackdropMaskPrototypeOnCurrentSequence(regions, output_size,
+                                                          css_viewport);
+  }
+
+  std::string RunD3D12BackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 std::vector<LiveBackdropFilterRegion> regions,
+                 gfx::Size output_size, gfx::Size css_viewport,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result = self->RunD3D12BackdropMaskPrototypeOnCurrentSequence(
+                    regions, output_size, css_viewport);
+                completed->Signal();
+              },
+              base::Unretained(this), regions, output_size, css_viewport,
+              &result, &completed));
+      if (!posted) {
+        return "gpu_d3d12_backdrop_mask_prototype_smoke: failed "
+               "failure=failed to post mask prototype to D3D12 context "
+               "sequence";
+      }
+      completed.Wait();
+      return result;
+    }
+    return RunD3D12BackdropMaskPrototypeOnCurrentSequence(regions, output_size,
+                                                          css_viewport);
+  }
+
   std::string RunBorrowedVkImageBackingSmokeOnCurrentSequence() {
     StandaloneBorrowedVkImageBackingSmokeResult result;
     std::unique_ptr<gpu::VulkanImage> target_image;
@@ -2188,6 +2259,951 @@ class StandaloneSkiaOutputSurfaceDependency final
     result.target_destroyed = true;
     target_image.reset();
     return StandaloneBorrowedVkImageBackingSmokeLine(result);
+  }
+
+  std::string RunVulkanBackdropMaskPrototypeOnCurrentSequence(
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    constexpr const char* kLabel =
+        "gpu_vulkan_backdrop_mask_prototype_smoke";
+    std::unique_ptr<gpu::VulkanImage> target_image;
+
+    auto finish_with_failure = [&](std::string failure) {
+      if (target_image) {
+        target_image->Destroy();
+      }
+      return std::string(kLabel) + ": failed failure=" + std::move(failure);
+    };
+
+    if (regions.empty()) {
+      return finish_with_failure("no backdrop filter regions collected");
+    }
+    if (output_size.IsEmpty() || css_viewport.IsEmpty()) {
+      return finish_with_failure("target or CSS viewport size is empty");
+    }
+    if (!use_vulkan_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "backdrop mask prototype requires offscreen Vulkan output");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->vk_context_provider() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    viz::VulkanContextProvider* vulkan_provider =
+        context_state->vk_context_provider();
+    gpu::VulkanDeviceQueue* device_queue = vulkan_provider->GetDeviceQueue();
+    if (!device_queue) {
+      return finish_with_failure("Vulkan context provider has no device queue");
+    }
+
+    target_image = gpu::VulkanImage::Create(
+        device_queue, output_size, VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
+    if (!target_image || target_image->image() == VK_NULL_HANDLE) {
+      return finish_with_failure(
+          "stand-in backdrop mask VkImage creation failed");
+    }
+
+    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
+    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
+    const GrVkImageInfo vk_image_info =
+        gpu::CreateGrVkImageInfo(target_image.get(), format, color_space);
+    const GrBackendTexture backend_texture =
+        GrBackendTextures::MakeVk(output_size.width(), output_size.height(),
+                                  vk_image_info);
+    if (!backend_texture.isValid()) {
+      return finish_with_failure("Skia backend texture wrapping failed");
+    }
+    sk_sp<SkSurface> surface = SkSurfaces::WrapBackendTexture(
+        context_state->gr_context(), backend_texture, kTopLeft_GrSurfaceOrigin,
+        /*sampleCnt=*/1, kRGBA_8888_SkColorType, color_space.ToSkColorSpace(),
+        nullptr);
+    if (!surface) {
+      return finish_with_failure("backdrop mask SkSurface wrapping failed");
+    }
+
+    SkCanvas* canvas = surface->getCanvas();
+    canvas->clear(SkColors::kTransparent);
+    SkPaint paint;
+    paint.setStyle(SkPaint::kFill_Style);
+    paint.setAntiAlias(true);
+
+    const float scale_x = static_cast<float>(output_size.width()) /
+                          static_cast<float>(css_viewport.width());
+    const float scale_y = static_cast<float>(output_size.height()) /
+                          static_cast<float>(css_viewport.height());
+    const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
+    for (size_t i = 0; i < encoded_region_count; ++i) {
+      const LiveBackdropFilterRegion& region = regions[i];
+      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
+      paint.setColor(SkColorSetARGB(255, region_id, 255, 0));
+      const SkRect rect = SkRect::MakeXYWH(
+          region.x * scale_x, region.y * scale_y, region.width * scale_x,
+          region.height * scale_y);
+      if ((region.flags & kStandaloneBackdropFilterRoundedRect) != 0) {
+        SkVector radii[4] = {
+            {region.border_radius_top_left * scale_x,
+             region.border_radius_top_left * scale_y},
+            {region.border_radius_top_right * scale_x,
+             region.border_radius_top_right * scale_y},
+            {region.border_radius_bottom_right * scale_x,
+             region.border_radius_bottom_right * scale_y},
+            {region.border_radius_bottom_left * scale_x,
+             region.border_radius_bottom_left * scale_y},
+        };
+        SkRRect rrect;
+        rrect.setRectRadii(rect, radii);
+        canvas->drawRRect(rrect, paint);
+      } else {
+        canvas->drawRect(rect, paint);
+      }
+    }
+
+    context_state->gr_context()->flush(surface.get());
+    if (!context_state->gr_context()->submit()) {
+      return finish_with_failure("backdrop mask Skia submit failed");
+    }
+
+    const SkImageInfo readback_info =
+        SkImageInfo::MakeN32Premul(output_size.width(), output_size.height());
+    std::vector<uint32_t> readback_pixels(static_cast<size_t>(
+        output_size.width()) * static_cast<size_t>(output_size.height()));
+    const size_t row_bytes =
+        static_cast<size_t>(output_size.width()) * sizeof(uint32_t);
+    if (!surface->readPixels(readback_info, readback_pixels.data(), row_bytes,
+                             0, 0)) {
+      return finish_with_failure("backdrop mask readback failed");
+    }
+    std::array<bool, 256> seen_ids = {};
+    size_t mask_pixels = 0;
+    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
+    for (int y = 0; y < output_size.height(); ++y) {
+      for (int x = 0; x < output_size.width(); ++x) {
+        const SkColor color = pixmap.getColor(x, y);
+        const uint8_t id = SkColorGetR(color);
+        const uint8_t coverage = SkColorGetG(color);
+        if (id != 0 && coverage != 0) {
+          ++mask_pixels;
+          seen_ids[id] = true;
+        }
+      }
+    }
+    size_t distinct_ids = 0;
+    for (bool seen : seen_ids) {
+      if (seen) {
+        ++distinct_ids;
+      }
+    }
+    if (mask_pixels == 0 || distinct_ids == 0) {
+      return finish_with_failure("backdrop mask target remained empty");
+    }
+
+    context_state->gr_context()->flushAndSubmit(GrSyncCpu::kYes);
+    if (device_queue) {
+      vkDeviceWaitIdle(device_queue->GetVulkanDevice());
+    }
+    target_image->Destroy();
+    target_image.reset();
+
+    std::ostringstream out;
+    out << kLabel << ": ok"
+        << " encoding=rgba8_id_coverage"
+        << " target=" << output_size.width() << "x" << output_size.height()
+        << " regions=" << regions.size()
+        << " encoded_regions=" << encoded_region_count
+        << " distinct_ids=" << distinct_ids
+        << " mask_pixels=" << mask_pixels;
+    return out.str();
+  }
+
+  std::string RenderVulkanBackdropMaskToExternalTargetForTesting(
+      const html_css_renderer::ExternalVulkanImageTarget* external_target,
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 const html_css_renderer::ExternalVulkanImageTarget*
+                     external_target,
+                 const std::vector<LiveBackdropFilterRegion>* regions,
+                 gfx::Size output_size, gfx::Size css_viewport,
+                 std::string* result, base::WaitableEvent* completed) {
+                *result =
+                    self->RenderVulkanBackdropMaskToExternalTargetOnCurrentSequence(
+                        external_target, *regions, output_size, css_viewport);
+                completed->Signal();
+              },
+              base::Unretained(this), external_target, &regions, output_size,
+              css_viewport, &result, &completed));
+      if (!posted) {
+        return "gpu_external_vkimage_backdrop_mask: failed failure=failed to "
+               "post mask render to Vulkan context sequence";
+      }
+      completed.Wait();
+      return result;
+    }
+    return RenderVulkanBackdropMaskToExternalTargetOnCurrentSequence(
+        external_target, regions, output_size, css_viewport);
+  }
+
+  std::string RenderVulkanBackdropMaskToExternalTargetOnCurrentSequence(
+      const html_css_renderer::ExternalVulkanImageTarget* external_target,
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    constexpr const char* kLabel = "gpu_external_vkimage_backdrop_mask";
+    auto finish_with_failure = [&](std::string failure) {
+      DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      return std::string(kLabel) + ": failed failure=" + std::move(failure);
+    };
+
+    if (!external_target) {
+      return finish_with_failure("external Vulkan mask target is null");
+    }
+    if (regions.empty()) {
+      return finish_with_failure("no backdrop filter regions collected");
+    }
+    if (output_size.IsEmpty() || css_viewport.IsEmpty()) {
+      return finish_with_failure("target or CSS viewport size is empty");
+    }
+    scoped_refptr<gpu::ClientSharedImage> unused_shared_image;
+    std::string prepare_result =
+        PrepareBorrowedVkImageRenderCopyBlitTargetForTesting(
+            output_size, nullptr, external_target, &unused_shared_image);
+    if (!prepare_result.empty()) {
+      return finish_with_failure(prepare_result);
+    }
+    if (!borrowed_blit_target_ || !borrowed_blit_target_->image) {
+      return finish_with_failure(
+          "external Vulkan mask target wrapper is unavailable");
+    }
+
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->GrContextIsVulkan() ||
+        !context_state->gr_context()) {
+      return finish_with_failure(
+          "offscreen runtime has no Vulkan Ganesh SharedContextState");
+    }
+    const viz::SharedImageFormat format = viz::SinglePlaneFormat::kRGBA_8888;
+    const gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
+    const GrVkImageInfo vk_image_info =
+        gpu::CreateGrVkImageInfo(borrowed_blit_target_->image.get(), format,
+                                 color_space);
+    const GrBackendTexture backend_texture =
+        GrBackendTextures::MakeVk(output_size.width(), output_size.height(),
+                                  vk_image_info);
+    if (!backend_texture.isValid()) {
+      return finish_with_failure("Skia backend texture wrapping failed");
+    }
+    sk_sp<SkSurface> surface = SkSurfaces::WrapBackendTexture(
+        context_state->gr_context(), backend_texture, kTopLeft_GrSurfaceOrigin,
+        /*sampleCnt=*/1, kRGBA_8888_SkColorType, color_space.ToSkColorSpace(),
+        nullptr);
+    if (!surface) {
+      return finish_with_failure("backdrop mask SkSurface wrapping failed");
+    }
+
+    SkCanvas* canvas = surface->getCanvas();
+    canvas->clear(SkColors::kTransparent);
+    SkPaint paint;
+    paint.setStyle(SkPaint::kFill_Style);
+    paint.setAntiAlias(true);
+
+    const float scale_x = static_cast<float>(output_size.width()) /
+                          static_cast<float>(css_viewport.width());
+    const float scale_y = static_cast<float>(output_size.height()) /
+                          static_cast<float>(css_viewport.height());
+    const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
+    for (size_t i = 0; i < encoded_region_count; ++i) {
+      const LiveBackdropFilterRegion& region = regions[i];
+      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
+      paint.setColor(SkColorSetARGB(255, region_id, 255, 0));
+      const SkRect rect = SkRect::MakeXYWH(
+          region.x * scale_x, region.y * scale_y, region.width * scale_x,
+          region.height * scale_y);
+      if ((region.flags & kStandaloneBackdropFilterRoundedRect) != 0) {
+        SkVector radii[4] = {
+            {region.border_radius_top_left * scale_x,
+             region.border_radius_top_left * scale_y},
+            {region.border_radius_top_right * scale_x,
+             region.border_radius_top_right * scale_y},
+            {region.border_radius_bottom_right * scale_x,
+             region.border_radius_bottom_right * scale_y},
+            {region.border_radius_bottom_left * scale_x,
+             region.border_radius_bottom_left * scale_y},
+        };
+        SkRRect rrect;
+        rrect.setRectRadii(rect, radii);
+        canvas->drawRRect(rrect, paint);
+      } else {
+        canvas->drawRect(rect, paint);
+      }
+    }
+
+    context_state->gr_context()->flush(surface.get());
+    if (!context_state->gr_context()->submit()) {
+      return finish_with_failure("backdrop mask Skia submit failed");
+    }
+
+    const SkImageInfo readback_info =
+        SkImageInfo::MakeN32Premul(output_size.width(), output_size.height());
+    std::vector<uint32_t> readback_pixels(static_cast<size_t>(
+        output_size.width()) * static_cast<size_t>(output_size.height()));
+    const size_t row_bytes =
+        static_cast<size_t>(output_size.width()) * sizeof(uint32_t);
+    if (!surface->readPixels(readback_info, readback_pixels.data(), row_bytes,
+                             0, 0)) {
+      return finish_with_failure("backdrop mask readback failed");
+    }
+    std::array<bool, 256> seen_ids = {};
+    size_t mask_pixels = 0;
+    SkPixmap pixmap(readback_info, readback_pixels.data(), row_bytes);
+    for (int y = 0; y < output_size.height(); ++y) {
+      for (int x = 0; x < output_size.width(); ++x) {
+        const SkColor color = pixmap.getColor(x, y);
+        const uint8_t id = SkColorGetR(color);
+        const uint8_t coverage = SkColorGetG(color);
+        if (id != 0 && coverage != 0) {
+          ++mask_pixels;
+          seen_ids[id] = true;
+        }
+      }
+    }
+    size_t distinct_ids = 0;
+    for (bool seen : seen_ids) {
+      if (seen) {
+        ++distinct_ids;
+      }
+    }
+    if (mask_pixels == 0 || distinct_ids == 0) {
+      return finish_with_failure("backdrop mask target remained empty");
+    }
+    context_state->gr_context()->flushAndSubmit(GrSyncCpu::kYes);
+    WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+    DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+
+    std::ostringstream out;
+    out << kLabel << ": ok"
+        << " encoding=rgba8_id_coverage"
+        << " target=" << output_size.width() << "x" << output_size.height()
+        << " regions=" << regions.size()
+        << " encoded_regions=" << encoded_region_count
+        << " distinct_ids=" << distinct_ids
+        << " mask_pixels=" << mask_pixels
+        << " ownership=borrowed";
+    return out.str();
+  }
+
+  std::string RunD3D12BackdropMaskPrototypeOnCurrentSequence(
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& output_size,
+      const gfx::Size& css_viewport) {
+    constexpr const char* kLabel = "gpu_d3d12_backdrop_mask_prototype_smoke";
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    Microsoft::WRL::ComPtr<ID3D12Resource> target;
+    Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+    HANDLE event_handle = nullptr;
+
+    auto finish_with_failure = [&](std::string failure) {
+      if (event_handle) {
+        ::CloseHandle(event_handle);
+      }
+      return std::string(kLabel) + ": failed failure=" + std::move(failure);
+    };
+
+    if (regions.empty()) {
+      return finish_with_failure("no backdrop filter regions collected");
+    }
+    if (output_size.IsEmpty() || css_viewport.IsEmpty()) {
+      return finish_with_failure("target or CSS viewport size is empty");
+    }
+    if (!use_d3d12_offscreen_ || !IsOffscreen()) {
+      return finish_with_failure(
+          "backdrop mask prototype requires offscreen D3D12 output");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->IsGraphiteDawnD3D() ||
+        !context_state->dawn_context_provider()) {
+      return finish_with_failure(
+          "offscreen runtime has no D3D12 Graphite/Dawn SharedContextState");
+    }
+    if (context_state->dawn_context_provider()->backend_type() !=
+        wgpu::BackendType::D3D12) {
+      return finish_with_failure("Dawn context provider is not D3D12");
+    }
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
+        context_state->dawn_context_provider()->GetD3D12CommandQueue();
+    if (!queue) {
+      return finish_with_failure("Dawn D3D12 command queue is unavailable");
+    }
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
+      return finish_with_failure("Dawn D3D12 device is unavailable");
+    }
+
+    D3D12_HEAP_PROPERTIES heap_properties = {};
+    heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    heap_properties.CreationNodeMask = 1;
+    heap_properties.VisibleNodeMask = 1;
+
+    D3D12_RESOURCE_DESC texture_desc = {};
+    texture_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    texture_desc.Width = static_cast<UINT64>(output_size.width());
+    texture_desc.Height = static_cast<UINT>(output_size.height());
+    texture_desc.DepthOrArraySize = 1;
+    texture_desc.MipLevels = 1;
+    texture_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    texture_desc.SampleDesc.Count = 1;
+    texture_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    texture_desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET |
+                         D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+
+    D3D12_CLEAR_VALUE clear_value = {};
+    clear_value.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    HRESULT hr = device->CreateCommittedResource(
+        &heap_properties, D3D12_HEAP_FLAG_NONE, &texture_desc,
+        D3D12_RESOURCE_STATE_COMMON, &clear_value, IID_PPV_ARGS(&target));
+    if (FAILED(hr) || !target) {
+      return finish_with_failure("stand-in D3D12 mask target creation failed");
+    }
+
+    D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {};
+    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+    rtv_heap_desc.NumDescriptors = 1;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
+    hr = device->CreateDescriptorHeap(&rtv_heap_desc,
+                                      IID_PPV_ARGS(&rtv_heap));
+    if (FAILED(hr) || !rtv_heap) {
+      return finish_with_failure("D3D12 mask RTV heap creation failed");
+    }
+    D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
+    rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle =
+        rtv_heap->GetCPUDescriptorHandleForHeapStart();
+    device->CreateRenderTargetView(target.Get(), &rtv_desc, rtv_handle);
+
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT row_count = 0;
+    UINT64 row_size_bytes = 0;
+    UINT64 total_bytes = 0;
+    device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &footprint,
+                                  &row_count, &row_size_bytes, &total_bytes);
+    if (row_count == 0 || row_size_bytes == 0 || total_bytes == 0) {
+      return finish_with_failure("D3D12 mask readback footprint invalid");
+    }
+
+    D3D12_HEAP_PROPERTIES readback_heap = {};
+    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+    readback_heap.CreationNodeMask = 1;
+    readback_heap.VisibleNodeMask = 1;
+    D3D12_RESOURCE_DESC buffer_desc = {};
+    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer_desc.Width = total_bytes;
+    buffer_desc.Height = 1;
+    buffer_desc.DepthOrArraySize = 1;
+    buffer_desc.MipLevels = 1;
+    buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
+    buffer_desc.SampleDesc.Count = 1;
+    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    hr = device->CreateCommittedResource(
+        &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback));
+    if (FAILED(hr) || !readback) {
+      return finish_with_failure("D3D12 mask readback resource creation failed");
+    }
+
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+    hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                        IID_PPV_ARGS(&allocator));
+    if (FAILED(hr) || !allocator) {
+      return finish_with_failure("D3D12 mask command allocator creation failed");
+    }
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+    hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                   allocator.Get(), nullptr,
+                                   IID_PPV_ARGS(&command_list));
+    if (FAILED(hr) || !command_list) {
+      return finish_with_failure("D3D12 mask command list creation failed");
+    }
+
+    D3D12_RESOURCE_BARRIER to_render_target = {};
+    to_render_target.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    to_render_target.Transition.pResource = target.Get();
+    to_render_target.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    to_render_target.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    to_render_target.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    command_list->ResourceBarrier(1, &to_render_target);
+
+    const FLOAT transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    command_list->ClearRenderTargetView(rtv_handle, transparent, 0, nullptr);
+
+    const float scale_x = static_cast<float>(output_size.width()) /
+                          static_cast<float>(css_viewport.width());
+    const float scale_y = static_cast<float>(output_size.height()) /
+                          static_cast<float>(css_viewport.height());
+    const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
+    size_t encoded_rects = 0;
+    for (size_t i = 0; i < encoded_region_count; ++i) {
+      const LiveBackdropFilterRegion& region = regions[i];
+      LONG left = static_cast<LONG>(std::floor(region.x * scale_x));
+      LONG top = static_cast<LONG>(std::floor(region.y * scale_y));
+      LONG right =
+          static_cast<LONG>(std::ceil((region.x + region.width) * scale_x));
+      LONG bottom =
+          static_cast<LONG>(std::ceil((region.y + region.height) * scale_y));
+      left = std::clamp<LONG>(left, 0, output_size.width());
+      top = std::clamp<LONG>(top, 0, output_size.height());
+      right = std::clamp<LONG>(right, 0, output_size.width());
+      bottom = std::clamp<LONG>(bottom, 0, output_size.height());
+      if (right <= left || bottom <= top) {
+        continue;
+      }
+      const D3D12_RECT rect = {left, top, right, bottom};
+      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
+      const FLOAT color[4] = {static_cast<FLOAT>(region_id) / 255.0f,
+                              1.0f, 0.0f, 1.0f};
+      command_list->ClearRenderTargetView(rtv_handle, color, 1, &rect);
+      ++encoded_rects;
+    }
+
+    D3D12_RESOURCE_BARRIER to_copy_source = {};
+    to_copy_source.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    to_copy_source.Transition.pResource = target.Get();
+    to_copy_source.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    to_copy_source.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    to_copy_source.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    command_list->ResourceBarrier(1, &to_copy_source);
+
+    D3D12_TEXTURE_COPY_LOCATION src = {};
+    src.pResource = target.Get();
+    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    src.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION dst = {};
+    dst.pResource = readback.Get();
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst.PlacedFootprint = footprint;
+    command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+
+    hr = command_list->Close();
+    if (FAILED(hr)) {
+      return finish_with_failure("D3D12 mask command list close failed");
+    }
+    ID3D12CommandList* command_lists[] = {command_list.Get()};
+    queue->ExecuteCommandLists(1, command_lists);
+
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+    if (FAILED(hr) || !fence) {
+      return finish_with_failure("D3D12 mask fence creation failed");
+    }
+    event_handle = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!event_handle) {
+      return finish_with_failure("D3D12 mask fence event creation failed");
+    }
+    constexpr UINT64 kFenceValue = 1;
+    hr = queue->Signal(fence.Get(), kFenceValue);
+    if (FAILED(hr)) {
+      return finish_with_failure("D3D12 mask queue signal failed");
+    }
+    if (fence->GetCompletedValue() < kFenceValue) {
+      hr = fence->SetEventOnCompletion(kFenceValue, event_handle);
+      if (FAILED(hr)) {
+        return finish_with_failure("D3D12 mask fence wait setup failed");
+      }
+      ::WaitForSingleObject(event_handle, 5000);
+    }
+    ::CloseHandle(event_handle);
+    event_handle = nullptr;
+    if (fence->GetCompletedValue() < kFenceValue) {
+      return finish_with_failure("D3D12 mask fence wait timed out");
+    }
+
+    void* mapped = nullptr;
+    D3D12_RANGE read_range = {0, static_cast<SIZE_T>(total_bytes)};
+    hr = readback->Map(0, &read_range, &mapped);
+    if (FAILED(hr) || !mapped) {
+      return finish_with_failure("D3D12 mask readback map failed");
+    }
+    std::array<bool, 256> seen_ids = {};
+    size_t mask_pixels = 0;
+    const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
+    for (int y = 0; y < output_size.height(); ++y) {
+      const uint8_t* row =
+          mapped_bytes + footprint.Offset +
+          static_cast<size_t>(y) * footprint.Footprint.RowPitch;
+      for (int x = 0; x < output_size.width(); ++x) {
+        const uint8_t* pixel = row + static_cast<size_t>(x) * 4u;
+        const uint8_t id = pixel[0];
+        const uint8_t coverage = pixel[1];
+        if (id != 0 && coverage != 0) {
+          ++mask_pixels;
+          seen_ids[id] = true;
+        }
+      }
+    }
+    D3D12_RANGE written_range = {0, 0};
+    readback->Unmap(0, &written_range);
+
+    size_t distinct_ids = 0;
+    for (bool seen : seen_ids) {
+      if (seen) {
+        ++distinct_ids;
+      }
+    }
+    if (encoded_rects == 0 || mask_pixels == 0 || distinct_ids == 0) {
+      return finish_with_failure("D3D12 backdrop mask target remained empty");
+    }
+
+    std::ostringstream out;
+    out << kLabel << ": ok"
+        << " encoding=rgba8_id_coverage"
+        << " shape=rectangular_coverage_mvp"
+        << " target=" << output_size.width() << "x" << output_size.height()
+        << " regions=" << regions.size()
+        << " encoded_regions=" << encoded_region_count
+        << " encoded_rects=" << encoded_rects
+        << " distinct_ids=" << distinct_ids
+        << " mask_pixels=" << mask_pixels;
+    return out.str();
+#else
+    return std::string(kLabel) +
+           ": blocked failure=D3D12/Dawn external targets are not enabled in "
+           "this build";
+#endif
+  }
+
+  std::string RenderD3D12BackdropMaskToExternalTargetForTesting(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height,
+      const std::vector<LiveBackdropFilterRegion>& regions,
+      const gfx::Size& css_viewport) {
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    constexpr const char* kLabel = "gpu_external_d3d12_backdrop_mask";
+    if (scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+            GpuTaskRunnerIfOffSequenceForTesting()) {
+      base::WaitableEvent completed(
+          base::WaitableEvent::ResetPolicy::MANUAL,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
+      std::string result;
+      const bool posted = task_runner->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](StandaloneSkiaOutputSurfaceDependency* self,
+                 uintptr_t d3d12_resource,
+                 uintptr_t shared_handle,
+                 int width,
+                 int height,
+                 std::vector<LiveBackdropFilterRegion> regions,
+                 gfx::Size css_viewport,
+                 std::string* result,
+                 base::WaitableEvent* completed) {
+                *result =
+                    self->RenderD3D12BackdropMaskToExternalTargetForTesting(
+                        reinterpret_cast<void*>(d3d12_resource),
+                        reinterpret_cast<void*>(shared_handle), width, height,
+                        regions, css_viewport);
+                completed->Signal();
+              },
+              base::Unretained(this),
+              reinterpret_cast<uintptr_t>(d3d12_resource),
+              reinterpret_cast<uintptr_t>(shared_handle), width, height,
+              regions, css_viewport, &result, &completed));
+      if (!posted) {
+        return std::string(kLabel) +
+               ": failed failure=failed to post D3D12 backdrop mask task";
+      }
+      completed.Wait();
+      return result;
+    }
+    Microsoft::WRL::ComPtr<ID3D12Resource> readback;
+    HANDLE event_handle = nullptr;
+
+    auto finish_with_failure = [&](std::string failure) {
+      if (event_handle) {
+        ::CloseHandle(event_handle);
+      }
+      DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      return std::string(kLabel) + ": failed failure=" + std::move(failure);
+    };
+
+    if (regions.empty()) {
+      return finish_with_failure("no backdrop filter regions collected");
+    }
+    if (css_viewport.IsEmpty()) {
+      return finish_with_failure("CSS viewport size is empty");
+    }
+    gfx::Size output_size(width, height);
+    if (output_size.IsEmpty() && d3d12_resource) {
+      ID3D12Resource* resource = static_cast<ID3D12Resource*>(d3d12_resource);
+      const D3D12_RESOURCE_DESC desc = resource->GetDesc();
+      output_size =
+          gfx::Size(static_cast<int>(desc.Width), static_cast<int>(desc.Height));
+    }
+    if (output_size.IsEmpty()) {
+      return finish_with_failure("target size is empty");
+    }
+    scoped_refptr<gpu::ClientSharedImage> unused_shared_image;
+    std::string prepare_result =
+        PrepareBorrowedD3D12RenderCopyBlitTargetForTesting(
+            output_size, static_cast<ID3D12Resource*>(d3d12_resource),
+            shared_handle, &unused_shared_image);
+    if (!prepare_result.empty()) {
+      return finish_with_failure(prepare_result);
+    }
+    if (!borrowed_d3d12_blit_target_ ||
+        !borrowed_d3d12_blit_target_->resource) {
+      return finish_with_failure(
+          "external D3D12 mask target wrapper is unavailable");
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetSharedContextState();
+    if (!context_state || !context_state->IsGraphiteDawnD3D() ||
+        !context_state->dawn_context_provider()) {
+      return finish_with_failure(
+          "offscreen runtime has no D3D12 Graphite/Dawn SharedContextState");
+    }
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue =
+        context_state->dawn_context_provider()->GetD3D12CommandQueue();
+    if (!queue) {
+      return finish_with_failure("Dawn D3D12 command queue is unavailable");
+    }
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    if (FAILED(queue->GetDevice(IID_PPV_ARGS(&device))) || !device) {
+      return finish_with_failure("Dawn D3D12 device is unavailable");
+    }
+
+    ID3D12Resource* target = borrowed_d3d12_blit_target_->resource.Get();
+    D3D12_RESOURCE_DESC texture_desc = target->GetDesc();
+    D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {};
+    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+    rtv_heap_desc.NumDescriptors = 1;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
+    HRESULT hr = device->CreateDescriptorHeap(&rtv_heap_desc,
+                                              IID_PPV_ARGS(&rtv_heap));
+    if (FAILED(hr) || !rtv_heap) {
+      return finish_with_failure("D3D12 mask RTV heap creation failed");
+    }
+    D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
+    rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
+    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle =
+        rtv_heap->GetCPUDescriptorHandleForHeapStart();
+    device->CreateRenderTargetView(target, &rtv_desc, rtv_handle);
+
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
+    UINT row_count = 0;
+    UINT64 row_size_bytes = 0;
+    UINT64 total_bytes = 0;
+    device->GetCopyableFootprints(&texture_desc, 0, 1, 0, &footprint,
+                                  &row_count, &row_size_bytes, &total_bytes);
+    if (row_count == 0 || row_size_bytes == 0 || total_bytes == 0) {
+      return finish_with_failure("D3D12 mask readback footprint invalid");
+    }
+
+    D3D12_HEAP_PROPERTIES readback_heap = {};
+    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+    readback_heap.CreationNodeMask = 1;
+    readback_heap.VisibleNodeMask = 1;
+    D3D12_RESOURCE_DESC buffer_desc = {};
+    buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    buffer_desc.Width = total_bytes;
+    buffer_desc.Height = 1;
+    buffer_desc.DepthOrArraySize = 1;
+    buffer_desc.MipLevels = 1;
+    buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
+    buffer_desc.SampleDesc.Count = 1;
+    buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    hr = device->CreateCommittedResource(
+        &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+        D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback));
+    if (FAILED(hr) || !readback) {
+      return finish_with_failure("D3D12 mask readback resource creation failed");
+    }
+
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator;
+    hr = device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                        IID_PPV_ARGS(&allocator));
+    if (FAILED(hr) || !allocator) {
+      return finish_with_failure("D3D12 mask command allocator creation failed");
+    }
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+    hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT,
+                                   allocator.Get(), nullptr,
+                                   IID_PPV_ARGS(&command_list));
+    if (FAILED(hr) || !command_list) {
+      return finish_with_failure("D3D12 mask command list creation failed");
+    }
+
+    D3D12_RESOURCE_BARRIER to_render_target = {};
+    to_render_target.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    to_render_target.Transition.pResource = target;
+    to_render_target.Transition.Subresource =
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    to_render_target.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    to_render_target.Transition.StateAfter =
+        D3D12_RESOURCE_STATE_RENDER_TARGET;
+    command_list->ResourceBarrier(1, &to_render_target);
+
+    const FLOAT transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    command_list->ClearRenderTargetView(rtv_handle, transparent, 0, nullptr);
+
+    const float scale_x = static_cast<float>(output_size.width()) /
+                          static_cast<float>(css_viewport.width());
+    const float scale_y = static_cast<float>(output_size.height()) /
+                          static_cast<float>(css_viewport.height());
+    const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
+    size_t encoded_rects = 0;
+    for (size_t i = 0; i < encoded_region_count; ++i) {
+      const LiveBackdropFilterRegion& region = regions[i];
+      LONG left = static_cast<LONG>(std::floor(region.x * scale_x));
+      LONG top = static_cast<LONG>(std::floor(region.y * scale_y));
+      LONG right =
+          static_cast<LONG>(std::ceil((region.x + region.width) * scale_x));
+      LONG bottom =
+          static_cast<LONG>(std::ceil((region.y + region.height) * scale_y));
+      left = std::clamp<LONG>(left, 0, output_size.width());
+      top = std::clamp<LONG>(top, 0, output_size.height());
+      right = std::clamp<LONG>(right, 0, output_size.width());
+      bottom = std::clamp<LONG>(bottom, 0, output_size.height());
+      if (right <= left || bottom <= top) {
+        continue;
+      }
+      const D3D12_RECT rect = {left, top, right, bottom};
+      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
+      const FLOAT color[4] = {static_cast<FLOAT>(region_id) / 255.0f,
+                              1.0f, 0.0f, 1.0f};
+      command_list->ClearRenderTargetView(rtv_handle, color, 1, &rect);
+      ++encoded_rects;
+    }
+
+    D3D12_RESOURCE_BARRIER to_copy_source = {};
+    to_copy_source.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    to_copy_source.Transition.pResource = target;
+    to_copy_source.Transition.Subresource =
+        D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    to_copy_source.Transition.StateBefore =
+        D3D12_RESOURCE_STATE_RENDER_TARGET;
+    to_copy_source.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    command_list->ResourceBarrier(1, &to_copy_source);
+
+    D3D12_TEXTURE_COPY_LOCATION src = {};
+    src.pResource = target;
+    src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    src.SubresourceIndex = 0;
+    D3D12_TEXTURE_COPY_LOCATION dst = {};
+    dst.pResource = readback.Get();
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    dst.PlacedFootprint = footprint;
+    command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+
+    hr = command_list->Close();
+    if (FAILED(hr)) {
+      return finish_with_failure("D3D12 mask command list close failed");
+    }
+    ID3D12CommandList* command_lists[] = {command_list.Get()};
+    queue->ExecuteCommandLists(1, command_lists);
+
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    hr = device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+    if (FAILED(hr) || !fence) {
+      return finish_with_failure("D3D12 mask fence creation failed");
+    }
+    event_handle = ::CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!event_handle) {
+      return finish_with_failure("D3D12 mask fence event creation failed");
+    }
+    constexpr UINT64 kFenceValue = 1;
+    hr = queue->Signal(fence.Get(), kFenceValue);
+    if (FAILED(hr)) {
+      return finish_with_failure("D3D12 mask queue signal failed");
+    }
+    if (fence->GetCompletedValue() < kFenceValue) {
+      hr = fence->SetEventOnCompletion(kFenceValue, event_handle);
+      if (FAILED(hr)) {
+        return finish_with_failure("D3D12 mask fence wait setup failed");
+      }
+      ::WaitForSingleObject(event_handle, 5000);
+    }
+    ::CloseHandle(event_handle);
+    event_handle = nullptr;
+    if (fence->GetCompletedValue() < kFenceValue) {
+      return finish_with_failure("D3D12 mask fence wait timed out");
+    }
+
+    void* mapped = nullptr;
+    D3D12_RANGE read_range = {0, static_cast<SIZE_T>(total_bytes)};
+    hr = readback->Map(0, &read_range, &mapped);
+    if (FAILED(hr) || !mapped) {
+      return finish_with_failure("D3D12 mask readback map failed");
+    }
+    std::array<bool, 256> seen_ids = {};
+    size_t mask_pixels = 0;
+    const uint8_t* mapped_bytes = static_cast<const uint8_t*>(mapped);
+    for (int y = 0; y < output_size.height(); ++y) {
+      const uint8_t* row =
+          mapped_bytes + footprint.Offset +
+          static_cast<size_t>(y) * footprint.Footprint.RowPitch;
+      for (int x = 0; x < output_size.width(); ++x) {
+        const uint8_t* pixel = row + static_cast<size_t>(x) * 4u;
+        const uint8_t id = pixel[0];
+        const uint8_t coverage = pixel[1];
+        if (id != 0 && coverage != 0) {
+          ++mask_pixels;
+          seen_ids[id] = true;
+        }
+      }
+    }
+    D3D12_RANGE written_range = {0, 0};
+    readback->Unmap(0, &written_range);
+
+    size_t distinct_ids = 0;
+    for (bool seen : seen_ids) {
+      if (seen) {
+        ++distinct_ids;
+      }
+    }
+    if (encoded_rects == 0 || mask_pixels == 0 || distinct_ids == 0) {
+      return finish_with_failure("D3D12 backdrop mask target remained empty");
+    }
+    DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+
+    std::ostringstream out;
+    out << kLabel << ": ok"
+        << " encoding=rgba8_id_coverage"
+        << " shape=rectangular_coverage_mvp"
+        << " target=" << output_size.width() << "x" << output_size.height()
+        << " regions=" << regions.size()
+        << " encoded_regions=" << encoded_region_count
+        << " encoded_rects=" << encoded_rects
+        << " distinct_ids=" << distinct_ids
+        << " mask_pixels=" << mask_pixels
+        << " ownership=borrowed";
+    return out.str();
+#else
+    return "gpu_external_d3d12_backdrop_mask: blocked failure=D3D12/Dawn "
+           "external targets are not enabled in this build";
+#endif
   }
 
   std::string RunBorrowedVkImageRenderCopySmokeForTesting(
@@ -4137,6 +5153,28 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     return out.str();
   }
 
+  std::string RenderBackdropMaskToExternalVkImage(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image,
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!display_) {
+      return "gpu_external_vkimage_backdrop_mask: failed failure=Viz Display "
+             "is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_external_vkimage_backdrop_mask: failed "
+             "failure=offscreen Vulkan Skia dependency is not available";
+    }
+    gfx::Size output_size = viewport_;
+    if (vulkan_image && vulkan_image->width > 0 && vulkan_image->height > 0) {
+      output_size = gfx::Size(vulkan_image->width, vulkan_image->height);
+    } else if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    return offscreen_skia_dependency_
+        ->RenderVulkanBackdropMaskToExternalTargetForTesting(
+            vulkan_image, regions, output_size, viewport_);
+  }
+
   std::string RunVkImageRenderCopyForTesting(
       const html_css_renderer::ExternalVulkanImageTarget* external_target) {
     if (!display_) {
@@ -4321,6 +5359,27 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     return out.str();
   }
 
+  std::string RenderBackdropMaskToExternalD3D12Target(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height,
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!display_) {
+      return "gpu_external_d3d12_backdrop_mask: failed failure=Viz Display "
+             "is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_external_d3d12_backdrop_mask: failed "
+             "failure=offscreen D3D12 Skia dependency is not available";
+    }
+    gfx::Size css_viewport = viewport_;
+    return offscreen_skia_dependency_
+        ->RenderD3D12BackdropMaskToExternalTargetForTesting(
+            d3d12_resource, shared_handle, width, height, regions,
+            css_viewport);
+  }
+
   std::string RunD3D12RenderCopyForTesting(ID3D12Resource* external_resource,
                                            void* shared_handle = nullptr) {
     if (!display_) {
@@ -4403,6 +5462,42 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     return offscreen_skia_dependency_->RunGpuOutputVulkanPixelSmokeForTesting(
         held_gpu_copy_output_shared_image_);
+  }
+
+  std::string RunVulkanBackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!display_) {
+      return "gpu_vulkan_backdrop_mask_prototype_smoke: failed failure=Viz "
+             "Display is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_vulkan_backdrop_mask_prototype_smoke: failed "
+             "failure=offscreen Vulkan Skia dependency is not available";
+    }
+    gfx::Size output_size = viewport_;
+    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    return offscreen_skia_dependency_->RunVulkanBackdropMaskPrototypeForTesting(
+        regions, output_size, viewport_);
+  }
+
+  std::string RunD3D12BackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!display_) {
+      return "gpu_d3d12_backdrop_mask_prototype_smoke: failed failure=Viz "
+             "Display is not initialized";
+    }
+    if (!offscreen_skia_dependency_) {
+      return "gpu_d3d12_backdrop_mask_prototype_smoke: failed "
+             "failure=offscreen D3D12 Skia dependency is not available";
+    }
+    gfx::Size output_size = viewport_;
+    if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+      output_size = *viz_display_output_size_;
+    }
+    return offscreen_skia_dependency_->RunD3D12BackdropMaskPrototypeForTesting(
+        regions, output_size, viewport_);
   }
 
   void ReleaseExternalGpuTargetState() {
@@ -5113,6 +6208,17 @@ class StandaloneCcLayerHost final
     }
     return active_frame_sink_->RenderExternalVkImageToTarget(vulkan_image);
   }
+
+  std::string RenderBackdropMaskToExternalVkImage(
+      const html_css_renderer::ExternalVulkanImageTarget* vulkan_image,
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!active_frame_sink_) {
+      return "gpu_external_vkimage_backdrop_mask: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RenderBackdropMaskToExternalVkImage(vulkan_image,
+                                                                  regions);
+  }
   std::string RunBorrowedD3D12RenderCopySmokeForTesting() {
     if (!active_frame_sink_) {
       return "gpu_borrowed_d3d12_render_copy_smoke: failed failure=active "
@@ -5140,12 +6246,42 @@ class StandaloneCcLayerHost final
     return active_frame_sink_->RenderExternalD3D12ToTarget(
         d3d12_resource, shared_handle, width, height);
   }
+
+  std::string RenderBackdropMaskToExternalD3D12Target(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height,
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!active_frame_sink_) {
+      return "gpu_external_d3d12_backdrop_mask: failed failure=active "
+             "LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RenderBackdropMaskToExternalD3D12Target(
+        d3d12_resource, shared_handle, width, height, regions);
+  }
   std::string RunGpuOutputVulkanPixelSmokeForTesting() {
     if (!active_frame_sink_) {
       return "gpu_output_vulkan_pixel_smoke: failed failure=active "
              "LayerTreeFrameSink is not available";
     }
     return active_frame_sink_->RunGpuOutputVulkanPixelSmokeForTesting();
+  }
+  std::string RunVulkanBackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!active_frame_sink_) {
+      return "gpu_vulkan_backdrop_mask_prototype_smoke: failed "
+             "failure=active LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunVulkanBackdropMaskPrototypeForTesting(regions);
+  }
+  std::string RunD3D12BackdropMaskPrototypeForTesting(
+      const std::vector<LiveBackdropFilterRegion>& regions) {
+    if (!active_frame_sink_) {
+      return "gpu_d3d12_backdrop_mask_prototype_smoke: failed "
+             "failure=active LayerTreeFrameSink is not available";
+    }
+    return active_frame_sink_->RunD3D12BackdropMaskPrototypeForTesting(regions);
   }
   void ReleaseExternalGpuTargetState() {
     if (active_frame_sink_) {
@@ -17675,6 +18811,34 @@ StandaloneBlinkLiveFrameBridgeRenderExternalVkImageToTargetForStandaloneRenderer
 }
 
 const char*
+StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalVkImageForStandaloneRenderer(
+    const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
+  static std::string result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!vulkan_image) {
+    result =
+        "gpu_external_vkimage_backdrop_mask: failed failure=external Vulkan "
+        "mask image is null";
+    return result.c_str();
+  }
+  if (cache.backdrop_filter_regions.empty()) {
+    result =
+        "gpu_external_vkimage_backdrop_mask: failed failure=no backdrop "
+        "filter regions collected";
+    return result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    result =
+        "gpu_external_vkimage_backdrop_mask: failed failure=cc layer host is "
+        "not available";
+    return result.c_str();
+  }
+  result = cache.cc_layer_host->RenderBackdropMaskToExternalVkImage(
+      vulkan_image, cache.backdrop_filter_regions);
+  return result.c_str();
+}
+
+const char*
 StandaloneBlinkLiveFrameBridgeRunBorrowedD3D12RenderCopySmokeForStandaloneRenderer() {
   static std::string smoke_result;
   LiveFramePaintProbeCache& cache = ProbeCache();
@@ -17753,6 +18917,46 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
   return result.c_str();
 }
 
+const char*
+StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalD3D12TargetForStandaloneRenderer(
+    void* d3d12_resource,
+    void* shared_handle,
+    int width,
+    int height) {
+  static std::string result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+#if BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+  if (!d3d12_resource && !shared_handle) {
+    result =
+        "gpu_external_d3d12_backdrop_mask: failed failure=external D3D12 mask "
+        "resource/shared handle is null";
+    return result.c_str();
+  }
+  if (cache.backdrop_filter_regions.empty()) {
+    result =
+        "gpu_external_d3d12_backdrop_mask: failed failure=no backdrop filter "
+        "regions collected";
+    return result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    result =
+        "gpu_external_d3d12_backdrop_mask: failed failure=cc layer host is not "
+        "available";
+    return result.c_str();
+  }
+  result = cache.cc_layer_host->RenderBackdropMaskToExternalD3D12Target(
+      d3d12_resource, shared_handle, width, height,
+      cache.backdrop_filter_regions);
+  return result.c_str();
+#else
+  result =
+      "gpu_external_d3d12_backdrop_mask: blocked failure=D3D12/Dawn external "
+      "targets are not enabled in this build";
+  return result.c_str();
+#endif
+}
+
 void StandaloneBlinkLiveFrameBridgeReleaseExternalGpuTargetStateForStandaloneRenderer() {
   LiveFramePaintProbeCache& cache = ProbeCache();
   if (cache.cc_layer_host) {
@@ -17781,6 +18985,55 @@ StandaloneBlinkLiveFrameBridgeRunGpuOutputVulkanPixelSmokeForStandaloneRenderer(
   }
   smoke_result =
       cache.cc_layer_host->RunGpuOutputVulkanPixelSmokeForTesting();
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunVulkanBackdropMaskPrototypeForStandaloneRenderer() {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (!cache.copy_output_gpu_frame.vk_context_provider_available ||
+      !cache.copy_output_gpu_frame.shared_context_state_is_vulkan) {
+    smoke_result =
+        "gpu_vulkan_backdrop_mask_prototype_smoke: failed failure=Vulkan "
+        "SharedContextState is not available";
+    return smoke_result.c_str();
+  }
+  if (cache.backdrop_filter_regions.empty()) {
+    smoke_result =
+        "gpu_vulkan_backdrop_mask_prototype_smoke: failed failure=no "
+        "backdrop filter regions collected";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_vulkan_backdrop_mask_prototype_smoke: failed failure=cc layer "
+        "host is not available";
+    return smoke_result.c_str();
+  }
+  smoke_result = cache.cc_layer_host->RunVulkanBackdropMaskPrototypeForTesting(
+      cache.backdrop_filter_regions);
+  return smoke_result.c_str();
+}
+
+const char*
+StandaloneBlinkLiveFrameBridgeRunD3D12BackdropMaskPrototypeForStandaloneRenderer() {
+  static std::string smoke_result;
+  LiveFramePaintProbeCache& cache = ProbeCache();
+  if (cache.backdrop_filter_regions.empty()) {
+    smoke_result =
+        "gpu_d3d12_backdrop_mask_prototype_smoke: failed failure=no "
+        "backdrop filter regions collected";
+    return smoke_result.c_str();
+  }
+  if (!cache.cc_layer_host) {
+    smoke_result =
+        "gpu_d3d12_backdrop_mask_prototype_smoke: failed failure=cc layer "
+        "host is not available";
+    return smoke_result.c_str();
+  }
+  smoke_result = cache.cc_layer_host->RunD3D12BackdropMaskPrototypeForTesting(
+      cache.backdrop_filter_regions);
   return smoke_result.c_str();
 }
 
