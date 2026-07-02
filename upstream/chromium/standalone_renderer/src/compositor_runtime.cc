@@ -106,6 +106,9 @@ StandaloneBlinkLiveFrameBridgeRunExternalVkImageRenderCopyForStandaloneRenderer(
 const char*
 StandaloneBlinkLiveFrameBridgeRenderExternalVkImageToTargetForStandaloneRenderer(
     const html_css_renderer::ExternalVulkanImageTarget* vulkan_image);
+html_css_renderer::ExternalGpuTargetCopyResult
+StandaloneBlinkLiveFrameBridgeBeginRenderExternalVkImageToTargetAsyncForStandaloneRenderer(
+    const html_css_renderer::ExternalVulkanImageTarget* vulkan_image);
 const char*
 StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalVkImageForStandaloneRenderer(
     const html_css_renderer::ExternalVulkanImageTarget* vulkan_image);
@@ -121,6 +124,12 @@ StandaloneBlinkLiveFrameBridgeRenderExternalD3D12ToTargetForStandaloneRenderer(
     void* shared_handle,
     int width,
     int height);
+html_css_renderer::ExternalGpuTargetCopyResult
+StandaloneBlinkLiveFrameBridgeBeginRenderExternalD3D12ToTargetAsyncForStandaloneRenderer(
+    void* d3d12_resource,
+    void* shared_handle,
+    int width,
+    int height);
 const char*
 StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalD3D12TargetForStandaloneRenderer(
     void* d3d12_resource,
@@ -128,6 +137,10 @@ StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalD3D12TargetForStandalo
     int width,
     int height);
 void StandaloneBlinkLiveFrameBridgeReleaseExternalGpuTargetStateForStandaloneRenderer();
+html_css_renderer::ExternalGpuTargetCopyResult
+StandaloneBlinkLiveFrameBridgePollExternalGpuTargetAsyncCopyForStandaloneRenderer();
+html_css_renderer::ExternalGpuTargetCopyResult
+StandaloneBlinkLiveFrameBridgeCancelExternalGpuTargetAsyncCopyForStandaloneRenderer();
 const char*
 StandaloneBlinkLiveFrameBridgeRunGpuOutputVulkanPixelSmokeForStandaloneRenderer();
 const char*
@@ -1700,6 +1713,19 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return result ? result : "";
   }
 
+  ExternalGpuTargetCopyResult BeginRenderExternalVkImageToTargetAsync(
+      const ExternalVulkanImageTarget& vulkan_image) override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+
+    return ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeBeginRenderExternalVkImageToTargetAsyncForStandaloneRenderer(
+            &vulkan_image);
+  }
+
   std::string RenderBackdropMaskToExternalVkImage(
       const ExternalVulkanImageTarget& vulkan_image) override {
     ScopedStandaloneResourceProviderContext scoped_resources(
@@ -1758,6 +1784,21 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     return result ? result : "";
   }
 
+  ExternalGpuTargetCopyResult BeginRenderExternalD3D12ToTargetAsync(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height) override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    return ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeBeginRenderExternalD3D12ToTargetAsyncForStandaloneRenderer(
+            d3d12_resource, shared_handle, width, height);
+  }
+
   std::string RenderBackdropMaskToExternalD3D12Target(
       void* d3d12_resource,
       void* shared_handle,
@@ -1773,6 +1814,26 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             StandaloneBlinkLiveFrameBridgeRenderBackdropMaskToExternalD3D12TargetForStandaloneRenderer(
                 d3d12_resource, shared_handle, width, height);
     return result ? result : "";
+  }
+
+  ExternalGpuTargetCopyResult PollExternalGpuTargetAsyncCopy() override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    return ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgePollExternalGpuTargetAsyncCopyForStandaloneRenderer();
+  }
+
+  ExternalGpuTargetCopyResult CancelExternalGpuTargetAsyncCopy() override {
+    ScopedStandaloneResourceProviderContext scoped_resources(
+        resource_provider_context_id_);
+    ScopedTypefaceResourceRegistryContext scoped_typefaces(
+        typeface_registry_context_id_);
+    ScopedStandaloneBridgeInstance scoped_bridge(bridge_instance_id_);
+    return ::blink::standalone_renderer_probe::
+        StandaloneBlinkLiveFrameBridgeCancelExternalGpuTargetAsyncCopyForStandaloneRenderer();
   }
 
   void ReleaseExternalGpuTargetState() override {

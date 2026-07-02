@@ -1,6 +1,7 @@
 #ifndef STANDALONE_RENDERER_INCLUDE_HTML_CSS_RENDERER_COMPOSITOR_RUNTIME_H_
 #define STANDALONE_RENDERER_INCLUDE_HTML_CSS_RENDERER_COMPOSITOR_RUNTIME_H_
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -148,6 +149,23 @@ struct ExternalVulkanImageTarget {
   uint32_t queue_family_index = 0;
 };
 
+enum class ExternalGpuTargetCopyStatus {
+  kNone = 0,
+  kPending = 1,
+  kCompleted = 2,
+  kFailed = 3,
+  kCancelled = 4,
+  kStale = 5,
+};
+
+struct ExternalGpuTargetCopyResult {
+  ExternalGpuTargetCopyStatus status = ExternalGpuTargetCopyStatus::kNone;
+  uint64_t request_id = 0;
+  int width = 0;
+  int height = 0;
+  std::string diagnostic;
+};
+
 class StandaloneCompositorRuntime {
  public:
   virtual ~StandaloneCompositorRuntime() = default;
@@ -167,6 +185,8 @@ class StandaloneCompositorRuntime {
       const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RenderExternalVkImageToTarget(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
+  virtual ExternalGpuTargetCopyResult BeginRenderExternalVkImageToTargetAsync(
+      const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RenderBackdropMaskToExternalVkImage(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
@@ -177,11 +197,18 @@ class StandaloneCompositorRuntime {
                                                   void* shared_handle,
                                                   int width,
                                                   int height) = 0;
+  virtual ExternalGpuTargetCopyResult BeginRenderExternalD3D12ToTargetAsync(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height) = 0;
   virtual std::string RenderBackdropMaskToExternalD3D12Target(
       void* d3d12_resource,
       void* shared_handle,
       int width,
       int height) = 0;
+  virtual ExternalGpuTargetCopyResult PollExternalGpuTargetAsyncCopy() = 0;
+  virtual ExternalGpuTargetCopyResult CancelExternalGpuTargetAsyncCopy() = 0;
   virtual void ReleaseExternalGpuTargetState() = 0;
   virtual std::string RunGpuOutputVulkanPixelSmokeForTesting() = 0;
   virtual std::string RunVulkanBackdropMaskPrototypeForTesting() = 0;

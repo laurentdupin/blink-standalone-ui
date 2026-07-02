@@ -87,6 +87,31 @@ typedef enum blink_standalone_gpu_backdrop_mask_encoding {
   BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE = 1,
 } blink_standalone_gpu_backdrop_mask_encoding_t;
 
+typedef enum blink_standalone_gpu_async_state {
+  BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND = 0,
+  BLINK_STANDALONE_GPU_ASYNC_STATE_SUBMITTED = 1,
+  BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING = 2,
+  BLINK_STANDALONE_GPU_ASYNC_STATE_COMPLETED = 3,
+  BLINK_STANDALONE_GPU_ASYNC_STATE_FAILED = 4,
+  BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED = 5,
+  BLINK_STANDALONE_GPU_ASYNC_STATE_STALE = 6,
+} blink_standalone_gpu_async_state_t;
+
+typedef enum blink_standalone_gpu_async_flags {
+  /* Submit only if update() or a pending GPU source frame says output is
+   * needed. When clean, submit returns OK/NO_DEMAND without touching the
+   * target. */
+  BLINK_STANDALONE_GPU_ASYNC_SKIP_IF_CLEAN = 1u << 0,
+  /* Debug/test mode: keep compatibility with the historical synchronous path
+   * by waiting for completion inside submit. Product embedders should leave
+   * this unset and poll by request id. */
+  BLINK_STANDALONE_GPU_ASYNC_BLOCK_UNTIL_COMPLETE = 1u << 1,
+  /* For backdrop requests, fail if the mask/effect output cannot be submitted
+   * or completed. Explicit GPU backdrop output never falls back to CPU region
+   * metadata. */
+  BLINK_STANDALONE_GPU_ASYNC_BACKDROP_MASK_REQUIRED = 1u << 2,
+} blink_standalone_gpu_async_flags_t;
+
 typedef enum blink_standalone_backdrop_coordinate_space {
   BLINK_STANDALONE_BACKDROP_COORDINATE_SPACE_LOGICAL_CSS = 0,
 } blink_standalone_backdrop_coordinate_space_t;
@@ -421,6 +446,46 @@ typedef struct blink_standalone_gpu_backdrop_render_result {
   uint32_t physical_height;
 } blink_standalone_gpu_backdrop_render_result_t;
 
+typedef struct blink_standalone_gpu_async_render_request {
+  uint32_t backend;
+  uint32_t flags;
+  uint64_t request_generation;
+  uint32_t mask_encoding;
+  blink_standalone_external_gpu_target_t main_target;
+  blink_standalone_external_gpu_target_t backdrop_mask_target;
+} blink_standalone_gpu_async_render_request_t;
+
+typedef struct blink_standalone_gpu_async_render_result {
+  uint32_t backend;
+  uint32_t status;
+  uint32_t state;
+  uint64_t request_id;
+  uint64_t request_generation;
+  uint64_t frame_generation;
+  uint64_t main_target_generation;
+  uint64_t backdrop_mask_generation;
+  uint32_t main_target_written;
+  uint32_t backdrop_mask_written;
+  uint32_t effect_count;
+  uint32_t max_effect_id;
+  uint32_t needs_output;
+  uint32_t frame_advanced;
+  uint32_t frame_skipped_due_to_no_demand;
+  uint32_t full_frame_damage;
+  uint32_t damage_rect_count;
+  uint32_t physical_width;
+  uint32_t physical_height;
+  uint32_t pixel_format;
+  uint32_t mask_encoding;
+  /* Reserved for backend-native completion export. The MVP uses request_id
+   * polling; future Vulkan/D3D12 slices may populate signal objects/values when
+   * the compositor path can hand them to embedders without blocking. */
+  void* vulkan_signal_semaphore;
+  uint64_t vulkan_signal_value;
+  void* d3d12_signal_fence;
+  uint64_t d3d12_signal_value;
+} blink_standalone_gpu_async_render_result_t;
+
 typedef struct blink_standalone_update_result {
   uint32_t status;
   uint32_t frame_advanced;
@@ -578,6 +643,29 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     const blink_standalone_gpu_backdrop_render_request_t* request,
     blink_standalone_gpu_backdrop_render_result_t* result);
+/* Async GPU target rendering is a submit/poll contract for explicit GPU
+ * embedders. submit schedules compositor CopyOutput/blit work and returns
+ * without waiting for completion unless BLINK_STANDALONE_GPU_ASYNC_BLOCK_UNTIL_COMPLETE
+ * is set. While a request is SUBMITTED/PENDING, the embedder owns and must keep
+ * alive every borrowed native target/sync handle in the request. poll drives
+ * renderer-side completion callbacks without applying document updates or
+ * starting a new render; embedders should call it from their normal frame pump
+ * until it returns COMPLETED, FAILED, CANCELLED, or STALE. A newer resize,
+ * viewport/DSF change, backend change, cancel call, or accepted newer submit may
+ * make an older request STALE. Completed main target, backdrop mask target, and
+ * effect metadata become current atomically by frame_generation. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_submit_gpu_frame_async(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_gpu_async_render_request_t* request,
+    blink_standalone_gpu_async_render_result_t* result);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_poll_gpu_frame_async(
+    blink_standalone_renderer_t* renderer,
+    uint64_t request_id,
+    blink_standalone_gpu_async_render_result_t* result);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_cancel_gpu_frame_async(
+    blink_standalone_renderer_t* renderer,
+    uint64_t request_id,
+    blink_standalone_gpu_async_render_result_t* result);
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(
     blink_standalone_renderer_t* renderer,
