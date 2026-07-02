@@ -24,6 +24,8 @@ option(BLINK_STANDALONE_OPTIMIZE_APP
   "Compile standalone benchmark/presenter application sources with release optimization." ON)
 option(BLINK_STANDALONE_DAWN_D3D12
   "Enable experimental standalone Dawn/D3D12 benchmark wiring." OFF)
+option(BLINK_STANDALONE_DAWN_D3D12_AUTO_DETECT
+  "Enable Dawn/D3D12 wiring automatically when the repo-local Dawn probe output exists." ON)
 option(BLINK_STANDALONE_USE_VCPKG_DEPS
   "Use vcpkg/system packages for libxml2/Iconv/ZLIB instead of only source-owned repository dependencies." ON)
 set(BLINK_STANDALONE_DAWN_D3D12_LIBS
@@ -41,6 +43,42 @@ set(BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR
 set(BLINK_STANDALONE_DAWN_D3D12_BUILDFLAGS_DIR
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium/standalone_renderer/stubs/dawn_d3d12_buildflags
 )
+if(WIN32 AND NOT BLINK_STANDALONE_DAWN_D3D12 AND
+    BLINK_STANDALONE_DAWN_D3D12_AUTO_DETECT)
+  set(_blink_standalone_default_dawn_d3d12_build_dir
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/dawn_probe/cmake_d3d12")
+  set(_blink_standalone_default_dawn_d3d12_source_dir
+    "${CMAKE_CURRENT_SOURCE_DIR}/build/dawn_probe/dawn")
+  set(_blink_standalone_default_dawn_d3d12_gen_include_dir
+    "${_blink_standalone_default_dawn_d3d12_build_dir}/gen/include")
+  if(EXISTS "${_blink_standalone_default_dawn_d3d12_gen_include_dir}/dawn/webgpu.h" AND
+      EXISTS "${_blink_standalone_default_dawn_d3d12_source_dir}/include/dawn/native/DawnNative.h" AND
+      EXISTS "${_blink_standalone_default_dawn_d3d12_build_dir}/src/dawn/native/dawn_native.lib")
+    file(GLOB_RECURSE _blink_standalone_default_dawn_d3d12_libs
+      CONFIGURE_DEPENDS
+      "${_blink_standalone_default_dawn_d3d12_build_dir}/*.lib")
+    list(SORT _blink_standalone_default_dawn_d3d12_libs)
+    set(BLINK_STANDALONE_DAWN_D3D12 ON CACHE BOOL
+      "Enable experimental standalone Dawn/D3D12 benchmark wiring." FORCE)
+    set(BLINK_STANDALONE_DAWN_D3D12_LIBS
+      "${_blink_standalone_default_dawn_d3d12_libs}"
+      CACHE STRING
+      "Semicolon-separated Dawn static libraries built with D3D12 enabled."
+      FORCE)
+    set(BLINK_STANDALONE_DAWN_D3D12_GEN_INCLUDE_DIR
+      "${_blink_standalone_default_dawn_d3d12_gen_include_dir}"
+      CACHE PATH
+      "Path to Dawn generated include directory from the D3D12 Dawn build."
+      FORCE)
+    set(BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR
+      "${_blink_standalone_default_dawn_d3d12_source_dir}"
+      CACHE PATH
+      "Path to the Dawn source checkout used for the D3D12 Dawn build."
+      FORCE)
+    message(STATUS
+      "Auto-enabled BLINK_STANDALONE_DAWN_D3D12 from repo-local Dawn probe output.")
+  endif()
+endif()
 unset(BLINK_STANDALONE_REQUIRE_PREBUILT_V8_COMPAT CACHE)
 option(BLINK_STANDALONE_V8_SYNC_DEPS
   "Allow the V8 compatibility wrapper to run gclient sync in its generated work root." OFF)
@@ -2286,6 +2324,11 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       )
     endforeach()
   endif()
+  if(BLINK_STANDALONE_DAWN_D3D12)
+    set(_blink_standalone_dawn_d3d12_enabled_json true)
+  else()
+    set(_blink_standalone_dawn_d3d12_enabled_json false)
+  endif()
   set(_blink_standalone_renderer_c_api_link_manifest_content [=[
 {
   "schema_version": 1,
@@ -2308,6 +2351,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   },
   "link_mode": "dynamic",
   "link_kind": "shared_library",
+  "d3d12_external_targets_enabled": @_blink_standalone_dawn_d3d12_enabled_json@,
   "public_header": {
     "package_relative": "include/html_css_renderer/renderer_c_api.h",
     "source": "@BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER@",

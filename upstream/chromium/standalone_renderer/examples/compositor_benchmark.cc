@@ -61,6 +61,8 @@
 #include "ui/gl/gl_switches.h"
 
 #if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
 #include <d3d12.h>
 #include <wrl/client.h>
 #endif
@@ -213,9 +215,11 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-full-viewport-button-hit-metadata-smoke] "
       "[--c-api-vulkan-external-target-filter-backdrop-smoke] "
       "[--c-api-vulkan-external-target-backdrop-mask-smoke] "
+      "[--c-api-vulkan-external-target-backdrop-mask-resize-bounce-smoke] "
       "[--c-api-vulkan-external-target-clean-skip-smoke] "
       "[--c-api-vulkan-invalid-target-metadata-smoke] "
       "[--c-api-gpu-backdrop-mask-required-invalid-smoke] "
+      "[--c-api-dll-d3d12-capabilities-smoke] "
       "[--c-api-d3d12-external-target-smoke] "
       "[--c-api-d3d12-external-target-resize-smoke] "
       "[--c-api-d3d12-external-target-click-timing-smoke] "
@@ -876,7 +880,9 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool expect_backdrop_filter_metadata =
                                       false,
                                   bool exercise_gpu_backdrop_mask = false,
-                                  bool exercise_clean_skip_sequence = false) {
+                                  bool exercise_clean_skip_sequence = false,
+                                  bool exercise_backdrop_mask_resize_bounce =
+                                      false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
   blink_standalone_renderer_config_t config = {};
@@ -1959,6 +1965,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                       {1280, 720},  {1152, 648},  {1024, 600},
                       {900, 600},   {1152, 648},  {1280, 720},
                       {1800, 1000}, {2316, 1199}, {2548, 1320}};
+    } else if (exercise_backdrop_mask_resize_bounce) {
+      resize_steps = {{1280, 720}, {2490, 1401}, {1280, 720}, {2490, 1401}};
     } else if (exercise_gpu_backdrop_mask) {
       resize_steps = {{1210, 681},
                       {1175, 661},
@@ -2902,6 +2910,113 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   return 0;
 }
 
+#if BUILDFLAG(IS_WIN)
+int RunCApiDllD3D12CapabilitiesSmoke() {
+  wchar_t exe_path[MAX_PATH] = {};
+  const DWORD exe_path_len =
+      GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
+  if (exe_path_len == 0 || exe_path_len >= MAX_PATH) {
+    std::fprintf(stderr,
+                 "c_api_dll_d3d12_capabilities_smoke: failed exe_path\n");
+    return 1;
+  }
+
+  const std::filesystem::path exe_dir =
+      std::filesystem::path(exe_path).parent_path();
+  std::vector<std::filesystem::path> dll_candidates = {
+      exe_dir / L"blink_standalone_renderer_c_api.dll",
+      exe_dir / L"package" / L"c_api_runtime" /
+          L"blink_standalone_renderer_c_api.dll"};
+  HMODULE module = nullptr;
+  std::filesystem::path loaded_path;
+  for (const auto& candidate : dll_candidates) {
+    module = LoadLibraryW(candidate.c_str());
+    if (module) {
+      loaded_path = candidate;
+      break;
+    }
+  }
+  if (!module) {
+    std::fprintf(stderr,
+                 "c_api_dll_d3d12_capabilities_smoke: failed LoadLibrary "
+                 "last_error=%lu\n",
+                 static_cast<unsigned long>(GetLastError()));
+    return 1;
+  }
+
+  auto require_proc = [&](const char* name) -> FARPROC {
+    FARPROC proc = GetProcAddress(module, name);
+    if (!proc) {
+      std::fprintf(stderr,
+                   "c_api_dll_d3d12_capabilities_smoke: missing export %s\n",
+                   name);
+    }
+    return proc;
+  };
+  using CreateFn = blink_standalone_status_code_t (*)(
+      const blink_standalone_renderer_config_t*, blink_standalone_renderer_t**);
+  using DestroyFn = void (*)(blink_standalone_renderer_t*);
+  using CapabilitiesFn = uint32_t (*)(blink_standalone_renderer_t*, uint32_t);
+  using LastErrorFn = const char* (*)(blink_standalone_renderer_t*);
+
+  auto* create = reinterpret_cast<CreateFn>(
+      require_proc("blink_standalone_renderer_create"));
+  auto* destroy = reinterpret_cast<DestroyFn>(
+      require_proc("blink_standalone_renderer_destroy"));
+  auto* capabilities = reinterpret_cast<CapabilitiesFn>(
+      require_proc("blink_standalone_renderer_gpu_backend_capabilities"));
+  auto* last_error = reinterpret_cast<LastErrorFn>(
+      require_proc("blink_standalone_renderer_last_error"));
+  if (!create || !destroy || !capabilities || !last_error) {
+    FreeLibrary(module);
+    return 1;
+  }
+
+  blink_standalone_renderer_config_t config = {};
+  config.width = 64;
+  config.height = 64;
+  config.device_scale_factor = 1.0f;
+  config.no_script_profile = 1;
+  blink_standalone_renderer_t* renderer = nullptr;
+  blink_standalone_status_code_t status = create(&config, &renderer);
+  if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+    std::fprintf(stderr,
+                 "c_api_dll_d3d12_capabilities_smoke: create failed "
+                 "status=%d\n",
+                 status);
+    FreeLibrary(module);
+    return 1;
+  }
+  const uint32_t d3d12_capabilities =
+      capabilities(renderer, BLINK_STANDALONE_GPU_BACKEND_D3D12);
+  constexpr uint32_t required_capabilities =
+      BLINK_STANDALONE_GPU_CAPABILITY_AVAILABLE |
+      BLINK_STANDALONE_GPU_CAPABILITY_EXTERNAL_TARGET;
+  if ((d3d12_capabilities & required_capabilities) != required_capabilities) {
+    std::fprintf(stderr,
+                 "c_api_dll_d3d12_capabilities_smoke: D3D12 unavailable "
+                 "capabilities=%u error=%s dll=%ls\n",
+                 d3d12_capabilities, last_error(renderer),
+                 loaded_path.c_str());
+    destroy(renderer);
+    FreeLibrary(module);
+    return 1;
+  }
+  std::printf(
+      "c_api_dll_d3d12_capabilities_smoke: ok capabilities=%u dll=%ls\n",
+      d3d12_capabilities, loaded_path.c_str());
+  destroy(renderer);
+  FreeLibrary(module);
+  return 0;
+}
+#else
+int RunCApiDllD3D12CapabilitiesSmoke() {
+  std::fprintf(stderr,
+               "c_api_dll_d3d12_capabilities_smoke: blocked platform\n");
+  return 0;
+}
+#endif
+
 int RunCApiVulkanExternalTargetSmoke() {
   return RunCApiExternalGpuTargetSmoke(
       BLINK_STANDALONE_GPU_BACKEND_VULKAN,
@@ -3186,6 +3301,56 @@ int RunCApiVulkanExternalTargetBackdropMaskSmoke() {
       /*force_pending_during_rapid_resize=*/false,
       /*expect_backdrop_filter_metadata=*/true,
       /*exercise_gpu_backdrop_mask=*/true);
+}
+
+int RunCApiVulkanExternalTargetBackdropMaskResizeBounceSmoke() {
+  const char* extra_css =
+      "#backdrop{position:absolute;left:80px;top:64px;width:240px;"
+      "height:140px;border-radius:24px;background:rgba(255,255,255,.20);"
+      "backdrop-filter:blur(10px) saturate(170%);"
+      "-webkit-backdrop-filter:blur(10px) saturate(170%);}"
+      "#backdrop2{position:absolute;left:360px;top:160px;width:220px;"
+      "height:120px;border-radius:12px;background:rgba(255,255,255,.18);"
+      "backdrop-filter:blur(4px) brightness(1.2);"
+      "-webkit-backdrop-filter:blur(4px) brightness(1.2);}"
+      "#stripe{position:absolute;left:0;top:260px;width:2490px;height:240px;"
+      "background:linear-gradient(90deg,#144a80,#237a57,#d06329);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_external_target_backdrop_mask_resize_bounce_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff144a80u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"#144a80",
+      /*box_css=*/"#237a57",
+      /*width=*/2490,
+      /*height=*/1401,
+      extra_css,
+      /*extra_body=*/
+      "<div id='backdrop'></div><div id='backdrop2'></div><div id='stripe'></div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/true,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/true,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/true,
+      /*exercise_gpu_backdrop_mask=*/true,
+      /*exercise_clean_skip_sequence=*/false,
+      /*exercise_backdrop_mask_resize_bounce=*/true);
 }
 
 int RunCApiVulkanExternalTargetCleanSkipSmoke() {
@@ -11592,8 +11757,11 @@ int main(int argc, char** argv) {
             "--c-api-vulkan-external-target-full-viewport-button-hit-metadata-smoke" ||
         arg == "--c-api-vulkan-external-target-filter-backdrop-smoke" ||
         arg == "--c-api-vulkan-external-target-backdrop-mask-smoke" ||
+        arg ==
+            "--c-api-vulkan-external-target-backdrop-mask-resize-bounce-smoke" ||
         arg == "--c-api-vulkan-external-target-clean-skip-smoke" ||
         arg == "--c-api-vulkan-invalid-target-metadata-smoke" ||
+        arg == "--c-api-dll-d3d12-capabilities-smoke" ||
         arg == "--c-api-d3d12-external-target-resize-smoke" ||
         arg == "--c-api-d3d12-external-target-click-timing-smoke" ||
         arg == "--c-api-d3d12-external-target-click-resize-smoke" ||
@@ -11678,9 +11846,11 @@ int main(int argc, char** argv) {
       false;
   bool c_api_vulkan_external_target_filter_backdrop_smoke = false;
   bool c_api_vulkan_external_target_backdrop_mask_smoke = false;
+  bool c_api_vulkan_external_target_backdrop_mask_resize_bounce_smoke = false;
   bool c_api_vulkan_external_target_clean_skip_smoke = false;
   bool c_api_vulkan_invalid_target_metadata_smoke = false;
   bool c_api_gpu_backdrop_mask_required_invalid_smoke = false;
+  bool c_api_dll_d3d12_capabilities_smoke = false;
   bool c_api_d3d12_external_target_smoke = false;
   bool c_api_d3d12_external_target_resize_smoke = false;
   bool c_api_d3d12_external_target_click_timing_smoke = false;
@@ -11879,12 +12049,18 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_filter_backdrop_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-backdrop-mask-smoke") {
       c_api_vulkan_external_target_backdrop_mask_smoke = true;
+    } else if (
+        arg ==
+        "--c-api-vulkan-external-target-backdrop-mask-resize-bounce-smoke") {
+      c_api_vulkan_external_target_backdrop_mask_resize_bounce_smoke = true;
     } else if (arg == "--c-api-vulkan-external-target-clean-skip-smoke") {
       c_api_vulkan_external_target_clean_skip_smoke = true;
     } else if (arg == "--c-api-vulkan-invalid-target-metadata-smoke") {
       c_api_vulkan_invalid_target_metadata_smoke = true;
     } else if (arg == "--c-api-gpu-backdrop-mask-required-invalid-smoke") {
       c_api_gpu_backdrop_mask_required_invalid_smoke = true;
+    } else if (arg == "--c-api-dll-d3d12-capabilities-smoke") {
+      c_api_dll_d3d12_capabilities_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-smoke") {
       c_api_d3d12_external_target_smoke = true;
     } else if (arg == "--c-api-d3d12-external-target-resize-smoke") {
@@ -12193,6 +12369,10 @@ int main(int argc, char** argv) {
     return RunCApiVulkanExternalTargetBackdropMaskSmoke();
   }
 
+  if (c_api_vulkan_external_target_backdrop_mask_resize_bounce_smoke) {
+    return RunCApiVulkanExternalTargetBackdropMaskResizeBounceSmoke();
+  }
+
   if (c_api_vulkan_external_target_clean_skip_smoke) {
     return RunCApiVulkanExternalTargetCleanSkipSmoke();
   }
@@ -12203,6 +12383,10 @@ int main(int argc, char** argv) {
 
   if (c_api_gpu_backdrop_mask_required_invalid_smoke) {
     return RunCApiGpuBackdropMaskRequiredInvalidSmoke();
+  }
+
+  if (c_api_dll_d3d12_capabilities_smoke) {
+    return RunCApiDllD3D12CapabilitiesSmoke();
   }
 
   if (c_api_d3d12_external_target_smoke) {
