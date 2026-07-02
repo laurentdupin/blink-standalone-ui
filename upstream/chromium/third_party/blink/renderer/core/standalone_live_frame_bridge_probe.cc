@@ -5662,6 +5662,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      offscreen_skia_dependency_
+          ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
     }
   }
 
