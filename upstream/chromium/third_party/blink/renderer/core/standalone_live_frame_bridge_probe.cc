@@ -823,6 +823,123 @@ struct LiveBackdropFilterRegion {
   std::vector<LiveExportedFilterOperation> filter_operations;
 };
 
+bool StandaloneBackdropMaskPointInsideRegion(
+    const LiveBackdropFilterRegion& region,
+    float pixel_x,
+    float pixel_y,
+    float scale_x,
+    float scale_y) {
+  const float left = region.x * scale_x;
+  const float top = region.y * scale_y;
+  const float right = (region.x + region.width) * scale_x;
+  const float bottom = (region.y + region.height) * scale_y;
+  if (pixel_x < left || pixel_x >= right || pixel_y < top ||
+      pixel_y >= bottom) {
+    return false;
+  }
+  if ((region.flags & kStandaloneBackdropFilterRoundedRect) == 0) {
+    return true;
+  }
+
+  auto inside_corner = [](float x, float y, float center_x, float center_y,
+                          float radius_x, float radius_y) {
+    if (radius_x <= 0.0f || radius_y <= 0.0f) {
+      return true;
+    }
+    const float dx = (x - center_x) / radius_x;
+    const float dy = (y - center_y) / radius_y;
+    return dx * dx + dy * dy <= 1.0f;
+  };
+
+  const float tl_rx = region.border_radius_top_left * scale_x;
+  const float tl_ry = region.border_radius_top_left * scale_y;
+  if (tl_rx > 0.0f && tl_ry > 0.0f && pixel_x < left + tl_rx &&
+      pixel_y < top + tl_ry) {
+    return inside_corner(pixel_x, pixel_y, left + tl_rx, top + tl_ry, tl_rx,
+                         tl_ry);
+  }
+
+  const float tr_rx = region.border_radius_top_right * scale_x;
+  const float tr_ry = region.border_radius_top_right * scale_y;
+  if (tr_rx > 0.0f && tr_ry > 0.0f && pixel_x >= right - tr_rx &&
+      pixel_y < top + tr_ry) {
+    return inside_corner(pixel_x, pixel_y, right - tr_rx, top + tr_ry, tr_rx,
+                         tr_ry);
+  }
+
+  const float br_rx = region.border_radius_bottom_right * scale_x;
+  const float br_ry = region.border_radius_bottom_right * scale_y;
+  if (br_rx > 0.0f && br_ry > 0.0f && pixel_x >= right - br_rx &&
+      pixel_y >= bottom - br_ry) {
+    return inside_corner(pixel_x, pixel_y, right - br_rx, bottom - br_ry,
+                         br_rx, br_ry);
+  }
+
+  const float bl_rx = region.border_radius_bottom_left * scale_x;
+  const float bl_ry = region.border_radius_bottom_left * scale_y;
+  if (bl_rx > 0.0f && bl_ry > 0.0f && pixel_x < left + bl_rx &&
+      pixel_y >= bottom - bl_ry) {
+    return inside_corner(pixel_x, pixel_y, left + bl_rx, bottom - bl_ry,
+                         bl_rx, bl_ry);
+  }
+  return true;
+}
+
+size_t PopulateStandaloneBackdropMaskRows(
+    uint8_t* dst,
+    size_t row_pitch,
+    const gfx::Size& output_size,
+    const gfx::Size& css_viewport,
+    const std::vector<LiveBackdropFilterRegion>& regions) {
+  if (!dst || output_size.IsEmpty() || css_viewport.IsEmpty()) {
+    return 0;
+  }
+  const float scale_x = static_cast<float>(output_size.width()) /
+                        static_cast<float>(css_viewport.width());
+  const float scale_y = static_cast<float>(output_size.height()) /
+                        static_cast<float>(css_viewport.height());
+  size_t mask_pixels = 0;
+  const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
+  for (size_t i = 0; i < encoded_region_count; ++i) {
+    const LiveBackdropFilterRegion& region = regions[i];
+    int left = static_cast<int>(std::floor(region.x * scale_x));
+    int top = static_cast<int>(std::floor(region.y * scale_y));
+    int right =
+        static_cast<int>(std::ceil((region.x + region.width) * scale_x));
+    int bottom =
+        static_cast<int>(std::ceil((region.y + region.height) * scale_y));
+    left = std::clamp(left, 0, output_size.width());
+    top = std::clamp(top, 0, output_size.height());
+    right = std::clamp(right, 0, output_size.width());
+    bottom = std::clamp(bottom, 0, output_size.height());
+    if (right <= left || bottom <= top) {
+      continue;
+    }
+    const uint8_t region_id = static_cast<uint8_t>(i + 1u);
+    for (int y = top; y < bottom; ++y) {
+      uint8_t* row = dst + static_cast<size_t>(y) * row_pitch;
+      for (int x = left; x < right; ++x) {
+        const float center_x = static_cast<float>(x) + 0.5f;
+        const float center_y = static_cast<float>(y) + 0.5f;
+        if (!StandaloneBackdropMaskPointInsideRegion(region, center_x,
+                                                     center_y, scale_x,
+                                                     scale_y)) {
+          continue;
+        }
+        uint8_t* pixel = row + static_cast<size_t>(x) * 4u;
+        if (pixel[0] == 0 || pixel[1] == 0) {
+          ++mask_pixels;
+        }
+        pixel[0] = region_id;
+        pixel[1] = 255;
+        pixel[2] = 0;
+        pixel[3] = 255;
+      }
+    }
+  }
+  return mask_pixels;
+}
+
 struct LiveScrollableElementEntry {
   std::string element_id;
   DisplayItemClientId paint_client_id = kInvalidDisplayItemClientId;
@@ -2684,22 +2801,6 @@ class StandaloneSkiaOutputSurfaceDependency final
       return finish_with_failure("stand-in D3D12 mask target creation failed");
     }
 
-    D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {};
-    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    rtv_heap_desc.NumDescriptors = 1;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
-    hr = device->CreateDescriptorHeap(&rtv_heap_desc,
-                                      IID_PPV_ARGS(&rtv_heap));
-    if (FAILED(hr) || !rtv_heap) {
-      return finish_with_failure("D3D12 mask RTV heap creation failed");
-    }
-    D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
-    rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle =
-        rtv_heap->GetCPUDescriptorHandleForHeapStart();
-    device->CreateRenderTargetView(target.Get(), &rtv_desc, rtv_handle);
-
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
     UINT row_count = 0;
     UINT64 row_size_bytes = 0;
@@ -2710,10 +2811,10 @@ class StandaloneSkiaOutputSurfaceDependency final
       return finish_with_failure("D3D12 mask readback footprint invalid");
     }
 
-    D3D12_HEAP_PROPERTIES readback_heap = {};
-    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
-    readback_heap.CreationNodeMask = 1;
-    readback_heap.VisibleNodeMask = 1;
+    D3D12_HEAP_PROPERTIES upload_heap = {};
+    upload_heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    upload_heap.CreationNodeMask = 1;
+    upload_heap.VisibleNodeMask = 1;
     D3D12_RESOURCE_DESC buffer_desc = {};
     buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
     buffer_desc.Width = total_bytes;
@@ -2723,6 +2824,34 @@ class StandaloneSkiaOutputSurfaceDependency final
     buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
     buffer_desc.SampleDesc.Count = 1;
     buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    Microsoft::WRL::ComPtr<ID3D12Resource> upload;
+    hr = device->CreateCommittedResource(
+        &upload_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+        D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
+    if (FAILED(hr) || !upload) {
+      return finish_with_failure("D3D12 mask upload resource creation failed");
+    }
+    void* upload_mapped = nullptr;
+    D3D12_RANGE upload_read_range = {0, 0};
+    hr = upload->Map(0, &upload_read_range, &upload_mapped);
+    if (FAILED(hr) || !upload_mapped) {
+      return finish_with_failure("D3D12 mask upload map failed");
+    }
+    std::memset(upload_mapped, 0, static_cast<size_t>(total_bytes));
+    const size_t encoded_pixels = PopulateStandaloneBackdropMaskRows(
+        static_cast<uint8_t*>(upload_mapped),
+        static_cast<size_t>(footprint.Footprint.RowPitch), output_size,
+        css_viewport, regions);
+    D3D12_RANGE upload_written_range = {0, static_cast<SIZE_T>(total_bytes)};
+    upload->Unmap(0, &upload_written_range);
+    if (encoded_pixels == 0) {
+      return finish_with_failure("D3D12 rounded backdrop mask encoded no pixels");
+    }
+
+    D3D12_HEAP_PROPERTIES readback_heap = {};
+    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+    readback_heap.CreationNodeMask = 1;
+    readback_heap.VisibleNodeMask = 1;
     hr = device->CreateCommittedResource(
         &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
         D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback));
@@ -2749,46 +2878,25 @@ class StandaloneSkiaOutputSurfaceDependency final
     to_render_target.Transition.pResource = target.Get();
     to_render_target.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     to_render_target.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-    to_render_target.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    to_render_target.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
     command_list->ResourceBarrier(1, &to_render_target);
 
-    const FLOAT transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    command_list->ClearRenderTargetView(rtv_handle, transparent, 0, nullptr);
-
-    const float scale_x = static_cast<float>(output_size.width()) /
-                          static_cast<float>(css_viewport.width());
-    const float scale_y = static_cast<float>(output_size.height()) /
-                          static_cast<float>(css_viewport.height());
     const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
-    size_t encoded_rects = 0;
-    for (size_t i = 0; i < encoded_region_count; ++i) {
-      const LiveBackdropFilterRegion& region = regions[i];
-      LONG left = static_cast<LONG>(std::floor(region.x * scale_x));
-      LONG top = static_cast<LONG>(std::floor(region.y * scale_y));
-      LONG right =
-          static_cast<LONG>(std::ceil((region.x + region.width) * scale_x));
-      LONG bottom =
-          static_cast<LONG>(std::ceil((region.y + region.height) * scale_y));
-      left = std::clamp<LONG>(left, 0, output_size.width());
-      top = std::clamp<LONG>(top, 0, output_size.height());
-      right = std::clamp<LONG>(right, 0, output_size.width());
-      bottom = std::clamp<LONG>(bottom, 0, output_size.height());
-      if (right <= left || bottom <= top) {
-        continue;
-      }
-      const D3D12_RECT rect = {left, top, right, bottom};
-      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
-      const FLOAT color[4] = {static_cast<FLOAT>(region_id) / 255.0f,
-                              1.0f, 0.0f, 1.0f};
-      command_list->ClearRenderTargetView(rtv_handle, color, 1, &rect);
-      ++encoded_rects;
-    }
+    D3D12_TEXTURE_COPY_LOCATION upload_src = {};
+    upload_src.pResource = upload.Get();
+    upload_src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    upload_src.PlacedFootprint = footprint;
+    D3D12_TEXTURE_COPY_LOCATION upload_dst = {};
+    upload_dst.pResource = target.Get();
+    upload_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    upload_dst.SubresourceIndex = 0;
+    command_list->CopyTextureRegion(&upload_dst, 0, 0, 0, &upload_src, nullptr);
 
     D3D12_RESOURCE_BARRIER to_copy_source = {};
     to_copy_source.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     to_copy_source.Transition.pResource = target.Get();
     to_copy_source.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    to_copy_source.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    to_copy_source.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
     to_copy_source.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
     command_list->ResourceBarrier(1, &to_copy_source);
 
@@ -2868,18 +2976,18 @@ class StandaloneSkiaOutputSurfaceDependency final
         ++distinct_ids;
       }
     }
-    if (encoded_rects == 0 || mask_pixels == 0 || distinct_ids == 0) {
+    if (encoded_region_count == 0 || mask_pixels == 0 || distinct_ids == 0) {
       return finish_with_failure("D3D12 backdrop mask target remained empty");
     }
 
     std::ostringstream out;
     out << kLabel << ": ok"
         << " encoding=rgba8_id_coverage"
-        << " shape=rectangular_coverage_mvp"
+        << " shape=rounded_coverage"
         << " target=" << output_size.width() << "x" << output_size.height()
         << " regions=" << regions.size()
         << " encoded_regions=" << encoded_region_count
-        << " encoded_rects=" << encoded_rects
+        << " encoded_pixels=" << encoded_pixels
         << " distinct_ids=" << distinct_ids
         << " mask_pixels=" << mask_pixels;
     return out.str();
@@ -2995,22 +3103,6 @@ class StandaloneSkiaOutputSurfaceDependency final
 
     ID3D12Resource* target = borrowed_d3d12_blit_target_->resource.Get();
     D3D12_RESOURCE_DESC texture_desc = target->GetDesc();
-    D3D12_DESCRIPTOR_HEAP_DESC rtv_heap_desc = {};
-    rtv_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    rtv_heap_desc.NumDescriptors = 1;
-    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
-    HRESULT hr = device->CreateDescriptorHeap(&rtv_heap_desc,
-                                              IID_PPV_ARGS(&rtv_heap));
-    if (FAILED(hr) || !rtv_heap) {
-      return finish_with_failure("D3D12 mask RTV heap creation failed");
-    }
-    D3D12_RENDER_TARGET_VIEW_DESC rtv_desc = {};
-    rtv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    rtv_desc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    const D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle =
-        rtv_heap->GetCPUDescriptorHandleForHeapStart();
-    device->CreateRenderTargetView(target, &rtv_desc, rtv_handle);
-
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint = {};
     UINT row_count = 0;
     UINT64 row_size_bytes = 0;
@@ -3021,10 +3113,10 @@ class StandaloneSkiaOutputSurfaceDependency final
       return finish_with_failure("D3D12 mask readback footprint invalid");
     }
 
-    D3D12_HEAP_PROPERTIES readback_heap = {};
-    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
-    readback_heap.CreationNodeMask = 1;
-    readback_heap.VisibleNodeMask = 1;
+    D3D12_HEAP_PROPERTIES upload_heap = {};
+    upload_heap.Type = D3D12_HEAP_TYPE_UPLOAD;
+    upload_heap.CreationNodeMask = 1;
+    upload_heap.VisibleNodeMask = 1;
     D3D12_RESOURCE_DESC buffer_desc = {};
     buffer_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
     buffer_desc.Width = total_bytes;
@@ -3034,6 +3126,34 @@ class StandaloneSkiaOutputSurfaceDependency final
     buffer_desc.Format = DXGI_FORMAT_UNKNOWN;
     buffer_desc.SampleDesc.Count = 1;
     buffer_desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    Microsoft::WRL::ComPtr<ID3D12Resource> upload;
+    HRESULT hr = device->CreateCommittedResource(
+        &upload_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
+        D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upload));
+    if (FAILED(hr) || !upload) {
+      return finish_with_failure("D3D12 mask upload resource creation failed");
+    }
+    void* upload_mapped = nullptr;
+    D3D12_RANGE upload_read_range = {0, 0};
+    hr = upload->Map(0, &upload_read_range, &upload_mapped);
+    if (FAILED(hr) || !upload_mapped) {
+      return finish_with_failure("D3D12 mask upload map failed");
+    }
+    std::memset(upload_mapped, 0, static_cast<size_t>(total_bytes));
+    const size_t encoded_pixels = PopulateStandaloneBackdropMaskRows(
+        static_cast<uint8_t*>(upload_mapped),
+        static_cast<size_t>(footprint.Footprint.RowPitch), output_size,
+        css_viewport, regions);
+    D3D12_RANGE upload_written_range = {0, static_cast<SIZE_T>(total_bytes)};
+    upload->Unmap(0, &upload_written_range);
+    if (encoded_pixels == 0) {
+      return finish_with_failure("D3D12 rounded backdrop mask encoded no pixels");
+    }
+
+    D3D12_HEAP_PROPERTIES readback_heap = {};
+    readback_heap.Type = D3D12_HEAP_TYPE_READBACK;
+    readback_heap.CreationNodeMask = 1;
+    readback_heap.VisibleNodeMask = 1;
     hr = device->CreateCommittedResource(
         &readback_heap, D3D12_HEAP_FLAG_NONE, &buffer_desc,
         D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&readback));
@@ -3062,40 +3182,19 @@ class StandaloneSkiaOutputSurfaceDependency final
         D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     to_render_target.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
     to_render_target.Transition.StateAfter =
-        D3D12_RESOURCE_STATE_RENDER_TARGET;
+        D3D12_RESOURCE_STATE_COPY_DEST;
     command_list->ResourceBarrier(1, &to_render_target);
 
-    const FLOAT transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-    command_list->ClearRenderTargetView(rtv_handle, transparent, 0, nullptr);
-
-    const float scale_x = static_cast<float>(output_size.width()) /
-                          static_cast<float>(css_viewport.width());
-    const float scale_y = static_cast<float>(output_size.height()) /
-                          static_cast<float>(css_viewport.height());
     const size_t encoded_region_count = std::min<size_t>(regions.size(), 255u);
-    size_t encoded_rects = 0;
-    for (size_t i = 0; i < encoded_region_count; ++i) {
-      const LiveBackdropFilterRegion& region = regions[i];
-      LONG left = static_cast<LONG>(std::floor(region.x * scale_x));
-      LONG top = static_cast<LONG>(std::floor(region.y * scale_y));
-      LONG right =
-          static_cast<LONG>(std::ceil((region.x + region.width) * scale_x));
-      LONG bottom =
-          static_cast<LONG>(std::ceil((region.y + region.height) * scale_y));
-      left = std::clamp<LONG>(left, 0, output_size.width());
-      top = std::clamp<LONG>(top, 0, output_size.height());
-      right = std::clamp<LONG>(right, 0, output_size.width());
-      bottom = std::clamp<LONG>(bottom, 0, output_size.height());
-      if (right <= left || bottom <= top) {
-        continue;
-      }
-      const D3D12_RECT rect = {left, top, right, bottom};
-      const uint8_t region_id = static_cast<uint8_t>(i + 1u);
-      const FLOAT color[4] = {static_cast<FLOAT>(region_id) / 255.0f,
-                              1.0f, 0.0f, 1.0f};
-      command_list->ClearRenderTargetView(rtv_handle, color, 1, &rect);
-      ++encoded_rects;
-    }
+    D3D12_TEXTURE_COPY_LOCATION upload_src = {};
+    upload_src.pResource = upload.Get();
+    upload_src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    upload_src.PlacedFootprint = footprint;
+    D3D12_TEXTURE_COPY_LOCATION upload_dst = {};
+    upload_dst.pResource = target;
+    upload_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    upload_dst.SubresourceIndex = 0;
+    command_list->CopyTextureRegion(&upload_dst, 0, 0, 0, &upload_src, nullptr);
 
     D3D12_RESOURCE_BARRIER to_copy_source = {};
     to_copy_source.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -3103,7 +3202,7 @@ class StandaloneSkiaOutputSurfaceDependency final
     to_copy_source.Transition.Subresource =
         D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     to_copy_source.Transition.StateBefore =
-        D3D12_RESOURCE_STATE_RENDER_TARGET;
+        D3D12_RESOURCE_STATE_COPY_DEST;
     to_copy_source.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
     command_list->ResourceBarrier(1, &to_copy_source);
 
@@ -3183,7 +3282,7 @@ class StandaloneSkiaOutputSurfaceDependency final
         ++distinct_ids;
       }
     }
-    if (encoded_rects == 0 || mask_pixels == 0 || distinct_ids == 0) {
+    if (encoded_region_count == 0 || mask_pixels == 0 || distinct_ids == 0) {
       return finish_with_failure("D3D12 backdrop mask target remained empty");
     }
     DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
@@ -3191,11 +3290,11 @@ class StandaloneSkiaOutputSurfaceDependency final
     std::ostringstream out;
     out << kLabel << ": ok"
         << " encoding=rgba8_id_coverage"
-        << " shape=rectangular_coverage_mvp"
+        << " shape=rounded_coverage"
         << " target=" << output_size.width() << "x" << output_size.height()
         << " regions=" << regions.size()
         << " encoded_regions=" << encoded_region_count
-        << " encoded_rects=" << encoded_rects
+        << " encoded_pixels=" << encoded_pixels
         << " distinct_ids=" << distinct_ids
         << " mask_pixels=" << mask_pixels
         << " ownership=borrowed";

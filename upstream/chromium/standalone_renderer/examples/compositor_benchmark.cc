@@ -1565,6 +1565,69 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                  backend);
     return false;
   };
+  auto verify_rounded_backdrop_mask_shape = [&](const char* stage,
+                                                const char* backend_label,
+                                                auto pixel_at) {
+    const size_t effect_count =
+        blink_standalone_renderer_gpu_backdrop_effect_count(renderer);
+    const float scale_x = static_cast<float>(active_width) /
+                          static_cast<float>(active_logical_width);
+    const float scale_y = static_cast<float>(active_height) /
+                          static_cast<float>(active_logical_height);
+    for (size_t i = 0; i < effect_count; ++i) {
+      blink_standalone_gpu_backdrop_effect_t effect = {};
+      if (blink_standalone_renderer_get_gpu_backdrop_effect(
+              renderer, i, &effect) != BLINK_STANDALONE_STATUS_OK) {
+        continue;
+      }
+      if (effect.id == 0 || effect.border_radius_top_left < 8.0f) {
+        continue;
+      }
+      const float probe_offset_css =
+          std::max(1.0f, std::min(3.0f, effect.border_radius_top_left * 0.10f));
+      const uint32_t outside_x = std::min<uint32_t>(
+          active_width - 1,
+          static_cast<uint32_t>(
+              std::floor((effect.bounds.x + probe_offset_css) * scale_x)));
+      const uint32_t outside_y = std::min<uint32_t>(
+          active_height - 1,
+          static_cast<uint32_t>(
+              std::floor((effect.bounds.y + probe_offset_css) * scale_y)));
+      const uint32_t inside_x = std::min<uint32_t>(
+          active_width - 1,
+          static_cast<uint32_t>(std::floor(
+              (effect.bounds.x + effect.border_radius_top_left + 2.0f) *
+              scale_x)));
+      const uint32_t inside_y = std::min<uint32_t>(
+          active_height - 1,
+          static_cast<uint32_t>(std::floor(
+              (effect.bounds.y + effect.border_radius_top_left + 2.0f) *
+              scale_y)));
+      const auto outside = pixel_at(outside_x, outside_y);
+      const auto inside = pixel_at(inside_x, inside_y);
+      if (outside.first != 0 && outside.second != 0) {
+        std::fprintf(stderr,
+                     "%s: failed %s %s rounded corner cutout encoded id=%u "
+                     "coverage=%u sample=%ux%u effect_id=%u bounds=%.1f,%.1f "
+                     "%.1fx%.1f radius=%.1f\n",
+                     label, stage, backend_label, outside.first,
+                     outside.second, outside_x, outside_y, effect.id,
+                     effect.bounds.x, effect.bounds.y, effect.bounds.width,
+                     effect.bounds.height, effect.border_radius_top_left);
+        return false;
+      }
+      if (inside.first != effect.id || inside.second == 0) {
+        std::fprintf(stderr,
+                     "%s: failed %s %s rounded corner interior missing id "
+                     "observed=%u coverage=%u sample=%ux%u expected_id=%u\n",
+                     label, stage, backend_label, inside.first, inside.second,
+                     inside_x, inside_y, effect.id);
+        return false;
+      }
+      return true;
+    }
+    return true;
+  };
   auto verify_backdrop_mask_pixels = [&](const char* stage) {
     std::vector<uint32_t> pixels;
     std::string failure;
@@ -1593,7 +1656,14 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       for (uint32_t seen : seen_ids) {
         backdrop_mask_distinct_ids += seen;
       }
-      return backdrop_mask_pixels != 0 && backdrop_mask_distinct_ids != 0;
+      auto pixel_at = [&](uint32_t x, uint32_t y) {
+        const uint32_t pixel =
+            pixels[static_cast<size_t>(y) * active_width + x];
+        return std::pair<uint32_t, uint32_t>((pixel >> 16) & 0xffu,
+                                             (pixel >> 8) & 0xffu);
+      };
+      return backdrop_mask_pixels != 0 && backdrop_mask_distinct_ids != 0 &&
+             verify_rounded_backdrop_mask_shape(stage, "d3d12", pixel_at);
     }
 #endif
     if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
@@ -1619,7 +1689,14 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       for (uint32_t seen : seen_ids) {
         backdrop_mask_distinct_ids += seen;
       }
-      return backdrop_mask_pixels != 0 && backdrop_mask_distinct_ids != 0;
+      auto pixel_at = [&](uint32_t x, uint32_t y) {
+        const uint32_t rgba =
+            pixels[static_cast<size_t>(y) * active_width + x];
+        return std::pair<uint32_t, uint32_t>(rgba & 0xffu,
+                                             (rgba >> 8) & 0xffu);
+      };
+      return backdrop_mask_pixels != 0 && backdrop_mask_distinct_ids != 0 &&
+             verify_rounded_backdrop_mask_shape(stage, "vulkan", pixel_at);
     }
     std::fprintf(stderr, "%s: failed %s unsupported backend=%u\n", label, stage,
                  backend);
