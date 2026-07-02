@@ -2072,9 +2072,14 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}
       ${BLINK_STANDALONE_DAWN_D3D12_SOURCE_DIR}/include
     )
-    target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
-      BLINK_STANDALONE_HAVE_DAWN_D3D12=1
-    )
+    foreach(dawn_api_target IN ITEMS
+        blink_standalone_render_benchmark_skia
+        blink_standalone_renderer_c_api
+        blink_standalone_renderer_c_api_dll)
+      target_compile_definitions(${dawn_api_target} PRIVATE
+        BLINK_STANDALONE_HAVE_DAWN_D3D12=1
+      )
+    endforeach()
     if(TARGET blink_standalone_dawn_d3d12_render_objects)
       target_include_directories(
         blink_standalone_dawn_d3d12_render_objects BEFORE PRIVATE
