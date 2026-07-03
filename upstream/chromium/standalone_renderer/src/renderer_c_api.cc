@@ -943,6 +943,13 @@ class DedicatedRendererSequence {
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
+    if (status == BLINK_STANDALONE_STATUS_PENDING &&
+        result.render_result.request_id == 0) {
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
+    }
     if ((status != BLINK_STANDALONE_STATUS_OK &&
          status != BLINK_STANDALONE_STATUS_PENDING) ||
         result.render_result.request_id == 0) {

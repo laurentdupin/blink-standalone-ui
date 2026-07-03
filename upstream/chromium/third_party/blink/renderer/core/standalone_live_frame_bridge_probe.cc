@@ -5281,8 +5281,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
         return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            "gpu_external_vkimage_render_copy_async: failed failure=Viz "
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+            "gpu_external_vkimage_render_copy_async: pending reason=Viz "
             "Display cannot initialize without LocalSurfaceId",
             output_size);
       }
@@ -5592,8 +5592,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
         return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            "gpu_external_d3d12_render_copy_async: failed failure=Viz "
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+            "gpu_external_d3d12_render_copy_async: pending reason=Viz "
             "Display cannot initialize without LocalSurfaceId",
             output_size);
       }
