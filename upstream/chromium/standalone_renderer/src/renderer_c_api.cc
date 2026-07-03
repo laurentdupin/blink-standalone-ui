@@ -2295,7 +2295,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   if (FrameResultHasGpuPreparePending(renderer->latest_result)) {
     renderer->gpu_source_frame_pending = true;
-    renderer->runtime->ReleaseExternalGpuTargetState();
+    // No external copy request has been accepted yet. Keep the offscreen
+    // Display/output state alive so pending source-frame work can settle before
+    // the embedder retries.
     result->status = BLINK_STANDALONE_STATUS_PENDING;
     result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING;
     return SetLastError(
