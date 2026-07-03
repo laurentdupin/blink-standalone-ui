@@ -105,6 +105,13 @@ typedef enum blink_standalone_gpu_source_frame_state {
   BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_STALE = 4,
 } blink_standalone_gpu_source_frame_state_t;
 
+typedef enum blink_standalone_dedicated_thread_command_state {
+  BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING = 0,
+  BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED = 1,
+  BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED = 2,
+  BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE = 3,
+} blink_standalone_dedicated_thread_command_state_t;
+
 typedef enum blink_standalone_gpu_async_flags {
   /* Submit only if update() or a pending GPU source frame says output is
    * needed. When clean, submit returns OK/NO_DEMAND without touching the
@@ -537,6 +544,29 @@ typedef struct blink_standalone_update_result {
   uint32_t damage_rect_count;
 } blink_standalone_update_result_t;
 
+typedef struct blink_standalone_dedicated_thread_gpu_frame_request {
+  double timeline_time_seconds;
+  blink_standalone_gpu_source_frame_tick_request_t source_request;
+  blink_standalone_gpu_async_render_request_t render_request;
+  uint32_t poll_interval_ms;
+  uint32_t max_poll_iterations;
+} blink_standalone_dedicated_thread_gpu_frame_request_t;
+
+typedef struct blink_standalone_dedicated_thread_gpu_frame_result {
+  uint32_t status;
+  uint32_t state;
+  uint64_t command_id;
+  blink_standalone_update_result_t update_result;
+  blink_standalone_gpu_source_frame_tick_result_t source_result;
+  blink_standalone_gpu_async_render_result_t render_result;
+  uint32_t poll_iterations;
+  double elapsed_ms;
+  double update_ms;
+  double source_tick_ms;
+  double submit_ms;
+  double poll_ms;
+} blink_standalone_dedicated_thread_gpu_frame_result_t;
+
 /* Pointers returned in this struct are owned by the renderer and are valid
  * until the next output release, renderer mutation, frame advance, or destroy.
  * Call release_latest_output when the embedder has finished reading pixels. */
@@ -630,6 +660,9 @@ typedef struct blink_standalone_gpu_backdrop_effect {
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create(
     const blink_standalone_renderer_config_t* config,
     blink_standalone_renderer_t** renderer_out);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_create_dedicated_thread(
+    const blink_standalone_renderer_config_t* config,
+    blink_standalone_renderer_t** renderer_out);
 BLINK_STANDALONE_RENDERER_C_API void blink_standalone_renderer_destroy(blink_standalone_renderer_t* renderer);
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_set_document_html(
@@ -717,6 +750,14 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     uint64_t request_id,
     blink_standalone_gpu_async_render_result_t* result);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_dedicated_thread_gpu_frame_request_t* request,
+    blink_standalone_dedicated_thread_gpu_frame_result_t* result);
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+    blink_standalone_renderer_t* renderer,
+    uint64_t command_id,
+    blink_standalone_dedicated_thread_gpu_frame_result_t* result);
 
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_mouse_move(
     blink_standalone_renderer_t* renderer,

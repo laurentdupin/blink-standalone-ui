@@ -1,6 +1,7 @@
 LIBRARY blink_standalone_renderer_c_api
 EXPORTS
   blink_standalone_renderer_create
+  blink_standalone_renderer_create_dedicated_thread
   blink_standalone_renderer_destroy
   blink_standalone_renderer_set_document_html
   blink_standalone_renderer_set_viewport
@@ -9,6 +10,11 @@ EXPORTS
   blink_standalone_renderer_gpu_backend_capabilities
   blink_standalone_renderer_render_to_gpu_target
   blink_standalone_renderer_tick_gpu_source_frame_async
+  blink_standalone_renderer_submit_gpu_frame_async
+  blink_standalone_renderer_poll_gpu_frame_async
+  blink_standalone_renderer_cancel_gpu_frame_async
+  blink_standalone_renderer_post_dedicated_thread_gpu_frame
+  blink_standalone_renderer_poll_dedicated_thread_gpu_frame
   blink_standalone_renderer_mouse_move
   blink_standalone_renderer_mouse_down
   blink_standalone_renderer_mouse_up
