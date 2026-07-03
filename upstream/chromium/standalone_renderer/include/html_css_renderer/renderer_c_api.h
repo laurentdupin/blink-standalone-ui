@@ -97,6 +97,14 @@ typedef enum blink_standalone_gpu_async_state {
   BLINK_STANDALONE_GPU_ASYNC_STATE_STALE = 6,
 } blink_standalone_gpu_async_state_t;
 
+typedef enum blink_standalone_gpu_source_frame_state {
+  BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_NO_DEMAND = 0,
+  BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_PENDING = 1,
+  BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_SOURCE_READY = 2,
+  BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_FAILED = 3,
+  BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_STALE = 4,
+} blink_standalone_gpu_source_frame_state_t;
+
 typedef enum blink_standalone_gpu_async_flags {
   /* Submit only if update() or a pending GPU source frame says output is
    * needed. When clean, submit returns OK/NO_DEMAND without touching the
@@ -486,6 +494,39 @@ typedef struct blink_standalone_gpu_async_render_result {
   uint64_t d3d12_signal_value;
 } blink_standalone_gpu_async_render_result_t;
 
+typedef struct blink_standalone_gpu_source_frame_tick_request {
+  uint32_t backend;
+  uint32_t flags;
+  uint64_t request_generation;
+  double timeline_time_seconds;
+  uint32_t logical_width;
+  uint32_t logical_height;
+  uint32_t physical_width;
+  uint32_t physical_height;
+  float device_scale_factor;
+  double max_work_budget_ms;
+} blink_standalone_gpu_source_frame_tick_request_t;
+
+typedef struct blink_standalone_gpu_source_frame_tick_result {
+  uint32_t backend;
+  uint32_t status;
+  uint32_t state;
+  uint64_t request_generation;
+  uint64_t source_frame_generation;
+  uint32_t needs_output;
+  uint32_t frame_advanced;
+  uint32_t frame_skipped_due_to_no_demand;
+  uint32_t full_frame_damage;
+  uint32_t damage_rect_count;
+  uint32_t logical_width;
+  uint32_t logical_height;
+  uint32_t physical_width;
+  uint32_t physical_height;
+  float device_scale_factor;
+  double elapsed_ms;
+  double max_work_budget_ms;
+} blink_standalone_gpu_source_frame_tick_result_t;
+
 typedef struct blink_standalone_update_result {
   uint32_t status;
   uint32_t frame_advanced;
@@ -643,6 +684,16 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     blink_standalone_renderer_t* renderer,
     const blink_standalone_gpu_backdrop_render_request_t* request,
     blink_standalone_gpu_backdrop_render_result_t* result);
+/* Cooperative explicit-GPU source-frame production. Product embedders may call
+ * this once per host frame while update() reports needs_output. SOURCE_READY
+ * means a later submit_gpu_frame_async call with the same backend, generation,
+ * logical/physical size, and DSF can skip source-frame production and only
+ * schedule the external-target copy. PENDING means keep displaying the previous
+ * completed generation and tick again in a later host frame. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_tick_gpu_source_frame_async(
+    blink_standalone_renderer_t* renderer,
+    const blink_standalone_gpu_source_frame_tick_request_t* request,
+    blink_standalone_gpu_source_frame_tick_result_t* result);
 /* Async GPU target rendering is a submit/poll contract for explicit GPU
  * embedders. submit schedules compositor CopyOutput/blit work and returns
  * without waiting for completion unless BLINK_STANDALONE_GPU_ASYNC_BLOCK_UNTIL_COMPLETE
