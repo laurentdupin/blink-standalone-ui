@@ -843,14 +843,23 @@ class DedicatedRendererSequence {
       return;
     }
 
-    const auto source_start = std::chrono::steady_clock::now();
-    blink_standalone_status_code_t status =
-        blink_standalone_renderer_tick_gpu_source_frame_async(
-        inner, &request.source_request, &result.source_result);
-    const auto source_end = std::chrono::steady_clock::now();
-    result.source_tick_ms =
-        std::chrono::duration<double, std::milli>(source_end - source_start)
-            .count();
+    const uint32_t max_polls =
+        request.max_poll_iterations ? request.max_poll_iterations : 240;
+    const uint32_t poll_interval_ms =
+        request.poll_interval_ms ? request.poll_interval_ms : 1;
+    blink_standalone_status_code_t status = BLINK_STANDALONE_STATUS_OK;
+    auto tick_source_frame = [&]() {
+      const auto source_start = std::chrono::steady_clock::now();
+      blink_standalone_status_code_t tick_status =
+          blink_standalone_renderer_tick_gpu_source_frame_async(
+              inner, &request.source_request, &result.source_result);
+      const auto source_end = std::chrono::steady_clock::now();
+      result.source_tick_ms +=
+          std::chrono::duration<double, std::milli>(source_end - source_start)
+              .count();
+      return tick_status;
+    };
+    status = tick_source_frame();
     result.update_result.status = result.source_result.status;
     result.update_result.needs_output = result.source_result.needs_output;
     result.update_result.frame_advanced = result.source_result.frame_advanced;
@@ -875,16 +884,52 @@ class DedicatedRendererSequence {
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
+    while ((status == BLINK_STANDALONE_STATUS_PENDING ||
+            result.source_result.state ==
+                BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_PENDING) &&
+           !DedicatedGpuFrameCancelRequested(command) &&
+           result.poll_iterations < max_polls) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+      status = tick_source_frame();
+      result.update_result.status = result.source_result.status;
+      result.update_result.needs_output = result.source_result.needs_output;
+      result.update_result.frame_advanced = result.source_result.frame_advanced;
+      result.update_result.frame_skipped_due_to_no_demand =
+          result.source_result.frame_skipped_due_to_no_demand;
+      result.update_result.full_frame_damage =
+          result.source_result.full_frame_damage;
+      result.update_result.damage_rect_count =
+          result.source_result.damage_rect_count;
+      ++result.poll_iterations;
+    }
+    if (DedicatedGpuFrameCancelRequested(command)) {
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+      result.render_result.status = BLINK_STANDALONE_STATUS_OK;
+      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
+    }
+    if (status == BLINK_STANDALONE_STATUS_OK &&
+        result.source_result.state ==
+            BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_NO_DEMAND) {
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED;
+      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
+    }
     if (status != BLINK_STANDALONE_STATUS_OK ||
         result.source_result.state !=
             BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_SOURCE_READY) {
-      result.status = status;
-      result.state =
-          status == BLINK_STANDALONE_STATUS_PENDING
-              ? BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING
-              : BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
-      if (result.state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED) {
-        SetDedicatedGpuFrameErrorFromRenderer(inner, &result);
+      result.status = status == BLINK_STANDALONE_STATUS_PENDING
+                          ? BLINK_STANDALONE_STATUS_RENDER_FAILED
+                          : status;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+      SetDedicatedGpuFrameErrorFromRenderer(inner, &result);
+      if (!result.error_message) {
+        result.error_message =
+            "dedicated GPU frame source work did not become ready";
       }
       FinishGpuFrameCommand(command, result, command_start);
       return;
@@ -920,10 +965,6 @@ class DedicatedRendererSequence {
     }
 
     const uint64_t request_id = result.render_result.request_id;
-    const uint32_t max_polls =
-        request.max_poll_iterations ? request.max_poll_iterations : 240;
-    const uint32_t poll_interval_ms =
-        request.poll_interval_ms ? request.poll_interval_ms : 1;
     while ((result.render_result.state ==
                 BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING ||
             result.render_result.state ==

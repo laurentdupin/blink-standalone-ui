@@ -1201,6 +1201,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                   bool dedicated_first_frame_no_mutation =
                                       false,
                                   bool dedicated_cancel_before_completion =
+                                      false,
+                                  bool dedicated_cancel_resize_backdrop_mask =
                                       false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
@@ -2295,12 +2297,16 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                 stale_result.state);
   }
   auto resize_active_async_target = [&](uint32_t target_width,
-                                        uint32_t target_height) {
+                                        uint32_t target_height,
+                                        uint32_t logical_width = 0,
+                                        uint32_t logical_height = 0,
+                                        float device_scale_factor = 0.0f) {
     active_width = target_width;
     active_height = target_height;
-    active_logical_width = target_width;
-    active_logical_height = target_height;
-    active_device_scale_factor = 1.0f;
+    active_logical_width = logical_width ? logical_width : target_width;
+    active_logical_height = logical_height ? logical_height : target_height;
+    active_device_scale_factor =
+        device_scale_factor > 0.0f ? device_scale_factor : 1.0f;
     status = blink_standalone_renderer_set_viewport(
         renderer, static_cast<int>(active_logical_width),
         static_cast<int>(active_logical_height), active_device_scale_factor);
@@ -2375,7 +2381,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                    bool mutate,
                                    double timestamp,
                                    AsyncDirtyTimingStats* stats,
-                                   bool cooperative_source_tick) {
+                                   bool cooperative_source_tick,
+                                   bool cancel_before_completion = false) {
     const auto frame_start = std::chrono::steady_clock::now();
     if (mutate) {
       const std::string text = "fps " + std::to_string(iteration);
@@ -2422,6 +2429,22 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       dedicated_request.render_request.main_target = target;
       dedicated_request.render_request.flags |=
           BLINK_STANDALONE_GPU_ASYNC_SKIP_IF_CLEAN;
+      if (exercise_gpu_backdrop_mask) {
+        mask_target.common.generation = target.common.generation + 1;
+        if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
+          mask_target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        }
+#if BUILDFLAG(IS_WIN)
+        if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
+          mask_target.d3d12.current_state = D3D12_RESOURCE_STATE_COMMON;
+        }
+#endif
+        dedicated_request.render_request.flags |=
+            BLINK_STANDALONE_GPU_ASYNC_BACKDROP_MASK_REQUIRED;
+        dedicated_request.render_request.mask_encoding =
+            BLINK_STANDALONE_GPU_BACKDROP_MASK_ENCODING_RGBA8_ID_COVERAGE;
+        dedicated_request.render_request.backdrop_mask_target = mask_target;
+      }
       dedicated_request.poll_interval_ms = 1;
       dedicated_request.max_poll_iterations = 240;
       blink_standalone_dedicated_thread_gpu_frame_result_t dedicated_result =
@@ -2450,7 +2473,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       }
       ++stats->accepted_requests;
       const uint64_t command_id = dedicated_result.command_id;
-      if (dedicated_cancel_before_completion) {
+      if (cancel_before_completion) {
         int caller_polls = 0;
         while (dedicated_result.state ==
                    BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
@@ -2571,11 +2594,17 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
           dedicated_result.render_result.main_target_generation !=
               target.common.generation ||
           dedicated_result.render_result.physical_width != active_width ||
-          dedicated_result.render_result.physical_height != active_height) {
+          dedicated_result.render_result.physical_height != active_height ||
+          (exercise_gpu_backdrop_mask &&
+           (dedicated_result.render_result.backdrop_mask_written == 0 ||
+            dedicated_result.render_result.backdrop_mask_generation !=
+                mask_target.common.generation ||
+            dedicated_result.render_result.effect_count == 0))) {
         std::fprintf(stderr,
                      "%s: dedicated gpu frame completion failed frame=%d "
                      "status=%d command_state=%u render_status=%u "
-                     "render_state=%u command_id=%llu main=%u generation=%llu "
+                     "render_state=%u command_id=%llu main=%u mask=%u "
+                     "effects=%u generation=%llu mask_generation=%llu "
                      "size=%ux%u caller_polls=%d renderer_polls=%u "
                      "command_error=%s error=%s\n",
                      label, iteration, status, dedicated_result.state,
@@ -2583,8 +2612,12 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                      dedicated_result.render_result.state,
                      static_cast<unsigned long long>(command_id),
                      dedicated_result.render_result.main_target_written,
+                     dedicated_result.render_result.backdrop_mask_written,
+                     dedicated_result.render_result.effect_count,
                      static_cast<unsigned long long>(
                          dedicated_result.render_result.main_target_generation),
+                     static_cast<unsigned long long>(
+                         dedicated_result.render_result.backdrop_mask_generation),
                      dedicated_result.render_result.physical_width,
                      dedicated_result.render_result.physical_height,
                      caller_polls, dedicated_result.poll_iterations,
@@ -2593,6 +2626,13 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                          : "",
                      blink_standalone_renderer_last_error(renderer));
         return false;
+      }
+      if (exercise_gpu_backdrop_mask &&
+          !verify_backdrop_mask_pixels("dedicated-backdrop-mask")) {
+        return false;
+      }
+      if (exercise_gpu_backdrop_mask) {
+        backdrop_effect_count = dedicated_result.render_result.effect_count;
       }
       ++stats->completed_requests;
       const auto frame_end = std::chrono::steady_clock::now();
@@ -2845,7 +2885,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
   if (dedicated_first_frame_no_mutation) {
     AsyncDirtyTimingStats stats;
     if (!run_async_dirty_frame(0, /*mutate=*/false, 2.000, &stats,
-                               /*cooperative_source_tick=*/false)) {
+                               /*cooperative_source_tick=*/false,
+                               dedicated_cancel_before_completion)) {
       return cleanup_and_fail();
     }
     print_async_dirty_stats("dedicated_first_frame_no_mutation", stats);
@@ -2853,6 +2894,34 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
         !verify_target_pixels("dedicated-first-frame", expected_background,
                               expected_box, require_full_nontransparent,
                               /*quiet=*/false)) {
+      return cleanup_and_fail();
+    }
+  }
+  if (dedicated_cancel_resize_backdrop_mask) {
+    AsyncDirtyTimingStats stats;
+    if (!run_async_dirty_frame(0, /*mutate=*/true, 3.000, &stats,
+                               /*cooperative_source_tick=*/false,
+                               /*cancel_before_completion=*/true)) {
+      return cleanup_and_fail();
+    }
+    if (!resize_active_async_target(1280, 720, 1280, 720, 1.0f)) {
+      return cleanup_and_fail();
+    }
+    if (!run_async_dirty_frame(1, /*mutate=*/true, 3.100, &stats,
+                               /*cooperative_source_tick=*/false)) {
+      return cleanup_and_fail();
+    }
+    if (!resize_active_async_target(2560, 1440, 1280, 720, 2.0f)) {
+      return cleanup_and_fail();
+    }
+    if (!run_async_dirty_frame(2, /*mutate=*/true, 3.200, &stats,
+                               /*cooperative_source_tick=*/false)) {
+      return cleanup_and_fail();
+    }
+    print_async_dirty_stats("dedicated_cancel_resize_backdrop_mask", stats);
+    if (!verify_target_pixels("dedicated-cancel-resize-backdrop",
+                              expected_background, expected_box,
+                              require_full_nontransparent, /*quiet=*/true)) {
       return cleanup_and_fail();
     }
   }
@@ -2998,7 +3067,7 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
     }
     print_async_dirty_stats("async_churn_final_size", final_stats);
   }
-  if (exercise_gpu_backdrop_mask) {
+  if (exercise_gpu_backdrop_mask && !dedicated_cancel_resize_backdrop_mask) {
     if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
       target.vulkan.current_layout = target.vulkan.required_final_layout;
       mask_target.vulkan.current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -4695,6 +4764,70 @@ int RunCApiVulkanDedicatedThreadGpuFrameSmoke() {
       /*exercise_async_profile_churn_sequence=*/false,
       /*cooperative_async_dirty_timing_iterations=*/60,
       /*use_dedicated_thread_gpu_frame_api=*/true);
+}
+
+int RunCApiVulkanDedicatedThreadBackdropMaskCancelResizeSmoke() {
+  const char* extra_css =
+      "#counter{position:absolute;left:24px;top:18px;"
+      "font:32px sans-serif;color:white}"
+      "#backdrop{position:absolute;left:80px;top:64px;width:240px;"
+      "height:140px;border-radius:24px;background:rgba(255,255,255,.20);"
+      "backdrop-filter:blur(10px) saturate(170%);"
+      "-webkit-backdrop-filter:blur(10px) saturate(170%);}"
+      "#backdrop2{position:absolute;left:360px;top:160px;width:220px;"
+      "height:120px;border-radius:12px;background:rgba(255,255,255,.18);"
+      "backdrop-filter:blur(4px) brightness(1.2);"
+      "-webkit-backdrop-filter:blur(4px) brightness(1.2);}"
+      "#stripe{position:absolute;left:0;top:260px;width:720px;height:120px;"
+      "background:linear-gradient(90deg,#144a80,#237a57,#d06329);}";
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_VULKAN,
+      "c_api_vulkan_dedicated_thread_backdrop_mask_cancel_resize_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff144a80u,
+      /*expected_box=*/0xff237a57u,
+      /*background_css=*/"#144a80",
+      /*box_css=*/"#237a57",
+      /*width=*/1280,
+      /*height=*/720,
+      extra_css,
+      /*extra_body=*/
+      "<div id='counter'>fps 0</div><div id='backdrop'></div>"
+      "<div id='backdrop2'></div><div id='stripe'></div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/false,
+      /*exercise_gpu_backdrop_mask=*/true,
+      /*exercise_clean_skip_sequence=*/false,
+      /*exercise_backdrop_mask_resize_bounce=*/false,
+      /*exercise_dsf_resize_sequence=*/false,
+      /*exercise_async_render_sequence=*/false,
+      /*exercise_async_resize_stale_sequence=*/false,
+      /*async_dirty_timing_iterations=*/0,
+      /*exercise_async_profile_churn_sequence=*/false,
+      /*cooperative_async_dirty_timing_iterations=*/0,
+      /*use_dedicated_thread_gpu_frame_api=*/true,
+      /*skip_initial_gpu_target_render=*/false,
+      /*dedicated_first_frame_no_mutation=*/false,
+      /*dedicated_cancel_before_completion=*/false,
+      /*dedicated_cancel_resize_backdrop_mask=*/true);
 }
 
 int RunCApiVulkanExternalTargetAsyncProfileChurnSmoke() {
@@ -13885,6 +14018,8 @@ int main(int argc, char** argv) {
         arg == "--c-api-vulkan-external-target-async-source-tick-smoke" ||
         arg == "--c-api-vulkan-renderer-thread-gpu-source-smoke" ||
         arg == "--c-api-vulkan-dedicated-thread-gpu-frame-smoke" ||
+        arg ==
+            "--c-api-vulkan-dedicated-thread-backdrop-mask-cancel-resize-smoke" ||
         arg == "--c-api-vulkan-external-target-async-resize-stale-smoke" ||
         arg == "--c-api-vulkan-external-target-click-timing-smoke" ||
         arg == "--c-api-vulkan-external-target-click-resize-pending-smoke" ||
@@ -13959,6 +14094,10 @@ int main(int argc, char** argv) {
       return RunCApiVulkanDedicatedThreadGpuFrameSmoke();
     }
     if (std::string(argv[i]) ==
+        "--c-api-vulkan-dedicated-thread-backdrop-mask-cancel-resize-smoke") {
+      return RunCApiVulkanDedicatedThreadBackdropMaskCancelResizeSmoke();
+    }
+    if (std::string(argv[i]) ==
         "--c-api-d3d12-dedicated-thread-gpu-frame-smoke") {
       return RunCApiD3D12DedicatedThreadGpuFrameSmoke();
     }
@@ -14021,6 +14160,8 @@ int main(int argc, char** argv) {
   bool c_api_vulkan_external_target_async_dirty_timing_smoke = false;
   bool c_api_vulkan_external_target_async_source_tick_smoke = false;
   bool c_api_vulkan_dedicated_thread_gpu_frame_smoke = false;
+  bool c_api_vulkan_dedicated_thread_backdrop_mask_cancel_resize_smoke =
+      false;
   bool c_api_vulkan_external_target_async_profile_churn_smoke = false;
   bool c_api_vulkan_external_target_async_resize_stale_smoke = false;
   bool c_api_vulkan_external_target_click_timing_smoke = false;
@@ -14240,6 +14381,10 @@ int main(int argc, char** argv) {
       c_api_vulkan_external_target_async_source_tick_smoke = true;
     } else if (arg == "--c-api-vulkan-dedicated-thread-gpu-frame-smoke") {
       c_api_vulkan_dedicated_thread_gpu_frame_smoke = true;
+    } else if (
+        arg ==
+        "--c-api-vulkan-dedicated-thread-backdrop-mask-cancel-resize-smoke") {
+      c_api_vulkan_dedicated_thread_backdrop_mask_cancel_resize_smoke = true;
     } else if (
         arg == "--c-api-vulkan-external-target-async-profile-churn-smoke") {
       c_api_vulkan_external_target_async_profile_churn_smoke = true;
@@ -14605,6 +14750,10 @@ int main(int argc, char** argv) {
 
   if (c_api_vulkan_dedicated_thread_gpu_frame_smoke) {
     return RunCApiVulkanDedicatedThreadGpuFrameSmoke();
+  }
+
+  if (c_api_vulkan_dedicated_thread_backdrop_mask_cancel_resize_smoke) {
+    return RunCApiVulkanDedicatedThreadBackdropMaskCancelResizeSmoke();
   }
 
   if (c_api_vulkan_external_target_async_profile_churn_smoke) {
