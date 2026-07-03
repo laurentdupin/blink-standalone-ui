@@ -6,24 +6,21 @@
 
 #include <EGL/egl.h>
 
-#if !defined(HTML_CSS_RENDERER_STANDALONE)
 extern "C" {
 // The ANGLE internal eglGetProcAddress
-EGLAPI __eglMustCastToProperFunctionPointerType EGLAPIENTRY
+__eglMustCastToProperFunctionPointerType EGLAPIENTRY
 EGL_GetProcAddress(const char* procname);
 }
-#endif
 
 namespace gl {
 namespace init {
 
 bool InitializeStaticANGLEEGL() {
-#if defined(HTML_CSS_RENDERER_STANDALONE)
-  return false;
-#else
+  // Standalone static packages link ANGLE into the final executable instead of
+  // shipping libEGL/libGLESv2 sidecars, so bind directly to ANGLE's in-process
+  // EGL entry point.
   SetGLGetProcAddressProc(&EGL_GetProcAddress);
   return true;
-#endif
 }
 
 }  // namespace init

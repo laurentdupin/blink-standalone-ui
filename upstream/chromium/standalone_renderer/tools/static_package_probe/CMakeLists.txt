@@ -116,3 +116,7 @@ _blink_static_configure_probe(blink_static_raw_output_smoke)
 add_executable(blink_static_gpu_external_target_smoke
   gpu_external_target_smoke.cc)
 _blink_static_configure_probe(blink_static_gpu_external_target_smoke)
+
+add_executable(blink_static_host_collision_smoke
+  host_collision_smoke.cc)
+_blink_static_configure_probe(blink_static_host_collision_smoke)

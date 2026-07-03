@@ -81,6 +81,9 @@ int main() {
 
   status = blink_standalone_renderer_advance_frame(renderer, 0.0);
   if (status != BLINK_STANDALONE_STATUS_OK) {
+    std::fprintf(stderr, "static_raw_output_smoke: advance_frame status=%d error=%s\n",
+                 static_cast<int>(status),
+                 blink_standalone_renderer_last_error(renderer));
     blink_standalone_renderer_destroy(renderer);
     return Fail("advance_frame") ? 0 : 1;
   }

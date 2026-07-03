@@ -54,6 +54,9 @@ def cmake_list(value):
 
 
 def chromium_libcxx_cxx_flags(cache_path):
+  toolchain = read_cmake_cache_value(cache_path, "BLINK_STANDALONE_V8_TOOLCHAIN")
+  if toolchain == "msvc":
+    return ""
   include_dirs = cmake_list(read_cmake_cache_value(
       cache_path, "BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS"))
   defines = cmake_list(read_cmake_cache_value(

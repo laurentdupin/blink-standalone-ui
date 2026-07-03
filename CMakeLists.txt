@@ -249,6 +249,133 @@ if(BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "chromium-clang")
   set(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX ON)
 endif()
 
+set(BLINK_STANDALONE_PLATFORM_COMPILE_DEFINITIONS)
+set(BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES)
+set(BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS)
+set(BLINK_STANDALONE_PLATFORM_LINK_OPTIONS)
+set(BLINK_STANDALONE_PLATFORM_LINK_LIBS)
+set(BLINK_STANDALONE_SDL_PLATFORM_LINK_LIBS)
+if(WIN32)
+  list(APPEND BLINK_STANDALONE_PLATFORM_COMPILE_DEFINITIONS
+    VK_USE_PLATFORM_WIN32_KHR=1
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    _CRT_NONSTDC_NO_WARNINGS
+    _CRT_SECURE_NO_DEPRECATE
+    _SCL_SECURE_NO_DEPRECATE
+    _WINSOCK_DEPRECATED_NO_WARNINGS
+    UNICODE
+    _UNICODE
+  )
+  list(APPEND BLINK_STANDALONE_PLATFORM_LINK_LIBS
+    d3d11
+    d3d12
+    dcomp
+    dwmapi
+    dxcore
+    dxgi
+    kernel32
+    mincore
+    ole32
+    oleaut32
+    propsys
+    runtimeobject
+    shell32
+    shcore
+    winmm
+    windowscodecs
+    wbemuuid
+    advapi32
+    dbghelp
+    ntdll
+    psapi
+    setupapi
+    shlwapi
+    ws2_32
+    delayimp
+  )
+  list(APPEND BLINK_STANDALONE_SDL_PLATFORM_LINK_LIBS
+    kernel32.lib
+    user32.lib
+    gdi32.lib
+    winmm.lib
+    imm32.lib
+    ole32.lib
+    oleaut32.lib
+    version.lib
+    uuid.lib
+    advapi32.lib
+    setupapi.lib
+    shell32.lib
+    dbghelp.lib
+    dinput8.lib
+    ntdll.lib
+    psapi.lib
+    shlwapi.lib
+    ws2_32.lib
+  )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(Threads REQUIRED)
+  find_package(X11 REQUIRED COMPONENTS xcb)
+  foreach(_blink_standalone_x11_include_dir IN ITEMS
+      "${X11_INCLUDEDIR}"
+      "${X11_X11_INCLUDE_PATH}"
+      "${X11_xcb_INCLUDE_PATH}")
+    if(_blink_standalone_x11_include_dir AND
+       EXISTS "${_blink_standalone_x11_include_dir}")
+      list(APPEND BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES
+        "${_blink_standalone_x11_include_dir}")
+    endif()
+  endforeach()
+  list(REMOVE_DUPLICATES BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES)
+  list(APPEND BLINK_STANDALONE_PLATFORM_COMPILE_DEFINITIONS
+    VK_USE_PLATFORM_XCB_KHR=1
+    USE_OZONE=1
+  )
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    list(APPEND BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS
+      -fPIC
+      -pthread
+      -fvisibility=hidden
+      -fvisibility-inlines-hidden
+    )
+    list(APPEND BLINK_STANDALONE_PLATFORM_LINK_OPTIONS
+      -fPIC
+      -pthread
+      -Wl,-z,noexecstack
+      -Wl,-z,relro
+    )
+  endif()
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    list(APPEND BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS
+      -Wno-nullability-completeness
+      -Wno-nontrivial-memcall
+    )
+    get_filename_component(_blink_standalone_clang_bin_dir
+      "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    if(EXISTS "${_blink_standalone_clang_bin_dir}/ld.lld")
+      execute_process(
+        COMMAND "${_blink_standalone_clang_bin_dir}/ld.lld" --version
+        RESULT_VARIABLE _blink_standalone_lld_result
+        OUTPUT_QUIET
+        ERROR_QUIET)
+      if(_blink_standalone_lld_result EQUAL 0)
+        list(APPEND BLINK_STANDALONE_PLATFORM_LINK_OPTIONS
+          -fuse-ld=lld
+        )
+      endif()
+    endif()
+  endif()
+  list(APPEND BLINK_STANDALONE_PLATFORM_LINK_LIBS
+    Threads::Threads
+    X11::X11
+    X11::xcb
+    atomic
+    dl
+    m
+  )
+endif()
+
 set(BLINK_STANDALONE_CHROMIUM_ROOT
   ${CMAKE_CURRENT_SOURCE_DIR}/upstream/chromium
 )
@@ -290,6 +417,20 @@ file(TO_CMAKE_PATH "${_blink_standalone_default_v8_compat_work_root}" _blink_sta
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_COMPAT_WORK_ROOT}" _blink_standalone_v8_compat_work_root_normalized)
 file(TO_CMAKE_PATH "${_blink_standalone_default_v8_compat_out_dir}" _blink_standalone_default_v8_compat_out_dir_normalized)
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}" _blink_standalone_v8_compat_out_dir_normalized)
+if(WIN32)
+  set(_blink_standalone_v8_gn_names gn.bat gn.cmd gn.exe gn)
+  set(_blink_standalone_v8_gclient_names gclient.bat gclient.cmd gclient.exe gclient gclient.py)
+else()
+  if(BLINK_STANDALONE_V8_GN_EXECUTABLE MATCHES "\\.(bat|cmd|exe)$")
+    unset(BLINK_STANDALONE_V8_GN_EXECUTABLE CACHE)
+  endif()
+  if(BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE MATCHES "\\.(bat|cmd|exe)$")
+    unset(BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE CACHE)
+  endif()
+  set(_blink_standalone_v8_gn_names gn gn.py)
+  set(_blink_standalone_v8_gclient_names gclient gclient.py)
+endif()
+
 if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
    _blink_standalone_v8_compat_out_dir_normalized STREQUAL _blink_standalone_default_v8_compat_out_dir_normalized)
   message(STATUS "Updating BLINK_STANDALONE_V8_COMPAT_OUT_DIR to match BLINK_STANDALONE_V8_COMPAT_WORK_ROOT.")
@@ -301,26 +442,26 @@ if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalo
   )
 endif()
 find_program(BLINK_STANDALONE_V8_GN_EXECUTABLE
-  NAMES gn.bat gn.cmd gn.exe gn
+  NAMES ${_blink_standalone_v8_gn_names}
   HINTS ${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}
   NO_DEFAULT_PATH
   DOC "GN executable for the optional V8/CppGC compatibility build target."
 )
 if(NOT BLINK_STANDALONE_V8_GN_EXECUTABLE)
   find_program(BLINK_STANDALONE_V8_GN_EXECUTABLE
-    NAMES gn.bat gn.cmd gn.exe gn
+    NAMES ${_blink_standalone_v8_gn_names}
     DOC "GN executable for the optional V8/CppGC compatibility build target."
   )
 endif()
 find_program(BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE
-  NAMES gclient.bat gclient.cmd gclient.exe gclient gclient.py
+  NAMES ${_blink_standalone_v8_gclient_names}
   HINTS ${BLINK_STANDALONE_DEPOT_TOOLS_ROOT}
   NO_DEFAULT_PATH
   DOC "gclient executable for the optional V8/CppGC compatibility dependency sync."
 )
 if(NOT BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE)
   find_program(BLINK_STANDALONE_V8_GCLIENT_EXECUTABLE
-    NAMES gclient.bat gclient.cmd gclient.exe gclient gclient.py
+    NAMES ${_blink_standalone_v8_gclient_names}
     DOC "gclient executable for the optional V8/CppGC compatibility dependency sync."
   )
 endif()
@@ -499,23 +640,39 @@ if(_blink_standalone_icu_data_file_normalized MATCHES "/out/.*/icudtl\\.dat$")
     FORCE
   )
 endif()
+if(WIN32)
+  set(_blink_standalone_v8_monolith_lib_relative
+    obj/v8_monolith.lib)
+  set(_blink_standalone_packaged_v8_monolith_name
+    v8_monolith.lib)
+else()
+  set(_blink_standalone_v8_monolith_lib_relative
+    obj/libv8_monolith.a)
+  set(_blink_standalone_packaged_v8_monolith_name
+    libv8_monolith.a)
+endif()
+set(_blink_standalone_default_v8_monolith_lib
+  ${_blink_standalone_default_v8_compat_out_dir}/${_blink_standalone_v8_monolith_lib_relative}
+)
+set(_blink_standalone_current_v8_monolith_lib
+  ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/${_blink_standalone_v8_monolith_lib_relative}
+)
 set(BLINK_STANDALONE_V8_MONOLITH_LIB
-  ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
+  ${_blink_standalone_current_v8_monolith_lib}
   CACHE FILEPATH
   "Source-built V8/CppGC compatibility library for the live Blink renderer."
-)
-set(_blink_standalone_default_v8_monolith_lib
-  ${_blink_standalone_default_v8_compat_out_dir}/obj/v8_monolith.lib
 )
 set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
   ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
   ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
+  ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++abi/src/include
   CACHE STRING
   "Chromium libc++ include roots used for ABI compatibility with the V8/CppGC library."
 )
 set(_blink_standalone_default_libcxx_include_dirs
   ${_blink_standalone_default_v8_build_root}/buildtools/third_party/libc++
   ${_blink_standalone_default_v8_build_root}/third_party/libc++/src/include
+  ${_blink_standalone_default_v8_build_root}/third_party/libc++abi/src/include
 )
 set(BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
@@ -525,6 +682,7 @@ set(BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR
 set(BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES
   _LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE
   _LIBCPP_DISABLE_VISIBILITY_ANNOTATIONS
+  _LIBCPP_NO_AUTO_LINK
   _LIBCPP_INSTRUMENTED_WITH_ASAN=0
   CR_LIBCXX_REVISION=5abc7f839700f0f17338434e1c1c6a8c87c00c11
   ABSL_ALLOCATOR_NOTHROW=1
@@ -537,6 +695,28 @@ set(BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR
 )
 set(_blink_standalone_default_libcxx_object_dir
   ${_blink_standalone_default_v8_compat_out_dir}/obj/buildtools/third_party/libc++/libc++
+)
+set(_blink_standalone_default_libcxx_lib
+  ${_blink_standalone_default_v8_compat_out_dir}/obj/buildtools/third_party/libc++/libc++.a
+)
+set(_blink_standalone_default_libcxxabi_lib
+  ${_blink_standalone_default_v8_compat_out_dir}/obj/buildtools/third_party/libc++abi/libc++abi.a
+)
+set(_blink_standalone_current_libcxx_lib
+  ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/buildtools/third_party/libc++/libc++.a
+)
+set(_blink_standalone_current_libcxxabi_lib
+  ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/buildtools/third_party/libc++abi/libc++abi.a
+)
+set(BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB
+  ${_blink_standalone_current_libcxx_lib}
+  CACHE FILEPATH
+  "Chromium libc++ static library built with the V8/CppGC compatibility library."
+)
+set(BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB
+  ${_blink_standalone_current_libcxxabi_lib}
+  CACHE FILEPATH
+  "Chromium libc++abi static library built with the V8/CppGC compatibility library."
 )
 file(TO_CMAKE_PATH "${BLINK_STANDALONE_V8_BUILD_ROOT}" _blink_standalone_v8_build_root_normalized)
 if(_blink_standalone_v8_build_root_normalized MATCHES "/build/v8_mono2/v8$")
@@ -557,7 +737,7 @@ if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalo
    _blink_standalone_v8_monolith_lib_normalized STREQUAL _blink_standalone_default_v8_monolith_lib_normalized)
   message(STATUS "Updating BLINK_STANDALONE_V8_MONOLITH_LIB to match BLINK_STANDALONE_V8_COMPAT_OUT_DIR.")
   set(BLINK_STANDALONE_V8_MONOLITH_LIB
-    ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
+    ${_blink_standalone_current_v8_monolith_lib}
     CACHE FILEPATH
     "Source-built V8/CppGC compatibility library for the live Blink renderer."
     FORCE
@@ -566,7 +746,16 @@ endif()
 if(_blink_standalone_v8_monolith_lib_normalized MATCHES "/build/v8_mono2/v8/out/chromium_static/obj/v8_monolith\\.lib$")
   message(STATUS "Migrating legacy BLINK_STANDALONE_V8_MONOLITH_LIB cache value to the generated V8 compatibility output.")
   set(BLINK_STANDALONE_V8_MONOLITH_LIB
-    ${BLINK_STANDALONE_V8_COMPAT_OUT_DIR}/obj/v8_monolith.lib
+    ${_blink_standalone_current_v8_monolith_lib}
+    CACHE FILEPATH
+    "Source-built V8/CppGC compatibility library for the live Blink renderer."
+    FORCE
+  )
+endif()
+if(NOT WIN32 AND _blink_standalone_v8_monolith_lib_normalized MATCHES "/obj/v8_monolith\\.lib$")
+  message(STATUS "Migrating BLINK_STANDALONE_V8_MONOLITH_LIB to the Linux GN archive name.")
+  set(BLINK_STANDALONE_V8_MONOLITH_LIB
+    ${_blink_standalone_current_v8_monolith_lib}
     CACHE FILEPATH
     "Source-built V8/CppGC compatibility library for the live Blink renderer."
     FORCE
@@ -596,6 +785,30 @@ if(_blink_standalone_libcxx_object_dir_normalized MATCHES "/build/v8_mono2/v8/ou
     FORCE
   )
 endif()
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB}" _blink_standalone_libcxx_lib_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_libcxx_lib}" _blink_standalone_default_libcxx_lib_normalized)
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_libcxx_lib_normalized STREQUAL _blink_standalone_default_libcxx_lib_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB to match BLINK_STANDALONE_V8_COMPAT_OUT_DIR.")
+  set(BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB
+    ${_blink_standalone_current_libcxx_lib}
+    CACHE FILEPATH
+    "Chromium libc++ static library built with the V8/CppGC compatibility library."
+    FORCE
+  )
+endif()
+file(TO_CMAKE_PATH "${BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB}" _blink_standalone_libcxxabi_lib_normalized)
+file(TO_CMAKE_PATH "${_blink_standalone_default_libcxxabi_lib}" _blink_standalone_default_libcxxabi_lib_normalized)
+if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalone_default_v8_compat_work_root_normalized AND
+   _blink_standalone_libcxxabi_lib_normalized STREQUAL _blink_standalone_default_libcxxabi_lib_normalized)
+  message(STATUS "Updating BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB to match BLINK_STANDALONE_V8_COMPAT_OUT_DIR.")
+  set(BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB
+    ${_blink_standalone_current_libcxxabi_lib}
+    CACHE FILEPATH
+    "Chromium libc++abi static library built with the V8/CppGC compatibility library."
+    FORCE
+  )
+endif()
 set(_blink_standalone_legacy_libcxx_include_dirs
   ${_blink_standalone_legacy_v8_build_root}/buildtools/third_party/libc++
   ${_blink_standalone_legacy_v8_build_root}/third_party/libc++/src/include
@@ -610,6 +823,7 @@ if(NOT _blink_standalone_v8_compat_work_root_normalized STREQUAL _blink_standalo
   set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
     ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
     ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++abi/src/include
     CACHE STRING
     "Chromium libc++ include roots used for ABI compatibility with the V8/CppGC library."
     FORCE
@@ -621,6 +835,7 @@ if(NOT _blink_standalone_legacy_libcxx_include_pos EQUAL -1)
   set(BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS
     ${BLINK_STANDALONE_V8_BUILD_ROOT}/buildtools/third_party/libc++
     ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++/src/include
+    ${BLINK_STANDALONE_V8_BUILD_ROOT}/third_party/libc++abi/src/include
     CACHE STRING
     "Chromium libc++ include roots used for ABI compatibility with the V8/CppGC library."
     FORCE
@@ -635,6 +850,20 @@ if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
   set(BLINK_STANDALONE_STL_DEFINES
     ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
   )
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+  list(PREPEND BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS}
+  )
+  list(REMOVE_DUPLICATES BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    list(APPEND BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS
+      "$<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>"
+    )
+    list(APPEND BLINK_STANDALONE_PLATFORM_LINK_OPTIONS
+      -nostdlib++
+    )
+  endif()
 endif()
 set(BLINK_STANDALONE_V8_ABI_DEFINES
   V8_COMPRESS_POINTERS
@@ -726,6 +955,16 @@ elseif(_blink_standalone_v8_compat_action STREQUAL "prepare")
 else()
   set(_blink_standalone_v8_compat_comment "V8/CppGC compatibility build plan")
 endif()
+set(_blink_standalone_v8_compat_byproducts
+  ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+  ${BLINK_STANDALONE_ICU_DATA_FILE}
+)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+  list(APPEND _blink_standalone_v8_compat_byproducts
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB}
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB}
+  )
+endif()
 set(_blink_standalone_v8_compat_stamp
   ${CMAKE_BINARY_DIR}/CMakeFiles/blink_standalone_v8_compat.stamp
 )
@@ -733,9 +972,7 @@ add_custom_command(
   OUTPUT ${_blink_standalone_v8_compat_stamp}
   COMMAND ${_blink_standalone_v8_compat_command}
   COMMAND ${CMAKE_COMMAND} -E touch ${_blink_standalone_v8_compat_stamp}
-  BYPRODUCTS
-    ${BLINK_STANDALONE_V8_MONOLITH_LIB}
-    ${BLINK_STANDALONE_ICU_DATA_FILE}
+  BYPRODUCTS ${_blink_standalone_v8_compat_byproducts}
   USES_TERMINAL
   COMMENT "${_blink_standalone_v8_compat_comment}"
   VERBATIM
@@ -745,7 +982,7 @@ add_custom_target(blink_standalone_v8_compat
 )
 
 function(blink_standalone_add_v8_compat_dependency target_name)
-  if(WIN32)
+  if(TARGET blink_standalone_v8_compat_validate)
     add_dependencies(${target_name} blink_standalone_v8_compat_validate)
   endif()
 endfunction()
@@ -759,24 +996,24 @@ function(blink_standalone_copy_icu_data target_name)
   )
 endfunction()
 
-if(WIN32)
-  add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
-  set_target_properties(blink_standalone_v8_monolith PROPERTIES
-    IMPORTED_LOCATION "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
-    INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_STL_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
-  )
-  set(_blink_standalone_libcxx_object_list
-    ${CMAKE_BINARY_DIR}/v8_compat_libcxx_objects.txt
-  )
-  set(_blink_standalone_v8_compat_validation_command
-    ${Python3_EXECUTABLE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/validate_v8_compat_output.py
-    --monolith-lib ${BLINK_STANDALONE_V8_MONOLITH_LIB}
-    --toolchain ${BLINK_STANDALONE_V8_TOOLCHAIN}
-    --v8-include-dir ${BLINK_STANDALONE_V8_INCLUDE_DIR}
-  )
-  add_library(blink_standalone_chromium_libcxx INTERFACE)
-  if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+add_library(blink_standalone_v8_monolith STATIC IMPORTED GLOBAL)
+set_target_properties(blink_standalone_v8_monolith PROPERTIES
+  IMPORTED_LOCATION "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
+  INTERFACE_COMPILE_DEFINITIONS "${BLINK_STANDALONE_STL_DEFINES};${BLINK_STANDALONE_V8_ABI_DEFINES}"
+)
+set(_blink_standalone_libcxx_object_list
+  ${CMAKE_BINARY_DIR}/v8_compat_libcxx_objects.txt
+)
+set(_blink_standalone_v8_compat_validation_command
+  ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/v8/validate_v8_compat_output.py
+  --monolith-lib ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+  --toolchain ${BLINK_STANDALONE_V8_TOOLCHAIN}
+  --v8-include-dir ${BLINK_STANDALONE_V8_INCLUDE_DIR}
+)
+add_library(blink_standalone_chromium_libcxx INTERFACE)
+if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+  if(WIN32)
     blink_standalone_resolve_libcxx_objects(
       BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS
       "${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECT_DIR}"
@@ -797,26 +1034,42 @@ if(WIN32)
     target_sources(blink_standalone_chromium_libcxx INTERFACE
       ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
     )
+    add_library(blink_standalone_chromium_libcxx_static STATIC
+      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_OBJECTS}
+    )
+    set_target_properties(blink_standalone_chromium_libcxx_static PROPERTIES
+      LINKER_LANGUAGE CXX
+      OUTPUT_NAME chromium_libcxx
+    )
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    list(APPEND _blink_standalone_v8_compat_validation_command
+      --required-path ${BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB}
+      --required-path ${BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB}
+    )
+    target_link_libraries(blink_standalone_chromium_libcxx INTERFACE
+      "${BLINK_STANDALONE_CHROMIUM_LIBCXX_LIB}"
+      "${BLINK_STANDALONE_CHROMIUM_LIBCXXABI_LIB}"
+    )
   endif()
-  set(_blink_standalone_v8_compat_validate_stamp
-    ${CMAKE_BINARY_DIR}/CMakeFiles/blink_standalone_v8_compat_validate.stamp
-  )
-  add_custom_command(
-    OUTPUT ${_blink_standalone_v8_compat_validate_stamp}
-    COMMAND ${_blink_standalone_v8_compat_validation_command}
-    COMMAND ${CMAKE_COMMAND} -E touch ${_blink_standalone_v8_compat_validate_stamp}
-    DEPENDS
-      ${BLINK_STANDALONE_V8_MONOLITH_LIB}
-      ${_blink_standalone_v8_compat_stamp}
-    COMMENT "Validate V8/CppGC compatibility link outputs"
-    VERBATIM
-  )
-  add_custom_target(blink_standalone_v8_compat_validate
-    DEPENDS ${_blink_standalone_v8_compat_validate_stamp}
-  )
-  if(_blink_standalone_v8_compat_action STREQUAL "build")
-    add_dependencies(blink_standalone_v8_compat_validate blink_standalone_v8_compat)
-  endif()
+endif()
+set(_blink_standalone_v8_compat_validate_stamp
+  ${CMAKE_BINARY_DIR}/CMakeFiles/blink_standalone_v8_compat_validate.stamp
+)
+add_custom_command(
+  OUTPUT ${_blink_standalone_v8_compat_validate_stamp}
+  COMMAND ${_blink_standalone_v8_compat_validation_command}
+  COMMAND ${CMAKE_COMMAND} -E touch ${_blink_standalone_v8_compat_validate_stamp}
+  DEPENDS
+    ${BLINK_STANDALONE_V8_MONOLITH_LIB}
+    ${_blink_standalone_v8_compat_stamp}
+  COMMENT "Validate V8/CppGC compatibility link outputs"
+  VERBATIM
+)
+add_custom_target(blink_standalone_v8_compat_validate
+  DEPENDS ${_blink_standalone_v8_compat_validate_stamp}
+)
+if(_blink_standalone_v8_compat_action STREQUAL "build")
+  add_dependencies(blink_standalone_v8_compat_validate blink_standalone_v8_compat)
 endif()
 
 set(BLINK_STANDALONE_FREETYPE_SOURCE
@@ -1639,49 +1892,55 @@ target_include_directories(blink_live_modp_b64 PRIVATE
   ${BLINK_STANDALONE_CHROMIUM_ROOT}
 )
 
-add_library(blink_standalone_abseil OBJECT
+function(blink_standalone_configure_abseil_target target_name)
+  target_include_directories(${target_name} BEFORE PRIVATE
+    ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
+    ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
+  )
+  target_include_directories(${target_name} PRIVATE
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
+    ${BLINK_STANDALONE_CHROMIUM_ROOT}
+  )
+  target_compile_definitions(${target_name} PRIVATE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+    _CRT_NONSTDC_NO_WARNINGS
+    _CRT_SECURE_NO_DEPRECATE
+    _SCL_SECURE_NO_DEPRECATE
+    _WINSOCK_DEPRECATED_NO_WARNINGS
+    UNICODE
+    _UNICODE
+    ${BLINK_STANDALONE_STL_DEFINES}
+  )
+  set_property(TARGET ${target_name} PROPERTY
+    MSVC_RUNTIME_LIBRARY "MultiThreaded")
+  if(MSVC)
+    target_compile_options(${target_name} PRIVATE
+      /bigobj
+      /permissive-
+      /Zc:__cplusplus
+      /wd4005
+      /wd4068
+      /wd4100
+      /wd4127
+      /wd4267
+      /wd4324
+      /wd4800
+      /wd4996
+    )
+  endif()
+endfunction()
+
+add_library(blink_standalone_abseil_static STATIC
   ${BLINK_STANDALONE_ABSEIL_SOURCES}
 )
-target_include_directories(blink_standalone_abseil BEFORE PRIVATE
-  ${BLINK_STANDALONE_STL_INCLUDE_DIRS}
-  ${BLINK_STANDALONE_V8_ABSEIL_INCLUDE_DIR}
+set_target_properties(blink_standalone_abseil_static PROPERTIES
+  OUTPUT_NAME blink_standalone_abseil
 )
-target_include_directories(blink_standalone_abseil PRIVATE
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/abseil-cpp
-  ${BLINK_STANDALONE_CHROMIUM_ROOT}
-)
-target_compile_definitions(blink_standalone_abseil PRIVATE
-  NOMINMAX
-  WIN32_LEAN_AND_MEAN
-  _CRT_NONSTDC_NO_WARNINGS
-  _CRT_SECURE_NO_DEPRECATE
-  _SCL_SECURE_NO_DEPRECATE
-  _WINSOCK_DEPRECATED_NO_WARNINGS
-  UNICODE
-  _UNICODE
-  ${BLINK_STANDALONE_STL_DEFINES}
-)
-set_property(TARGET blink_standalone_abseil PROPERTY
-  MSVC_RUNTIME_LIBRARY "MultiThreaded")
-if(MSVC)
-  target_compile_options(blink_standalone_abseil PRIVATE
-    /bigobj
-    /permissive-
-    /Zc:__cplusplus
-    /wd4005
-    /wd4068
-    /wd4100
-    /wd4127
-    /wd4267
-    /wd4324
-    /wd4800
-    /wd4996
-  )
-endif()
+blink_standalone_configure_abseil_target(blink_standalone_abseil_static)
 
 set(BLINK_STANDALONE_LIVE_OBJECTS
   $<TARGET_OBJECTS:blink_live_modp_b64>
-  $<TARGET_OBJECTS:blink_standalone_abseil>
 )
 if(BLINK_STANDALONE_COMPILER_IS_MSVC_CL)
   add_library(blink_standalone_partition_alloc_masm OBJECT
@@ -1722,9 +1981,9 @@ if(BLINK_STANDALONE_DAWN_D3D12)
   add_library(blink_standalone_dawn_d3d12_render_objects OBJECT
     ${BLINK_STANDALONE_DAWN_D3D12_RENDER_SOURCES}
   )
-  add_dependencies(blink_standalone_dawn_d3d12_render_objects
-    blink_angle_libEGL
-    blink_angle_libGLESv2
+add_dependencies(blink_standalone_dawn_d3d12_render_objects
+    blink_angle_libEGL_static
+    blink_angle_libGLESv2_static
   )
   blink_standalone_add_v8_compat_dependency(
     blink_standalone_dawn_d3d12_render_objects)
@@ -1739,8 +1998,8 @@ add_library(blink_standalone_live_renderer_objects OBJECT
   ${BLINK_STANDALONE_LIVE_SOURCES}
 )
 add_dependencies(blink_standalone_live_renderer_objects
-  blink_angle_libEGL
-  blink_angle_libGLESv2
+  blink_angle_libEGL_static
+  blink_angle_libGLESv2_static
 )
 blink_standalone_add_v8_compat_dependency(blink_standalone_live_renderer_objects)
 if(BLINK_STANDALONE_RELEASE_LEVEL_VIEWER)
@@ -1758,8 +2017,8 @@ add_executable(blink_standalone_render_benchmark_skia
   ${BLINK_STANDALONE_LIVE_OBJECTS}
 )
 add_dependencies(blink_standalone_render_benchmark_skia
-  blink_angle_libEGL
-  blink_angle_libGLESv2
+  blink_angle_libEGL_static
+  blink_angle_libGLESv2_static
 )
 blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia)
 
@@ -1823,6 +2082,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
     ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
+    ${BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES}
   )
   target_compile_definitions(blink_standalone_render_benchmark_skia PRIVATE
     BLINK_CORE_IMPLEMENTATION=1
@@ -1840,17 +2100,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     SK_VULKAN=1
     SK_GPU_WORKAROUNDS_HEADER=\"gpu/config/gpu_driver_bug_workaround_autogen.h\"
     SK_USE_INTERNAL_VULKAN_HEADERS=1
-    VK_USE_PLATFORM_WIN32_KHR=1
     WTF_IMPLEMENTATION=1
     USE_AURA=1
-    NOMINMAX
-    WIN32_LEAN_AND_MEAN
-    _CRT_NONSTDC_NO_WARNINGS
-    _CRT_SECURE_NO_DEPRECATE
-    _SCL_SECURE_NO_DEPRECATE
-    _WINSOCK_DEPRECATED_NO_WARNINGS
-    UNICODE
-    _UNICODE
     U_STATIC_IMPLEMENTATION
     U_I18N_IMPLEMENTATION
     U_COMMON_IMPLEMENTATION
@@ -1861,6 +2112,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     PNG_WRITE_CUSTOMIZE_COMPRESSION_SUPPORTED=1
     PNG_INTEL_SSE=1
     ZLIB_IMPLEMENTATION=1
+    ${BLINK_STANDALONE_PLATFORM_COMPILE_DEFINITIONS}
     ${BLINK_STANDALONE_STL_DEFINES}
     ${BLINK_STANDALONE_V8_ABI_DEFINES}
   )
@@ -1883,33 +2135,10 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   endif()
 
   target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
+    blink_standalone_abseil_static
     blink_standalone_chromium_libcxx
     blink_standalone_v8_monolith
-    d3d11
-    d3d12
-    dcomp
-    dwmapi
-    dxcore
-    dxgi
-    kernel32
-    mincore
-    ole32
-    oleaut32
-    propsys
-    runtimeobject
-    shell32
-    shcore
-    winmm
-    windowscodecs
-    wbemuuid
-    advapi32
-    dbghelp
-    ntdll
-    psapi
-    setupapi
-    shlwapi
-    ws2_32
-    delayimp
+    ${BLINK_STANDALONE_PLATFORM_LINK_LIBS}
   )
 
   if(MSVC)
@@ -1931,6 +2160,14 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     target_link_options(blink_standalone_render_benchmark_skia PRIVATE
       /MAP:${CMAKE_BINARY_DIR}/blink_standalone_render_benchmark_skia.map
     )
+  endif()
+  if(BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS)
+    target_compile_options(blink_standalone_render_benchmark_skia PRIVATE
+      ${BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS})
+  endif()
+  if(BLINK_STANDALONE_PLATFORM_LINK_OPTIONS)
+    target_link_options(blink_standalone_render_benchmark_skia PRIVATE
+      ${BLINK_STANDALONE_PLATFORM_LINK_OPTIONS})
   endif()
 
   target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
@@ -1986,8 +2223,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_LIVE_OBJECTS}
   )
   add_dependencies(blink_standalone_renderer_c_api
-    blink_angle_libEGL
-    blink_angle_libGLESv2
+    blink_angle_libEGL_static
+    blink_angle_libGLESv2_static
   )
   blink_standalone_add_v8_compat_dependency(blink_standalone_renderer_c_api)
   foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
@@ -2005,13 +2242,20 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
         target_compile_options(blink_standalone_renderer_c_api PRIVATE
           ${property_value})
       elseif(property_name STREQUAL "LINK_LIBRARIES")
+        if(WIN32 AND TARGET blink_standalone_chromium_libcxx_static)
+          list(REMOVE_ITEM property_value blink_standalone_chromium_libcxx)
+        endif()
         target_link_libraries(blink_standalone_renderer_c_api PRIVATE
           ${property_value})
       endif()
     endif()
   endforeach()
   target_compile_definitions(blink_standalone_renderer_c_api PRIVATE
-    BLINK_STANDALONE_RENDERER_C_API_STATIC=1)
+    BLINK_STANDALONE_RENDERER_C_API_STATIC=1
+    KHRONOS_STATIC=1)
+  target_link_libraries(blink_standalone_renderer_c_api PUBLIC
+    blink_angle_libEGL_static
+    blink_angle_libGLESv2_static)
   set_property(TARGET blink_standalone_renderer_c_api PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded")
   set_target_properties(blink_standalone_renderer_c_api PROPERTIES
@@ -2021,12 +2265,17 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     ${BLINK_STANDALONE_C_API_SOURCES}
     ${BLINK_STANDALONE_C_API_EXPORTS_DEF}
     $<TARGET_OBJECTS:blink_standalone_live_renderer_objects>
+    ${BLINK_STANDALONE_ANGLE_IMAGE_UTIL_SOURCES}
+    ${BLINK_STANDALONE_ANGLE_TRANSLATOR_SOURCES}
     ${BLINK_STANDALONE_LIVE_OBJECTS}
   )
   add_dependencies(blink_standalone_renderer_c_api_dll
     blink_angle_libEGL
     blink_angle_libGLESv2
   )
+  target_link_libraries(blink_standalone_renderer_c_api_dll PRIVATE
+    blink_angle_libEGL
+    blink_angle_libGLESv2)
   blink_standalone_add_v8_compat_dependency(blink_standalone_renderer_c_api_dll)
   foreach(property_name IN ITEMS INCLUDE_DIRECTORIES COMPILE_DEFINITIONS
                                  COMPILE_OPTIONS LINK_LIBRARIES)
@@ -2056,12 +2305,19 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     MSVC_RUNTIME_LIBRARY "MultiThreaded")
   set_target_properties(blink_standalone_renderer_c_api_dll PROPERTIES
     OUTPUT_NAME blink_standalone_renderer_c_api)
+  if(BLINK_STANDALONE_PLATFORM_LINK_OPTIONS)
+    target_link_options(blink_standalone_renderer_c_api_dll PRIVATE
+      ${BLINK_STANDALONE_PLATFORM_LINK_OPTIONS})
+  endif()
   if(MSVC)
     target_link_options(blink_standalone_renderer_c_api_dll PRIVATE
       /MAP:${CMAKE_BINARY_DIR}/blink_standalone_renderer_c_api_dll.map
       /DEF:${BLINK_STANDALONE_C_API_EXPORTS_DEF}
     )
   endif()
+  target_link_libraries(blink_standalone_render_benchmark_skia PRIVATE
+    blink_angle_libEGL_static
+    blink_angle_libGLESv2_static)
   if(BLINK_STANDALONE_COMPILER_IS_CLANG_CL)
     target_link_options(blink_standalone_renderer_c_api_dll PRIVATE
       /exclude-all-symbols
@@ -2507,6 +2763,18 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
 
   set(_blink_standalone_static_dawn_libs_json)
   set(_blink_standalone_static_dawn_copy_commands)
+  set(_blink_standalone_static_libcxx_libs_json)
+  set(_blink_standalone_static_libcxx_copy_commands)
+  if(WIN32 AND TARGET blink_standalone_chromium_libcxx_static)
+    string(APPEND _blink_standalone_static_libcxx_libs_json
+      ",\n    \"lib/$<TARGET_FILE_NAME:blink_standalone_chromium_libcxx_static>\""
+    )
+    list(APPEND _blink_standalone_static_libcxx_copy_commands
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:blink_standalone_chromium_libcxx_static>"
+        "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_chromium_libcxx_static>"
+    )
+  endif()
   foreach(_blink_standalone_dawn_lib IN LISTS BLINK_STANDALONE_DAWN_D3D12_LIBS)
     get_filename_component(_blink_standalone_dawn_lib_name
       "${_blink_standalone_dawn_lib}" NAME)
@@ -2519,6 +2787,40 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ",\n    \"lib/dawn/${_blink_standalone_dawn_lib_name}\""
     )
   endforeach()
+
+  set(_blink_standalone_static_product_supported false)
+  set(_blink_standalone_static_full_host_supported false)
+  set(_blink_standalone_static_full_host_blocker_json
+    "\"monolithic_renderer_archive_exports_chromium_third_party_symbols\"")
+  set(_blink_standalone_static_symbol_collision_risk "\"known\"")
+  set(_blink_standalone_static_symbol_product_supported false)
+  set(_blink_standalone_static_duplicate_prone_families_json
+    "\"abseil_template_instantiations\",\n      \"chromium_libcxx\"")
+  set(_blink_standalone_static_required_resolution
+    "actual Godot editor/static-template link proof or private/prefixed ownership for remaining Abseil template instantiations and Chromium libc++ symbols before full host/editor static linking is product-supported")
+  set(_blink_standalone_static_status "raw_output_link_proof_passed")
+  set(_blink_standalone_static_manifest_notes
+    "The synthetic host collision probe covers prior libpng, ICU, and VMA Godot collision families, but this package still needs a real host/editor link proof before product support can be claimed.")
+  set(_blink_standalone_static_known_hazards_json
+    "\"This static package is validated by isolated external probes first; full Godot editor/export static linking can still expose duplicate host/Blink third-party symbols until dependency ownership or symbol isolation is solved.\",\n    \"The renderer static archive currently contains globally named Chromium/Skia/V8-adjacent third-party objects. The synthetic host collision probe covers prior libpng, ICU, and VMA Godot collision families, but full host binaries that already link Abseil or Chromium libc++-style symbols can still fail with LNK2005/LNK1169.\"")
+  if(WIN32 AND
+      CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND
+      BLINK_STANDALONE_V8_TOOLCHAIN STREQUAL "msvc" AND
+      NOT BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+    set(_blink_standalone_static_product_supported true)
+    set(_blink_standalone_static_full_host_supported true)
+    set(_blink_standalone_static_full_host_blocker_json null)
+    set(_blink_standalone_static_symbol_collision_risk "\"validated_native_msvc_host_link\"")
+    set(_blink_standalone_static_symbol_product_supported true)
+    set(_blink_standalone_static_duplicate_prone_families_json "")
+    set(_blink_standalone_static_required_resolution
+      "Native MSVC/MSVC-STL package validated by static probes plus Godot editor diagnostic static link without forbidden code DLL imports.")
+    set(_blink_standalone_static_status "godot_host_static_link_proof_passed")
+    set(_blink_standalone_static_manifest_notes
+      "Native MSVC/MSVC-STL package validated by static raw-output, D3D12/Vulkan external-target, host-collision probes, and a Godot editor diagnostic static link. Consumers must still match CRT family, architecture, configuration, and iterator debug level.")
+    set(_blink_standalone_static_known_hazards_json
+      "\"Native MSVC/MSVC-STL static host linking is validated for Godot with matching /MT CRT, architecture, configuration, and iterator debug level. Rebuild this package if the host switches CRT family or configuration.\",\n    \"ChromiumLLVM/libc++ static packages remain unsupported for Godot/MSVC-STL host linking; this support claim applies only to the native MSVC/MSVC-STL package.\"")
+  endif()
 
   set(_blink_standalone_static_package_manifest_content [=[
 {
@@ -2542,27 +2844,35 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   },
   "link_mode": "static",
   "link_kind": "static_library",
-  "package_kind": "static_c_api_with_runtime_sidecars",
+  "package_kind": "static_c_api_no_blink_angle_code_sidecars",
   "static_link_complete_by_itself": false,
-  "full_host_static_link_supported": false,
-  "full_host_static_link_blocker": "monolithic_renderer_archive_exports_chromium_third_party_symbols",
+  "full_host_static_link_supported": @_blink_standalone_static_full_host_supported@,
+  "full_host_static_link_blocker": @_blink_standalone_static_full_host_blocker_json@,
+  "product_supported": @_blink_standalone_static_product_supported@,
   "symbol_ownership": {
     "model": "blink_bundled_third_party_symbols_are_public_in_static_archive_with_incremental_private_prefixing",
-    "collision_risk": "known",
-    "product_supported": false,
+    "collision_risk": @_blink_standalone_static_symbol_collision_risk@,
+    "product_supported": @_blink_standalone_static_symbol_product_supported@,
     "private_prefixed_families": [
       "libpng",
       "icu",
       "vulkan_memory_allocator"
     ],
+    "host_collision_probe": {
+      "target": "blink_static_host_collision_smoke",
+      "covered_families": [
+        "libpng",
+        "icu",
+        "vulkan_memory_allocator"
+      ],
+      "scope": "synthetic host definitions for the symbol families that previously blocked Godot editor static linking; this does not prove arbitrary Abseil or Chromium libc++ coexistence"
+    },
     "duplicate_prone_families": [
-      "zlib",
-      "abseil",
-      "chromium_libcxx"
+      @_blink_standalone_static_duplicate_prone_families_json@
     ],
-    "required_resolution": "private/prefixed Blink third-party symbols or a validated dependency ownership split before full host/editor static linking is supported"
+    "required_resolution": "@_blink_standalone_static_required_resolution@"
   },
-  "status": "raw_output_link_proof_passed",
+  "status": "@_blink_standalone_static_status@",
   "crt": {
     "msvc_runtime_library": "MultiThreaded",
     "required_consumer_match": true,
@@ -2581,24 +2891,23 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
   ],
   "required_static_archives": [
     "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>",
-    "lib/v8_monolith.lib"
+    "lib/@_blink_standalone_packaged_v8_monolith_name@"
   ],
-  "required_import_libraries": [
-    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>",
-    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>"
-  ],
+  "required_import_libraries": [],
   "third_party_static_archives": [
+    "lib/$<TARGET_FILE_NAME:blink_angle_libEGL_static>",
+    "lib/$<TARGET_FILE_NAME:blink_angle_libGLESv2_static>",
+    "lib/$<TARGET_FILE_NAME:blink_standalone_abseil_static>",
     "lib/$<TARGET_FILE_NAME:freetype>",
     "lib/$<TARGET_FILE_NAME:harfbuzz>",
-    "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_dawn_libs_json@
+    "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_libcxx_libs_json@@_blink_standalone_static_dawn_libs_json@
   ],
   "whole_archive_candidates_msvc": [
     "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
   ],
+  "runtime_code_sidecars": [],
   "remaining_runtime_sidecars": [
-    "bin/$<TARGET_FILE_NAME:blink_angle_libEGL>",
-    "bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>",
-    "bin/icudtl.dat"@_blink_standalone_dawn_d3d12_runtime_sidecars_package_json@
+    "bin/icudtl.dat"
   ],
   "windows_system_libraries": [
     "d3d11.lib",
@@ -2629,25 +2938,25 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     "delayimp.lib"
   ],
   "known_hazards": [
-    "This static package is validated by isolated external probes first; full Godot editor/export static linking can still expose duplicate host/Blink third-party symbols until dependency ownership or symbol isolation is solved.",
-    "The renderer static archive currently contains globally named Chromium/Skia/V8-adjacent third-party objects. Full host binaries that already link libpng, ICU, zlib, VMA, Abseil, or Chromium libc++-style symbols can fail with LNK2005/LNK1169 even without /WHOLEARCHIVE.",
-    "The static C API archive must be whole-archived on MSVC, but v8_monolith.lib must not be whole-archived.",
-    "ANGLE remains deployed as libEGL/libGLESv2 runtime sidecars in this package.",
+    @_blink_standalone_static_known_hazards_json@,
+    "The static C API archive must be whole-archived on MSVC, but the V8 monolith archive must not be whole-archived.",
+    "Static mode must not ship Blink or ANGLE code shared-library sidecars; libEGL/libGLESv2 are packaged as static archives.",
     "icudtl.dat remains a required runtime data sidecar."
   ],
   "package_files": [
     "blink_standalone_renderer_c_api_static_link_manifest.json",
     "include/html_css_renderer/renderer_c_api.h",
+    "include/vk_video",
+    "include/vulkan",
     "lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>",
-    "lib/v8_monolith.lib",
-    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>",
-    "lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>",
+    "lib/@_blink_standalone_packaged_v8_monolith_name@",
+    "lib/$<TARGET_FILE_NAME:blink_angle_libEGL_static>",
+    "lib/$<TARGET_FILE_NAME:blink_angle_libGLESv2_static>",
+    "lib/$<TARGET_FILE_NAME:blink_standalone_abseil_static>",
     "lib/$<TARGET_FILE_NAME:freetype>",
     "lib/$<TARGET_FILE_NAME:harfbuzz>",
-    "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_dawn_libs_json@,
-    "bin/$<TARGET_FILE_NAME:blink_angle_libEGL>",
-    "bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>",
-    "bin/icudtl.dat"@_blink_standalone_dawn_d3d12_runtime_sidecars_package_json@
+    "lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"@_blink_standalone_static_libcxx_libs_json@@_blink_standalone_static_dawn_libs_json@,
+    "bin/icudtl.dat"
   ]
 }
 ]=])
@@ -2670,8 +2979,9 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     DEPENDS
       blink_standalone_renderer_c_api
       blink_standalone_renderer_c_api_static_link_manifest
-      blink_angle_libEGL
-      blink_angle_libGLESv2
+      blink_angle_libEGL_static
+      blink_angle_libGLESv2_static
+      blink_standalone_abseil_static
       freetype
       harfbuzz
     COMMAND ${CMAKE_COMMAND} -E make_directory
@@ -2679,25 +2989,43 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     COMMAND ${CMAKE_COMMAND} -E make_directory
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/html_css_renderer"
     COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vk_video"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vulkan"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/dawn"
+    COMMAND ${CMAKE_COMMAND} -E rm -f
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/$<TARGET_FILE_NAME:blink_angle_libEGL>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_LINK_MANIFEST}"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/blink_standalone_renderer_c_api_static_link_manifest.json"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_RENDERER_C_API_PUBLIC_HEADER}"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/html_css_renderer/renderer_c_api.h"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan-headers/src/include/vk_video"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vk_video"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/vulkan-headers/src/include/vulkan"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/include/vulkan"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "$<TARGET_FILE:blink_standalone_renderer_c_api>"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_renderer_c_api>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_V8_MONOLITH_LIB}"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/v8_monolith.lib"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/${_blink_standalone_packaged_v8_monolith_name}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_LINKER_FILE:blink_angle_libEGL>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libEGL>"
+      "$<TARGET_FILE:blink_angle_libEGL_static>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_angle_libEGL_static>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_LINKER_FILE:blink_angle_libGLESv2>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_LINKER_FILE_NAME:blink_angle_libGLESv2>"
+      "$<TARGET_FILE:blink_angle_libGLESv2_static>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_angle_libGLESv2_static>"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:blink_standalone_abseil_static>"
+      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:blink_standalone_abseil_static>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "$<TARGET_FILE:freetype>"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:freetype>"
@@ -2707,20 +3035,22 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "$<TARGET_FILE:LibXml2::LibXml2>"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/lib/$<TARGET_FILE_NAME:LibXml2::LibXml2>"
+    ${_blink_standalone_static_libcxx_copy_commands}
     ${_blink_standalone_static_dawn_copy_commands}
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_FILE:blink_angle_libEGL>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/$<TARGET_FILE_NAME:blink_angle_libEGL>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-      "$<TARGET_FILE:blink_angle_libGLESv2>"
-      "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/$<TARGET_FILE_NAME:blink_angle_libGLESv2>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       "${BLINK_STANDALONE_ICU_DATA_FILE}"
       "${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}/bin/icudtl.dat"
     ${_blink_standalone_dawn_d3d12_runtime_copy_commands}
+    COMMAND ${CMAKE_COMMAND}
+      -DPACKAGE_DIR="${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
+      -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/verify_static_package_no_code_sidecars.cmake"
     COMMAND ${CMAKE_COMMAND} -E echo
       "C API static package: ${BLINK_STANDALONE_RENDERER_C_API_STATIC_PACKAGE_DIR}"
   )
+  if(TARGET blink_standalone_chromium_libcxx_static)
+    add_dependencies(blink_standalone_renderer_c_api_static_package
+      blink_standalone_chromium_libcxx_static)
+  endif()
   add_custom_target(blink_standalone_renderer_c_api_static_archive
     DEPENDS blink_standalone_renderer_c_api_static_package
     COMMAND ${CMAKE_COMMAND} -E rm -f
@@ -2739,8 +3069,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_SDL_APP_SOURCES}
     )
     add_dependencies(blink_standalone_sdl_viewer_skia
-      blink_angle_libEGL
-      blink_angle_libGLESv2
+      blink_angle_libEGL_static
+      blink_angle_libGLESv2_static
       blink_standalone_renderer_c_api
     )
     blink_standalone_add_v8_compat_dependency(blink_standalone_sdl_viewer_skia)
@@ -2803,6 +3133,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/v8/include
       ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/stubs
       ${BLINK_STANDALONE_FREETYPE_SOURCE}/include
+      ${BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES}
     )
 
     target_compile_definitions(blink_standalone_sdl_viewer_skia PRIVATE
@@ -2821,17 +3152,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       SK_VULKAN=1
       SK_GPU_WORKAROUNDS_HEADER=\"gpu/config/gpu_driver_bug_workaround_autogen.h\"
       SK_USE_INTERNAL_VULKAN_HEADERS=1
-      VK_USE_PLATFORM_WIN32_KHR=1
       WTF_IMPLEMENTATION=1
       USE_AURA=1
-      NOMINMAX
-      WIN32_LEAN_AND_MEAN
-      _CRT_NONSTDC_NO_WARNINGS
-      _CRT_SECURE_NO_DEPRECATE
-      _SCL_SECURE_NO_DEPRECATE
-      _WINSOCK_DEPRECATED_NO_WARNINGS
-      UNICODE
-      _UNICODE
       U_STATIC_IMPLEMENTATION
       U_I18N_IMPLEMENTATION
       U_COMMON_IMPLEMENTATION
@@ -2844,6 +3166,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       ZLIB_IMPLEMENTATION=1
       SDL_STATIC_LIB=1
       BLINK_STANDALONE_RENDERER_C_API_STATIC=1
+      KHRONOS_STATIC=1
+      ${BLINK_STANDALONE_PLATFORM_COMPILE_DEFINITIONS}
       ${BLINK_STANDALONE_STL_DEFINES}
       ${BLINK_STANDALONE_V8_ABI_DEFINES}
     )
@@ -2864,25 +3188,22 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
         CPU_NO_SIMD=1
       )
     endif()
+    if(BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS)
+      target_compile_options(blink_standalone_sdl_viewer_skia PRIVATE
+        ${BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS})
+    endif()
+    if(BLINK_STANDALONE_PLATFORM_LINK_OPTIONS)
+      target_link_options(blink_standalone_sdl_viewer_skia PRIVATE
+        ${BLINK_STANDALONE_PLATFORM_LINK_OPTIONS})
+    endif()
 
     target_link_libraries(blink_standalone_sdl_viewer_skia PRIVATE
-    blink_standalone_renderer_c_api
-    blink_standalone_chromium_libcxx
-    blink_standalone_v8_monolith
-    d3d11
-    d3d12
-    dcomp
-    dwmapi
-    dxcore
-    dxgi
-    mincore
-      ole32
-      propsys
-      runtimeobject
-      shcore
-      windowscodecs
-      wbemuuid
-      delayimp
+      blink_standalone_renderer_c_api
+      blink_angle_libEGL_static
+      blink_angle_libGLESv2_static
+      blink_standalone_chromium_libcxx
+      blink_standalone_v8_monolith
+      ${BLINK_STANDALONE_PLATFORM_LINK_LIBS}
     )
 
     if(MSVC)
@@ -2908,9 +3229,7 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
       harfbuzz
       LibXml2::LibXml2
       ${BLINK_STANDALONE_SDL3_TARGET}
-      kernel32.lib user32.lib gdi32.lib winmm.lib imm32.lib ole32.lib
-      oleaut32.lib version.lib uuid.lib advapi32.lib setupapi.lib shell32.lib
-      dbghelp.lib dinput8.lib ntdll.lib psapi.lib shlwapi.lib ws2_32.lib
+      ${BLINK_STANDALONE_SDL_PLATFORM_LINK_LIBS}
     )
     blink_standalone_copy_icu_data(blink_standalone_sdl_viewer_skia)
   endif()

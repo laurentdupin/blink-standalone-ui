@@ -12,6 +12,9 @@
 
 #if ANGLE_SHARED_LIBVULKAN
 #    include <volk.h>
+#    if defined(VOLK_NAMESPACE)
+using namespace volk;
+#    endif
 #else
 #    include <vulkan/vulkan.h>
 #endif

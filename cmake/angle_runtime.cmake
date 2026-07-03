@@ -25,6 +25,80 @@ set_source_files_properties(
   ${BLINK_STANDALONE_ANGLE_SRC}/third_party/volk/volk.c
   PROPERTIES LANGUAGE CXX)
 
+set(BLINK_STANDALONE_ANGLE_PLATFORM_COMMON_RUNTIME_SOURCES)
+set(BLINK_STANDALONE_ANGLE_PLATFORM_GPU_INFO_RUNTIME_SOURCES)
+set(BLINK_STANDALONE_ANGLE_PLATFORM_VULKAN_BACKEND_SOURCES)
+set(BLINK_STANDALONE_ANGLE_PLATFORM_LIBEGL_SOURCES)
+set(BLINK_STANDALONE_ANGLE_PLATFORM_COMPILE_DEFINITIONS)
+set(BLINK_STANDALONE_ANGLE_PLATFORM_LINK_LIBS)
+if(WIN32)
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_COMMON_RUNTIME_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win32.cpp
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_GPU_INFO_RUNTIME_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/gpu_info_util/SystemInfo_win.cpp
+  )
+  file(GLOB BLINK_STANDALONE_ANGLE_PLATFORM_VULKAN_BACKEND_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/win32/*.cpp)
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_LIBEGL_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win32.cpp
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_COMPILE_DEFINITIONS
+    ANGLE_IS_WIN=1
+    ANGLE_PLATFORM_WINDOWS=1
+    ANGLE_WINDOWS_NO_FUTEX=1
+    VK_USE_PLATFORM_WIN32_KHR=1
+    WIN32_LEAN_AND_MEAN
+    NOMINMAX
+    _CRT_SECURE_NO_DEPRECATE
+    _SCL_SECURE_NO_DEPRECATE
+    _WINSOCK_DEPRECATED_NO_WARNINGS
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_LINK_LIBS
+    advapi32
+    d3d11
+    dxgi
+    dxguid
+    gdi32
+    kernel32
+    ole32
+    setupapi
+    user32
+    version
+    winmm
+  )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_COMMON_RUNTIME_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_linux.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_posix.cpp
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_GPU_INFO_RUNTIME_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/gpu_info_util/SystemInfo_linux.cpp
+  )
+  file(GLOB BLINK_STANDALONE_ANGLE_PLATFORM_VULKAN_BACKEND_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/linux/*.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/linux/display/*.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/linux/headless/*.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/linux/xcb/*.cpp)
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_VULKAN_BACKEND_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/linux/dma_buf_utils.cpp
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_LIBEGL_SOURCES
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_linux.cpp
+    ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_posix.cpp
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_COMPILE_DEFINITIONS
+    ANGLE_USE_X11=1
+    VK_USE_PLATFORM_XCB_KHR=1
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+  )
+  list(APPEND BLINK_STANDALONE_ANGLE_PLATFORM_LINK_LIBS
+    ${BLINK_STANDALONE_PLATFORM_LINK_LIBS}
+  )
+endif()
+
 set(BLINK_STANDALONE_ANGLE_COMMON_RUNTIME_SOURCES
   ${BLINK_STANDALONE_ANGLE_SRC}/common/CompiledShaderState.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/Float16ToFloat32.cpp
@@ -51,8 +125,6 @@ set(BLINK_STANDALONE_ANGLE_COMMON_RUNTIME_SOURCES
   ${BLINK_STANDALONE_ANGLE_SRC}/common/platform_helpers.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/string_utils.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils.cpp
-  ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win.cpp
-  ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win32.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/tls.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/uniform_type_info_autogen.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/common/utilities.cpp
@@ -61,6 +133,7 @@ set(BLINK_STANDALONE_ANGLE_COMMON_RUNTIME_SOURCES
   ${BLINK_STANDALONE_ANGLE_SRC}/common/vulkan/vulkan_icd.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/third_party/volk/volk.c
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/angle_vma_implementation.cc
+  ${BLINK_STANDALONE_ANGLE_PLATFORM_COMMON_RUNTIME_SOURCES}
   ${BLINK_STANDALONE_ANGLE_ZLIB_SOURCES}
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/google/compression_utils_portable.cc
 )
@@ -78,8 +151,8 @@ set(BLINK_STANDALONE_ANGLE_IMAGE_RUNTIME_SOURCES
 
 set(BLINK_STANDALONE_ANGLE_GPU_INFO_RUNTIME_SOURCES
   ${BLINK_STANDALONE_ANGLE_SRC}/gpu_info_util/SystemInfo.cpp
-  ${BLINK_STANDALONE_ANGLE_SRC}/gpu_info_util/SystemInfo_win.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/gpu_info_util/SystemInfo_vulkan.cpp
+  ${BLINK_STANDALONE_ANGLE_PLATFORM_GPU_INFO_RUNTIME_SOURCES}
 )
 
 file(GLOB BLINK_STANDALONE_ANGLE_LIBANGLE_TOP_SOURCES
@@ -119,13 +192,13 @@ set(BLINK_STANDALONE_ANGLE_CAPTURE_MOCK_SOURCES
 )
 
 file(GLOB BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES
-  ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/*.cpp
-  ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/win32/*.cpp)
+  ${BLINK_STANDALONE_ANGLE_SRC}/libANGLE/renderer/vulkan/*.cpp)
+list(APPEND BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES
+  ${BLINK_STANDALONE_ANGLE_PLATFORM_VULKAN_BACKEND_SOURCES})
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/CL[^/]*\\.cpp$")
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/clspv_utils\\.cpp$")
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/vk_cl_utils\\.cpp$")
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/android/")
-list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/linux/")
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/mac/")
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/fuchsia/")
 list(FILTER BLINK_STANDALONE_ANGLE_VULKAN_BACKEND_SOURCES EXCLUDE REGEX "/null/")
@@ -173,8 +246,7 @@ set(BLINK_STANDALONE_ANGLE_LIBGLESV2_SOURCES
 set(BLINK_STANDALONE_ANGLE_LIBEGL_SOURCES
   ${BLINK_STANDALONE_CHROMIUM_ROOT}/standalone_renderer/src/angle_egl_log_stub.cc
   ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils.cpp
-  ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win.cpp
-  ${BLINK_STANDALONE_ANGLE_SRC}/common/system_utils_win32.cpp
+  ${BLINK_STANDALONE_ANGLE_PLATFORM_LIBEGL_SOURCES}
   ${BLINK_STANDALONE_ANGLE_SRC}/libEGL/egl_loader_autogen.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/libEGL/libEGL_autogen.cpp
   ${BLINK_STANDALONE_ANGLE_SRC}/libEGL/libEGL_autogen.def
@@ -194,6 +266,10 @@ set(BLINK_STANDALONE_ANGLE_RUNTIME_SOURCES
 list(REMOVE_DUPLICATES BLINK_STANDALONE_ANGLE_RUNTIME_SOURCES)
 
 function(blink_standalone_configure_angle_target target_name)
+  if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX)
+    target_include_directories(${target_name} BEFORE PRIVATE
+      ${BLINK_STANDALONE_CHROMIUM_LIBCXX_INCLUDE_DIRS})
+  endif()
   target_include_directories(${target_name} PRIVATE
     ${CMAKE_BINARY_DIR}/generated
     ${BLINK_STANDALONE_CHROMIUM_ROOT}
@@ -211,6 +287,7 @@ function(blink_standalone_configure_angle_target target_name)
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/spirv-tools/src/include
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib
     ${BLINK_STANDALONE_CHROMIUM_ROOT}/third_party/zlib/google
+    ${BLINK_STANDALONE_PLATFORM_INCLUDE_DIRECTORIES}
   )
   target_compile_definitions(${target_name} PRIVATE
     ANGLE_ENABLE_CONTEXT_MUTEX=1
@@ -218,23 +295,14 @@ function(blink_standalone_configure_angle_target target_name)
     ANGLE_ENABLE_ESSL=1
     ANGLE_ENABLE_GLSL=1
     ANGLE_ENABLE_VULKAN=1
-    ANGLE_IS_WIN=1
     ANGLE_OUTSIDE_WEBKIT=1
-    ANGLE_PLATFORM_WINDOWS=1
     ANGLE_SHARED_LIBVULKAN=1
     ANGLE_USE_CUSTOM_VULKAN_OUTSIDE_RENDER_PASS_CMD_BUFFERS=1
     ANGLE_USE_CUSTOM_VULKAN_RENDER_PASS_CMD_BUFFERS=1
-    ANGLE_WINDOWS_NO_FUTEX=1
     EGL_EGL_PROTOTYPES=1
     EGL_EGLEXT_PROTOTYPES=1
     GL_GLES_PROTOTYPES=1
     GL_GLEXT_PROTOTYPES=1
-    VK_USE_PLATFORM_WIN32_KHR=1
-    WIN32_LEAN_AND_MEAN
-    NOMINMAX
-    _CRT_SECURE_NO_DEPRECATE
-    _SCL_SECURE_NO_DEPRECATE
-    _WINSOCK_DEPRECATED_NO_WARNINGS
     ANGLE_CAPTURE_ENABLED=0
     ANGLE_EGL_LIBRARY_NAME="libEGL"
     ANGLE_GLESV2_LIBRARY_NAME="libGLESv2"
@@ -246,6 +314,8 @@ function(blink_standalone_configure_angle_target target_name)
     CPU_NO_SIMD=1
     NDEBUG=1
     ZLIB_IMPLEMENTATION=1
+    ${BLINK_STANDALONE_CHROMIUM_LIBCXX_DEFINES}
+    ${BLINK_STANDALONE_ANGLE_PLATFORM_COMPILE_DEFINITIONS}
   )
   set_property(TARGET ${target_name} PROPERTY
     MSVC_RUNTIME_LIBRARY "MultiThreaded")
@@ -269,20 +339,31 @@ function(blink_standalone_configure_angle_target target_name)
       /wd4996
     )
   endif()
+  if(BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS)
+    target_compile_options(${target_name} PRIVATE
+      ${BLINK_STANDALONE_PLATFORM_COMPILE_OPTIONS})
+  endif()
+  if(BLINK_STANDALONE_PLATFORM_LINK_OPTIONS)
+    target_link_options(${target_name} PRIVATE
+      ${BLINK_STANDALONE_PLATFORM_LINK_OPTIONS})
+  endif()
   target_link_libraries(${target_name} PRIVATE
-    advapi32
-    d3d11
-    dxgi
-    dxguid
-    gdi32
-    kernel32
-    ole32
-    setupapi
-    user32
-    version
-    winmm
+    ${BLINK_STANDALONE_ANGLE_PLATFORM_LINK_LIBS}
     ZLIB::ZLIB
   )
+  if(MSVC)
+    target_link_libraries(${target_name} PRIVATE
+      libcpmt)
+  endif()
+  get_target_property(_blink_standalone_angle_target_type
+    ${target_name} TYPE)
+  if(BLINK_STANDALONE_USE_CHROMIUM_LIBCXX AND
+      TARGET blink_standalone_chromium_libcxx AND
+      NOT _blink_standalone_angle_target_type STREQUAL "STATIC_LIBRARY")
+    target_link_libraries(${target_name} PRIVATE
+      blink_standalone_chromium_libcxx)
+    blink_standalone_add_v8_compat_dependency(${target_name})
+  endif()
   set_target_properties(${target_name} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
@@ -314,3 +395,38 @@ target_compile_definitions(blink_angle_libEGL PRIVATE
   LIBEGL_IMPLEMENTATION=1
 )
 add_dependencies(blink_angle_libEGL blink_angle_libGLESv2)
+
+add_library(blink_angle_libGLESv2_static STATIC
+  ${BLINK_STANDALONE_ANGLE_RUNTIME_SOURCES}
+  ${BLINK_STANDALONE_ANGLE_LIBGLESV2_SOURCES}
+)
+set_target_properties(blink_angle_libGLESv2_static PROPERTIES
+  OUTPUT_NAME "libGLESv2_static")
+blink_standalone_configure_angle_target(blink_angle_libGLESv2_static)
+target_compile_definitions(blink_angle_libGLESv2_static PRIVATE
+  ANGLE_EXPORT=
+  ANGLE_STATIC=1
+  KHRONOS_STATIC=1
+  LIBANGLE_IMPLEMENTATION=1
+  LIBGLESV2_IMPLEMENTATION=1
+  VOLK_NAMESPACE=blink_angle_volk
+)
+
+add_library(blink_angle_libEGL_static STATIC
+  ${BLINK_STANDALONE_ANGLE_LIBEGL_SOURCES}
+)
+set_target_properties(blink_angle_libEGL_static PROPERTIES
+  OUTPUT_NAME "libEGL_static")
+blink_standalone_configure_angle_target(blink_angle_libEGL_static)
+target_compile_definitions(blink_angle_libEGL_static PRIVATE
+  ANGLE_EXPORT=
+  ANGLE_STATIC=1
+  EGLAPI=
+  KHRONOS_STATIC=1
+  LIBANGLE_IMPLEMENTATION=1
+  LIBEGL_IMPLEMENTATION=1
+  LIBGLESV2_IMPLEMENTATION=1
+)
+target_link_libraries(blink_angle_libEGL_static PUBLIC
+  blink_angle_libGLESv2_static)
+add_dependencies(blink_angle_libEGL_static blink_angle_libGLESv2_static)

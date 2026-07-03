@@ -35,6 +35,13 @@ def main() -> int:
     parser.add_argument("--libcxx-object-dir", type=Path)
     parser.add_argument("--object-list", type=Path)
     parser.add_argument(
+        "--required-path",
+        action="append",
+        default=[],
+        type=Path,
+        help="Additional generated compatibility output that must exist.",
+    )
+    parser.add_argument(
         "--build-hint",
         default=(
             "Configure with BLINK_STANDALONE_V8_COMPAT_ACTION=build and "
@@ -50,6 +57,9 @@ def main() -> int:
     missing: list[Path] = []
     if not args.monolith_lib.is_file():
         missing.append(args.monolith_lib)
+    for required_path in args.required_path:
+        if not required_path.exists():
+            missing.append(required_path)
 
     if args.toolchain == "msvc":
         if not args.v8_include_dir:

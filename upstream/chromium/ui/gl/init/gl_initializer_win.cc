@@ -30,6 +30,10 @@
 namespace gl {
 namespace init {
 
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+bool InitializeStaticANGLEEGL();
+#endif
+
 namespace {
 
 const wchar_t kD3DCompiler[] = L"D3DCompiler_47.dll";
@@ -132,7 +136,13 @@ bool InitializeStaticEGLInternal(GLImplementationParts implementation) {
   }
 #else
   if (!InitializeStaticEGLInternalFromLibrary()) {
+#if defined(HTML_CSS_RENDERER_STANDALONE)
+    if (!InitializeStaticANGLEEGL()) {
+      return false;
+    }
+#else
     return false;
+#endif
   }
 #endif  // BUILDFLAG(USE_STATIC_ANGLE)
 
