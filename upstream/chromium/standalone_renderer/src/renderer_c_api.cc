@@ -897,12 +897,24 @@ class DedicatedRendererSequence {
     result.submit_ms =
         std::chrono::duration<double, std::milli>(submit_end - submit_start)
             .count();
+    if (status == BLINK_STANDALONE_STATUS_OK &&
+        result.render_result.state ==
+            BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND) {
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
+    }
     if ((status != BLINK_STANDALONE_STATUS_OK &&
          status != BLINK_STANDALONE_STATUS_PENDING) ||
         result.render_result.request_id == 0) {
       result.status = status;
       result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
       SetDedicatedGpuFrameErrorFromRenderer(inner, &result);
+      if (!result.error_message) {
+        result.error_message =
+            "dedicated GPU frame submit did not accept a copy request";
+      }
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -3026,7 +3038,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if ((request->flags & BLINK_STANDALONE_GPU_ASYNC_SKIP_IF_CLEAN) != 0) {
     main_target.common.flags |= BLINK_STANDALONE_GPU_TARGET_SKIP_IF_CLEAN;
   }
-  if (CanSkipCleanGpuRender(renderer, &main_target)) {
+  const bool prepared_source_matches =
+      PreparedGpuSourceMatchesTarget(renderer, backend, &main_target,
+                                     request->request_generation);
+  if (!prepared_source_matches && CanSkipCleanGpuRender(renderer, &main_target)) {
     result->status = BLINK_STANDALONE_STATUS_OK;
     result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND;
     result->needs_output = 0;
@@ -3059,9 +3074,6 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "submit_gpu_frame_async failed: async rendering requires a real external target handle");
   }
 
-  const bool prepared_source_matches =
-      PreparedGpuSourceMatchesTarget(renderer, backend, &main_target,
-                                     request->request_generation);
   if (!prepared_source_matches) {
     blink_standalone_status_code_t status =
         AdvanceGpuFrameForBackend(renderer, backend,

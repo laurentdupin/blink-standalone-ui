@@ -2420,6 +2420,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       dedicated_request.render_request.request_generation =
           target.common.generation;
       dedicated_request.render_request.main_target = target;
+      dedicated_request.render_request.flags |=
+          BLINK_STANDALONE_GPU_ASYNC_SKIP_IF_CLEAN;
       dedicated_request.poll_interval_ms = 1;
       dedicated_request.max_poll_iterations = 240;
       blink_standalone_dedicated_thread_gpu_frame_result_t dedicated_result =
