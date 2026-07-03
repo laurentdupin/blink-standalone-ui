@@ -837,10 +837,7 @@ class DedicatedRendererSequence {
     const auto command_start = std::chrono::steady_clock::now();
 
     if (DedicatedGpuFrameCancelRequested(command)) {
-      result.status = BLINK_STANDALONE_STATUS_OK;
-      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
-      result.render_result.status = BLINK_STANDALONE_STATUS_OK;
-      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+      CancelDedicatedGpuFrameAndReleaseExternalTargets(inner, &result);
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -879,10 +876,7 @@ class DedicatedRendererSequence {
       return;
     }
     if (DedicatedGpuFrameCancelRequested(command)) {
-      result.status = BLINK_STANDALONE_STATUS_OK;
-      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
-      result.render_result.status = BLINK_STANDALONE_STATUS_OK;
-      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+      CancelDedicatedGpuFrameAndReleaseExternalTargets(inner, &result);
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -905,10 +899,7 @@ class DedicatedRendererSequence {
       ++result.poll_iterations;
     }
     if (DedicatedGpuFrameCancelRequested(command)) {
-      result.status = BLINK_STANDALONE_STATUS_OK;
-      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
-      result.render_result.status = BLINK_STANDALONE_STATUS_OK;
-      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+      CancelDedicatedGpuFrameAndReleaseExternalTargets(inner, &result);
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -1023,6 +1014,33 @@ class DedicatedRendererSequence {
     if (error && error[0]) {
       result->error_message = error;
     }
+  }
+
+  static void CancelDedicatedGpuFrameAndReleaseExternalTargets(
+      blink_standalone_renderer* inner,
+      blink_standalone_dedicated_thread_gpu_frame_result_t* result) {
+    if (!result) {
+      return;
+    }
+    result->status = BLINK_STANDALONE_STATUS_OK;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+    result->render_result.status = BLINK_STANDALONE_STATUS_OK;
+    result->render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+    if (!inner) {
+      return;
+    }
+    result->render_result.backend = inner->pending_async_gpu_frame.backend;
+    result->render_result.request_generation =
+        inner->pending_async_gpu_frame.request_generation;
+    result->render_result.request_id =
+        inner->pending_async_gpu_frame.request_id;
+    if (inner->runtime) {
+      inner->runtime->ReleaseExternalGpuTargetState();
+    }
+    inner->pending_async_gpu_frame.active = false;
+    inner->gpu_source_frame_pending = false;
+    inner->gpu_prepare_required_after_update = true;
+    inner->prepared_gpu_source_frame = {};
   }
 
   static bool DedicatedGpuFrameCancelRequested(
