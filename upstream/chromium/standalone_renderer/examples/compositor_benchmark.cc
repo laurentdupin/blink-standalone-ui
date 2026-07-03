@@ -188,6 +188,9 @@ bool ParseNonNegativeInt(const std::string& value, int* out) {
   return true;
 }
 
+int RunCApiVulkanExternalTargetAsyncSourceTickSmoke();
+int RunCApiD3D12ExternalTargetAsyncSourceTickSmoke();
+
 class RendererThreadHarness {
  public:
   RendererThreadHarness() {
@@ -314,6 +317,7 @@ void PrintUsage() {
       "[--c-api-vulkan-external-target-async-smoke] "
       "[--c-api-vulkan-external-target-async-dirty-timing-smoke] "
       "[--c-api-vulkan-external-target-async-source-tick-smoke] "
+      "[--c-api-vulkan-renderer-thread-gpu-source-smoke] "
       "[--c-api-vulkan-external-target-async-profile-churn-smoke] "
       "[--c-api-vulkan-external-target-async-resize-stale-smoke] "
       "[--c-api-vulkan-external-target-click-timing-smoke] "
@@ -333,6 +337,7 @@ void PrintUsage() {
       "[--c-api-d3d12-external-target-async-smoke] "
       "[--c-api-d3d12-external-target-async-dirty-timing-smoke] "
       "[--c-api-d3d12-external-target-async-source-tick-smoke] "
+      "[--c-api-d3d12-renderer-thread-gpu-source-smoke] "
       "[--c-api-d3d12-external-target-async-resize-stale-smoke] "
       "[--c-api-d3d12-external-target-click-timing-smoke] "
       "[--c-api-d3d12-external-target-click-resize-smoke] "
@@ -801,6 +806,67 @@ int RunCApiRendererThreadBasicSmoke() {
       static_cast<unsigned long long>(command_id), post_ms, polls,
       poll_ms / std::max(1, polls), total_ms);
   return 0;
+}
+
+int RunCApiRendererThreadGpuSourceSmoke(const char* label,
+                                        std::function<int()> smoke) {
+  RendererThreadHarness renderer_thread;
+  const auto post_start = std::chrono::steady_clock::now();
+  const uint64_t command_id = renderer_thread.Post(std::move(smoke));
+  const auto post_end = std::chrono::steady_clock::now();
+  const double post_ms =
+      std::chrono::duration<double, std::milli>(post_end - post_start).count();
+
+  int exit_code = 1;
+  std::string message;
+  int polls = 0;
+  double poll_ms = 0.0;
+  const auto wait_start = std::chrono::steady_clock::now();
+  while (true) {
+    const auto poll_start = std::chrono::steady_clock::now();
+    const bool done = renderer_thread.Poll(command_id, &exit_code, &message);
+    const auto poll_end = std::chrono::steady_clock::now();
+    poll_ms +=
+        std::chrono::duration<double, std::milli>(poll_end - poll_start)
+            .count();
+    ++polls;
+    if (done) {
+      break;
+    }
+    if (polls > 15000) {
+      std::fprintf(stderr,
+                   "%s: timed out waiting for command_id=%llu\n",
+                   label, static_cast<unsigned long long>(command_id));
+      return 1;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  const auto wait_end = std::chrono::steady_clock::now();
+  const double total_ms =
+      std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+  if (exit_code != 0) {
+    std::fprintf(stderr, "%s: worker failed exit=%d message=%s\n", label,
+                 exit_code, message.c_str());
+    return exit_code;
+  }
+  std::printf(
+      "%s: renderer_thread ok command_id=%llu post_ms=%.3f polls=%d "
+      "poll_avg_ms=%.3f total_ms=%.3f\n",
+      label, static_cast<unsigned long long>(command_id), post_ms, polls,
+      poll_ms / std::max(1, polls), total_ms);
+  return 0;
+}
+
+int RunCApiVulkanRendererThreadGpuSourceSmoke() {
+  return RunCApiRendererThreadGpuSourceSmoke(
+      "c_api_vulkan_renderer_thread_gpu_source_smoke",
+      []() { return RunCApiVulkanExternalTargetAsyncSourceTickSmoke(); });
+}
+
+int RunCApiD3D12RendererThreadGpuSourceSmoke() {
+  return RunCApiRendererThreadGpuSourceSmoke(
+      "c_api_d3d12_renderer_thread_gpu_source_smoke",
+      []() { return RunCApiD3D12ExternalTargetAsyncSourceTickSmoke(); });
 }
 
 bool FindVulkanMemoryTypeForSmoke(VkPhysicalDevice physical_device,
@@ -13389,6 +13455,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-vulkan-external-target-fps-timing-smoke" ||
         arg == "--c-api-vulkan-external-target-async-smoke" ||
         arg == "--c-api-vulkan-external-target-async-source-tick-smoke" ||
+        arg == "--c-api-vulkan-renderer-thread-gpu-source-smoke" ||
         arg == "--c-api-vulkan-external-target-async-resize-stale-smoke" ||
         arg == "--c-api-vulkan-external-target-click-timing-smoke" ||
         arg == "--c-api-vulkan-external-target-click-resize-pending-smoke" ||
@@ -13407,6 +13474,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-d3d12-external-target-resize-smoke" ||
         arg == "--c-api-d3d12-external-target-async-smoke" ||
         arg == "--c-api-d3d12-external-target-async-source-tick-smoke" ||
+        arg == "--c-api-d3d12-renderer-thread-gpu-source-smoke" ||
         arg == "--c-api-d3d12-external-target-async-resize-stale-smoke" ||
         arg == "--c-api-d3d12-external-target-click-timing-smoke" ||
         arg == "--c-api-d3d12-external-target-click-resize-smoke" ||
@@ -13445,6 +13513,14 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     if (std::string(argv[i]) == "--c-api-renderer-thread-basic-smoke") {
       return RunCApiRendererThreadBasicSmoke();
+    }
+    if (std::string(argv[i]) ==
+        "--c-api-vulkan-renderer-thread-gpu-source-smoke") {
+      return RunCApiVulkanRendererThreadGpuSourceSmoke();
+    }
+    if (std::string(argv[i]) ==
+        "--c-api-d3d12-renderer-thread-gpu-source-smoke") {
+      return RunCApiD3D12RendererThreadGpuSourceSmoke();
     }
   }
   if (!c_api_smoke_requested)
