@@ -408,24 +408,32 @@ struct COMPONENT_EXPORT(VULKAN) VulkanFunctionPointers {
 
 }  // namespace gpu
 
+#if defined(BLINK_STANDALONE_PRIVATE_VULKAN_FUNCTION_POINTER_WRAPPERS)
+#define BLINK_STANDALONE_VULKAN_WRAPPER_INLINE static ALWAYS_INLINE
+#else
+#define BLINK_STANDALONE_VULKAN_WRAPPER_INLINE ALWAYS_INLINE
+#endif
+
 // Unassociated functions
-ALWAYS_INLINE PFN_vkVoidFunction vkGetInstanceProcAddr(VkInstance instance,
-                                                       const char* pName) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE PFN_vkVoidFunction
+vkGetInstanceProcAddr(VkInstance instance, const char* pName) {
   return gpu::GetVulkanFunctionPointers()->vkGetInstanceProcAddr(instance,
                                                                  pName);
 }
 
-ALWAYS_INLINE VkResult vkEnumerateInstanceVersion(uint32_t* pApiVersion) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
+vkEnumerateInstanceVersion(uint32_t* pApiVersion) {
   return gpu::GetVulkanFunctionPointers()->vkEnumerateInstanceVersion(
       pApiVersion);
 }
-ALWAYS_INLINE VkResult vkCreateInstance(const VkInstanceCreateInfo* pCreateInfo,
-                                        const VkAllocationCallbacks* pAllocator,
-                                        VkInstance* pInstance) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
+vkCreateInstance(const VkInstanceCreateInfo* pCreateInfo,
+                 const VkAllocationCallbacks* pAllocator,
+                 VkInstance* pInstance) {
   return gpu::GetVulkanFunctionPointers()->vkCreateInstance(
       pCreateInfo, pAllocator, pInstance);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkEnumerateInstanceExtensionProperties(const char* pLayerName,
                                        uint32_t* pPropertyCount,
                                        VkExtensionProperties* pProperties) {
@@ -433,7 +441,7 @@ vkEnumerateInstanceExtensionProperties(const char* pLayerName,
       ->vkEnumerateInstanceExtensionProperties(pLayerName, pPropertyCount,
                                                pProperties);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkEnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
                                    VkLayerProperties* pProperties) {
   return gpu::GetVulkanFunctionPointers()->vkEnumerateInstanceLayerProperties(
@@ -441,19 +449,19 @@ vkEnumerateInstanceLayerProperties(uint32_t* pPropertyCount,
 }
 
 // Instance functions
-ALWAYS_INLINE VkResult vkCreateDevice(VkPhysicalDevice physicalDevice,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateDevice(VkPhysicalDevice physicalDevice,
                                       const VkDeviceCreateInfo* pCreateInfo,
                                       const VkAllocationCallbacks* pAllocator,
                                       VkDevice* pDevice) {
   return gpu::GetVulkanFunctionPointers()->vkCreateDevice(
       physicalDevice, pCreateInfo, pAllocator, pDevice);
 }
-ALWAYS_INLINE void vkDestroyInstance(VkInstance instance,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyInstance(VkInstance instance,
                                      const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyInstance(instance,
                                                              pAllocator);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice,
                                      const char* pLayerName,
                                      uint32_t* pPropertyCount,
@@ -461,25 +469,25 @@ vkEnumerateDeviceExtensionProperties(VkPhysicalDevice physicalDevice,
   return gpu::GetVulkanFunctionPointers()->vkEnumerateDeviceExtensionProperties(
       physicalDevice, pLayerName, pPropertyCount, pProperties);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkEnumerateDeviceLayerProperties(VkPhysicalDevice physicalDevice,
                                  uint32_t* pPropertyCount,
                                  VkLayerProperties* pProperties) {
   return gpu::GetVulkanFunctionPointers()->vkEnumerateDeviceLayerProperties(
       physicalDevice, pPropertyCount, pProperties);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkEnumeratePhysicalDevices(VkInstance instance,
                            uint32_t* pPhysicalDeviceCount,
                            VkPhysicalDevice* pPhysicalDevices) {
   return gpu::GetVulkanFunctionPointers()->vkEnumeratePhysicalDevices(
       instance, pPhysicalDeviceCount, pPhysicalDevices);
 }
-ALWAYS_INLINE PFN_vkVoidFunction vkGetDeviceProcAddr(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE PFN_vkVoidFunction vkGetDeviceProcAddr(VkDevice device,
                                                      const char* pName) {
   return gpu::GetVulkanFunctionPointers()->vkGetDeviceProcAddr(device, pName);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceExternalSemaphoreProperties(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceExternalSemaphoreProperties(
     VkPhysicalDevice physicalDevice,
     const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo,
     VkExternalSemaphoreProperties* pExternalSemaphoreProperties) {
@@ -487,27 +495,27 @@ ALWAYS_INLINE void vkGetPhysicalDeviceExternalSemaphoreProperties(
       ->vkGetPhysicalDeviceExternalSemaphoreProperties(
           physicalDevice, pExternalSemaphoreInfo, pExternalSemaphoreProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceFeatures2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceFeatures2(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceFeatures2* pFeatures) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceFeatures2(
       physicalDevice, pFeatures);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceFormatProperties(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceFormatProperties(
     VkPhysicalDevice physicalDevice,
     VkFormat format,
     VkFormatProperties* pFormatProperties) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceFormatProperties(
       physicalDevice, format, pFormatProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceFormatProperties2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceFormatProperties2(
     VkPhysicalDevice physicalDevice,
     VkFormat format,
     VkFormatProperties2* pFormatProperties) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceFormatProperties2(
       physicalDevice, format, pFormatProperties);
 }
-ALWAYS_INLINE VkResult vkGetPhysicalDeviceImageFormatProperties2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice physicalDevice,
     const VkPhysicalDeviceImageFormatInfo2* pImageFormatInfo,
     VkImageFormatProperties2* pImageFormatProperties) {
@@ -515,31 +523,31 @@ ALWAYS_INLINE VkResult vkGetPhysicalDeviceImageFormatProperties2(
       ->vkGetPhysicalDeviceImageFormatProperties2(
           physicalDevice, pImageFormatInfo, pImageFormatProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceMemoryProperties(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceMemoryProperties(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceMemoryProperties* pMemoryProperties) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceMemoryProperties(
       physicalDevice, pMemoryProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceMemoryProperties2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceMemoryProperties2(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceMemoryProperties2* pMemoryProperties) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceMemoryProperties2(
       physicalDevice, pMemoryProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceProperties(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceProperties(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceProperties* pProperties) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceProperties(
       physicalDevice, pProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceProperties2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceProperties2(
     VkPhysicalDevice physicalDevice,
     VkPhysicalDeviceProperties2* pProperties) {
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceProperties2(
       physicalDevice, pProperties);
 }
-ALWAYS_INLINE void vkGetPhysicalDeviceQueueFamilyProperties(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetPhysicalDeviceQueueFamilyProperties(
     VkPhysicalDevice physicalDevice,
     uint32_t* pQueueFamilyPropertyCount,
     VkQueueFamilyProperties* pQueueFamilyProperties) {
@@ -549,7 +557,7 @@ ALWAYS_INLINE void vkGetPhysicalDeviceQueueFamilyProperties(
 }
 
 #if DCHECK_IS_ON()
-ALWAYS_INLINE VkResult vkCreateDebugReportCallbackEXT(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateDebugReportCallbackEXT(
     VkInstance instance,
     const VkDebugReportCallbackCreateInfoEXT* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
@@ -557,7 +565,7 @@ ALWAYS_INLINE VkResult vkCreateDebugReportCallbackEXT(
   return gpu::GetVulkanFunctionPointers()->vkCreateDebugReportCallbackEXT(
       instance, pCreateInfo, pAllocator, pCallback);
 }
-ALWAYS_INLINE void vkDestroyDebugReportCallbackEXT(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyDebugReportCallbackEXT(
     VkInstance instance,
     VkDebugReportCallbackEXT callback,
     const VkAllocationCallbacks* pAllocator) {
@@ -566,14 +574,14 @@ ALWAYS_INLINE void vkDestroyDebugReportCallbackEXT(
 }
 #endif  // DCHECK_IS_ON()
 
-ALWAYS_INLINE void vkDestroySurfaceKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroySurfaceKHR(
     VkInstance instance,
     VkSurfaceKHR surface,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroySurfaceKHR(
       instance, surface, pAllocator);
 }
-ALWAYS_INLINE VkResult vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkPhysicalDevice physicalDevice,
     VkSurfaceKHR surface,
     VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) {
@@ -581,7 +589,7 @@ ALWAYS_INLINE VkResult vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
       ->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface,
                                                   pSurfaceCapabilities);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,
                                      VkSurfaceKHR surface,
                                      uint32_t* pSurfaceFormatCount,
@@ -589,7 +597,7 @@ vkGetPhysicalDeviceSurfaceFormatsKHR(VkPhysicalDevice physicalDevice,
   return gpu::GetVulkanFunctionPointers()->vkGetPhysicalDeviceSurfaceFormatsKHR(
       physicalDevice, surface, pSurfaceFormatCount, pSurfaceFormats);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
                                      uint32_t queueFamilyIndex,
                                      VkSurfaceKHR surface,
@@ -598,7 +606,7 @@ vkGetPhysicalDeviceSurfaceSupportKHR(VkPhysicalDevice physicalDevice,
       physicalDevice, queueFamilyIndex, surface, pSupported);
 }
 
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateHeadlessSurfaceEXT(VkInstance instance,
                            const VkHeadlessSurfaceCreateInfoEXT* pCreateInfo,
                            const VkAllocationCallbacks* pAllocator,
@@ -608,7 +616,7 @@ vkCreateHeadlessSurfaceEXT(VkInstance instance,
 }
 
 #if defined(USE_VULKAN_XCB)
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateXcbSurfaceKHR(VkInstance instance,
                       const VkXcbSurfaceCreateInfoKHR* pCreateInfo,
                       const VkAllocationCallbacks* pAllocator,
@@ -616,7 +624,7 @@ vkCreateXcbSurfaceKHR(VkInstance instance,
   return gpu::GetVulkanFunctionPointers()->vkCreateXcbSurfaceKHR(
       instance, pCreateInfo, pAllocator, pSurface);
 }
-ALWAYS_INLINE VkBool32
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkBool32
 vkGetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice,
                                              uint32_t queueFamilyIndex,
                                              xcb_connection_t* connection,
@@ -628,7 +636,7 @@ vkGetPhysicalDeviceXcbPresentationSupportKHR(VkPhysicalDevice physicalDevice,
 #endif  // defined(USE_VULKAN_XCB)
 
 #if BUILDFLAG(IS_WIN)
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateWin32SurfaceKHR(VkInstance instance,
                         const VkWin32SurfaceCreateInfoKHR* pCreateInfo,
                         const VkAllocationCallbacks* pAllocator,
@@ -636,7 +644,7 @@ vkCreateWin32SurfaceKHR(VkInstance instance,
   return gpu::GetVulkanFunctionPointers()->vkCreateWin32SurfaceKHR(
       instance, pCreateInfo, pAllocator, pSurface);
 }
-ALWAYS_INLINE VkBool32
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkBool32
 vkGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice,
                                                uint32_t queueFamilyIndex) {
   return gpu::GetVulkanFunctionPointers()
@@ -646,7 +654,7 @@ vkGetPhysicalDeviceWin32PresentationSupportKHR(VkPhysicalDevice physicalDevice,
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_ANDROID)
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateAndroidSurfaceKHR(VkInstance instance,
                           const VkAndroidSurfaceCreateInfoKHR* pCreateInfo,
                           const VkAllocationCallbacks* pAllocator,
@@ -657,7 +665,7 @@ vkCreateAndroidSurfaceKHR(VkInstance instance,
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_FUCHSIA)
-ALWAYS_INLINE VkResult vkCreateImagePipeSurfaceFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateImagePipeSurfaceFUCHSIA(
     VkInstance instance,
     const VkImagePipeSurfaceCreateInfoFUCHSIA* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
@@ -668,21 +676,21 @@ ALWAYS_INLINE VkResult vkCreateImagePipeSurfaceFUCHSIA(
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
 // Device functions
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkAllocateCommandBuffers(VkDevice device,
                          const VkCommandBufferAllocateInfo* pAllocateInfo,
                          VkCommandBuffer* pCommandBuffers) {
   return gpu::GetVulkanFunctionPointers()->vkAllocateCommandBuffers(
       device, pAllocateInfo, pCommandBuffers);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkAllocateDescriptorSets(VkDevice device,
                          const VkDescriptorSetAllocateInfo* pAllocateInfo,
                          VkDescriptorSet* pDescriptorSets) {
   return gpu::GetVulkanFunctionPointers()->vkAllocateDescriptorSets(
       device, pAllocateInfo, pDescriptorSets);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkAllocateMemory(VkDevice device,
                  const VkMemoryAllocateInfo* pAllocateInfo,
                  const VkAllocationCallbacks* pAllocator,
@@ -690,48 +698,48 @@ vkAllocateMemory(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkAllocateMemory(
       device, pAllocateInfo, pAllocator, pMemory);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkBeginCommandBuffer(VkCommandBuffer commandBuffer,
                      const VkCommandBufferBeginInfo* pBeginInfo) {
   return gpu::GetVulkanFunctionPointers()->vkBeginCommandBuffer(commandBuffer,
                                                                 pBeginInfo);
 }
-ALWAYS_INLINE VkResult vkBindBufferMemory(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkBindBufferMemory(VkDevice device,
                                           VkBuffer buffer,
                                           VkDeviceMemory memory,
                                           VkDeviceSize memoryOffset) {
   return gpu::GetVulkanFunctionPointers()->vkBindBufferMemory(
       device, buffer, memory, memoryOffset);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkBindBufferMemory2(VkDevice device,
                     uint32_t bindInfoCount,
                     const VkBindBufferMemoryInfo* pBindInfos) {
   return gpu::GetVulkanFunctionPointers()->vkBindBufferMemory2(
       device, bindInfoCount, pBindInfos);
 }
-ALWAYS_INLINE VkResult vkBindImageMemory(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkBindImageMemory(VkDevice device,
                                          VkImage image,
                                          VkDeviceMemory memory,
                                          VkDeviceSize memoryOffset) {
   return gpu::GetVulkanFunctionPointers()->vkBindImageMemory(
       device, image, memory, memoryOffset);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkBindImageMemory2(VkDevice device,
                    uint32_t bindInfoCount,
                    const VkBindImageMemoryInfo* pBindInfos) {
   return gpu::GetVulkanFunctionPointers()->vkBindImageMemory2(
       device, bindInfoCount, pBindInfos);
 }
-ALWAYS_INLINE void vkCmdBeginRenderPass(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdBeginRenderPass(
     VkCommandBuffer commandBuffer,
     const VkRenderPassBeginInfo* pRenderPassBegin,
     VkSubpassContents contents) {
   return gpu::GetVulkanFunctionPointers()->vkCmdBeginRenderPass(
       commandBuffer, pRenderPassBegin, contents);
 }
-ALWAYS_INLINE void vkCmdBindDescriptorSets(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdBindDescriptorSets(
     VkCommandBuffer commandBuffer,
     VkPipelineBindPoint pipelineBindPoint,
     VkPipelineLayout layout,
@@ -744,13 +752,13 @@ ALWAYS_INLINE void vkCmdBindDescriptorSets(
       commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount,
       pDescriptorSets, dynamicOffsetCount, pDynamicOffsets);
 }
-ALWAYS_INLINE void vkCmdBindPipeline(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdBindPipeline(VkCommandBuffer commandBuffer,
                                      VkPipelineBindPoint pipelineBindPoint,
                                      VkPipeline pipeline) {
   return gpu::GetVulkanFunctionPointers()->vkCmdBindPipeline(
       commandBuffer, pipelineBindPoint, pipeline);
 }
-ALWAYS_INLINE void vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer,
                                           uint32_t firstBinding,
                                           uint32_t bindingCount,
                                           const VkBuffer* pBuffers,
@@ -758,7 +766,7 @@ ALWAYS_INLINE void vkCmdBindVertexBuffers(VkCommandBuffer commandBuffer,
   return gpu::GetVulkanFunctionPointers()->vkCmdBindVertexBuffers(
       commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
 }
-ALWAYS_INLINE void vkCmdCopyBuffer(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdCopyBuffer(VkCommandBuffer commandBuffer,
                                    VkBuffer srcBuffer,
                                    VkBuffer dstBuffer,
                                    uint32_t regionCount,
@@ -766,7 +774,7 @@ ALWAYS_INLINE void vkCmdCopyBuffer(VkCommandBuffer commandBuffer,
   return gpu::GetVulkanFunctionPointers()->vkCmdCopyBuffer(
       commandBuffer, srcBuffer, dstBuffer, regionCount, pRegions);
 }
-ALWAYS_INLINE void vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
                                           VkBuffer srcBuffer,
                                           VkImage dstImage,
                                           VkImageLayout dstImageLayout,
@@ -776,7 +784,7 @@ ALWAYS_INLINE void vkCmdCopyBufferToImage(VkCommandBuffer commandBuffer,
       commandBuffer, srcBuffer, dstImage, dstImageLayout, regionCount,
       pRegions);
 }
-ALWAYS_INLINE void vkCmdCopyImage(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdCopyImage(VkCommandBuffer commandBuffer,
                                   VkImage srcImage,
                                   VkImageLayout srcImageLayout,
                                   VkImage dstImage,
@@ -787,7 +795,7 @@ ALWAYS_INLINE void vkCmdCopyImage(VkCommandBuffer commandBuffer,
       commandBuffer, srcImage, srcImageLayout, dstImage, dstImageLayout,
       regionCount, pRegions);
 }
-ALWAYS_INLINE void vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer,
                                           VkImage srcImage,
                                           VkImageLayout srcImageLayout,
                                           VkBuffer dstBuffer,
@@ -797,7 +805,7 @@ ALWAYS_INLINE void vkCmdCopyImageToBuffer(VkCommandBuffer commandBuffer,
       commandBuffer, srcImage, srcImageLayout, dstBuffer, regionCount,
       pRegions);
 }
-ALWAYS_INLINE void vkCmdDraw(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdDraw(VkCommandBuffer commandBuffer,
                              uint32_t vertexCount,
                              uint32_t instanceCount,
                              uint32_t firstVertex,
@@ -805,22 +813,22 @@ ALWAYS_INLINE void vkCmdDraw(VkCommandBuffer commandBuffer,
   return gpu::GetVulkanFunctionPointers()->vkCmdDraw(
       commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
-ALWAYS_INLINE void vkCmdEndRenderPass(VkCommandBuffer commandBuffer) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdEndRenderPass(VkCommandBuffer commandBuffer) {
   return gpu::GetVulkanFunctionPointers()->vkCmdEndRenderPass(commandBuffer);
 }
-ALWAYS_INLINE void vkCmdExecuteCommands(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdExecuteCommands(
     VkCommandBuffer commandBuffer,
     uint32_t commandBufferCount,
     const VkCommandBuffer* pCommandBuffers) {
   return gpu::GetVulkanFunctionPointers()->vkCmdExecuteCommands(
       commandBuffer, commandBufferCount, pCommandBuffers);
 }
-ALWAYS_INLINE void vkCmdNextSubpass(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdNextSubpass(VkCommandBuffer commandBuffer,
                                     VkSubpassContents contents) {
   return gpu::GetVulkanFunctionPointers()->vkCmdNextSubpass(commandBuffer,
                                                             contents);
 }
-ALWAYS_INLINE void vkCmdPipelineBarrier(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdPipelineBarrier(
     VkCommandBuffer commandBuffer,
     VkPipelineStageFlags srcStageMask,
     VkPipelineStageFlags dstStageMask,
@@ -836,7 +844,7 @@ ALWAYS_INLINE void vkCmdPipelineBarrier(
       memoryBarrierCount, pMemoryBarriers, bufferMemoryBarrierCount,
       pBufferMemoryBarriers, imageMemoryBarrierCount, pImageMemoryBarriers);
 }
-ALWAYS_INLINE void vkCmdPushConstants(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdPushConstants(VkCommandBuffer commandBuffer,
                                       VkPipelineLayout layout,
                                       VkShaderStageFlags stageFlags,
                                       uint32_t offset,
@@ -845,28 +853,28 @@ ALWAYS_INLINE void vkCmdPushConstants(VkCommandBuffer commandBuffer,
   return gpu::GetVulkanFunctionPointers()->vkCmdPushConstants(
       commandBuffer, layout, stageFlags, offset, size, pValues);
 }
-ALWAYS_INLINE void vkCmdSetScissor(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdSetScissor(VkCommandBuffer commandBuffer,
                                    uint32_t firstScissor,
                                    uint32_t scissorCount,
                                    const VkRect2D* pScissors) {
   return gpu::GetVulkanFunctionPointers()->vkCmdSetScissor(
       commandBuffer, firstScissor, scissorCount, pScissors);
 }
-ALWAYS_INLINE void vkCmdSetViewport(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkCmdSetViewport(VkCommandBuffer commandBuffer,
                                     uint32_t firstViewport,
                                     uint32_t viewportCount,
                                     const VkViewport* pViewports) {
   return gpu::GetVulkanFunctionPointers()->vkCmdSetViewport(
       commandBuffer, firstViewport, viewportCount, pViewports);
 }
-ALWAYS_INLINE VkResult vkCreateBuffer(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateBuffer(VkDevice device,
                                       const VkBufferCreateInfo* pCreateInfo,
                                       const VkAllocationCallbacks* pAllocator,
                                       VkBuffer* pBuffer) {
   return gpu::GetVulkanFunctionPointers()->vkCreateBuffer(device, pCreateInfo,
                                                           pAllocator, pBuffer);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateCommandPool(VkDevice device,
                     const VkCommandPoolCreateInfo* pCreateInfo,
                     const VkAllocationCallbacks* pAllocator,
@@ -874,7 +882,7 @@ vkCreateCommandPool(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateCommandPool(
       device, pCreateInfo, pAllocator, pCommandPool);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateDescriptorPool(VkDevice device,
                        const VkDescriptorPoolCreateInfo* pCreateInfo,
                        const VkAllocationCallbacks* pAllocator,
@@ -882,7 +890,7 @@ vkCreateDescriptorPool(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateDescriptorPool(
       device, pCreateInfo, pAllocator, pDescriptorPool);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateDescriptorSetLayout(VkDevice device,
                             const VkDescriptorSetLayoutCreateInfo* pCreateInfo,
                             const VkAllocationCallbacks* pAllocator,
@@ -890,14 +898,14 @@ vkCreateDescriptorSetLayout(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateDescriptorSetLayout(
       device, pCreateInfo, pAllocator, pSetLayout);
 }
-ALWAYS_INLINE VkResult vkCreateFence(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateFence(VkDevice device,
                                      const VkFenceCreateInfo* pCreateInfo,
                                      const VkAllocationCallbacks* pAllocator,
                                      VkFence* pFence) {
   return gpu::GetVulkanFunctionPointers()->vkCreateFence(device, pCreateInfo,
                                                          pAllocator, pFence);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateFramebuffer(VkDevice device,
                     const VkFramebufferCreateInfo* pCreateInfo,
                     const VkAllocationCallbacks* pAllocator,
@@ -905,7 +913,7 @@ vkCreateFramebuffer(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateFramebuffer(
       device, pCreateInfo, pAllocator, pFramebuffer);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateGraphicsPipelines(VkDevice device,
                           VkPipelineCache pipelineCache,
                           uint32_t createInfoCount,
@@ -916,14 +924,14 @@ vkCreateGraphicsPipelines(VkDevice device,
       device, pipelineCache, createInfoCount, pCreateInfos, pAllocator,
       pPipelines);
 }
-ALWAYS_INLINE VkResult vkCreateImage(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateImage(VkDevice device,
                                      const VkImageCreateInfo* pCreateInfo,
                                      const VkAllocationCallbacks* pAllocator,
                                      VkImage* pImage) {
   return gpu::GetVulkanFunctionPointers()->vkCreateImage(device, pCreateInfo,
                                                          pAllocator, pImage);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateImageView(VkDevice device,
                   const VkImageViewCreateInfo* pCreateInfo,
                   const VkAllocationCallbacks* pAllocator,
@@ -931,7 +939,7 @@ vkCreateImageView(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateImageView(
       device, pCreateInfo, pAllocator, pView);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreatePipelineLayout(VkDevice device,
                        const VkPipelineLayoutCreateInfo* pCreateInfo,
                        const VkAllocationCallbacks* pAllocator,
@@ -939,7 +947,7 @@ vkCreatePipelineLayout(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreatePipelineLayout(
       device, pCreateInfo, pAllocator, pPipelineLayout);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateRenderPass(VkDevice device,
                    const VkRenderPassCreateInfo* pCreateInfo,
                    const VkAllocationCallbacks* pAllocator,
@@ -947,14 +955,14 @@ vkCreateRenderPass(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateRenderPass(
       device, pCreateInfo, pAllocator, pRenderPass);
 }
-ALWAYS_INLINE VkResult vkCreateSampler(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateSampler(VkDevice device,
                                        const VkSamplerCreateInfo* pCreateInfo,
                                        const VkAllocationCallbacks* pAllocator,
                                        VkSampler* pSampler) {
   return gpu::GetVulkanFunctionPointers()->vkCreateSampler(
       device, pCreateInfo, pAllocator, pSampler);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateSemaphore(VkDevice device,
                   const VkSemaphoreCreateInfo* pCreateInfo,
                   const VkAllocationCallbacks* pAllocator,
@@ -962,7 +970,7 @@ vkCreateSemaphore(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateSemaphore(
       device, pCreateInfo, pAllocator, pSemaphore);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateShaderModule(VkDevice device,
                      const VkShaderModuleCreateInfo* pCreateInfo,
                      const VkAllocationCallbacks* pAllocator,
@@ -970,115 +978,115 @@ vkCreateShaderModule(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateShaderModule(
       device, pCreateInfo, pAllocator, pShaderModule);
 }
-ALWAYS_INLINE void vkDestroyBuffer(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyBuffer(VkDevice device,
                                    VkBuffer buffer,
                                    const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyBuffer(device, buffer,
                                                            pAllocator);
 }
-ALWAYS_INLINE void vkDestroyCommandPool(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyCommandPool(
     VkDevice device,
     VkCommandPool commandPool,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyCommandPool(
       device, commandPool, pAllocator);
 }
-ALWAYS_INLINE void vkDestroyDescriptorPool(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyDescriptorPool(
     VkDevice device,
     VkDescriptorPool descriptorPool,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyDescriptorPool(
       device, descriptorPool, pAllocator);
 }
-ALWAYS_INLINE void vkDestroyDescriptorSetLayout(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyDescriptorSetLayout(
     VkDevice device,
     VkDescriptorSetLayout descriptorSetLayout,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyDescriptorSetLayout(
       device, descriptorSetLayout, pAllocator);
 }
-ALWAYS_INLINE void vkDestroyDevice(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyDevice(VkDevice device,
                                    const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyDevice(device, pAllocator);
 }
-ALWAYS_INLINE void vkDestroyFence(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyFence(VkDevice device,
                                   VkFence fence,
                                   const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyFence(device, fence,
                                                           pAllocator);
 }
-ALWAYS_INLINE void vkDestroyFramebuffer(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyFramebuffer(
     VkDevice device,
     VkFramebuffer framebuffer,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyFramebuffer(
       device, framebuffer, pAllocator);
 }
-ALWAYS_INLINE void vkDestroyImage(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyImage(VkDevice device,
                                   VkImage image,
                                   const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyImage(device, image,
                                                           pAllocator);
 }
-ALWAYS_INLINE void vkDestroyImageView(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyImageView(VkDevice device,
                                       VkImageView imageView,
                                       const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyImageView(device, imageView,
                                                               pAllocator);
 }
-ALWAYS_INLINE void vkDestroyPipeline(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyPipeline(VkDevice device,
                                      VkPipeline pipeline,
                                      const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyPipeline(device, pipeline,
                                                              pAllocator);
 }
-ALWAYS_INLINE void vkDestroyPipelineLayout(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyPipelineLayout(
     VkDevice device,
     VkPipelineLayout pipelineLayout,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyPipelineLayout(
       device, pipelineLayout, pAllocator);
 }
-ALWAYS_INLINE void vkDestroyRenderPass(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyRenderPass(
     VkDevice device,
     VkRenderPass renderPass,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyRenderPass(
       device, renderPass, pAllocator);
 }
-ALWAYS_INLINE void vkDestroySampler(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroySampler(VkDevice device,
                                     VkSampler sampler,
                                     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroySampler(device, sampler,
                                                             pAllocator);
 }
-ALWAYS_INLINE void vkDestroySemaphore(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroySemaphore(VkDevice device,
                                       VkSemaphore semaphore,
                                       const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroySemaphore(device, semaphore,
                                                               pAllocator);
 }
-ALWAYS_INLINE void vkDestroyShaderModule(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyShaderModule(
     VkDevice device,
     VkShaderModule shaderModule,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroyShaderModule(
       device, shaderModule, pAllocator);
 }
-ALWAYS_INLINE VkResult vkDeviceWaitIdle(VkDevice device) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkDeviceWaitIdle(VkDevice device) {
   return gpu::GetVulkanFunctionPointers()->vkDeviceWaitIdle(device);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkFlushMappedMemoryRanges(VkDevice device,
                           uint32_t memoryRangeCount,
                           const VkMappedMemoryRange* pMemoryRanges) {
   return gpu::GetVulkanFunctionPointers()->vkFlushMappedMemoryRanges(
       device, memoryRangeCount, pMemoryRanges);
 }
-ALWAYS_INLINE VkResult vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkEndCommandBuffer(VkCommandBuffer commandBuffer) {
   return gpu::GetVulkanFunctionPointers()->vkEndCommandBuffer(commandBuffer);
 }
-ALWAYS_INLINE void vkFreeCommandBuffers(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkFreeCommandBuffers(
     VkDevice device,
     VkCommandPool commandPool,
     uint32_t commandBufferCount,
@@ -1086,7 +1094,7 @@ ALWAYS_INLINE void vkFreeCommandBuffers(
   return gpu::GetVulkanFunctionPointers()->vkFreeCommandBuffers(
       device, commandPool, commandBufferCount, pCommandBuffers);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkFreeDescriptorSets(VkDevice device,
                      VkDescriptorPool descriptorPool,
                      uint32_t descriptorSetCount,
@@ -1094,64 +1102,64 @@ vkFreeDescriptorSets(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkFreeDescriptorSets(
       device, descriptorPool, descriptorSetCount, pDescriptorSets);
 }
-ALWAYS_INLINE void vkFreeMemory(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkFreeMemory(VkDevice device,
                                 VkDeviceMemory memory,
                                 const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkFreeMemory(device, memory,
                                                         pAllocator);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkInvalidateMappedMemoryRanges(VkDevice device,
                                uint32_t memoryRangeCount,
                                const VkMappedMemoryRange* pMemoryRanges) {
   return gpu::GetVulkanFunctionPointers()->vkInvalidateMappedMemoryRanges(
       device, memoryRangeCount, pMemoryRanges);
 }
-ALWAYS_INLINE void vkGetBufferMemoryRequirements(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetBufferMemoryRequirements(
     VkDevice device,
     VkBuffer buffer,
     VkMemoryRequirements* pMemoryRequirements) {
   return gpu::GetVulkanFunctionPointers()->vkGetBufferMemoryRequirements(
       device, buffer, pMemoryRequirements);
 }
-ALWAYS_INLINE void vkGetBufferMemoryRequirements2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetBufferMemoryRequirements2(
     VkDevice device,
     const VkBufferMemoryRequirementsInfo2* pInfo,
     VkMemoryRequirements2* pMemoryRequirements) {
   return gpu::GetVulkanFunctionPointers()->vkGetBufferMemoryRequirements2(
       device, pInfo, pMemoryRequirements);
 }
-ALWAYS_INLINE void vkGetDeviceQueue(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetDeviceQueue(VkDevice device,
                                     uint32_t queueFamilyIndex,
                                     uint32_t queueIndex,
                                     VkQueue* pQueue) {
   return gpu::GetVulkanFunctionPointers()->vkGetDeviceQueue(
       device, queueFamilyIndex, queueIndex, pQueue);
 }
-ALWAYS_INLINE void vkGetDeviceQueue2(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetDeviceQueue2(VkDevice device,
                                      const VkDeviceQueueInfo2* pQueueInfo,
                                      VkQueue* pQueue) {
   return gpu::GetVulkanFunctionPointers()->vkGetDeviceQueue2(device, pQueueInfo,
                                                              pQueue);
 }
-ALWAYS_INLINE VkResult vkGetFenceStatus(VkDevice device, VkFence fence) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetFenceStatus(VkDevice device, VkFence fence) {
   return gpu::GetVulkanFunctionPointers()->vkGetFenceStatus(device, fence);
 }
-ALWAYS_INLINE void vkGetImageMemoryRequirements(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetImageMemoryRequirements(
     VkDevice device,
     VkImage image,
     VkMemoryRequirements* pMemoryRequirements) {
   return gpu::GetVulkanFunctionPointers()->vkGetImageMemoryRequirements(
       device, image, pMemoryRequirements);
 }
-ALWAYS_INLINE void vkGetImageMemoryRequirements2(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetImageMemoryRequirements2(
     VkDevice device,
     const VkImageMemoryRequirementsInfo2* pInfo,
     VkMemoryRequirements2* pMemoryRequirements) {
   return gpu::GetVulkanFunctionPointers()->vkGetImageMemoryRequirements2(
       device, pInfo, pMemoryRequirements);
 }
-ALWAYS_INLINE void vkGetImageSubresourceLayout(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkGetImageSubresourceLayout(
     VkDevice device,
     VkImage image,
     const VkImageSubresource* pSubresource,
@@ -1159,7 +1167,7 @@ ALWAYS_INLINE void vkGetImageSubresourceLayout(
   return gpu::GetVulkanFunctionPointers()->vkGetImageSubresourceLayout(
       device, image, pSubresource, pLayout);
 }
-ALWAYS_INLINE VkResult vkMapMemory(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkMapMemory(VkDevice device,
                                    VkDeviceMemory memory,
                                    VkDeviceSize offset,
                                    VkDeviceSize size,
@@ -1168,7 +1176,7 @@ ALWAYS_INLINE VkResult vkMapMemory(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkMapMemory(device, memory, offset,
                                                        size, flags, ppData);
 }
-ALWAYS_INLINE VkResult vkQueueSubmit(VkQueue queue,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkQueueSubmit(VkQueue queue,
                                      uint32_t submitCount,
                                      const VkSubmitInfo* pSubmits,
                                      VkFence fence) {
@@ -1181,7 +1189,7 @@ ALWAYS_INLINE VkResult vkQueueSubmit(VkQueue queue,
   return gpu::GetVulkanFunctionPointers()->vkQueueSubmit(queue, submitCount,
                                                          pSubmits, fence);
 }
-ALWAYS_INLINE VkResult vkQueueWaitIdle(VkQueue queue) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkQueueWaitIdle(VkQueue queue) {
   gpu::VulkanQueueLock* lock = nullptr;
   auto it = gpu::GetVulkanFunctionPointers()->per_queue_lock_map.find(queue);
   if (it != gpu::GetVulkanFunctionPointers()->per_queue_lock_map.end()) {
@@ -1190,21 +1198,21 @@ ALWAYS_INLINE VkResult vkQueueWaitIdle(VkQueue queue) {
   gpu::VulkanQueueAutoLockMaybe auto_lock(lock);
   return gpu::GetVulkanFunctionPointers()->vkQueueWaitIdle(queue);
 }
-ALWAYS_INLINE VkResult vkResetCommandBuffer(VkCommandBuffer commandBuffer,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkResetCommandBuffer(VkCommandBuffer commandBuffer,
                                             VkCommandBufferResetFlags flags) {
   return gpu::GetVulkanFunctionPointers()->vkResetCommandBuffer(commandBuffer,
                                                                 flags);
 }
-ALWAYS_INLINE VkResult vkResetFences(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkResetFences(VkDevice device,
                                      uint32_t fenceCount,
                                      const VkFence* pFences) {
   return gpu::GetVulkanFunctionPointers()->vkResetFences(device, fenceCount,
                                                          pFences);
 }
-ALWAYS_INLINE void vkUnmapMemory(VkDevice device, VkDeviceMemory memory) {
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkUnmapMemory(VkDevice device, VkDeviceMemory memory) {
   return gpu::GetVulkanFunctionPointers()->vkUnmapMemory(device, memory);
 }
-ALWAYS_INLINE void vkUpdateDescriptorSets(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkUpdateDescriptorSets(
     VkDevice device,
     uint32_t descriptorWriteCount,
     const VkWriteDescriptorSet* pDescriptorWrites,
@@ -1214,7 +1222,7 @@ ALWAYS_INLINE void vkUpdateDescriptorSets(
       device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount,
       pDescriptorCopies);
 }
-ALWAYS_INLINE VkResult vkWaitForFences(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkWaitForFences(VkDevice device,
                                        uint32_t fenceCount,
                                        const VkFence* pFences,
                                        VkBool32 waitAll,
@@ -1224,7 +1232,7 @@ ALWAYS_INLINE VkResult vkWaitForFences(VkDevice device,
 }
 
 #if BUILDFLAG(IS_ANDROID)
-ALWAYS_INLINE VkResult vkGetAndroidHardwareBufferPropertiesANDROID(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetAndroidHardwareBufferPropertiesANDROID(
     VkDevice device,
     const struct AHardwareBuffer* buffer,
     VkAndroidHardwareBufferPropertiesANDROID* pProperties) {
@@ -1235,14 +1243,14 @@ ALWAYS_INLINE VkResult vkGetAndroidHardwareBufferPropertiesANDROID(
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_POSIX)
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkGetSemaphoreFdKHR(VkDevice device,
                     const VkSemaphoreGetFdInfoKHR* pGetFdInfo,
                     int* pFd) {
   return gpu::GetVulkanFunctionPointers()->vkGetSemaphoreFdKHR(device,
                                                                pGetFdInfo, pFd);
 }
-ALWAYS_INLINE VkResult vkImportSemaphoreFdKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkImportSemaphoreFdKHR(
     VkDevice device,
     const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo) {
   return gpu::GetVulkanFunctionPointers()->vkImportSemaphoreFdKHR(
@@ -1251,14 +1259,14 @@ ALWAYS_INLINE VkResult vkImportSemaphoreFdKHR(
 #endif  // BUILDFLAG(IS_POSIX)
 
 #if BUILDFLAG(IS_WIN)
-ALWAYS_INLINE VkResult vkGetSemaphoreWin32HandleKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetSemaphoreWin32HandleKHR(
     VkDevice device,
     const VkSemaphoreGetWin32HandleInfoKHR* pGetWin32HandleInfo,
     HANDLE* pHandle) {
   return gpu::GetVulkanFunctionPointers()->vkGetSemaphoreWin32HandleKHR(
       device, pGetWin32HandleInfo, pHandle);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkImportSemaphoreWin32HandleKHR(VkDevice device,
                                 const VkImportSemaphoreWin32HandleInfoKHR*
                                     pImportSemaphoreWin32HandleInfo) {
@@ -1268,13 +1276,13 @@ vkImportSemaphoreWin32HandleKHR(VkDevice device,
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_POSIX)
-ALWAYS_INLINE VkResult vkGetMemoryFdKHR(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetMemoryFdKHR(VkDevice device,
                                         const VkMemoryGetFdInfoKHR* pGetFdInfo,
                                         int* pFd) {
   return gpu::GetVulkanFunctionPointers()->vkGetMemoryFdKHR(device, pGetFdInfo,
                                                             pFd);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkGetMemoryFdPropertiesKHR(VkDevice device,
                            VkExternalMemoryHandleTypeFlagBits handleType,
                            int fd,
@@ -1285,14 +1293,14 @@ vkGetMemoryFdPropertiesKHR(VkDevice device,
 #endif  // BUILDFLAG(IS_POSIX)
 
 #if BUILDFLAG(IS_WIN)
-ALWAYS_INLINE VkResult vkGetMemoryWin32HandleKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetMemoryWin32HandleKHR(
     VkDevice device,
     const VkMemoryGetWin32HandleInfoKHR* pGetWin32HandleInfo,
     HANDLE* pHandle) {
   return gpu::GetVulkanFunctionPointers()->vkGetMemoryWin32HandleKHR(
       device, pGetWin32HandleInfo, pHandle);
 }
-ALWAYS_INLINE VkResult vkGetMemoryWin32HandlePropertiesKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetMemoryWin32HandlePropertiesKHR(
     VkDevice device,
     VkExternalMemoryHandleTypeFlagBits handleType,
     HANDLE handle,
@@ -1303,14 +1311,14 @@ ALWAYS_INLINE VkResult vkGetMemoryWin32HandlePropertiesKHR(
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_FUCHSIA)
-ALWAYS_INLINE VkResult vkImportSemaphoreZirconHandleFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkImportSemaphoreZirconHandleFUCHSIA(
     VkDevice device,
     const VkImportSemaphoreZirconHandleInfoFUCHSIA*
         pImportSemaphoreZirconHandleInfo) {
   return gpu::GetVulkanFunctionPointers()->vkImportSemaphoreZirconHandleFUCHSIA(
       device, pImportSemaphoreZirconHandleInfo);
 }
-ALWAYS_INLINE VkResult vkGetSemaphoreZirconHandleFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetSemaphoreZirconHandleFUCHSIA(
     VkDevice device,
     const VkSemaphoreGetZirconHandleInfoFUCHSIA* pGetZirconHandleInfo,
     zx_handle_t* pZirconHandle) {
@@ -1320,7 +1328,7 @@ ALWAYS_INLINE VkResult vkGetSemaphoreZirconHandleFUCHSIA(
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_FUCHSIA)
-ALWAYS_INLINE VkResult vkGetMemoryZirconHandleFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetMemoryZirconHandleFUCHSIA(
     VkDevice device,
     const VkMemoryGetZirconHandleInfoFUCHSIA* pGetZirconHandleInfo,
     zx_handle_t* pZirconHandle) {
@@ -1330,7 +1338,7 @@ ALWAYS_INLINE VkResult vkGetMemoryZirconHandleFUCHSIA(
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
 #if BUILDFLAG(IS_FUCHSIA)
-ALWAYS_INLINE VkResult vkCreateBufferCollectionFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkCreateBufferCollectionFUCHSIA(
     VkDevice device,
     const VkBufferCollectionCreateInfoFUCHSIA* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
@@ -1338,7 +1346,7 @@ ALWAYS_INLINE VkResult vkCreateBufferCollectionFUCHSIA(
   return gpu::GetVulkanFunctionPointers()->vkCreateBufferCollectionFUCHSIA(
       device, pCreateInfo, pAllocator, pCollection);
 }
-ALWAYS_INLINE VkResult vkSetBufferCollectionImageConstraintsFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkSetBufferCollectionImageConstraintsFUCHSIA(
     VkDevice device,
     VkBufferCollectionFUCHSIA collection,
     const VkImageConstraintsInfoFUCHSIA* pImageConstraintsInfo) {
@@ -1346,14 +1354,14 @@ ALWAYS_INLINE VkResult vkSetBufferCollectionImageConstraintsFUCHSIA(
       ->vkSetBufferCollectionImageConstraintsFUCHSIA(device, collection,
                                                      pImageConstraintsInfo);
 }
-ALWAYS_INLINE VkResult vkGetBufferCollectionPropertiesFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetBufferCollectionPropertiesFUCHSIA(
     VkDevice device,
     VkBufferCollectionFUCHSIA collection,
     VkBufferCollectionPropertiesFUCHSIA* pProperties) {
   return gpu::GetVulkanFunctionPointers()
       ->vkGetBufferCollectionPropertiesFUCHSIA(device, collection, pProperties);
 }
-ALWAYS_INLINE void vkDestroyBufferCollectionFUCHSIA(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroyBufferCollectionFUCHSIA(
     VkDevice device,
     VkBufferCollectionFUCHSIA collection,
     const VkAllocationCallbacks* pAllocator) {
@@ -1362,7 +1370,7 @@ ALWAYS_INLINE void vkDestroyBufferCollectionFUCHSIA(
 }
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
-ALWAYS_INLINE VkResult vkAcquireNextImageKHR(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkAcquireNextImageKHR(VkDevice device,
                                              VkSwapchainKHR swapchain,
                                              uint64_t timeout,
                                              VkSemaphore semaphore,
@@ -1371,7 +1379,7 @@ ALWAYS_INLINE VkResult vkAcquireNextImageKHR(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkAcquireNextImageKHR(
       device, swapchain, timeout, semaphore, fence, pImageIndex);
 }
-ALWAYS_INLINE VkResult
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult
 vkCreateSwapchainKHR(VkDevice device,
                      const VkSwapchainCreateInfoKHR* pCreateInfo,
                      const VkAllocationCallbacks* pAllocator,
@@ -1379,21 +1387,21 @@ vkCreateSwapchainKHR(VkDevice device,
   return gpu::GetVulkanFunctionPointers()->vkCreateSwapchainKHR(
       device, pCreateInfo, pAllocator, pSwapchain);
 }
-ALWAYS_INLINE void vkDestroySwapchainKHR(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE void vkDestroySwapchainKHR(
     VkDevice device,
     VkSwapchainKHR swapchain,
     const VkAllocationCallbacks* pAllocator) {
   return gpu::GetVulkanFunctionPointers()->vkDestroySwapchainKHR(
       device, swapchain, pAllocator);
 }
-ALWAYS_INLINE VkResult vkGetSwapchainImagesKHR(VkDevice device,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetSwapchainImagesKHR(VkDevice device,
                                                VkSwapchainKHR swapchain,
                                                uint32_t* pSwapchainImageCount,
                                                VkImage* pSwapchainImages) {
   return gpu::GetVulkanFunctionPointers()->vkGetSwapchainImagesKHR(
       device, swapchain, pSwapchainImageCount, pSwapchainImages);
 }
-ALWAYS_INLINE VkResult vkQueuePresentKHR(VkQueue queue,
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkQueuePresentKHR(VkQueue queue,
                                          const VkPresentInfoKHR* pPresentInfo) {
   gpu::VulkanQueueLock* lock = nullptr;
   auto it = gpu::GetVulkanFunctionPointers()->per_queue_lock_map.find(queue);
@@ -1406,7 +1414,7 @@ ALWAYS_INLINE VkResult vkQueuePresentKHR(VkQueue queue,
 }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-ALWAYS_INLINE VkResult vkGetImageDrmFormatModifierPropertiesEXT(
+BLINK_STANDALONE_VULKAN_WRAPPER_INLINE VkResult vkGetImageDrmFormatModifierPropertiesEXT(
     VkDevice device,
     VkImage image,
     VkImageDrmFormatModifierPropertiesEXT* pProperties) {
@@ -1414,5 +1422,7 @@ ALWAYS_INLINE VkResult vkGetImageDrmFormatModifierPropertiesEXT(
       ->vkGetImageDrmFormatModifierPropertiesEXT(device, image, pProperties);
 }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+
+#undef BLINK_STANDALONE_VULKAN_WRAPPER_INLINE
 
 #endif  // GPU_VULKAN_VULKAN_FUNCTION_POINTERS_H_

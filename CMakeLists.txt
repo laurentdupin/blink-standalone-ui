@@ -2098,6 +2098,8 @@ blink_standalone_add_v8_compat_dependency(blink_standalone_render_benchmark_skia
     HTML_CSS_RENDERER_ENABLE_WEBGPU=0
     SK_GANESH=1
     SK_VULKAN=1
+    VK_NO_PROTOTYPES=1
+    BLINK_STANDALONE_PRIVATE_VULKAN_FUNCTION_POINTER_WRAPPERS=1
     SK_GPU_WORKAROUNDS_HEADER=\"gpu/config/gpu_driver_bug_workaround_autogen.h\"
     SK_USE_INTERNAL_VULKAN_HEADERS=1
     WTF_IMPLEMENTATION=1
