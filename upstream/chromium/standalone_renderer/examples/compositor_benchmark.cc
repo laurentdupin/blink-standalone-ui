@@ -1,11 +1,16 @@
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <functional>
 #include <initializer_list>
 #include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -183,6 +188,102 @@ bool ParseNonNegativeInt(const std::string& value, int* out) {
   return true;
 }
 
+class RendererThreadHarness {
+ public:
+  RendererThreadHarness() {
+    worker_ = std::thread([this]() { ThreadMain(); });
+  }
+
+  ~RendererThreadHarness() {
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      stop_ = true;
+    }
+    cv_.notify_one();
+    if (worker_.joinable()) {
+      worker_.join();
+    }
+  }
+
+  uint64_t Post(std::function<int()> task) {
+    auto command = std::make_shared<Command>();
+    command->id = next_id_++;
+    command->task = std::move(task);
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      commands_.push(command);
+      completions_[command->id] = command;
+    }
+    cv_.notify_one();
+    return command->id;
+  }
+
+  bool Poll(uint64_t id, int* exit_code, std::string* message) {
+    std::shared_ptr<Command> command;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = completions_.find(id);
+      if (it == completions_.end()) {
+        return false;
+      }
+      command = it->second;
+    }
+    std::lock_guard<std::mutex> lock(command->mutex);
+    if (!command->done) {
+      return false;
+    }
+    if (exit_code) {
+      *exit_code = command->exit_code;
+    }
+    if (message) {
+      *message = command->message;
+    }
+    return true;
+  }
+
+ private:
+  struct Command {
+    uint64_t id = 0;
+    std::function<int()> task;
+    std::mutex mutex;
+    bool done = false;
+    int exit_code = 1;
+    std::string message;
+  };
+
+  void ThreadMain() {
+    for (;;) {
+      std::shared_ptr<Command> command;
+      {
+        std::unique_lock<std::mutex> lock(mutex_);
+        cv_.wait(lock, [this]() { return stop_ || !commands_.empty(); });
+        if (stop_ && commands_.empty()) {
+          return;
+        }
+        command = commands_.front();
+        commands_.pop();
+      }
+
+      const int exit_code = command->task ? command->task() : 1;
+      std::string message;
+      {
+        std::lock_guard<std::mutex> lock(command->mutex);
+        command->exit_code = exit_code;
+        command->message = std::move(message);
+        command->done = true;
+      }
+    }
+  }
+
+  std::mutex mutex_;
+  std::condition_variable cv_;
+  std::queue<std::shared_ptr<Command>> commands_;
+  std::map<uint64_t, std::shared_ptr<Command>> completions_;
+  std::thread worker_;
+  bool stop_ = false;
+  uint64_t next_id_ = 1;
+};
+
 void PrintUsage() {
   std::fprintf(
       stderr,
@@ -249,7 +350,8 @@ void PrintUsage() {
       "[--c-api-d3d12-external-target-backdrop-mask-dsf-resize-smoke] "
       "[--c-api-d3d12-external-target-clean-skip-smoke] "
       "[--c-api-d3d12-external-target-transparent-filter-backdrop-smoke] "
-      "[--c-api-smoke] [--c-api-viewport-resize-smoke] "
+      "[--c-api-smoke] [--c-api-renderer-thread-basic-smoke] "
+      "[--c-api-viewport-resize-smoke] "
       "[--c-api-resource-provider-smoke] "
       "[--c-api-resource-provider-data-url-smoke] "
       "[--c-api-resource-provider-font-smoke] "
@@ -580,6 +682,124 @@ int RunCApiSmoke() {
       output.width, output.height, output.stride, output.pixel_count,
       output.dirty_rect_count, hit_count, pixel_stats.nonwhite_colored,
       pixel_stats.blue_2878d8);
+  return 0;
+}
+
+int RunCApiRendererThreadBasicSmoke() {
+  RendererThreadHarness renderer_thread;
+  const auto post_start = std::chrono::steady_clock::now();
+  const uint64_t command_id = renderer_thread.Post([]() {
+    blink_standalone_renderer_config_t config = {};
+    config.width = 160;
+    config.height = 120;
+    config.device_scale_factor = 1.0f;
+    config.no_script_profile = 1;
+    blink_standalone_renderer_t* renderer = nullptr;
+    blink_standalone_status_code_t status =
+        blink_standalone_renderer_create(&config, &renderer);
+    if (status != BLINK_STANDALONE_STATUS_OK || !renderer) {
+      std::fprintf(stderr,
+                   "c_api_renderer_thread_basic_smoke: create failed "
+                   "status=%d\n",
+                   status);
+      return 1;
+    }
+    const char* html =
+        "<!doctype html><style>body{margin:0}.card{width:80px;height:60px;"
+        "background:#2878d8;color:white}</style><div id='card' class='card' "
+        "data-godot-action='open'>Card</div>";
+    status =
+        blink_standalone_renderer_set_document_html(renderer, html, "", "");
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "c_api_renderer_thread_basic_smoke: set html failed "
+                   "status=%d error=%s\n",
+                   status, blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    status = blink_standalone_renderer_advance_frame(renderer, 0.0);
+    if (status != BLINK_STANDALONE_STATUS_OK) {
+      std::fprintf(stderr,
+                   "c_api_renderer_thread_basic_smoke: advance failed "
+                   "status=%d error=%s\n",
+                   status, blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    blink_standalone_frame_output_t output = {};
+    status = blink_standalone_renderer_get_latest_output(renderer, &output);
+    const FramePixelContentStats pixel_stats =
+        AnalyzeFramePixelContent(output);
+    const size_t hit_count =
+        blink_standalone_renderer_hit_metadata_count(renderer);
+    const bool output_ok =
+        status == BLINK_STANDALONE_STATUS_OK && output.pixels &&
+        output.width == 160 && output.height == 120 &&
+        output.stride >= output.width * 4 && output.pixel_count > 0 &&
+        output.dirty_rect_count == 1 && pixel_stats.blue_2878d8 >= 3000 &&
+        hit_count > 0;
+    if (!output_ok) {
+      std::fprintf(stderr,
+                   "c_api_renderer_thread_basic_smoke: output invalid "
+                   "status=%d size=%dx%d stride=%d bytes=%zu dirty=%zu "
+                   "hits=%zu blue2878d8=%zu nontransparent=%zu error=%s\n",
+                   status, output.width, output.height, output.stride,
+                   output.pixel_count, output.dirty_rect_count, hit_count,
+                   pixel_stats.blue_2878d8, pixel_stats.nontransparent,
+                   blink_standalone_renderer_last_error(renderer));
+      blink_standalone_renderer_release_latest_output(renderer);
+      blink_standalone_renderer_destroy(renderer);
+      return 1;
+    }
+    blink_standalone_renderer_release_latest_output(renderer);
+    blink_standalone_renderer_destroy(renderer);
+    return 0;
+  });
+  const auto post_end = std::chrono::steady_clock::now();
+  const double post_ms =
+      std::chrono::duration<double, std::milli>(post_end - post_start).count();
+
+  int exit_code = 1;
+  std::string message;
+  int polls = 0;
+  double poll_ms = 0.0;
+  const auto wait_start = std::chrono::steady_clock::now();
+  while (true) {
+    const auto poll_start = std::chrono::steady_clock::now();
+    const bool done = renderer_thread.Poll(command_id, &exit_code, &message);
+    const auto poll_end = std::chrono::steady_clock::now();
+    poll_ms +=
+        std::chrono::duration<double, std::milli>(poll_end - poll_start)
+            .count();
+    ++polls;
+    if (done) {
+      break;
+    }
+    if (polls > 5000) {
+      std::fprintf(stderr,
+                   "c_api_renderer_thread_basic_smoke: timed out waiting for "
+                   "command_id=%llu\n",
+                   static_cast<unsigned long long>(command_id));
+      return 1;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  const auto wait_end = std::chrono::steady_clock::now();
+  const double total_ms =
+      std::chrono::duration<double, std::milli>(wait_end - wait_start).count();
+  if (exit_code != 0) {
+    std::fprintf(stderr,
+                 "c_api_renderer_thread_basic_smoke: worker failed "
+                 "exit=%d message=%s\n",
+                 exit_code, message.c_str());
+    return exit_code;
+  }
+  std::printf(
+      "c_api_renderer_thread_basic_smoke: ok command_id=%llu post_ms=%.3f "
+      "polls=%d poll_avg_ms=%.3f total_ms=%.3f\n",
+      static_cast<unsigned long long>(command_id), post_ms, polls,
+      poll_ms / std::max(1, polls), total_ms);
   return 0;
 }
 
@@ -13147,6 +13367,7 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--c-api-smoke" ||
+        arg == "--c-api-renderer-thread-basic-smoke" ||
         arg == "--c-api-viewport-resize-smoke" ||
         arg == "--c-api-resource-provider-smoke" ||
         arg == "--c-api-resource-provider-data-url-smoke" ||
@@ -13219,6 +13440,11 @@ int main(int argc, char** argv) {
         arg == "--typeface-isolation-smoke") {
       c_api_smoke_requested = true;
       break;
+    }
+  }
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--c-api-renderer-thread-basic-smoke") {
+      return RunCApiRendererThreadBasicSmoke();
     }
   }
   if (!c_api_smoke_requested)
@@ -13309,6 +13535,7 @@ int main(int argc, char** argv) {
   bool c_api_d3d12_external_target_clean_skip_smoke = false;
   bool c_api_d3d12_external_target_transparent_filter_backdrop_smoke = false;
   bool c_api_smoke = false;
+  bool c_api_renderer_thread_basic_smoke = false;
   bool c_api_viewport_resize_smoke = false;
   bool c_api_resource_provider_smoke = false;
   bool c_api_resource_provider_data_url_smoke = false;
@@ -13585,6 +13812,8 @@ int main(int argc, char** argv) {
       c_api_d3d12_external_target_transparent_filter_backdrop_smoke = true;
     } else if (arg == "--c-api-smoke") {
       c_api_smoke = true;
+    } else if (arg == "--c-api-renderer-thread-basic-smoke") {
+      c_api_renderer_thread_basic_smoke = true;
     } else if (arg == "--c-api-viewport-resize-smoke") {
       c_api_viewport_resize_smoke = true;
     } else if (arg == "--c-api-resource-provider-smoke") {
@@ -13984,6 +14213,10 @@ int main(int argc, char** argv) {
 
   if (c_api_smoke) {
     return RunCApiSmoke();
+  }
+
+  if (c_api_renderer_thread_basic_smoke) {
+    return RunCApiRendererThreadBasicSmoke();
   }
 
   if (c_api_viewport_resize_smoke) {
