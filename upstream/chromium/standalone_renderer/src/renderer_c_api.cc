@@ -709,6 +709,7 @@ struct DedicatedGpuFrameCommand {
   std::mutex mutex;
   bool done = false;
   blink_standalone_dedicated_thread_gpu_frame_result_t result = {};
+  std::string error;
 };
 
 class DedicatedRendererSequence {
@@ -770,6 +771,8 @@ class DedicatedRendererSequence {
     std::lock_guard<std::mutex> lock(command->mutex);
     if (result) {
       *result = command->result;
+      result->error_message =
+          command->error.empty() ? nullptr : command->error.c_str();
     }
     return true;
   }
@@ -800,35 +803,30 @@ class DedicatedRendererSequence {
     result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
     const auto command_start = std::chrono::steady_clock::now();
 
-    const auto update_start = std::chrono::steady_clock::now();
+    const auto source_start = std::chrono::steady_clock::now();
     blink_standalone_status_code_t status =
-        blink_standalone_renderer_update(inner, request.timeline_time_seconds,
-                                         &result.update_result);
-    const auto update_end = std::chrono::steady_clock::now();
-    result.update_ms =
-        std::chrono::duration<double, std::milli>(update_end - update_start)
+        blink_standalone_renderer_tick_gpu_source_frame_async(
+        inner, &request.source_request, &result.source_result);
+    const auto source_end = std::chrono::steady_clock::now();
+    result.source_tick_ms =
+        std::chrono::duration<double, std::milli>(source_end - source_start)
             .count();
-    if (status != BLINK_STANDALONE_STATUS_OK) {
-      result.status = status;
-      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
-      FinishGpuFrameCommand(command, result, command_start);
-      return;
-    }
-    if (!result.update_result.needs_output) {
+    result.update_result.status = result.source_result.status;
+    result.update_result.needs_output = result.source_result.needs_output;
+    result.update_result.frame_advanced = result.source_result.frame_advanced;
+    result.update_result.frame_skipped_due_to_no_demand =
+        result.source_result.frame_skipped_due_to_no_demand;
+    result.update_result.full_frame_damage = result.source_result.full_frame_damage;
+    result.update_result.damage_rect_count = result.source_result.damage_rect_count;
+    if (status == BLINK_STANDALONE_STATUS_OK &&
+        result.source_result.state ==
+            BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_NO_DEMAND) {
       result.status = BLINK_STANDALONE_STATUS_OK;
       result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED;
       result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND;
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
-
-    const auto source_start = std::chrono::steady_clock::now();
-    status = blink_standalone_renderer_tick_gpu_source_frame_async(
-        inner, &request.source_request, &result.source_result);
-    const auto source_end = std::chrono::steady_clock::now();
-    result.source_tick_ms =
-        std::chrono::duration<double, std::milli>(source_end - source_start)
-            .count();
     if (status != BLINK_STANDALONE_STATUS_OK ||
         result.source_result.state !=
             BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_SOURCE_READY) {
@@ -837,6 +835,9 @@ class DedicatedRendererSequence {
           status == BLINK_STANDALONE_STATUS_PENDING
               ? BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING
               : BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+      if (result.state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED) {
+        SetDedicatedGpuFrameErrorFromRenderer(inner, &result);
+      }
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -853,6 +854,7 @@ class DedicatedRendererSequence {
         result.render_result.request_id == 0) {
       result.status = status;
       result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+      SetDedicatedGpuFrameErrorFromRenderer(inner, &result);
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -888,7 +890,22 @@ class DedicatedRendererSequence {
                     BLINK_STANDALONE_GPU_ASYNC_STATE_COMPLETED
             ? BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED
             : BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+    if (result.state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED) {
+      SetDedicatedGpuFrameErrorFromRenderer(inner, &result);
+    }
     FinishGpuFrameCommand(command, result, command_start);
+  }
+
+  static void SetDedicatedGpuFrameErrorFromRenderer(
+      blink_standalone_renderer* inner,
+      blink_standalone_dedicated_thread_gpu_frame_result_t* result) {
+    if (!inner || !result) {
+      return;
+    }
+    const char* error = blink_standalone_renderer_last_error(inner);
+    if (error && error[0]) {
+      result->error_message = error;
+    }
   }
 
   static void FinishGpuFrameCommand(
@@ -900,6 +917,9 @@ class DedicatedRendererSequence {
         std::chrono::duration<double, std::milli>(command_end - command_start)
             .count();
     std::lock_guard<std::mutex> lock(command->mutex);
+    command->error = result.error_message ? result.error_message : "";
+    result.error_message =
+        command->error.empty() ? nullptr : command->error.c_str();
     command->result = result;
     command->done = true;
   }
@@ -2313,7 +2333,24 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "tick_gpu_source_frame_async failed: expected logical size/DSF does not match renderer viewport");
   }
 
-  if (!HasPendingFrameInput(renderer) &&
+  const bool prepared_source_matches_request =
+      renderer->prepared_gpu_source_frame.valid &&
+      renderer->prepared_gpu_source_frame.backend == backend &&
+      renderer->prepared_gpu_source_frame.request_generation ==
+          request->request_generation &&
+      renderer->prepared_gpu_source_frame.logical_width ==
+          expected_logical_width &&
+      renderer->prepared_gpu_source_frame.logical_height ==
+          expected_logical_height &&
+      std::abs(renderer->prepared_gpu_source_frame.device_scale_factor -
+               expected_dsf) <= 0.001f &&
+      (!request->physical_width ||
+       renderer->prepared_gpu_source_frame.physical_width ==
+           request->physical_width) &&
+      (!request->physical_height ||
+       renderer->prepared_gpu_source_frame.physical_height ==
+           request->physical_height);
+  if (prepared_source_matches_request && !HasPendingFrameInput(renderer) &&
       !renderer->gpu_prepare_required_after_update &&
       !renderer->gpu_source_frame_pending &&
       !renderer->latest_result.needs_output) {

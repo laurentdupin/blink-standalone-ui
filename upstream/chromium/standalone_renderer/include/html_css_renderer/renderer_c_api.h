@@ -565,6 +565,10 @@ typedef struct blink_standalone_dedicated_thread_gpu_frame_result {
   double source_tick_ms;
   double submit_ms;
   double poll_ms;
+  /* Renderer-owned diagnostic string for FAILED results. Valid until the
+   * command is overwritten by a newer command result or the renderer is
+   * destroyed. */
+  const char* error_message;
 } blink_standalone_dedicated_thread_gpu_frame_result_t;
 
 /* Pointers returned in this struct are owned by the renderer and are valid
