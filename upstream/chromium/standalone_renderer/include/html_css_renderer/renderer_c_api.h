@@ -110,6 +110,7 @@ typedef enum blink_standalone_dedicated_thread_command_state {
   BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED = 1,
   BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED = 2,
   BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE = 3,
+  BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED = 4,
 } blink_standalone_dedicated_thread_command_state_t;
 
 typedef enum blink_standalone_gpu_async_flags {
@@ -759,6 +760,15 @@ BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_
     const blink_standalone_dedicated_thread_gpu_frame_request_t* request,
     blink_standalone_dedicated_thread_gpu_frame_result_t* result);
 BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+    blink_standalone_renderer_t* renderer,
+    uint64_t command_id,
+    blink_standalone_dedicated_thread_gpu_frame_result_t* result);
+/* Terminal operation for resize/destruction. Requests cancellation for a
+ * pending dedicated-thread GPU command and waits until Blink no longer keeps
+ * borrowed external GPU targets alive for that command. If the command already
+ * completed, failed, cancelled, or became stale, the terminal state is returned
+ * unchanged. */
+BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
     blink_standalone_renderer_t* renderer,
     uint64_t command_id,
     blink_standalone_dedicated_thread_gpu_frame_result_t* result);

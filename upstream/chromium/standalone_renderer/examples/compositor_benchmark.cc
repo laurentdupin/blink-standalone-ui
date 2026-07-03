@@ -341,6 +341,7 @@ void PrintUsage() {
       "[--c-api-d3d12-renderer-thread-gpu-source-smoke] "
       "[--c-api-d3d12-dedicated-thread-gpu-frame-smoke] "
       "[--c-api-d3d12-dedicated-thread-first-frame-smoke] "
+      "[--c-api-d3d12-dedicated-thread-cancel-smoke] "
       "[--c-api-d3d12-external-target-async-resize-stale-smoke] "
       "[--c-api-d3d12-external-target-click-timing-smoke] "
       "[--c-api-d3d12-external-target-click-resize-smoke] "
@@ -1198,6 +1199,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
                                       false,
                                   bool skip_initial_gpu_target_render = false,
                                   bool dedicated_first_frame_no_mutation =
+                                      false,
+                                  bool dedicated_cancel_before_completion =
                                       false) {
   uint32_t active_width = width;
   uint32_t active_height = height;
@@ -2445,6 +2448,67 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       }
       ++stats->accepted_requests;
       const uint64_t command_id = dedicated_result.command_id;
+      if (dedicated_cancel_before_completion) {
+        int caller_polls = 0;
+        while (dedicated_result.state ==
+                   BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+               caller_polls < 3) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          const auto poll_call_start = std::chrono::steady_clock::now();
+          status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+              renderer, command_id, &dedicated_result);
+          const auto poll_call_end = std::chrono::steady_clock::now();
+          stats->poll_call_ms += std::chrono::duration<double, std::milli>(
+                                     poll_call_end - poll_call_start)
+                                     .count();
+          ++caller_polls;
+          ++stats->poll_iterations;
+          if (status != BLINK_STANDALONE_STATUS_PENDING) {
+            break;
+          }
+        }
+        blink_standalone_dedicated_thread_gpu_frame_result_t cancel_result =
+            {};
+        const auto cancel_start = std::chrono::steady_clock::now();
+        status = blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+            renderer, command_id, &cancel_result);
+        const auto cancel_end = std::chrono::steady_clock::now();
+        const double cancel_ms =
+            std::chrono::duration<double, std::milli>(cancel_end - cancel_start)
+                .count();
+        if (status != BLINK_STANDALONE_STATUS_OK ||
+            (cancel_result.state !=
+                 BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED &&
+             cancel_result.state !=
+                 BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED &&
+             cancel_result.state !=
+                 BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE)) {
+          std::fprintf(stderr,
+                       "%s: dedicated cancel failed frame=%d status=%d "
+                       "command_state=%u render_status=%u render_state=%u "
+                       "command_id=%llu caller_polls=%d cancel_ms=%.3f "
+                       "command_error=%s error=%s\n",
+                       label, iteration, status, cancel_result.state,
+                       cancel_result.render_result.status,
+                       cancel_result.render_result.state,
+                       static_cast<unsigned long long>(command_id),
+                       caller_polls, cancel_ms,
+                       cancel_result.error_message
+                           ? cancel_result.error_message
+                           : "",
+                       blink_standalone_renderer_last_error(renderer));
+          return false;
+        }
+        std::printf(
+            "%s: dedicated_cancel_before_completion command_id=%llu "
+            "state=%u render_state=%u caller_polls=%d "
+            "renderer_polls=%u cancel_ms=%.3f\n",
+            label, static_cast<unsigned long long>(command_id),
+            cancel_result.state, cancel_result.render_result.state,
+            caller_polls, cancel_result.poll_iterations, cancel_ms);
+        ++stats->completed_requests;
+        return true;
+      }
       const auto completion_start = std::chrono::steady_clock::now();
       int caller_polls = 0;
       while (dedicated_result.state ==
@@ -2783,7 +2847,8 @@ int RunCApiExternalGpuTargetSmoke(uint32_t backend,
       return cleanup_and_fail();
     }
     print_async_dirty_stats("dedicated_first_frame_no_mutation", stats);
-    if (!verify_target_pixels("dedicated-first-frame", expected_background,
+    if (!dedicated_cancel_before_completion &&
+        !verify_target_pixels("dedicated-first-frame", expected_background,
                               expected_box, require_full_nontransparent,
                               /*quiet=*/false)) {
       return cleanup_and_fail();
@@ -5493,6 +5558,55 @@ int RunCApiD3D12DedicatedThreadFirstFrameSmoke() {
       /*use_dedicated_thread_gpu_frame_api=*/true,
       /*skip_initial_gpu_target_render=*/true,
       /*dedicated_first_frame_no_mutation=*/true);
+}
+
+int RunCApiD3D12DedicatedThreadCancelSmoke() {
+  return RunCApiExternalGpuTargetSmoke(
+      BLINK_STANDALONE_GPU_BACKEND_D3D12,
+      "c_api_d3d12_dedicated_thread_cancel_smoke",
+      /*require_external_target=*/true,
+      /*expected_background=*/0xff123456u,
+      /*expected_box=*/0xffd06329u,
+      /*background_css=*/"#123456",
+      /*box_css=*/"#d06329",
+      /*width=*/1280,
+      /*height=*/720,
+      /*extra_css=*/"#counter{position:absolute;left:120px;top:12px;"
+                    "font:32px sans-serif;color:white}",
+      /*extra_body=*/"<div id='counter'>fps 0</div>",
+      /*require_full_nontransparent=*/true,
+      /*exercise_update_output_sequence=*/false,
+      /*expect_invalid_vulkan_metadata=*/false,
+      /*repeated_update_output_iterations=*/0,
+      /*exercise_resize_sequence=*/false,
+      /*repeated_click_output_iterations=*/0,
+      /*tolerate_pending_resize_retry=*/false,
+      /*use_button_action_document=*/false,
+      /*exercise_host_pending_resize_boundary=*/false,
+      /*repeated_same_target_render_iterations=*/0,
+      /*repeated_after_resize_render_iterations=*/0,
+      /*omit_d3d12_resource_hint_after_resize=*/false,
+      /*rotate_d3d12_shared_handle_after_resize=*/false,
+      /*alias_d3d12_resource_hint_after_resize=*/false,
+      /*invalidate_d3d12_shared_handle_after_resize=*/false,
+      /*expect_invalid_uncached_d3d12_handle_after_resize=*/false,
+      /*full_viewport_button_document=*/false,
+      /*exercise_rapid_resize_sequence=*/false,
+      /*force_pending_during_rapid_resize=*/false,
+      /*expect_backdrop_filter_metadata=*/false,
+      /*exercise_gpu_backdrop_mask=*/false,
+      /*exercise_clean_skip_sequence=*/false,
+      /*exercise_backdrop_mask_resize_bounce=*/false,
+      /*exercise_dsf_resize_sequence=*/false,
+      /*exercise_async_render_sequence=*/false,
+      /*exercise_async_resize_stale_sequence=*/false,
+      /*async_dirty_timing_iterations=*/0,
+      /*exercise_async_profile_churn_sequence=*/false,
+      /*cooperative_async_dirty_timing_iterations=*/0,
+      /*use_dedicated_thread_gpu_frame_api=*/true,
+      /*skip_initial_gpu_target_render=*/true,
+      /*dedicated_first_frame_no_mutation=*/true,
+      /*dedicated_cancel_before_completion=*/true);
 }
 
 int RunCApiD3D12ExternalTargetAsyncResizeStaleSmoke() {
@@ -13790,6 +13904,7 @@ int main(int argc, char** argv) {
         arg == "--c-api-d3d12-renderer-thread-gpu-source-smoke" ||
         arg == "--c-api-d3d12-dedicated-thread-gpu-frame-smoke" ||
         arg == "--c-api-d3d12-dedicated-thread-first-frame-smoke" ||
+        arg == "--c-api-d3d12-dedicated-thread-cancel-smoke" ||
         arg == "--c-api-d3d12-external-target-async-resize-stale-smoke" ||
         arg == "--c-api-d3d12-external-target-click-timing-smoke" ||
         arg == "--c-api-d3d12-external-target-click-resize-smoke" ||
@@ -13848,6 +13963,10 @@ int main(int argc, char** argv) {
     if (std::string(argv[i]) ==
         "--c-api-d3d12-dedicated-thread-first-frame-smoke") {
       return RunCApiD3D12DedicatedThreadFirstFrameSmoke();
+    }
+    if (std::string(argv[i]) ==
+        "--c-api-d3d12-dedicated-thread-cancel-smoke") {
+      return RunCApiD3D12DedicatedThreadCancelSmoke();
     }
   }
   if (!c_api_smoke_requested)
@@ -13922,6 +14041,7 @@ int main(int argc, char** argv) {
   bool c_api_d3d12_external_target_async_source_tick_smoke = false;
   bool c_api_d3d12_dedicated_thread_gpu_frame_smoke = false;
   bool c_api_d3d12_dedicated_thread_first_frame_smoke = false;
+  bool c_api_d3d12_dedicated_thread_cancel_smoke = false;
   bool c_api_d3d12_external_target_async_resize_stale_smoke = false;
   bool c_api_d3d12_external_target_click_timing_smoke = false;
   bool c_api_d3d12_external_target_click_resize_smoke = false;
@@ -14172,6 +14292,8 @@ int main(int argc, char** argv) {
       c_api_d3d12_dedicated_thread_gpu_frame_smoke = true;
     } else if (arg == "--c-api-d3d12-dedicated-thread-first-frame-smoke") {
       c_api_d3d12_dedicated_thread_first_frame_smoke = true;
+    } else if (arg == "--c-api-d3d12-dedicated-thread-cancel-smoke") {
+      c_api_d3d12_dedicated_thread_cancel_smoke = true;
     } else if (
         arg == "--c-api-d3d12-external-target-async-resize-stale-smoke") {
       c_api_d3d12_external_target_async_resize_stale_smoke = true;
@@ -14565,6 +14687,10 @@ int main(int argc, char** argv) {
 
   if (c_api_d3d12_dedicated_thread_first_frame_smoke) {
     return RunCApiD3D12DedicatedThreadFirstFrameSmoke();
+  }
+
+  if (c_api_d3d12_dedicated_thread_cancel_smoke) {
+    return RunCApiD3D12DedicatedThreadCancelSmoke();
   }
 
   if (c_api_d3d12_external_target_async_resize_stale_smoke) {

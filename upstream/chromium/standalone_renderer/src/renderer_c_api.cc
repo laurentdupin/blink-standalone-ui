@@ -707,7 +707,9 @@ namespace {
 
 struct DedicatedGpuFrameCommand {
   std::mutex mutex;
+  std::condition_variable cv;
   bool done = false;
+  bool cancel_requested = false;
   blink_standalone_dedicated_thread_gpu_frame_result_t result = {};
   std::string error;
 };
@@ -777,6 +779,35 @@ class DedicatedRendererSequence {
     return true;
   }
 
+  bool CancelGpuFrame(
+      uint64_t command_id,
+      blink_standalone_dedicated_thread_gpu_frame_result_t* result) {
+    if (!command_id) {
+      return false;
+    }
+    std::shared_ptr<DedicatedGpuFrameCommand> command;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = gpu_commands_.find(command_id);
+      if (it == gpu_commands_.end()) {
+        return false;
+      }
+      command = it->second;
+    }
+
+    std::unique_lock<std::mutex> lock(command->mutex);
+    if (!command->done) {
+      command->cancel_requested = true;
+      command->cv.wait(lock, [&] { return command->done; });
+    }
+    if (result) {
+      *result = command->result;
+      result->error_message =
+          command->error.empty() ? nullptr : command->error.c_str();
+    }
+    return true;
+  }
+
  private:
   struct SyncCommand {
     std::function<blink_standalone_status_code_t()> task;
@@ -803,6 +834,15 @@ class DedicatedRendererSequence {
     result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
     const auto command_start = std::chrono::steady_clock::now();
 
+    if (DedicatedGpuFrameCancelRequested(command)) {
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+      result.render_result.status = BLINK_STANDALONE_STATUS_OK;
+      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
+    }
+
     const auto source_start = std::chrono::steady_clock::now();
     blink_standalone_status_code_t status =
         blink_standalone_renderer_tick_gpu_source_frame_async(
@@ -824,6 +864,14 @@ class DedicatedRendererSequence {
       result.status = BLINK_STANDALONE_STATUS_OK;
       result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED;
       result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
+    }
+    if (DedicatedGpuFrameCancelRequested(command)) {
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+      result.render_result.status = BLINK_STANDALONE_STATUS_OK;
+      result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -868,6 +916,7 @@ class DedicatedRendererSequence {
                 BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING ||
             result.render_result.state ==
                 BLINK_STANDALONE_GPU_ASYNC_STATE_SUBMITTED) &&
+           !DedicatedGpuFrameCancelRequested(command) &&
            result.poll_iterations < max_polls) {
       std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
       const auto poll_start = std::chrono::steady_clock::now();
@@ -882,6 +931,19 @@ class DedicatedRendererSequence {
           status != BLINK_STANDALONE_STATUS_PENDING) {
         break;
       }
+    }
+    if (result.render_result.state ==
+            BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING ||
+        result.render_result.state ==
+            BLINK_STANDALONE_GPU_ASYNC_STATE_SUBMITTED) {
+      blink_standalone_gpu_async_render_result_t cancel_result = {};
+      blink_standalone_renderer_cancel_gpu_frame_async(inner, request_id,
+                                                       &cancel_result);
+      result.render_result = cancel_result;
+      result.status = BLINK_STANDALONE_STATUS_OK;
+      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+      FinishGpuFrameCommand(command, result, command_start);
+      return;
     }
     result.status = status;
     result.state =
@@ -908,6 +970,12 @@ class DedicatedRendererSequence {
     }
   }
 
+  static bool DedicatedGpuFrameCancelRequested(
+      const std::shared_ptr<DedicatedGpuFrameCommand>& command) {
+    std::lock_guard<std::mutex> lock(command->mutex);
+    return command->cancel_requested;
+  }
+
   static void FinishGpuFrameCommand(
       const std::shared_ptr<DedicatedGpuFrameCommand>& command,
       blink_standalone_dedicated_thread_gpu_frame_result_t result,
@@ -922,6 +990,7 @@ class DedicatedRendererSequence {
         command->error.empty() ? nullptr : command->error.c_str();
     command->result = result;
     command->done = true;
+    command->cv.notify_all();
   }
 
   void ThreadMain() {
@@ -3313,6 +3382,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->request_generation =
       renderer->pending_async_gpu_frame.request_generation;
   renderer->pending_async_gpu_frame.active = false;
+  renderer->gpu_source_frame_pending = false;
+  renderer->gpu_prepare_required_after_update = true;
+  InvalidatePreparedGpuSourceFrame(renderer);
+  renderer->runtime->ReleaseExternalGpuTargetState();
   return BLINK_STANDALONE_STATUS_OK;
 }
 
@@ -3361,6 +3434,35 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   ClearLastError(renderer);
   if (!DedicatedSequenceFor(renderer).PollGpuFrame(command_id, result)) {
+    result->command_id = command_id;
+    result->status = BLINK_STANDALONE_STATUS_OK;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE;
+    return BLINK_STANDALONE_STATUS_OK;
+  }
+  return result->state == BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING
+             ? BLINK_STANDALONE_STATUS_PENDING
+             : static_cast<blink_standalone_status_code_t>(result->status);
+}
+
+extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_cancel_dedicated_thread_gpu_frame(
+    blink_standalone_renderer_t* renderer,
+    uint64_t command_id,
+    blink_standalone_dedicated_thread_gpu_frame_result_t* result) {
+  if (!renderer || !result) {
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "cancel_dedicated_thread_gpu_frame failed: renderer and result are required");
+  }
+  *result = blink_standalone_dedicated_thread_gpu_frame_result_t{};
+  if (!IsDedicatedThreadShell(renderer)) {
+    result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+        "cancel_dedicated_thread_gpu_frame failed: renderer was not created with create_dedicated_thread");
+  }
+  ClearLastError(renderer);
+  if (!DedicatedSequenceFor(renderer).CancelGpuFrame(command_id, result)) {
     result->command_id = command_id;
     result->status = BLINK_STANDALONE_STATUS_OK;
     result->state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE;
