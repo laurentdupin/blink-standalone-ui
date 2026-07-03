@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 def run(command, cwd=None):
@@ -47,6 +48,10 @@ def read_cmake_cache_value(cache_path, name):
   return None
 
 
+def is_truthy_cmake_value(value):
+  return value is not None and value.upper() in ("1", "ON", "TRUE", "YES")
+
+
 def cmake_list(value):
   if not value:
     return []
@@ -76,6 +81,85 @@ def chromium_libcxx_cxx_flags(cache_path):
   for define in defines:
     flags.append("/D" + define)
   return " ".join(flags)
+
+
+def compiler_path_matches(configured, requested):
+  if not configured or not requested:
+    return False
+  configured_path = pathlib.Path(configured).resolve()
+  requested_path = pathlib.Path(requested).resolve()
+  if configured_path == requested_path:
+    return True
+  # CMake can cache cl.exe through a resolved short/long path variant. Keep this
+  # fallback narrow: accepting the same tool name avoids unnecessary rebuilds
+  # while still rejecting stale ChromiumLLVM clang-cl Dawn caches.
+  return configured_path.name.lower() == requested_path.name.lower()
+
+
+def dawn_cmake_cache_matches(cache_path, cc, cxx, cxx_flags):
+  if not cache_path.exists():
+    return False
+  if read_cmake_cache_value(cache_path, "CMAKE_BUILD_TYPE") != "Release":
+    return False
+  if read_cmake_cache_value(cache_path, "CMAKE_MSVC_RUNTIME_LIBRARY") != "MultiThreaded":
+    return False
+  if not is_truthy_cmake_value(read_cmake_cache_value(
+      cache_path, "ABSL_MSVC_STATIC_RUNTIME")):
+    return False
+  if not compiler_path_matches(read_cmake_cache_value(
+      cache_path, "CMAKE_C_COMPILER"), cc):
+    return False
+  if not compiler_path_matches(read_cmake_cache_value(
+      cache_path, "CMAKE_CXX_COMPILER"), cxx):
+    return False
+  cached_cxx_flags = read_cmake_cache_value(cache_path, "CMAKE_CXX_FLAGS") or ""
+  return cached_cxx_flags.strip() == cxx_flags.strip()
+
+
+def ensure_clean_dawn_build_cache(dawn_build_dir, cc, cxx, cxx_flags):
+  cache_path = dawn_build_dir / "CMakeCache.txt"
+  if not cache_path.exists():
+    return
+  if dawn_cmake_cache_matches(cache_path, cc, cxx, cxx_flags):
+    return
+  print("Removing stale Dawn CMake build cache that does not match the "
+        "requested Release /MT native package configuration.", flush=True)
+  shutil.rmtree(dawn_build_dir)
+
+
+def dumpbin_directives(lib_path):
+  dumpbin = shutil.which("dumpbin")
+  if dumpbin:
+    command = [dumpbin, "/directives", str(lib_path)]
+  else:
+    link = shutil.which("link")
+    if not link:
+      raise RuntimeError("dumpbin or link must be available on PATH to validate "
+                         f"Dawn library directives for {lib_path}")
+    command = [link, "/dump", "/directives", str(lib_path)]
+  result = subprocess.run(command, check=True, text=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+  return result.stdout
+
+
+def validate_release_static_msvc_libs(libs):
+  bad = []
+  for lib in libs:
+    directives = dumpbin_directives(lib)
+    if "RuntimeLibrary=MDd_DynamicDebug" in directives:
+      bad.append(f"{lib}: RuntimeLibrary=MDd_DynamicDebug")
+    if "RuntimeLibrary=MD_DynamicRelease" in directives:
+      bad.append(f"{lib}: RuntimeLibrary=MD_DynamicRelease")
+    if "RuntimeLibrary=MTd_StaticDebug" in directives:
+      bad.append(f"{lib}: RuntimeLibrary=MTd_StaticDebug")
+    if "_ITERATOR_DEBUG_LEVEL=2" in directives:
+      bad.append(f"{lib}: _ITERATOR_DEBUG_LEVEL=2")
+    if "/DEFAULTLIB:MSVCRTD" in directives or "/DEFAULTLIB:MSVCPRTD" in directives:
+      bad.append(f"{lib}: debug dynamic CRT default library")
+  if bad:
+    raise RuntimeError(
+        "Dawn D3D12 static closure is not compatible with the native MSVC "
+        "Release /MT package:\n  " + "\n  ".join(bad))
 
 
 def pinned_dawn_revision(repo_root):
@@ -112,8 +196,40 @@ def apply_dawn_patches(repo_root, dawn_dir):
   if not patch_dir.exists():
     return
   for patch_path in sorted(patch_dir.glob("*.patch")):
-    run(git_command(dawn_dir, "apply", "--check", str(patch_path)), cwd=dawn_dir)
-    run(git_command(dawn_dir, "apply", str(patch_path)), cwd=dawn_dir)
+    normalized_patch = normalize_patch_for_git_apply(patch_path)
+    patch_args = ["--ignore-space-change", "--ignore-whitespace",
+                  str(normalized_patch)]
+    try:
+      run(git_command(dawn_dir, "apply", "--check", *patch_args), cwd=dawn_dir)
+      run(git_command(dawn_dir, "apply", *patch_args), cwd=dawn_dir)
+    finally:
+      normalized_patch.unlink(missing_ok=True)
+
+
+def normalize_patch_for_git_apply(patch_path):
+  """Returns a temporary git-apply-safe copy of a whitespace-clean patch file."""
+  lines = patch_path.read_text(encoding="utf-8-sig").splitlines()
+  normalized = []
+  in_hunk = False
+  for line in lines:
+    if line.startswith("diff --git "):
+      in_hunk = False
+      normalized.append(line)
+      continue
+    if line.startswith("@@ "):
+      in_hunk = True
+      normalized.append(line)
+      continue
+    if in_hunk and line == "":
+      normalized.append(" ")
+    else:
+      normalized.append(line)
+  handle = tempfile.NamedTemporaryFile(
+      "w", encoding="utf-8", suffix=".patch", delete=False)
+  with handle:
+    handle.write("\n".join(normalized))
+    handle.write("\n")
+  return pathlib.Path(handle.name)
 
 
 def main():
@@ -148,6 +264,7 @@ def main():
   if not cc or not cxx:
     raise RuntimeError("Could not determine C/C++ compiler; pass --cc and --cxx")
   cxx_flags = chromium_libcxx_cxx_flags(cache_path)
+  ensure_clean_dawn_build_cache(dawn_build_dir, cc, cxx, cxx_flags)
 
   revision = pinned_dawn_revision(repo_root)
   ensure_dawn_checkout(dawn_dir, revision)
@@ -201,6 +318,8 @@ def main():
   ]
   dawn_libs.extend(sorted((dawn_build_dir / "src" / "tint").glob("*.lib")))
   dawn_libs.extend(sorted((dawn_build_dir / "third_party" / "abseil").rglob("*.lib")))
+  if pathlib.Path(cxx).name.lower() == "cl.exe":
+    validate_release_static_msvc_libs(dawn_libs)
   print("dawn_libs=" + ";".join(str(lib) for lib in dawn_libs))
 
 

@@ -41,6 +41,36 @@ function Invoke-Step([string]$Name, [scriptblock]$Body) {
   & $Body
 }
 
+function Assert-ReleaseStaticMsvcLibraries([string]$Name, [string[]]$Libs) {
+  $dumpbin = Require-Command "dumpbin"
+  $bad = New-Object System.Collections.Generic.List[string]
+  foreach ($lib in $Libs) {
+    if (-not (Test-Path $lib)) {
+      continue
+    }
+    $directives = & $dumpbin /directives $lib 2>&1 | Out-String
+    if ($directives.Contains("RuntimeLibrary=MDd_DynamicDebug")) {
+      $bad.Add("${lib}: RuntimeLibrary=MDd_DynamicDebug")
+    }
+    if ($directives.Contains("RuntimeLibrary=MD_DynamicRelease")) {
+      $bad.Add("${lib}: RuntimeLibrary=MD_DynamicRelease")
+    }
+    if ($directives.Contains("RuntimeLibrary=MTd_StaticDebug")) {
+      $bad.Add("${lib}: RuntimeLibrary=MTd_StaticDebug")
+    }
+    if ($directives.Contains("_ITERATOR_DEBUG_LEVEL=2")) {
+      $bad.Add("${lib}: _ITERATOR_DEBUG_LEVEL=2")
+    }
+    if ($directives.Contains("/DEFAULTLIB:MSVCRTD") -or
+        $directives.Contains("/DEFAULTLIB:MSVCPRTD")) {
+      $bad.Add("${lib}: debug dynamic CRT default library")
+    }
+  }
+  if ($bad.Count -gt 0) {
+    throw "$Name is not compatible with the native MSVC Release /MT static package:`n  $($bad -join "`n  ")"
+  }
+}
+
 $ScriptPath = $MyInvocation.MyCommand.Path
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $ScriptPath) "../../../.."))
 Set-Location $RepoRoot
@@ -116,6 +146,8 @@ if (-not ((Test-Path (Join-Path $DawnGenIncludeDir "dawn/webgpu.h")) -and
           (Test-Path $DawnNativeLib))) {
   throw "Missing Dawn D3D12 static closure under '$DawnWorkDirFull'. Re-run without -SkipDawnBuild; first run may need network access for Dawn dependencies."
 }
+$DawnLibs = @(Get-ChildItem $DawnBuildDir -Recurse -Filter *.lib | ForEach-Object { $_.FullName })
+Assert-ReleaseStaticMsvcLibraries "Dawn D3D12 static closure" $DawnLibs
 
 Invoke-Step "Configure native MSVC static C API package build" {
   & $cmake -S $RepoRoot -B $BuildDirFull -G Ninja `
