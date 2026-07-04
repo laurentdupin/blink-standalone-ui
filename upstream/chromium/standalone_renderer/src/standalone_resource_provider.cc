@@ -25,6 +25,7 @@
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
 #include "base/strings/escape.h"
+#include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -90,13 +91,6 @@ CurrentEmbedderProviderAndFlags() {
   base::AutoLock auto_lock(DiagnosticsLock());
   ResourceProviderContextState& state = CurrentContextStateLocked();
   return {state.embedder_provider, state.embedder_provider_flags};
-}
-
-std::string LowerAscii(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(), [](char c) {
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  });
-  return value;
 }
 
 std::string UrlPrefix(const std::string& url) {
@@ -492,11 +486,11 @@ bool IsSvgImageMime(const std::string& mime_type) {
 }
 
 bool IsDataUrl(const std::string& url) {
-  return LowerAscii(url).rfind("data:", 0) == 0;
+  return base::ToLowerASCII(url).rfind("data:", 0) == 0;
 }
 
 StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
-  std::string lower_url = LowerAscii(url);
+  std::string lower_url = base::ToLowerASCII(url);
   constexpr char kPrefix[] = "data:";
   if (lower_url.rfind(kPrefix, 0) != 0) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
@@ -591,7 +585,7 @@ bool IsWithinRoot(const std::filesystem::path& path,
 }
 
 std::string SupportedImageMimeFromExtension(std::string extension) {
-  extension = LowerAscii(std::move(extension));
+  extension = base::ToLowerASCII(std::move(extension));
   if (extension == ".png")
     return "image/png";
   if (extension == ".jpg" || extension == ".jpeg")
@@ -606,7 +600,7 @@ std::string SupportedImageMimeFromExtension(std::string extension) {
 }
 
 StandaloneResourceResult DecodeLocalImage(const std::string& url) {
-  std::string lower_url = LowerAscii(url);
+  std::string lower_url = base::ToLowerASCII(url);
   if (lower_url.rfind("http:", 0) == 0 || lower_url.rfind("https:", 0) == 0) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "HTTP/HTTPS loading is disabled");
