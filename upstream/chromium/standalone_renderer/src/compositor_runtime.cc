@@ -490,21 +490,13 @@ void EnsureStandaloneDiscardableMemoryAllocator() {
     base::DiscardableMemoryAllocator::SetInstance(&allocator);
 }
 
-std::string LowerAscii(std::string value) {
-  return base::ToLowerASCII(value);
-}
-
-std::string TrimAscii(std::string value) {
+std::string TrimAsciiWhitespace(std::string value) {
   base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
   return value;
 }
 
-bool HasUrlScheme(const std::string& value) {
-  return GURL(value).has_scheme();
-}
-
 bool HasHtmlBaseElement(const std::string& html) {
-  const std::string lower = LowerAscii(html);
+  const std::string lower = base::ToLowerASCII(html);
   return lower.find("<base") != std::string::npos;
 }
 
@@ -574,7 +566,7 @@ std::string StandaloneDocumentBaseElementHtml(const std::string& html) {
 std::string RewriteStandaloneCssUrlValueToFileUrl(
     const std::string& raw_value,
     const fs::path& document_base_dir) {
-  std::string value = TrimAscii(raw_value);
+  std::string value = TrimAsciiWhitespace(raw_value);
   if (value.empty() || document_base_dir.empty())
     return raw_value;
 
@@ -588,7 +580,7 @@ std::string RewriteStandaloneCssUrlValueToFileUrl(
 
   if (value.empty() || value.front() == '#' ||
       base::StartsWith(value, "//") || base::StartsWith(value, "/") ||
-      base::StartsWith(value, "\\") || HasUrlScheme(value)) {
+      base::StartsWith(value, "\\") || GURL(value).has_scheme()) {
     return raw_value;
   }
 
@@ -608,7 +600,7 @@ std::string RewriteStandaloneCssUrlsToFileUrls(const std::string& css) {
 
   std::string output;
   output.reserve(css.size());
-  const std::string lower = LowerAscii(css);
+  const std::string lower = base::ToLowerASCII(css);
   size_t search_offset = 0;
   while (true) {
     const size_t url_start = lower.find("url(", search_offset);
@@ -634,7 +626,7 @@ std::string RewriteStandaloneCssUrlsToFileUrls(const std::string& css) {
 std::string RewriteStandaloneHtmlStyleBlocksToFileUrls(
     const std::string& html) {
   std::string output;
-  const std::string lower = LowerAscii(html);
+  const std::string lower = base::ToLowerASCII(html);
   size_t search_offset = 0;
   while (true) {
     const size_t open = lower.find("<style", search_offset);
@@ -663,7 +655,7 @@ std::string RewriteStandaloneHtmlStyleBlocksToFileUrls(
 
 std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
   std::string output;
-  const std::string lower = LowerAscii(html);
+  const std::string lower = base::ToLowerASCII(html);
   size_t search_offset = 0;
   while (true) {
     const size_t open = lower.find("<link", search_offset);
@@ -691,11 +683,6 @@ std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
   return output;
 }
 
-std::string TrimAsciiWhitespace(std::string value) {
-  base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
-  return value;
-}
-
 std::string UnquoteCssUrlToken(std::string value) {
   value = TrimAsciiWhitespace(std::move(value));
   if (value.size() >= 2 &&
@@ -709,7 +696,7 @@ std::string UnquoteCssUrlToken(std::string value) {
 std::string ResolveProviderUrl(const std::string& value,
                                const std::string& base_url) {
   const std::string url = TrimAsciiWhitespace(value);
-  if (url.empty() || HasUrlScheme(url) || base_url.empty())
+  if (url.empty() || GURL(url).has_scheme() || base_url.empty())
     return url;
   const GURL parsed_base(base_url);
   if (parsed_base.is_valid()) {
@@ -725,8 +712,8 @@ std::string ResolveProviderUrl(const std::string& value,
 
 std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
                                                  const std::string& name) {
-  const std::string lower = LowerAscii(tag);
-  const std::string needle = LowerAscii(name);
+  const std::string lower = base::ToLowerASCII(tag);
+  const std::string needle = base::ToLowerASCII(name);
   size_t pos = 0;
   while ((pos = lower.find(needle, pos)) != std::string::npos) {
     if (pos > 0) {
@@ -771,7 +758,7 @@ std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
 std::vector<std::string> ExtractProviderLinkedStylesheetHrefs(
     const std::string& html) {
   std::vector<std::string> hrefs;
-  const std::string lower = LowerAscii(html);
+  const std::string lower = base::ToLowerASCII(html);
   size_t search_offset = 0;
   while (true) {
     const size_t open = lower.find("<link", search_offset);
@@ -783,7 +770,8 @@ std::vector<std::string> ExtractProviderLinkedStylesheetHrefs(
     const std::string tag = html.substr(open, open_end - open + 1);
     const std::optional<std::string> rel = HtmlTagAttributeValue(tag, "rel");
     const std::optional<std::string> href = HtmlTagAttributeValue(tag, "href");
-    if (rel && href && LowerAscii(*rel).find("stylesheet") != std::string::npos)
+    if (rel && href &&
+        base::ToLowerASCII(*rel).find("stylesheet") != std::string::npos)
       hrefs.push_back(*href);
     search_offset = open_end + 1;
   }
@@ -794,7 +782,7 @@ std::optional<std::pair<size_t, size_t>> FindNextCssImportRule(
     const std::string& css,
     size_t offset,
     std::string* import_url) {
-  const std::string lower = LowerAscii(css);
+  const std::string lower = base::ToLowerASCII(css);
   const size_t at_import = lower.find("@import", offset);
   if (at_import == std::string::npos)
     return std::nullopt;
@@ -905,7 +893,7 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
                                     const std::vector<Stylesheet>& stylesheets) {
   const auto extract_style_blocks = [&](const std::string& input) {
     std::string styles;
-    const std::string lower = LowerAscii(input);
+    const std::string lower = base::ToLowerASCII(input);
     size_t search_offset = 0;
     while (true) {
       const size_t open = lower.find("<style", search_offset);
@@ -927,7 +915,7 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
   };
   const auto remove_style_blocks = [&](const std::string& input) {
     std::string output;
-    const std::string lower = LowerAscii(input);
+    const std::string lower = base::ToLowerASCII(input);
     size_t search_offset = 0;
     while (true) {
       const size_t open = lower.find("<style", search_offset);
