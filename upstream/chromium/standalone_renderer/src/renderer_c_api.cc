@@ -27,15 +27,19 @@
 
 #include "base/at_exit.h"
 #include "base/base_switches.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
+#include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/threading/thread.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
@@ -731,36 +735,64 @@ class DedicatedRendererSequence {
 
   blink_standalone_status_code_t CallSync(
       std::function<blink_standalone_status_code_t()> task) {
-    std::lock_guard<std::mutex> execution_lock(execution_mutex_);
-    DrainAsyncCommandsBefore(std::numeric_limits<uint64_t>::max());
-    if (task) {
+    if (!task) {
+      return BLINK_STANDALONE_STATUS_OK;
+    }
+    if (task_runner_->RunsTasksInCurrentSequence()) {
       return task();
     }
-    return BLINK_STANDALONE_STATUS_OK;
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    blink_standalone_status_code_t status = BLINK_STANDALONE_STATUS_OK;
+    const bool posted = task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](std::function<blink_standalone_status_code_t()> task,
+               blink_standalone_status_code_t* status,
+               base::WaitableEvent* done) {
+              *status = task ? task() : BLINK_STANDALONE_STATUS_OK;
+              done->Signal();
+            },
+            std::move(task), &status, &done));
+    if (!posted) {
+      return BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    }
+    done.Wait();
+    return status;
   }
 
   void PostAsync(std::function<void()> task) {
     if (!task) {
       return;
     }
-    std::lock_guard<std::mutex> lock(mutex_);
-    async_commands_.push_back(
-        DedicatedAsyncCommand{next_sequence_order_++, std::move(task)});
+    uint64_t sequence_order = 0;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      sequence_order = next_sequence_order_++;
+      ++pending_async_count_;
+    }
+    const bool posted = task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DedicatedRendererSequence::RunPostedAsyncCommand,
+                       base::Unretained(this), sequence_order,
+                       std::move(task)));
+    if (!posted) {
+      MarkAsyncCommandComplete(sequence_order);
+    }
   }
 
   void DrainPendingAsyncForTesting() {
-    std::lock_guard<std::mutex> execution_lock(execution_mutex_);
-    DrainAsyncCommandsBefore(std::numeric_limits<uint64_t>::max());
+    CallSync([] { return BLINK_STANDALONE_STATUS_OK; });
   }
 
   bool HasPendingAsyncForTesting() {
     std::lock_guard<std::mutex> lock(mutex_);
-    return !async_commands_.empty();
+    return pending_async_count_ != 0;
   }
 
   size_t PendingAsyncCountForTesting() {
     std::lock_guard<std::mutex> lock(mutex_);
-    return async_commands_.size();
+    return pending_async_count_;
   }
 
   uint64_t LastCompletedSequenceOrderForTesting() {
@@ -803,6 +835,20 @@ class DedicatedRendererSequence {
       command->result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
       gpu_commands_[command_id] = command;
     }
+    const bool posted = task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&DedicatedRendererSequence::RunPostedGpuFrameCommand,
+                       base::Unretained(this), command_id, command));
+    if (!posted) {
+      blink_standalone_dedicated_thread_gpu_frame_result_t failed = {};
+      failed.command_id = command_id;
+      failed.status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
+      failed.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
+      failed.error_message =
+          "dedicated GPU frame failed: renderer thread task post failed";
+      FinishGpuFrameCommand(command, failed, std::chrono::steady_clock::now());
+      MarkSequenceCompleted(command->sequence_order);
+    }
     return command_id;
   }
 
@@ -820,22 +866,6 @@ class DedicatedRendererSequence {
         return false;
       }
       command = it->second;
-    }
-    bool run_command = false;
-    {
-      std::lock_guard<std::mutex> lock(command->mutex);
-      if (!command->done && !command->started && !command->cancel_requested) {
-        command->started = true;
-        run_command = true;
-      }
-    }
-    if (run_command) {
-      std::lock_guard<std::mutex> execution_lock(execution_mutex_);
-      DrainAsyncCommandsBefore(command->sequence_order);
-      RunGpuFrameCommand(command->inner, command->request, command, command_id);
-      std::lock_guard<std::mutex> lock(mutex_);
-      last_completed_sequence_order_ =
-          std::max(last_completed_sequence_order_, command->sequence_order);
     }
     std::lock_guard<std::mutex> lock(command->mutex);
     if (result) {
@@ -886,42 +916,53 @@ class DedicatedRendererSequence {
   }
 
  private:
-  struct DedicatedAsyncCommand {
-    uint64_t sequence_order = 0;
-    std::function<void()> task;
-  };
-
-  DedicatedRendererSequence() = default;
+  DedicatedRendererSequence() : thread_("BlinkStandaloneDedicatedRenderer") {
+    base::Thread::Options options(base::MessagePumpType::DEFAULT, 0);
+    CHECK(thread_.StartWithOptions(std::move(options)));
+    task_runner_ = thread_.task_runner();
+    CHECK(task_runner_);
+  }
 
   ~DedicatedRendererSequence() = default;
 
-  void DrainAsyncCommandsBefore(uint64_t sequence_order) {
-    std::vector<DedicatedAsyncCommand> ready;
+  void RunPostedAsyncCommand(uint64_t sequence_order,
+                             std::function<void()> task) {
+    if (task) {
+      task();
+    }
+    MarkAsyncCommandComplete(sequence_order);
+  }
+
+  void MarkAsyncCommandComplete(uint64_t sequence_order) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (pending_async_count_ > 0) {
+      --pending_async_count_;
+    }
+    last_completed_sequence_order_ =
+        std::max(last_completed_sequence_order_, sequence_order);
+  }
+
+  void MarkSequenceCompleted(uint64_t sequence_order) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    last_completed_sequence_order_ =
+        std::max(last_completed_sequence_order_, sequence_order);
+  }
+
+  void RunPostedGpuFrameCommand(
+      uint64_t command_id,
+      const std::shared_ptr<DedicatedGpuFrameCommand>& command) {
+    bool should_run = false;
     {
-      std::lock_guard<std::mutex> lock(mutex_);
-      auto it = async_commands_.begin();
-      while (it != async_commands_.end()) {
-        if (it->sequence_order < sequence_order) {
-          ready.push_back(std::move(*it));
-          it = async_commands_.erase(it);
-        } else {
-          ++it;
-        }
+      std::lock_guard<std::mutex> lock(command->mutex);
+      if (!command->done && !command->cancel_requested) {
+        command->started = true;
+        should_run = true;
       }
     }
-    std::sort(ready.begin(), ready.end(),
-              [](const DedicatedAsyncCommand& a,
-                 const DedicatedAsyncCommand& b) {
-                return a.sequence_order < b.sequence_order;
-              });
-    for (auto& command : ready) {
-      if (command.task) {
-        command.task();
-      }
-      std::lock_guard<std::mutex> lock(mutex_);
-      last_completed_sequence_order_ =
-          std::max(last_completed_sequence_order_, command.sequence_order);
+    if (should_run) {
+      RunGpuFrameCommand(command->inner, command->request, command, command_id);
     }
+    MarkSequenceCompleted(command->sequence_order);
   }
 
   static void RunGpuFrameCommand(
@@ -1209,12 +1250,13 @@ class DedicatedRendererSequence {
   }
 
   std::mutex mutex_;
-  std::mutex execution_mutex_;
-  std::vector<DedicatedAsyncCommand> async_commands_;
   std::map<uint64_t, std::shared_ptr<DedicatedGpuFrameCommand>> gpu_commands_;
+  base::Thread thread_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   uint64_t next_command_id_ = 1;
   uint64_t next_sequence_order_ = 1;
   uint64_t last_completed_sequence_order_ = 0;
+  size_t pending_async_count_ = 0;
 };
 
 bool IsDedicatedThreadShell(const blink_standalone_renderer* renderer) {
@@ -2086,6 +2128,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!renderer_out) {
     return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
   }
+  EnsureStandaloneCApiProcessInitialized();
   *renderer_out = nullptr;
   auto shell = std::make_unique<blink_standalone_renderer>();
   shell->dedicated_thread_shell = true;
