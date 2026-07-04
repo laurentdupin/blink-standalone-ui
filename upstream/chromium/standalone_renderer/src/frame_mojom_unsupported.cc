@@ -16,6 +16,7 @@
 #include "third_party/blink/public/mojom/drag/drag.mojom.h"
 #include "third_party/blink/public/mojom/blob/serialized_blob.mojom-shared-internal.h"
 
+#include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
 #include "mojo/public/cpp/bindings/message.h"
 
 #include <memory>
@@ -140,6 +141,8 @@ Accelerator::Accelerator(uint16_t key_code_in, int32_t modifiers_in)
     : key_code(key_code_in), modifiers(modifiers_in) {}
 Accelerator::~Accelerator() = default;
 size_t Accelerator::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, key_code);
+  seed = mojo::internal::Hash(seed, modifiers);
   return seed;
 }
 void Accelerator::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -151,6 +154,7 @@ FormRendererId::FormRendererId() : id(0) {}
 FormRendererId::FormRendererId(uint64_t id_in) : id(id_in) {}
 FormRendererId::~FormRendererId() = default;
 size_t FormRendererId::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, id);
   return seed;
 }
 void FormRendererId::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -162,6 +166,7 @@ FieldRendererId::FieldRendererId() : id(0) {}
 FieldRendererId::FieldRendererId(uint64_t id_in) : id(id_in) {}
 FieldRendererId::~FieldRendererId() = default;
 size_t FieldRendererId::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, id);
   return seed;
 }
 void FieldRendererId::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -197,6 +202,9 @@ AllowedDragOperations::AllowedDragOperations(bool allow_copy,
       allow_move(allow_move) {}
 AllowedDragOperations::~AllowedDragOperations() = default;
 size_t AllowedDragOperations::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, allow_copy);
+  seed = mojo::internal::Hash(seed, allow_link);
+  seed = mojo::internal::Hash(seed, allow_move);
   return seed;
 }
 void AllowedDragOperations::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -257,6 +265,8 @@ Accelerator::Accelerator(uint16_t key_code_in, int32_t modifiers_in)
     : key_code(key_code_in), modifiers(modifiers_in) {}
 Accelerator::~Accelerator() = default;
 size_t Accelerator::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, key_code);
+  seed = mojo::internal::WTFHash(seed, modifiers);
   return seed;
 }
 void Accelerator::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -268,6 +278,7 @@ FormRendererId::FormRendererId() : id(0) {}
 FormRendererId::FormRendererId(uint64_t id_in) : id(id_in) {}
 FormRendererId::~FormRendererId() = default;
 size_t FormRendererId::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, id);
   return seed;
 }
 void FormRendererId::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -279,6 +290,7 @@ FieldRendererId::FieldRendererId() : id(0) {}
 FieldRendererId::FieldRendererId(uint64_t id_in) : id(id_in) {}
 FieldRendererId::~FieldRendererId() = default;
 size_t FieldRendererId::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, id);
   return seed;
 }
 void FieldRendererId::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -314,6 +326,9 @@ AllowedDragOperations::AllowedDragOperations(bool allow_copy,
       allow_move(allow_move) {}
 AllowedDragOperations::~AllowedDragOperations() = default;
 size_t AllowedDragOperations::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, allow_copy);
+  seed = mojo::internal::WTFHash(seed, allow_link);
+  seed = mojo::internal::WTFHash(seed, allow_move);
   return seed;
 }
 void AllowedDragOperations::WriteIntoTrace(perfetto::TracedValue) const {}
@@ -365,18 +380,26 @@ bool StructTraits<::blink::mojom::blink::UntrustworthyContextMenuParams::
 
 bool StructTraits<::blink::mojom::AllowedDragOperations::DataView,
                   ::blink::mojom::AllowedDragOperationsPtr>::
-    Read(::blink::mojom::AllowedDragOperations::DataView,
+    Read(::blink::mojom::AllowedDragOperations::DataView input,
          ::blink::mojom::AllowedDragOperationsPtr* output) {
-  output->reset();
-  return false;
+  auto result = ::blink::mojom::AllowedDragOperations::New();
+  result->allow_copy = input.allow_copy();
+  result->allow_link = input.allow_link();
+  result->allow_move = input.allow_move();
+  *output = std::move(result);
+  return true;
 }
 
 bool StructTraits<::blink::mojom::blink::AllowedDragOperations::DataView,
                   ::blink::mojom::blink::AllowedDragOperationsPtr>::
-    Read(::blink::mojom::blink::AllowedDragOperations::DataView,
+    Read(::blink::mojom::blink::AllowedDragOperations::DataView input,
          ::blink::mojom::blink::AllowedDragOperationsPtr* output) {
-  output->reset();
-  return false;
+  auto result = ::blink::mojom::blink::AllowedDragOperations::New();
+  result->allow_copy = input.allow_copy();
+  result->allow_link = input.allow_link();
+  result->allow_move = input.allow_move();
+  *output = std::move(result);
+  return true;
 }
 
 bool StructTraits<::blink::mojom::DragData::DataView,
@@ -397,18 +420,30 @@ bool StructTraits<::blink::mojom::blink::DragData::DataView,
 
 bool StructTraits<::blink::mojom::DragEventSourceInfo::DataView,
                   ::blink::mojom::DragEventSourceInfoPtr>::
-    Read(::blink::mojom::DragEventSourceInfo::DataView,
+    Read(::blink::mojom::DragEventSourceInfo::DataView input,
          ::blink::mojom::DragEventSourceInfoPtr* output) {
-  output->reset();
-  return false;
+  bool success = true;
+  auto result = ::blink::mojom::DragEventSourceInfo::New();
+  if (success && !input.ReadLocation(&result->location))
+    success = false;
+  if (success && !input.ReadSource(&result->source))
+    success = false;
+  *output = std::move(result);
+  return success;
 }
 
 bool StructTraits<::blink::mojom::blink::DragEventSourceInfo::DataView,
                   ::blink::mojom::blink::DragEventSourceInfoPtr>::
-    Read(::blink::mojom::blink::DragEventSourceInfo::DataView,
+    Read(::blink::mojom::blink::DragEventSourceInfo::DataView input,
          ::blink::mojom::blink::DragEventSourceInfoPtr* output) {
-  output->reset();
-  return false;
+  bool success = true;
+  auto result = ::blink::mojom::blink::DragEventSourceInfo::New();
+  if (success && !input.ReadLocation(&result->location))
+    success = false;
+  if (success && !input.ReadSource(&result->source))
+    success = false;
+  *output = std::move(result);
+  return success;
 }
 
 }  // namespace mojo

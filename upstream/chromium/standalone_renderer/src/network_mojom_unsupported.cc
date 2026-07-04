@@ -12,6 +12,7 @@
 
 #include "base/feature_list.h"
 #include "base/time/time.h"
+#include "mojo/public/cpp/bindings/lib/wtf_serialization.h"
 #include "openssl/pool.h"
 #include "net/base/features.h"
 #include "net/base/host_port_pair.h"
@@ -770,6 +771,7 @@ EncodedBodyLength::EncodedBodyLength(uint64_t value_in) : value(value_in) {}
 EncodedBodyLength::~EncodedBodyLength() = default;
 
 size_t EncodedBodyLength::Hash(size_t seed) const {
+  seed = mojo::internal::Hash(seed, value);
   return seed;
 }
 
@@ -868,6 +870,7 @@ EncodedBodyLength::EncodedBodyLength(uint64_t value_in) : value(value_in) {}
 EncodedBodyLength::~EncodedBodyLength() = default;
 
 size_t EncodedBodyLength::Hash(size_t seed) const {
+  seed = mojo::internal::WTFHash(seed, value);
   return seed;
 }
 
