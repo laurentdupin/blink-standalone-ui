@@ -10,7 +10,7 @@
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 
 #include "base/notreached.h"
-#include "net/base/url_util.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/mixed_content.mojom-blink.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
@@ -18,7 +18,6 @@
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "url/gurl.h"
-#include "url/url_constants.h"
 
 namespace blink {
 
@@ -59,27 +58,14 @@ bool MixedContentChecker::IsWebSocketAllowed(WorkerFetchContext&,
 
 namespace {
 
-bool StandaloneIsPotentiallyTrustworthyUrl(const KURL& url) {
-  if (url.ProtocolIsData()) {
+bool StandaloneIsUrlPotentiallyTrustworthy(const KURL& url) {
+  if (url.ProtocolIsData())
     return true;
-  }
-
-  const GURL gurl(url);
-  if (gurl.IsAboutBlank() || gurl.IsAboutSrcdoc()) {
-    return true;
-  }
-  if (gurl.SchemeIs(url::kHttpsScheme) || gurl.SchemeIs(url::kWssScheme) ||
-      gurl.SchemeIs(url::kFileScheme)) {
-    return true;
-  }
-  if (net::IsLocalhost(gurl)) {
-    return true;
-  }
-  return SchemeRegistry::SchemeShouldBypassSecureContextCheck(url.Protocol());
+  return network::IsUrlPotentiallyTrustworthy(GURL(url));
 }
 
 bool StandaloneIsInsecureUrl(const KURL& url) {
-  return !StandaloneIsPotentiallyTrustworthyUrl(url);
+  return !StandaloneIsUrlPotentiallyTrustworthy(url);
 }
 
 }  // namespace

@@ -12,6 +12,7 @@
 #include "mojo/public/cpp/bindings/lib/pending_remote_state.h"
 #include "mojo/public/cpp/bindings/connection_group.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "net/base/url_util.h"
 #include "services/network/public/cpp/client_hints.h"
 #include "openssl/pool.h"
 #include "net/cert/x509_certificate.h"
@@ -100,6 +101,7 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/scheme_host_port.h"
+#include "url/url_constants.h"
 #include "url/url_util.h"
 
 extern "C" void CRYPTO_BUFFER_free(CRYPTO_BUFFER*) {}
@@ -206,14 +208,47 @@ AuthChallengeInfo::~AuthChallengeInfo() = default;
 
 namespace network {
 
+namespace {
+
+bool StandaloneIsSchemeConsideredAuthenticated(std::string_view scheme) {
+  for (const std::string& secure_scheme : url::GetSecureSchemes()) {
+    if (secure_scheme == scheme)
+      return true;
+  }
+  for (const std::string& local_scheme : url::GetLocalSchemes()) {
+    if (local_scheme == scheme)
+      return true;
+  }
+  return false;
+}
+
+}  // namespace
+
 bool NoVarySearchHasBooleanParamsMember(std::string_view) {
   return false;
 }
-bool IsOriginPotentiallyTrustworthy(const url::Origin&) {
-  return true;
+bool IsOriginPotentiallyTrustworthy(const url::Origin& origin) {
+  if (origin.opaque())
+    return false;
+  if (GURL::SchemeIsCryptographic(origin.scheme()))
+    return true;
+  if (net::IsLocalhost(origin.GetURL()))
+    return true;
+  if (origin.scheme() == url::kFileScheme)
+    return true;
+  return StandaloneIsSchemeConsideredAuthenticated(origin.scheme());
 }
-bool IsUrlPotentiallyTrustworthy(const GURL&) {
-  return true;
+bool IsUrlPotentiallyTrustworthy(const GURL& url) {
+  if (url.IsAboutBlank() || url.IsAboutSrcdoc())
+    return true;
+  if (url.SchemeIs(url::kDataScheme))
+    return true;
+  const url::Origin origin = url::Origin::Create(url);
+  if (origin.opaque() &&
+      StandaloneIsSchemeConsideredAuthenticated(url.scheme())) {
+    return true;
+  }
+  return IsOriginPotentiallyTrustworthy(origin);
 }
 bool IsSuccessfulStatus(int status) {
   return status >= 200 && status < 300;
