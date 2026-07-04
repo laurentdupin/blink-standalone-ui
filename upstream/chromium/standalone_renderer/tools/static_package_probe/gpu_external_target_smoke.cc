@@ -4,6 +4,7 @@
 
 #include "html_css_renderer/renderer_c_api.h"
 
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -984,8 +985,14 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
       "#glass{position:absolute;left:120px;top:80px;width:360px;height:180px;"
       "border-radius:28px;background:rgba(255,255,255,.25);"
       "backdrop-filter:blur(12px) saturate(160%);"
-      "-webkit-backdrop-filter:blur(12px) saturate(160%)}</style>"
-      "<div id='box'></div><div id='glass'></div>";
+      "-webkit-backdrop-filter:blur(12px) saturate(160%)}#dynamic{position:"
+      "absolute;left:160px;top:300px;width:220px;height:120px;background:"
+      "#1b5e20}#label{position:"
+      "absolute;left:120px;top:300px;color:white;font:700 160px Arial,"
+      "sans-serif;line-height:1}</style><div id='box'></div>"
+      "<style id='live_style'>#dynamic{background:#1b5e20}</style>"
+      "<div id='glass'></div><div id='dynamic'></div>"
+      "<div id='label'>IIIIIIIIII</div>";
   status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
   if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
@@ -1094,6 +1101,26 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
   }
 
   const uint64_t command_id = command_result.command_id;
+  const auto mutation_start = std::chrono::steady_clock::now();
+  status = blink_standalone_renderer_set_element_text(
+      renderer, "live_style", "#dynamic{background:#ff00ff}");
+  const auto mutation_end = std::chrono::steady_clock::now();
+  const double mutation_ms =
+      std::chrono::duration<double, std::milli>(mutation_end - mutation_start)
+          .count();
+  if (status != BLINK_STANDALONE_STATUS_OK || mutation_ms > 10.0) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_mutation_enqueue status=%d elapsed_ms=%.3f "
+                 "error=%s\n",
+                 status, mutation_ms,
+                 blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
   for (uint32_t poll = 0;
        command_result.state ==
                BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
@@ -1199,10 +1226,6 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
     }
   }
 
-  DestroyRenderer(renderer);
-  destroy_mask();
-  DestroyVulkanProbeContext(&context);
-
   if (observed_background != kExpectedBackground || background_pixels == 0 ||
       box_pixels == 0 || nontransparent_pixels == 0) {
     std::fprintf(stderr,
@@ -1212,20 +1235,139 @@ bool RunVulkanDedicatedThreadFirstPublishSmoke() {
                  "nontransparent=%u\n",
                  observed_background, observed_box, background_pixels,
                  box_pixels, nontransparent_pixels);
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
     return false;
   }
 
+  target.common.generation = 2;
+  target.vulkan.current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  mask_target.common.generation = 2;
+  mask_target.vulkan.current_layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  request.timeline_time_seconds = 0.032;
+  request.source_request.request_generation = 2;
+  request.source_request.timeline_time_seconds = request.timeline_time_seconds;
+  request.render_request.request_generation = 2;
+  request.render_request.main_target = target;
+  request.render_request.backdrop_mask_target = mask_target;
+
+  blink_standalone_dedicated_thread_gpu_frame_result_t mutation_result = {};
+  status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+      renderer, &request, &mutation_result);
+  if (status != BLINK_STANDALONE_STATUS_OK &&
+      status != BLINK_STANDALONE_STATUS_PENDING) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "post_vulkan_dedicated_mutation status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+  const uint64_t mutation_command_id = mutation_result.command_id;
+  for (uint32_t poll = 0;
+       mutation_result.state ==
+               BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+       poll < 10000;
+       ++poll) {
+    ::Sleep(1);
+    status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+        renderer, mutation_command_id, &mutation_result);
+    if (status != BLINK_STANDALONE_STATUS_OK &&
+        status != BLINK_STANDALONE_STATUS_PENDING) {
+      break;
+    }
+  }
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      mutation_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED ||
+      mutation_result.render_result.main_target_written == 0 ||
+      mutation_result.render_result.backdrop_mask_written == 0 ||
+      mutation_result.render_result.effect_count == 0) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_mutation_frame status=%d result_status=%u "
+                 "state=%u render_state=%u written=%u mask_written=%u "
+                 "effects=%u error=%s\n",
+                 status, mutation_result.status, mutation_result.state,
+                 mutation_result.render_result.state,
+                 mutation_result.render_result.main_target_written,
+                 mutation_result.render_result.backdrop_mask_written,
+                 mutation_result.render_result.effect_count,
+                 mutation_result.error_message
+                     ? mutation_result.error_message
+                     : blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+  if (!ValidatePublicGpuBackdropEffectTable(
+          renderer, mutation_result.render_result.effect_count,
+          "vulkan_dedicated_mutation")) {
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+  std::vector<uint32_t> mutated_pixels;
+  if (!ReadbackVulkanImage(&context, kPhysicalWidth, kPhysicalHeight,
+                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                           &mutated_pixels, &failure)) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_mutation_readback failure=%s\n",
+                 failure.c_str());
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+  uint32_t mutation_changed_pixels = 0;
+  const uint32_t compare_left = 320;
+  const uint32_t compare_top = 600;
+  const uint32_t compare_right = 760;
+  const uint32_t compare_bottom = 840;
+  for (uint32_t y = compare_top; y < compare_bottom; ++y) {
+    for (uint32_t x = compare_left; x < compare_right; ++x) {
+      const size_t index = static_cast<size_t>(y) * kPhysicalWidth + x;
+      if (pixels[index] != mutated_pixels[index]) {
+        ++mutation_changed_pixels;
+      }
+    }
+  }
+  if (mutation_changed_pixels < 1000) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "vulkan_dedicated_mutation_pixels changed=%u\n",
+                 mutation_changed_pixels);
+    DestroyRenderer(renderer);
+    destroy_mask();
+    DestroyVulkanProbeContext(&context);
+    return false;
+  }
+
+  DestroyRenderer(renderer);
+  destroy_mask();
+  DestroyVulkanProbeContext(&context);
+
   std::printf(
       "static_gpu_external_target_smoke: ok vulkan_dedicated=1 "
-      "main_written=1 mask_written=%u effects=%u size=%ux%u command_id=%llu "
-      "polls=%u elapsed_ms=%.3f source_ms=%.3f submit_ms=%.3f "
-      "poll_ms=%.3f\n",
+      "main_written=1 mask_written=%u effects=%u mutation_changed=%u "
+      "mutation_enqueue_ms=%.3f size=%ux%u command_id=%llu "
+      "mutation_command_id=%llu polls=%u mutation_polls=%u elapsed_ms=%.3f "
+      "source_ms=%.3f submit_ms=%.3f poll_ms=%.3f\n",
       command_result.render_result.backdrop_mask_written,
-      command_result.render_result.effect_count,
+      command_result.render_result.effect_count, mutation_changed_pixels,
+      mutation_ms,
       command_result.render_result.physical_width,
       command_result.render_result.physical_height,
       static_cast<unsigned long long>(command_id),
-      command_result.poll_iterations, command_result.elapsed_ms,
+      static_cast<unsigned long long>(mutation_command_id),
+      command_result.poll_iterations, mutation_result.poll_iterations,
+      command_result.elapsed_ms,
       command_result.source_tick_ms, command_result.submit_ms,
       command_result.poll_ms);
   return true;
@@ -2665,8 +2807,14 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
       "#glass{position:absolute;left:120px;top:80px;width:360px;height:180px;"
       "border-radius:28px;background:rgba(255,255,255,.25);"
       "backdrop-filter:blur(12px) saturate(160%);"
-      "-webkit-backdrop-filter:blur(12px) saturate(160%)}</style>"
-      "<div id='box'></div><div id='glass'></div>";
+      "-webkit-backdrop-filter:blur(12px) saturate(160%)}#dynamic{position:"
+      "absolute;left:160px;top:300px;width:220px;height:120px;background:"
+      "#1b5e20}#label{position:"
+      "absolute;left:120px;top:300px;color:white;font:700 160px Arial,"
+      "sans-serif;line-height:1}</style><div id='box'></div>"
+      "<style id='live_style'>#dynamic{background:#1b5e20}</style>"
+      "<div id='glass'></div><div id='dynamic'></div>"
+      "<div id='label'>IIIIIIIIII</div>";
   status = blink_standalone_renderer_set_document_html(renderer, html, "", "");
   if (status != BLINK_STANDALONE_STATUS_OK) {
     std::fprintf(stderr,
@@ -2780,6 +2928,26 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
   }
 
   const uint64_t command_id = command_result.command_id;
+  const auto mutation_start = std::chrono::steady_clock::now();
+  status = blink_standalone_renderer_set_element_text(
+      renderer, "live_style", "#dynamic{background:#ff00ff}");
+  const auto mutation_end = std::chrono::steady_clock::now();
+  const double mutation_ms =
+      std::chrono::duration<double, std::milli>(mutation_end - mutation_start)
+          .count();
+  if (status != BLINK_STANDALONE_STATUS_OK || mutation_ms > 10.0) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_mutation_enqueue status=%d elapsed_ms=%.3f "
+                 "error=%s\n",
+                 status, mutation_ms,
+                 blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+
   for (uint32_t poll = 0;
        command_result.state ==
                BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
@@ -2903,10 +3071,6 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
 
   const uint32_t observed_background = pixels[8 * kPhysicalWidth + 8];
   const uint32_t observed_box = pixels[40 * kPhysicalWidth + 40];
-  DestroyRenderer(renderer);
-  ::CloseHandle(mask_shared_handle);
-  ::CloseHandle(shared_handle);
-
   if (observed_background != kExpectedBackground ||
       observed_box != kExpectedBox) {
     std::fprintf(stderr,
@@ -2914,27 +3078,152 @@ bool RunD3D12DedicatedThreadFirstPublishSmoke() {
                  "d3d12_dedicated_pixels observed_background=%08x "
                  "observed_box=%08x\n",
                  observed_background, observed_box);
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
     return false;
   }
   if (mask_pixels_written == 0) {
     std::fprintf(stderr,
                  "static_gpu_external_target_smoke: failed "
                  "d3d12_dedicated_mask_empty\n");
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
     return false;
   }
 
+  target.common.generation = 2;
+  target.d3d12.current_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
+  mask_target.common.generation = 2;
+  mask_target.d3d12.current_state = D3D12_RESOURCE_STATE_COPY_SOURCE;
+  request.timeline_time_seconds = 0.032;
+  request.source_request.request_generation = 2;
+  request.source_request.timeline_time_seconds = request.timeline_time_seconds;
+  request.render_request.request_generation = 2;
+  request.render_request.main_target = target;
+  request.render_request.backdrop_mask_target = mask_target;
+
+  blink_standalone_dedicated_thread_gpu_frame_result_t mutation_result = {};
+  status = blink_standalone_renderer_post_dedicated_thread_gpu_frame(
+      renderer, &request, &mutation_result);
+  if (status != BLINK_STANDALONE_STATUS_OK &&
+      status != BLINK_STANDALONE_STATUS_PENDING) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "post_d3d12_dedicated_mutation status=%d error=%s\n",
+                 status, blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+  const uint64_t mutation_command_id = mutation_result.command_id;
+  for (uint32_t poll = 0;
+       mutation_result.state ==
+               BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING &&
+       poll < 10000;
+       ++poll) {
+    ::Sleep(1);
+    status = blink_standalone_renderer_poll_dedicated_thread_gpu_frame(
+        renderer, mutation_command_id, &mutation_result);
+    if (status != BLINK_STANDALONE_STATUS_OK &&
+        status != BLINK_STANDALONE_STATUS_PENDING) {
+      break;
+    }
+  }
+  if (status != BLINK_STANDALONE_STATUS_OK ||
+      mutation_result.state !=
+          BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED ||
+      mutation_result.render_result.main_target_written == 0 ||
+      mutation_result.render_result.backdrop_mask_written == 0 ||
+      mutation_result.render_result.effect_count == 0) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_mutation_frame status=%d result_status=%u "
+                 "state=%u render_state=%u written=%u mask_written=%u "
+                 "effects=%u error=%s\n",
+                 status, mutation_result.status, mutation_result.state,
+                 mutation_result.render_result.state,
+                 mutation_result.render_result.main_target_written,
+                 mutation_result.render_result.backdrop_mask_written,
+                 mutation_result.render_result.effect_count,
+                 mutation_result.error_message
+                     ? mutation_result.error_message
+                     : blink_standalone_renderer_last_error(renderer));
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+  if (!ValidatePublicGpuBackdropEffectTable(
+          renderer, mutation_result.render_result.effect_count,
+          "d3d12_dedicated_mutation")) {
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+
+  std::vector<uint32_t> mutated_pixels;
+  if (!ReadbackD3D12Texture(
+          device.Get(), queue.Get(), target_resource.Get(), kPhysicalWidth,
+          kPhysicalHeight,
+          static_cast<D3D12_RESOURCE_STATES>(target.d3d12.required_final_state),
+          &mutated_pixels, &failure)) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_mutation_readback failure=%s\n",
+                 failure.c_str());
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+  uint32_t mutation_changed_pixels = 0;
+  const uint32_t compare_left = 320;
+  const uint32_t compare_top = 600;
+  const uint32_t compare_right = 760;
+  const uint32_t compare_bottom = 840;
+  for (uint32_t y = compare_top; y < compare_bottom; ++y) {
+    for (uint32_t x = compare_left; x < compare_right; ++x) {
+      const size_t index = static_cast<size_t>(y) * kPhysicalWidth + x;
+      if (pixels[index] != mutated_pixels[index]) {
+        ++mutation_changed_pixels;
+      }
+    }
+  }
+  if (mutation_changed_pixels < 1000) {
+    std::fprintf(stderr,
+                 "static_gpu_external_target_smoke: failed "
+                 "d3d12_dedicated_mutation_pixels changed=%u\n",
+                 mutation_changed_pixels);
+    DestroyRenderer(renderer);
+    ::CloseHandle(mask_shared_handle);
+    ::CloseHandle(shared_handle);
+    return false;
+  }
+
+  DestroyRenderer(renderer);
+  ::CloseHandle(mask_shared_handle);
+  ::CloseHandle(shared_handle);
+
   std::printf(
       "static_gpu_external_target_smoke: ok d3d12_dedicated=1 "
-      "main_written=%u mask_written=%u effects=%u mask_pixels=%u size=%ux%u "
-      "command_id=%llu polls=%u elapsed_ms=%.3f source_ms=%.3f submit_ms=%.3f "
-      "poll_ms=%.3f\n",
+      "main_written=%u mask_written=%u effects=%u mask_pixels=%u "
+      "mutation_changed=%u mutation_enqueue_ms=%.3f size=%ux%u "
+      "command_id=%llu mutation_command_id=%llu polls=%u mutation_polls=%u "
+      "elapsed_ms=%.3f source_ms=%.3f submit_ms=%.3f poll_ms=%.3f\n",
       command_result.render_result.main_target_written,
       command_result.render_result.backdrop_mask_written,
       command_result.render_result.effect_count, mask_pixels_written,
+      mutation_changed_pixels, mutation_ms,
       command_result.render_result.physical_width,
       command_result.render_result.physical_height,
       static_cast<unsigned long long>(command_id),
-      command_result.poll_iterations, command_result.elapsed_ms,
+      static_cast<unsigned long long>(mutation_command_id),
+      command_result.poll_iterations, mutation_result.poll_iterations,
+      command_result.elapsed_ms,
       command_result.source_tick_ms, command_result.submit_ms,
       command_result.poll_ms);
   return true;

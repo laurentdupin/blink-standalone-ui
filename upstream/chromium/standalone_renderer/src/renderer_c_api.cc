@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -713,6 +714,7 @@ struct DedicatedGpuFrameCommand {
   std::condition_variable cv;
   blink_standalone_renderer* inner = nullptr;
   blink_standalone_dedicated_thread_gpu_frame_request_t request = {};
+  uint64_t sequence_order = 0;
   bool started = false;
   bool done = false;
   bool cancel_requested = false;
@@ -729,6 +731,8 @@ class DedicatedRendererSequence {
 
   blink_standalone_status_code_t CallSync(
       std::function<blink_standalone_status_code_t()> task) {
+    std::lock_guard<std::mutex> execution_lock(execution_mutex_);
+    DrainAsyncCommandsBefore(std::numeric_limits<uint64_t>::max());
     if (task) {
       return task();
     }
@@ -736,9 +740,51 @@ class DedicatedRendererSequence {
   }
 
   void PostAsync(std::function<void()> task) {
-    if (task) {
-      task();
+    if (!task) {
+      return;
     }
+    std::lock_guard<std::mutex> lock(mutex_);
+    async_commands_.push_back(
+        DedicatedAsyncCommand{next_sequence_order_++, std::move(task)});
+  }
+
+  void DrainPendingAsyncForTesting() {
+    std::lock_guard<std::mutex> execution_lock(execution_mutex_);
+    DrainAsyncCommandsBefore(std::numeric_limits<uint64_t>::max());
+  }
+
+  bool HasPendingAsyncForTesting() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return !async_commands_.empty();
+  }
+
+  size_t PendingAsyncCountForTesting() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return async_commands_.size();
+  }
+
+  uint64_t LastCompletedSequenceOrderForTesting() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return last_completed_sequence_order_;
+  }
+
+  uint64_t NextSequenceOrderForTesting() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return next_sequence_order_;
+  }
+
+  bool CommandSequenceOrderForTesting(uint64_t command_id,
+                                      uint64_t* sequence_order) {
+    if (!sequence_order) {
+      return false;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = gpu_commands_.find(command_id);
+    if (it == gpu_commands_.end()) {
+      return false;
+    }
+    *sequence_order = it->second->sequence_order;
+    return true;
   }
 
   uint64_t PostGpuFrame(
@@ -751,6 +797,7 @@ class DedicatedRendererSequence {
       command_id = next_command_id_++;
       command->inner = inner;
       command->request = request;
+      command->sequence_order = next_sequence_order_++;
       command->result.command_id = command_id;
       command->result.status = BLINK_STANDALONE_STATUS_PENDING;
       command->result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
@@ -783,7 +830,12 @@ class DedicatedRendererSequence {
       }
     }
     if (run_command) {
+      std::lock_guard<std::mutex> execution_lock(execution_mutex_);
+      DrainAsyncCommandsBefore(command->sequence_order);
       RunGpuFrameCommand(command->inner, command->request, command, command_id);
+      std::lock_guard<std::mutex> lock(mutex_);
+      last_completed_sequence_order_ =
+          std::max(last_completed_sequence_order_, command->sequence_order);
     }
     std::lock_guard<std::mutex> lock(command->mutex);
     if (result) {
@@ -834,9 +886,43 @@ class DedicatedRendererSequence {
   }
 
  private:
+  struct DedicatedAsyncCommand {
+    uint64_t sequence_order = 0;
+    std::function<void()> task;
+  };
+
   DedicatedRendererSequence() = default;
 
   ~DedicatedRendererSequence() = default;
+
+  void DrainAsyncCommandsBefore(uint64_t sequence_order) {
+    std::vector<DedicatedAsyncCommand> ready;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      auto it = async_commands_.begin();
+      while (it != async_commands_.end()) {
+        if (it->sequence_order < sequence_order) {
+          ready.push_back(std::move(*it));
+          it = async_commands_.erase(it);
+        } else {
+          ++it;
+        }
+      }
+    }
+    std::sort(ready.begin(), ready.end(),
+              [](const DedicatedAsyncCommand& a,
+                 const DedicatedAsyncCommand& b) {
+                return a.sequence_order < b.sequence_order;
+              });
+    for (auto& command : ready) {
+      if (command.task) {
+        command.task();
+      }
+      std::lock_guard<std::mutex> lock(mutex_);
+      last_completed_sequence_order_ =
+          std::max(last_completed_sequence_order_, command.sequence_order);
+    }
+  }
 
   static void RunGpuFrameCommand(
       blink_standalone_renderer* inner,
@@ -1123,8 +1209,12 @@ class DedicatedRendererSequence {
   }
 
   std::mutex mutex_;
+  std::mutex execution_mutex_;
+  std::vector<DedicatedAsyncCommand> async_commands_;
   std::map<uint64_t, std::shared_ptr<DedicatedGpuFrameCommand>> gpu_commands_;
   uint64_t next_command_id_ = 1;
+  uint64_t next_sequence_order_ = 1;
+  uint64_t last_completed_sequence_order_ = 0;
 };
 
 bool IsDedicatedThreadShell(const blink_standalone_renderer* renderer) {
