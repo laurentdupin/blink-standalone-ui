@@ -1,7 +1,6 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
 #include <limits>
 #include <cstring>
@@ -30,6 +29,9 @@
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
+#include "url/third_party/mozilla/url_parse.h"
+#include "url/url_constants.h"
+#include "url/url_util.h"
 
 namespace html_css_renderer {
 namespace {
@@ -486,25 +488,26 @@ bool IsSvgImageMime(const std::string& mime_type) {
 }
 
 bool IsDataUrl(const std::string& url) {
-  return base::ToLowerASCII(url).rfind("data:", 0) == 0;
+  return url::FindAndCompareScheme(url, url::kDataScheme, nullptr);
 }
 
 StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
-  std::string lower_url = base::ToLowerASCII(url);
-  constexpr char kPrefix[] = "data:";
-  if (lower_url.rfind(kPrefix, 0) != 0) {
+  url::Component scheme;
+  if (!url::FindAndCompareScheme(url, url::kDataScheme, &scheme)) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "not a data URL");
   }
 
-  size_t comma = url.find(',');
-  if (comma == std::string::npos || comma == 0) {
+  std::string lower_url = base::ToLowerASCII(url);
+  const size_t metadata_start = static_cast<size_t>(scheme.end() + 1);
+  size_t comma = url.find(',', metadata_start);
+  if (comma == std::string::npos || comma < metadata_start) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "malformed data URL");
   }
 
   std::string metadata =
-      lower_url.substr(sizeof(kPrefix) - 1, comma - (sizeof(kPrefix) - 1));
+      lower_url.substr(metadata_start, comma - metadata_start);
   std::string mime_type = SupportedImageMimeFromMetadata(metadata);
   if (mime_type.empty()) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
@@ -562,15 +565,12 @@ std::string StripFileUrlPrefix(const std::string& url) {
 }
 
 bool HasScheme(const std::string& url) {
-  size_t colon = url.find(':');
-  if (colon == std::string::npos || colon == 0)
-    return false;
-  for (size_t i = 0; i < colon; ++i) {
-    unsigned char c = static_cast<unsigned char>(url[i]);
-    if (!std::isalnum(c) && url[i] != '+' && url[i] != '-' && url[i] != '.')
-      return false;
-  }
-  return true;
+  url::Component scheme;
+  return url::ExtractScheme(url, &scheme);
+}
+
+bool SchemeIs(const std::string& url, const char* lower_ascii_scheme) {
+  return url::FindAndCompareScheme(url, lower_ascii_scheme, nullptr);
 }
 
 bool IsWithinRoot(const std::filesystem::path& path,
@@ -600,12 +600,11 @@ std::string SupportedImageMimeFromExtension(std::string extension) {
 }
 
 StandaloneResourceResult DecodeLocalImage(const std::string& url) {
-  std::string lower_url = base::ToLowerASCII(url);
-  if (lower_url.rfind("http:", 0) == 0 || lower_url.rfind("https:", 0) == 0) {
+  if (SchemeIs(url, url::kHttpScheme) || SchemeIs(url, url::kHttpsScheme)) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "HTTP/HTTPS loading is disabled");
   }
-  if (HasScheme(lower_url) && lower_url.rfind("file:", 0) != 0) {
+  if (HasScheme(url) && !SchemeIs(url, url::kFileScheme)) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "only data:, file:, and document-relative resources are enabled");
   }
@@ -633,7 +632,7 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
                          "document base path cannot be resolved");
     }
   }
-  const bool is_file_url = lower_url.rfind("file:", 0) == 0;
+  const bool is_file_url = SchemeIs(url, url::kFileScheme);
   std::filesystem::path candidate =
       is_file_url ? std::filesystem::path(StripFileUrlPrefix(url))
                   : std::filesystem::path(url);
