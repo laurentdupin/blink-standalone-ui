@@ -16,6 +16,7 @@
 #include "base/check.h"
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "html_css_renderer/standalone_resource_provider.h"
@@ -404,11 +405,10 @@ std::vector<std::string> ParseLengthPrefixedStringList(
       break;
     }
     size_t length = 0;
-    for (size_t i = offset; i < separator; ++i) {
-      if (!base::IsAsciiDigit(serialized[i])) {
-        return values;
-      }
-      length = length * 10 + static_cast<size_t>(serialized[i] - '0');
+    if (!base::StringToSizeT(
+            std::string_view(serialized).substr(offset, separator - offset),
+            &length)) {
+      return values;
     }
     const size_t value_begin = separator + 1;
     if (value_begin + length > serialized.size()) {
