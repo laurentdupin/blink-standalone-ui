@@ -348,8 +348,7 @@ bool ViolatesNoScriptProfile(const std::string& html) {
 const char* AttributeNoScriptViolationReason(const std::string& attribute_name,
                                              const std::string& value) {
   const std::string lower_name = base::ToLowerASCII(attribute_name);
-  if (lower_name.size() >= 2 && lower_name[0] == 'o' &&
-      lower_name[1] == 'n') {
+  if (base::StartsWith(lower_name, "on")) {
     return "inline event handler";
   }
   return ContainsJavaScriptScheme(base::ToLowerASCII(value)) ? "javascript URL"
