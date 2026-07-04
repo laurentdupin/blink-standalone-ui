@@ -11,6 +11,7 @@
 
 #include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
+#include "url/third_party/mozilla/url_parse.h"
 #include "url/origin.h"
 
 namespace network {
@@ -62,11 +63,51 @@ std::optional<OriginWithPossibleWildcards> OriginWithPossibleWildcards::Parse(
 }
 
 std::string OriginWithPossibleWildcards::Serialize() const {
-  return {};
+  std::string result = csp_source.scheme + "://";
+  if (csp_source.is_host_wildcard) {
+    result += "*.";
+  }
+  result += csp_source.host;
+  if (!csp_source.is_port_wildcard &&
+      csp_source.port != url::PORT_UNSPECIFIED) {
+    result += ":" + std::to_string(csp_source.port);
+  }
+  return result;
 }
 
-bool OriginWithPossibleWildcards::DoesMatchOrigin(const url::Origin&) const {
-  return false;
+bool OriginWithPossibleWildcards::DoesMatchOrigin(
+    const url::Origin& match_origin) const {
+  if (match_origin.opaque()) {
+    return false;
+  }
+  if (csp_source.scheme != match_origin.scheme()) {
+    return false;
+  }
+
+  const std::string& source_host = csp_source.host;
+  const std::string& match_host = match_origin.host();
+  if (csp_source.is_host_wildcard) {
+    if (source_host.empty() || match_host.size() <= source_host.size()) {
+      return false;
+    }
+    const size_t suffix_start = match_host.size() - source_host.size();
+    if (match_host.compare(suffix_start, source_host.size(), source_host) !=
+        0) {
+      return false;
+    }
+    if (match_host[suffix_start - 1] != '.') {
+      return false;
+    }
+  } else if (source_host != match_host) {
+    return false;
+  }
+
+  if (!csp_source.is_port_wildcard &&
+      csp_source.port != url::PORT_UNSPECIFIED &&
+      csp_source.port != match_origin.port()) {
+    return false;
+  }
+  return true;
 }
 
 bool operator==(const OriginWithPossibleWildcards&,
@@ -111,10 +152,10 @@ ParsedPermissionsPolicyDeclaration::~ParsedPermissionsPolicyDeclaration() =
 
 bool ParsedPermissionsPolicyDeclaration::Contains(
     const url::Origin& origin) const {
-  if (matches_all_origins) {
+  if (matches_all_origins || (matches_opaque_src && origin.opaque())) {
     return true;
   }
-  if (self_if_matches && *self_if_matches == origin) {
+  if (origin == self_if_matches) {
     return true;
   }
   for (const auto& allowed_origin : allowed_origins) {
@@ -143,12 +184,27 @@ PermissionsPolicy::Allowlist& PermissionsPolicy::Allowlist::operator=(
     Allowlist&&) noexcept = default;
 
 PermissionsPolicy::Allowlist PermissionsPolicy::Allowlist::FromDeclaration(
-    const network::ParsedPermissionsPolicyDeclaration&) {
-  return Allowlist();
+    const network::ParsedPermissionsPolicyDeclaration& parsed_declaration) {
+  PermissionsPolicy::Allowlist result;
+  if (parsed_declaration.self_if_matches) {
+    result.AddSelf(parsed_declaration.self_if_matches);
+  }
+  if (parsed_declaration.matches_all_origins) {
+    result.AddAll();
+  }
+  if (parsed_declaration.matches_opaque_src) {
+    result.AddOpaqueSrc();
+  }
+  for (const auto& origin : parsed_declaration.allowed_origins) {
+    result.Add(origin);
+  }
+  return result;
 }
 
 void PermissionsPolicy::Allowlist::Add(
-    const network::OriginWithPossibleWildcards&) {}
+    const network::OriginWithPossibleWildcards& origin) {
+  allowed_origins_.push_back(origin);
+}
 
 void PermissionsPolicy::Allowlist::AddSelf(std::optional<url::Origin> self) {
   self_if_matches_ = std::move(self);
@@ -162,8 +218,19 @@ void PermissionsPolicy::Allowlist::AddOpaqueSrc() {
   matches_opaque_src_ = true;
 }
 
-bool PermissionsPolicy::Allowlist::Contains(const url::Origin&) const {
-  return false;
+bool PermissionsPolicy::Allowlist::Contains(const url::Origin& origin) const {
+  if (origin == self_if_matches_) {
+    return true;
+  }
+  for (const auto& allowed_origin : allowed_origins_) {
+    if (allowed_origin.DoesMatchOrigin(origin)) {
+      return true;
+    }
+  }
+  if (origin.opaque()) {
+    return matches_opaque_src_;
+  }
+  return matches_all_origins_;
 }
 
 const std::optional<url::Origin>&
