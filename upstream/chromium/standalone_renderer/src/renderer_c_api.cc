@@ -36,6 +36,8 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
@@ -616,8 +618,9 @@ class CApiResourceProvider final
     }
     if (result.status != html_css_renderer::StandaloneResourceStatus::kSuccess &&
         result.error.empty()) {
-      result.error = "C resource provider returned " +
-                     std::string(html_css_renderer::ToString(result.status));
+      result.error = base::StrCat(
+          {"C resource provider returned ",
+           html_css_renderer::ToString(result.status)});
     }
     return result;
   }
@@ -1399,14 +1402,14 @@ blink_standalone_status_code_t RequireLiveElement(
   }
   if (!element_id || !*element_id) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(api_name) +
-                            " failed: element id is required");
+                        base::StrCat(
+                            {api_name, " failed: element id is required"}));
   }
   if (!HasLiveElement(renderer, element_id)) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(api_name) + " failed: element id '" +
-                            element_id +
-                            "' not found in current live document");
+                        base::StrCat(
+                            {api_name, " failed: element id '", element_id,
+                             "' not found in current live document"}));
   }
   return BLINK_STANDALONE_STATUS_OK;
 }
@@ -1498,8 +1501,7 @@ std::string SerializeSelectedValuesForMutation(const char* const* values,
   for (size_t i = 0; i < value_count; ++i) {
     const char* value = values[i] ? values[i] : "";
     const size_t length = std::strlen(value);
-    serialized += std::to_string(length);
-    serialized += ':';
+    base::StrAppend(&serialized, {base::NumberToString(length), ":"});
     serialized.append(value, length);
   }
   return serialized;
@@ -1528,8 +1530,8 @@ blink_standalone_status_code_t QueueDomMutation(
   if (!renderer || ((type != html_css_renderer::DomMutationType::kBlurFocusedElement) &&
                     (!element_id || !*element_id))) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(DomMutationTypeName(type)) +
-                            " failed: element id is required");
+                        base::StrCat({DomMutationTypeName(type),
+                                      " failed: element id is required"}));
   }
   const std::string mutation_name = name ? name : "";
   const std::string mutation_value = value ? value : "";
@@ -1537,9 +1539,10 @@ blink_standalone_status_code_t QueueDomMutation(
        type == html_css_renderer::DomMutationType::kRemoveAttribute) &&
       mutation_name.empty()) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(DomMutationTypeName(type)) +
-                            " failed: attribute name is required for element id '" +
-                            ElementLabel(element_id) + "'");
+                        base::StrCat(
+                            {DomMutationTypeName(type),
+                             " failed: attribute name is required for element id '",
+                             ElementLabel(element_id), "'"}));
   }
   if (renderer->no_script_profile) {
     const bool html_fragment_mutation =
@@ -1565,8 +1568,8 @@ blink_standalone_status_code_t QueueDomMutation(
     if (reason[0] != '\0') {
       return SetLastError(
           renderer, BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
-          std::string(DomMutationTypeName(type)) +
-              " rejected by no-script profile: " + reason);
+          base::StrCat({DomMutationTypeName(type),
+                        " rejected by no-script profile: ", reason}));
     }
   }
   html_css_renderer::DomMutation mutation;
@@ -1587,23 +1590,25 @@ blink_standalone_status_code_t PostDedicatedDomMutation(
     const char* value) {
   if (!IsDedicatedThreadShell(renderer) || !renderer->dedicated_thread_inner) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(DomMutationTypeName(type)) +
-                            " failed: dedicated renderer is not available");
+                        base::StrCat(
+                            {DomMutationTypeName(type),
+                             " failed: dedicated renderer is not available"}));
   }
   if (type != html_css_renderer::DomMutationType::kBlurFocusedElement &&
       (!element_id || !*element_id)) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(DomMutationTypeName(type)) +
-                            " failed: element id is required");
+                        base::StrCat({DomMutationTypeName(type),
+                                      " failed: element id is required"}));
   }
   const std::string mutation_name = name ? name : "";
   if ((type == html_css_renderer::DomMutationType::kSetAttribute ||
        type == html_css_renderer::DomMutationType::kRemoveAttribute) &&
       mutation_name.empty()) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string(DomMutationTypeName(type)) +
-                            " failed: attribute name is required for element id '" +
-                            ElementLabel(element_id) + "'");
+                        base::StrCat(
+                            {DomMutationTypeName(type),
+                             " failed: attribute name is required for element id '",
+                             ElementLabel(element_id), "'"}));
   }
   std::string element_id_copy = element_id ? element_id : "";
   std::string name_copy = mutation_name;
@@ -2052,8 +2057,8 @@ blink_standalone_status_code_t AdvanceGpuFrameForBackend(
         renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
         renderer->latest_result.gpu_frame_failure.empty()
             ? "render_to_gpu_target failed: GPU frame output was not produced"
-            : "render_to_gpu_target failed: " +
-                  renderer->latest_result.gpu_frame_failure);
+            : base::StrCat({"render_to_gpu_target failed: ",
+                            renderer->latest_result.gpu_frame_failure}));
   }
   return BLINK_STANDALONE_STATUS_OK;
 }
@@ -2176,8 +2181,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     renderer->html.clear();
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_NO_SCRIPT_REJECTED,
-        std::string("set_document_html rejected by no-script profile: ") +
-            NoScriptViolationReason(html));
+        base::StrCat({"set_document_html rejected by no-script profile: ",
+                      NoScriptViolationReason(html)}));
   }
   renderer->resource_root = resource_root ? resource_root : "";
   renderer->resource_base_path = resource_base_path ? resource_base_path : "";
@@ -2315,8 +2320,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
       renderer->latest_result.raw_frame_failure.empty()
           ? "advance_frame failed: raw frame output was not produced"
-          : "advance_frame failed: " +
-                renderer->latest_result.raw_frame_failure);
+          : base::StrCat({"advance_frame failed: ",
+                          renderer->latest_result.raw_frame_failure}));
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API int blink_standalone_renderer_needs_begin_frame(
@@ -3154,8 +3159,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                                       &validation_failure)) {
       result->status = BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
       return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                          "render_gpu_backdrop_frame failed: " +
-                              validation_failure);
+                          base::StrCat(
+                              {"render_gpu_backdrop_frame failed: ",
+                               validation_failure}));
     }
     html_css_renderer::ExternalVulkanImageTarget mask_target;
     mask_target.vk_image = request->backdrop_mask_target.vulkan.vk_image;
@@ -4145,9 +4151,10 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       FindFormControlEntry(renderer, element_id);
   if (!entry) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                        std::string("set_form_control_value failed: element id '") +
-                            ElementLabel(element_id) +
-                            "' is not a supported form control");
+                        base::StrCat(
+                            {"set_form_control_value failed: element id '",
+                             ElementLabel(element_id),
+                             "' is not a supported form control"}));
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetFormControlValue,
@@ -4174,9 +4181,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!entry || !IsCheckboxOrRadio(*entry)) {
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-        std::string("set_form_control_checked failed: element id '") +
-            ElementLabel(element_id) +
-            "' is not a checkbox or radio form control");
+        base::StrCat({"set_form_control_checked failed: element id '",
+                      ElementLabel(element_id),
+                      "' is not a checkbox or radio form control"}));
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetFormControlChecked,
@@ -4217,8 +4224,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!entry || !IsSelect(*entry)) {
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-        std::string("set_form_control_selected_values failed: element id '") +
-            ElementLabel(element_id) + "' is not a select form control");
+        base::StrCat(
+            {"set_form_control_selected_values failed: element id '",
+             ElementLabel(element_id), "' is not a select form control"}));
   }
   return QueueDomMutation(
       renderer,
@@ -4264,7 +4272,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     unsigned start,
     unsigned end) {
   const std::string range =
-      std::to_string(start) + ":" + std::to_string(end);
+      base::StrCat({base::NumberToString(start), ":", base::NumberToString(end)});
   if (IsDedicatedThreadShell(renderer)) {
     return PostDedicatedDomMutation(
         renderer, html_css_renderer::DomMutationType::kSetTextSelection,
@@ -4281,9 +4289,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!entry || !IsTextSelectionCapable(*entry)) {
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-        std::string("set_text_selection failed: element id '") +
-            ElementLabel(element_id) +
-            "' is not a text-editable form control");
+        base::StrCat({"set_text_selection failed: element id '",
+                      ElementLabel(element_id),
+                      "' is not a text-editable form control"}));
   }
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetTextSelection,
@@ -4423,8 +4431,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
                       BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                      std::string("get_form_control_state_by_id failed: element id '") +
-                          element_id + "' is not a known form control");
+                      base::StrCat(
+                          {"get_form_control_state_by_id failed: element id '",
+                           element_id, "' is not a known form control"}));
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_form_control_selected_value_count(
@@ -4468,8 +4477,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
   return SetLastError(const_cast<blink_standalone_renderer_t*>(renderer),
                       BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                      std::string("get_form_control_selected_value failed: element id '") +
-                          element_id + "' is not a known form control");
+                      base::StrCat(
+                          {"get_form_control_selected_value failed: element id '",
+                           element_id, "' is not a known form control"}));
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_backdrop_filter_region_count(
