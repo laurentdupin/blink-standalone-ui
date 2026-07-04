@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "media/base/mime_util.h"
 #include "media/filters/stream_parser_factory.h"
@@ -81,20 +82,10 @@ void SplitCodecs(std::string_view codecs,
     return;
   }
   codecs_out->clear();
-  size_t start = 0;
-  while (start <= codecs.size()) {
-    size_t comma = codecs.find(',', start);
-    std::string codec(codecs.substr(
-        start, comma == std::string_view::npos ? std::string_view::npos
-                                               : comma - start));
-    base::TrimWhitespaceASCII(codec, base::TRIM_ALL, &codec);
-    if (!codec.empty()) {
-      codecs_out->push_back(std::move(codec));
-    }
-    if (comma == std::string_view::npos) {
-      break;
-    }
-    start = comma + 1;
+  for (std::string_view codec :
+       base::SplitStringPiece(codecs, ",", base::TRIM_WHITESPACE,
+                              base::SPLIT_WANT_NONEMPTY)) {
+    codecs_out->emplace_back(codec);
   }
 }
 
