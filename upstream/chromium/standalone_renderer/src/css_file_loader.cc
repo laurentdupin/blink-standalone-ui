@@ -2,9 +2,10 @@
 
 #include <algorithm>
 #include <cctype>
-#include <fstream>
-#include <iterator>
 #include <system_error>
+
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 
 namespace html_css_renderer {
 namespace {
@@ -12,12 +13,11 @@ namespace {
 namespace fs = std::filesystem;
 
 std::optional<std::string> ReadTextFile(const fs::path& path) {
-  std::ifstream file(path, std::ios::binary);
-  if (!file) {
+  std::string contents;
+  if (!base::ReadFileToString(base::FilePath(path.native()), &contents)) {
     return std::nullopt;
   }
-  return std::string(std::istreambuf_iterator<char>(file),
-                     std::istreambuf_iterator<char>());
+  return contents;
 }
 
 std::string ToLowerAscii(std::string value) {
