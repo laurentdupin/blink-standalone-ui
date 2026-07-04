@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -406,7 +405,7 @@ std::vector<std::string> ParseLengthPrefixedStringList(
     }
     size_t length = 0;
     for (size_t i = offset; i < separator; ++i) {
-      if (!std::isdigit(static_cast<unsigned char>(serialized[i]))) {
+      if (!base::IsAsciiDigit(serialized[i])) {
         return values;
       }
       length = length * 10 + static_cast<size_t>(serialized[i] - '0');
@@ -513,8 +512,8 @@ std::string PercentEncodeFileUrlPath(std::string path) {
   constexpr char kHex[] = "0123456789ABCDEF";
   for (const unsigned char c : path) {
     const bool safe =
-        std::isalnum(c) || c == '/' || c == ':' || c == '-' || c == '_' ||
-        c == '.' || c == '~';
+        base::IsAsciiAlphaNumeric(c) || c == '/' || c == ':' || c == '-' ||
+        c == '_' || c == '.' || c == '~';
     if (safe) {
       output.push_back(static_cast<char>(c));
       continue;
@@ -743,15 +742,13 @@ std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
   while ((pos = lower.find(needle, pos)) != std::string::npos) {
     if (pos > 0) {
       const char prev = lower[pos - 1];
-      if (std::isalnum(static_cast<unsigned char>(prev)) || prev == '-' ||
-          prev == '_') {
+      if (base::IsAsciiAlphaNumeric(prev) || prev == '-' || prev == '_') {
         pos += needle.size();
         continue;
       }
     }
     size_t cursor = pos + needle.size();
-    while (cursor < lower.size() &&
-           std::isspace(static_cast<unsigned char>(lower[cursor]))) {
+    while (cursor < lower.size() && base::IsAsciiWhitespace(lower[cursor])) {
       ++cursor;
     }
     if (cursor >= lower.size() || lower[cursor] != '=') {
@@ -759,8 +756,7 @@ std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
       continue;
     }
     ++cursor;
-    while (cursor < lower.size() &&
-           std::isspace(static_cast<unsigned char>(lower[cursor]))) {
+    while (cursor < lower.size() && base::IsAsciiWhitespace(lower[cursor])) {
       ++cursor;
     }
     if (cursor >= tag.size())
@@ -774,7 +770,7 @@ std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
     }
     size_t end = cursor;
     while (end < tag.size() &&
-           !std::isspace(static_cast<unsigned char>(tag[end])) &&
+           !base::IsAsciiWhitespace(tag[end]) &&
            tag[end] != '>') {
       ++end;
     }
@@ -814,8 +810,7 @@ std::optional<std::pair<size_t, size_t>> FindNextCssImportRule(
   if (at_import == std::string::npos)
     return std::nullopt;
   size_t cursor = at_import + 7;
-  while (cursor < css.size() &&
-         std::isspace(static_cast<unsigned char>(css[cursor]))) {
+  while (cursor < css.size() && base::IsAsciiWhitespace(css[cursor])) {
     ++cursor;
   }
   std::string url;
