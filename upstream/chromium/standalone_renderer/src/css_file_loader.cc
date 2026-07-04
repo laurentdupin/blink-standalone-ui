@@ -1,7 +1,6 @@
 #include "html_css_renderer/css_file_loader.h"
 
 #include <algorithm>
-#include <cctype>
 #include <system_error>
 
 #include "base/files/file_path.h"
@@ -58,8 +57,7 @@ fs::path NormalizePathForPolicy(const fs::path& path) {
 }
 
 bool IsImportBoundary(char c) {
-  const unsigned char value = static_cast<unsigned char>(c);
-  return !std::isalnum(value) && c != '_' && c != '-';
+  return !base::IsAsciiAlphaNumeric(c) && c != '_' && c != '-';
 }
 
 void AppendUnsupportedCssImportRuleDiagnostic(
@@ -145,8 +143,7 @@ ParsedImportRule ParseImportRule(const std::string& rule) {
   const std::string lower = base::ToLowerASCII(rule);
   size_t cursor = 7;
   auto skip_space = [&]() {
-    while (cursor < rule.size() &&
-           std::isspace(static_cast<unsigned char>(rule[cursor]))) {
+    while (cursor < rule.size() && base::IsAsciiWhitespace(rule[cursor])) {
       ++cursor;
     }
   };
@@ -442,7 +439,7 @@ std::optional<std::string> ExtractAttribute(const std::string& tag,
   }
   size_t value_end = value_start;
   while (value_end < tag.size() &&
-         !std::isspace(static_cast<unsigned char>(tag[value_end])) &&
+         !base::IsAsciiWhitespace(tag[value_end]) &&
          tag[value_end] != '>') {
     ++value_end;
   }
@@ -525,7 +522,7 @@ bool CssContainsImportRule(const std::string& css) {
     if (lower.compare(i, 7, "@import") == 0) {
       const size_t after = i + 7;
       if (after >= lower.size() ||
-          !std::isalnum(static_cast<unsigned char>(lower[after]))) {
+          !base::IsAsciiAlphaNumeric(lower[after])) {
         return true;
       }
     }
