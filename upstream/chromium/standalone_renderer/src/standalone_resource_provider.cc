@@ -1,6 +1,7 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 
 #include <algorithm>
+#include <span>
 #include <filesystem>
 #include <limits>
 #include <cstring>
@@ -23,6 +24,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
 #include "net/base/data_url.h"
@@ -111,10 +113,7 @@ uint32_t ReadLittleEndian24(const uint8_t* data) {
 }
 
 uint32_t ReadLittleEndian32(const uint8_t* data) {
-  return static_cast<uint32_t>(data[0]) |
-         (static_cast<uint32_t>(data[1]) << 8) |
-         (static_cast<uint32_t>(data[2]) << 16) |
-         (static_cast<uint32_t>(data[3]) << 24);
+  return base::U32FromLittleEndian(std::span<const uint8_t, 4>(data, 4));
 }
 
 bool BytesEqual(const std::vector<uint8_t>& bytes,
