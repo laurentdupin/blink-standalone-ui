@@ -25,11 +25,6 @@ std::optional<std::string> ReadTextFile(const fs::path& path) {
   return contents;
 }
 
-std::string TrimAscii(std::string value) {
-  base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
-  return value;
-}
-
 std::optional<fs::path> ResolveLocalPathReference(
     const std::string& reference,
     const fs::path& base_dir) {
@@ -202,7 +197,8 @@ ParsedImportRule ParseImportRule(const std::string& rule) {
         parsed.reason = "unterminated url() import";
         return parsed;
       }
-      parsed.href = TrimAscii(rule.substr(href_start, cursor - href_start));
+      parsed.href = std::string(base::TrimWhitespaceASCII(
+          rule.substr(href_start, cursor - href_start), base::TRIM_ALL));
       value_end = ++cursor;
     }
   } else if (cursor < rule.size() &&
@@ -227,17 +223,19 @@ ParsedImportRule ParseImportRule(const std::string& rule) {
     return parsed;
   }
 
-  std::string tail = TrimAscii(rule.substr(value_end));
+  std::string tail = std::string(
+      base::TrimWhitespaceASCII(rule.substr(value_end), base::TRIM_ALL));
   if (!tail.empty() && tail.back() == ';') {
     tail.pop_back();
-    tail = TrimAscii(tail);
+    tail = std::string(base::TrimWhitespaceASCII(tail, base::TRIM_ALL));
   }
   if (!tail.empty()) {
     parsed.reason = "media-qualified imports are not expanded";
     parsed.href.clear();
     return parsed;
   }
-  parsed.href = TrimAscii(parsed.href);
+  parsed.href =
+      std::string(base::TrimWhitespaceASCII(parsed.href, base::TRIM_ALL));
   if (parsed.href.empty()) {
     parsed.reason = "empty import URL";
     return parsed;
@@ -397,7 +395,8 @@ std::optional<std::string> ExpandAndRebaseStylesheetFile(
 std::string RebaseCssUrlValue(const std::string& raw_value,
                               const fs::path& stylesheet_dir,
                               const fs::path& document_base_dir) {
-  std::string value = TrimAscii(raw_value);
+  std::string value =
+      std::string(base::TrimWhitespaceASCII(raw_value, base::TRIM_ALL));
   if (value.empty()) {
     return raw_value;
   }
