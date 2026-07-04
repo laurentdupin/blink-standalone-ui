@@ -22,15 +22,7 @@ std::optional<std::string> ReadTextFile(const fs::path& path) {
 }
 
 std::string TrimAscii(std::string value) {
-  auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
-  value.erase(value.begin(),
-              std::find_if(value.begin(), value.end(), [&](char c) {
-                return !is_space(static_cast<unsigned char>(c));
-              }));
-  value.erase(std::find_if(value.rbegin(), value.rend(), [&](char c) {
-                return !is_space(static_cast<unsigned char>(c));
-              }).base(),
-              value.end());
+  base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
   return value;
 }
 
