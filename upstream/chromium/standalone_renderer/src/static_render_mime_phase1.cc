@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "media/base/mime_util.h"
 #include "media/filters/stream_parser_factory.h"
+#include "net/base/mime_util.h"
 
 namespace blink {
 
@@ -58,9 +59,11 @@ bool IsWasmMIMEType(std::string_view) {
 }
 
 bool IsJSONMimeType(std::string_view mime_type) {
-  const std::string mime = NormalizeMime(mime_type);
-  return mime == "application/json" || mime == "text/json" ||
-         base::EndsWith(mime, "+json", base::CompareCase::SENSITIVE);
+  return net::MatchesMimeType("application/json", mime_type) ||
+         net::MatchesMimeType("text/json", mime_type) ||
+         net::MatchesMimeType(
+             "*+json", mime_type,
+             net::MimeTypeValidationLevel::kWildcardSlashAndTokens);
 }
 
 bool IsSupportedMimeType(std::string_view mime_type) {
