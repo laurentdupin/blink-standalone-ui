@@ -309,9 +309,8 @@ std::string ExpandImportsAndRebaseCssSegments(
       AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
                                               parsed.reason, diagnostics);
     } else {
-      const std::string lower_href = base::ToLowerASCII(parsed.href);
       const fs::path import_ref = fs::path(parsed.href);
-      if (lower_href.rfind("//", 0) == 0 || HasUrlScheme(parsed.href) ||
+      if (base::StartsWith(parsed.href, "//") || HasUrlScheme(parsed.href) ||
           import_ref.is_absolute()) {
         AppendUnsupportedCssImportRuleDiagnostic(
             stylesheet_path.string(), "non-local import URL", diagnostics);
@@ -399,8 +398,8 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
   }
   const std::string lower = base::ToLowerASCII(value);
   if (value.empty() || value.front() == '#' ||
-      lower.rfind("//", 0) == 0 || lower.rfind("/", 0) == 0 ||
-      lower.rfind("\\", 0) == 0 || HasUrlScheme(value)) {
+      base::StartsWith(lower, "//") || base::StartsWith(lower, "/") ||
+      base::StartsWith(lower, "\\") || HasUrlScheme(value)) {
     return raw_value;
   }
   const fs::path absolute_url =
@@ -591,8 +590,9 @@ void AddLocalLinkedStylesheetsForDocument(
     std::vector<std::string>* diagnostics) {
   const fs::path base_dir = fs::absolute(html_path).parent_path();
   for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
-    if (href.find("://") != std::string::npos || href.rfind("//", 0) == 0 ||
-        href.rfind("data:", 0) == 0 || href.empty()) {
+    if (href.find("://") != std::string::npos ||
+        base::StartsWith(href, "//") || base::StartsWith(href, "data:") ||
+        href.empty()) {
       continue;
     }
     fs::path css_path = fs::path(href);
