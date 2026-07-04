@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -813,7 +814,7 @@ std::optional<std::pair<size_t, size_t>> FindNextCssImportRule(
     ++cursor;
   }
   std::string url;
-  if (lower.compare(cursor, 4, "url(") == 0) {
+  if (base::StartsWith(std::string_view(lower).substr(cursor), "url(")) {
     cursor += 4;
     const size_t close = css.find(')', cursor);
     if (close == std::string::npos)
