@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -18,6 +17,7 @@
 #include "base/check.h"
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/time/time.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "html_css_renderer/typeface_resource_registry.h"
 #include "html_css_renderer/vulkan_window_host.h"
@@ -393,8 +393,6 @@ namespace {
 
 namespace fs = std::filesystem;
 
-using RuntimeClock = std::chrono::steady_clock;
-
 std::vector<std::string> ParseLengthPrefixedStringList(
     const std::string& serialized) {
   std::vector<std::string> values;
@@ -421,9 +419,8 @@ std::vector<std::string> ParseLengthPrefixedStringList(
   return values;
 }
 
-double RuntimeElapsedMs(RuntimeClock::time_point start,
-                        RuntimeClock::time_point end) {
-  return std::chrono::duration<double, std::milli>(end - start).count();
+double RuntimeElapsedMs(base::TimeTicks start, base::TimeTicks end) {
+  return (end - start).InMillisecondsF();
 }
 
 class StandaloneLocalDiscardableMemory final : public base::DiscardableMemory {
@@ -1294,8 +1291,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       return MakeSkippedFrameResult(input);
 
     const bool frame_input_requires_output = FrameInputRequiresOutput(input);
-    const auto runtime_start = RuntimeClock::now();
-    const auto apply_state_start = RuntimeClock::now();
+    const auto runtime_start = base::TimeTicks::Now();
+    const auto apply_state_start = base::TimeTicks::Now();
     ApplyInput(input);
     ApplyResourceProviderContext();
     if (native_window_config_) {
@@ -1427,9 +1424,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
           mutation.name.c_str(), mutation.value.c_str());
     }
     result.timing.runtime_apply_state_ms =
-        RuntimeElapsedMs(apply_state_start, RuntimeClock::now());
+        RuntimeElapsedMs(apply_state_start, base::TimeTicks::Now());
 
-    const auto bridge_query_start = RuntimeClock::now();
+    const auto bridge_query_start = base::TimeTicks::Now();
     result.paint_clean =
         probe::StandaloneBlinkLiveFrameBridgeReachesPaintCleanForStandaloneRenderer(
             probe_html.c_str()) != 0;
@@ -1614,9 +1611,9 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         probe::StandaloneBlinkLiveFrameBridgeTimingRebuiltForAttributesForStandaloneRenderer(
             probe_html.c_str()) != 0;
     result.timing.runtime_bridge_query_ms =
-        RuntimeElapsedMs(bridge_query_start, RuntimeClock::now());
+        RuntimeElapsedMs(bridge_query_start, base::TimeTicks::Now());
     result.timing.runtime_total_ms =
-        RuntimeElapsedMs(runtime_start, RuntimeClock::now());
+        RuntimeElapsedMs(runtime_start, base::TimeTicks::Now());
     last_frame_result_ = result;
     return result;
   }
