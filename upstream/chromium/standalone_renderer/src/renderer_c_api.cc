@@ -1439,7 +1439,7 @@ bool IsCheckboxOrRadio(const html_css_renderer::FormControlEntry& entry) {
 }
 
 bool IsSelect(const html_css_renderer::FormControlEntry& entry) {
-  return base::ToLowerASCII(entry.tag_name) == "select";
+  return base::EqualsCaseInsensitiveASCII(entry.tag_name, "select");
 }
 
 bool IsTextSelectionCapable(const html_css_renderer::FormControlEntry& entry) {
