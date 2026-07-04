@@ -1557,6 +1557,48 @@ blink_standalone_status_code_t QueueDomMutation(
   return BLINK_STANDALONE_STATUS_OK;
 }
 
+blink_standalone_status_code_t PostDedicatedDomMutation(
+    blink_standalone_renderer_t* renderer,
+    html_css_renderer::DomMutationType type,
+    const char* element_id,
+    const char* name,
+    const char* value) {
+  if (!IsDedicatedThreadShell(renderer) || !renderer->dedicated_thread_inner) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(DomMutationTypeName(type)) +
+                            " failed: dedicated renderer is not available");
+  }
+  if (type != html_css_renderer::DomMutationType::kBlurFocusedElement &&
+      (!element_id || !*element_id)) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(DomMutationTypeName(type)) +
+                            " failed: element id is required");
+  }
+  const std::string mutation_name = name ? name : "";
+  if ((type == html_css_renderer::DomMutationType::kSetAttribute ||
+       type == html_css_renderer::DomMutationType::kRemoveAttribute) &&
+      mutation_name.empty()) {
+    return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                        std::string(DomMutationTypeName(type)) +
+                            " failed: attribute name is required for element id '" +
+                            ElementLabel(element_id) + "'");
+  }
+  std::string element_id_copy = element_id ? element_id : "";
+  std::string name_copy = mutation_name;
+  std::string value_copy = value ? value : "";
+  blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
+  ClearLastError(renderer);
+  DedicatedSequenceFor(renderer).PostAsync(
+      [inner, type, element_id_copy = std::move(element_id_copy),
+       name_copy = std::move(name_copy),
+       value_copy = std::move(value_copy)]() mutable {
+        ClearLastError(inner);
+        QueueDomMutation(inner, type, element_id_copy.c_str(),
+                         name_copy.c_str(), value_copy.c_str());
+      });
+  return BLINK_STANDALONE_STATUS_OK;
+}
+
 void AppendMouseEvent(blink_standalone_renderer* renderer,
                       html_css_renderer::MouseInputEventType type,
                       float x,
@@ -3853,23 +3895,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                           "set_element_text failed: UTF-8 text is required");
     }
-    std::string element_id_copy = element_id ? element_id : "";
-    std::string text_copy = utf8_text;
-    blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
-    if (!inner || element_id_copy.empty()) {
-      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
-                          "set_element_text failed: element id is required");
-    }
-    ClearLastError(renderer);
-    DedicatedSequenceFor(renderer).PostAsync(
-        [inner, element_id_copy = std::move(element_id_copy),
-         text_copy = std::move(text_copy)]() mutable {
-          ClearLastError(inner);
-          QueueDomMutation(inner,
-                           html_css_renderer::DomMutationType::kSetTextContent,
-                           element_id_copy.c_str(), "", text_copy.c_str());
-        });
-    return BLINK_STANDALONE_STATUS_OK;
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetTextContent,
+        element_id, "", utf8_text);
   }
   if (!utf8_text) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
@@ -3895,6 +3923,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
         "set_element_inner_html failed: HTML fragment is required");
   }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetElementInnerHtml,
+        element_id, "", html_fragment);
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "set_element_inner_html", element_id);
@@ -3912,6 +3945,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!html_fragment) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "set_body_inner_html failed: HTML fragment is required");
+  }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetBodyInnerHtml,
+        "__body__", "", html_fragment);
   }
   ClearLastError(renderer);
   if (!renderer || !renderer->runtime || !renderer->runtime->HasLiveBody()) {
@@ -3938,6 +3976,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "insert_element_html failed: insert position is invalid");
   }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kInsertElementHtml,
+        element_id, position_name, html_fragment);
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "insert_element_html", element_id);
@@ -3952,6 +3995,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_remove_element(
     blink_standalone_renderer_t* renderer,
     const char* element_id) {
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kRemoveElement,
+        element_id, "", "");
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "remove_element", element_id);
@@ -3972,6 +4020,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "set_element_attribute failed: attribute value is required");
   }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetAttribute,
+        element_id, attribute_name, attribute_value);
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "set_element_attribute", element_id);
@@ -3987,6 +4040,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     const char* element_id,
     const char* attribute_name) {
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kRemoveAttribute,
+        element_id, attribute_name, "");
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "remove_element_attribute", element_id);
@@ -4005,6 +4063,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!style_attribute_value) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "set_element_style failed: style attribute value is required");
+  }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetStyleAttribute,
+        element_id, "style", style_attribute_value);
   }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
@@ -4025,6 +4088,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "replace_stylesheet_text failed: CSS text is required");
   }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kReplaceStylesheetText,
+        style_element_id, "", css_text);
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "replace_stylesheet_text", style_element_id);
@@ -4043,6 +4111,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   if (!value) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
                         "set_form_control_value failed: value is required");
+  }
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetFormControlValue,
+        element_id, "value", value);
   }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
@@ -4067,6 +4140,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     blink_standalone_renderer_t* renderer,
     const char* element_id,
     int checked) {
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetFormControlChecked,
+        element_id, "checked", checked ? "1" : "0");
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "set_form_control_checked", element_id);
@@ -4102,6 +4180,14 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                           "set_form_control_selected_values failed: selected value entries must be non-null");
     }
   }
+  const std::string selected_values =
+      SerializeSelectedValuesForMutation(values, value_count);
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer,
+        html_css_renderer::DomMutationType::kSetFormControlSelectedValues,
+        element_id, "selected_values", selected_values.c_str());
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status = RequireLiveElement(
       renderer, "set_form_control_selected_values", element_id);
@@ -4119,13 +4205,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   return QueueDomMutation(
       renderer,
       html_css_renderer::DomMutationType::kSetFormControlSelectedValues,
-      element_id, "selected_values",
-      SerializeSelectedValuesForMutation(values, value_count).c_str());
+      element_id, "selected_values", selected_values.c_str());
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_focus_element(
     blink_standalone_renderer_t* renderer,
     const char* element_id) {
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kFocusElement,
+        element_id, "", "");
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "focus_element", element_id);
@@ -4139,6 +4229,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_blur_focused_element(
     blink_standalone_renderer_t* renderer) {
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kBlurFocusedElement, "",
+        "", "");
+  }
   ClearLastError(renderer);
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kBlurFocusedElement, "",
@@ -4150,6 +4245,13 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const char* element_id,
     unsigned start,
     unsigned end) {
+  const std::string range =
+      std::to_string(start) + ":" + std::to_string(end);
+  if (IsDedicatedThreadShell(renderer)) {
+    return PostDedicatedDomMutation(
+        renderer, html_css_renderer::DomMutationType::kSetTextSelection,
+        element_id, "selection", range.c_str());
+  }
   ClearLastError(renderer);
   blink_standalone_status_code_t status =
       RequireLiveElement(renderer, "set_text_selection", element_id);
@@ -4165,8 +4267,6 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
             ElementLabel(element_id) +
             "' is not a text-editable form control");
   }
-  const std::string range =
-      std::to_string(start) + ":" + std::to_string(end);
   return QueueDomMutation(
       renderer, html_css_renderer::DomMutationType::kSetTextSelection,
       element_id, "selection", range.c_str());
