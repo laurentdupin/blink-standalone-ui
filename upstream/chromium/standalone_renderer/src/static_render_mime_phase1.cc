@@ -89,12 +89,8 @@ void SplitCodecs(std::string_view codecs,
   if (!codecs_out) {
     return;
   }
-  codecs_out->clear();
-  for (std::string_view codec :
-       base::SplitStringPiece(codecs, ",", base::TRIM_WHITESPACE,
-                              base::SPLIT_WANT_NONEMPTY)) {
-    codecs_out->emplace_back(codec);
-  }
+  *codecs_out = base::SplitString(codecs, ",", base::TRIM_WHITESPACE,
+                                  base::SPLIT_WANT_NONEMPTY);
 }
 
 SupportsType IsSupportedMediaFormat(std::string_view,
