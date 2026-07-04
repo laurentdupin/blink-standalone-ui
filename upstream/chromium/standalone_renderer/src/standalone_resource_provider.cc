@@ -23,12 +23,13 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
-#include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
-#include "third_party/blink/renderer/platform/wtf/text/base64.h"
+#include "net/base/data_url.h"
+#include "net/base/mime_util.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
+#include "url/gurl.h"
 #include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
@@ -467,18 +468,23 @@ bool ShouldBlockFallbackForRequest(const StandaloneResourceRequest& request,
   return false;
 }
 
-std::string SupportedImageMimeFromMetadata(const std::string& metadata) {
-  if (metadata.find("image/png") != std::string::npos)
+std::string SupportedDataImageMime(std::string_view media_type) {
+  std::optional<std::string> mime_type =
+      net::ExtractMimeTypeFromMediaType(media_type,
+                                        /*accept_comma_separated=*/false);
+  if (!mime_type) {
+    return std::string();
+  }
+  const std::string mime = base::ToLowerASCII(*mime_type);
+  if (mime == "image/png")
     return "image/png";
-  if (metadata.find("image/jpeg") != std::string::npos ||
-      metadata.find("image/jpg") != std::string::npos)
+  if (mime == "image/jpeg" || mime == "image/jpg")
     return "image/jpeg";
-  if (metadata.find("image/bmp") != std::string::npos ||
-      metadata.find("image/x-ms-bmp") != std::string::npos)
+  if (mime == "image/bmp" || mime == "image/x-ms-bmp")
     return "image/bmp";
-  if (metadata.find("image/webp") != std::string::npos)
+  if (mime == "image/webp")
     return "image/webp";
-  if (metadata.find("image/svg+xml") != std::string::npos)
+  if (mime == "image/svg+xml")
     return "image/svg+xml";
   return std::string();
 }
@@ -492,57 +498,35 @@ bool IsDataUrl(const std::string& url) {
 }
 
 StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
-  url::Component scheme;
-  if (!url::FindAndCompareScheme(url, url::kDataScheme, &scheme)) {
+  if (!IsDataUrl(url)) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "not a data URL");
   }
 
-  std::string lower_url = base::ToLowerASCII(url);
-  const size_t metadata_start = static_cast<size_t>(scheme.end() + 1);
-  size_t comma = url.find(',', metadata_start);
-  if (comma == std::string::npos || comma < metadata_start) {
+  std::string parsed_mime_type;
+  std::string parsed_charset;
+  std::string data;
+  if (!net::DataURL::Parse(GURL(url), &parsed_mime_type, &parsed_charset,
+                           &data)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "malformed data URL");
   }
 
-  std::string metadata =
-      lower_url.substr(metadata_start, comma - metadata_start);
-  std::string mime_type = SupportedImageMimeFromMetadata(metadata);
+  std::string mime_type = SupportedDataImageMime(parsed_mime_type);
   if (mime_type.empty()) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
                        "only PNG/JPEG/BMP/WebP/SVG data URLs are enabled", "");
   }
-
-  const bool is_base64 = metadata.find(";base64") != std::string::npos;
-  if (!is_base64 && !IsSvgImageMime(mime_type)) {
+  if (data.empty()) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                       "image data URL is not base64 encoded", mime_type);
+                       "data URL image payload is empty", mime_type);
   }
-
-  std::string payload = url.substr(comma + 1);
 
   StandaloneResourceResult result;
   result.source_kind = StandaloneResourceSourceKind::kDataUrl;
   result.mime_type = std::move(mime_type);
   result.cache_key = url;
-  if (is_base64) {
-    blink::Vector<uint8_t> blink_encoded;
-    if (!blink::Base64Decode(blink::String(payload.c_str()), blink_encoded,
-                             blink::Base64DecodePolicy::kForgiving) ||
-        blink_encoded.empty()) {
-      return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                         "base64 decode failed", result.mime_type);
-    }
-    result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
-  } else {
-    std::string decoded = base::UnescapeBinaryURLComponent(payload);
-    result.encoded_bytes.assign(decoded.begin(), decoded.end());
-    if (result.encoded_bytes.empty()) {
-      return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
-                         "SVG data URL is empty", result.mime_type);
-    }
-  }
+  result.encoded_bytes.assign(data.begin(), data.end());
   if (IsSvgImageMime(result.mime_type)) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
     result.error = "SVG image rendering is unsupported in this standalone build";
