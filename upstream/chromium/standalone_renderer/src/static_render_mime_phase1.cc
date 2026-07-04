@@ -23,18 +23,24 @@ namespace blink {
 
 namespace {
 
-std::string NormalizeMime(std::string_view mime_type) {
-  return base::ToLowerASCII(mime_type);
+bool MatchesStaticMime(std::string_view mime_type,
+                       std::string_view expected_mime_type) {
+  return base::EqualsCaseInsensitiveASCII(mime_type, expected_mime_type);
 }
 
 bool IsStaticImageMime(std::string_view mime_type) {
-  const std::string mime = NormalizeMime(mime_type);
-  return mime == "image/png" || mime == "image/apng" ||
-         mime == "image/jpeg" || mime == "image/jpg" ||
-         mime == "image/pjpeg" || mime == "image/gif" ||
-         mime == "image/webp" || mime == "image/bmp" ||
-         mime == "image/x-icon" || mime == "image/vnd.microsoft.icon" ||
-         mime == "image/x-png" || mime == "image/svg+xml";
+  return MatchesStaticMime(mime_type, "image/png") ||
+         MatchesStaticMime(mime_type, "image/apng") ||
+         MatchesStaticMime(mime_type, "image/jpeg") ||
+         MatchesStaticMime(mime_type, "image/jpg") ||
+         MatchesStaticMime(mime_type, "image/pjpeg") ||
+         MatchesStaticMime(mime_type, "image/gif") ||
+         MatchesStaticMime(mime_type, "image/webp") ||
+         MatchesStaticMime(mime_type, "image/bmp") ||
+         MatchesStaticMime(mime_type, "image/x-icon") ||
+         MatchesStaticMime(mime_type, "image/vnd.microsoft.icon") ||
+         MatchesStaticMime(mime_type, "image/x-png") ||
+         MatchesStaticMime(mime_type, "image/svg+xml");
 }
 
 }  // namespace
@@ -44,11 +50,13 @@ bool IsSupportedImageMimeType(std::string_view mime_type) {
 }
 
 bool IsSupportedNonImageMimeType(std::string_view mime_type) {
-  const std::string mime = NormalizeMime(mime_type);
-  return mime == "text/css" || mime == "text/plain" ||
-         mime == "text/html" || mime == "application/xml" ||
-         mime == "text/xml" || mime == "application/xhtml+xml" ||
-         mime == "application/json";
+  return MatchesStaticMime(mime_type, "text/css") ||
+         MatchesStaticMime(mime_type, "text/plain") ||
+         MatchesStaticMime(mime_type, "text/html") ||
+         MatchesStaticMime(mime_type, "application/xml") ||
+         MatchesStaticMime(mime_type, "text/xml") ||
+         MatchesStaticMime(mime_type, "application/xhtml+xml") ||
+         MatchesStaticMime(mime_type, "application/json");
 }
 
 bool IsSupportedJavascriptMimeType(std::string_view) {
