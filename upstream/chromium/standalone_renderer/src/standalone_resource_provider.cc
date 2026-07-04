@@ -568,19 +568,13 @@ bool IsWithinRoot(const std::filesystem::path& path,
   return true;
 }
 
-std::string SupportedImageMimeFromExtension(std::string extension) {
-  extension = base::ToLowerASCII(std::move(extension));
-  if (extension == ".png")
-    return "image/png";
-  if (extension == ".jpg" || extension == ".jpeg")
-    return "image/jpeg";
-  if (extension == ".bmp")
-    return "image/bmp";
-  if (extension == ".webp")
-    return "image/webp";
-  if (extension == ".svg")
-    return "image/svg+xml";
-  return std::string();
+std::string SupportedImageMimeFromFile(const std::filesystem::path& path) {
+  std::string mime_type;
+  if (!net::GetWellKnownMimeTypeFromFile(base::FilePath(path.native()),
+                                         &mime_type)) {
+    return std::string();
+  }
+  return SupportedDataImageMime(mime_type);
 }
 
 StandaloneResourceResult DecodeLocalImage(const std::string& url) {
@@ -631,7 +625,7 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
   StandaloneResourceResult result;
   result.source_kind = is_file_url ? StandaloneResourceSourceKind::kFileUrl
                                    : StandaloneResourceSourceKind::kRelativeFile;
-  result.mime_type = SupportedImageMimeFromExtension(candidate.extension().string());
+  result.mime_type = SupportedImageMimeFromFile(candidate);
   result.resolved_path = candidate.string();
   result.cache_key = result.resolved_path;
 
