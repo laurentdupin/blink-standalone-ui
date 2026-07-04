@@ -7,7 +7,6 @@
 #include <iterator>
 #include <limits>
 #include <cstring>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -24,6 +23,8 @@
 #include <wrl/client.h>
 #endif
 
+#include "base/no_destructor.h"
+#include "base/synchronization/lock.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
@@ -50,9 +51,9 @@ std::unordered_map<uint64_t, ResourceProviderContextState>& MutableContexts() {
   return *contexts;
 }
 
-std::mutex& DiagnosticsMutex() {
-  static std::mutex* mutex = new std::mutex();
-  return *mutex;
+base::Lock& DiagnosticsLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
 }
 
 uint64_t& NextContextId() {
@@ -85,7 +86,7 @@ std::string& MutableDocumentBasePath() {
 
 std::pair<std::shared_ptr<StandaloneResourceProvider>, uint32_t>
 CurrentEmbedderProviderAndFlags() {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   ResourceProviderContextState& state = CurrentContextStateLocked();
   return {state.embedder_provider, state.embedder_provider_flags};
 }
@@ -221,7 +222,7 @@ StandaloneResourceResult CreateTransparentDecodedImage(
 
 void RecordRequest(const StandaloneResourceRequest& request,
                    const StandaloneResourceResult& result) {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   StandaloneResourceProviderDiagnostics& diagnostics = MutableDiagnostics();
   ++diagnostics.request_count;
   if (request.type_hint == StandaloneResourceTypeHint::kImage) {
@@ -772,21 +773,21 @@ StandaloneResourceProvider& DefaultStandaloneResourceProvider() {
 }
 
 uint64_t CreateStandaloneResourceProviderContext() {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   const uint64_t context_id = NextContextId()++;
   MutableContexts().emplace(context_id, ResourceProviderContextState());
   return context_id;
 }
 
 void DestroyStandaloneResourceProviderContext(uint64_t context_id) {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   MutableContexts().erase(context_id);
   if (g_current_context_id == context_id)
     g_current_context_id = 0;
 }
 
 void SetCurrentStandaloneResourceProviderContext(uint64_t context_id) {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   if (context_id != 0 &&
       MutableContexts().find(context_id) == MutableContexts().end()) {
     context_id = 0;
@@ -795,41 +796,41 @@ void SetCurrentStandaloneResourceProviderContext(uint64_t context_id) {
 }
 
 void SetStandaloneResourceProviderResourceRoot(std::string root_path) {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   MutableResourceRoot() = std::move(root_path);
 }
 
 std::string GetStandaloneResourceProviderResourceRoot() {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   return MutableResourceRoot();
 }
 
 void SetStandaloneResourceProviderDocumentBasePath(std::string base_path) {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   MutableDocumentBasePath() = std::move(base_path);
 }
 
 std::string GetStandaloneResourceProviderDocumentBasePath() {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   return MutableDocumentBasePath();
 }
 
 void SetStandaloneResourceProviderEmbedderProvider(
     std::shared_ptr<StandaloneResourceProvider> provider,
     uint32_t flags) {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   ResourceProviderContextState& state = CurrentContextStateLocked();
   state.embedder_provider = std::move(provider);
   state.embedder_provider_flags = flags;
 }
 
 void ResetStandaloneResourceProviderDiagnostics() {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   MutableDiagnostics() = StandaloneResourceProviderDiagnostics();
 }
 
 StandaloneResourceProviderDiagnostics GetStandaloneResourceProviderDiagnostics() {
-  std::lock_guard<std::mutex> lock(DiagnosticsMutex());
+  base::AutoLock auto_lock(DiagnosticsLock());
   return MutableDiagnostics();
 }
 

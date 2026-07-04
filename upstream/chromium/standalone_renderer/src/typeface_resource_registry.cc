@@ -2,9 +2,10 @@
 
 #include <algorithm>
 #include <cstring>
-#include <mutex>
 #include <unordered_map>
 
+#include "base/no_destructor.h"
+#include "base/synchronization/lock.h"
 #include "third_party/skia/include/core/SkString.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 
@@ -19,9 +20,9 @@ struct RegistryState {
   TextBlobReplayDiagnostics diagnostics;
 };
 
-std::mutex& RegistryMutex() {
-  static auto* mutex = new std::mutex();
-  return *mutex;
+base::Lock& RegistryLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
 }
 
 RegistryState& Registry() {
@@ -53,7 +54,7 @@ RegistryState& CurrentRegistryLocked() {
 }  // namespace
 
 void ResetTypefaceResourceRegistryForFrame() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   auto& registry = CurrentRegistryLocked();
   registry.resources.clear();
   registry.ids.clear();
@@ -64,21 +65,21 @@ void ResetTypefaceResourceRegistryForFrame() {
 }
 
 uint64_t CreateTypefaceResourceRegistryContext() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   const uint64_t context_id = NextRegistryContextId()++;
   Registries().emplace(context_id, RegistryState());
   return context_id;
 }
 
 void DestroyTypefaceResourceRegistryContext(uint64_t context_id) {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   Registries().erase(context_id);
   if (g_current_registry_context_id == context_id)
     g_current_registry_context_id = 0;
 }
 
 void SetCurrentTypefaceResourceRegistryContext(uint64_t context_id) {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   if (context_id != 0 && Registries().find(context_id) == Registries().end())
     context_id = 0;
   g_current_registry_context_id = context_id;
@@ -88,7 +89,7 @@ uint64_t RegisterSameProcessTypefaceResource(SkTypeface* typeface) {
   if (!typeface) {
     return 0;
   }
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   auto& registry = CurrentRegistryLocked();
   if (const auto found = registry.ids.find(typeface);
       found != registry.ids.end()) {
@@ -113,7 +114,7 @@ bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface) {
   if (!id || !typeface) {
     return false;
   }
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   auto& registry = CurrentRegistryLocked();
   SkString family;
   typeface->getFamilyName(&family);
@@ -133,13 +134,13 @@ bool RegisterTypefaceResourceWithId(uint64_t id, SkTypeface* typeface) {
 }
 
 void FreezeTypefaceResourcesForReplay() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   auto& registry = CurrentRegistryLocked();
   registry.replay_resources = registry.resources;
 }
 
 sk_sp<SkTypeface> LookupSameProcessTypefaceResource(uint64_t id) {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   auto& registry = CurrentRegistryLocked();
   ++registry.diagnostics.typeface_lookup_attempt_count;
   const auto found = registry.resources.find(id);
@@ -158,7 +159,7 @@ sk_sp<SkTypeface> LookupSameProcessTypefaceResource(uint64_t id) {
 }
 
 std::vector<TypefaceResource> SnapshotTypefaceResources() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   std::vector<TypefaceResource> resources;
   auto& registry = CurrentRegistryLocked();
   resources.reserve(registry.resources.size());
@@ -173,32 +174,32 @@ std::vector<TypefaceResource> SnapshotTypefaceResources() {
 }
 
 void SetTextBlobReplayDiagnosticsEnabled(bool enabled) {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   CurrentRegistryLocked().diagnostics.enabled = enabled;
 }
 
 TextBlobReplayDiagnostics SnapshotTextBlobReplayDiagnostics() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   return CurrentRegistryLocked().diagnostics;
 }
 
 void RecordTextBlobDeserializeAttempt() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   ++CurrentRegistryLocked().diagnostics.deserialize_attempt_count;
 }
 
 void RecordTextBlobDeserializeSuccess() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   ++CurrentRegistryLocked().diagnostics.deserialize_success_count;
 }
 
 void RecordTextBlobDeserializeFailure() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   ++CurrentRegistryLocked().diagnostics.deserialize_failure_count;
 }
 
 void RecordDiagnosticTypefaceFallback() {
-  std::lock_guard<std::mutex> lock(RegistryMutex());
+  base::AutoLock auto_lock(RegistryLock());
   ++CurrentRegistryLocked().diagnostics.diagnostic_typeface_fallback_count;
 }
 
