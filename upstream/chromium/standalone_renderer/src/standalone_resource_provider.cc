@@ -30,6 +30,9 @@
 #include "base/synchronization/lock.h"
 #include "net/base/data_url.h"
 #include "net/base/mime_util.h"
+#include "third_party/blink/public/common/mime_util/mime_util.h"
+#include "third_party/skia/include/codec/SkCodec.h"
+#include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "url/gurl.h"
@@ -271,7 +274,71 @@ StandaloneResourceResult ErrorResult(StandaloneResourceStatus status,
   return result;
 }
 
+StandaloneResourceResult DecodeImageBytesWithSkCodec(
+    StandaloneResourceResult result) {
+  if (result.encoded_bytes.empty()) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "encoded image bytes are empty", result.mime_type);
+  }
+  sk_sp<SkData> data =
+      SkData::MakeWithCopy(result.encoded_bytes.data(),
+                           result.encoded_bytes.size());
+  if (!data) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "SkData creation failed for image decode",
+                       result.mime_type);
+  }
+
+  std::unique_ptr<SkCodec> codec = SkCodec::MakeFromData(std::move(data));
+  if (!codec) {
+    return ErrorResult(StandaloneResourceStatus::kUnsupportedMime,
+                       "SkCodec does not support this image resource",
+                       result.mime_type);
+  }
+
+  const SkISize dimensions = codec->dimensions();
+  if (dimensions.width() <= 0 || dimensions.height() <= 0) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "SkCodec image dimensions are invalid",
+                       result.mime_type);
+  }
+
+  SkImageInfo image_info =
+      SkImageInfo::Make(dimensions.width(), dimensions.height(),
+                        kBGRA_8888_SkColorType, kPremul_SkAlphaType);
+  const size_t row_bytes = image_info.minRowBytes();
+  size_t byte_count = 0;
+  if (!base::CheckMul(row_bytes, static_cast<size_t>(dimensions.height()))
+           .AssignIfValid(&byte_count)) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "decoded image is too large", result.mime_type);
+  }
+  std::vector<uint8_t> pixels(byte_count);
+  SkPixmap pixmap(image_info, pixels.data(), row_bytes);
+  if (codec->getPixels(pixmap) != SkCodec::kSuccess) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "SkCodec image decode failed", result.mime_type);
+  }
+
+  result.decoded_image = SkImages::RasterFromPixmapCopy(pixmap);
+  if (!result.decoded_image) {
+    return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
+                       "SkImage creation failed after SkCodec decode",
+                       result.mime_type);
+  }
+  result.intrinsic_width = dimensions.width();
+  result.intrinsic_height = dimensions.height();
+  result.status = StandaloneResourceStatus::kSuccess;
+  result.error.clear();
+  return result;
+}
+
 StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
+  StandaloneResourceResult skia_decoded =
+      DecodeImageBytesWithSkCodec(result);
+  if (skia_decoded.status == StandaloneResourceStatus::kSuccess) {
+    return skia_decoded;
+  }
 #if defined(_WIN32)
   if (!base::IsValueInRangeForNumericType<DWORD>(
           result.encoded_bytes.size())) {
@@ -480,10 +547,6 @@ bool ShouldBlockFallbackForRequest(const StandaloneResourceRequest& request,
   return false;
 }
 
-bool MimeEquals(std::string_view mime_type, std::string_view expected_mime_type) {
-  return base::EqualsCaseInsensitiveASCII(mime_type, expected_mime_type);
-}
-
 std::string SupportedDataImageMime(std::string_view media_type) {
   std::optional<std::string> mime_type =
       net::ExtractMimeTypeFromMediaType(media_type,
@@ -491,19 +554,18 @@ std::string SupportedDataImageMime(std::string_view media_type) {
   if (!mime_type) {
     return std::string();
   }
-  if (MimeEquals(*mime_type, "image/png"))
-    return "image/png";
-  if (MimeEquals(*mime_type, "image/jpeg") ||
-      MimeEquals(*mime_type, "image/jpg"))
+  std::string canonical_mime_type = base::ToLowerASCII(*mime_type);
+  if (net::MatchesMimeType("image/jpg", canonical_mime_type) ||
+      net::MatchesMimeType("image/pjpeg", canonical_mime_type)) {
     return "image/jpeg";
-  if (MimeEquals(*mime_type, "image/bmp") ||
-      MimeEquals(*mime_type, "image/x-ms-bmp"))
+  }
+  if (net::MatchesMimeType("image/x-ms-bmp", canonical_mime_type)) {
     return "image/bmp";
-  if (MimeEquals(*mime_type, "image/webp"))
-    return "image/webp";
-  if (MimeEquals(*mime_type, "image/svg+xml"))
-    return "image/svg+xml";
-  return std::string();
+  }
+  if (!blink::IsSupportedImageMimeType(canonical_mime_type)) {
+    return std::string();
+  }
+  return canonical_mime_type;
 }
 
 bool IsSvgImageMime(std::string_view mime_type) {
