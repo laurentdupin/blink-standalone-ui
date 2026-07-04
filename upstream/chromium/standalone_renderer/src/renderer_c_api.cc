@@ -1664,10 +1664,6 @@ void AppendKeyboardEvent(blink_standalone_renderer* renderer,
   InvalidatePreparedGpuSourceFrame(renderer);
 }
 
-bool StartsWith(const std::string& value, const char* prefix) {
-  return value.rfind(prefix, 0) == 0;
-}
-
 bool HasPendingFrameInput(const blink_standalone_renderer* renderer) {
   return renderer->resource_provider_dirty ||
          !renderer->pending_mouse_events.empty() ||
