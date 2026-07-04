@@ -37,6 +37,7 @@
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/strings/string_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
@@ -268,13 +269,6 @@ void EnsureStandaloneCApiProcessInitialized() {
   (void)initialized;
 }
 
-std::string LowerAscii(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(), [](char c) {
-    return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  });
-  return value;
-}
-
 bool HasInlineEventHandlerAttribute(const std::string& lower_html) {
   size_t tag = lower_html.find('<');
   while (tag != std::string::npos) {
@@ -329,7 +323,7 @@ bool ContainsJavaScriptScheme(const std::string& lower_html) {
 }
 
 const char* NoScriptViolationReason(const std::string& html) {
-  const std::string lower = LowerAscii(html);
+  const std::string lower = base::ToLowerASCII(html);
   if (lower.find("<script") != std::string::npos) {
     return "script tag";
   }
@@ -357,12 +351,13 @@ bool ViolatesNoScriptProfile(const std::string& html) {
 
 const char* AttributeNoScriptViolationReason(const std::string& attribute_name,
                                              const std::string& value) {
-  const std::string lower_name = LowerAscii(attribute_name);
+  const std::string lower_name = base::ToLowerASCII(attribute_name);
   if (lower_name.size() >= 2 && lower_name[0] == 'o' &&
       lower_name[1] == 'n') {
     return "inline event handler";
   }
-  return ContainsJavaScriptScheme(LowerAscii(value)) ? "javascript URL" : "";
+  return ContainsJavaScriptScheme(base::ToLowerASCII(value)) ? "javascript URL"
+                                                            : "";
 }
 
 bool MutationViolatesNoScriptProfile(const std::string& attribute_name,
@@ -1448,7 +1443,7 @@ bool IsCheckboxOrRadio(const html_css_renderer::FormControlEntry& entry) {
 }
 
 bool IsSelect(const html_css_renderer::FormControlEntry& entry) {
-  return LowerAscii(entry.tag_name) == "select";
+  return base::ToLowerASCII(entry.tag_name) == "select";
 }
 
 bool IsTextSelectionCapable(const html_css_renderer::FormControlEntry& entry) {
@@ -1575,7 +1570,7 @@ blink_standalone_status_code_t QueueDomMutation(
                                   html_css_renderer::DomMutationType::
                                       kReplaceStylesheetText
                               ? (ContainsJavaScriptScheme(
-                                     LowerAscii(mutation_value))
+                                     base::ToLowerASCII(mutation_value))
                                      ? "javascript URL"
                                      : "")
                               : "";
