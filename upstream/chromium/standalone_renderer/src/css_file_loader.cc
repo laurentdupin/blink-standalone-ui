@@ -33,19 +33,9 @@ bool HasUrlScheme(const std::string& value) {
 }
 
 bool IsPathWithinRoot(const fs::path& path, const fs::path& root) {
-  const fs::path relative = path.lexically_relative(root);
-  if (relative.empty()) {
-    return path == root;
-  }
-  if (relative.is_absolute()) {
-    return false;
-  }
-  for (const fs::path& part : relative) {
-    if (part == "..") {
-      return false;
-    }
-  }
-  return true;
+  const base::FilePath path_file(path.native());
+  const base::FilePath root_file(root.native());
+  return path_file == root_file || root_file.IsParent(path_file);
 }
 
 fs::path NormalizePathForPolicy(const fs::path& path) {
