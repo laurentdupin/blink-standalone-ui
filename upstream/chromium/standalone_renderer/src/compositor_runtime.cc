@@ -17,6 +17,7 @@
 #include "base/check.h"
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "html_css_renderer/typeface_resource_registry.h"
@@ -487,23 +488,11 @@ void EnsureStandaloneDiscardableMemoryAllocator() {
 }
 
 std::string LowerAscii(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char c) {
-                   return static_cast<char>(std::tolower(c));
-                 });
-  return value;
+  return base::ToLowerASCII(value);
 }
 
 std::string TrimAscii(std::string value) {
-  auto is_space = [](unsigned char c) { return std::isspace(c) != 0; };
-  value.erase(value.begin(),
-              std::find_if(value.begin(), value.end(), [&](char c) {
-                return !is_space(static_cast<unsigned char>(c));
-              }));
-  value.erase(std::find_if(value.rbegin(), value.rend(), [&](char c) {
-                return !is_space(static_cast<unsigned char>(c));
-              }).base(),
-              value.end());
+  base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
   return value;
 }
 
@@ -729,13 +718,7 @@ std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
 }
 
 std::string TrimAsciiWhitespace(std::string value) {
-  const auto not_space = [](unsigned char c) {
-    return !std::isspace(c);
-  };
-  value.erase(value.begin(),
-              std::find_if(value.begin(), value.end(), not_space));
-  value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(),
-              value.end());
+  base::TrimWhitespaceASCII(value, base::TRIM_ALL, &value);
   return value;
 }
 
