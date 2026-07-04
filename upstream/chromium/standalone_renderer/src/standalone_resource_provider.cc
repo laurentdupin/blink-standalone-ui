@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <limits>
 #include <cstring>
 #include <optional>
@@ -23,6 +21,8 @@
 #include <wrl/client.h>
 #endif
 
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/no_destructor.h"
 #include "base/synchronization/lock.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
@@ -701,14 +701,14 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
     return result;
   }
 
-  std::ifstream file(candidate, std::ios::binary);
-  if (!file) {
+  std::optional<std::vector<uint8_t>> file_bytes =
+      base::ReadFileToBytes(base::FilePath(candidate.native()));
+  if (!file_bytes) {
     result.status = StandaloneResourceStatus::kError;
     result.error = "failed to open local image file";
     return result;
   }
-  result.encoded_bytes.assign(std::istreambuf_iterator<char>(file),
-                              std::istreambuf_iterator<char>());
+  result.encoded_bytes = std::move(*file_bytes);
   if (result.encoded_bytes.empty()) {
     result.status = StandaloneResourceStatus::kDecodeFailed;
     result.error = "local image file is empty";
