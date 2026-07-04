@@ -22,6 +22,7 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "html_css_renderer/typeface_resource_registry.h"
 #include "html_css_renderer/vulkan_window_host.h"
+#include "url/third_party/mozilla/url_parse.h"
 
 namespace blink::standalone_renderer_probe {
 uint64_t StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer();
@@ -497,17 +498,8 @@ std::string TrimAscii(std::string value) {
 }
 
 bool HasUrlScheme(const std::string& value) {
-  const size_t colon = value.find(':');
-  if (colon == std::string::npos || colon == 0)
-    return false;
-  for (size_t i = 0; i < colon; ++i) {
-    const unsigned char c = static_cast<unsigned char>(value[i]);
-    if (!std::isalnum(c) && value[i] != '+' && value[i] != '-' &&
-        value[i] != '.') {
-      return false;
-    }
-  }
-  return true;
+  url::Component scheme;
+  return url::ExtractScheme(value, &scheme);
 }
 
 bool HasHtmlBaseElement(const std::string& html) {
