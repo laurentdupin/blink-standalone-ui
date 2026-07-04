@@ -10,6 +10,7 @@
 #include <cmath>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -710,6 +711,9 @@ namespace {
 struct DedicatedGpuFrameCommand {
   std::mutex mutex;
   std::condition_variable cv;
+  blink_standalone_renderer* inner = nullptr;
+  blink_standalone_dedicated_thread_gpu_frame_request_t request = {};
+  bool started = false;
   bool done = false;
   bool cancel_requested = false;
   blink_standalone_dedicated_thread_gpu_frame_result_t result = {};
@@ -725,16 +729,16 @@ class DedicatedRendererSequence {
 
   blink_standalone_status_code_t CallSync(
       std::function<blink_standalone_status_code_t()> task) {
-    auto command = std::make_shared<SyncCommand>();
-    command->task = std::move(task);
-    {
-      std::lock_guard<std::mutex> lock(mutex_);
-      sync_commands_.push(command);
+    if (task) {
+      return task();
     }
-    cv_.notify_one();
-    std::unique_lock<std::mutex> lock(command->mutex);
-    command->cv.wait(lock, [&] { return command->done; });
-    return command->status;
+    return BLINK_STANDALONE_STATUS_OK;
+  }
+
+  void PostAsync(std::function<void()> task) {
+    if (task) {
+      task();
+    }
   }
 
   uint64_t PostGpuFrame(
@@ -745,15 +749,13 @@ class DedicatedRendererSequence {
     {
       std::lock_guard<std::mutex> lock(mutex_);
       command_id = next_command_id_++;
+      command->inner = inner;
+      command->request = request;
       command->result.command_id = command_id;
       command->result.status = BLINK_STANDALONE_STATUS_PENDING;
       command->result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
       gpu_commands_[command_id] = command;
-      async_commands_.push([inner, request, command, command_id]() mutable {
-        RunGpuFrameCommand(inner, request, command, command_id);
-      });
     }
-    cv_.notify_one();
     return command_id;
   }
 
@@ -771,6 +773,17 @@ class DedicatedRendererSequence {
         return false;
       }
       command = it->second;
+    }
+    bool run_command = false;
+    {
+      std::lock_guard<std::mutex> lock(command->mutex);
+      if (!command->done && !command->started && !command->cancel_requested) {
+        command->started = true;
+        run_command = true;
+      }
+    }
+    if (run_command) {
+      RunGpuFrameCommand(command->inner, command->request, command, command_id);
     }
     std::lock_guard<std::mutex> lock(command->mutex);
     if (result) {
@@ -798,7 +811,17 @@ class DedicatedRendererSequence {
     }
 
     std::unique_lock<std::mutex> lock(command->mutex);
-    if (!command->done) {
+    if (!command->done && !command->started) {
+      command->cancel_requested = true;
+      command->done = true;
+      command->result.command_id = command_id;
+      command->result.status = BLINK_STANDALONE_STATUS_OK;
+      command->result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_CANCELLED;
+      command->result.render_result.status = BLINK_STANDALONE_STATUS_OK;
+      command->result.render_result.state =
+          BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
+      command->cv.notify_all();
+    } else if (!command->done) {
       command->cancel_requested = true;
       command->cv.wait(lock, [&] { return command->done; });
     }
@@ -811,17 +834,7 @@ class DedicatedRendererSequence {
   }
 
  private:
-  struct SyncCommand {
-    std::function<blink_standalone_status_code_t()> task;
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool done = false;
-    blink_standalone_status_code_t status = BLINK_STANDALONE_STATUS_OK;
-  };
-
-  DedicatedRendererSequence() {
-    worker_ = std::thread([this]() { ThreadMain(); });
-  }
+  DedicatedRendererSequence() = default;
 
   ~DedicatedRendererSequence() = default;
 
@@ -928,13 +941,18 @@ class DedicatedRendererSequence {
       return;
     }
 
-    const auto submit_start = std::chrono::steady_clock::now();
-    status = blink_standalone_renderer_submit_gpu_frame_async(
-        inner, &request.render_request, &result.render_result);
-    const auto submit_end = std::chrono::steady_clock::now();
-    result.submit_ms =
-        std::chrono::duration<double, std::milli>(submit_end - submit_start)
-            .count();
+    auto submit_gpu_frame = [&]() {
+      const auto submit_start = std::chrono::steady_clock::now();
+      blink_standalone_status_code_t submit_status =
+          blink_standalone_renderer_submit_gpu_frame_async(
+              inner, &request.render_request, &result.render_result);
+      const auto submit_end = std::chrono::steady_clock::now();
+      result.submit_ms +=
+          std::chrono::duration<double, std::milli>(submit_end - submit_start)
+              .count();
+      return submit_status;
+    };
+    status = submit_gpu_frame();
     if (status == BLINK_STANDALONE_STATUS_OK &&
         result.render_result.state ==
             BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND) {
@@ -943,10 +961,41 @@ class DedicatedRendererSequence {
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
-    if (status == BLINK_STANDALONE_STATUS_PENDING &&
-        result.render_result.request_id == 0) {
-      result.status = BLINK_STANDALONE_STATUS_OK;
-      result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_STALE;
+    while (status == BLINK_STANDALONE_STATUS_PENDING &&
+           result.render_result.request_id == 0 &&
+           !DedicatedGpuFrameCancelRequested(command) &&
+           result.poll_iterations < max_polls) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+      status = tick_source_frame();
+      result.update_result.status = result.source_result.status;
+      result.update_result.needs_output = result.source_result.needs_output;
+      result.update_result.frame_advanced =
+          result.source_result.frame_advanced;
+      result.update_result.frame_skipped_due_to_no_demand =
+          result.source_result.frame_skipped_due_to_no_demand;
+      result.update_result.full_frame_damage =
+          result.source_result.full_frame_damage;
+      result.update_result.damage_rect_count =
+          result.source_result.damage_rect_count;
+      ++result.poll_iterations;
+      if (status == BLINK_STANDALONE_STATUS_OK &&
+          result.source_result.state ==
+              BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_NO_DEMAND) {
+        result.status = BLINK_STANDALONE_STATUS_OK;
+        result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_COMPLETED;
+        result.render_result.state = BLINK_STANDALONE_GPU_ASYNC_STATE_NO_DEMAND;
+        FinishGpuFrameCommand(command, result, command_start);
+        return;
+      }
+      if (status != BLINK_STANDALONE_STATUS_OK ||
+          result.source_result.state !=
+              BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_SOURCE_READY) {
+        continue;
+      }
+      status = submit_gpu_frame();
+    }
+    if (DedicatedGpuFrameCancelRequested(command)) {
+      CancelDedicatedGpuFrameAndReleaseExternalTargets(inner, &result);
       FinishGpuFrameCommand(command, result, command_start);
       return;
     }
@@ -1073,46 +1122,8 @@ class DedicatedRendererSequence {
     command->cv.notify_all();
   }
 
-  void ThreadMain() {
-    for (;;) {
-      std::shared_ptr<SyncCommand> sync_command;
-      std::function<void()> async_command;
-      {
-        std::unique_lock<std::mutex> lock(mutex_);
-        cv_.wait(lock, [&] {
-          return !sync_commands_.empty() || !async_commands_.empty();
-        });
-        if (!sync_commands_.empty()) {
-          sync_command = sync_commands_.front();
-          sync_commands_.pop();
-        } else {
-          async_command = std::move(async_commands_.front());
-          async_commands_.pop();
-        }
-      }
-      if (sync_command) {
-        blink_standalone_status_code_t status = BLINK_STANDALONE_STATUS_OK;
-        if (sync_command->task) {
-          status = sync_command->task();
-        }
-        {
-          std::lock_guard<std::mutex> lock(sync_command->mutex);
-          sync_command->status = status;
-          sync_command->done = true;
-        }
-        sync_command->cv.notify_one();
-      } else if (async_command) {
-        async_command();
-      }
-    }
-  }
-
   std::mutex mutex_;
-  std::condition_variable cv_;
-  std::queue<std::shared_ptr<SyncCommand>> sync_commands_;
-  std::queue<std::function<void()>> async_commands_;
   std::map<uint64_t, std::shared_ptr<DedicatedGpuFrameCommand>> gpu_commands_;
-  std::thread worker_;
   uint64_t next_command_id_ = 1;
 };
 
@@ -1127,6 +1138,14 @@ DedicatedRendererSequence& DedicatedSequenceFor(
         renderer->dedicated_thread_sequence);
   }
   return DedicatedRendererSequence::Get();
+}
+
+const blink_standalone_renderer* PublicMetadataRendererFor(
+    const blink_standalone_renderer* renderer) {
+  if (IsDedicatedThreadShell(renderer) && renderer->dedicated_thread_inner) {
+    return renderer->dedicated_thread_inner;
+  }
+  return renderer;
 }
 
 void ClearLastError(blink_standalone_renderer* renderer) {
@@ -1335,6 +1354,9 @@ blink_standalone_status_code_t InitializeRuntime(blink_standalone_renderer* rend
   create_info.renderer.transparent_background = renderer->no_script_profile;
   create_info.no_script_profile = renderer->no_script_profile;
   create_info.transparent_background = renderer->no_script_profile;
+  if (const char* trace_stages = std::getenv("HTML_CSS_RENDERER_TRACE_STAGES")) {
+    create_info.trace_stages = trace_stages[0] && trace_stages[0] != '0';
+  }
   renderer->runtime =
       html_css_renderer::CreateStandaloneCompositorRuntime(std::move(create_info));
   std::vector<std::string> diagnostics;
@@ -1836,6 +1858,13 @@ blink_standalone_status_code_t AdvanceGpuFrameForBackend(
   if (require_source_gpu_frame &&
       (!renderer->latest_result.gpu_frame.shared_image_available ||
        renderer->latest_result.gpu_frame.is_software)) {
+    if (IsRecoverableGpuCopyOutputNotReady(
+            renderer->latest_result.gpu_frame_failure)) {
+      renderer->gpu_source_frame_pending = true;
+      return SetLastError(
+          renderer, BLINK_STANDALONE_STATUS_PENDING,
+          "render_to_gpu_target pending: Viz CopyOutput did not produce output");
+    }
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
         renderer->latest_result.gpu_frame_failure.empty()
@@ -2511,10 +2540,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
 
   InvalidatePreparedGpuSourceFrame(renderer);
+  const bool request_pending_source_frame = renderer->gpu_source_frame_pending;
   const auto tick_start = std::chrono::steady_clock::now();
   const blink_standalone_status_code_t status =
       AdvanceGpuFrameForBackend(renderer, backend,
-                                /*require_source_gpu_frame=*/false);
+                                request_pending_source_frame);
   const auto tick_end = std::chrono::steady_clock::now();
   result->elapsed_ms =
       std::chrono::duration<double, std::milli>(tick_end - tick_start).count();
@@ -3234,12 +3264,35 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->mask_encoding = request->mask_encoding;
   if (copy_result.status ==
       html_css_renderer::ExternalGpuTargetCopyStatus::kFailed) {
+    if (copy_result.request_id == 0 &&
+        IsRecoverableGpuCopyOutputNotReady(copy_result.diagnostic)) {
+      renderer->gpu_source_frame_pending = true;
+      result->status = BLINK_STANDALONE_STATUS_PENDING;
+      result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING;
+      return SetLastError(
+          renderer, BLINK_STANDALONE_STATUS_PENDING,
+          copy_result.diagnostic.empty()
+              ? "submit_gpu_frame_async pending: Viz CopyOutput did not produce output"
+              : copy_result.diagnostic);
+    }
     return SetLastError(renderer,
                         static_cast<blink_standalone_status_code_t>(
                             result->status),
                         copy_result.diagnostic.empty()
                             ? "submit_gpu_frame_async failed"
                             : copy_result.diagnostic);
+  }
+  if (copy_result.status ==
+          html_css_renderer::ExternalGpuTargetCopyStatus::kPending &&
+      copy_result.request_id == 0) {
+    renderer->gpu_source_frame_pending = true;
+    result->status = BLINK_STANDALONE_STATUS_PENDING;
+    result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING;
+    return SetLastError(
+        renderer, BLINK_STANDALONE_STATUS_PENDING,
+        copy_result.diagnostic.empty()
+            ? "submit_gpu_frame_async pending: GPU copy request was not accepted yet"
+            : copy_result.diagnostic);
   }
 
   InvalidatePreparedGpuSourceFrame(renderer);
@@ -3347,6 +3400,9 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   }
 
   if (renderer->pending_async_gpu_frame.backdrop) {
+    if (renderer->latest_result.backdrop_filter_regions.empty()) {
+      RefreshPublicFrameMetadata(renderer);
+    }
     const size_t effect_count =
         std::min(renderer->latest_result.backdrop_filter_regions.size(),
                  static_cast<size_t>(255u));
@@ -3699,12 +3755,20 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     std::string element_id_copy = element_id ? element_id : "";
     std::string text_copy = utf8_text;
     blink_standalone_renderer* inner = renderer->dedicated_thread_inner;
-    return DedicatedSequenceFor(renderer).CallSync(
+    if (!inner || element_id_copy.empty()) {
+      return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
+                          "set_element_text failed: element id is required");
+    }
+    ClearLastError(renderer);
+    DedicatedSequenceFor(renderer).PostAsync(
         [inner, element_id_copy = std::move(element_id_copy),
-         text_copy = std::move(text_copy)]() {
-          return blink_standalone_renderer_set_element_text(
-              inner, element_id_copy.c_str(), text_copy.c_str());
+         text_copy = std::move(text_copy)]() mutable {
+          ClearLastError(inner);
+          QueueDomMutation(inner,
+                           html_css_renderer::DomMutationType::kSetTextContent,
+                           element_id_copy.c_str(), "", text_copy.c_str());
         });
+    return BLINK_STANDALONE_STATUS_OK;
   }
   if (!utf8_text) {
     return SetLastError(renderer, BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
@@ -4191,31 +4255,34 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_backdrop_filter_region_count(
     const blink_standalone_renderer_t* renderer) {
-  return renderer ? renderer->latest_result.backdrop_filter_regions.size() : 0;
+  const blink_standalone_renderer* source = PublicMetadataRendererFor(renderer);
+  return source ? source->latest_result.backdrop_filter_regions.size() : 0;
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_standalone_renderer_get_backdrop_filter_region(
     const blink_standalone_renderer_t* renderer,
     size_t index,
     blink_standalone_backdrop_filter_region_t* out) {
-  if (!renderer || !out ||
-      index >= renderer->latest_result.backdrop_filter_regions.size()) {
+  const blink_standalone_renderer* source = PublicMetadataRendererFor(renderer);
+  if (!source || !out ||
+      index >= source->latest_result.backdrop_filter_regions.size()) {
     return SetLastError(
         const_cast<blink_standalone_renderer_t*>(renderer),
         BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
         "get_backdrop_filter_region failed: renderer, output pointer, and valid index are required");
   }
-  CopyBackdropFilterRegion(renderer->latest_result.backdrop_filter_regions[index],
+  CopyBackdropFilterRegion(source->latest_result.backdrop_filter_regions[index],
                            out);
   return BLINK_STANDALONE_STATUS_OK;
 }
 
 extern "C" BLINK_STANDALONE_RENDERER_C_API size_t blink_standalone_renderer_gpu_backdrop_effect_count(
     const blink_standalone_renderer_t* renderer) {
-  if (!renderer) {
+  const blink_standalone_renderer* source = PublicMetadataRendererFor(renderer);
+  if (!source) {
     return 0;
   }
-  return std::min(renderer->latest_result.backdrop_filter_regions.size(),
+  return std::min(source->latest_result.backdrop_filter_regions.size(),
                   static_cast<size_t>(255u));
 }
 
@@ -4223,18 +4290,19 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
     const blink_standalone_renderer_t* renderer,
     size_t index,
     blink_standalone_gpu_backdrop_effect_t* out) {
+  const blink_standalone_renderer* source = PublicMetadataRendererFor(renderer);
   const size_t effect_count =
       blink_standalone_renderer_gpu_backdrop_effect_count(renderer);
-  if (!renderer || !out || index >= effect_count) {
+  if (!source || !out || index >= effect_count) {
     return SetLastError(
         const_cast<blink_standalone_renderer_t*>(renderer),
         BLINK_STANDALONE_STATUS_INVALID_ARGUMENT,
         "get_gpu_backdrop_effect failed: renderer, output pointer, and valid index are required");
   }
   CopyGpuBackdropEffect(
-      renderer->latest_result.backdrop_filter_regions[index],
+      source->latest_result.backdrop_filter_regions[index],
       static_cast<uint32_t>(index + 1u),
-      renderer->gpu_backdrop_frame_generation, out);
+      source->gpu_backdrop_frame_generation, out);
   return BLINK_STANDALONE_STATUS_OK;
 }
 
