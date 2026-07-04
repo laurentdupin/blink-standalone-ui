@@ -556,14 +556,7 @@ html_css_renderer::StandaloneResourceStatus ToRuntimeResourceStatus(
 }
 
 std::string JoinAcceptedMimeTypes(const std::vector<std::string>& values) {
-  std::string joined;
-  for (const std::string& value : values) {
-    if (!joined.empty()) {
-      joined += ",";
-    }
-    joined += value;
-  }
-  return joined;
+  return base::JoinString(values, ",");
 }
 
 class CApiResourceProvider final
