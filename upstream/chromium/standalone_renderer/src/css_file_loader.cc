@@ -1,6 +1,7 @@
 #include "html_css_renderer/css_file_loader.h"
 
 #include <algorithm>
+#include <string_view>
 #include <system_error>
 
 #include "base/files/file_path.h"
@@ -149,7 +150,7 @@ ParsedImportRule ParseImportRule(const std::string& rule) {
   };
   skip_space();
   size_t value_end = cursor;
-  if (lower.compare(cursor, 3, "url") == 0) {
+  if (base::StartsWith(std::string_view(lower).substr(cursor), "url")) {
     cursor += 3;
     skip_space();
     if (cursor >= rule.size() || rule[cursor] != '(') {
@@ -291,7 +292,7 @@ std::string ExpandImportsAndRebaseCssSegments(
       in_double_quote = true;
       continue;
     }
-    if (lower.compare(i, 7, "@import") != 0) {
+    if (!base::StartsWith(std::string_view(lower).substr(i), "@import")) {
       continue;
     }
     const size_t after_import = i + 7;
@@ -518,7 +519,7 @@ bool CssContainsImportRule(const std::string& css) {
       in_double_quote = true;
       continue;
     }
-    if (lower.compare(i, 7, "@import") == 0) {
+    if (base::StartsWith(std::string_view(lower).substr(i), "@import")) {
       const size_t after = i + 7;
       if (after >= lower.size() ||
           !base::IsAsciiAlphaNumeric(lower[after])) {
