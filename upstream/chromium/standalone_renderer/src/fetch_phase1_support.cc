@@ -38,20 +38,31 @@ ResourceLoadPriority AdjustPriorityWithPriorityHintAndRenderBlocking(
     case mojom::blink::FetchPriorityHint::kAuto:
       break;
     case mojom::blink::FetchPriorityHint::kHigh:
+      // Boost priority of any request type that supports priority hints.
       if (new_priority < ResourceLoadPriority::kHigh) {
         new_priority = ResourceLoadPriority::kHigh;
       }
+      CHECK_LE(priority, new_priority);
       break;
     case mojom::blink::FetchPriorityHint::kLow:
+      // Demote priority of any request type that supports priority hints.
+      // Most content types go to kLow. The one exception is early
+      // render-blocking CSS which defaults to the highest priority but
+      // can be lowered to match the "high" priority of everything else
+      // to allow for ordering if necessary without causing too much of a
+      // foot-gun.
       if (type == ResourceType::kCSSStyleSheet &&
           new_priority == ResourceLoadPriority::kVeryHigh) {
         new_priority = ResourceLoadPriority::kHigh;
       } else if (new_priority > ResourceLoadPriority::kLow) {
         new_priority = ResourceLoadPriority::kLow;
       }
+      CHECK_LE(new_priority, priority);
       break;
   }
 
+  // Render-blocking is a signal that the resource is important, so we bump it
+  // to at least kHigh.
   if (render_blocking_behavior == RenderBlockingBehavior::kBlocking &&
       new_priority < ResourceLoadPriority::kHigh) {
     new_priority = ResourceLoadPriority::kHigh;
@@ -80,7 +91,7 @@ bool ShouldLoadIncremental(ResourceType type) {
     case ResourceType::kDictionary:
       return true;
   }
-  return false;
+  NOTREACHED();
 }
 
 std::optional<ResourceRequestBlockedReason> PrepareResourceRequestForCacheAccess(
