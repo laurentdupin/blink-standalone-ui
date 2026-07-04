@@ -468,6 +468,10 @@ bool ShouldBlockFallbackForRequest(const StandaloneResourceRequest& request,
   return false;
 }
 
+bool MimeEquals(std::string_view mime_type, std::string_view expected_mime_type) {
+  return base::EqualsCaseInsensitiveASCII(mime_type, expected_mime_type);
+}
+
 std::string SupportedDataImageMime(std::string_view media_type) {
   std::optional<std::string> mime_type =
       net::ExtractMimeTypeFromMediaType(media_type,
@@ -475,16 +479,17 @@ std::string SupportedDataImageMime(std::string_view media_type) {
   if (!mime_type) {
     return std::string();
   }
-  const std::string mime = base::ToLowerASCII(*mime_type);
-  if (mime == "image/png")
+  if (MimeEquals(*mime_type, "image/png"))
     return "image/png";
-  if (mime == "image/jpeg" || mime == "image/jpg")
+  if (MimeEquals(*mime_type, "image/jpeg") ||
+      MimeEquals(*mime_type, "image/jpg"))
     return "image/jpeg";
-  if (mime == "image/bmp" || mime == "image/x-ms-bmp")
+  if (MimeEquals(*mime_type, "image/bmp") ||
+      MimeEquals(*mime_type, "image/x-ms-bmp"))
     return "image/bmp";
-  if (mime == "image/webp")
+  if (MimeEquals(*mime_type, "image/webp"))
     return "image/webp";
-  if (mime == "image/svg+xml")
+  if (MimeEquals(*mime_type, "image/svg+xml"))
     return "image/svg+xml";
   return std::string();
 }
