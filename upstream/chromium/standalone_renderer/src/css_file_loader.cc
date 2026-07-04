@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/strings/string_util.h"
 
 namespace html_css_renderer {
 namespace {
@@ -18,14 +19,6 @@ std::optional<std::string> ReadTextFile(const fs::path& path) {
     return std::nullopt;
   }
   return contents;
-}
-
-std::string ToLowerAscii(std::string value) {
-  std::transform(value.begin(), value.end(), value.begin(),
-                 [](unsigned char c) {
-                   return static_cast<char>(std::tolower(c));
-                 });
-  return value;
 }
 
 std::string TrimAscii(std::string value) {
@@ -166,7 +159,7 @@ size_t FindCssRuleEnd(const std::string& css, size_t rule_start) {
 
 ParsedImportRule ParseImportRule(const std::string& rule) {
   ParsedImportRule parsed;
-  const std::string lower = ToLowerAscii(rule);
+  const std::string lower = base::ToLowerASCII(rule);
   size_t cursor = 7;
   auto skip_space = [&]() {
     while (cursor < rule.size() &&
@@ -276,7 +269,7 @@ std::string ExpandImportsAndRebaseCssSegments(
     size_t depth) {
   std::string output;
   output.reserve(css.size());
-  const std::string lower = ToLowerAscii(css);
+  const std::string lower = base::ToLowerASCII(css);
   bool in_single_quote = false;
   bool in_double_quote = false;
   bool in_comment = false;
@@ -336,7 +329,7 @@ std::string ExpandImportsAndRebaseCssSegments(
       AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
                                               parsed.reason, diagnostics);
     } else {
-      const std::string lower_href = ToLowerAscii(parsed.href);
+      const std::string lower_href = base::ToLowerASCII(parsed.href);
       const fs::path import_ref = fs::path(parsed.href);
       if (lower_href.rfind("//", 0) == 0 || HasUrlScheme(parsed.href) ||
           import_ref.is_absolute()) {
@@ -424,7 +417,7 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
     quote = value.front();
     value = value.substr(1, value.size() - 2);
   }
-  const std::string lower = ToLowerAscii(value);
+  const std::string lower = base::ToLowerASCII(value);
   if (value.empty() || value.front() == '#' ||
       lower.rfind("//", 0) == 0 || lower.rfind("/", 0) == 0 ||
       lower.rfind("\\", 0) == 0 || HasUrlScheme(value)) {
@@ -445,8 +438,8 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
 
 std::optional<std::string> ExtractAttribute(const std::string& tag,
                                             const std::string& name) {
-  const std::string lower = ToLowerAscii(tag);
-  const std::string needle = ToLowerAscii(name) + "=";
+  const std::string lower = base::ToLowerASCII(tag);
+  const std::string needle = base::ToLowerASCII(name) + "=";
   const size_t attr = lower.find(needle);
   if (attr == std::string::npos) {
     return std::nullopt;
@@ -475,7 +468,7 @@ std::optional<std::string> ExtractAttribute(const std::string& tag,
 
 std::vector<std::string> ExtractLinkedStylesheetHrefs(const std::string& html) {
   std::vector<std::string> hrefs;
-  const std::string lower = ToLowerAscii(html);
+  const std::string lower = base::ToLowerASCII(html);
   size_t search_offset = 0;
   while (true) {
     const size_t link_start = lower.find("<link", search_offset);
@@ -492,7 +485,7 @@ std::vector<std::string> ExtractLinkedStylesheetHrefs(const std::string& html) {
     const std::optional<std::string> rel = ExtractAttribute(tag, "rel");
     const std::optional<std::string> href = ExtractAttribute(tag, "href");
     if (href && rel &&
-        ToLowerAscii(*rel).find("stylesheet") != std::string::npos) {
+        base::ToLowerASCII(*rel).find("stylesheet") != std::string::npos) {
       hrefs.push_back(*href);
     } else if (href && lower_tag.find("stylesheet") != std::string::npos) {
       hrefs.push_back(*href);
@@ -505,7 +498,7 @@ std::vector<std::string> ExtractLinkedStylesheetHrefs(const std::string& html) {
 }  // namespace
 
 bool CssContainsImportRule(const std::string& css) {
-  const std::string lower = ToLowerAscii(css);
+  const std::string lower = base::ToLowerASCII(css);
   bool in_single_quote = false;
   bool in_double_quote = false;
   bool in_comment = false;
@@ -574,7 +567,7 @@ std::string RebaseCssUrlsToDocumentBase(
   const fs::path stylesheet_dir = stylesheet_path.parent_path();
   std::string output;
   output.reserve(css.size());
-  const std::string lower = ToLowerAscii(css);
+  const std::string lower = base::ToLowerASCII(css);
   size_t search_offset = 0;
   while (true) {
     const size_t url_start = lower.find("url(", search_offset);
