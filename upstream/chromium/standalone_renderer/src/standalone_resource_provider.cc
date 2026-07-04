@@ -25,6 +25,7 @@
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
 #include "base/numerics/byte_conversions.h"
+#include "base/numerics/checked_math.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
 #include "net/base/data_url.h"
@@ -333,17 +334,18 @@ StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
   }
 
   constexpr UINT kBytesPerPixel = 4;
-  uint64_t stride64 = static_cast<uint64_t>(width) * kBytesPerPixel;
-  uint64_t byte_count64 = stride64 * height;
-  if (stride64 > std::numeric_limits<UINT>::max() ||
-      byte_count64 > std::numeric_limits<size_t>::max()) {
+  const auto stride_checked = base::CheckMul(width, kBytesPerPixel);
+  const auto byte_count_checked = base::CheckMul(stride_checked, height);
+  UINT stride = 0;
+  UINT byte_count = 0;
+  if (!stride_checked.AssignIfValid(&stride) ||
+      !byte_count_checked.AssignIfValid(&byte_count)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "decoded image is too large", result.mime_type);
   }
 
-  std::vector<uint8_t> pixels(static_cast<size_t>(byte_count64));
-  hr = converter->CopyPixels(nullptr, static_cast<UINT>(stride64),
-                             static_cast<UINT>(byte_count64), pixels.data());
+  std::vector<uint8_t> pixels(byte_count);
+  hr = converter->CopyPixels(nullptr, stride, byte_count, pixels.data());
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "WIC image pixel copy failed", result.mime_type);
@@ -352,7 +354,7 @@ StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
   SkImageInfo image_info =
       SkImageInfo::Make(static_cast<int>(width), static_cast<int>(height),
                         kBGRA_8888_SkColorType, kPremul_SkAlphaType);
-  SkPixmap pixmap(image_info, pixels.data(), static_cast<size_t>(stride64));
+  SkPixmap pixmap(image_info, pixels.data(), static_cast<size_t>(stride));
   result.decoded_image = SkImages::RasterFromPixmapCopy(pixmap);
   if (!result.decoded_image) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
