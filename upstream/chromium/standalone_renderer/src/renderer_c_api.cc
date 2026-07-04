@@ -231,8 +231,7 @@ class BorrowedVulkanImplementation final : public gpu::VulkanImplementation {
 #endif
 
 void EnsureStandaloneCApiProcessInitialized() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  static const bool initialized = [] {
     html_css_renderer::ConfigureStandaloneToolProcess();
     if (!base::CommandLine::InitializedForCurrentProcess()) {
       const char* argv[] = {"blink_standalone_renderer"};
@@ -264,7 +263,9 @@ void EnsureStandaloneCApiProcessInitialized() {
     if (!perfetto::Tracing::IsInitialized()) {
       base::trace_event::InitializeInProcessPerfettoBackend();
     }
-  });
+    return true;
+  }();
+  (void)initialized;
 }
 
 std::string LowerAscii(std::string value) {
