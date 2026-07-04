@@ -7,6 +7,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_util.h"
+#include "url/third_party/mozilla/url_parse.h"
 
 namespace html_css_renderer {
 namespace {
@@ -27,18 +28,8 @@ std::string TrimAscii(std::string value) {
 }
 
 bool HasUrlScheme(const std::string& value) {
-  const size_t colon = value.find(':');
-  if (colon == std::string::npos || colon == 0) {
-    return false;
-  }
-  for (size_t i = 0; i < colon; ++i) {
-    const unsigned char c = static_cast<unsigned char>(value[i]);
-    if (!std::isalnum(c) && value[i] != '+' && value[i] != '-' &&
-        value[i] != '.') {
-      return false;
-    }
-  }
-  return true;
+  url::Component scheme;
+  return url::ExtractScheme(value, &scheme);
 }
 
 bool IsPathWithinRoot(const fs::path& path, const fs::path& root) {
