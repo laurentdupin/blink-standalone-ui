@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <string_view>
-#include <system_error>
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -17,9 +16,31 @@ namespace {
 
 namespace fs = std::filesystem;
 
+base::FilePath FilePathFromFsPath(const fs::path& path) {
+  return base::FilePath(path.native());
+}
+
+fs::path FsPathFromFilePath(const base::FilePath& path) {
+  return fs::path(path.value());
+}
+
+base::FilePath AbsoluteFilePathForCssPolicy(base::FilePath path) {
+  if (path.empty())
+    return path;
+  base::FilePath resolved = base::MakeAbsoluteFilePath(path);
+  if (!resolved.empty())
+    return resolved;
+  if (path.IsAbsolute())
+    return path.NormalizePathSeparators();
+  base::FilePath current_directory;
+  if (base::GetCurrentDirectory(&current_directory))
+    return current_directory.Append(path).NormalizePathSeparators();
+  return path.NormalizePathSeparators();
+}
+
 std::optional<std::string> ReadTextFile(const fs::path& path) {
   std::string contents;
-  if (!base::ReadFileToString(base::FilePath(path.native()), &contents)) {
+  if (!base::ReadFileToString(FilePathFromFsPath(path), &contents)) {
     return std::nullopt;
   }
   return contents;
@@ -40,7 +61,7 @@ std::optional<fs::path> ResolveLocalPathReference(
     if (!net::FileURLToFilePath(url, &file_path)) {
       return std::nullopt;
     }
-    return fs::path(file_path.value());
+    return FsPathFromFilePath(file_path);
   }
   fs::path path(reference);
   if (path.is_relative()) {
@@ -50,18 +71,14 @@ std::optional<fs::path> ResolveLocalPathReference(
 }
 
 bool IsPathWithinRoot(const fs::path& path, const fs::path& root) {
-  const base::FilePath path_file(path.native());
-  const base::FilePath root_file(root.native());
+  const base::FilePath path_file = FilePathFromFsPath(path);
+  const base::FilePath root_file = FilePathFromFsPath(root);
   return path_file == root_file || root_file.IsParent(path_file);
 }
 
 fs::path NormalizePathForPolicy(const fs::path& path) {
-  std::error_code error;
-  fs::path normalized = fs::weakly_canonical(path, error);
-  if (!error) {
-    return normalized;
-  }
-  return fs::absolute(path).lexically_normal();
+  return FsPathFromFilePath(
+      AbsoluteFilePathForCssPolicy(FilePathFromFsPath(path)));
 }
 
 bool IsImportBoundary(char c) {
@@ -600,7 +617,7 @@ void AddLocalLinkedStylesheetsForDocument(
     const std::string& html,
     RendererCreateInfo* create_info,
     std::vector<std::string>* diagnostics) {
-  const fs::path base_dir = fs::absolute(html_path).parent_path();
+  const fs::path base_dir = NormalizePathForPolicy(html_path).parent_path();
   for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
     if (href.empty()) {
       continue;
