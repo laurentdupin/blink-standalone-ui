@@ -1791,6 +1791,9 @@ uint32_t ToPublicAsyncState(
       return BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
     case html_css_renderer::ExternalGpuTargetCopyStatus::kStale:
       return BLINK_STANDALONE_GPU_ASYNC_STATE_STALE;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kUnsupported:
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument:
+      return BLINK_STANDALONE_GPU_ASYNC_STATE_FAILED;
   }
   return BLINK_STANDALONE_GPU_ASYNC_STATE_FAILED;
 }
@@ -1805,6 +1808,45 @@ blink_standalone_status_code_t ToPublicAsyncStatus(
       return BLINK_STANDALONE_STATUS_OK;
     case html_css_renderer::ExternalGpuTargetCopyStatus::kPending:
       return BLINK_STANDALONE_STATUS_PENDING;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kFailed:
+      return BLINK_STANDALONE_STATUS_RENDER_FAILED;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kUnsupported:
+      return BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument:
+      return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+  }
+  return BLINK_STANDALONE_STATUS_RENDER_FAILED;
+}
+
+html_css_renderer::ExternalGpuTargetCopyResult LegacyGpuSmokeResultToCopyResult(
+    std::string diagnostic) {
+  html_css_renderer::ExternalGpuTargetCopyResult result;
+  result.diagnostic = std::move(diagnostic);
+  result.status =
+      result.diagnostic.empty() ||
+              result.diagnostic.find("failed") != std::string::npos
+          ? html_css_renderer::ExternalGpuTargetCopyStatus::kFailed
+          : html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted;
+  if (result.diagnostic.find("blocked") != std::string::npos) {
+    result.status = html_css_renderer::ExternalGpuTargetCopyStatus::kUnsupported;
+  }
+  return result;
+}
+
+blink_standalone_status_code_t ToPublicSyncGpuCopyStatus(
+    html_css_renderer::ExternalGpuTargetCopyStatus status) {
+  switch (status) {
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted:
+      return BLINK_STANDALONE_STATUS_OK;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kPending:
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kStale:
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kCancelled:
+      return BLINK_STANDALONE_STATUS_PENDING;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kUnsupported:
+      return BLINK_STANDALONE_STATUS_UNSUPPORTED;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument:
+      return BLINK_STANDALONE_STATUS_INVALID_ARGUMENT;
+    case html_css_renderer::ExternalGpuTargetCopyStatus::kNone:
     case html_css_renderer::ExternalGpuTargetCopyStatus::kFailed:
       return BLINK_STANDALONE_STATUS_RENDER_FAILED;
   }
@@ -2825,7 +2867,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "render_to_gpu_target pending: forced internal retry test");
   }
 
-  std::string target_result;
+  html_css_renderer::ExternalGpuTargetCopyResult target_result;
   if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
     if (vulkan_external) {
       if (!renderer->external_vulkan_configured) {
@@ -2855,8 +2897,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       target_result =
           renderer->runtime->RenderExternalVkImageToTarget(external_target);
     } else {
-      target_result =
-          renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting();
+      target_result = LegacyGpuSmokeResultToCopyResult(
+          renderer->runtime->RunBorrowedVkImageRenderCopySmokeForTesting());
     }
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
     if (d3d12_external) {
@@ -2871,8 +2913,8 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
           target->d3d12.d3d12_resource, target->d3d12.shared_handle,
           d3d12_target_width, d3d12_target_height);
     } else {
-      target_result =
-          renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting();
+      target_result = LegacyGpuSmokeResultToCopyResult(
+          renderer->runtime->RunBorrowedD3D12RenderCopySmokeForTesting());
     }
   } else {
     result->status = BLINK_STANDALONE_STATUS_UNSUPPORTED;
@@ -2880,47 +2922,32 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                         "render_to_gpu_target failed: backend is not a GPU target backend");
   }
 
-  const bool expected_result_prefix =
-      StartsWith(target_result, "gpu_borrowed_") ||
-      StartsWith(target_result, "gpu_external_");
-  if (target_result.find("cannot initialize without LocalSurfaceId") !=
-      std::string::npos) {
-    renderer->gpu_source_frame_pending = true;
-    renderer->runtime->ReleaseExternalGpuTargetState();
-    result->status = BLINK_STANDALONE_STATUS_PENDING;
-    return SetLastError(
-        renderer, BLINK_STANDALONE_STATUS_PENDING,
-        "render_to_gpu_target pending: GPU source frame is not ready");
-  }
-  if (renderer->latest_result.gpu_frame_status ==
-      html_css_renderer::GpuFrameOutputStatus::kPending) {
+  if (target_result.status ==
+          html_css_renderer::ExternalGpuTargetCopyStatus::kPending ||
+      target_result.status ==
+          html_css_renderer::ExternalGpuTargetCopyStatus::kStale ||
+      target_result.status ==
+          html_css_renderer::ExternalGpuTargetCopyStatus::kCancelled) {
     renderer->gpu_prepare_required_after_update = true;
     renderer->gpu_source_frame_pending = false;
     renderer->runtime->ReleaseExternalGpuTargetState();
     result->status = BLINK_STANDALONE_STATUS_PENDING;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_PENDING,
-        renderer->latest_result.gpu_frame_failure.empty()
+        target_result.diagnostic.empty()
             ? "render_to_gpu_target pending: GPU source frame is not ready"
-            : renderer->latest_result.gpu_frame_failure);
+            : target_result.diagnostic);
   }
-  if (!expected_result_prefix ||
-      target_result.find(": ok") == std::string::npos) {
-    const bool invalid_external_d3d12_target =
-        backend == BLINK_STANDALONE_GPU_BACKEND_D3D12 &&
-        target_result.find(
-            "borrowed external D3D12 shared handle open failed") !=
-            std::string::npos;
+  if (target_result.status !=
+      html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted) {
     const blink_standalone_status_code_t failure_status =
-        invalid_external_d3d12_target
-            ? BLINK_STANDALONE_STATUS_INVALID_ARGUMENT
-            : BLINK_STANDALONE_STATUS_RENDER_FAILED;
+        ToPublicSyncGpuCopyStatus(target_result.status);
     result->status = failure_status;
     return SetLastError(
         renderer, failure_status,
-        target_result.empty()
+        target_result.diagnostic.empty()
             ? "render_to_gpu_target failed: GPU target writer returned no result"
-            : target_result);
+            : target_result.diagnostic);
   }
   result->status = BLINK_STANDALONE_STATUS_OK;
   result->target_written = 1;
@@ -3055,17 +3082,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         "render_gpu_backdrop_frame failed: a backdrop mask target is required");
   }
 
-  std::string mask_result;
-  const char* expected_mask_prefix = "";
+  html_css_renderer::ExternalGpuTargetCopyResult mask_result;
   if (mask_internal_standin) {
-    mask_result =
+    mask_result = LegacyGpuSmokeResultToCopyResult(
         backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN
             ? renderer->runtime->RunVulkanBackdropMaskPrototypeForTesting()
-            : renderer->runtime->RunD3D12BackdropMaskPrototypeForTesting();
-    expected_mask_prefix =
-        backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN
-            ? "gpu_vulkan_backdrop_mask_prototype_smoke: ok"
-            : "gpu_d3d12_backdrop_mask_prototype_smoke: ok";
+            : renderer->runtime->RunD3D12BackdropMaskPrototypeForTesting());
   } else if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
     std::string validation_failure;
     if (!ValidateVulkanExternalTarget(request->backdrop_mask_target,
@@ -3097,7 +3119,6 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         request->backdrop_mask_target.vulkan.queue_family_index;
     mask_result =
         renderer->runtime->RenderBackdropMaskToExternalVkImage(mask_target);
-    expected_mask_prefix = "gpu_external_vkimage_backdrop_mask: ok";
   } else {
     const int mask_width =
         request->backdrop_mask_target.d3d12.width
@@ -3113,19 +3134,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         request->backdrop_mask_target.d3d12.d3d12_resource,
         request->backdrop_mask_target.d3d12.shared_handle, mask_width,
         mask_height);
-    expected_mask_prefix = "gpu_external_d3d12_backdrop_mask: ok";
   }
-  if (!StartsWith(mask_result, expected_mask_prefix)) {
+  if (mask_result.status !=
+      html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted) {
     const blink_standalone_status_code_t failure_status =
-        mask_result.find(": blocked") != std::string::npos
-            ? BLINK_STANDALONE_STATUS_UNSUPPORTED
-            : BLINK_STANDALONE_STATUS_RENDER_FAILED;
+        ToPublicSyncGpuCopyStatus(mask_result.status);
     result->status = failure_status;
     return SetLastError(
         renderer, failure_status,
-        mask_result.empty()
+        mask_result.diagnostic.empty()
             ? "render_gpu_backdrop_frame failed: backdrop mask writer returned no result"
-            : mask_result);
+            : mask_result.diagnostic);
   }
 
   result->status = BLINK_STANDALONE_STATUS_OK;
@@ -3348,7 +3367,11 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->pixel_format = main_target.common.pixel_format;
   result->mask_encoding = request->mask_encoding;
   if (copy_result.status ==
-      html_css_renderer::ExternalGpuTargetCopyStatus::kFailed) {
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed ||
+      copy_result.status ==
+          html_css_renderer::ExternalGpuTargetCopyStatus::kUnsupported ||
+      copy_result.status ==
+          html_css_renderer::ExternalGpuTargetCopyStatus::kInvalidArgument) {
     return SetLastError(renderer,
                         static_cast<blink_standalone_status_code_t>(
                             result->status),
@@ -3491,7 +3514,7 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
           "poll_gpu_frame_async failed: no backdrop effects were collected for the rendered frame");
     }
 
-    std::string mask_result;
+    html_css_renderer::ExternalGpuTargetCopyResult mask_result;
     const uint32_t backend = renderer->pending_async_gpu_frame.backend;
     if (backend == BLINK_STANDALONE_GPU_BACKEND_VULKAN) {
       std::string validation_failure;
@@ -3520,25 +3543,6 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       mask_target.queue_family_index = target.vulkan.queue_family_index;
       mask_result =
           renderer->runtime->RenderBackdropMaskToExternalVkImage(mask_target);
-      if (!StartsWith(mask_result, "gpu_external_vkimage_backdrop_mask: ok")) {
-        if (renderer->pending_async_gpu_frame.mask_required &&
-            mask_result.find("backdrop mask target remained empty") !=
-                std::string::npos) {
-          result->status = BLINK_STANDALONE_STATUS_PENDING;
-          result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING;
-          result->main_target_written = 0;
-          result->backdrop_mask_written = 0;
-          result->effect_count = 0;
-          result->max_effect_id = 0;
-          return SetLastError(renderer, BLINK_STANDALONE_STATUS_PENDING,
-                              mask_result);
-        }
-        renderer->pending_async_gpu_frame.active = false;
-        result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
-        result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_FAILED;
-        return SetLastError(renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
-                            mask_result);
-      }
     } else if (backend == BLINK_STANDALONE_GPU_BACKEND_D3D12) {
       const auto& target =
           renderer->pending_async_gpu_frame.backdrop_mask_target;
@@ -3553,13 +3557,36 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
       mask_result = renderer->runtime->RenderBackdropMaskToExternalD3D12Target(
           target.d3d12.d3d12_resource, target.d3d12.shared_handle, mask_width,
           mask_height);
-      if (!StartsWith(mask_result, "gpu_external_d3d12_backdrop_mask: ok")) {
-        renderer->pending_async_gpu_frame.active = false;
-        result->status = BLINK_STANDALONE_STATUS_RENDER_FAILED;
-        result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_FAILED;
-        return SetLastError(renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
-                            mask_result);
+    }
+    if (mask_result.status !=
+        html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted) {
+      if (mask_result.status ==
+              html_css_renderer::ExternalGpuTargetCopyStatus::kPending ||
+          mask_result.status ==
+              html_css_renderer::ExternalGpuTargetCopyStatus::kStale ||
+          mask_result.status ==
+              html_css_renderer::ExternalGpuTargetCopyStatus::kCancelled) {
+        result->status = BLINK_STANDALONE_STATUS_PENDING;
+        result->state = ToPublicAsyncState(mask_result.status);
+        result->main_target_written = 0;
+        result->backdrop_mask_written = 0;
+        result->effect_count = 0;
+        result->max_effect_id = 0;
+        return SetLastError(
+            renderer, BLINK_STANDALONE_STATUS_PENDING,
+            mask_result.diagnostic.empty()
+                ? "poll_gpu_frame_async pending: backdrop mask writer is not ready"
+                : mask_result.diagnostic);
       }
+      renderer->pending_async_gpu_frame.active = false;
+      result->status = ToPublicSyncGpuCopyStatus(mask_result.status);
+      result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_FAILED;
+      return SetLastError(
+          renderer,
+          static_cast<blink_standalone_status_code_t>(result->status),
+          mask_result.diagnostic.empty()
+              ? "poll_gpu_frame_async failed: backdrop mask writer returned no result"
+              : mask_result.diagnostic);
     }
     result->backdrop_mask_written = 1;
     renderer->gpu_backdrop_frame_generation = std::max(

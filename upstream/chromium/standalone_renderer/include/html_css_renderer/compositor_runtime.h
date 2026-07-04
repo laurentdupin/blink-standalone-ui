@@ -164,6 +164,8 @@ enum class ExternalGpuTargetCopyStatus {
   kFailed = 3,
   kCancelled = 4,
   kStale = 5,
+  kUnsupported = 6,
+  kInvalidArgument = 7,
 };
 
 struct ExternalGpuTargetCopyResult {
@@ -191,26 +193,27 @@ class StandaloneCompositorRuntime {
   virtual std::string RunBorrowedVkImageRenderCopySmokeForTesting() = 0;
   virtual std::string RunExternalVkImageRenderCopyForTesting(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
-  virtual std::string RenderExternalVkImageToTarget(
+  virtual ExternalGpuTargetCopyResult RenderExternalVkImageToTarget(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual ExternalGpuTargetCopyResult BeginRenderExternalVkImageToTargetAsync(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
-  virtual std::string RenderBackdropMaskToExternalVkImage(
+  virtual ExternalGpuTargetCopyResult RenderBackdropMaskToExternalVkImage(
       const ExternalVulkanImageTarget& vulkan_image) = 0;
   virtual std::string RunBorrowedD3D12RenderCopySmokeForTesting() = 0;
   virtual std::string RunExternalD3D12RenderCopyForTesting(
       void* d3d12_resource,
       void* shared_handle) = 0;
-  virtual std::string RenderExternalD3D12ToTarget(void* d3d12_resource,
-                                                  void* shared_handle,
-                                                  int width,
-                                                  int height) = 0;
+  virtual ExternalGpuTargetCopyResult RenderExternalD3D12ToTarget(
+      void* d3d12_resource,
+      void* shared_handle,
+      int width,
+      int height) = 0;
   virtual ExternalGpuTargetCopyResult BeginRenderExternalD3D12ToTargetAsync(
       void* d3d12_resource,
       void* shared_handle,
       int width,
       int height) = 0;
-  virtual std::string RenderBackdropMaskToExternalD3D12Target(
+  virtual ExternalGpuTargetCopyResult RenderBackdropMaskToExternalD3D12Target(
       void* d3d12_resource,
       void* shared_handle,
       int width,
