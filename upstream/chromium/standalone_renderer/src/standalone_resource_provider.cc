@@ -408,7 +408,7 @@ StandaloneResourceResult DecodeOrClassifyImageBytes(
       "valid WebP resource classified without platform WebP decoder");
 }
 
-bool IsSvgImageMime(const std::string& mime_type);
+bool IsSvgImageMime(std::string_view mime_type);
 bool IsDataUrl(const std::string& url);
 
 StandaloneResourceResult FinalizeProviderMemoryResult(
@@ -489,8 +489,8 @@ std::string SupportedDataImageMime(std::string_view media_type) {
   return std::string();
 }
 
-bool IsSvgImageMime(const std::string& mime_type) {
-  return mime_type == "image/svg+xml";
+bool IsSvgImageMime(std::string_view mime_type) {
+  return net::MatchesMimeType("image/svg+xml", mime_type);
 }
 
 bool IsDataUrl(const std::string& url) {
