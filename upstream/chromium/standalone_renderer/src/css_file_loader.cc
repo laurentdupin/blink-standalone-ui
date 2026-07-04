@@ -8,6 +8,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "net/base/filename_util.h"
+#include "standalone_renderer/src/standalone_css_import_parser.h"
 #include "standalone_renderer/src/standalone_stylesheet_link_parser.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -82,10 +83,6 @@ fs::path NormalizePathForPolicy(const fs::path& path) {
       AbsoluteFilePathForCssPolicy(FilePathFromFsPath(path)));
 }
 
-bool IsImportBoundary(char c) {
-  return !base::IsAsciiAlphaNumeric(c) && c != '_' && c != '-';
-}
-
 void AppendUnsupportedCssImportRuleDiagnostic(
     const std::string& stylesheet_label,
     const std::string& reason,
@@ -99,167 +96,6 @@ void AppendUnsupportedCssImportRuleDiagnostic(
     base::StrAppend(&message, {" (", reason, ")"});
   }
   diagnostics->push_back(message);
-}
-
-struct ParsedImportRule {
-  bool supported = false;
-  std::string href;
-  std::string reason;
-};
-
-size_t FindCssRuleEnd(const std::string& css, size_t rule_start) {
-  bool in_single_quote = false;
-  bool in_double_quote = false;
-  bool in_comment = false;
-  int paren_depth = 0;
-  for (size_t i = rule_start; i < css.size(); ++i) {
-    if (in_comment) {
-      if (i + 1 < css.size() && css[i] == '*' && css[i + 1] == '/') {
-        in_comment = false;
-        ++i;
-      }
-      continue;
-    }
-    if (in_single_quote) {
-      if (css[i] == '\\') {
-        ++i;
-      } else if (css[i] == '\'') {
-        in_single_quote = false;
-      }
-      continue;
-    }
-    if (in_double_quote) {
-      if (css[i] == '\\') {
-        ++i;
-      } else if (css[i] == '"') {
-        in_double_quote = false;
-      }
-      continue;
-    }
-    if (i + 1 < css.size() && css[i] == '/' && css[i + 1] == '*') {
-      in_comment = true;
-      ++i;
-      continue;
-    }
-    if (css[i] == '\'') {
-      in_single_quote = true;
-      continue;
-    }
-    if (css[i] == '"') {
-      in_double_quote = true;
-      continue;
-    }
-    if (css[i] == '(') {
-      ++paren_depth;
-      continue;
-    }
-    if (css[i] == ')' && paren_depth > 0) {
-      --paren_depth;
-      continue;
-    }
-    if (css[i] == ';' && paren_depth == 0) {
-      return i + 1;
-    }
-  }
-  return css.size();
-}
-
-ParsedImportRule ParseImportRule(const std::string& rule) {
-  ParsedImportRule parsed;
-  const std::string lower = base::ToLowerASCII(rule);
-  size_t cursor = 7;
-  auto skip_space = [&]() {
-    while (cursor < rule.size() && base::IsAsciiWhitespace(rule[cursor])) {
-      ++cursor;
-    }
-  };
-  skip_space();
-  size_t value_end = cursor;
-  if (base::StartsWith(std::string_view(lower).substr(cursor), "url")) {
-    cursor += 3;
-    skip_space();
-    if (cursor >= rule.size() || rule[cursor] != '(') {
-      parsed.reason = "invalid url() import";
-      return parsed;
-    }
-    ++cursor;
-    skip_space();
-    if (cursor < rule.size() && (rule[cursor] == '"' || rule[cursor] == '\'')) {
-      const char quote = rule[cursor++];
-      const size_t href_start = cursor;
-      while (cursor < rule.size() && rule[cursor] != quote) {
-        if (rule[cursor] == '\\' && cursor + 1 < rule.size()) {
-          cursor += 2;
-        } else {
-          ++cursor;
-        }
-      }
-      if (cursor >= rule.size()) {
-        parsed.reason = "unterminated quoted import";
-        return parsed;
-      }
-      parsed.href = rule.substr(href_start, cursor - href_start);
-      ++cursor;
-      skip_space();
-      if (cursor >= rule.size() || rule[cursor] != ')') {
-        parsed.reason = "invalid url() import";
-        return parsed;
-      }
-      value_end = ++cursor;
-    } else {
-      const size_t href_start = cursor;
-      while (cursor < rule.size() && rule[cursor] != ')') {
-        ++cursor;
-      }
-      if (cursor >= rule.size()) {
-        parsed.reason = "unterminated url() import";
-        return parsed;
-      }
-      parsed.href = std::string(base::TrimWhitespaceASCII(
-          rule.substr(href_start, cursor - href_start), base::TRIM_ALL));
-      value_end = ++cursor;
-    }
-  } else if (cursor < rule.size() &&
-             (rule[cursor] == '"' || rule[cursor] == '\'')) {
-    const char quote = rule[cursor++];
-    const size_t href_start = cursor;
-    while (cursor < rule.size() && rule[cursor] != quote) {
-      if (rule[cursor] == '\\' && cursor + 1 < rule.size()) {
-        cursor += 2;
-      } else {
-        ++cursor;
-      }
-    }
-    if (cursor >= rule.size()) {
-      parsed.reason = "unterminated quoted import";
-      return parsed;
-    }
-    parsed.href = rule.substr(href_start, cursor - href_start);
-    value_end = ++cursor;
-  } else {
-    parsed.reason = "missing import URL";
-    return parsed;
-  }
-
-  std::string tail = std::string(
-      base::TrimWhitespaceASCII(rule.substr(value_end), base::TRIM_ALL));
-  if (!tail.empty() && tail.back() == ';') {
-    tail.pop_back();
-    tail = std::string(base::TrimWhitespaceASCII(tail, base::TRIM_ALL));
-  }
-  if (!tail.empty()) {
-    parsed.reason = "media-qualified imports are not expanded";
-    parsed.href.clear();
-    return parsed;
-  }
-  parsed.href =
-      std::string(base::TrimWhitespaceASCII(parsed.href, base::TRIM_ALL));
-  if (parsed.href.empty()) {
-    parsed.reason = "empty import URL";
-    return parsed;
-  }
-  parsed.supported = true;
-  return parsed;
 }
 
 std::optional<std::string> ExpandAndRebaseStylesheetFile(
@@ -325,15 +161,15 @@ std::string ExpandImportsAndRebaseCssSegments(
     }
     const size_t after_import = i + 7;
     if (after_import < lower.size() &&
-        !IsImportBoundary(lower[after_import])) {
+        !StandaloneCssImportBoundary(lower[after_import])) {
       continue;
     }
     output += RebaseCssUrlsToDocumentBase(
         css.substr(segment_start, i - segment_start), stylesheet_path,
         document_base_dir);
-    const size_t rule_end = FindCssRuleEnd(css, i);
-    const ParsedImportRule parsed =
-        ParseImportRule(css.substr(i, rule_end - i));
+    const size_t rule_end = FindStandaloneCssRuleEnd(css, i);
+    const StandaloneCssImportRule parsed =
+        ParseStandaloneCssImportRule(css.substr(i, rule_end - i));
     if (!parsed.supported) {
       AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
                                               parsed.reason, diagnostics);

@@ -27,6 +27,7 @@
 #include "html_css_renderer/typeface_resource_registry.h"
 #include "html_css_renderer/vulkan_window_host.h"
 #include "net/base/filename_util.h"
+#include "standalone_renderer/src/standalone_css_import_parser.h"
 #include "standalone_renderer/src/standalone_stylesheet_link_parser.h"
 #include "url/gurl.h"
 
@@ -661,16 +662,6 @@ std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
   return RemoveStandaloneStylesheetLinkTagsFromHtml(html);
 }
 
-std::string UnquoteCssUrlToken(std::string value) {
-  value = TrimAsciiWhitespace(std::move(value));
-  if (value.size() >= 2 &&
-      ((value.front() == '\'' && value.back() == '\'') ||
-       (value.front() == '"' && value.back() == '"'))) {
-    return value.substr(1, value.size() - 2);
-  }
-  return value;
-}
-
 std::string ResolveProviderUrl(const std::string& value,
                                const std::string& base_url) {
   const std::string url = TrimAsciiWhitespace(value);
@@ -693,44 +684,6 @@ std::vector<std::string> ExtractProviderLinkedStylesheetHrefs(
   return ExtractStandaloneStylesheetLinkHrefs(html);
 }
 
-std::optional<std::pair<size_t, size_t>> FindNextCssImportRule(
-    const std::string& css,
-    size_t offset,
-    std::string* import_url) {
-  const std::string lower = base::ToLowerASCII(css);
-  const size_t at_import = lower.find("@import", offset);
-  if (at_import == std::string::npos)
-    return std::nullopt;
-  size_t cursor = at_import + 7;
-  while (cursor < css.size() && base::IsAsciiWhitespace(css[cursor])) {
-    ++cursor;
-  }
-  std::string url;
-  if (base::StartsWith(std::string_view(lower).substr(cursor), "url(")) {
-    cursor += 4;
-    const size_t close = css.find(')', cursor);
-    if (close == std::string::npos)
-      return std::nullopt;
-    url = UnquoteCssUrlToken(css.substr(cursor, close - cursor));
-    cursor = close + 1;
-  } else if (cursor < css.size() &&
-             (css[cursor] == '\'' || css[cursor] == '"')) {
-    const char quote = css[cursor];
-    const size_t close = css.find(quote, cursor + 1);
-    if (close == std::string::npos)
-      return std::nullopt;
-    url = css.substr(cursor + 1, close - cursor - 1);
-    cursor = close + 1;
-  } else {
-    return std::nullopt;
-  }
-  const size_t semicolon = css.find(';', cursor);
-  if (semicolon == std::string::npos)
-    return std::nullopt;
-  *import_url = url;
-  return std::make_pair(at_import, semicolon + 1);
-}
-
 std::optional<std::string> LoadProviderStylesheetText(const std::string& url,
                                                       const std::string& base_url,
                                                       StandaloneResourceInitiator initiator,
@@ -744,20 +697,19 @@ std::string InlineProviderCssImports(const std::string& css,
   std::string output;
   size_t offset = 0;
   while (true) {
-    std::string import_url;
-    const std::optional<std::pair<size_t, size_t>> range =
-        FindNextCssImportRule(css, offset, &import_url);
-    if (!range)
+    const std::optional<StandaloneCssImportRule> import_rule =
+        FindNextStandaloneCssImportRule(css, offset);
+    if (!import_rule || !import_rule->supported)
       break;
-    output += css.substr(offset, range->first - offset);
-    const std::string resolved = ResolveProviderUrl(import_url, base_url);
+    output += css.substr(offset, import_rule->start - offset);
+    const std::string resolved = ResolveProviderUrl(import_rule->href, base_url);
     if (std::optional<std::string> imported = LoadProviderStylesheetText(
             resolved, resolved, StandaloneResourceInitiator::kCssImport,
             depth + 1)) {
       output += *imported;
       output += "\n";
     }
-    offset = range->second;
+    offset = import_rule->end;
   }
   output += css.substr(offset);
   return output;
