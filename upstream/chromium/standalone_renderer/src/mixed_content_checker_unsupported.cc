@@ -9,7 +9,16 @@
 
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 
+#include "base/notreached.h"
+#include "net/base/url_util.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/mixed_content.mojom-blink.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_client_settings_object.h"
+#include "third_party/blink/renderer/platform/loader/fetch/https_state.h"
+#include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace blink {
 
@@ -48,16 +57,60 @@ bool MixedContentChecker::IsWebSocketAllowed(WorkerFetchContext&,
   return false;
 }
 
-bool MixedContentChecker::IsMixedContent(const SecurityOrigin*, const KURL&) {
-  return false;
+namespace {
+
+bool StandaloneIsPotentiallyTrustworthyUrl(const KURL& url) {
+  if (url.ProtocolIsData()) {
+    return true;
+  }
+
+  const GURL gurl(url);
+  if (gurl.IsAboutBlank() || gurl.IsAboutSrcdoc()) {
+    return true;
+  }
+  if (gurl.SchemeIs(url::kHttpsScheme) || gurl.SchemeIs(url::kWssScheme) ||
+      gurl.SchemeIs(url::kFileScheme)) {
+    return true;
+  }
+  if (net::IsLocalhost(gurl)) {
+    return true;
+  }
+  return SchemeRegistry::SchemeShouldBypassSecureContextCheck(url.Protocol());
 }
 
-bool MixedContentChecker::IsMixedContent(const String&, const KURL&) {
-  return false;
+bool StandaloneIsInsecureUrl(const KURL& url) {
+  return !StandaloneIsPotentiallyTrustworthyUrl(url);
 }
 
-bool MixedContentChecker::IsMixedContent(const FetchClientSettingsObject&,
-                                         const KURL&) {
+}  // namespace
+
+bool MixedContentChecker::IsMixedContent(const SecurityOrigin* security_origin,
+                                         const KURL& url) {
+  if (!security_origin)
+    return false;
+  return IsMixedContent(
+      security_origin->GetOriginOrPrecursorOriginIfOpaque()->Protocol(), url);
+}
+
+bool MixedContentChecker::IsMixedContent(const String& origin_protocol,
+                                         const KURL& url) {
+  if (!SchemeRegistry::ShouldTreatURLSchemeAsRestrictingMixedContent(
+          origin_protocol)) {
+    return false;
+  }
+  return StandaloneIsInsecureUrl(url);
+}
+
+bool MixedContentChecker::IsMixedContent(
+    const FetchClientSettingsObject& settings,
+    const KURL& url) {
+  switch (settings.GetHttpsState()) {
+    case HttpsState::kNone:
+      return false;
+    case HttpsState::kModern:
+      return StandaloneIsInsecureUrl(url);
+  }
+  NOTREACHED();
   return false;
 }
 
@@ -132,9 +185,60 @@ MixedContent::CheckModeForPlugin MixedContentChecker::DecideCheckModeForPlugin(
 }
 
 mojom::blink::MixedContentContextType MixedContent::ContextTypeFromRequestContext(
-    mojom::RequestContextType,
-    CheckModeForPlugin) {
-  return mojom::blink::MixedContentContextType::kNotMixedContent;
+    mojom::RequestContextType context,
+    CheckModeForPlugin check_mode_for_plugin) {
+  switch (context) {
+    case mojom::RequestContextType::AUDIO:
+    case mojom::RequestContextType::IMAGE:
+    case mojom::RequestContextType::VIDEO:
+      return mojom::blink::MixedContentContextType::kOptionallyBlockable;
+
+    case mojom::RequestContextType::PLUGIN:
+      return check_mode_for_plugin == MixedContent::CheckModeForPlugin::kStrict
+                 ? mojom::blink::MixedContentContextType::kBlockable
+                 : mojom::blink::MixedContentContextType::kOptionallyBlockable;
+
+    case mojom::RequestContextType::ATTRIBUTION_SRC:
+    case mojom::RequestContextType::BEACON:
+    case mojom::RequestContextType::CSP_REPORT:
+    case mojom::RequestContextType::EMBED:
+    case mojom::RequestContextType::EVENT_SOURCE:
+    case mojom::RequestContextType::FAVICON:
+    case mojom::RequestContextType::FETCH:
+    case mojom::RequestContextType::FONT:
+    case mojom::RequestContextType::FORM:
+    case mojom::RequestContextType::FRAME:
+    case mojom::RequestContextType::HYPERLINK:
+    case mojom::RequestContextType::IFRAME:
+    case mojom::RequestContextType::IMAGE_SET:
+    case mojom::RequestContextType::INTERNAL:
+    case mojom::RequestContextType::JSON:
+    case mojom::RequestContextType::LOCATION:
+    case mojom::RequestContextType::MANIFEST:
+    case mojom::RequestContextType::OBJECT:
+    case mojom::RequestContextType::PING:
+    case mojom::RequestContextType::PREFETCH:
+    case mojom::RequestContextType::SCRIPT:
+    case mojom::RequestContextType::SERVICE_WORKER:
+    case mojom::RequestContextType::SHARED_WORKER:
+    case mojom::RequestContextType::SPECULATION_RULES:
+    case mojom::RequestContextType::STYLE:
+    case mojom::RequestContextType::SUBRESOURCE:
+    case mojom::RequestContextType::SUBRESOURCE_WEBBUNDLE:
+    case mojom::RequestContextType::TRACK:
+    case mojom::RequestContextType::WORKER:
+    case mojom::RequestContextType::XML_HTTP_REQUEST:
+    case mojom::RequestContextType::XSLT:
+      return mojom::blink::MixedContentContextType::kBlockable;
+
+    case mojom::RequestContextType::DOWNLOAD:
+      return mojom::blink::MixedContentContextType::kShouldBeBlockable;
+
+    case mojom::RequestContextType::UNSPECIFIED:
+      NOTREACHED();
+  }
+  NOTREACHED();
+  return mojom::blink::MixedContentContextType::kBlockable;
 }
 
 }  // namespace blink
