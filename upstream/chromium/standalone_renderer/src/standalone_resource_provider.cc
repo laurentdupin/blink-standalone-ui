@@ -567,10 +567,6 @@ std::string SupportedDataImageMime(std::string_view media_type) {
   return canonical_mime_type;
 }
 
-bool IsSvgImageMime(std::string_view mime_type) {
-  return net::MatchesMimeType("image/svg+xml", mime_type);
-}
-
 bool IsDataUrl(const std::string& url) {
   return url::FindAndCompareScheme(url, url::kDataScheme, nullptr);
 }
@@ -605,20 +601,12 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
   result.mime_type = std::move(mime_type);
   result.cache_key = url;
   result.encoded_bytes.assign(data.begin(), data.end());
-  if (IsSvgImageMime(result.mime_type)) {
+  if (blink::IsSVGMimeType(result.mime_type)) {
     result.status = StandaloneResourceStatus::kUnsupportedMime;
     result.error = "SVG image rendering is unsupported in this standalone build";
     return result;
   }
   return DecodeOrClassifyImageBytes(std::move(result));
-}
-
-bool HasScheme(const std::string& url) {
-  return GURL(url).has_scheme();
-}
-
-bool SchemeIs(const std::string& url, const char* lower_ascii_scheme) {
-  return GURL(url).SchemeIs(lower_ascii_scheme);
 }
 
 base::FilePath ResourceFilePathFromUtf8(std::string_view path) {
@@ -654,11 +642,14 @@ std::string SupportedImageMimeFromFile(const base::FilePath& path) {
 }
 
 StandaloneResourceResult DecodeLocalImage(const std::string& url) {
-  if (SchemeIs(url, url::kHttpScheme) || SchemeIs(url, url::kHttpsScheme)) {
+  const GURL parsed_url(url);
+  const bool is_file_url = parsed_url.SchemeIs(url::kFileScheme);
+  if (parsed_url.SchemeIs(url::kHttpScheme) ||
+      parsed_url.SchemeIs(url::kHttpsScheme)) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "HTTP/HTTPS loading is disabled");
   }
-  if (HasScheme(url) && !SchemeIs(url, url::kFileScheme)) {
+  if (parsed_url.has_scheme() && !is_file_url) {
     return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                        "only data:, file:, and document-relative resources are enabled");
   }
@@ -683,11 +674,10 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
                          "document base path cannot be resolved");
     }
   }
-  const bool is_file_url = SchemeIs(url, url::kFileScheme);
   base::FilePath candidate;
   if (is_file_url) {
     base::FilePath file_url_path;
-    if (!net::FileURLToFilePath(GURL(url), &file_url_path)) {
+    if (!net::FileURLToFilePath(parsed_url, &file_url_path)) {
       return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                          "file URL could not be converted to a local path");
     }
