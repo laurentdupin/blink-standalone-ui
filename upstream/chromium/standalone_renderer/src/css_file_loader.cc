@@ -30,10 +30,6 @@ std::string TrimAscii(std::string value) {
   return value;
 }
 
-bool HasUrlScheme(const std::string& value) {
-  return GURL(value).has_scheme();
-}
-
 std::optional<fs::path> ResolveLocalPathReference(
     const std::string& reference,
     const fs::path& base_dir) {
@@ -415,7 +411,7 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
   const std::string lower = base::ToLowerASCII(value);
   if (value.empty() || value.front() == '#' ||
       base::StartsWith(lower, "//") || base::StartsWith(lower, "/") ||
-      base::StartsWith(lower, "\\") || HasUrlScheme(value)) {
+      base::StartsWith(lower, "\\") || GURL(value).has_scheme()) {
     return raw_value;
   }
   const fs::path absolute_url =
