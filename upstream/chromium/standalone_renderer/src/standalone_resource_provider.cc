@@ -273,7 +273,8 @@ StandaloneResourceResult ErrorResult(StandaloneResourceStatus status,
 
 StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
 #if defined(_WIN32)
-  if (result.encoded_bytes.size() > std::numeric_limits<DWORD>::max()) {
+  if (!base::IsValueInRangeForNumericType<DWORD>(
+          result.encoded_bytes.size())) {
     return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                        "encoded image is too large", result.mime_type);
   }
@@ -300,7 +301,7 @@ StandaloneResourceResult DecodeImageBytes(StandaloneResourceResult result) {
   }
   hr = stream->InitializeFromMemory(
       result.encoded_bytes.data(),
-      static_cast<DWORD>(result.encoded_bytes.size()));
+      base::checked_cast<DWORD>(result.encoded_bytes.size()));
   if (FAILED(hr)) {
     return ErrorResult(StandaloneResourceStatus::kError,
                        "WIC stream initialization failed", result.mime_type);
