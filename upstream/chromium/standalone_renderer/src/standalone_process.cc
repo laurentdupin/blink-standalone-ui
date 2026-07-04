@@ -6,7 +6,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <mutex>
 
 #include "base/check.h"
 #include "base/i18n/icu_util.h"
@@ -98,8 +97,11 @@ void ConfigureStandaloneToolProcess() {
 }
 
 void InitializeStandaloneIcu() {
-  static std::once_flag once;
-  std::call_once(once, [] { CHECK(base::i18n::InitializeICU()); });
+  static const bool initialized = [] {
+    CHECK(base::i18n::InitializeICU());
+    return true;
+  }();
+  (void)initialized;
 }
 
 }  // namespace html_css_renderer
