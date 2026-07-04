@@ -603,10 +603,9 @@ std::string RewriteStandaloneCssUrlValueToFileUrl(
     value = value.substr(1, value.size() - 2);
   }
 
-  const std::string lower = LowerAscii(value);
-  if (value.empty() || value.front() == '#' || lower.rfind("//", 0) == 0 ||
-      lower.rfind("/", 0) == 0 || lower.rfind("\\", 0) == 0 ||
-      HasUrlScheme(value)) {
+  if (value.empty() || value.front() == '#' ||
+      base::StartsWith(value, "//") || base::StartsWith(value, "/") ||
+      base::StartsWith(value, "\\") || HasUrlScheme(value)) {
     return raw_value;
   }
 
