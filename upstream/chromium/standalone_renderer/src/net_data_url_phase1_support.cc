@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// DataURL::BuildResponse is not used by the Phase 1 Blink data: wrapper, but
-// net/base/data_url.cc contains the symbol reference. Keep the HTTP-header
-// factory inert instead of importing the broader net/http response-header owner.
+// Keep the data: URL response-header factory local to the standalone build
+// while using Chromium's DataURL::BuildResponse parsing path.
 
 #include "net/http/http_response_headers.h"
 #include "net/base/features.h"
+#include "net/http/http_version.h"
 
 namespace net::features {
 
@@ -25,8 +25,10 @@ BASE_FEATURE(kDataUrlMimeTypeParameterPreservation,
 namespace net {
 
 scoped_refptr<HttpResponseHeaders> HttpResponseHeaders::TryToCreateForDataURL(
-    std::string_view) {
-  return nullptr;
+    std::string_view content_type) {
+  return HttpResponseHeaders::Builder(HttpVersion(1, 1), "200 OK")
+      .AddHeader("Content-Type", content_type)
+      .Build();
 }
 
 }  // namespace net

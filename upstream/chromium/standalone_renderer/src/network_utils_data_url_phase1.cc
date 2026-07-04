@@ -13,6 +13,7 @@
 
 #include "net/base/data_url.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_headers.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
@@ -30,14 +31,13 @@ std::tuple<int, ResourceResponse, scoped_refptr<SharedBuffer>> ParseDataURL(
   std::string mime_type;
   std::string charset;
   std::string data;
+  scoped_refptr<net::HttpResponseHeaders> headers;
 
-  if (!net::DataURL::Parse(GURL(url), &mime_type, &charset, &data)) {
-    return std::make_tuple(net::ERR_INVALID_URL, ResourceResponse(), nullptr);
-  }
-
-  if (method == "HEAD") {
-    data.clear();
-  }
+  net::Error result =
+      net::DataURL::BuildResponse(GURL(url), method.Ascii(), &mime_type,
+                                  &charset, &data, &headers);
+  if (result != net::OK)
+    return std::make_tuple(result, ResourceResponse(), nullptr);
 
   auto buffer = SharedBuffer::Create(data);
 
@@ -48,12 +48,19 @@ std::tuple<int, ResourceResponse, scoped_refptr<SharedBuffer>> ParseDataURL(
   response.SetMimeType(AtomicString(String::FromUtf8(mime_type)));
   response.SetExpectedContentLength(buffer->size());
   response.SetTextEncodingName(AtomicString(String::FromUtf8(charset)));
+  size_t iter = 0;
+  std::string name;
+  std::string value;
+  while (headers && headers->EnumerateHeaderLines(&iter, &name, &value)) {
+    response.AddHttpHeaderField(AtomicString(base::as_byte_span(name)),
+                                AtomicString(base::as_byte_span(value)));
+  }
 
   return std::make_tuple(net::OK, std::move(response), std::move(buffer));
 }
 
-bool IsCertificateTransparencyRequiredError(int) {
-  return false;
+bool IsCertificateTransparencyRequiredError(int error_code) {
+  return error_code == net::ERR_CERTIFICATE_TRANSPARENCY_REQUIRED;
 }
 
 }  // namespace blink::network_utils
