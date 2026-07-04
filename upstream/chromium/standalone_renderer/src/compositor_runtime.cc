@@ -8,7 +8,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -19,6 +18,7 @@
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "html_css_renderer/standalone_resource_provider.h"
@@ -511,7 +511,6 @@ bool HasHtmlBaseElement(const std::string& html) {
 std::string PercentEncodeFileUrlPath(std::string path) {
   std::string output;
   output.reserve(path.size() + 16);
-  constexpr char kHex[] = "0123456789ABCDEF";
   for (const unsigned char c : path) {
     const bool safe =
         base::IsAsciiAlphaNumeric(c) || c == '/' || c == ':' || c == '-' ||
@@ -521,8 +520,7 @@ std::string PercentEncodeFileUrlPath(std::string path) {
       continue;
     }
     output.push_back('%');
-    output.push_back(kHex[c >> 4]);
-    output.push_back(kHex[c & 0x0F]);
+    base::AppendHexEncodedByte(c, output);
   }
   return output;
 }
@@ -1070,10 +1068,17 @@ std::string SerializeElementScrollOffsets(
             [](const auto& lhs, const auto& rhs) {
               return lhs.first < rhs.first;
             });
-  std::ostringstream out;
-  for (const auto& [key, value] : ordered)
-    out << key << "=" << value.x << "," << value.y << "\n";
-  return out.str();
+  std::string out;
+  for (const auto& [key, value] : ordered) {
+    base::StrAppend(&out, {key, "=",
+                           base::StringPrintf("%g",
+                                              static_cast<double>(value.x)),
+                           ",",
+                           base::StringPrintf("%g",
+                                              static_cast<double>(value.y)),
+                           "\n"});
+  }
+  return out;
 }
 
 std::string SerializeElementAttributes(
@@ -1084,10 +1089,11 @@ std::string SerializeElementAttributes(
             [](const auto& lhs, const auto& rhs) {
               return lhs.first < rhs.first;
             });
-  std::ostringstream out;
-  for (const auto& [key, value] : ordered)
-    out << key << "=" << value << "\n";
-  return out.str();
+  std::string out;
+  for (const auto& [key, value] : ordered) {
+    base::StrAppend(&out, {key, "=", value, "\n"});
+  }
+  return out;
 }
 
 class ScopedStandaloneBridgeInstance {
