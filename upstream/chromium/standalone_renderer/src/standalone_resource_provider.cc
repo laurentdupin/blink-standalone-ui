@@ -103,7 +103,7 @@ std::string UrlPrefix(const std::string& url) {
   if (url.size() <= kMaxPrefix) {
     return url;
   }
-  return url.substr(0, kMaxPrefix) + "...";
+  return std::string(base::TruncateUTF8ToByteSize(url, kMaxPrefix)) + "...";
 }
 
 uint32_t ReadLittleEndian24(const uint8_t* data) {
