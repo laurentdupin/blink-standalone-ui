@@ -199,12 +199,22 @@ StandaloneResourceResult CreateTransparentDecodedImage(
     result.error = "decoded image dimensions are invalid";
     return result;
   }
-  const size_t pixel_count = static_cast<size_t>(width) * height;
-  std::vector<uint8_t> pixels(pixel_count * 4, 0);
+  constexpr size_t kBytesPerPixel = 4;
+  size_t row_bytes = 0;
+  size_t byte_count = 0;
+  if (!base::CheckMul(static_cast<size_t>(width), kBytesPerPixel)
+           .AssignIfValid(&row_bytes) ||
+      !base::CheckMul(row_bytes, static_cast<size_t>(height))
+           .AssignIfValid(&byte_count)) {
+    result.status = StandaloneResourceStatus::kDecodeFailed;
+    result.error = "decoded image is too large";
+    return result;
+  }
+  std::vector<uint8_t> pixels(byte_count, 0);
   SkImageInfo image_info =
       SkImageInfo::Make(width, height, kBGRA_8888_SkColorType,
                         kPremul_SkAlphaType);
-  SkPixmap pixmap(image_info, pixels.data(), static_cast<size_t>(width) * 4);
+  SkPixmap pixmap(image_info, pixels.data(), row_bytes);
   result.decoded_image = SkImages::RasterFromPixmapCopy(pixmap);
   if (!result.decoded_image) {
     result.status = StandaloneResourceStatus::kDecodeFailed;
