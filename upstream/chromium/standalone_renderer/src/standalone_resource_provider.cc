@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <span>
-#include <filesystem>
 #include <limits>
 #include <cstring>
 #include <optional>
@@ -622,11 +621,28 @@ bool SchemeIs(const std::string& url, const char* lower_ascii_scheme) {
   return GURL(url).SchemeIs(lower_ascii_scheme);
 }
 
-bool IsWithinRoot(const std::filesystem::path& path,
-                  const std::filesystem::path& root) {
-  const base::FilePath path_file(path.native());
-  const base::FilePath root_file(root.native());
-  return path_file == root_file || root_file.IsParent(path_file);
+base::FilePath ResourceFilePathFromUtf8(std::string_view path) {
+  return base::FilePath::FromUTF8Unsafe(path);
+}
+
+base::FilePath ResolveExistingResourcePath(std::string_view path) {
+  return base::MakeAbsoluteFilePath(ResourceFilePathFromUtf8(path));
+}
+
+base::FilePath MakeAbsoluteResourcePathForLookup(const base::FilePath& path) {
+  base::FilePath resolved = base::MakeAbsoluteFilePath(path);
+  if (!resolved.empty())
+    return resolved;
+  if (path.IsAbsolute())
+    return path.NormalizePathSeparators();
+  base::FilePath cwd;
+  if (!base::GetCurrentDirectory(&cwd))
+    return path.NormalizePathSeparators();
+  return cwd.Append(path).NormalizePathSeparators();
+}
+
+bool IsWithinRoot(const base::FilePath& path, const base::FilePath& root) {
+  return path == root || root.IsParent(path);
 }
 
 std::string SupportedImageMimeFromFile(const base::FilePath& path) {
@@ -653,52 +669,46 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
                        "local resource root is not configured");
   }
 
-  std::error_code root_error;
-  std::filesystem::path root =
-      std::filesystem::weakly_canonical(root_string, root_error);
-  if (root_error) {
+  const base::FilePath root = ResolveExistingResourcePath(root_string);
+  if (root.empty()) {
     return ErrorResult(StandaloneResourceStatus::kBlockedByPolicy,
                        "local resource root cannot be resolved");
   }
   const std::string base_string = GetStandaloneResourceProviderDocumentBasePath();
-  std::filesystem::path base_path = root;
+  base::FilePath base_path = root;
   if (!base_string.empty()) {
-    std::error_code base_error;
-    base_path = std::filesystem::weakly_canonical(base_string, base_error);
-    if (base_error) {
+    base_path = ResolveExistingResourcePath(base_string);
+    if (base_path.empty()) {
       return ErrorResult(StandaloneResourceStatus::kBlockedByPolicy,
                          "document base path cannot be resolved");
     }
   }
   const bool is_file_url = SchemeIs(url, url::kFileScheme);
-  std::filesystem::path candidate;
+  base::FilePath candidate;
   if (is_file_url) {
     base::FilePath file_url_path;
     if (!net::FileURLToFilePath(GURL(url), &file_url_path)) {
       return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
                          "file URL could not be converted to a local path");
     }
-    candidate = std::filesystem::path(file_url_path.value());
+    candidate = file_url_path;
   } else {
-    candidate = std::filesystem::path(url);
+    candidate = ResourceFilePathFromUtf8(url);
   }
-  if (candidate.is_relative())
-    candidate = base_path / candidate;
-  std::error_code candidate_error;
-  candidate = std::filesystem::weakly_canonical(candidate, candidate_error);
-  if (candidate_error) {
-    candidate = std::filesystem::absolute(candidate);
-  }
-  const base::FilePath candidate_file_path(candidate.native());
+  if (!candidate.IsAbsolute())
+    candidate = base_path.Append(candidate);
+  const base::FilePath candidate_file_path =
+      MakeAbsoluteResourcePathForLookup(candidate);
 
   StandaloneResourceResult result;
   result.source_kind = is_file_url ? StandaloneResourceSourceKind::kFileUrl
                                    : StandaloneResourceSourceKind::kRelativeFile;
   result.mime_type = SupportedImageMimeFromFile(candidate_file_path);
-  result.resolved_path = candidate.string();
+  result.resolved_path = candidate_file_path.AsUTF8Unsafe();
   result.cache_key = result.resolved_path;
 
-  if (!IsWithinRoot(candidate, root)) {
+  if (candidate_file_path.ReferencesParent() ||
+      !IsWithinRoot(candidate_file_path, root)) {
     result.status = StandaloneResourceStatus::kBlockedByPolicy;
     result.error = "resolved local image path escapes resource root";
     return result;
