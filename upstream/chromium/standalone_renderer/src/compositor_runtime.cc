@@ -14,6 +14,8 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/strings/strcat.h"
@@ -500,57 +502,58 @@ bool HasHtmlBaseElement(const std::string& html) {
   return lower.find("<base") != std::string::npos;
 }
 
-std::string FileUrlForBaseDirectory(const std::string& base_path_string) {
-  if (base_path_string.empty())
-    return std::string();
+base::FilePath FilePathFromStandaloneString(const std::string& path_string) {
+  return base::FilePath(fs::path(path_string).native());
+}
 
-  std::error_code error;
-  fs::path base_path = fs::absolute(fs::path(base_path_string), error);
-  if (error)
-    base_path = fs::path(base_path_string);
-  if (fs::is_regular_file(base_path, error))
-    base_path = base_path.parent_path();
-  fs::path normalized = fs::weakly_canonical(base_path, error);
-  if (!error)
-    base_path = std::move(normalized);
-
-  std::string path = base_path.generic_string();
+base::FilePath AbsoluteFilePathForStandalone(base::FilePath path) {
   if (path.empty())
+    return path;
+  base::FilePath resolved = base::MakeAbsoluteFilePath(path);
+  if (!resolved.empty())
+    return resolved;
+  if (path.IsAbsolute())
+    return path.NormalizePathSeparators();
+  base::FilePath current_directory;
+  if (base::GetCurrentDirectory(&current_directory))
+    return current_directory.Append(path).NormalizePathSeparators();
+  return path.NormalizePathSeparators();
+}
+
+base::FilePath StandaloneBaseDirectoryFilePath(
+    const std::string& base_path_string) {
+  if (base_path_string.empty())
+    return base::FilePath();
+  base::FilePath base_path =
+      AbsoluteFilePathForStandalone(FilePathFromStandaloneString(base_path_string));
+  base::File::Info file_info;
+  if (base::GetFileInfo(base_path, &file_info) && !file_info.is_directory)
+    base_path = base_path.DirName();
+  return base_path;
+}
+
+std::string FileUrlForBaseDirectory(const std::string& base_path_string) {
+  base::FilePath base_path =
+      StandaloneBaseDirectoryFilePath(base_path_string);
+  if (base_path.empty())
     return std::string();
-  return net::FilePathToFileURL(
-             base::FilePath(base_path.native()).AsEndingWithSeparator())
-      .spec();
+  return net::FilePathToFileURL(base_path.AsEndingWithSeparator()).spec();
 }
 
 fs::path StandaloneDocumentBaseDirectoryPath() {
-  const std::string base_path_string =
-      GetStandaloneResourceProviderDocumentBasePath();
-  if (base_path_string.empty())
-    return fs::path();
-
-  std::error_code error;
-  fs::path base_path = fs::absolute(fs::path(base_path_string), error);
-  if (error)
-    base_path = fs::path(base_path_string);
-  if (fs::is_regular_file(base_path, error))
-    base_path = base_path.parent_path();
-  fs::path normalized = fs::weakly_canonical(base_path, error);
-  if (!error)
-    base_path = std::move(normalized);
-  return base_path;
+  return fs::path(StandaloneBaseDirectoryFilePath(
+                      GetStandaloneResourceProviderDocumentBasePath())
+                      .value());
 }
 
 std::string FileUrlForLocalPath(const fs::path& path) {
   if (path.empty())
     return std::string();
-  std::error_code error;
-  fs::path absolute = fs::absolute(path, error);
-  if (error)
-    absolute = path;
-  fs::path normalized = fs::weakly_canonical(absolute, error);
-  if (!error)
-    absolute = std::move(normalized);
-  return net::FilePathToFileURL(base::FilePath(absolute.native())).spec();
+  base::FilePath absolute =
+      AbsoluteFilePathForStandalone(base::FilePath(path.native()));
+  if (absolute.empty())
+    return std::string();
+  return net::FilePathToFileURL(absolute).spec();
 }
 
 std::string StandaloneDocumentBaseElementHtml(const std::string& html) {
