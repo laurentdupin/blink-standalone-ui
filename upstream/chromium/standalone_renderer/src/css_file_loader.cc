@@ -590,9 +590,7 @@ void AddLocalLinkedStylesheetsForDocument(
     std::vector<std::string>* diagnostics) {
   const fs::path base_dir = fs::absolute(html_path).parent_path();
   for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
-    if (href.find("://") != std::string::npos ||
-        base::StartsWith(href, "//") || base::StartsWith(href, "data:") ||
-        href.empty()) {
+    if (href.empty() || base::StartsWith(href, "//") || HasUrlScheme(href)) {
       continue;
     }
     fs::path css_path = fs::path(href);
