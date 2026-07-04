@@ -24,6 +24,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
+#include "base/strings/escape.h"
 #include "base/synchronization/lock.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -494,34 +495,6 @@ bool IsDataUrl(const std::string& url) {
   return LowerAscii(url).rfind("data:", 0) == 0;
 }
 
-std::vector<uint8_t> PercentDecodeBytes(const std::string& input) {
-  auto hex_value = [](char c) -> int {
-    if (c >= '0' && c <= '9')
-      return c - '0';
-    if (c >= 'a' && c <= 'f')
-      return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F')
-      return c - 'A' + 10;
-    return -1;
-  };
-
-  std::vector<uint8_t> output;
-  output.reserve(input.size());
-  for (size_t i = 0; i < input.size(); ++i) {
-    if (input[i] == '%' && i + 2 < input.size()) {
-      int high = hex_value(input[i + 1]);
-      int low = hex_value(input[i + 2]);
-      if (high >= 0 && low >= 0) {
-        output.push_back(static_cast<uint8_t>((high << 4) | low));
-        i += 2;
-        continue;
-      }
-    }
-    output.push_back(static_cast<uint8_t>(input[i]));
-  }
-  return output;
-}
-
 StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
   std::string lower_url = LowerAscii(url);
   constexpr char kPrefix[] = "data:";
@@ -566,7 +539,8 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
     }
     result.encoded_bytes.assign(blink_encoded.begin(), blink_encoded.end());
   } else {
-    result.encoded_bytes = PercentDecodeBytes(payload);
+    std::string decoded = base::UnescapeBinaryURLComponent(payload);
+    result.encoded_bytes.assign(decoded.begin(), decoded.end());
     if (result.encoded_bytes.empty()) {
       return ErrorResult(StandaloneResourceStatus::kDecodeFailed,
                          "SVG data URL is empty", result.mime_type);
