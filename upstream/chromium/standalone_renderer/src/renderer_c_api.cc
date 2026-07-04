@@ -6,9 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
-#include <chrono>
 #include <cmath>
-#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -16,12 +14,10 @@
 #include <limits>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <queue>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -35,11 +31,15 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
+#include "base/synchronization/condition_variable.h"
+#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_executor.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event_impl.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
@@ -714,8 +714,10 @@ struct blink_standalone_renderer {
 namespace {
 
 struct DedicatedGpuFrameCommand {
-  std::mutex mutex;
-  std::condition_variable cv;
+  DedicatedGpuFrameCommand() : cv(&lock) {}
+
+  base::Lock lock;
+  base::ConditionVariable cv;
   blink_standalone_renderer* inner = nullptr;
   blink_standalone_dedicated_thread_gpu_frame_request_t request = {};
   uint64_t sequence_order = 0;
@@ -767,7 +769,7 @@ class DedicatedRendererSequence {
     }
     uint64_t sequence_order = 0;
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      base::AutoLock auto_lock(lock_);
       sequence_order = next_sequence_order_++;
       ++pending_async_count_;
     }
@@ -786,22 +788,22 @@ class DedicatedRendererSequence {
   }
 
   bool HasPendingAsyncForTesting() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     return pending_async_count_ != 0;
   }
 
   size_t PendingAsyncCountForTesting() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     return pending_async_count_;
   }
 
   uint64_t LastCompletedSequenceOrderForTesting() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     return last_completed_sequence_order_;
   }
 
   uint64_t NextSequenceOrderForTesting() {
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     return next_sequence_order_;
   }
 
@@ -810,7 +812,7 @@ class DedicatedRendererSequence {
     if (!sequence_order) {
       return false;
     }
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     auto it = gpu_commands_.find(command_id);
     if (it == gpu_commands_.end()) {
       return false;
@@ -825,7 +827,7 @@ class DedicatedRendererSequence {
     auto command = std::make_shared<DedicatedGpuFrameCommand>();
     uint64_t command_id = 0;
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      base::AutoLock auto_lock(lock_);
       command_id = next_command_id_++;
       command->inner = inner;
       command->request = request;
@@ -846,7 +848,7 @@ class DedicatedRendererSequence {
       failed.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_FAILED;
       failed.error_message =
           "dedicated GPU frame failed: renderer thread task post failed";
-      FinishGpuFrameCommand(command, failed, std::chrono::steady_clock::now());
+      FinishGpuFrameCommand(command, failed, base::TimeTicks::Now());
       MarkSequenceCompleted(command->sequence_order);
     }
     return command_id;
@@ -860,14 +862,14 @@ class DedicatedRendererSequence {
     }
     std::shared_ptr<DedicatedGpuFrameCommand> command;
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      base::AutoLock auto_lock(lock_);
       auto it = gpu_commands_.find(command_id);
       if (it == gpu_commands_.end()) {
         return false;
       }
       command = it->second;
     }
-    std::lock_guard<std::mutex> lock(command->mutex);
+    base::AutoLock auto_lock(command->lock);
     if (result) {
       *result = command->result;
       result->error_message =
@@ -884,7 +886,7 @@ class DedicatedRendererSequence {
     }
     std::shared_ptr<DedicatedGpuFrameCommand> command;
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      base::AutoLock auto_lock(lock_);
       auto it = gpu_commands_.find(command_id);
       if (it == gpu_commands_.end()) {
         return false;
@@ -892,7 +894,7 @@ class DedicatedRendererSequence {
       command = it->second;
     }
 
-    std::unique_lock<std::mutex> lock(command->mutex);
+    base::AutoLock auto_lock(command->lock);
     if (!command->done && !command->started) {
       command->cancel_requested = true;
       command->done = true;
@@ -902,10 +904,12 @@ class DedicatedRendererSequence {
       command->result.render_result.status = BLINK_STANDALONE_STATUS_OK;
       command->result.render_result.state =
           BLINK_STANDALONE_GPU_ASYNC_STATE_CANCELLED;
-      command->cv.notify_all();
+      command->cv.Broadcast();
     } else if (!command->done) {
       command->cancel_requested = true;
-      command->cv.wait(lock, [&] { return command->done; });
+      while (!command->done) {
+        command->cv.Wait();
+      }
     }
     if (result) {
       *result = command->result;
@@ -934,7 +938,7 @@ class DedicatedRendererSequence {
   }
 
   void MarkAsyncCommandComplete(uint64_t sequence_order) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     if (pending_async_count_ > 0) {
       --pending_async_count_;
     }
@@ -943,7 +947,7 @@ class DedicatedRendererSequence {
   }
 
   void MarkSequenceCompleted(uint64_t sequence_order) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    base::AutoLock auto_lock(lock_);
     last_completed_sequence_order_ =
         std::max(last_completed_sequence_order_, sequence_order);
   }
@@ -953,7 +957,7 @@ class DedicatedRendererSequence {
       const std::shared_ptr<DedicatedGpuFrameCommand>& command) {
     bool should_run = false;
     {
-      std::lock_guard<std::mutex> lock(command->mutex);
+      base::AutoLock auto_lock(command->lock);
       if (!command->done && !command->cancel_requested) {
         command->started = true;
         should_run = true;
@@ -974,7 +978,7 @@ class DedicatedRendererSequence {
     result.command_id = command_id;
     result.status = BLINK_STANDALONE_STATUS_OK;
     result.state = BLINK_STANDALONE_DEDICATED_THREAD_COMMAND_PENDING;
-    const auto command_start = std::chrono::steady_clock::now();
+    const auto command_start = base::TimeTicks::Now();
 
     if (DedicatedGpuFrameCancelRequested(command)) {
       CancelDedicatedGpuFrameAndReleaseExternalTargets(inner, &result);
@@ -988,14 +992,12 @@ class DedicatedRendererSequence {
         request.poll_interval_ms ? request.poll_interval_ms : 1;
     blink_standalone_status_code_t status = BLINK_STANDALONE_STATUS_OK;
     auto tick_source_frame = [&]() {
-      const auto source_start = std::chrono::steady_clock::now();
+      const auto source_start = base::TimeTicks::Now();
       blink_standalone_status_code_t tick_status =
           blink_standalone_renderer_tick_gpu_source_frame_async(
               inner, &request.source_request, &result.source_result);
-      const auto source_end = std::chrono::steady_clock::now();
-      result.source_tick_ms +=
-          std::chrono::duration<double, std::milli>(source_end - source_start)
-              .count();
+      const auto source_end = base::TimeTicks::Now();
+      result.source_tick_ms += (source_end - source_start).InMillisecondsF();
       return tick_status;
     };
     status = tick_source_frame();
@@ -1025,7 +1027,7 @@ class DedicatedRendererSequence {
                 BLINK_STANDALONE_GPU_SOURCE_FRAME_STATE_PENDING) &&
            !DedicatedGpuFrameCancelRequested(command) &&
            result.poll_iterations < max_polls) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+      base::PlatformThread::Sleep(base::Milliseconds(poll_interval_ms));
       status = tick_source_frame();
       result.update_result.status = result.source_result.status;
       result.update_result.needs_output = result.source_result.needs_output;
@@ -1069,14 +1071,12 @@ class DedicatedRendererSequence {
     }
 
     auto submit_gpu_frame = [&]() {
-      const auto submit_start = std::chrono::steady_clock::now();
+      const auto submit_start = base::TimeTicks::Now();
       blink_standalone_status_code_t submit_status =
           blink_standalone_renderer_submit_gpu_frame_async(
               inner, &request.render_request, &result.render_result);
-      const auto submit_end = std::chrono::steady_clock::now();
-      result.submit_ms +=
-          std::chrono::duration<double, std::milli>(submit_end - submit_start)
-              .count();
+      const auto submit_end = base::TimeTicks::Now();
+      result.submit_ms += (submit_end - submit_start).InMillisecondsF();
       return submit_status;
     };
     status = submit_gpu_frame();
@@ -1092,7 +1092,7 @@ class DedicatedRendererSequence {
            result.render_result.request_id == 0 &&
            !DedicatedGpuFrameCancelRequested(command) &&
            result.poll_iterations < max_polls) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
+      base::PlatformThread::Sleep(base::Milliseconds(poll_interval_ms));
       status = tick_source_frame();
       result.update_result.status = result.source_result.status;
       result.update_result.needs_output = result.source_result.needs_output;
@@ -1147,14 +1147,12 @@ class DedicatedRendererSequence {
                 BLINK_STANDALONE_GPU_ASYNC_STATE_SUBMITTED) &&
            !DedicatedGpuFrameCancelRequested(command) &&
            result.poll_iterations < max_polls) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(poll_interval_ms));
-      const auto poll_start = std::chrono::steady_clock::now();
+      base::PlatformThread::Sleep(base::Milliseconds(poll_interval_ms));
+      const auto poll_start = base::TimeTicks::Now();
       status = blink_standalone_renderer_poll_gpu_frame_async(
           inner, request_id, &result.render_result);
-      const auto poll_end = std::chrono::steady_clock::now();
-      result.poll_ms +=
-          std::chrono::duration<double, std::milli>(poll_end - poll_start)
-              .count();
+      const auto poll_end = base::TimeTicks::Now();
+      result.poll_ms += (poll_end - poll_start).InMillisecondsF();
       ++result.poll_iterations;
       if (status != BLINK_STANDALONE_STATUS_OK &&
           status != BLINK_STANDALONE_STATUS_PENDING) {
@@ -1228,28 +1226,26 @@ class DedicatedRendererSequence {
 
   static bool DedicatedGpuFrameCancelRequested(
       const std::shared_ptr<DedicatedGpuFrameCommand>& command) {
-    std::lock_guard<std::mutex> lock(command->mutex);
+    base::AutoLock auto_lock(command->lock);
     return command->cancel_requested;
   }
 
   static void FinishGpuFrameCommand(
       const std::shared_ptr<DedicatedGpuFrameCommand>& command,
       blink_standalone_dedicated_thread_gpu_frame_result_t result,
-      std::chrono::steady_clock::time_point command_start) {
-    const auto command_end = std::chrono::steady_clock::now();
-    result.elapsed_ms =
-        std::chrono::duration<double, std::milli>(command_end - command_start)
-            .count();
-    std::lock_guard<std::mutex> lock(command->mutex);
+      base::TimeTicks command_start) {
+    const auto command_end = base::TimeTicks::Now();
+    result.elapsed_ms = (command_end - command_start).InMillisecondsF();
+    base::AutoLock auto_lock(command->lock);
     command->error = result.error_message ? result.error_message : "";
     result.error_message =
         command->error.empty() ? nullptr : command->error.c_str();
     command->result = result;
     command->done = true;
-    command->cv.notify_all();
+    command->cv.Broadcast();
   }
 
-  std::mutex mutex_;
+  base::Lock lock_;
   std::map<uint64_t, std::shared_ptr<DedicatedGpuFrameCommand>> gpu_commands_;
   base::Thread thread_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
@@ -2749,13 +2745,12 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
 
   InvalidatePreparedGpuSourceFrame(renderer);
   const bool request_pending_source_frame = renderer->gpu_source_frame_pending;
-  const auto tick_start = std::chrono::steady_clock::now();
+  const auto tick_start = base::TimeTicks::Now();
   const blink_standalone_status_code_t status =
       AdvanceGpuFrameForBackend(renderer, backend,
                                 request_pending_source_frame);
-  const auto tick_end = std::chrono::steady_clock::now();
-  result->elapsed_ms =
-      std::chrono::duration<double, std::milli>(tick_end - tick_start).count();
+  const auto tick_end = base::TimeTicks::Now();
+  result->elapsed_ms = (tick_end - tick_start).InMillisecondsF();
   PopulateGpuSourceFrameTickResult(renderer, request, result);
   if (status != BLINK_STANDALONE_STATUS_OK) {
     result->status = status;
