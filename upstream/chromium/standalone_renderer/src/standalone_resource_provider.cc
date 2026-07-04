@@ -537,9 +537,9 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
 
 std::string StripFileUrlPrefix(const std::string& url) {
   std::string path = url;
-  if (path.rfind("file:///", 0) == 0) {
+  if (base::StartsWith(path, "file:///")) {
     path = path.substr(8);
-  } else if (path.rfind("file://", 0) == 0) {
+  } else if (base::StartsWith(path, "file://")) {
     path = path.substr(7);
   }
 #if defined(_WIN32)
