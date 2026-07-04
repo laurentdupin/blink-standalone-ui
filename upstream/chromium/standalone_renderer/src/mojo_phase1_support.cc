@@ -12,10 +12,11 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
+#include "base/no_destructor.h"
+#include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 
@@ -81,9 +82,9 @@ struct HandleRecord {
   StandaloneBuffer* buffer = nullptr;
 };
 
-std::mutex& HandleMutex() {
-  static std::mutex* mutex = new std::mutex();
-  return *mutex;
+base::Lock& HandleLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
 }
 
 std::unordered_map<MojoHandle, HandleRecord>& Handles() {
@@ -111,7 +112,7 @@ MojoTimeTicks StandaloneGetTimeTicksNow() {
 MojoResult StandaloneClose(MojoHandle handle) {
   if (handle == MOJO_HANDLE_INVALID)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  std::lock_guard<std::mutex> lock(HandleMutex());
+  base::AutoLock auto_lock(HandleLock());
   auto it = Handles().find(handle);
   if (it == Handles().end())
     return MOJO_RESULT_INVALID_ARGUMENT;
@@ -125,7 +126,7 @@ MojoResult StandaloneQueryHandleSignalsState(
     MojoHandleSignalsState* signals_state) {
   if (!signals_state)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  std::lock_guard<std::mutex> lock(HandleMutex());
+  base::AutoLock auto_lock(HandleLock());
   if (Handles().find(handle) == Handles().end())
     return MOJO_RESULT_INVALID_ARGUMENT;
   signals_state->satisfied_signals = MOJO_HANDLE_SIGNAL_WRITABLE;
@@ -142,7 +143,7 @@ MojoResult StandaloneCreateMessagePipe(const MojoCreateMessagePipeOptions*,
   MojoHandle first = NextHandle();
   MojoHandle second = NextHandle();
   {
-    std::lock_guard<std::mutex> lock(HandleMutex());
+    base::AutoLock auto_lock(HandleLock());
     Handles()[first] = {HandleKind::kMessagePipe, nullptr};
     Handles()[second] = {HandleKind::kMessagePipe, nullptr};
   }
@@ -155,7 +156,7 @@ MojoResult StandaloneWriteMessage(MojoHandle handle,
                                   MojoMessageHandle message,
                                   const MojoWriteMessageOptions*) {
   {
-    std::lock_guard<std::mutex> lock(HandleMutex());
+    base::AutoLock auto_lock(HandleLock());
     if (Handles().find(handle) == Handles().end())
       return MOJO_RESULT_INVALID_ARGUMENT;
   }
@@ -172,7 +173,7 @@ MojoResult StandaloneWriteMessage(MojoHandle handle,
 MojoResult StandaloneReadMessage(MojoHandle handle,
                                  const MojoReadMessageOptions*,
                                  MojoMessageHandle*) {
-  std::lock_guard<std::mutex> lock(HandleMutex());
+  base::AutoLock auto_lock(HandleLock());
   if (Handles().find(handle) == Handles().end())
     return MOJO_RESULT_INVALID_ARGUMENT;
   return MOJO_RESULT_SHOULD_WAIT;
@@ -351,7 +352,7 @@ MojoResult StandaloneCreateSharedBuffer(uint64_t size,
     return MOJO_RESULT_INVALID_ARGUMENT;
   MojoHandle new_handle = NextHandle();
   {
-    std::lock_guard<std::mutex> lock(HandleMutex());
+    base::AutoLock auto_lock(HandleLock());
     Handles()[new_handle] = {HandleKind::kSharedBuffer,
                              new StandaloneBuffer(size)};
   }
@@ -365,7 +366,7 @@ MojoResult StandaloneDuplicateBufferHandle(
     MojoHandle* new_handle) {
   if (!new_handle)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  std::lock_guard<std::mutex> lock(HandleMutex());
+  base::AutoLock auto_lock(HandleLock());
   auto it = Handles().find(handle);
   if (it == Handles().end() || !it->second.buffer)
     return MOJO_RESULT_INVALID_ARGUMENT;
@@ -383,7 +384,7 @@ MojoResult StandaloneMapBuffer(MojoHandle handle,
                                void** buffer) {
   if (!buffer)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  std::lock_guard<std::mutex> lock(HandleMutex());
+  base::AutoLock auto_lock(HandleLock());
   auto it = Handles().find(handle);
   if (it == Handles().end() || !it->second.buffer)
     return MOJO_RESULT_INVALID_ARGUMENT;
@@ -402,7 +403,7 @@ MojoResult StandaloneGetBufferInfo(MojoHandle handle,
                                    MojoSharedBufferInfo* info) {
   if (!info)
     return MOJO_RESULT_INVALID_ARGUMENT;
-  std::lock_guard<std::mutex> lock(HandleMutex());
+  base::AutoLock auto_lock(HandleLock());
   auto it = Handles().find(handle);
   if (it == Handles().end() || !it->second.buffer)
     return MOJO_RESULT_INVALID_ARGUMENT;
@@ -418,7 +419,7 @@ MojoResult StandaloneCreateTrap(MojoTrapEventHandler,
     return MOJO_RESULT_INVALID_ARGUMENT;
   MojoHandle handle = NextHandle();
   {
-    std::lock_guard<std::mutex> lock(HandleMutex());
+    base::AutoLock auto_lock(HandleLock());
     Handles()[handle] = {HandleKind::kTrap, nullptr};
   }
   *trap = handle;
@@ -456,7 +457,7 @@ MojoResult StandaloneWrapPlatformHandle(const MojoPlatformHandle*,
     return MOJO_RESULT_INVALID_ARGUMENT;
   MojoHandle new_handle = NextHandle();
   {
-    std::lock_guard<std::mutex> lock(HandleMutex());
+    base::AutoLock auto_lock(HandleLock());
     Handles()[new_handle] = {HandleKind::kPlatform, nullptr};
   }
   *handle = new_handle;
@@ -504,7 +505,7 @@ MojoResult StandaloneCreateInvitation(const MojoCreateInvitationOptions*,
     return MOJO_RESULT_INVALID_ARGUMENT;
   MojoHandle handle = NextHandle();
   {
-    std::lock_guard<std::mutex> lock(HandleMutex());
+    base::AutoLock auto_lock(HandleLock());
     Handles()[handle] = {HandleKind::kInvitation, nullptr};
   }
   *invitation = handle;
