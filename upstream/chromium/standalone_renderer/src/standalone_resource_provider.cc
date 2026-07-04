@@ -568,10 +568,9 @@ bool IsWithinRoot(const std::filesystem::path& path,
   return true;
 }
 
-std::string SupportedImageMimeFromFile(const std::filesystem::path& path) {
+std::string SupportedImageMimeFromFile(const base::FilePath& path) {
   std::string mime_type;
-  if (!net::GetWellKnownMimeTypeFromFile(base::FilePath(path.native()),
-                                         &mime_type)) {
+  if (!net::GetWellKnownMimeTypeFromFile(path, &mime_type)) {
     return std::string();
   }
   return SupportedDataImageMime(mime_type);
@@ -621,11 +620,12 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
   if (candidate_error) {
     candidate = std::filesystem::absolute(candidate);
   }
+  const base::FilePath candidate_file_path(candidate.native());
 
   StandaloneResourceResult result;
   result.source_kind = is_file_url ? StandaloneResourceSourceKind::kFileUrl
                                    : StandaloneResourceSourceKind::kRelativeFile;
-  result.mime_type = SupportedImageMimeFromFile(candidate);
+  result.mime_type = SupportedImageMimeFromFile(candidate_file_path);
   result.resolved_path = candidate.string();
   result.cache_key = result.resolved_path;
 
@@ -639,15 +639,16 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
     result.error = "only local PNG/JPEG/BMP/WebP/SVG images are enabled";
     return result;
   }
-  if (!std::filesystem::exists(candidate) ||
-      !std::filesystem::is_regular_file(candidate)) {
+  base::File::Info file_info;
+  if (!base::GetFileInfo(candidate_file_path, &file_info) ||
+      file_info.is_directory) {
     result.status = StandaloneResourceStatus::kNotFound;
     result.error = "local image file was not found";
     return result;
   }
 
   std::optional<std::vector<uint8_t>> file_bytes =
-      base::ReadFileToBytes(base::FilePath(candidate.native()));
+      base::ReadFileToBytes(candidate_file_path);
   if (!file_bytes) {
     result.status = StandaloneResourceStatus::kError;
     result.error = "failed to open local image file";
