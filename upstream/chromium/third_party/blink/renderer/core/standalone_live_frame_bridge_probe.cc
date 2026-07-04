@@ -5261,15 +5261,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "gpu_external_vkimage_render_copy_async: failed failure=external "
           "Vulkan image is null");
     }
-    if (async_external_gpu_target_copy_.status ==
-        html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_render_copy_async: failed failure=async "
-          "external GPU target copy is already pending");
-    }
-    async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
-
     gfx::Size output_size(vulkan_image->width, vulkan_image->height);
     if (output_size.IsEmpty()) {
       output_size = viewport_;
@@ -5277,6 +5268,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         output_size = *viz_display_output_size_;
       }
     }
+    if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+          "gpu_external_vkimage_render_copy_async: pending reason=previous "
+          "external GPU target CopyOutput is still releasing",
+          output_size);
+    }
+    if (async_external_gpu_target_copy_.status ==
+        html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          "gpu_external_vkimage_render_copy_async: failed failure=async "
+          "external GPU target copy is already pending",
+          output_size);
+    }
+    async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
+
     ResetOffscreenVizDisplayForExternalTargetResize(output_size);
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
@@ -5568,15 +5576,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "gpu_external_d3d12_render_copy_async: failed failure=external "
           "D3D12 resource/shared handle is null");
     }
-    if (async_external_gpu_target_copy_.status ==
-        html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_render_copy_async: failed failure=async "
-          "external GPU target copy is already pending");
-    }
-    async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
-
     gfx::Size output_size(width, height);
     if (output_size.IsEmpty() && external_resource) {
       const D3D12_RESOURCE_DESC desc = external_resource->GetDesc();
@@ -5588,6 +5587,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     } else if (output_size.IsEmpty()) {
       output_size = viewport_;
     }
+    if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+          "gpu_external_d3d12_render_copy_async: pending reason=previous "
+          "external GPU target CopyOutput is still releasing",
+          output_size);
+    }
+    if (async_external_gpu_target_copy_.status ==
+        html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          "gpu_external_d3d12_render_copy_async: failed failure=async "
+          "external GPU target copy is already pending",
+          output_size);
+    }
+    async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
+
     ResetOffscreenVizDisplayForExternalTargetResize(output_size);
     if (!display_) {
       if (!local_surface_id_.is_valid()) {
@@ -5804,10 +5820,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
 
   html_css_renderer::ExternalGpuTargetCopyResult
   PollExternalGpuTargetAsyncCopy() {
-    if (async_external_gpu_target_copy_.status ==
-        html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
-      base::RunLoop().RunUntilIdle();
-    }
+    // Match Viz CopyOutput ownership semantics: the callback is the completion
+    // boundary. Polling the public async state must not pump arbitrary cc/Viz
+    // work on the caller's stack.
     FinalizeAsyncExternalGpuTargetCopyIfReady();
     return CurrentAsyncExternalGpuTargetCopyResult();
   }
@@ -5827,21 +5842,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         html_css_renderer::ExternalGpuTargetCopyStatus::kCancelled,
         async_external_gpu_target_copy_.label +
             ": cancelled path=viz_blit_request",
-        /*discard_prepared_target=*/true);
+        /*discard_prepared_target=*/false);
     return CurrentAsyncExternalGpuTargetCopyResult();
   }
 
   void ReleaseExternalGpuTargetState() {
+    if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
+      return;
+    }
     if (async_external_gpu_target_copy_.request_id != 0 &&
-        async_external_gpu_target_copy_.status !=
-            html_css_renderer::ExternalGpuTargetCopyStatus::kCancelled &&
-        async_external_gpu_target_copy_.status !=
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed) {
+        async_external_gpu_target_copy_.status ==
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
       InvalidatePendingAsyncExternalGpuTargetCopy(
           html_css_renderer::ExternalGpuTargetCopyStatus::kStale,
           async_external_gpu_target_copy_.label +
               ": stale after ReleaseExternalGpuTargetState",
           /*discard_prepared_target=*/false);
+      return;
     }
     ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
     if (!offscreen_skia_dependency_) {
@@ -5914,6 +5931,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       AsyncExternalGpuTargetCopyBackend backend,
       const gfx::Size& output_size,
       const char* label) {
+    async_external_gpu_target_copy_request_enqueued_ = false;
     async_external_gpu_target_copy_.request_id =
         ++next_async_external_gpu_target_copy_request_id_;
     async_external_gpu_target_copy_.generation =
@@ -5933,6 +5951,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   void FinalizeAsyncExternalGpuTargetCopyIfReady() {
     if (async_external_gpu_target_copy_.status !=
         html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
+      return;
+    }
+    if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
       return;
     }
     if (copy_output_completed_ && !*copy_output_completed_) {
@@ -5955,6 +5976,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       }
       async_external_gpu_target_copy_.status =
           html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted;
+      async_external_gpu_target_copy_request_enqueued_ = false;
       std::ostringstream out;
       out << async_external_gpu_target_copy_.label
           << ": ok path=viz_blit_request"
@@ -5981,6 +6003,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     async_external_gpu_target_copy_.status =
         html_css_renderer::ExternalGpuTargetCopyStatus::kFailed;
+    async_external_gpu_target_copy_request_enqueued_ = false;
     async_external_gpu_target_copy_.diagnostic =
         async_external_gpu_target_copy_.label + ": failed failure=" + failure;
   }
@@ -5989,11 +6012,33 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       html_css_renderer::ExternalGpuTargetCopyStatus status,
       std::string diagnostic,
       bool discard_prepared_target) {
+    const bool was_pending =
+        async_external_gpu_target_copy_.status ==
+        html_css_renderer::ExternalGpuTargetCopyStatus::kPending;
+    const uint64_t invalidated_generation =
+        async_external_gpu_target_copy_.generation;
+    const AsyncExternalGpuTargetCopyBackend invalidated_backend =
+        async_external_gpu_target_copy_.backend;
+    const bool wait_for_stale_callback =
+        was_pending && invalidated_generation != 0 &&
+        async_external_gpu_target_copy_request_enqueued_;
     ++async_external_gpu_target_copy_generation_;
-    async_external_gpu_target_copy_.status = status;
+    async_external_gpu_target_copy_.status =
+        wait_for_stale_callback
+            ? html_css_renderer::ExternalGpuTargetCopyStatus::kPending
+            : status;
     async_external_gpu_target_copy_.diagnostic = std::move(diagnostic);
+    if (wait_for_stale_callback) {
+      stale_async_external_gpu_target_copy_waiting_for_callback_ = true;
+      stale_async_external_gpu_target_copy_generation_ = invalidated_generation;
+      stale_async_external_gpu_target_copy_backend_ = invalidated_backend;
+      stale_async_external_gpu_target_copy_terminal_status_ = status;
+    } else {
+      async_external_gpu_target_copy_request_enqueued_ = false;
+    }
     ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
-    if (discard_prepared_target && offscreen_skia_dependency_) {
+    if ((discard_prepared_target || !wait_for_stale_callback) &&
+        offscreen_skia_dependency_) {
       if (async_external_gpu_target_copy_.backend ==
           AsyncExternalGpuTargetCopyBackend::kVulkan) {
         offscreen_skia_dependency_
@@ -6024,6 +6069,36 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       std::move(held_gpu_copy_output_release_callback_)
           .Run(sync_token, /*lost_resource=*/false);
     }
+  }
+
+  void ReleaseStaleAsyncExternalGpuTargetCopyIfNeeded(uint64_t generation) {
+    if (!stale_async_external_gpu_target_copy_waiting_for_callback_ ||
+        generation != stale_async_external_gpu_target_copy_generation_) {
+      return;
+    }
+    ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
+    if (offscreen_skia_dependency_) {
+      if (stale_async_external_gpu_target_copy_backend_ ==
+          AsyncExternalGpuTargetCopyBackend::kVulkan) {
+        offscreen_skia_dependency_
+            ->WaitForBorrowedVkImageRenderCopyBlitTargetForTesting();
+        offscreen_skia_dependency_
+            ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
+      } else if (stale_async_external_gpu_target_copy_backend_ ==
+                 AsyncExternalGpuTargetCopyBackend::kD3D12) {
+        offscreen_skia_dependency_
+            ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
+      }
+    }
+    async_external_gpu_target_copy_.status =
+        stale_async_external_gpu_target_copy_terminal_status_;
+    async_external_gpu_target_copy_request_enqueued_ = false;
+    stale_async_external_gpu_target_copy_waiting_for_callback_ = false;
+    stale_async_external_gpu_target_copy_generation_ = 0;
+    stale_async_external_gpu_target_copy_backend_ =
+        AsyncExternalGpuTargetCopyBackend::kNone;
+    stale_async_external_gpu_target_copy_terminal_status_ =
+        html_css_renderer::ExternalGpuTargetCopyStatus::kNone;
   }
 
   void SetFailure(const char* reason) {
@@ -6152,8 +6227,15 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     TraceLiveFrameProbeStage(
-        "direct frame sink drain offscreen Display for external target resize");
-    ReleaseExternalGpuTargetState();
+        "direct frame sink resize offscreen Display for external target");
+    if (async_external_gpu_target_copy_.status ==
+        html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
+      InvalidatePendingAsyncExternalGpuTargetCopy(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kStale,
+          async_external_gpu_target_copy_.label +
+              ": stale after external target resize",
+          /*discard_prepared_target=*/false);
+    }
   }
 
   void DrawVizDisplayNow() {
@@ -6225,7 +6307,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         wants_gpu ? viz::CopyOutputRequest::ResultDestination::kSharedImage
                   : viz::CopyOutputRequest::ResultDestination::kSystemMemory,
         base::BindOnce(&StandaloneDirectLayerTreeFrameSink::OnCopyOutput,
-                       base::Unretained(this), wants_png, wants_raw,
+                       weak_factory_.GetWeakPtr(), wants_png, wants_raw,
                        wants_gpu, async_generation));
     request->set_area(gfx::Rect(output_size));
     if (blit_target) {
@@ -6239,6 +6321,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     support_->RequestCopyOfOutput(
         std::make_unique<viz::PendingCopyOutputRequest>(
             local_surface_id_, viz::SubtreeCaptureId(), std::move(request)));
+    if (async_generation != 0 &&
+        async_generation == async_external_gpu_target_copy_generation_) {
+      async_external_gpu_target_copy_request_enqueued_ = true;
+    }
   }
 
   void OnCopyOutput(bool wants_png,
@@ -6248,6 +6334,17 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                     std::unique_ptr<viz::CopyOutputResult> output) {
     if (async_generation != 0 &&
         async_generation != async_external_gpu_target_copy_generation_) {
+      if (stale_async_external_gpu_target_copy_waiting_for_callback_ &&
+          async_generation == stale_async_external_gpu_target_copy_generation_) {
+        if (wants_gpu && output && !output->IsEmpty() &&
+            output->destination() ==
+                viz::CopyOutputResult::Destination::kSharedImage) {
+          held_gpu_copy_output_shared_image_ = output->GetSharedImage();
+          held_gpu_copy_output_release_callback_ =
+              output->TakeSharedImageOwnership();
+        }
+        ReleaseStaleAsyncExternalGpuTargetCopyIfNeeded(async_generation);
+      }
       return;
     }
     if (!output) {
@@ -6457,12 +6554,21 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   uint64_t next_async_external_gpu_target_copy_request_id_ = 0;
   uint64_t async_external_gpu_target_copy_generation_ = 0;
   AsyncExternalGpuTargetCopyState async_external_gpu_target_copy_;
+  bool async_external_gpu_target_copy_request_enqueued_ = false;
+  bool stale_async_external_gpu_target_copy_waiting_for_callback_ = false;
+  uint64_t stale_async_external_gpu_target_copy_generation_ = 0;
+  AsyncExternalGpuTargetCopyBackend stale_async_external_gpu_target_copy_backend_ =
+      AsyncExternalGpuTargetCopyBackend::kNone;
+  html_css_renderer::ExternalGpuTargetCopyStatus
+      stale_async_external_gpu_target_copy_terminal_status_ =
+          html_css_renderer::ExternalGpuTargetCopyStatus::kNone;
   raw_ptr<std::string> failure_reason_ = nullptr;
   raw_ptr<bool> begin_frame_source_set_ = nullptr;
   raw_ptr<int> did_not_produce_count_ = nullptr;
   raw_ptr<int> last_frame_skipped_reason_ = nullptr;
   raw_ptr<int> last_did_not_produce_has_damage_ = nullptr;
   bool use_vulkan_offscreen_output_ = false;
+  base::WeakPtrFactory<StandaloneDirectLayerTreeFrameSink> weak_factory_{this};
 };
 
 struct OriginalElementAttributeValue {
