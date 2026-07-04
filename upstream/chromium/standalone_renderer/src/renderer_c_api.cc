@@ -5,7 +5,6 @@
 #include "html_css_renderer/renderer_c_api.h"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -277,27 +276,25 @@ bool HasInlineEventHandlerAttribute(const std::string& lower_html) {
       return false;
     }
     for (size_t i = tag + 1; i + 3 < end; ++i) {
-      if (!std::isspace(static_cast<unsigned char>(lower_html[i]))) {
+      if (!base::IsAsciiWhitespace(lower_html[i])) {
         continue;
       }
       size_t name = i + 1;
-      while (name < end &&
-             std::isspace(static_cast<unsigned char>(lower_html[name]))) {
+      while (name < end && base::IsAsciiWhitespace(lower_html[name])) {
         ++name;
       }
       if (name + 2 >= end || lower_html[name] != 'o' ||
           lower_html[name + 1] != 'n' ||
-          !std::isalpha(static_cast<unsigned char>(lower_html[name + 2]))) {
+          !base::IsAsciiAlpha(lower_html[name + 2])) {
         continue;
       }
       size_t cursor = name + 3;
       while (cursor < end &&
-             (std::isalnum(static_cast<unsigned char>(lower_html[cursor])) ||
+             (base::IsAsciiAlphaNumeric(lower_html[cursor]) ||
               lower_html[cursor] == '-' || lower_html[cursor] == '_')) {
         ++cursor;
       }
-      while (cursor < end &&
-             std::isspace(static_cast<unsigned char>(lower_html[cursor]))) {
+      while (cursor < end && base::IsAsciiWhitespace(lower_html[cursor])) {
         ++cursor;
       }
       if (cursor < end && lower_html[cursor] == '=') {
@@ -313,8 +310,7 @@ bool ContainsJavaScriptScheme(const std::string& lower_html) {
   std::string compact;
   compact.reserve(lower_html.size());
   for (char c : lower_html) {
-    const unsigned char byte = static_cast<unsigned char>(c);
-    if (std::isspace(byte) || c == '\0') {
+    if (base::IsAsciiWhitespace(c) || c == '\0') {
       continue;
     }
     compact.push_back(c);
