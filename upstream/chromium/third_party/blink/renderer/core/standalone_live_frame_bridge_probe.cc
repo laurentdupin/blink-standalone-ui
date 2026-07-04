@@ -5153,6 +5153,80 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     return RunVkImageRenderCopyForTesting(vulkan_image);
   }
 
+  struct ExternalTargetDisplayPrepareResult {
+    html_css_renderer::ExternalGpuTargetCopyResult copy_result;
+    gfx::Size output_size;
+    bool ready = false;
+    bool display_created = false;
+  };
+
+  ExternalTargetDisplayPrepareResult PrepareDisplayForExternalTargetCopy(
+      gfx::Size requested_output_size,
+      const char* diagnostic_label,
+      bool draw_after_display_create = false) {
+    ExternalTargetDisplayPrepareResult result;
+    result.output_size = requested_output_size;
+    if (result.output_size.IsEmpty()) {
+      result.output_size = viewport_;
+      if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+        result.output_size = *viz_display_output_size_;
+      }
+    }
+    if (result.output_size.IsEmpty()) {
+      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          std::string(diagnostic_label) +
+              ": failed failure=external target output size is empty",
+          result.output_size);
+      return result;
+    }
+
+    ResetOffscreenVizDisplayForExternalTargetResize(result.output_size);
+    if (!display_) {
+      if (!local_surface_id_.is_valid()) {
+        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+            std::string(diagnostic_label) +
+                ": pending reason=Viz Display cannot initialize without "
+                "LocalSurfaceId",
+            result.output_size);
+        return result;
+      }
+      if (!EnsureVizDisplay(result.output_size)) {
+        result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+            std::string(diagnostic_label) +
+                ": failed failure=Viz Display could not initialize",
+            result.output_size);
+        return result;
+      }
+      result.display_created = true;
+    }
+    if (!local_surface_id_.is_valid()) {
+      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
+          std::string(diagnostic_label) +
+              ": pending reason=Viz Display has no LocalSurfaceId",
+          result.output_size);
+      return result;
+    }
+    display_->SetLocalSurfaceId(local_surface_id_,
+                                last_submitted_device_scale_factor_);
+    display_->Resize(result.output_size);
+    if (viz_display_output_size_) {
+      *viz_display_output_size_ = result.output_size;
+    }
+    if (result.display_created && draw_after_display_create) {
+      DrawVizDisplayNow();
+    }
+    result.ready = true;
+    result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+        html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted,
+        std::string(diagnostic_label) + ": ready",
+        result.output_size);
+    return result;
+  }
+
   html_css_renderer::ExternalGpuTargetCopyResult RenderExternalVkImageToTarget(
       const html_css_renderer::ExternalVulkanImageTarget* vulkan_image) {
     if (!vulkan_image) {
@@ -5163,42 +5237,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
 
     gfx::Size output_size(vulkan_image->width, vulkan_image->height);
-    if (output_size.IsEmpty()) {
-      output_size = viewport_;
-      if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
-        output_size = *viz_display_output_size_;
-      }
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_vkimage_render_copy");
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
-    ResetOffscreenVizDisplayForExternalTargetResize(output_size);
-    if (!display_) {
-      if (!local_surface_id_.is_valid()) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            "gpu_external_vkimage_render_copy: pending reason=Viz Display "
-            "cannot initialize without LocalSurfaceId",
-            output_size);
-      }
-      if (!EnsureVizDisplay(output_size)) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            "gpu_external_vkimage_render_copy: failed failure=Viz Display "
-            "could not initialize",
-            output_size);
-      }
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
-    } else if (local_surface_id_.is_valid()) {
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
-    }
+    output_size = display_ready.output_size;
     if (!offscreen_skia_dependency_) {
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
@@ -5286,18 +5330,20 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           "Vulkan image is null");
     }
     gfx::Size output_size(vulkan_image->width, vulkan_image->height);
-    if (output_size.IsEmpty()) {
-      output_size = viewport_;
-      if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
-        output_size = *viz_display_output_size_;
-      }
-    }
+    output_size = output_size.IsEmpty() ? gfx::Size() : output_size;
     if (stale_async_external_gpu_target_copy_waiting_for_callback_) {
+      gfx::Size pending_size = output_size;
+      if (pending_size.IsEmpty()) {
+        pending_size = viewport_;
+        if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
+          pending_size = *viz_display_output_size_;
+        }
+      }
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           "gpu_external_vkimage_render_copy_async: pending reason=previous "
           "external GPU target CopyOutput is still releasing",
-          output_size);
+          pending_size);
     }
     if (async_external_gpu_target_copy_.status ==
         html_css_renderer::ExternalGpuTargetCopyStatus::kPending) {
@@ -5309,36 +5355,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
 
-    ResetOffscreenVizDisplayForExternalTargetResize(output_size);
-    if (!display_) {
-      if (!local_surface_id_.is_valid()) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            "gpu_external_vkimage_render_copy_async: pending reason=Viz "
-            "Display cannot initialize without LocalSurfaceId",
-            output_size);
-      }
-      if (!EnsureVizDisplay(output_size)) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            "gpu_external_vkimage_render_copy_async: failed failure=Viz "
-            "Display could not initialize",
-            output_size);
-      }
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
-    } else if (local_surface_id_.is_valid()) {
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_vkimage_render_copy_async");
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
+    output_size = display_ready.output_size;
     if (!offscreen_skia_dependency_) {
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
@@ -5385,23 +5407,24 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   RenderBackdropMaskToExternalVkImage(
       const html_css_renderer::ExternalVulkanImageTarget* vulkan_image,
       const std::vector<LiveBackdropFilterRegion>& regions) {
-    if (!display_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_backdrop_mask: failed failure=Viz Display "
-          "is not initialized");
-    }
-    if (!offscreen_skia_dependency_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_vkimage_backdrop_mask: failed "
-          "failure=offscreen Vulkan Skia dependency is not available");
-    }
     gfx::Size output_size = viewport_;
     if (vulkan_image && vulkan_image->width > 0 && vulkan_image->height > 0) {
       output_size = gfx::Size(vulkan_image->width, vulkan_image->height);
     } else if (viz_display_output_size_ && !viz_display_output_size_->IsEmpty()) {
       output_size = *viz_display_output_size_;
+    }
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_vkimage_backdrop_mask");
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
+    }
+    output_size = display_ready.output_size;
+    if (!offscreen_skia_dependency_) {
+      return MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          "gpu_external_vkimage_backdrop_mask: failed "
+          "failure=offscreen Vulkan Skia dependency is not available",
+          output_size);
     }
     std::string diagnostic =
         offscreen_skia_dependency_
@@ -5517,37 +5540,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     } else if (output_size.IsEmpty()) {
       output_size = viewport_;
     }
-    ResetOffscreenVizDisplayForExternalTargetResize(output_size);
-    if (!display_) {
-      if (!local_surface_id_.is_valid()) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            "gpu_external_d3d12_render_copy: pending reason=Viz Display "
-            "cannot initialize without LocalSurfaceId",
-            output_size);
-      }
-      if (!EnsureVizDisplay(output_size)) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            "gpu_external_d3d12_render_copy: failed failure=Viz Display "
-            "could not initialize",
-            output_size);
-      }
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
-      DrawVizDisplayNow();
-    } else if (local_surface_id_.is_valid()) {
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_d3d12_render_copy",
+        /*draw_after_display_create=*/true);
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
+    output_size = display_ready.output_size;
     if (!offscreen_skia_dependency_) {
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
@@ -5668,37 +5667,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
     async_external_gpu_target_copy_ = AsyncExternalGpuTargetCopyState();
 
-    ResetOffscreenVizDisplayForExternalTargetResize(output_size);
-    if (!display_) {
-      if (!local_surface_id_.is_valid()) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
-            "gpu_external_d3d12_render_copy_async: pending reason=Viz "
-            "Display cannot initialize without LocalSurfaceId",
-            output_size);
-      }
-      if (!EnsureVizDisplay(output_size)) {
-        return MakeAsyncExternalGpuTargetCopyResult(
-            html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-            "gpu_external_d3d12_render_copy_async: failed failure=Viz "
-            "Display could not initialize",
-            output_size);
-      }
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
-      DrawVizDisplayNow();
-    } else if (local_surface_id_.is_valid()) {
-      display_->SetLocalSurfaceId(local_surface_id_,
-                                  last_submitted_device_scale_factor_);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        output_size, "gpu_external_d3d12_render_copy_async",
+        /*draw_after_display_create=*/true);
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
+    output_size = display_ready.output_size;
     if (!offscreen_skia_dependency_) {
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
@@ -5748,29 +5723,30 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       int width,
       int height,
       const std::vector<LiveBackdropFilterRegion>& regions) {
-    if (!display_) {
-      return MakeAsyncExternalGpuTargetCopyResult(
-          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-          "gpu_external_d3d12_backdrop_mask: failed failure=Viz Display "
-          "is not initialized");
+    auto display_ready = PrepareDisplayForExternalTargetCopy(
+        gfx::Size(width, height), "gpu_external_d3d12_backdrop_mask");
+    if (!display_ready.ready) {
+      return display_ready.copy_result;
     }
+    const gfx::Size output_size = display_ready.output_size;
     if (!offscreen_skia_dependency_) {
       return MakeAsyncExternalGpuTargetCopyResult(
           html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
           "gpu_external_d3d12_backdrop_mask: failed "
-          "failure=offscreen D3D12 Skia dependency is not available");
+          "failure=offscreen D3D12 Skia dependency is not available",
+          output_size);
     }
     gfx::Size css_viewport = viewport_;
     std::string diagnostic =
         offscreen_skia_dependency_
             ->RenderD3D12BackdropMaskToExternalTargetForTesting(
-                d3d12_resource, shared_handle, width, height, regions,
-                css_viewport);
+                d3d12_resource, shared_handle, output_size.width(),
+                output_size.height(), regions, css_viewport);
     return MakeAsyncExternalGpuTargetCopyResult(
         diagnostic.find(": ok") != std::string::npos
             ? html_css_renderer::ExternalGpuTargetCopyStatus::kCompleted
             : html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
-        std::move(diagnostic), gfx::Size(width, height));
+        std::move(diagnostic), output_size);
   }
 
   std::string RunD3D12RenderCopyForTesting(ID3D12Resource* external_resource,
