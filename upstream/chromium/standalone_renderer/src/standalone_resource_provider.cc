@@ -559,13 +559,9 @@ bool SchemeIs(const std::string& url, const char* lower_ascii_scheme) {
 
 bool IsWithinRoot(const std::filesystem::path& path,
                   const std::filesystem::path& root) {
-  auto path_it = path.begin();
-  auto root_it = root.begin();
-  for (; root_it != root.end(); ++root_it, ++path_it) {
-    if (path_it == path.end() || *path_it != *root_it)
-      return false;
-  }
-  return true;
+  const base::FilePath path_file(path.native());
+  const base::FilePath root_file(root.native());
+  return path_file == root_file || root_file.IsParent(path_file);
 }
 
 std::string SupportedImageMimeFromFile(const base::FilePath& path) {
