@@ -17,6 +17,7 @@
 #include "base/check.h"
 #include "base/memory/discardable_memory.h"
 #include "base/memory/discardable_memory_allocator.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -586,7 +587,7 @@ std::string StandaloneDocumentBaseElementHtml(const std::string& html) {
       FileUrlForBaseDirectory(GetStandaloneResourceProviderDocumentBasePath());
   if (base_url.empty())
     return std::string();
-  return "<base href=\"" + base_url + "\">";
+  return base::StrCat({"<base href=\"", base_url, "\">"});
 }
 
 std::string RewriteStandaloneCssUrlValueToFileUrl(
@@ -614,8 +615,9 @@ std::string RewriteStandaloneCssUrlValueToFileUrl(
       FileUrlForLocalPath((document_base_dir / fs::path(value)).lexically_normal());
   if (file_url.empty())
     return raw_value;
-  return std::string(1, quote == '\0' ? '"' : quote) + file_url +
-         std::string(1, quote == '\0' ? '"' : quote);
+  const char quote_char = quote == '\0' ? '"' : quote;
+  const std::string_view quote_view(&quote_char, 1);
+  return base::StrCat({quote_view, file_url, quote_view});
 }
 
 std::string RewriteStandaloneCssUrlsToFileUrls(const std::string& css) {
@@ -731,7 +733,7 @@ std::string ResolveProviderUrl(const std::string& value,
   const size_t slash = base_url.find_last_of('/');
   if (slash == std::string::npos)
     return url;
-  return base_url.substr(0, slash + 1) + url;
+  return base::StrCat({base_url.substr(0, slash + 1), url});
 }
 
 std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
@@ -984,17 +986,18 @@ std::string BuildLiveBlinkProbeHtml(const std::string& html,
     const size_t insert_at =
         head_close != std::string::npos ? head_close : head_close_upper;
     if (insert_at != std::string::npos) {
-      output.insert(insert_at, base_html + stylesheet_html);
+      output.insert(insert_at, base::StrCat({base_html, stylesheet_html}));
       return output;
     }
-    return base_html + stylesheet_html + output;
+    return base::StrCat({base_html, stylesheet_html, output});
   }
   if (has_body || has_html)
-    return "<head>" + base_html + stylesheet_html + "</head>" +
-           RemoveStandaloneStylesheetLinkTags(
-               RewriteStandaloneHtmlStyleBlocksToFileUrls(html));
-  return "<head>" + base_html + stylesheet_html + extract_style_blocks(html) +
-         "</head><body>" + remove_style_blocks(html) + "</body>";
+    return base::StrCat({"<head>", base_html, stylesheet_html, "</head>",
+                         RemoveStandaloneStylesheetLinkTags(
+                             RewriteStandaloneHtmlStyleBlocksToFileUrls(html))});
+  return base::StrCat({"<head>", base_html, stylesheet_html,
+                       extract_style_blocks(html), "</head><body>",
+                       remove_style_blocks(html), "</body>"});
 }
 
 Point SnapshotDocumentScrollOffset(const RendererSnapshot& snapshot) {
@@ -1218,15 +1221,15 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       diagnostics->push_back(
           "SDL supplies the native window; cc frames submit through Viz and create a Skia GPU Display when an HWND is available");
       diagnostics->push_back(
-          "live Blink bridge recipe version: " +
-          std::to_string(
-              probe::StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer()));
+          base::StrCat({"live Blink bridge recipe version: ",
+                        base::NumberToString(
+                            probe::StandaloneBlinkLiveFrameBridgeRecipeVersionForStandaloneRenderer())}));
       if (no_script_profile_) {
         diagnostics->push_back(
             "no-script profile requested by embedder configuration");
       }
-      diagnostics->push_back(std::string("cc/viz frame sink prewarm: ") +
-                             (prewarm_ok ? "ok" : "failed"));
+      diagnostics->push_back(base::StrCat(
+          {"cc/viz frame sink prewarm: ", prewarm_ok ? "ok" : "failed"}));
     }
     return probe::StandaloneBlinkLiveFrameBridgeUsesDummyPageHolderForStandaloneRenderer() &&
            probe::StandaloneBlinkLiveFrameBridgeUsesLocalFrameViewPaintArtifactForStandaloneRenderer();
@@ -1593,8 +1596,8 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!vulkan_window_host_) {
       NativePresentationResult result;
       result.failure_reason = "native window presentation was not initialized";
-      result.diagnostics.push_back("presentation failure: " +
-                                   result.failure_reason);
+      result.diagnostics.push_back(
+          base::StrCat({"presentation failure: ", result.failure_reason}));
       return result;
     }
     return vulkan_window_host_->Present(frame);
@@ -2410,15 +2413,15 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (probe::StandaloneBlinkLiveFrameBridgeCcAttachFailureForStandaloneRenderer(
             probe_html.c_str(), cc_attach_failure.data(),
             static_cast<int>(cc_attach_failure.size())) > 0) {
-      result.diagnostics.emplace_back(std::string("cc attach failure: ") +
-                                      cc_attach_failure.data());
+      result.diagnostics.emplace_back(
+          base::StrCat({"cc attach failure: ", cc_attach_failure.data()}));
     }
     std::array<char, 1024> cc_frame_sink_failure{};
     if (probe::StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
             probe_html.c_str(), cc_frame_sink_failure.data(),
             static_cast<int>(cc_frame_sink_failure.size())) > 0) {
-      result.diagnostics.emplace_back(std::string("cc frame sink failure: ") +
-                                      cc_frame_sink_failure.data());
+      result.diagnostics.emplace_back(base::StrCat(
+          {"cc frame sink failure: ", cc_frame_sink_failure.data()}));
     }
   }
 

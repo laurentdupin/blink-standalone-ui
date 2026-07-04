@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "url/third_party/mozilla/url_parse.h"
 
@@ -58,10 +59,10 @@ void AppendUnsupportedCssImportRuleDiagnostic(
   if (!diagnostics) {
     return;
   }
-  std::string message =
-      "unsupported CSS @import rule in stylesheet: " + stylesheet_label;
+  std::string message = base::StrCat(
+      {"unsupported CSS @import rule in stylesheet: ", stylesheet_label});
   if (!reason.empty()) {
-    message += " (" + reason + ")";
+    base::StrAppend(&message, {" (", reason, ")"});
   }
   diagnostics->push_back(message);
 }
@@ -401,7 +402,8 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
   }
   std::string rewritten = rebased.generic_string();
   if (quote != '\0') {
-    rewritten = std::string(1, quote) + rewritten + std::string(1, quote);
+    const std::string quote_string(1, quote);
+    rewritten = base::StrCat({quote_string, rewritten, quote_string});
   }
   return rewritten;
 }
@@ -409,7 +411,7 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
 std::optional<std::string> ExtractAttribute(const std::string& tag,
                                             const std::string& name) {
   const std::string lower = base::ToLowerASCII(tag);
-  const std::string needle = base::ToLowerASCII(name) + "=";
+  const std::string needle = base::StrCat({base::ToLowerASCII(name), "="});
   const size_t attr = lower.find(needle);
   if (attr == std::string::npos) {
     return std::nullopt;
@@ -525,8 +527,8 @@ void AppendUnsupportedCssImportDiagnostic(
     const std::string& stylesheet_label,
     std::vector<std::string>* diagnostics) {
   if (diagnostics && CssContainsImportRule(css)) {
-    diagnostics->push_back("unsupported CSS @import rule in stylesheet: " +
-                           stylesheet_label);
+    diagnostics->push_back(base::StrCat(
+        {"unsupported CSS @import rule in stylesheet: ", stylesheet_label}));
   }
 }
 
