@@ -24,7 +24,8 @@
 #include "html_css_renderer/standalone_resource_provider.h"
 #include "html_css_renderer/typeface_resource_registry.h"
 #include "html_css_renderer/vulkan_window_host.h"
-#include "url/third_party/mozilla/url_parse.h"
+#include "net/base/filename_util.h"
+#include "url/gurl.h"
 
 namespace blink::standalone_renderer_probe {
 uint64_t StandaloneBlinkLiveFrameBridgeCreateInstanceForStandaloneRenderer();
@@ -499,30 +500,12 @@ std::string TrimAscii(std::string value) {
 }
 
 bool HasUrlScheme(const std::string& value) {
-  url::Component scheme;
-  return url::ExtractScheme(value, &scheme);
+  return GURL(value).has_scheme();
 }
 
 bool HasHtmlBaseElement(const std::string& html) {
   const std::string lower = LowerAscii(html);
   return lower.find("<base") != std::string::npos;
-}
-
-std::string PercentEncodeFileUrlPath(std::string path) {
-  std::string output;
-  output.reserve(path.size() + 16);
-  for (const unsigned char c : path) {
-    const bool safe =
-        base::IsAsciiAlphaNumeric(c) || c == '/' || c == ':' || c == '-' ||
-        c == '_' || c == '.' || c == '~';
-    if (safe) {
-      output.push_back(static_cast<char>(c));
-      continue;
-    }
-    output.push_back('%');
-    base::AppendHexEncodedByte(c, output);
-  }
-  return output;
 }
 
 std::string FileUrlForBaseDirectory(const std::string& base_path_string) {
@@ -542,9 +525,9 @@ std::string FileUrlForBaseDirectory(const std::string& base_path_string) {
   std::string path = base_path.generic_string();
   if (path.empty())
     return std::string();
-  if (path.back() != '/')
-    path.push_back('/');
-  return "file:///" + PercentEncodeFileUrlPath(path);
+  return net::FilePathToFileURL(
+             base::FilePath(base_path.native()).AsEndingWithSeparator())
+      .spec();
 }
 
 fs::path StandaloneDocumentBaseDirectoryPath() {
@@ -575,7 +558,7 @@ std::string FileUrlForLocalPath(const fs::path& path) {
   fs::path normalized = fs::weakly_canonical(absolute, error);
   if (!error)
     absolute = std::move(normalized);
-  return "file:///" + PercentEncodeFileUrlPath(absolute.generic_string());
+  return net::FilePathToFileURL(base::FilePath(absolute.native())).spec();
 }
 
 std::string StandaloneDocumentBaseElementHtml(const std::string& html) {
@@ -728,6 +711,12 @@ std::string ResolveProviderUrl(const std::string& value,
   const std::string url = TrimAsciiWhitespace(value);
   if (url.empty() || HasUrlScheme(url) || base_url.empty())
     return url;
+  const GURL parsed_base(base_url);
+  if (parsed_base.is_valid()) {
+    const GURL resolved = parsed_base.Resolve(url);
+    if (resolved.is_valid())
+      return resolved.spec();
+  }
   const size_t slash = base_url.find_last_of('/');
   if (slash == std::string::npos)
     return url;

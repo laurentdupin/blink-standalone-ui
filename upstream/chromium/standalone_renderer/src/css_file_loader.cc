@@ -8,7 +8,9 @@
 #include "base/files/file_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
-#include "url/third_party/mozilla/url_parse.h"
+#include "net/base/filename_util.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace html_css_renderer {
 namespace {
@@ -29,8 +31,31 @@ std::string TrimAscii(std::string value) {
 }
 
 bool HasUrlScheme(const std::string& value) {
-  url::Component scheme;
-  return url::ExtractScheme(value, &scheme);
+  return GURL(value).has_scheme();
+}
+
+std::optional<fs::path> ResolveLocalPathReference(
+    const std::string& reference,
+    const fs::path& base_dir) {
+  if (base::StartsWith(reference, "//")) {
+    return std::nullopt;
+  }
+  const GURL url(reference);
+  if (url.has_scheme()) {
+    if (!url.SchemeIs(url::kFileScheme)) {
+      return std::nullopt;
+    }
+    base::FilePath file_path;
+    if (!net::FileURLToFilePath(url, &file_path)) {
+      return std::nullopt;
+    }
+    return fs::path(file_path.value());
+  }
+  fs::path path(reference);
+  if (path.is_relative()) {
+    path = base_dir / path;
+  }
+  return path;
 }
 
 bool IsPathWithinRoot(const fs::path& path, const fs::path& root) {
@@ -301,14 +326,13 @@ std::string ExpandImportsAndRebaseCssSegments(
       AppendUnsupportedCssImportRuleDiagnostic(stylesheet_path.string(),
                                               parsed.reason, diagnostics);
     } else {
-      const fs::path import_ref = fs::path(parsed.href);
-      if (base::StartsWith(parsed.href, "//") || HasUrlScheme(parsed.href) ||
-          import_ref.is_absolute()) {
+      std::optional<fs::path> resolved_import =
+          ResolveLocalPathReference(parsed.href, stylesheet_path.parent_path());
+      if (!resolved_import) {
         AppendUnsupportedCssImportRuleDiagnostic(
             stylesheet_path.string(), "non-local import URL", diagnostics);
       } else {
-        const fs::path import_path =
-            NormalizePathForPolicy(stylesheet_path.parent_path() / import_ref);
+        const fs::path import_path = NormalizePathForPolicy(*resolved_import);
         const fs::path root = NormalizePathForPolicy(document_base_dir);
         if (!IsPathWithinRoot(import_path, root)) {
           AppendUnsupportedCssImportRuleDiagnostic(
@@ -583,15 +607,15 @@ void AddLocalLinkedStylesheetsForDocument(
     std::vector<std::string>* diagnostics) {
   const fs::path base_dir = fs::absolute(html_path).parent_path();
   for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
-    if (href.empty() || base::StartsWith(href, "//") || HasUrlScheme(href)) {
+    if (href.empty()) {
       continue;
     }
-    fs::path css_path = fs::path(href);
-    if (css_path.is_relative()) {
-      css_path = base_dir / css_path;
+    std::optional<fs::path> css_path = ResolveLocalPathReference(href, base_dir);
+    if (!css_path) {
+      continue;
     }
     std::optional<Stylesheet> stylesheet =
-        LoadStylesheetFileForDocument(css_path, base_dir, diagnostics);
+        LoadStylesheetFileForDocument(*css_path, base_dir, diagnostics);
     if (stylesheet) {
       create_info->stylesheets.push_back(std::move(*stylesheet));
     }

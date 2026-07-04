@@ -29,6 +29,7 @@
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
 #include "net/base/data_url.h"
+#include "net/base/filename_util.h"
 #include "net/base/mime_util.h"
 #include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "third_party/skia/include/codec/SkCodec.h"
@@ -36,7 +37,6 @@
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "url/gurl.h"
-#include "url/third_party/mozilla/url_parse.h"
 #include "url/url_constants.h"
 #include "url/url_util.h"
 
@@ -614,26 +614,12 @@ StandaloneResourceResult DecodeDataImageUrl(const std::string& url) {
   return DecodeOrClassifyImageBytes(std::move(result));
 }
 
-std::string StripFileUrlPrefix(const std::string& url) {
-  std::string path = url;
-  if (base::StartsWith(path, "file:///")) {
-    path = path.substr(8);
-  } else if (base::StartsWith(path, "file://")) {
-    path = path.substr(7);
-  }
-#if defined(_WIN32)
-  std::replace(path.begin(), path.end(), '/', '\\');
-#endif
-  return path;
-}
-
 bool HasScheme(const std::string& url) {
-  url::Component scheme;
-  return url::ExtractScheme(url, &scheme);
+  return GURL(url).has_scheme();
 }
 
 bool SchemeIs(const std::string& url, const char* lower_ascii_scheme) {
-  return url::FindAndCompareScheme(url, lower_ascii_scheme, nullptr);
+  return GURL(url).SchemeIs(lower_ascii_scheme);
 }
 
 bool IsWithinRoot(const std::filesystem::path& path,
@@ -685,9 +671,17 @@ StandaloneResourceResult DecodeLocalImage(const std::string& url) {
     }
   }
   const bool is_file_url = SchemeIs(url, url::kFileScheme);
-  std::filesystem::path candidate =
-      is_file_url ? std::filesystem::path(StripFileUrlPrefix(url))
-                  : std::filesystem::path(url);
+  std::filesystem::path candidate;
+  if (is_file_url) {
+    base::FilePath file_url_path;
+    if (!net::FileURLToFilePath(GURL(url), &file_url_path)) {
+      return ErrorResult(StandaloneResourceStatus::kUnsupportedScheme,
+                         "file URL could not be converted to a local path");
+    }
+    candidate = std::filesystem::path(file_url_path.value());
+  } else {
+    candidate = std::filesystem::path(url);
+  }
   if (candidate.is_relative())
     candidate = base_path / candidate;
   std::error_code candidate_error;
