@@ -56,6 +56,13 @@ struct GpuFrameOutput {
   std::string creation_sync_token;
 };
 
+enum class GpuFrameOutputStatus {
+  kNone = 0,
+  kAvailable = 1,
+  kPending = 2,
+  kFailed = 3,
+};
+
 struct CompositorFrameResult {
   RendererSnapshot successor_snapshot;
   CompositorFrameTiming timing;
@@ -89,6 +96,7 @@ struct CompositorFrameResult {
   std::string raw_frame_failure;
   RawFrameOutput raw_frame;
   bool gpu_frame_requested = false;
+  GpuFrameOutputStatus gpu_frame_status = GpuFrameOutputStatus::kNone;
   std::string gpu_frame_failure;
   GpuFrameOutput gpu_frame;
   std::string raw_paint_artifact_audit_json;

@@ -1602,12 +1602,8 @@ bool HasPendingFrameInput(const blink_standalone_renderer* renderer) {
 
 bool FrameResultHasGpuPreparePending(
     const html_css_renderer::CompositorFrameResult& result) {
-  if (result.gpu_frame_failure == "GPU external target source frame is pending") {
-    return true;
-  }
-  return std::find(result.diagnostics.begin(), result.diagnostics.end(),
-                   "GPU external target source frame is pending") !=
-         result.diagnostics.end();
+  return result.gpu_frame_status ==
+         html_css_renderer::GpuFrameOutputStatus::kPending;
 }
 
 bool FrameResultHasPublicFrameMetadata(
@@ -1780,13 +1776,6 @@ bool PreparedGpuSourceMatchesTarget(
   return std::abs(prepared.device_scale_factor - target_dsf) <= 0.001f;
 }
 
-bool IsRecoverableGpuCopyOutputNotReady(const std::string& failure) {
-  return failure.find("Viz CopyOutput did not produce output") !=
-             std::string::npos ||
-         failure.find("Viz BlitRequest CopyOutput did not complete") !=
-             std::string::npos;
-}
-
 uint32_t ToPublicAsyncState(
     html_css_renderer::ExternalGpuTargetCopyStatus status) {
   switch (status) {
@@ -1948,12 +1937,14 @@ blink_standalone_status_code_t AdvanceGpuFrameForBackend(
   if (require_source_gpu_frame &&
       (!renderer->latest_result.gpu_frame.shared_image_available ||
        renderer->latest_result.gpu_frame.is_software)) {
-    if (IsRecoverableGpuCopyOutputNotReady(
-            renderer->latest_result.gpu_frame_failure)) {
+    if (renderer->latest_result.gpu_frame_status ==
+        html_css_renderer::GpuFrameOutputStatus::kPending) {
       renderer->gpu_source_frame_pending = true;
       return SetLastError(
           renderer, BLINK_STANDALONE_STATUS_PENDING,
-          "render_to_gpu_target pending: Viz CopyOutput did not produce output");
+          renderer->latest_result.gpu_frame_failure.empty()
+              ? "render_to_gpu_target pending: GPU source frame is not ready"
+              : renderer->latest_result.gpu_frame_failure);
     }
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_RENDER_FAILED,
@@ -2788,16 +2779,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
                                       request_prepared_external_source);
     if (status != BLINK_STANDALONE_STATUS_OK) {
       if (external_target &&
-          IsRecoverableGpuCopyOutputNotReady(
-              renderer->latest_result.gpu_frame_failure)) {
+          renderer->latest_result.gpu_frame_status ==
+              html_css_renderer::GpuFrameOutputStatus::kPending) {
         renderer->gpu_prepare_required_after_update = true;
         renderer->gpu_source_frame_pending = false;
         renderer->runtime->ReleaseExternalGpuTargetState();
         result->status = BLINK_STANDALONE_STATUS_PENDING;
         return SetLastError(
             renderer, BLINK_STANDALONE_STATUS_PENDING,
-            "render_to_gpu_target pending: Viz CopyOutput did not produce "
-            "output");
+            renderer->latest_result.gpu_frame_failure.empty()
+                ? "render_to_gpu_target pending: GPU source frame is not ready"
+                : renderer->latest_result.gpu_frame_failure);
       }
       result->status = status;
       return status;
@@ -2900,14 +2892,17 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
         renderer, BLINK_STANDALONE_STATUS_PENDING,
         "render_to_gpu_target pending: GPU source frame is not ready");
   }
-  if (IsRecoverableGpuCopyOutputNotReady(target_result)) {
+  if (renderer->latest_result.gpu_frame_status ==
+      html_css_renderer::GpuFrameOutputStatus::kPending) {
     renderer->gpu_prepare_required_after_update = true;
     renderer->gpu_source_frame_pending = false;
     renderer->runtime->ReleaseExternalGpuTargetState();
     result->status = BLINK_STANDALONE_STATUS_PENDING;
     return SetLastError(
         renderer, BLINK_STANDALONE_STATUS_PENDING,
-        "render_to_gpu_target pending: Viz CopyOutput did not produce output");
+        renderer->latest_result.gpu_frame_failure.empty()
+            ? "render_to_gpu_target pending: GPU source frame is not ready"
+            : renderer->latest_result.gpu_frame_failure);
   }
   if (!expected_result_prefix ||
       target_result.find(": ok") == std::string::npos) {
@@ -3354,17 +3349,6 @@ extern "C" BLINK_STANDALONE_RENDERER_C_API blink_standalone_status_code_t blink_
   result->mask_encoding = request->mask_encoding;
   if (copy_result.status ==
       html_css_renderer::ExternalGpuTargetCopyStatus::kFailed) {
-    if (copy_result.request_id == 0 &&
-        IsRecoverableGpuCopyOutputNotReady(copy_result.diagnostic)) {
-      renderer->gpu_source_frame_pending = true;
-      result->status = BLINK_STANDALONE_STATUS_PENDING;
-      result->state = BLINK_STANDALONE_GPU_ASYNC_STATE_PENDING;
-      return SetLastError(
-          renderer, BLINK_STANDALONE_STATUS_PENDING,
-          copy_result.diagnostic.empty()
-              ? "submit_gpu_frame_async pending: Viz CopyOutput did not produce output"
-              : copy_result.diagnostic);
-    }
     return SetLastError(renderer,
                         static_cast<blink_standalone_status_code_t>(
                             result->status),

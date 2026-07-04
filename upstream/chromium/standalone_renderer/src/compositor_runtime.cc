@@ -1545,6 +1545,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     CopyGpuFrame(probe_html, result);
     if (probe::StandaloneBlinkLiveFrameBridgeGpuPreparePendingForStandaloneRenderer(
             probe_html.c_str())) {
+      result.gpu_frame_status = GpuFrameOutputStatus::kPending;
       result.gpu_frame_failure = "GPU external target source frame is pending";
       result.diagnostics.emplace_back(result.gpu_frame_failure);
     }
@@ -2032,6 +2033,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     result.raw_frame = RawFrameOutput();
     result.gpu_frame_failure.clear();
     result.gpu_frame = GpuFrameOutput();
+    result.gpu_frame_status = GpuFrameOutputStatus::kNone;
     if (input.result_collection == FrameResultCollection::kMinimal) {
       result.raw_paint_artifact_audit_json.clear();
       result.form_control_entries.clear();
@@ -2322,7 +2324,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       }
     }
     if (!result.png_snapshot_available) {
-      std::array<char, 256> failure{};
+      std::array<char, 1024> failure{};
       const int copied =
           probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
               probe_html.c_str(), failure.data(),
@@ -2346,7 +2348,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
     if (!probe::StandaloneBlinkLiveFrameBridgeRawFrameInfoForStandaloneRenderer(
             probe_html.c_str(), &width, &height, &stride, &pixel_format,
             &premultiplied_alpha)) {
-      std::array<char, 256> failure{};
+      std::array<char, 1024> failure{};
       const int copied =
           probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
               probe_html.c_str(), failure.data(),
@@ -2360,7 +2362,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
         probe::StandaloneBlinkLiveFrameBridgeRawFrameByteSizeForStandaloneRenderer(
             probe_html.c_str());
     if (byte_size <= 0) {
-      std::array<char, 256> failure{};
+      std::array<char, 1024> failure{};
       const int copied =
           probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
               probe_html.c_str(), failure.data(),
@@ -2416,7 +2418,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
             mailbox.data(), static_cast<int>(mailbox.size()),
             creation_sync_token.data(),
             static_cast<int>(creation_sync_token.size()))) {
-      std::array<char, 256> failure{};
+      std::array<char, 1024> failure{};
       const int copied =
           probe::StandaloneBlinkLiveFrameBridgePngSnapshotFailureForStandaloneRenderer(
               probe_html.c_str(), failure.data(),
@@ -2424,8 +2426,10 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       result.gpu_frame_failure =
           copied > 0 ? failure.data()
                      : "Viz CopyOutput shared image was not produced";
+      result.gpu_frame_status = GpuFrameOutputStatus::kFailed;
       return;
     }
+    result.gpu_frame_status = GpuFrameOutputStatus::kAvailable;
     result.gpu_frame.shared_image_available = true;
     result.gpu_frame.is_software = is_software != 0;
     result.gpu_frame.vk_context_provider_available =
@@ -2449,7 +2453,7 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       result.diagnostics.emplace_back(std::string("cc attach failure: ") +
                                       cc_attach_failure.data());
     }
-    std::array<char, 256> cc_frame_sink_failure{};
+    std::array<char, 1024> cc_frame_sink_failure{};
     if (probe::StandaloneBlinkLiveFrameBridgeCcFrameSinkFailureForStandaloneRenderer(
             probe_html.c_str(), cc_frame_sink_failure.data(),
             static_cast<int>(cc_frame_sink_failure.size())) > 0) {
