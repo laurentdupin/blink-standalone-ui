@@ -8,6 +8,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "net/base/filename_util.h"
+#include "standalone_renderer/src/standalone_stylesheet_link_parser.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
 
@@ -444,65 +445,6 @@ std::string RebaseCssUrlValue(const std::string& raw_value,
   return rewritten;
 }
 
-std::optional<std::string> ExtractAttribute(const std::string& tag,
-                                            const std::string& name) {
-  const std::string lower = base::ToLowerASCII(tag);
-  const std::string needle = base::StrCat({base::ToLowerASCII(name), "="});
-  const size_t attr = lower.find(needle);
-  if (attr == std::string::npos) {
-    return std::nullopt;
-  }
-  size_t value_start = attr + needle.size();
-  if (value_start >= tag.size()) {
-    return std::nullopt;
-  }
-  const char quote = tag[value_start];
-  if (quote == '"' || quote == '\'') {
-    ++value_start;
-    const size_t value_end = tag.find(quote, value_start);
-    if (value_end == std::string::npos) {
-      return std::nullopt;
-    }
-    return tag.substr(value_start, value_end - value_start);
-  }
-  size_t value_end = value_start;
-  while (value_end < tag.size() &&
-         !base::IsAsciiWhitespace(tag[value_end]) &&
-         tag[value_end] != '>') {
-    ++value_end;
-  }
-  return tag.substr(value_start, value_end - value_start);
-}
-
-std::vector<std::string> ExtractLinkedStylesheetHrefs(const std::string& html) {
-  std::vector<std::string> hrefs;
-  const std::string lower = base::ToLowerASCII(html);
-  size_t search_offset = 0;
-  while (true) {
-    const size_t link_start = lower.find("<link", search_offset);
-    if (link_start == std::string::npos) {
-      break;
-    }
-    const size_t link_end = lower.find('>', link_start);
-    if (link_end == std::string::npos) {
-      break;
-    }
-    const std::string tag = html.substr(link_start, link_end - link_start + 1);
-    const std::string lower_tag = lower.substr(link_start,
-                                               link_end - link_start + 1);
-    const std::optional<std::string> rel = ExtractAttribute(tag, "rel");
-    const std::optional<std::string> href = ExtractAttribute(tag, "href");
-    if (href && rel &&
-        base::ToLowerASCII(*rel).find("stylesheet") != std::string::npos) {
-      hrefs.push_back(*href);
-    } else if (href && lower_tag.find("stylesheet") != std::string::npos) {
-      hrefs.push_back(*href);
-    }
-    search_offset = link_end + 1;
-  }
-  return hrefs;
-}
-
 }  // namespace
 
 bool CssContainsImportRule(const std::string& css) {
@@ -618,7 +560,7 @@ void AddLocalLinkedStylesheetsForDocument(
     RendererCreateInfo* create_info,
     std::vector<std::string>* diagnostics) {
   const fs::path base_dir = NormalizePathForPolicy(html_path).parent_path();
-  for (const std::string& href : ExtractLinkedStylesheetHrefs(html)) {
+  for (const std::string& href : ExtractStandaloneStylesheetLinkHrefs(html)) {
     if (href.empty()) {
       continue;
     }

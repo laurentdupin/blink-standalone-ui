@@ -27,6 +27,7 @@
 #include "html_css_renderer/typeface_resource_registry.h"
 #include "html_css_renderer/vulkan_window_host.h"
 #include "net/base/filename_util.h"
+#include "standalone_renderer/src/standalone_stylesheet_link_parser.h"
 #include "url/gurl.h"
 
 namespace blink::standalone_renderer_probe {
@@ -657,33 +658,7 @@ std::string RewriteStandaloneHtmlStyleBlocksToFileUrls(
 }
 
 std::string RemoveStandaloneStylesheetLinkTags(const std::string& html) {
-  std::string output;
-  const std::string lower = base::ToLowerASCII(html);
-  size_t search_offset = 0;
-  while (true) {
-    const size_t open = lower.find("<link", search_offset);
-    if (open == std::string::npos) {
-      output += html.substr(search_offset);
-      break;
-    }
-    const size_t open_end = lower.find('>', open);
-    if (open_end == std::string::npos) {
-      output += html.substr(search_offset);
-      break;
-    }
-    const std::string tag = lower.substr(open, open_end - open + 1);
-    const bool rel_stylesheet =
-        tag.find("rel=\"stylesheet\"") != std::string::npos ||
-        tag.find("rel='stylesheet'") != std::string::npos ||
-        tag.find("rel=stylesheet") != std::string::npos;
-    if (rel_stylesheet) {
-      output += html.substr(search_offset, open - search_offset);
-    } else {
-      output += html.substr(search_offset, open_end + 1 - search_offset);
-    }
-    search_offset = open_end + 1;
-  }
-  return output;
+  return RemoveStandaloneStylesheetLinkTagsFromHtml(html);
 }
 
 std::string UnquoteCssUrlToken(std::string value) {
@@ -713,72 +688,9 @@ std::string ResolveProviderUrl(const std::string& value,
   return base::StrCat({base_url.substr(0, slash + 1), url});
 }
 
-std::optional<std::string> HtmlTagAttributeValue(const std::string& tag,
-                                                 const std::string& name) {
-  const std::string lower = base::ToLowerASCII(tag);
-  const std::string needle = base::ToLowerASCII(name);
-  size_t pos = 0;
-  while ((pos = lower.find(needle, pos)) != std::string::npos) {
-    if (pos > 0) {
-      const char prev = lower[pos - 1];
-      if (base::IsAsciiAlphaNumeric(prev) || prev == '-' || prev == '_') {
-        pos += needle.size();
-        continue;
-      }
-    }
-    size_t cursor = pos + needle.size();
-    while (cursor < lower.size() && base::IsAsciiWhitespace(lower[cursor])) {
-      ++cursor;
-    }
-    if (cursor >= lower.size() || lower[cursor] != '=') {
-      pos += needle.size();
-      continue;
-    }
-    ++cursor;
-    while (cursor < lower.size() && base::IsAsciiWhitespace(lower[cursor])) {
-      ++cursor;
-    }
-    if (cursor >= tag.size())
-      return std::string();
-    const char quote = tag[cursor];
-    if (quote == '\'' || quote == '"') {
-      const size_t end = tag.find(quote, cursor + 1);
-      if (end == std::string::npos)
-        return std::nullopt;
-      return tag.substr(cursor + 1, end - cursor - 1);
-    }
-    size_t end = cursor;
-    while (end < tag.size() &&
-           !base::IsAsciiWhitespace(tag[end]) &&
-           tag[end] != '>') {
-      ++end;
-    }
-    return tag.substr(cursor, end - cursor);
-  }
-  return std::nullopt;
-}
-
 std::vector<std::string> ExtractProviderLinkedStylesheetHrefs(
     const std::string& html) {
-  std::vector<std::string> hrefs;
-  const std::string lower = base::ToLowerASCII(html);
-  size_t search_offset = 0;
-  while (true) {
-    const size_t open = lower.find("<link", search_offset);
-    if (open == std::string::npos)
-      break;
-    const size_t open_end = lower.find('>', open);
-    if (open_end == std::string::npos)
-      break;
-    const std::string tag = html.substr(open, open_end - open + 1);
-    const std::optional<std::string> rel = HtmlTagAttributeValue(tag, "rel");
-    const std::optional<std::string> href = HtmlTagAttributeValue(tag, "href");
-    if (rel && href &&
-        base::ToLowerASCII(*rel).find("stylesheet") != std::string::npos)
-      hrefs.push_back(*href);
-    search_offset = open_end + 1;
-  }
-  return hrefs;
+  return ExtractStandaloneStylesheetLinkHrefs(html);
 }
 
 std::optional<std::pair<size_t, size_t>> FindNextCssImportRule(
