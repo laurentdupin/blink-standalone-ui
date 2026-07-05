@@ -24,6 +24,12 @@ namespace cc {
 
 class LayerTreeHostImpl;
 
+bool ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
+    const gfx::Size& frame_size_in_pixels,
+    const viz::LocalSurfaceId& local_surface_id,
+    const gfx::Size& last_submitted_size_in_pixels,
+    const viz::LocalSurfaceId& last_submitted_local_surface_id);
+
 class UnboundedFrameSinkHandler : public LayerTreeFrameSinkClient {
  public:
   explicit UnboundedFrameSinkHandler(LayerTreeHostImpl* host_impl);

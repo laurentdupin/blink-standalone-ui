@@ -61,6 +61,7 @@
 #include "cc/trees/layer_tree_host_delegate.h"
 #include "cc/trees/layer_tree_host_single_thread_delegate.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "cc/trees/unbounded_frame_sink_handler.h"
 
 #if !BUILDFLAG(IS_WIN) && defined(HTML_CSS_RENDERER_STANDALONE)
 struct D3D12_RESOURCE_DESC {
@@ -5105,12 +5106,20 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
         &viz_client_, frame_sink_manager_, frame_sink_id_, /*is_root=*/true);
     TraceLiveFrameProbeStage("direct frame sink after support create");
+    frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
+                                                 frame_sink_id_);
+    begin_frame_source_registered_ = true;
     return true;
   }
 
   void DetachFromClient() override {
     if (client_) {
       client_->SetBeginFrameSource(nullptr);
+    }
+    if (begin_frame_source_registered_) {
+      frame_sink_manager_->UnregisterBeginFrameSource(
+          begin_frame_source_.get());
+      begin_frame_source_registered_ = false;
     }
     begin_frame_source_.reset();
     if (begin_frame_source_set_) {
@@ -5156,12 +5165,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (submitted_output_size_) {
       *submitted_output_size_ = output_size;
     }
-    // Match cc::UnboundedFrameSinkHandler: if the frame pixel size changes
-    // before cc supplies a new LocalSurfaceId, do not submit a frame that Viz
-    // will reject or later try to copy from with mismatched surface metadata.
     const bool size_changed_without_new_local_surface_id =
-        output_size != last_submitted_size_in_pixels_ &&
-        local_surface_id_ == last_submitted_local_surface_id_;
+        cc::ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
+            output_size, local_surface_id_, last_submitted_size_in_pixels_,
+            last_submitted_local_surface_id_);
     if (size_changed_without_new_local_surface_id) {
       TraceLiveFrameProbeStage(
           "direct frame sink dropped resized frame awaiting LocalSurfaceId");
@@ -6454,6 +6461,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         std::move(overlay_processor),
         /*scheduler=*/nullptr, base::SingleThreadTaskRunner::GetCurrentDefault());
     display_->Initialize(&display_client_, frame_sink_manager_->surface_manager());
+    if (support_) {
+      support_->SetUpHitTest(display_.get());
+    }
     display_->SetVisible(true);
     display_->Resize(output_size);
     display_uses_software_output_ = false;
@@ -6772,6 +6782,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   StandaloneVizFrameSinkClient viz_client_;
   StandaloneDisplayClient display_client_;
   std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
+  bool begin_frame_source_registered_ = false;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   std::unique_ptr<viz::Display> display_;
   raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =

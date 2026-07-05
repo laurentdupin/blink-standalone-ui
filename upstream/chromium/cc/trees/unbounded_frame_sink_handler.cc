@@ -14,6 +14,18 @@
 
 namespace cc {
 
+bool ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
+    const gfx::Size& frame_size_in_pixels,
+    const viz::LocalSurfaceId& local_surface_id,
+    const gfx::Size& last_submitted_size_in_pixels,
+    const viz::LocalSurfaceId& last_submitted_local_surface_id) {
+  // If the frame size changed but we haven't received a new LocalSurfaceId from
+  // the browser yet, we must drop the frame. Submitting a frame with a
+  // mismatched size/ID causes validation errors and crashes in Viz.
+  return frame_size_in_pixels != last_submitted_size_in_pixels &&
+         local_surface_id == last_submitted_local_surface_id;
+}
+
 UnboundedFrameSinkHandler::UnboundedFrameSinkHandler(
     LayerTreeHostImpl* host_impl)
     : host_impl_(host_impl) {
@@ -54,12 +66,10 @@ void UnboundedFrameSinkHandler::SetLocalSurfaceId(
 }
 
 void UnboundedFrameSinkHandler::SubmitFrame(viz::CompositorFrame frame) {
-  // If the frame size changed but we haven't received a new LocalSurfaceId from
-  // the browser yet, we must drop the frame. Submitting a frame with a
-  // mismatched size/ID causes validation errors and crashes in Viz.
-  bool size_changed_without_new_local_surface_id =
-      frame.size_in_pixels() != last_submitted_size_in_pixels_ &&
-      local_surface_id_ == last_submitted_local_surface_id_;
+  const bool size_changed_without_new_local_surface_id =
+      ShouldDropFrameForUnboundedLocalSurfaceIdMismatch(
+          frame.size_in_pixels(), local_surface_id_,
+          last_submitted_size_in_pixels_, last_submitted_local_surface_id_);
   if (frame_sink_ && !size_changed_without_new_local_surface_id) {
     last_submitted_size_in_pixels_ = frame.size_in_pixels();
     last_submitted_local_surface_id_ = local_surface_id_;
