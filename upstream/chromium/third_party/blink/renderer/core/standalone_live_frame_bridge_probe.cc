@@ -5055,6 +5055,19 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (submitted_output_size_) {
       *submitted_output_size_ = output_size;
     }
+    // Match cc::UnboundedFrameSinkHandler: if the frame pixel size changes
+    // before cc supplies a new LocalSurfaceId, do not submit a frame that Viz
+    // will reject or later try to copy from with mismatched surface metadata.
+    const bool size_changed_without_new_local_surface_id =
+        output_size != last_submitted_size_in_pixels_ &&
+        local_surface_id_ == last_submitted_local_surface_id_;
+    if (size_changed_without_new_local_surface_id) {
+      TraceLiveFrameProbeStage(
+          "direct frame sink dropped resized frame awaiting LocalSurfaceId");
+      ReclaimDroppedCompositorFrameResources(frame);
+      SetFailure("");
+      return;
+    }
     const bool should_copy_output =
         copy_output_requested_ && *copy_output_requested_;
     const bool needs_display =
@@ -5071,6 +5084,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         /*submit_time=*/0);
     TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
     if (result == viz::SubmitResult::ACCEPTED) {
+      last_submitted_size_in_pixels_ = output_size;
+      last_submitted_local_surface_id_ = local_surface_id_;
       if (compositor_frame_submitted_) {
         *compositor_frame_submitted_ = true;
       }
@@ -5112,6 +5127,15 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     SetFailure(viz::CompositorFrameSinkSupport::GetSubmitResultAsString(result));
+  }
+
+  void ReclaimDroppedCompositorFrameResources(
+      const viz::CompositorFrame& frame) {
+    std::vector<viz::ReturnedResource> returned_resources =
+        viz::TransferableResource::ReturnResources(frame.resource_list);
+    if (!returned_resources.empty()) {
+      viz_client_.ReclaimResources(std::move(returned_resources));
+    }
   }
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack,
@@ -6599,6 +6623,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   bool vulkan_shared_context_state_is_vulkan_ = false;
   bool use_d3d12_offscreen_output_ = false;
   float last_submitted_device_scale_factor_ = 1.0f;
+  gfx::Size last_submitted_size_in_pixels_;
+  viz::LocalSurfaceId last_submitted_local_surface_id_;
   uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
