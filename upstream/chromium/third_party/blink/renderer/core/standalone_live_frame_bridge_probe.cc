@@ -5002,6 +5002,271 @@ class StandaloneInProcessRasterContextProvider final
   SEQUENCE_CHECKER(sequence_checker_);
 };
 
+class StandaloneRootVizDisplayController {
+ public:
+  StandaloneRootVizDisplayController(
+      viz::FrameSinkManagerImpl* frame_sink_manager,
+      const viz::FrameSinkId& frame_sink_id,
+      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
+      viz::RendererSettings* renderer_settings,
+      viz::DebugRendererSettings* debug_settings,
+      StandaloneDisplayClient* display_client,
+      std::unique_ptr<viz::Display>* display,
+      raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency,
+      bool* display_uses_software_output,
+      bool* vulkan_context_provider_available,
+      bool* shared_context_state_is_vulkan,
+      bool use_vulkan_offscreen_output,
+      bool use_d3d12_offscreen_output,
+      bool* viz_display_created,
+      gfx::Size* viz_display_output_size,
+      bool* skia_gpu_reached,
+      std::string* failure_reason)
+      : frame_sink_manager_(frame_sink_manager),
+        frame_sink_id_(frame_sink_id),
+        gpu_thread_holder_(std::move(gpu_thread_holder)),
+        renderer_settings_(renderer_settings),
+        debug_settings_(debug_settings),
+        display_client_(display_client),
+        display_(display),
+        offscreen_dependency_(offscreen_dependency),
+        display_uses_software_output_(display_uses_software_output),
+        vulkan_context_provider_available_(vulkan_context_provider_available),
+        shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
+        use_vulkan_offscreen_output_(use_vulkan_offscreen_output),
+        use_d3d12_offscreen_output_(use_d3d12_offscreen_output),
+        viz_display_created_(viz_display_created),
+        viz_display_output_size_(viz_display_output_size),
+        skia_gpu_reached_(skia_gpu_reached),
+        failure_reason_(failure_reason) {}
+
+  StandaloneRootVizDisplayController(
+      const StandaloneRootVizDisplayController&) = delete;
+  StandaloneRootVizDisplayController& operator=(
+      const StandaloneRootVizDisplayController&) = delete;
+
+  bool EnsureDisplay(const gfx::Size& output_size,
+                     viz::CompositorFrameSinkSupport* support) {
+    if (display_ && *display_) {
+      return true;
+    }
+    const bool offscreen = !g_standalone_native_window_handle;
+    if (!gpu_thread_holder_) {
+      SetFailure(offscreen
+                     ? "Offscreen Viz Display cannot initialize without GPU "
+                       "thread holder"
+                     : "Viz Display cannot initialize without GPU thread "
+                       "holder");
+      return false;
+    }
+    gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
+    if (!offscreen) {
+      surface_handle =
+#if BUILDFLAG(IS_WIN)
+          reinterpret_cast<gpu::SurfaceHandle>(
+              g_standalone_native_window_handle);
+#else
+          static_cast<gpu::SurfaceHandle>(
+              reinterpret_cast<uintptr_t>(g_standalone_native_window_handle));
+#endif
+      if (surface_handle == gpu::kNullSurfaceHandle) {
+        SetFailure("Viz Display received a null native surface handle");
+        return false;
+      }
+    }
+    if (!gpu_thread_holder_->GetTaskExecutor()) {
+      SetFailure(offscreen
+                     ? "Offscreen Viz Display GPU thread holder failed to "
+                       "initialize"
+                     : "Viz Display GPU thread holder failed to initialize");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
+    if (offscreen_dependency_) {
+      *offscreen_dependency_ = nullptr;
+    }
+    StandaloneOutputSurfaceProvider output_surface_provider(
+        gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
+        use_d3d12_offscreen_output_, vulkan_context_provider_available_,
+        shared_context_state_is_vulkan_, offscreen_dependency_);
+    std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+        display_controller = output_surface_provider.CreateGpuDependency(
+            /*gpu_compositing=*/true, surface_handle);
+    if (!display_controller) {
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
+    std::unique_ptr<viz::OutputSurface> output_surface =
+        output_surface_provider.CreateOutputSurface(
+            surface_handle, /*gpu_compositing=*/true,
+            /*display_client=*/nullptr, display_controller.get(),
+            *renderer_settings_, debug_settings_);
+    if (!output_surface) {
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
+    std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
+    if (offscreen) {
+      overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
+    } else {
+      overlay_processor =
+          viz::OverlayProcessorInterface::CreateOverlayProcessor(
+              output_surface.get(), surface_handle,
+              output_surface->capabilities(), display_controller.get(),
+              output_surface_provider.GetSharedImageManager(),
+              *renderer_settings_, debug_settings_);
+    }
+    if (!overlay_processor) {
+      SetFailure("Viz Display overlay processor creation failed");
+      return false;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Display create");
+    *display_ = std::make_unique<viz::Display>(
+        output_surface_provider.GetSharedImageManager(),
+        output_surface_provider.GetGpuScheduler(), *renderer_settings_,
+        debug_settings_, frame_sink_id_, std::move(display_controller),
+        std::move(output_surface), std::move(overlay_processor),
+        /*scheduler=*/nullptr, base::SingleThreadTaskRunner::GetCurrentDefault());
+    (*display_)->Initialize(display_client_,
+                            frame_sink_manager_->surface_manager());
+    if (support) {
+      support->SetUpHitTest(display_->get());
+    }
+    (*display_)->SetVisible(true);
+    (*display_)->Resize(output_size);
+    if (display_uses_software_output_) {
+      *display_uses_software_output_ = false;
+    }
+    if (viz_display_created_) {
+      *viz_display_created_ = true;
+    }
+    TraceLiveFrameProbeStage(
+        offscreen ? "direct frame sink after offscreen Display initialize"
+                  : "direct frame sink after Display initialize");
+    return true;
+  }
+
+  void UpdateForFrame(const viz::CompositorFrame& frame,
+                      viz::CompositorFrameSinkSupport* support,
+                      const viz::LocalSurfaceId& local_surface_id,
+                      const gfx::Size& output_size,
+                      float device_scale_factor) {
+    if (!display_ || !*display_ || !support) {
+      return;
+    }
+    const bool surface_id_changed =
+        support->last_activated_local_surface_id() != local_surface_id &&
+        !support->IsEvicted(local_surface_id);
+    gfx::Size display_size = output_size;
+    if (surface_id_changed) {
+      // Match RootCompositorFrameSinkImpl: a root Display observes a new
+      // LocalSurfaceId only when Viz is about to activate a fresh root surface.
+      (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
+      if ((*display_)->resize_based_on_root_surface() &&
+          !frame.render_pass_list.empty()) {
+        display_size = frame.render_pass_list.back()->output_rect.size();
+      }
+    }
+    if (!(*display_)->resize_based_on_root_surface() || surface_id_changed) {
+      (*display_)->Resize(display_size);
+    }
+    if (viz_display_output_size_) {
+      *viz_display_output_size_ = display_size;
+    }
+  }
+
+  void UpdateForExternalTargetCopy(
+      const viz::LocalSurfaceId& local_surface_id,
+      float device_scale_factor,
+      const gfx::Size& last_submitted_size_in_pixels,
+      const gfx::Size& output_size) {
+    if (!display_ || !*display_ || output_size.IsEmpty()) {
+      return;
+    }
+    (*display_)->SetLocalSurfaceId(local_surface_id, device_scale_factor);
+    if (!(*display_)->resize_based_on_root_surface() ||
+        output_size == last_submitted_size_in_pixels) {
+      (*display_)->Resize(output_size);
+    }
+  }
+
+  bool ShouldResetOffscreenForExternalTargetResize(
+      const gfx::Size& output_size) const {
+    return !g_standalone_native_window_handle && display_ && *display_ &&
+           viz_display_output_size_ && !viz_display_output_size_->IsEmpty() &&
+           *viz_display_output_size_ != output_size;
+  }
+
+  void ResetOffscreenForExternalTargetResize() {
+    if (!display_ || !*display_) {
+      return;
+    }
+    display_->reset();
+    if (offscreen_dependency_) {
+      *offscreen_dependency_ = nullptr;
+    }
+    if (viz_display_output_size_) {
+      *viz_display_output_size_ = gfx::Size();
+    }
+  }
+
+  void DrawNow() {
+    if (!display_ || !*display_) {
+      return;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before Display DrawAndSwap");
+    const base::TimeTicks now = base::TimeTicks::Now();
+    const base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
+    viz::DrawAndSwapParams params;
+    params.begin_frame_args = viz::BeginFrameArgs::Create(
+        BEGINFRAME_FROM_HERE, viz::BeginFrameArgs::kManualSourceId,
+        ++display_begin_frame_sequence_, now, now + interval, interval,
+        viz::BeginFrameArgs::NORMAL);
+    params.expected_display_time = now + interval;
+    const bool drew = (*display_)->DrawAndSwap(params);
+    TraceLiveFrameProbeStage("direct frame sink after Display DrawAndSwap");
+    TraceLiveFrameProbeStage("direct frame sink before DrawAndSwap result");
+    if (!drew) {
+      SetFailure("Viz Display DrawAndSwap returned false");
+      return;
+    }
+    TraceLiveFrameProbeStage("direct frame sink before gpu reached flag");
+    if ((!display_uses_software_output_ || !*display_uses_software_output_) &&
+        skia_gpu_reached_) {
+      *skia_gpu_reached_ = true;
+    }
+    TraceLiveFrameProbeStage("direct frame sink after gpu reached flag");
+  }
+
+ private:
+  void SetFailure(const char* reason) {
+    if (failure_reason_) {
+      *failure_reason_ = reason ? reason : "";
+    }
+  }
+
+  raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
+  viz::FrameSinkId frame_sink_id_;
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  raw_ptr<viz::RendererSettings> renderer_settings_ = nullptr;
+  raw_ptr<viz::DebugRendererSettings> debug_settings_ = nullptr;
+  raw_ptr<StandaloneDisplayClient> display_client_ = nullptr;
+  std::unique_ptr<viz::Display>* display_ = nullptr;
+  raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency_ =
+      nullptr;
+  raw_ptr<bool> display_uses_software_output_ = nullptr;
+  raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
+  raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
+  bool use_vulkan_offscreen_output_ = false;
+  bool use_d3d12_offscreen_output_ = false;
+  raw_ptr<bool> viz_display_created_ = nullptr;
+  raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
+  raw_ptr<bool> skia_gpu_reached_ = nullptr;
+  raw_ptr<std::string> failure_reason_ = nullptr;
+  uint64_t display_begin_frame_sequence_ =
+      viz::BeginFrameArgs::kStartingFrameNumber;
+};
+
 class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
  public:
   StandaloneDirectLayerTreeFrameSink(
@@ -5044,6 +5309,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         gpu_thread_holder_(std::move(gpu_thread_holder)),
         viewport_(viewport),
         display_client_(skia_gpu_reached, failure_reason),
+        display_root_(frame_sink_manager_,
+                      frame_sink_id_,
+                      gpu_thread_holder_,
+                      &renderer_settings_,
+                      &debug_settings_,
+                      &display_client_,
+                      &display_,
+                      &offscreen_skia_dependency_,
+                      &display_uses_software_output_,
+                      &vulkan_context_provider_available_,
+                      &vulkan_shared_context_state_is_vulkan_,
+                      use_vulkan_offscreen_output,
+                      use_d3d12_offscreen_output,
+                      viz_display_created,
+                      viz_display_output_size,
+                      skia_gpu_reached,
+                      failure_reason),
         compositor_frame_submitted_(compositor_frame_submitted),
         viz_display_created_(viz_display_created),
         skia_gpu_reached_(skia_gpu_reached),
@@ -5064,9 +5346,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         did_not_produce_count_(did_not_produce_count),
         last_frame_skipped_reason_(last_frame_skipped_reason),
         last_did_not_produce_has_damage_(
-            last_did_not_produce_has_damage),
-        use_vulkan_offscreen_output_(use_vulkan_offscreen_output),
-        use_d3d12_offscreen_output_(use_d3d12_offscreen_output) {
+            last_did_not_produce_has_damage) {
     // Standalone screenshot/readback consumers compare CSS top-left pixel
     // coordinates. Disable Viz backing/output-surface padding that is useful
     // for production buffer reuse but changes observable CopyOutput bounds.
@@ -5236,28 +5516,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   void UpdateVizDisplayForFrame(const viz::CompositorFrame& frame,
                                 const gfx::Size& output_size,
                                 float device_scale_factor) {
-    if (!display_ || !support_) {
-      return;
-    }
-    const bool surface_id_changed =
-        support_->last_activated_local_surface_id() != local_surface_id_ &&
-        !support_->IsEvicted(local_surface_id_);
-    gfx::Size display_size = output_size;
-    if (surface_id_changed) {
-      // Match RootCompositorFrameSinkImpl: a root Display observes a new
-      // LocalSurfaceId only when Viz is about to activate a fresh root surface.
-      display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
-      if (display_->resize_based_on_root_surface() &&
-          !frame.render_pass_list.empty()) {
-        display_size = frame.render_pass_list.back()->output_rect.size();
-      }
-    }
-    if (!display_->resize_based_on_root_surface() || surface_id_changed) {
-      display_->Resize(display_size);
-    }
-    if (viz_display_output_size_) {
-      *viz_display_output_size_ = display_size;
-    }
+    display_root_.UpdateForFrame(frame, support_.get(), local_surface_id_,
+                                 output_size, device_scale_factor);
   }
 
   void ReclaimDroppedCompositorFrameResources(
@@ -6081,15 +6341,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   void UpdateVizDisplayForExternalTargetCopy(const gfx::Size& output_size) {
-    if (!display_ || output_size.IsEmpty()) {
-      return;
-    }
-    display_->SetLocalSurfaceId(local_surface_id_,
-                                last_submitted_device_scale_factor_);
-    if (!display_->resize_based_on_root_surface() ||
-        output_size == last_submitted_size_in_pixels_) {
-      display_->Resize(output_size);
-    }
+    display_root_.UpdateForExternalTargetCopy(
+        local_surface_id_, last_submitted_device_scale_factor_,
+        last_submitted_size_in_pixels_, output_size);
   }
 
   html_css_renderer::ExternalGpuTargetCopyResult
@@ -6145,11 +6399,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     offscreen_skia_dependency_
         ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
     if (!g_standalone_native_window_handle) {
-      display_.reset();
-      offscreen_skia_dependency_ = nullptr;
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = gfx::Size();
-      }
+      display_root_.ResetOffscreenForExternalTargetResize();
     }
   }
 
@@ -6382,105 +6632,13 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   bool EnsureVizDisplay(const gfx::Size& output_size) {
-    if (display_) {
-      return true;
-    }
-    const bool offscreen = !g_standalone_native_window_handle;
-    if (!gpu_thread_holder_) {
-      SetFailure(offscreen
-                     ? "Offscreen Viz Display cannot initialize without GPU "
-                       "thread holder"
-                     : "Viz Display cannot initialize without GPU thread "
-                       "holder");
-      return false;
-    }
-    gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
-    if (!offscreen) {
-      surface_handle =
-#if BUILDFLAG(IS_WIN)
-          reinterpret_cast<gpu::SurfaceHandle>(
-              g_standalone_native_window_handle);
-#else
-          static_cast<gpu::SurfaceHandle>(
-              reinterpret_cast<uintptr_t>(g_standalone_native_window_handle));
-#endif
-      if (surface_handle == gpu::kNullSurfaceHandle) {
-        SetFailure("Viz Display received a null native surface handle");
-        return false;
-      }
-    }
-    if (!gpu_thread_holder_->GetTaskExecutor()) {
-      SetFailure(offscreen
-                     ? "Offscreen Viz Display GPU thread holder failed to "
-                       "initialize"
-                     : "Viz Display GPU thread holder failed to initialize");
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
-    offscreen_skia_dependency_ = nullptr;
-    StandaloneOutputSurfaceProvider output_surface_provider(
-        gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
-        use_d3d12_offscreen_output_, &vulkan_context_provider_available_,
-        &vulkan_shared_context_state_is_vulkan_, &offscreen_skia_dependency_);
-    std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
-        display_controller = output_surface_provider.CreateGpuDependency(
-            /*gpu_compositing=*/true, surface_handle);
-    if (!display_controller) {
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
-    std::unique_ptr<viz::OutputSurface> output_surface =
-        output_surface_provider.CreateOutputSurface(
-            surface_handle, /*gpu_compositing=*/true, /*display_client=*/nullptr,
-            display_controller.get(), renderer_settings_, &debug_settings_);
-    if (!output_surface) {
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
-    std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
-    if (offscreen) {
-      overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
-    } else {
-      overlay_processor =
-          viz::OverlayProcessorInterface::CreateOverlayProcessor(
-              output_surface.get(), surface_handle,
-              output_surface->capabilities(), display_controller.get(),
-              output_surface_provider.GetSharedImageManager(),
-              renderer_settings_, &debug_settings_);
-    }
-    if (!overlay_processor) {
-      SetFailure("Viz Display overlay processor creation failed");
-      return false;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before Display create");
-    display_ = std::make_unique<viz::Display>(
-        output_surface_provider.GetSharedImageManager(),
-        output_surface_provider.GetGpuScheduler(), renderer_settings_,
-        &debug_settings_, frame_sink_id_,
-        std::move(display_controller), std::move(output_surface),
-        std::move(overlay_processor),
-        /*scheduler=*/nullptr, base::SingleThreadTaskRunner::GetCurrentDefault());
-    display_->Initialize(&display_client_, frame_sink_manager_->surface_manager());
-    if (support_) {
-      support_->SetUpHitTest(display_.get());
-    }
-    display_->SetVisible(true);
-    display_->Resize(output_size);
-    display_uses_software_output_ = false;
-    if (viz_display_created_) {
-      *viz_display_created_ = true;
-    }
-    TraceLiveFrameProbeStage(
-        offscreen ? "direct frame sink after offscreen Display initialize"
-                  : "direct frame sink after Display initialize");
-    return true;
+    return display_root_.EnsureDisplay(output_size, support_.get());
   }
 
   void ResetOffscreenVizDisplayForExternalTargetResize(
       const gfx::Size& output_size) {
-    if (g_standalone_native_window_handle || !display_ ||
-        !viz_display_output_size_ || viz_display_output_size_->IsEmpty() ||
-        *viz_display_output_size_ == output_size) {
+    if (!display_root_.ShouldResetOffscreenForExternalTargetResize(
+            output_size)) {
       return;
     }
     TraceLiveFrameProbeStage(
@@ -6496,30 +6654,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   void DrawVizDisplayNow() {
-    if (!display_) {
-      return;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before Display DrawAndSwap");
-    const base::TimeTicks now = base::TimeTicks::Now();
-    const base::TimeDelta interval = viz::BeginFrameArgs::DefaultInterval();
-    viz::DrawAndSwapParams params;
-    params.begin_frame_args = viz::BeginFrameArgs::Create(
-        BEGINFRAME_FROM_HERE, viz::BeginFrameArgs::kManualSourceId,
-        ++display_begin_frame_sequence_, now, now + interval, interval,
-        viz::BeginFrameArgs::NORMAL);
-    params.expected_display_time = now + interval;
-    const bool drew = display_->DrawAndSwap(params);
-    TraceLiveFrameProbeStage("direct frame sink after Display DrawAndSwap");
-    TraceLiveFrameProbeStage("direct frame sink before DrawAndSwap result");
-    if (!drew) {
-      SetFailure("Viz Display DrawAndSwap returned false");
-      return;
-    }
-    TraceLiveFrameProbeStage("direct frame sink before gpu reached flag");
-    if (!display_uses_software_output_ && skia_gpu_reached_) {
-      *skia_gpu_reached_ = true;
-    }
-    TraceLiveFrameProbeStage("direct frame sink after gpu reached flag");
+    display_root_.DrawNow();
   }
 
   void RequestCopyOutput(const gfx::Size& output_size,
@@ -6781,6 +6916,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   viz::DebugRendererSettings debug_settings_;
   StandaloneVizFrameSinkClient viz_client_;
   StandaloneDisplayClient display_client_;
+  StandaloneRootVizDisplayController display_root_;
   std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
   bool begin_frame_source_registered_ = false;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
@@ -6790,11 +6926,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   bool display_uses_software_output_ = false;
   bool vulkan_context_provider_available_ = false;
   bool vulkan_shared_context_state_is_vulkan_ = false;
-  bool use_d3d12_offscreen_output_ = false;
   float last_submitted_device_scale_factor_ = 1.0f;
   gfx::Size last_submitted_size_in_pixels_;
   viz::LocalSurfaceId last_submitted_local_surface_id_;
-  uint64_t display_begin_frame_sequence_ = viz::BeginFrameArgs::kStartingFrameNumber;
   raw_ptr<bool> compositor_frame_submitted_ = nullptr;
   raw_ptr<bool> viz_display_created_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
@@ -6829,7 +6963,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   raw_ptr<int> did_not_produce_count_ = nullptr;
   raw_ptr<int> last_frame_skipped_reason_ = nullptr;
   raw_ptr<int> last_did_not_produce_has_damage_ = nullptr;
-  bool use_vulkan_offscreen_output_ = false;
   base::WeakPtrFactory<StandaloneDirectLayerTreeFrameSink> weak_factory_{this};
 };
 
