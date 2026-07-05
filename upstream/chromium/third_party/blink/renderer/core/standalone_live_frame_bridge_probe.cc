@@ -5617,8 +5617,18 @@ class StandaloneCopyOutputController {
                : std::move(fallback);
   }
 
-  void SetRunLoop(base::RunLoop* run_loop) {
-    copy_output_run_loop_ = run_loop;
+  bool WaitForCompletion(base::TimeDelta timeout_duration) {
+    if (!IsPending()) {
+      return true;
+    }
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    base::OneShotTimer timeout;
+    copy_output_run_loop_ = &run_loop;
+    timeout.Start(FROM_HERE, timeout_duration, run_loop.QuitClosure());
+    run_loop.Run();
+    timeout.Stop();
+    copy_output_run_loop_ = nullptr;
+    return !IsPending();
   }
 
   scoped_refptr<gpu::ClientSharedImage> held_shared_image() const {
@@ -6008,16 +6018,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       }
       if (should_copy_output) {
         if (copy_output_.IsPending()) {
-          base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-          base::OneShotTimer timeout;
-          copy_output_.SetRunLoop(&run_loop);
-          timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
           frame_sink_support_.SetDeferCompositorFrameAck(true);
-          run_loop.Run();
+          copy_output_.WaitForCompletion(base::Seconds(5));
           frame_sink_support_.SetDeferCompositorFrameAck(false);
           frame_sink_support_.FlushDeferredCompositorFrameAck();
-          timeout.Stop();
-          copy_output_.SetRunLoop(nullptr);
         }
         if (copy_output_requested_) {
           *copy_output_requested_ = false;
@@ -6225,15 +6229,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_.IsPending()) {
-      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-      base::OneShotTimer timeout;
-      copy_output_.SetRunLoop(&run_loop);
-      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
-      run_loop.Run();
-      timeout.Stop();
-      copy_output_.SetRunLoop(nullptr);
-    }
+    copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
@@ -6420,15 +6416,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_.IsPending()) {
-      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-      base::OneShotTimer timeout;
-      copy_output_.SetRunLoop(&run_loop);
-      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
-      run_loop.Run();
-      timeout.Stop();
-      copy_output_.SetRunLoop(nullptr);
-    }
+    copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedVkImageRenderCopyBlitTargetForTesting();
@@ -6529,15 +6517,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_.IsPending()) {
-      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-      base::OneShotTimer timeout;
-      copy_output_.SetRunLoop(&run_loop);
-      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
-      run_loop.Run();
-      timeout.Stop();
-      copy_output_.SetRunLoop(nullptr);
-    }
+    copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
@@ -6728,15 +6708,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                       /*wants_raw=*/false,
                       /*wants_gpu=*/true, std::move(blit_target));
     DrawVizDisplayNow();
-    if (copy_output_.IsPending()) {
-      base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-      base::OneShotTimer timeout;
-      copy_output_.SetRunLoop(&run_loop);
-      timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
-      run_loop.Run();
-      timeout.Stop();
-      copy_output_.SetRunLoop(nullptr);
-    }
+    copy_output_.WaitForCompletion(base::Seconds(5));
     if (copy_output_.IsPending()) {
       offscreen_skia_dependency_
           ->DiscardBorrowedD3D12RenderCopyBlitTargetForTesting();
