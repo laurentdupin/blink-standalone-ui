@@ -5235,6 +5235,8 @@ class StandaloneRootVizDisplayController {
                                             last_submitted_size_in_pixels);
   }
 
+  bool HasDisplay() const { return display_ && *display_; }
+
   bool ShouldResetOffscreenForExternalTargetResize(
       const gfx::Size& output_size) const {
     return !g_standalone_native_window_handle && display_ && *display_ &&
@@ -5519,25 +5521,13 @@ class StandaloneRootFrameSinkSupportController {
     return begin_frame_source_.get();
   }
 
-  std::optional<viz::SubmitResult> SubmitRootCompositorFrame(
+  std::optional<viz::SubmitResult> MaybeSubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
       std::optional<viz::HitTestRegionList> hit_test_region_list,
-      StandaloneRootVizDisplayController* display_root,
-      bool needs_display,
-      const gfx::Size& output_size,
       uint64_t submit_time) {
     if (!support_) {
       return std::nullopt;
-    }
-    if (needs_display) {
-      if (!display_root ||
-          !display_root->EnsureDisplay(output_size, support_.get(),
-                                       begin_frame_source_.get())) {
-        return std::nullopt;
-      }
-      display_root->UpdateForFrame(frame, support_.get(), local_surface_id,
-                                   output_size);
     }
     return support_->MaybeSubmitCompositorFrame(
         local_surface_id, std::move(frame), std::move(hit_test_region_list),
@@ -5605,6 +5595,11 @@ class StandaloneRootFrameSinkSupportController {
 
 class StandaloneRootFrameSinkController {
  public:
+  struct RootCompositorFrameSubmitResult {
+    std::optional<viz::SubmitResult> submit_result;
+    bool display_available = false;
+  };
+
   StandaloneRootFrameSinkController(
       viz::FrameSinkManagerImpl* frame_sink_manager,
       const viz::FrameSinkId& frame_sink_id,
@@ -5684,30 +5679,38 @@ class StandaloneRootFrameSinkController {
         last_submitted_local_surface_id_);
   }
 
-  std::optional<viz::SubmitResult> SubmitRootCompositorFrame(
+  RootCompositorFrameSubmitResult SubmitRootCompositorFrameLikeChromium(
       viz::CompositorFrame frame,
       bool hit_test_data_changed,
       bool needs_display,
       const gfx::Size& output_size,
       uint64_t submit_time) {
+    RootCompositorFrameSubmitResult result;
     const float frame_device_scale_factor = frame.device_scale_factor();
     const bool local_surface_id_changed =
         local_surface_id_ != last_submitted_local_surface_id_;
     std::optional<viz::HitTestRegionList> hit_test_region_list =
         BuildHitTestRegionList(hit_test_data_changed,
                                local_surface_id_changed);
-    std::optional<viz::SubmitResult> submit_result =
-        support_.SubmitRootCompositorFrame(
-            local_surface_id_, std::move(frame),
-            std::move(hit_test_region_list),
-        &display_root_, needs_display, output_size, submit_time);
-    if (submit_result &&
-        *submit_result == viz::SubmitResult::ACCEPTED) {
+    if (needs_display) {
+      if (!display_root_.EnsureDisplay(output_size, support_.support(),
+                                       support_.begin_frame_source())) {
+        return result;
+      }
+      display_root_.UpdateForFrame(frame, support_.support(), local_surface_id_,
+                                   output_size);
+    }
+    result.display_available = display_root_.HasDisplay();
+    result.submit_result = support_.MaybeSubmitCompositorFrame(
+        local_surface_id_, std::move(frame), std::move(hit_test_region_list),
+        submit_time);
+    if (result.submit_result &&
+        *result.submit_result == viz::SubmitResult::ACCEPTED) {
       last_submitted_size_in_pixels_ = output_size;
       last_submitted_local_surface_id_ = local_surface_id_;
       last_submitted_device_scale_factor_ = frame_device_scale_factor;
     }
-    return submit_result;
+    return result;
   }
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack) {
@@ -6330,23 +6333,23 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         copy_output_requested_ && *copy_output_requested_;
     const bool needs_display =
         g_standalone_native_window_handle || should_copy_output;
-    std::optional<viz::SubmitResult> submit_result =
-        root_frame_sink_.SubmitRootCompositorFrame(
-            std::move(frame), hit_test_data_changed, needs_display, output_size,
-            /*submit_time=*/0);
-    if (!submit_result) {
+    StandaloneRootFrameSinkController::RootCompositorFrameSubmitResult
+        submit_result = root_frame_sink_.SubmitRootCompositorFrameLikeChromium(
+            std::move(frame), hit_test_data_changed, needs_display,
+            output_size, /*submit_time=*/0);
+    if (!submit_result.submit_result) {
       return;
     }
     TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
-    if (*submit_result == viz::SubmitResult::ACCEPTED) {
+    if (*submit_result.submit_result == viz::SubmitResult::ACCEPTED) {
       if (compositor_frame_submitted_) {
         *compositor_frame_submitted_ = true;
       }
       SetFailure("");
-      if (display_) {
+      if (submit_result.display_available) {
         DrawVizDisplayNow();
       }
-      if (should_copy_output && display_) {
+      if (should_copy_output && submit_result.display_available) {
         RequestCopyOutput(output_size,
                           copy_output_png_requested_ &&
                               *copy_output_png_requested_,
@@ -6374,7 +6377,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     SetFailure(
-        viz::CompositorFrameSinkSupport::GetSubmitResultAsString(*submit_result));
+        viz::CompositorFrameSinkSupport::GetSubmitResultAsString(
+            *submit_result.submit_result));
   }
 
   void ReclaimDroppedCompositorFrameResources(
