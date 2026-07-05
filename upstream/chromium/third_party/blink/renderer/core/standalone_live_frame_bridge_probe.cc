@@ -1136,7 +1136,15 @@ class StandaloneDisplayClient final : public viz::DisplayClient {
   StandaloneDisplayClient& operator=(const StandaloneDisplayClient&) = delete;
   ~StandaloneDisplayClient() override = default;
 
+  void ResetForNewDisplay() {
+    output_surface_lost_ = false;
+    last_completed_swap_size_ = gfx::Size();
+    child_window_ = gpu::kNullSurfaceHandle;
+    wide_color_enabled_ = false;
+  }
+
   void DisplayOutputSurfaceLost() override {
+    output_surface_lost_ = true;
     if (failure_reason_) {
       *failure_reason_ = "Viz Display output surface was lost";
     }
@@ -1160,19 +1168,34 @@ class StandaloneDisplayClient final : public viz::DisplayClient {
   void DisplayDidReceiveCALayerParams(gfx::CALayerParams ca_layer_params)
       override {}
 
-  void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {}
-
-  void DisplayAddChildWindowToBrowser(gpu::SurfaceHandle child_window) override {
+  void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {
+    last_completed_swap_size_ = pixel_size;
   }
 
-  void SetWideColorEnabled(bool enabled) override {}
+  void DisplayAddChildWindowToBrowser(gpu::SurfaceHandle child_window) override {
+    child_window_ = child_window;
+  }
+
+  void SetWideColorEnabled(bool enabled) override {
+    wide_color_enabled_ = enabled;
+  }
 
   uint64_t draw_and_swap_count() const { return draw_and_swap_count_; }
+  bool output_surface_lost() const { return output_surface_lost_; }
+  const gfx::Size& last_completed_swap_size() const {
+    return last_completed_swap_size_;
+  }
+  gpu::SurfaceHandle child_window() const { return child_window_; }
+  bool wide_color_enabled() const { return wide_color_enabled_; }
 
  private:
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
   uint64_t draw_and_swap_count_ = 0;
+  bool output_surface_lost_ = false;
+  gfx::Size last_completed_swap_size_;
+  gpu::SurfaceHandle child_window_ = gpu::kNullSurfaceHandle;
+  bool wide_color_enabled_ = false;
 };
 
 const char* StandaloneCopyOutputErrorName(viz::CopyOutputResult::Error error) {
@@ -5138,6 +5161,9 @@ class StandaloneRootVizDisplayController {
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink before Display create");
+    if (display_client_) {
+      display_client_->ResetForNewDisplay();
+    }
     auto display_scheduler = std::make_unique<viz::DisplayScheduler>(
         begin_frame_source,
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
@@ -5154,7 +5180,7 @@ class StandaloneRootVizDisplayController {
     if (support) {
       support->SetUpHitTest(display_->get());
     }
-    (*display_)->SetVisible(true);
+    SetDisplayVisible(true);
     (*display_)->Resize(output_size);
     if (display_uses_software_output_) {
       *display_uses_software_output_ = false;
@@ -5223,7 +5249,32 @@ class StandaloneRootVizDisplayController {
     ResetDisplay();
   }
 
-  void DrawNow() {
+  bool DisplayOutputSurfaceLost() const {
+    return display_client_ && display_client_->output_surface_lost();
+  }
+
+  void ResetDisplayAfterOutputSurfaceLoss() {
+    ResetDisplay();
+    if (display_client_) {
+      display_client_->ResetForNewDisplay();
+    }
+  }
+
+  void SetDisplayVisible(bool visible) {
+    if (!display_ || !*display_) {
+      return;
+    }
+    (*display_)->SetVisible(visible);
+  }
+
+  void Resize(const gfx::Size& size) {
+    if (!display_ || !*display_ || (*display_)->resize_based_on_root_surface()) {
+      return;
+    }
+    (*display_)->Resize(size);
+  }
+
+  void ForceImmediateDrawAndSwapIfPossible() {
     if (!display_ || !*display_) {
       return;
     }
@@ -5629,7 +5680,17 @@ class StandaloneRootFrameSinkController {
     display_root_.ResetOffscreenForExternalTargetResize();
   }
 
-  void DrawNow() { display_root_.DrawNow(); }
+  bool DisplayOutputSurfaceLost() const {
+    return display_root_.DisplayOutputSurfaceLost();
+  }
+
+  void ResetDisplayAfterOutputSurfaceLoss() {
+    display_root_.ResetDisplayAfterOutputSurfaceLoss();
+  }
+
+  void ForceImmediateDrawAndSwapIfPossible() {
+    display_root_.ForceImmediateDrawAndSwapIfPossible();
+  }
 
  private:
   std::optional<viz::HitTestRegionList> BuildHitTestRegionList(
@@ -6316,6 +6377,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           html_css_renderer::ExternalGpuTargetCopyStatus::kPending,
           std::string(diagnostic_label) +
               ": pending reason=waiting for root surface activation",
+          result.output_size);
+      return result;
+    }
+
+    if (root_frame_sink_.DisplayOutputSurfaceLost()) {
+      root_frame_sink_.ResetDisplayAfterOutputSurfaceLoss();
+      result.copy_result = MakeAsyncExternalGpuTargetCopyResult(
+          html_css_renderer::ExternalGpuTargetCopyStatus::kFailed,
+          std::string(diagnostic_label) +
+              ": failed failure=Viz Display output surface was lost",
           result.output_size);
       return result;
     }
@@ -7255,7 +7326,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   void DrawVizDisplayNow() {
-    root_frame_sink_.DrawNow();
+    root_frame_sink_.ForceImmediateDrawAndSwapIfPossible();
   }
 
   void RequestCopyOutput(const gfx::Size& output_size,
