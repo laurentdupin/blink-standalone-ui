@@ -5267,6 +5267,126 @@ class StandaloneRootVizDisplayController {
       viz::BeginFrameArgs::kStartingFrameNumber;
 };
 
+class StandaloneRootFrameSinkSupportController {
+ public:
+  StandaloneRootFrameSinkSupportController(
+      viz::FrameSinkManagerImpl* frame_sink_manager,
+      const viz::FrameSinkId& frame_sink_id,
+      StandaloneVizFrameSinkClient* viz_client,
+      bool* begin_frame_source_set)
+      : frame_sink_manager_(frame_sink_manager),
+        frame_sink_id_(frame_sink_id),
+        viz_client_(viz_client),
+        begin_frame_source_set_(begin_frame_source_set) {}
+
+  StandaloneRootFrameSinkSupportController(
+      const StandaloneRootFrameSinkSupportController&) = delete;
+  StandaloneRootFrameSinkSupportController& operator=(
+      const StandaloneRootFrameSinkSupportController&) = delete;
+
+  void BindToClient(cc::LayerTreeFrameSinkClient* client,
+                    base::SingleThreadTaskRunner* compositor_task_runner) {
+    begin_frame_source_ = std::make_unique<viz::BackToBackBeginFrameSource>(
+        std::make_unique<viz::DelayBasedTimeSource>(compositor_task_runner));
+    client->SetBeginFrameSource(begin_frame_source_.get());
+    if (begin_frame_source_set_) {
+      *begin_frame_source_set_ = true;
+    }
+    viz_client_->SetCcClient(client);
+    TraceLiveFrameProbeStage("direct frame sink before support create");
+    support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
+        viz_client_, frame_sink_manager_, frame_sink_id_, /*is_root=*/true);
+    TraceLiveFrameProbeStage("direct frame sink after support create");
+    frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
+                                                 frame_sink_id_);
+    begin_frame_source_registered_ = true;
+  }
+
+  void DetachFromClient(cc::LayerTreeFrameSinkClient* client) {
+    if (client) {
+      client->SetBeginFrameSource(nullptr);
+    }
+    if (begin_frame_source_registered_) {
+      frame_sink_manager_->UnregisterBeginFrameSource(
+          begin_frame_source_.get());
+      begin_frame_source_registered_ = false;
+    }
+    begin_frame_source_.reset();
+    if (begin_frame_source_set_) {
+      *begin_frame_source_set_ = false;
+    }
+    viz_client_->SetCcClient(nullptr);
+    support_.reset();
+  }
+
+  viz::CompositorFrameSinkSupport* support() const { return support_.get(); }
+
+  viz::SubmitResult SubmitCompositorFrame(
+      const viz::LocalSurfaceId& local_surface_id,
+      viz::CompositorFrame frame,
+      std::optional<viz::HitTestRegionList> hit_test_region_list,
+      uint64_t submit_time) {
+    return support_->MaybeSubmitCompositorFrame(
+        local_surface_id, std::move(frame), std::move(hit_test_region_list),
+        submit_time);
+  }
+
+  void DidNotProduceFrame(const viz::BeginFrameAck& ack) {
+    if (support_) {
+      support_->DidNotProduceFrame(ack);
+    }
+  }
+
+  void NotifyNewLocalSurfaceIdExpectedWhilePaused() {
+    if (support_) {
+      support_->NotifyNewLocalSurfaceIdExpectedWhilePaused();
+    }
+  }
+
+  void ReclaimResources(std::vector<viz::ReturnedResource> resources) {
+    if (!resources.empty()) {
+      viz_client_->ReclaimResources(std::move(resources));
+    }
+  }
+
+  bool NeedsActivatedRootSurface(
+      const viz::LocalSurfaceId& local_surface_id) const {
+    if (!support_ || !local_surface_id.is_valid()) {
+      return false;
+    }
+    // RootCompositorFrameSinkImpl updates Display to a new LocalSurfaceId only
+    // while submitting the matching CompositorFrame. External target CopyOutput
+    // does not submit a frame, so it must wait until cc/Viz has activated the
+    // root surface instead of publishing a Display root that has no frame yet.
+    return support_->last_activated_local_surface_id() != local_surface_id ||
+           support_->IsEvicted(local_surface_id);
+  }
+
+  void SetDeferCompositorFrameAck(bool defer) {
+    viz_client_->SetDeferCompositorFrameAck(defer);
+  }
+
+  void FlushDeferredCompositorFrameAck() {
+    viz_client_->FlushDeferredCompositorFrameAck();
+  }
+
+  void RequestCopyOfOutput(const viz::LocalSurfaceId& local_surface_id,
+                           std::unique_ptr<viz::CopyOutputRequest> request) {
+    frame_sink_manager_->RequestCopyOfOutput(
+        viz::SurfaceId(frame_sink_id_, local_surface_id), std::move(request),
+        /*capture_exact_surface_id=*/false, base::TimeDelta());
+  }
+
+ private:
+  raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
+  viz::FrameSinkId frame_sink_id_;
+  raw_ptr<StandaloneVizFrameSinkClient> viz_client_ = nullptr;
+  raw_ptr<bool> begin_frame_source_set_ = nullptr;
+  std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
+  bool begin_frame_source_registered_ = false;
+  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
+};
+
 class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
  public:
   StandaloneDirectLayerTreeFrameSink(
@@ -5304,14 +5424,15 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
                                std::move(worker_context_provider),
                                std::move(compositor_task_runner),
                                /*shared_image_interface=*/nullptr),
-        frame_sink_manager_(frame_sink_manager),
-        frame_sink_id_(frame_sink_id),
-        gpu_thread_holder_(std::move(gpu_thread_holder)),
         viewport_(viewport),
         display_client_(skia_gpu_reached, failure_reason),
-        display_root_(frame_sink_manager_,
-                      frame_sink_id_,
-                      gpu_thread_holder_,
+        frame_sink_support_(frame_sink_manager,
+                            frame_sink_id,
+                            &viz_client_,
+                            begin_frame_source_set),
+        display_root_(frame_sink_manager,
+                      frame_sink_id,
+                      gpu_thread_holder,
                       &renderer_settings_,
                       &debug_settings_,
                       &display_client_,
@@ -5342,7 +5463,6 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         copy_output_gpu_frame_(copy_output_gpu_frame),
         copy_output_failure_(copy_output_failure),
         failure_reason_(failure_reason),
-        begin_frame_source_set_(begin_frame_source_set),
         did_not_produce_count_(did_not_produce_count),
         last_frame_skipped_reason_(last_frame_skipped_reason),
         last_did_not_produce_has_damage_(
@@ -5374,39 +5494,12 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink after base BindToClient");
-    begin_frame_source_ = std::make_unique<viz::BackToBackBeginFrameSource>(
-        std::make_unique<viz::DelayBasedTimeSource>(
-            compositor_task_runner_.get()));
-    client->SetBeginFrameSource(begin_frame_source_.get());
-    if (begin_frame_source_set_) {
-      *begin_frame_source_set_ = true;
-    }
-    viz_client_.SetCcClient(client);
-    TraceLiveFrameProbeStage("direct frame sink before support create");
-    support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
-        &viz_client_, frame_sink_manager_, frame_sink_id_, /*is_root=*/true);
-    TraceLiveFrameProbeStage("direct frame sink after support create");
-    frame_sink_manager_->RegisterBeginFrameSource(begin_frame_source_.get(),
-                                                 frame_sink_id_);
-    begin_frame_source_registered_ = true;
+    frame_sink_support_.BindToClient(client, compositor_task_runner_.get());
     return true;
   }
 
   void DetachFromClient() override {
-    if (client_) {
-      client_->SetBeginFrameSource(nullptr);
-    }
-    if (begin_frame_source_registered_) {
-      frame_sink_manager_->UnregisterBeginFrameSource(
-          begin_frame_source_.get());
-      begin_frame_source_registered_ = false;
-    }
-    begin_frame_source_.reset();
-    if (begin_frame_source_set_) {
-      *begin_frame_source_set_ = false;
-    }
-    viz_client_.SetCcClient(nullptr);
-    support_.reset();
+    frame_sink_support_.DetachFromClient(client_);
     cc::LayerTreeFrameSink::DetachFromClient();
   }
 
@@ -5424,7 +5517,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       std::fprintf(stderr, "standalone_cc_frame=%s\n", frame_json.c_str());
       std::fflush(stderr);
     }
-    if (!support_) {
+    if (!frame_sink_support_.support()) {
       SetFailure("Viz CompositorFrameSinkSupport is not initialized");
       return;
     }
@@ -5463,9 +5556,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (needs_display && EnsureVizDisplay(output_size)) {
       UpdateVizDisplayForFrame(frame, output_size, device_scale_factor);
     }
-    const viz::SubmitResult result = support_->MaybeSubmitCompositorFrame(
-        local_surface_id_, std::move(frame), std::move(hit_test_region_list),
-        /*submit_time=*/0);
+    const viz::SubmitResult result =
+        frame_sink_support_.SubmitCompositorFrame(
+            local_surface_id_, std::move(frame), std::move(hit_test_region_list),
+            /*submit_time=*/0);
     TraceLiveFrameProbeStage("direct frame sink after MaybeSubmitCompositorFrame");
     if (result == viz::SubmitResult::ACCEPTED) {
       last_submitted_size_in_pixels_ = output_size;
@@ -5493,10 +5587,10 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           base::OneShotTimer timeout;
           copy_output_run_loop_ = &run_loop;
           timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
-          viz_client_.SetDeferCompositorFrameAck(true);
+          frame_sink_support_.SetDeferCompositorFrameAck(true);
           run_loop.Run();
-          viz_client_.SetDeferCompositorFrameAck(false);
-          viz_client_.FlushDeferredCompositorFrameAck();
+          frame_sink_support_.SetDeferCompositorFrameAck(false);
+          frame_sink_support_.FlushDeferredCompositorFrameAck();
           timeout.Stop();
           copy_output_run_loop_ = nullptr;
         }
@@ -5516,17 +5610,16 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   void UpdateVizDisplayForFrame(const viz::CompositorFrame& frame,
                                 const gfx::Size& output_size,
                                 float device_scale_factor) {
-    display_root_.UpdateForFrame(frame, support_.get(), local_surface_id_,
-                                 output_size, device_scale_factor);
+    display_root_.UpdateForFrame(frame, frame_sink_support_.support(),
+                                 local_surface_id_, output_size,
+                                 device_scale_factor);
   }
 
   void ReclaimDroppedCompositorFrameResources(
       const viz::CompositorFrame& frame) {
     std::vector<viz::ReturnedResource> returned_resources =
         viz::TransferableResource::ReturnResources(frame.resource_list);
-    if (!returned_resources.empty()) {
-      viz_client_.ReclaimResources(std::move(returned_resources));
-    }
+    frame_sink_support_.ReclaimResources(std::move(returned_resources));
   }
 
   void DidNotProduceFrame(const viz::BeginFrameAck& ack,
@@ -5545,15 +5638,11 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
         static_cast<wtf_size_t>(reason),
         ack.has_damage ? static_cast<wtf_size_t>(1)
                        : static_cast<wtf_size_t>(0));
-    if (support_) {
-      support_->DidNotProduceFrame(ack);
-    }
+    frame_sink_support_.DidNotProduceFrame(ack);
   }
 
   void NotifyNewLocalSurfaceIdExpectedWhilePaused() override {
-    if (support_) {
-      support_->NotifyNewLocalSurfaceIdExpectedWhilePaused();
-    }
+    frame_sink_support_.NotifyNewLocalSurfaceIdExpectedWhilePaused();
   }
 
   void ExportFrameTiming() override {}
@@ -6329,15 +6418,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   bool NeedsActivatedRootSurfaceForExternalTarget() const {
-    if (!support_ || !local_surface_id_.is_valid()) {
-      return false;
-    }
-    // RootCompositorFrameSinkImpl updates Display to a new LocalSurfaceId only
-    // while submitting the matching CompositorFrame. External target CopyOutput
-    // does not submit a frame, so it must wait until cc/Viz has activated the
-    // root surface instead of publishing a Display root that has no frame yet.
-    return support_->last_activated_local_surface_id() != local_surface_id_ ||
-           support_->IsEvicted(local_surface_id_);
+    return frame_sink_support_.NeedsActivatedRootSurface(local_surface_id_);
   }
 
   void UpdateVizDisplayForExternalTargetCopy(const gfx::Size& output_size) {
@@ -6632,7 +6713,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
   }
 
   bool EnsureVizDisplay(const gfx::Size& output_size) {
-    return display_root_.EnsureDisplay(output_size, support_.get());
+    return display_root_.EnsureDisplay(output_size,
+                                       frame_sink_support_.support());
   }
 
   void ResetOffscreenVizDisplayForExternalTargetResize(
@@ -6667,7 +6749,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (wants_gpu) {
       ReleaseHeldGpuCopyOutputSharedImage(gpu::SyncToken());
     }
-    if (!support_) {
+    if (!frame_sink_support_.support()) {
       SetCopyOutputFailure("Viz CopyOutput cannot run without frame sink support");
       return;
     }
@@ -6712,9 +6794,8 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
           std::move(blit_target), sync_token,
           /*populates_mappable_shared_image=*/false));
     }
-    frame_sink_manager_->RequestCopyOfOutput(
-        viz::SurfaceId(frame_sink_id_, local_surface_id_), std::move(request),
-        /*capture_exact_surface_id=*/false, base::TimeDelta());
+    frame_sink_support_.RequestCopyOfOutput(local_surface_id_,
+                                            std::move(request));
     if (async_generation != 0 &&
         async_generation == async_external_gpu_target_copy_generation_) {
       async_external_gpu_target_copy_request_enqueued_ = true;
@@ -6907,19 +6988,14 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     }
   }
 
-  raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
-  viz::FrameSinkId frame_sink_id_;
   viz::LocalSurfaceId local_surface_id_;
-  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   gfx::Size viewport_;
   viz::RendererSettings renderer_settings_;
   viz::DebugRendererSettings debug_settings_;
   StandaloneVizFrameSinkClient viz_client_;
   StandaloneDisplayClient display_client_;
+  StandaloneRootFrameSinkSupportController frame_sink_support_;
   StandaloneRootVizDisplayController display_root_;
-  std::unique_ptr<viz::BackToBackBeginFrameSource> begin_frame_source_;
-  bool begin_frame_source_registered_ = false;
-  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   std::unique_ptr<viz::Display> display_;
   raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
       nullptr;
