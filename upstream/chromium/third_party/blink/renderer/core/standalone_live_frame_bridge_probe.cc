@@ -5052,7 +5052,7 @@ class StandaloneRootVizDisplayController {
 
   bool EnsureDisplay(const gfx::Size& output_size,
                      viz::CompositorFrameSinkSupport* support,
-                     viz::BeginFrameSource* begin_frame_source) {
+                     viz::SyntheticBeginFrameSource* begin_frame_source) {
     if (display_ && *display_) {
       return true;
     }
@@ -5114,6 +5114,13 @@ class StandaloneRootVizDisplayController {
     if (!output_surface) {
       return false;
     }
+    // Keep the standalone root synthetic begin-frame source synchronized with
+    // OutputSurface VSync updates, as RootCompositorFrameSinkImpl does for its
+    // normal synthetic begin-frame-source path.
+    display_begin_frame_source_ = begin_frame_source;
+    output_surface->SetUpdateVSyncParametersCallback(base::BindRepeating(
+        &StandaloneRootVizDisplayController::SetDisplayVSyncParameters,
+        base::Unretained(this)));
     TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
     std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
     if (offscreen) {
@@ -5210,6 +5217,7 @@ class StandaloneRootVizDisplayController {
     if (viz_display_output_size_) {
       *viz_display_output_size_ = gfx::Size();
     }
+    display_begin_frame_source_ = nullptr;
   }
 
   void ResetOffscreenForExternalTargetResize() {
@@ -5277,6 +5285,13 @@ class StandaloneRootVizDisplayController {
     }
   }
 
+  void SetDisplayVSyncParameters(base::TimeTicks timebase,
+                                 base::TimeDelta interval) {
+    if (display_begin_frame_source_) {
+      display_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
+    }
+  }
+
   raw_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_ = nullptr;
   viz::FrameSinkId frame_sink_id_;
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
@@ -5295,6 +5310,8 @@ class StandaloneRootVizDisplayController {
   raw_ptr<gfx::Size> viz_display_output_size_ = nullptr;
   raw_ptr<bool> skia_gpu_reached_ = nullptr;
   raw_ptr<std::string> failure_reason_ = nullptr;
+  raw_ptr<viz::SyntheticBeginFrameSource> display_begin_frame_source_ =
+      nullptr;
 };
 
 class StandaloneRootFrameSinkSupportController {
@@ -5352,7 +5369,7 @@ class StandaloneRootFrameSinkSupportController {
 
   viz::CompositorFrameSinkSupport* support() const { return support_.get(); }
 
-  viz::BeginFrameSource* begin_frame_source() const {
+  viz::SyntheticBeginFrameSource* begin_frame_source() const {
     return begin_frame_source_.get();
   }
 
