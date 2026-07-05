@@ -93,6 +93,7 @@ struct ID3D12Resource {
 #include "components/viz/service/display/overlay_processor_stub.h"
 #include "components/viz/service/display_embedder/skia_output_surface_dependency.h"
 #include "components/viz/service/display_embedder/skia_output_surface_impl.h"
+#include "components/viz/service/display_embedder/output_surface_provider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "components/viz/service/surfaces/pending_copy_output_request.h"
@@ -4704,6 +4705,106 @@ class StandaloneSkiaOutputSurfaceDependency final
 #endif
 };
 
+class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider {
+ public:
+  StandaloneOutputSurfaceProvider(
+      std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder,
+      std::string* failure_reason,
+      bool use_vulkan_offscreen,
+      bool use_d3d12_offscreen,
+      bool* vulkan_context_provider_available,
+      bool* shared_context_state_is_vulkan,
+      raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency)
+      : gpu_thread_holder_(std::move(gpu_thread_holder)),
+        failure_reason_(failure_reason),
+        use_vulkan_offscreen_(use_vulkan_offscreen),
+        use_d3d12_offscreen_(use_d3d12_offscreen),
+        vulkan_context_provider_available_(vulkan_context_provider_available),
+        shared_context_state_is_vulkan_(shared_context_state_is_vulkan),
+        offscreen_dependency_(offscreen_dependency) {}
+
+  StandaloneOutputSurfaceProvider(const StandaloneOutputSurfaceProvider&) =
+      delete;
+  StandaloneOutputSurfaceProvider& operator=(
+      const StandaloneOutputSurfaceProvider&) = delete;
+
+  ~StandaloneOutputSurfaceProvider() override = default;
+
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+  CreateGpuDependency(bool gpu_compositing,
+                      gpu::SurfaceHandle surface_handle) override {
+    if (!gpu_compositing) {
+      return nullptr;
+    }
+    if (!gpu_thread_holder_ || !gpu_thread_holder_->GetTaskExecutor()) {
+      SetFailure("Viz Display GPU thread holder failed to initialize");
+      return nullptr;
+    }
+    const bool is_offscreen = surface_handle == gpu::kNullSurfaceHandle;
+    auto dependency = std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
+        gpu_thread_holder_, surface_handle, failure_reason_,
+        is_offscreen && use_vulkan_offscreen_,
+        is_offscreen && use_d3d12_offscreen_,
+        is_offscreen ? vulkan_context_provider_available_ : nullptr,
+        is_offscreen ? shared_context_state_is_vulkan_ : nullptr);
+    if (offscreen_dependency_) {
+      *offscreen_dependency_ = is_offscreen ? dependency.get() : nullptr;
+    }
+    return std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
+        std::move(dependency));
+  }
+
+  std::unique_ptr<viz::OutputSurface> CreateOutputSurface(
+      gpu::SurfaceHandle surface_handle,
+      bool gpu_compositing,
+      viz::mojom::DisplayClient* display_client,
+      viz::DisplayCompositorMemoryAndTaskController* gpu_dependency,
+      const viz::RendererSettings& renderer_settings,
+      const viz::DebugRendererSettings* debug_settings) override {
+    if (!gpu_compositing || !gpu_dependency) {
+      SetFailure("Standalone Viz Display requires GPU compositing");
+      return nullptr;
+    }
+    std::unique_ptr<viz::OutputSurface> output_surface =
+        viz::SkiaOutputSurfaceImpl::Create(gpu_dependency, renderer_settings,
+                                           debug_settings);
+    if (!output_surface) {
+      SetFailure("Viz Display SkiaOutputSurfaceImpl creation failed");
+    }
+    return output_surface;
+  }
+
+  gpu::SharedImageManager* GetSharedImageManager() override {
+    return gpu_thread_holder_ ? gpu_thread_holder_->shared_image_manager()
+                              : nullptr;
+  }
+
+  gpu::SyncPointManager* GetSyncPointManager() override {
+    return gpu_thread_holder_ ? gpu_thread_holder_->sync_point_manager()
+                              : nullptr;
+  }
+
+  gpu::Scheduler* GetGpuScheduler() override {
+    return gpu_thread_holder_ ? gpu_thread_holder_->scheduler() : nullptr;
+  }
+
+ private:
+  void SetFailure(const char* reason) {
+    if (failure_reason_) {
+      *failure_reason_ = reason ? reason : "";
+    }
+  }
+
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  raw_ptr<std::string> failure_reason_ = nullptr;
+  bool use_vulkan_offscreen_ = false;
+  bool use_d3d12_offscreen_ = false;
+  raw_ptr<bool> vulkan_context_provider_available_ = nullptr;
+  raw_ptr<bool> shared_context_state_is_vulkan_ = nullptr;
+  raw_ptr<StandaloneSkiaOutputSurfaceDependency>* offscreen_dependency_ =
+      nullptr;
+};
+
 class StandaloneInProcessRasterContextProvider final
     : public viz::RasterContextProvider,
       public base::RefCountedThreadSafe<
@@ -5074,11 +5175,7 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     const bool needs_display =
         g_standalone_native_window_handle || should_copy_output;
     if (needs_display && EnsureVizDisplay(output_size)) {
-      display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
-      display_->Resize(output_size);
-      if (viz_display_output_size_) {
-        *viz_display_output_size_ = output_size;
-      }
+      UpdateVizDisplayForFrame(frame, output_size, device_scale_factor);
     }
     const viz::SubmitResult result = support_->MaybeSubmitCompositorFrame(
         local_surface_id_, std::move(frame), std::move(hit_test_region_list),
@@ -5128,6 +5225,33 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
       return;
     }
     SetFailure(viz::CompositorFrameSinkSupport::GetSubmitResultAsString(result));
+  }
+
+  void UpdateVizDisplayForFrame(const viz::CompositorFrame& frame,
+                                const gfx::Size& output_size,
+                                float device_scale_factor) {
+    if (!display_ || !support_) {
+      return;
+    }
+    const bool surface_id_changed =
+        support_->last_activated_local_surface_id() != local_surface_id_ &&
+        !support_->IsEvicted(local_surface_id_);
+    gfx::Size display_size = output_size;
+    if (surface_id_changed) {
+      // Match RootCompositorFrameSinkImpl: a root Display observes a new
+      // LocalSurfaceId only when Viz is about to activate a fresh root surface.
+      display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor);
+      if (display_->resize_based_on_root_surface() &&
+          !frame.render_pass_list.empty()) {
+        display_size = frame.render_pass_list.back()->output_rect.size();
+      }
+    }
+    if (!display_->resize_based_on_root_surface() || surface_id_changed) {
+      display_->Resize(display_size);
+    }
+    if (viz_display_output_size_) {
+      *viz_display_output_size_ = display_size;
+    }
   }
 
   void ReclaimDroppedCompositorFrameResources(
@@ -6198,105 +6322,78 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (display_) {
       return true;
     }
-    if (!g_standalone_native_window_handle) {
-      if (!gpu_thread_holder_) {
-        SetFailure("Offscreen Viz Display cannot initialize without GPU thread holder");
-        return false;
-      }
-      if (!gpu_thread_holder_->GetTaskExecutor()) {
-        SetFailure("Offscreen Viz Display GPU thread holder failed to initialize");
-        return false;
-      }
-      auto dependency = std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
-          gpu_thread_holder_, gpu::kNullSurfaceHandle, failure_reason_,
-          use_vulkan_offscreen_output_, use_d3d12_offscreen_output_,
-          &vulkan_context_provider_available_,
-          &vulkan_shared_context_state_is_vulkan_);
-      offscreen_skia_dependency_ = dependency.get();
-      auto display_controller =
-          std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
-              std::move(dependency));
-      std::unique_ptr<viz::OutputSurface> output_surface =
-          viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
-                                             renderer_settings_,
-                                             &debug_settings_);
-      if (!output_surface) {
-        SetFailure("Offscreen Viz Display SkiaOutputSurfaceImpl creation failed");
-        return false;
-      }
-      auto overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
-      display_ = std::make_unique<viz::Display>(
-          gpu_thread_holder_->shared_image_manager(),
-          gpu_thread_holder_->scheduler(),
-          renderer_settings_, &debug_settings_, frame_sink_id_,
-          std::move(display_controller), std::move(output_surface),
-          std::move(overlay_processor),
-          /*scheduler=*/nullptr,
-          base::SingleThreadTaskRunner::GetCurrentDefault());
-      display_->Initialize(&display_client_,
-                           frame_sink_manager_->surface_manager());
-      display_->SetVisible(true);
-      display_->Resize(output_size);
-      display_uses_software_output_ = false;
-      if (viz_display_created_) {
-        *viz_display_created_ = true;
-      }
-      TraceLiveFrameProbeStage(
-          "direct frame sink after offscreen Display initialize");
-      return true;
-    }
+    const bool offscreen = !g_standalone_native_window_handle;
     if (!gpu_thread_holder_) {
-      SetFailure("Viz Display cannot initialize without GPU thread holder");
+      SetFailure(offscreen
+                     ? "Offscreen Viz Display cannot initialize without GPU "
+                       "thread holder"
+                     : "Viz Display cannot initialize without GPU thread "
+                       "holder");
       return false;
     }
-    gpu::SurfaceHandle surface_handle =
+    gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
+    if (!offscreen) {
+      surface_handle =
 #if BUILDFLAG(IS_WIN)
-        reinterpret_cast<gpu::SurfaceHandle>(g_standalone_native_window_handle);
+          reinterpret_cast<gpu::SurfaceHandle>(
+              g_standalone_native_window_handle);
 #else
-        static_cast<gpu::SurfaceHandle>(
-            reinterpret_cast<uintptr_t>(g_standalone_native_window_handle));
+          static_cast<gpu::SurfaceHandle>(
+              reinterpret_cast<uintptr_t>(g_standalone_native_window_handle));
 #endif
-    if (surface_handle == gpu::kNullSurfaceHandle) {
-      SetFailure("Viz Display received a null native surface handle");
-      return false;
+      if (surface_handle == gpu::kNullSurfaceHandle) {
+        SetFailure("Viz Display received a null native surface handle");
+        return false;
+      }
     }
-    TraceLiveFrameProbeStage("direct frame sink before Viz Display GPU init");
-    offscreen_skia_dependency_ = nullptr;
     if (!gpu_thread_holder_->GetTaskExecutor()) {
-      SetFailure("Viz Display GPU thread holder failed to initialize");
+      SetFailure(offscreen
+                     ? "Offscreen Viz Display GPU thread holder failed to "
+                       "initialize"
+                     : "Viz Display GPU thread holder failed to initialize");
       return false;
     }
-    TraceLiveFrameProbeStage("direct frame sink before Viz Display dependency");
-    auto display_controller =
-        std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
-            std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
-                gpu_thread_holder_, surface_handle, failure_reason_,
-                /*use_vulkan_offscreen=*/false,
-                /*use_d3d12_offscreen=*/false,
-                /*vulkan_context_provider_available=*/nullptr,
-                /*shared_context_state_is_vulkan=*/nullptr));
+    TraceLiveFrameProbeStage("direct frame sink before Viz Display provider");
+    offscreen_skia_dependency_ = nullptr;
+    StandaloneOutputSurfaceProvider output_surface_provider(
+        gpu_thread_holder_, failure_reason_, use_vulkan_offscreen_output_,
+        use_d3d12_offscreen_output_, &vulkan_context_provider_available_,
+        &vulkan_shared_context_state_is_vulkan_, &offscreen_skia_dependency_);
+    std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+        display_controller = output_surface_provider.CreateGpuDependency(
+            /*gpu_compositing=*/true, surface_handle);
+    if (!display_controller) {
+      return false;
+    }
     TraceLiveFrameProbeStage("direct frame sink before SkiaOutputSurface");
     std::unique_ptr<viz::OutputSurface> output_surface =
-        viz::SkiaOutputSurfaceImpl::Create(display_controller.get(),
-                                           renderer_settings_,
-                                           &debug_settings_);
+        output_surface_provider.CreateOutputSurface(
+            surface_handle, /*gpu_compositing=*/true, /*display_client=*/nullptr,
+            display_controller.get(), renderer_settings_, &debug_settings_);
     if (!output_surface) {
-      SetFailure("Viz Display SkiaOutputSurfaceImpl creation failed");
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink after SkiaOutputSurface");
-    auto overlay_processor = viz::OverlayProcessorInterface::CreateOverlayProcessor(
-        output_surface.get(), surface_handle, output_surface->capabilities(),
-        display_controller.get(), gpu_thread_holder_->shared_image_manager(),
-        renderer_settings_, &debug_settings_);
+    std::unique_ptr<viz::OverlayProcessorInterface> overlay_processor;
+    if (offscreen) {
+      overlay_processor = std::make_unique<viz::OverlayProcessorStub>();
+    } else {
+      overlay_processor =
+          viz::OverlayProcessorInterface::CreateOverlayProcessor(
+              output_surface.get(), surface_handle,
+              output_surface->capabilities(), display_controller.get(),
+              output_surface_provider.GetSharedImageManager(),
+              renderer_settings_, &debug_settings_);
+    }
     if (!overlay_processor) {
       SetFailure("Viz Display overlay processor creation failed");
       return false;
     }
     TraceLiveFrameProbeStage("direct frame sink before Display create");
     display_ = std::make_unique<viz::Display>(
-        gpu_thread_holder_->shared_image_manager(), gpu_thread_holder_->scheduler(),
-        renderer_settings_, &debug_settings_, frame_sink_id_,
+        output_surface_provider.GetSharedImageManager(),
+        output_surface_provider.GetGpuScheduler(), renderer_settings_,
+        &debug_settings_, frame_sink_id_,
         std::move(display_controller), std::move(output_surface),
         std::move(overlay_processor),
         /*scheduler=*/nullptr, base::SingleThreadTaskRunner::GetCurrentDefault());
@@ -6307,7 +6404,9 @@ class StandaloneDirectLayerTreeFrameSink final : public cc::LayerTreeFrameSink {
     if (viz_display_created_) {
       *viz_display_created_ = true;
     }
-    TraceLiveFrameProbeStage("direct frame sink after Display initialize");
+    TraceLiveFrameProbeStage(
+        offscreen ? "direct frame sink after offscreen Display initialize"
+                  : "direct frame sink after Display initialize");
     return true;
   }
 
