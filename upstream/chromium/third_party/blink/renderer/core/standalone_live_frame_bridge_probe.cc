@@ -2002,98 +2002,57 @@ class StandaloneSkiaOutputSurfaceDependency final
   ~StandaloneSkiaOutputSurfaceDependency() override = default;
 
   std::unique_ptr<gpu::SingleTaskSequence> CreateSequence() override {
-    if (!gpu_thread_holder_ || !gpu_thread_holder_->GetTaskExecutor()) {
+    if (!HasGpuTaskExecutorLikeChromium()) {
       SetFailure("Viz Display cannot create a GPU task sequence");
       return nullptr;
     }
     return std::make_unique<gpu::SchedulerSequence>(
-        gpu_thread_holder_->scheduler(), gpu_thread_holder_->task_runner());
+        GetGpuSchedulerLikeChromium(),
+        GetCompositorGpuTaskRunnerLikeChromium());
   }
 
   gpu::SharedImageManager* GetSharedImageManager() override {
-    return gpu_thread_holder_ ? gpu_thread_holder_->shared_image_manager()
-                              : nullptr;
+    return GetSharedImageManagerLikeChromium();
   }
 
   gpu::SyncPointManager* GetSyncPointManager() override {
-    return gpu_thread_holder_ ? gpu_thread_holder_->sync_point_manager()
-                              : nullptr;
+    return GetSyncPointManagerLikeChromium();
   }
 
   const gpu::GpuDriverBugWorkarounds& GetGpuDriverBugWorkarounds() override {
-    return gpu_thread_holder_->gpu_driver_bug_workarounds();
+    return GetGpuDriverBugWorkaroundsLikeChromium();
   }
 
   scoped_refptr<gpu::SharedContextState> GetSharedContextState() override {
-    if (use_vulkan_offscreen_ && IsOffscreen()) {
-      scoped_refptr<gpu::SharedContextState> context_state =
-          gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
-                             : nullptr;
-      if (!context_state || !context_state->GrContextIsVulkan() ||
-          !context_state->vk_context_provider()) {
-        SetFailure(
-            "offscreen Vulkan Display requires a Vulkan in-process GPU "
-            "SharedContextState");
-        return nullptr;
-      }
-      if (shared_context_state_is_vulkan_) {
-        *shared_context_state_is_vulkan_ = context_state->GrContextIsVulkan();
-      }
-      return context_state;
-    }
-    return gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
-                              : nullptr;
+    return GetDisplaySharedContextStateLikeChromium();
   }
 
   gpu::raster::GrShaderCache* GetGrShaderCache() override { return nullptr; }
 
   viz::VulkanContextProvider* GetVulkanContextProvider() override {
-    if (use_vulkan_offscreen_ && IsOffscreen()) {
-      scoped_refptr<gpu::SharedContextState> context_state =
-          gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
-                             : nullptr;
-      if (!context_state || !context_state->vk_context_provider()) {
-        SetFailure(
-            "offscreen Vulkan Display requires a Vulkan context provider from "
-            "the in-process GPU holder");
-        return nullptr;
-      }
-      if (vulkan_context_provider_available_) {
-        *vulkan_context_provider_available_ =
-            context_state->vk_context_provider() != nullptr;
-      }
-      return context_state->vk_context_provider();
-    }
-    return nullptr;
+    return GetDisplayVulkanContextProviderLikeChromium();
   }
 
   gpu::DawnContextProvider* GetDawnContextProvider() override {
 #if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_WIN) && \
     defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
-    if (use_d3d12_offscreen_ && IsOffscreen()) {
-      return gpu_thread_holder_ ? gpu_thread_holder_->dawn_context_provider()
-                                : nullptr;
+    if (UsesOffscreenD3D12Display()) {
+      return GetDawnContextProviderLikeChromium();
     }
 #endif
     return nullptr;
   }
 
   const gpu::GpuPreferences& GetGpuPreferences() const override {
-    if (use_vulkan_offscreen_ && surface_handle_ == gpu::kNullSurfaceHandle) {
-      return vulkan_gpu_preferences_;
-    }
-    if (use_d3d12_offscreen_ && surface_handle_ == gpu::kNullSurfaceHandle) {
-      return d3d12_gpu_preferences_;
-    }
-    return gpu_thread_holder_->gpu_preferences();
+    return GetDisplayGpuPreferencesLikeChromium();
   }
 
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() override {
-    return gpu_thread_holder_->gpu_feature_info();
+    return GetGpuFeatureInfoLikeChromium();
   }
 
   bool IsOffscreen() override {
-    return surface_handle_ == gpu::kNullSurfaceHandle;
+    return IsOffscreenSurface();
   }
 
   gpu::SurfaceHandle GetSurfaceHandle() override { return surface_handle_; }
@@ -2134,11 +2093,13 @@ class StandaloneSkiaOutputSurfaceDependency final
   }
 
   void ScheduleDelayedGPUTaskFromGPUThread(base::OnceClosure task) override {
-    if (!gpu_thread_holder_) {
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+        GetCompositorGpuTaskRunnerLikeChromium();
+    if (!task_runner) {
       return;
     }
-    gpu_thread_holder_->task_runner()->PostDelayedTask(
-        FROM_HERE, std::move(task), base::Milliseconds(2));
+    task_runner->PostDelayedTask(FROM_HERE, std::move(task),
+                                 kDelayForDelayedGpuWorkLikeChromium);
   }
 
   void DidLoseContext(gpu::error::ContextLostReason reason,
@@ -2152,11 +2113,8 @@ class StandaloneSkiaOutputSurfaceDependency final
 
   scoped_refptr<base::SingleThreadTaskRunner>
   GpuTaskRunnerIfOffSequenceForTesting() const {
-    if (!gpu_thread_holder_) {
-      return nullptr;
-    }
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-        gpu_thread_holder_->task_runner();
+        GetCompositorGpuTaskRunnerLikeChromium();
     if (!task_runner || task_runner->RunsTasksInCurrentSequence()) {
       return nullptr;
     }
@@ -4367,11 +4325,123 @@ class StandaloneSkiaOutputSurfaceDependency final
     }
   }
 
+  bool IsOffscreenSurface() const {
+    return surface_handle_ == gpu::kNullSurfaceHandle;
+  }
+
+  bool UsesOffscreenVulkanDisplay() const {
+    return use_vulkan_offscreen_ && IsOffscreenSurface();
+  }
+
+  bool UsesOffscreenD3D12Display() const {
+    return use_d3d12_offscreen_ && IsOffscreenSurface();
+  }
+
+  bool HasGpuTaskExecutorLikeChromium() const {
+    return gpu_thread_holder_ && gpu_thread_holder_->GetTaskExecutor();
+  }
+
+  gpu::Scheduler* GetGpuSchedulerLikeChromium() const {
+    return gpu_thread_holder_ ? gpu_thread_holder_->scheduler() : nullptr;
+  }
+
+  scoped_refptr<base::SingleThreadTaskRunner>
+  GetCompositorGpuTaskRunnerLikeChromium() const {
+    return gpu_thread_holder_ ? gpu_thread_holder_->task_runner() : nullptr;
+  }
+
+  gpu::SharedImageManager* GetSharedImageManagerLikeChromium() const {
+    return gpu_thread_holder_ ? gpu_thread_holder_->shared_image_manager()
+                              : nullptr;
+  }
+
+  gpu::SyncPointManager* GetSyncPointManagerLikeChromium() const {
+    return gpu_thread_holder_ ? gpu_thread_holder_->sync_point_manager()
+                              : nullptr;
+  }
+
+  const gpu::GpuDriverBugWorkarounds&
+  GetGpuDriverBugWorkaroundsLikeChromium() const {
+    return gpu_thread_holder_->gpu_driver_bug_workarounds();
+  }
+
+  scoped_refptr<gpu::SharedContextState>
+  GetGpuServiceSharedContextStateLikeChromium() const {
+    return gpu_thread_holder_ ? gpu_thread_holder_->GetSharedContextState()
+                              : nullptr;
+  }
+
+  scoped_refptr<gpu::SharedContextState>
+  GetDisplaySharedContextStateLikeChromium() {
+    if (UsesOffscreenVulkanDisplay()) {
+      scoped_refptr<gpu::SharedContextState> context_state =
+          GetGpuServiceSharedContextStateLikeChromium();
+      if (!context_state || !context_state->GrContextIsVulkan() ||
+          !context_state->vk_context_provider()) {
+        SetFailure(
+            "offscreen Vulkan Display requires a Vulkan in-process GPU "
+            "SharedContextState");
+        return nullptr;
+      }
+      if (shared_context_state_is_vulkan_) {
+        *shared_context_state_is_vulkan_ = context_state->GrContextIsVulkan();
+      }
+      return context_state;
+    }
+    return GetGpuServiceSharedContextStateLikeChromium();
+  }
+
+  viz::VulkanContextProvider* GetDisplayVulkanContextProviderLikeChromium() {
+    if (!UsesOffscreenVulkanDisplay()) {
+      return nullptr;
+    }
+    scoped_refptr<gpu::SharedContextState> context_state =
+        GetGpuServiceSharedContextStateLikeChromium();
+    if (!context_state || !context_state->vk_context_provider()) {
+      SetFailure(
+          "offscreen Vulkan Display requires a Vulkan context provider from "
+          "the in-process GPU holder");
+      return nullptr;
+    }
+    if (vulkan_context_provider_available_) {
+      *vulkan_context_provider_available_ =
+          context_state->vk_context_provider() != nullptr;
+    }
+    return context_state->vk_context_provider();
+  }
+
+  gpu::DawnContextProvider* GetDawnContextProviderLikeChromium() const {
+#if BUILDFLAG(SKIA_USE_DAWN) && BUILDFLAG(IS_WIN) && \
+    defined(BLINK_STANDALONE_EXPERIMENTAL_DAWN_D3D12_RENDER)
+    return gpu_thread_holder_ ? gpu_thread_holder_->dawn_context_provider()
+                              : nullptr;
+#else
+    return nullptr;
+#endif
+  }
+
+  const gpu::GpuPreferences& GetDisplayGpuPreferencesLikeChromium() const {
+    if (UsesOffscreenVulkanDisplay()) {
+      return vulkan_gpu_preferences_;
+    }
+    if (UsesOffscreenD3D12Display()) {
+      return d3d12_gpu_preferences_;
+    }
+    return gpu_thread_holder_->gpu_preferences();
+  }
+
+  const gpu::GpuFeatureInfo& GetGpuFeatureInfoLikeChromium() const {
+    return gpu_thread_holder_->gpu_feature_info();
+  }
+
   void SetFailure(const char* reason) {
     if (failure_reason_ && reason && failure_reason_->empty()) {
       *failure_reason_ = reason;
     }
   }
+
+  static constexpr base::TimeDelta kDelayForDelayedGpuWorkLikeChromium =
+      base::Milliseconds(2);
 
   std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
   gpu::SurfaceHandle surface_handle_ = gpu::kNullSurfaceHandle;
@@ -4768,19 +4838,16 @@ class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider 
     if (!gpu_compositing) {
       return nullptr;
     }
-    if (!gpu_thread_holder_ || !gpu_thread_holder_->GetTaskExecutor()) {
+    if (!HasGpuTaskExecutorLikeChromium()) {
       SetFailure("Viz Display GPU thread holder failed to initialize");
       return nullptr;
     }
-    const bool is_offscreen = surface_handle == gpu::kNullSurfaceHandle;
-    auto dependency = std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
-        gpu_thread_holder_, surface_handle, failure_reason_,
-        is_offscreen && use_vulkan_offscreen_,
-        is_offscreen && use_d3d12_offscreen_,
-        is_offscreen ? vulkan_context_provider_available_ : nullptr,
-        is_offscreen ? shared_context_state_is_vulkan_ : nullptr);
+    auto dependency =
+        CreateSkiaOutputSurfaceDependencyLikeChromium(surface_handle);
     if (offscreen_dependency_) {
-      *offscreen_dependency_ = is_offscreen ? dependency.get() : nullptr;
+      *offscreen_dependency_ = IsOffscreenSurface(surface_handle)
+                                   ? dependency.get()
+                                   : nullptr;
     }
     return std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
         std::move(dependency));
@@ -4798,7 +4865,7 @@ class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider 
       return nullptr;
     }
     std::unique_ptr<viz::OutputSurface> output_surface =
-        viz::SkiaOutputSurfaceImpl::Create(gpu_dependency, renderer_settings,
+        CreateGpuOutputSurfaceLikeChromium(gpu_dependency, renderer_settings,
                                            debug_settings);
     if (!output_surface) {
       SetFailure("Viz Display SkiaOutputSurfaceImpl creation failed");
@@ -4807,20 +4874,60 @@ class StandaloneOutputSurfaceProvider final : public viz::OutputSurfaceProvider 
   }
 
   gpu::SharedImageManager* GetSharedImageManager() override {
+    return GetSharedImageManagerLikeChromium();
+  }
+
+  gpu::SyncPointManager* GetSyncPointManager() override {
+    return GetSyncPointManagerLikeChromium();
+  }
+
+  gpu::Scheduler* GetGpuScheduler() override {
+    return GetGpuSchedulerLikeChromium();
+  }
+
+ private:
+  static bool IsOffscreenSurface(gpu::SurfaceHandle surface_handle) {
+    return surface_handle == gpu::kNullSurfaceHandle;
+  }
+
+  bool HasGpuTaskExecutorLikeChromium() const {
+    return gpu_thread_holder_ && gpu_thread_holder_->GetTaskExecutor();
+  }
+
+  std::unique_ptr<StandaloneSkiaOutputSurfaceDependency>
+  CreateSkiaOutputSurfaceDependencyLikeChromium(
+      gpu::SurfaceHandle surface_handle) {
+    const bool is_offscreen = IsOffscreenSurface(surface_handle);
+    return std::make_unique<StandaloneSkiaOutputSurfaceDependency>(
+        gpu_thread_holder_, surface_handle, failure_reason_,
+        is_offscreen && use_vulkan_offscreen_,
+        is_offscreen && use_d3d12_offscreen_,
+        is_offscreen ? vulkan_context_provider_available_ : nullptr,
+        is_offscreen ? shared_context_state_is_vulkan_ : nullptr);
+  }
+
+  std::unique_ptr<viz::OutputSurface> CreateGpuOutputSurfaceLikeChromium(
+      viz::DisplayCompositorMemoryAndTaskController* gpu_dependency,
+      const viz::RendererSettings& renderer_settings,
+      const viz::DebugRendererSettings* debug_settings) {
+    return viz::SkiaOutputSurfaceImpl::Create(gpu_dependency, renderer_settings,
+                                             debug_settings);
+  }
+
+  gpu::SharedImageManager* GetSharedImageManagerLikeChromium() const {
     return gpu_thread_holder_ ? gpu_thread_holder_->shared_image_manager()
                               : nullptr;
   }
 
-  gpu::SyncPointManager* GetSyncPointManager() override {
+  gpu::SyncPointManager* GetSyncPointManagerLikeChromium() const {
     return gpu_thread_holder_ ? gpu_thread_holder_->sync_point_manager()
                               : nullptr;
   }
 
-  gpu::Scheduler* GetGpuScheduler() override {
+  gpu::Scheduler* GetGpuSchedulerLikeChromium() const {
     return gpu_thread_holder_ ? gpu_thread_holder_->scheduler() : nullptr;
   }
 
- private:
   void SetFailure(const char* reason) {
     if (failure_reason_) {
       *failure_reason_ = reason ? reason : "";
