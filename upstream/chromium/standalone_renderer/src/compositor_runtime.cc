@@ -2239,6 +2239,12 @@ class StandaloneCompositorRuntimeImpl final : public StandaloneCompositorRuntime
       result.gpu_frame_failure =
           copied > 0 ? failure.data()
                      : "Viz CopyOutput shared image was not produced";
+      if (result.cc_host_created && result.cc_root_layer_attached &&
+          result.cc_frame_sink_bound &&
+          (!result.compositor_frame_submitted || !result.viz_display_created)) {
+        result.gpu_frame_status = GpuFrameOutputStatus::kPending;
+        return;
+      }
       result.gpu_frame_status = GpuFrameOutputStatus::kFailed;
       return;
     }
