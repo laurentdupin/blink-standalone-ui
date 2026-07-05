@@ -5451,9 +5451,12 @@ class StandaloneRootFrameSinkSupportController {
 
   void RequestCopyOfOutput(const viz::LocalSurfaceId& local_surface_id,
                            std::unique_ptr<viz::CopyOutputRequest> request) {
+    // Standalone captures are always tied to the root surface that produced the
+    // target size. Let Viz enforce that LocalSurfaceId match instead of letting
+    // a later resize surface satisfy an older external-target copy request.
     frame_sink_manager_->RequestCopyOfOutput(
         viz::SurfaceId(frame_sink_id_, local_surface_id), std::move(request),
-        /*capture_exact_surface_id=*/false, base::TimeDelta());
+        /*capture_exact_surface_id=*/true, base::Seconds(5));
   }
 
  private:
