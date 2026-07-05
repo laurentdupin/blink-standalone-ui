@@ -80,6 +80,10 @@ struct ID3D12Resource {
 #include "components/viz/common/gpu/context_lost_observer.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/gpu/vulkan_in_process_context_provider.h"
+#include "components/viz/common/quads/compositor_frame.h"
+#include "components/viz/common/quads/compositor_render_pass.h"
+#include "components/viz/common/quads/shared_quad_state.h"
+#include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
@@ -98,6 +102,7 @@ struct ID3D12Resource {
 #include "components/viz/service/display_embedder/output_surface_provider.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/frame_sinks/root_compositor_frame_sink_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/raster_interface.h"
@@ -116,6 +121,8 @@ struct ID3D12Resource {
 #include "gpu/ipc/in_process_gpu_thread_holder.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
+#include "mojo/public/cpp/bindings/associated_remote.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/blink/public/web/web_navigation_params.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 #include "gpu/ipc/common/surface_handle.h"
@@ -525,6 +532,51 @@ std::string DescribeGLInitializationFailure(const char* prefix) {
 #endif
   out << ")";
   return out.str();
+}
+
+bool EnsureStandaloneChromiumDisplayGLInitialized(std::string* failure_reason,
+                                                  const char* trace_prefix) {
+  if (gl::GetGLImplementation() != gl::kGLImplementationNone) {
+    return true;
+  }
+
+  const std::string before_bindings =
+      std::string(trace_prefix) + " before static GL bindings";
+  TraceLiveFrameProbeStage(before_bindings.c_str());
+  if (!gl::init::InitializeStaticGLBindingsOneOff()) {
+    const std::string failed_bindings =
+        std::string(trace_prefix) + " static GL bindings failed";
+    TraceLiveFrameProbeStage(failed_bindings.c_str());
+    if (failure_reason) {
+      *failure_reason = DescribeGLInitializationFailure(
+          "Chromium GL static binding initialization failed before Viz "
+          "OutputSurface creation");
+    }
+    return false;
+  }
+
+  const std::string after_bindings =
+      std::string(trace_prefix) + " after static GL bindings";
+  TraceLiveFrameProbeStage(after_bindings.c_str());
+  if (gl::GetGLImplementation() != gl::kGLImplementationDisabled &&
+      !gl::init::InitializeGLOneOffPlatformImplementation(
+          /*disable_gl_drawing=*/false, /*init_extensions=*/true,
+          gl::GpuPreference::kDefault)) {
+    const std::string failed_platform =
+        std::string(trace_prefix) + " platform GL init failed";
+    TraceLiveFrameProbeStage(failed_platform.c_str());
+    if (failure_reason) {
+      *failure_reason = DescribeGLInitializationFailure(
+          "Chromium GL display/platform initialization failed before Viz "
+          "OutputSurface creation");
+    }
+    return false;
+  }
+
+  const std::string after_platform =
+      std::string(trace_prefix) + " after platform GL init";
+  TraceLiveFrameProbeStage(after_platform.c_str());
+  return true;
 }
 
 struct StandaloneTypefacePayload {
@@ -4996,29 +5048,10 @@ class StandaloneInProcessRasterContextProvider final
       return bind_result_;
     }
 
-    if (gl::GetGLImplementation() == gl::kGLImplementationNone) {
-      TraceLiveFrameProbeStage("cc raster context before static GL bindings");
-      if (!gl::init::InitializeStaticGLBindingsOneOff()) {
-        TraceLiveFrameProbeStage("cc raster context static GL bindings failed");
-        SetFailure(DescribeGLInitializationFailure(
-            "Chromium GL static binding initialization failed before raster "
-            "context creation"));
-        bind_result_ = gpu::ContextResult::kFatalFailure;
-        return bind_result_;
-      }
-      TraceLiveFrameProbeStage("cc raster context after static GL bindings");
-      if (gl::GetGLImplementation() != gl::kGLImplementationDisabled &&
-          !gl::init::InitializeGLOneOffPlatformImplementation(
-              /*disable_gl_drawing=*/false, /*init_extensions=*/true,
-              gl::GpuPreference::kDefault)) {
-        TraceLiveFrameProbeStage("cc raster context platform GL init failed");
-        SetFailure(DescribeGLInitializationFailure(
-            "Chromium GL display/platform initialization failed before raster "
-            "context creation"));
-        bind_result_ = gpu::ContextResult::kFatalFailure;
-        return bind_result_;
-      }
-      TraceLiveFrameProbeStage("cc raster context after platform GL init");
+    if (!EnsureStandaloneChromiumDisplayGLInitialized(
+            failure_reason_, "cc raster context")) {
+      bind_result_ = gpu::ContextResult::kFatalFailure;
+      return bind_result_;
     }
 
     TraceLiveFrameProbeStage("cc raster context before RasterInProcessContext");
@@ -8564,6 +8597,340 @@ class StandaloneCcLayerHost final
   double timing_scheduler_run_loop_ms_ = 0.0;
   double timing_submit_wait_ms_ = 0.0;
   base::WeakPtrFactory<StandaloneCcLayerHost> weak_factory_{this};
+};
+
+std::string EscapeStandaloneProbeJsonString(const std::string& value) {
+  std::string escaped;
+  escaped.reserve(value.size());
+  for (char c : value) {
+    switch (c) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped.push_back(c);
+        break;
+    }
+  }
+  return escaped;
+}
+
+class StandaloneChromiumRootFrameSinkProbe final
+    : public viz::mojom::CompositorFrameSinkClient {
+ public:
+  explicit StandaloneChromiumRootFrameSinkProbe(const gfx::Size& viewport)
+      : viewport_(viewport) {}
+
+  StandaloneChromiumRootFrameSinkProbe(
+      const StandaloneChromiumRootFrameSinkProbe&) = delete;
+  StandaloneChromiumRootFrameSinkProbe& operator=(
+      const StandaloneChromiumRootFrameSinkProbe&) = delete;
+
+  ~StandaloneChromiumRootFrameSinkProbe() override {
+    root_frame_sink_.reset();
+    frame_sink_manager_.reset();
+  }
+
+  std::string Run() {
+    if (!CreateRootFrameSink()) {
+      return BuildJson(false);
+    }
+    if (!SubmitAndCopy(viewport_, SkColors::kBlue, "initial")) {
+      return BuildJson(false);
+    }
+
+    const gfx::Size resized(std::max(1, viewport_.width() / 2),
+                            std::max(1, viewport_.height() / 2));
+    if (!SubmitAndCopy(resized, SkColors::kGreen, "resized")) {
+      return BuildJson(false);
+    }
+
+    return BuildJson(true);
+  }
+
+ private:
+  bool CreateRootFrameSink() {
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+        base::SingleThreadTaskRunner::GetCurrentDefault();
+    if (!task_runner) {
+      failure_reason_ =
+          "chromium root frame sink probe requires a current task runner";
+      return false;
+    }
+    if (!EnsureStandaloneChromiumDisplayGLInitialized(
+            &failure_reason_, "chromium root frame sink")) {
+      return false;
+    }
+
+    gpu_thread_holder_ = std::make_shared<gpu::InProcessGpuThreadHolder>();
+    gpu_thread_holder_->GetGpuPreferences()->gr_context_type =
+        gpu::GrContextType::kGL;
+    output_surface_provider_ = std::make_unique<StandaloneOutputSurfaceProvider>(
+        gpu_thread_holder_, &failure_reason_,
+        /*use_vulkan_offscreen=*/false,
+        /*use_d3d12_offscreen=*/false, &vulkan_context_provider_available_,
+        &shared_context_state_is_vulkan_, &offscreen_skia_dependency_);
+
+    viz::FrameSinkManagerImpl::InitParams manager_params(
+        output_surface_provider_.get());
+    frame_sink_manager_ =
+        std::make_unique<viz::FrameSinkManagerImpl>(manager_params);
+    frame_sink_manager_->RegisterFrameSinkId(frame_sink_id_,
+                                             /*report_activation=*/true);
+    frame_sink_manager_->SetFrameSinkDebugLabel(
+        frame_sink_id_, "standalone-renderer-chromium-root-probe");
+
+    renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
+    renderer_settings_.requires_alpha_channel = true;
+
+    auto params = viz::mojom::RootCompositorFrameSinkParams::New();
+    params->frame_sink_id = frame_sink_id_;
+    params->widget = gpu::kNullSurfaceHandle;
+    params->gpu_compositing = true;
+    params->renderer_settings = renderer_settings_;
+    params->compositor_frame_sink =
+        compositor_frame_sink_remote_.BindNewEndpointAndPassReceiver();
+    params->compositor_frame_sink_client =
+        compositor_frame_sink_client_receiver_.BindNewPipeAndPassRemote();
+    params->display_private =
+        display_private_remote_.BindNewEndpointAndPassReceiver();
+
+    root_frame_sink_ = viz::RootCompositorFrameSinkImpl::Create(
+        std::move(params), frame_sink_manager_.get(),
+        output_surface_provider_.get(), viz::BeginFrameSource::kNotRestartableId,
+        /*run_all_compositor_stages_before_draw=*/true, &debug_settings_,
+        /*hint_session_factory=*/nullptr);
+    if (!root_frame_sink_) {
+      if (failure_reason_.empty()) {
+        failure_reason_ = "RootCompositorFrameSinkImpl::Create returned null";
+      }
+      return false;
+    }
+    root_frame_sink_->SetDisplayVisible(true);
+    root_frame_sink_->Resize(viewport_);
+    return true;
+  }
+
+  bool SubmitAndCopy(const gfx::Size& size,
+                     SkColor4f color,
+                     const char* label) {
+    surface_id_allocator_.GenerateId();
+    const viz::LocalSurfaceId local_surface_id =
+        surface_id_allocator_.GetCurrentLocalSurfaceId();
+    root_frame_sink_->SubmitCompositorFrame(
+        local_surface_id, BuildSolidColorFrame(size, color), std::nullopt,
+        /*submit_time=*/0);
+    root_frame_sink_->ForceImmediateDrawAndSwapIfPossible();
+    base::RunLoop().RunUntilIdle();
+
+    const viz::SurfaceId current_surface_id =
+        root_frame_sink_->CurrentSurfaceId();
+    if (!current_surface_id.is_valid() ||
+        current_surface_id.local_surface_id() != local_surface_id) {
+      std::ostringstream out;
+      out << "chromium root frame sink " << label
+          << " did not activate submitted LocalSurfaceId";
+      failure_reason_ = out.str();
+      return false;
+    }
+
+    return RequestAndWaitForCopy(local_surface_id, size, label);
+  }
+
+  viz::CompositorFrame BuildSolidColorFrame(const gfx::Size& size,
+                                            SkColor4f color) {
+    viz::CompositorFrame frame;
+    frame.metadata.device_scale_factor = 1.0f;
+    frame.metadata.page_scale_factor = 1.0f;
+    frame.metadata.scrollable_viewport_size = gfx::SizeF(size);
+    frame.metadata.visible_viewport_size = size;
+    frame.metadata.root_background_color = SkColors::kTransparent;
+    frame.metadata.begin_frame_ack = viz::BeginFrameAck::CreateManualAckWithDamage();
+    frame.metadata.frame_token = ++frame_token_;
+
+    auto render_pass = viz::CompositorRenderPass::Create();
+    render_pass->SetNew(viz::CompositorRenderPassId{1}, gfx::Rect(size),
+                        gfx::Rect(size), gfx::Transform());
+    viz::SharedQuadState* shared_quad_state =
+        render_pass->CreateAndAppendSharedQuadState();
+    shared_quad_state->SetAll(
+        gfx::Transform(), gfx::Rect(size), gfx::Rect(size),
+        gfx::MaskFilterInfo(), std::nullopt,
+        /*contents_opaque=*/true, /*opacity_f=*/1.0f, SkBlendMode::kSrcOver,
+        /*sorting_context=*/0, /*layer_id=*/1,
+        /*fast_rounded_corner=*/false);
+    viz::SolidColorDrawQuad* quad =
+        render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+    quad->SetNew(shared_quad_state, gfx::Rect(size), gfx::Rect(size), color,
+                 /*anti_aliasing_off=*/true);
+    frame.render_pass_list.push_back(std::move(render_pass));
+    return frame;
+  }
+
+  bool RequestAndWaitForCopy(const viz::LocalSurfaceId& local_surface_id,
+                             const gfx::Size& size,
+                             const char* label) {
+    copy_completed_ = false;
+    copy_succeeded_ = false;
+    copy_pixels_ = 0;
+    copy_failure_.clear();
+
+    auto request = std::make_unique<viz::CopyOutputRequest>(
+        viz::CopyOutputRequest::ResultFormat::RGBA,
+        viz::CopyOutputRequest::ResultDestination::kSystemMemory,
+        base::BindOnce(&StandaloneChromiumRootFrameSinkProbe::OnCopyOutput,
+                       weak_factory_.GetWeakPtr(), std::string(label)));
+    viz::SetCopyOutputRequestResultSize(request.get(), gfx::Rect(size), size,
+                                        size);
+    request->set_result_task_runner(base::SequencedTaskRunner::GetCurrentDefault());
+    frame_sink_manager_->RequestCopyOfOutput(
+        viz::SurfaceId(frame_sink_id_, local_surface_id), std::move(request),
+        /*capture_exact_surface_id=*/true, base::Seconds(5));
+
+    root_frame_sink_->ForceImmediateDrawAndSwapIfPossible();
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    copy_run_loop_ = &run_loop;
+    base::OneShotTimer timeout;
+    timeout.Start(FROM_HERE, base::Seconds(5), run_loop.QuitClosure());
+    run_loop.Run();
+    timeout.Stop();
+    copy_run_loop_ = nullptr;
+
+    if (!copy_completed_) {
+      std::ostringstream out;
+      out << "chromium root frame sink " << label
+          << " CopyOutput did not complete";
+      failure_reason_ = out.str();
+      return false;
+    }
+    if (!copy_succeeded_) {
+      if (copy_failure_.empty()) {
+        copy_failure_ = "CopyOutput failed";
+      }
+      failure_reason_ = "chromium root frame sink ";
+      failure_reason_ += label;
+      failure_reason_ += " ";
+      failure_reason_ += copy_failure_;
+      return false;
+    }
+    return true;
+  }
+
+  void OnCopyOutput(std::string label,
+                    std::unique_ptr<viz::CopyOutputResult> output) {
+    if (!output) {
+      copy_failure_ = label + " CopyOutput returned no result";
+      FinishCopy(false);
+      return;
+    }
+    if (output->IsEmpty()) {
+      copy_failure_ = label + " CopyOutput returned empty result: " +
+                      StandaloneCopyOutputErrorName(output->error());
+      FinishCopy(false);
+      return;
+    }
+    viz::CopyOutputResult::ScopedSkBitmap scoped_bitmap =
+        output->ScopedAccessSkBitmap();
+    SkBitmap bitmap = scoped_bitmap.GetOutScopedBitmap();
+    if (!bitmap.readyToDraw()) {
+      copy_failure_ = label + " CopyOutput bitmap is not drawable";
+      FinishCopy(false);
+      return;
+    }
+    SkPixmap pixmap;
+    if (!bitmap.peekPixels(&pixmap)) {
+      copy_failure_ = label + " CopyOutput bitmap has no pixels";
+      FinishCopy(false);
+      return;
+    }
+    copy_pixels_ += pixmap.width() * pixmap.height();
+    FinishCopy(copy_pixels_ > 0);
+  }
+
+  void FinishCopy(bool succeeded) {
+    copy_succeeded_ = succeeded;
+    copy_completed_ = true;
+    if (copy_run_loop_) {
+      copy_run_loop_->Quit();
+    }
+  }
+
+  void DidReceiveCompositorFrameAck(
+      std::vector<viz::ReturnedResource> resources) override {
+    ++ack_count_;
+  }
+
+  void OnBeginFrame(
+      const viz::BeginFrameArgs& args,
+      const base::flat_map<uint32_t, viz::FrameTimingDetails>& details,
+      std::vector<viz::ReturnedResource> resources) override {}
+
+  void OnBeginFramePausedChanged(bool paused) override {}
+
+  void ReclaimResources(
+      std::vector<viz::ReturnedResource> resources) override {}
+
+  void OnCompositorFrameTransitionDirectiveProcessed(
+      uint32_t sequence_id) override {}
+
+  void OnSurfaceEvicted(
+      const viz::LocalSurfaceId& local_surface_id) override {}
+
+  std::string BuildJson(bool success) const {
+    std::ostringstream out;
+    out << "{\n"
+        << "  \"success\": " << (success ? "true" : "false") << ",\n"
+        << "  \"path\": \"RootCompositorFrameSinkImpl\",\n"
+        << "  \"viewport\": \"" << viewport_.width() << "x"
+        << viewport_.height() << "\",\n"
+        << "  \"acks\": " << ack_count_ << ",\n"
+        << "  \"copy_pixels\": " << copy_pixels_ << ",\n"
+        << "  \"failure\": \""
+        << EscapeStandaloneProbeJsonString(failure_reason_) << "\"\n"
+        << "}\n";
+    return out.str();
+  }
+
+  gfx::Size viewport_;
+  const viz::FrameSinkId frame_sink_id_{779, 1};
+  std::shared_ptr<gpu::InProcessGpuThreadHolder> gpu_thread_holder_;
+  std::unique_ptr<StandaloneOutputSurfaceProvider> output_surface_provider_;
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
+  std::unique_ptr<viz::RootCompositorFrameSinkImpl> root_frame_sink_;
+  viz::RendererSettings renderer_settings_;
+  viz::DebugRendererSettings debug_settings_;
+  raw_ptr<StandaloneSkiaOutputSurfaceDependency> offscreen_skia_dependency_ =
+      nullptr;
+  bool vulkan_context_provider_available_ = false;
+  bool shared_context_state_is_vulkan_ = false;
+  viz::ParentLocalSurfaceIdAllocator surface_id_allocator_;
+  mojo::AssociatedRemote<viz::mojom::CompositorFrameSink>
+      compositor_frame_sink_remote_;
+  mojo::AssociatedRemote<viz::mojom::DisplayPrivate> display_private_remote_;
+  mojo::Receiver<viz::mojom::CompositorFrameSinkClient>
+      compositor_frame_sink_client_receiver_{this};
+  uint32_t frame_token_ = 0;
+  int ack_count_ = 0;
+  bool copy_completed_ = false;
+  bool copy_succeeded_ = false;
+  int copy_pixels_ = 0;
+  std::string copy_failure_;
+  std::string failure_reason_;
+  raw_ptr<base::RunLoop> copy_run_loop_ = nullptr;
+  base::WeakPtrFactory<StandaloneChromiumRootFrameSinkProbe> weak_factory_{
+      this};
 };
 
 class StandaloneCcSchedulerParityProbe final
@@ -20020,6 +20387,17 @@ std::string RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(
   return probe.Run();
 }
 
+std::string RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(
+    int width,
+    int height) {
+  InstallStandaloneMojoThunksForStandaloneRenderer();
+  const int safe_width = std::max(1, width);
+  const int safe_height = std::max(1, height);
+  StandaloneChromiumRootFrameSinkProbe probe(
+      gfx::Size(safe_width, safe_height));
+  return probe.Run();
+}
+
 }  // namespace
 
 extern "C" const char*
@@ -20029,6 +20407,17 @@ StandaloneBlinkLiveFrameBridgeRunCcSchedulerProbeForStandaloneRenderer(
   static std::string probe_json;
   probe_json =
       RunStandaloneCcSchedulerParityProbeForStandaloneRenderer(width, height);
+  return probe_json.c_str();
+}
+
+extern "C" const char*
+StandaloneBlinkLiveFrameBridgeRunChromiumRootFrameSinkProbeForStandaloneRenderer(
+    int width,
+    int height) {
+  static std::string probe_json;
+  probe_json =
+      RunStandaloneChromiumRootFrameSinkProbeForStandaloneRenderer(width,
+                                                                  height);
   return probe_json.c_str();
 }
 
